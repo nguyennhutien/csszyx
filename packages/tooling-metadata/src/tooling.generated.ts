@@ -344,6 +344,8 @@ export const BOOLEAN_SHORTHANDS = [
     "srOnly",
     "stackedFractions",
     "tabularNums",
+    "textClip",
+    "textEllipsis",
     "truncate"
 ] as const;
 export const KNOWN_VARIANTS = [

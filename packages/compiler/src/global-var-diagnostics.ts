@@ -177,12 +177,9 @@ function collectStyleMethodDiagnostic(
         return;
     }
 
-    const kind =
-        method === 'setProperty'
-            ? 'style-set-property'
-            : method === 'getPropertyValue'
-              ? 'style-get-property'
-              : 'style-remove-property';
+    let kind: GlobalVarUsageDiagnostic['kind'] = 'style-remove-property';
+    if (method === 'setProperty') kind = 'style-set-property';
+    if (method === 'getPropertyValue') kind = 'style-get-property';
     diagnostics.push(createDiagnostic(kind, name, node, source, filename));
 }
 
@@ -469,7 +466,7 @@ function offsetToLocation(
     let line = 1;
     let column = 1;
     for (let index = 0; index < offset; index++) {
-        if (source.charCodeAt(index) === 10) {
+        if (source.codePointAt(index) === 10) {
             line++;
             column = 1;
         } else {

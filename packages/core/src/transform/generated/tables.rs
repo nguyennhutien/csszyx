@@ -368,6 +368,8 @@ pub(crate) fn variant_prefix(key: &str) -> Option<&'static str> {
 /// Lookup emitted classes for boolean shorthand keys with custom class names.
 pub(crate) fn boolean_class(key: &str) -> Option<&'static str> {
     match key {
+        "textEllipsis" => Some("text-ellipsis"),
+        "textClip" => Some("text-clip"),
         "backdropBlur" => Some("backdrop-blur"),
         "backdropGrayscale" => Some("backdrop-grayscale"),
         "backdropInvert" => Some("backdrop-invert"),
@@ -396,6 +398,8 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
     matches!(
         key,
         "truncate"
+            | "textEllipsis"
+            | "textClip"
             | "grow"
             | "shrink"
             | "blur"
@@ -426,6 +430,11 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
             | "ring"
             | "outline"
     )
+}
+
+/// Returns true when a property is lowered by a dedicated object branch.
+pub(crate) fn is_known_special_property(key: &str) -> bool {
+    matches!(key, "css")
 }
 
 /// Returns true when a key is a removed boolean-sugar alias (flex/absolute/

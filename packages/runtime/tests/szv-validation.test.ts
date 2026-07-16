@@ -81,9 +81,17 @@ describe('szv config/selection validation (dev)', () => {
         expect(warned(/"xl" is not a value of variant "size"/)).toBe(true);
     });
 
+    it('describes an object selection without default object stringification', () => {
+        const f = szv({ variants: { size: { sm: { px: 2 } } } });
+        // @ts-expect-error — object values are structurally invalid selections
+        expect(f({ size: {} })).toEqual({});
+        expect(warned(/"object" is not a value of variant "size"/)).toBe(true);
+        expect(warned(/\[object Object\]/)).toBe(false);
+    });
+
     it('warns on a forbidden (prototype-polluting) key in a variant value', () => {
         const hostile = JSON.parse('{"size":{"sm":{"__proto__":{"px":9}}}}');
-        szv({ variants: hostile.size ? hostile : hostile });
+        szv({ variants: hostile });
         expect(warned(/forbidden key "__proto__"/)).toBe(true);
     });
 
@@ -94,7 +102,7 @@ describe('szv config/selection validation (dev)', () => {
         // @ts-expect-error
         f({ size: 'xl' });
         const xlWarns = warn.mock.calls.filter(c => /is not a value of variant/.test(String(c[0])));
-        expect(xlWarns.length).toBe(1);
+        expect(xlWarns).toHaveLength(1);
     });
 });
 

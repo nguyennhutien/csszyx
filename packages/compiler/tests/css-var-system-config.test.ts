@@ -65,6 +65,21 @@ describe('CSS variable system config contract', () => {
         );
     });
 
+    it('keeps nullable conditional utilities aligned with mangled variable names', () => {
+        const source =
+            "const App = ({ flex }) => <div sz={{ flex: typeof flex === 'number' ? flex : undefined }} />;";
+
+        for (const result of [
+            transformOxc(source, 'nullable-vars-oxc.tsx', { mangleVars: true }),
+            transformRust(source, 'nullable-vars-rust.tsx', { mangleVars: true }),
+        ]) {
+            expect(result.code).toContain(`typeof flex === 'number' ? "flex-(--sz)" : undefined`);
+            expect(result.code).toContain(`"--sz": typeof flex === 'number' ? flex : undefined`);
+            expect(result.code).not.toContain('--_sz-flex');
+            expect(result.classes).toEqual(new Set(['flex-(--sz)']));
+        }
+    });
+
     it('hoists repeated component-tier variables to a bounded common ancestor', () => {
         const source =
             'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;';
@@ -303,5 +318,6 @@ describe('CSS variable system config contract', () => {
 });
 
 function asArray<T>(value: T | T[] | undefined): T[] {
-    return value === undefined ? [] : Array.isArray(value) ? value : [value];
+    if (value === undefined) return [];
+    return Array.isArray(value) ? value : [value];
 }

@@ -183,8 +183,8 @@ export function flattenColors(colors: Record<string, string | Record<string, str
 export function extractSpacingKeys(spacing: Record<string, string>): string[] {
     return Object.keys(spacing).sort((a, b) => {
         // Sort numbers first, then strings
-        const aNum = parseFloat(a);
-        const bNum = parseFloat(b);
+        const aNum = Number.parseFloat(a);
+        const bNum = Number.parseFloat(b);
 
         if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
             return aNum - bNum;

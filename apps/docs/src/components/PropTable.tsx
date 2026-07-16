@@ -2,6 +2,15 @@ import React from 'react';
 import { szv } from '@csszyx/runtime';
 import { dynamic } from '@csszyx/dynamic';
 
+import { parseSzObjectEntries } from '../utils/parse-sz-object.js';
+import {
+    type MarginDirection,
+    type PaddingKind,
+    resolveMarginViz,
+    resolvePaddingKind,
+    type SpacingVizProps,
+} from '../utils/spacing-viz.js';
+
 interface PropTableRow {
     sz: string;
     tw: string;
@@ -134,6 +143,41 @@ const hatchSz = szv({
     },
 });
 
+function resolveMarginKind(dir: MarginDirection, magnitude: number): MarginKind {
+    if (dir === 'right') return magnitude === 4 ? 'mr4' : 'mr2';
+    if (dir === 'left') return 'ml2';
+    if (dir === 'bottom') return magnitude === 8 ? 'mb8' : 'mb6';
+    return 'mt4';
+}
+
+function paddingOverrideClass(p: number | 'px' | '5px' | '--p'): string {
+    if (p === 4) return dynamic(_O_P4);
+    if (p === 'px') return dynamic(_O_PPX);
+    if (p === '5px') return dynamic(_O_P5PX);
+    return dynamic(_O_PVAR);
+}
+
+function resolvePaddingClasses(
+    kind: PaddingKind,
+    p: SpacingVizProps['p'],
+): { overrideClass: string; targetClass: string } {
+    if (kind === 'p' && p != null) {
+        return {
+            overrideClass: paddingOverrideClass(p),
+            targetClass: p === 4 || p === '5px' || p === '--p' ? '' : dynamic(_T_PAD),
+        };
+    }
+    if (kind === 'px') return { overrideClass: dynamic(_O_PX6), targetClass: '' };
+    if (kind === 'py') return { overrideClass: dynamic(_O_PY2), targetClass: '' };
+    if (kind === 'pt') return { overrideClass: dynamic(_O_PT4), targetClass: dynamic(_T_PAD_PT4) };
+    if (kind === 'pr') return { overrideClass: dynamic(_O_PR2), targetClass: dynamic(_T_PAD_PR2) };
+    if (kind === 'pb') return { overrideClass: dynamic(_O_PB4), targetClass: dynamic(_T_PAD_PB4) };
+    if (kind === 'ps') return { overrideClass: dynamic(_O_PS4), targetClass: dynamic(_T_PAD_PS4) };
+    if (kind === 'pe') return { overrideClass: dynamic(_O_PE4), targetClass: dynamic(_T_PAD_PE4) };
+    if (kind === 'pl') return { overrideClass: dynamic(_O_PL2), targetClass: dynamic(_T_PAD_PL2) };
+    return { overrideClass: '', targetClass: '' };
+}
+
 /**
  * Spacing viz — padding and margin.
  *
@@ -145,35 +189,13 @@ const hatchSz = szv({
  *
  * MARGIN:  Two boxes: green target + adjacent box with gradient fading away.
  */
-export function SpacingViz({ p, px, py, pt, pr, pb, pl, ps, pe, m, mx, my, mt, mr, mb, ml }: {
-    p?: number | 'px' | '5px' | '--p'; px?: number; py?: number;
-    pt?: number; pr?: number; pb?: number; pl?: number;
-    ps?: number; pe?: number;
-    m?: number; mx?: number; my?: number; mt?: number; mr?: number; mb?: number; ml?: number;
-}) {
-    const hasMargin = [m, mx, my, mt, mr, mb, ml].some(v => v != null);
+export function SpacingViz(props: SpacingVizProps) {
+    const { p, ps, pe } = props;
+    const margin = resolveMarginViz(props);
 
-    if (hasMargin) {
-        let dir: 'right' | 'left' | 'bottom' | 'top' = 'right';
-        if      (mr != null) dir = 'right';
-        else if (ml != null) dir = 'left';
-        else if (mb != null) dir = 'bottom';
-        else if (mt != null) dir = 'top';
-        else if (mx != null || m != null) dir = 'right';
-        else if (my != null) dir = 'bottom';
-
-        const isHoriz = dir === 'right' || dir === 'left';
-
-        const adjCls = dynamic(adjBoxSz({ dir }));
-
-        const mAbs = Math.abs(mr ?? ml ?? mb ?? mt ?? mx ?? my ?? m ?? 0);
-        const marginKind: MarginKind =
-            dir === 'right'  && mAbs === 4 ? 'mr4' :
-            dir === 'right'                ? 'mr2' :
-            dir === 'left'                 ? 'ml2' :
-            dir === 'bottom' && mAbs === 8 ? 'mb8' :
-            dir === 'bottom'               ? 'mb6' :
-                                             'mt4';
+    if (margin) {
+        const adjCls = dynamic(adjBoxSz({ dir: margin.direction }));
+        const marginKind = resolveMarginKind(margin.direction, margin.magnitude);
         const targetCls    = dynamic(targetMarginSz({ kind: marginKind }));
         const fakeMarginCls = dynamic(fakeMarginSz({  kind: marginKind }));
 
@@ -189,12 +211,12 @@ export function SpacingViz({ p, px, py, pt, pr, pb, pl, ps, pe, m, mx, my, mt, m
           <div sz={{ position: 'relative', w: 8, h: 8, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'indigo-800', to: 'indigo-900', rounded: 'sm', shrink: 0, z: 2 }} />
         </div>;
         const adjBox    = <div key="adj" className={adjCls} sz={{ from: 'indigo-800', to: 'transparent', rounded: 'md', shrink: 0 }} />;
-        const ordered = dir === 'right' || dir === 'bottom'
+        const ordered = margin.direction === 'right' || margin.direction === 'bottom'
             ? [targetBox, adjBox] : [adjBox, targetBox];
 
         return (
             <div sz={{ w: 40, h: 24, display: 'flex', items: 'center', justify: 'center', overflow: 'hidden' }}>
-                <div className={dynamic(marginContainerSz({ dir: isHoriz ? 'horiz' : 'vert' }))}>
+                <div className={dynamic(marginContainerSz({ dir: margin.horizontal ? 'horiz' : 'vert' }))}>
                     {ordered}
                 </div>
             </div>
@@ -202,42 +224,7 @@ export function SpacingViz({ p, px, py, pt, pr, pb, pl, ps, pe, m, mx, my, mt, m
     }
 
     // ── Padding visualization ─────────────────────────────────────────────────
-    let padOverrideCls = '';
-    let padTargetCls = '';
-    if (p != null) {
-      padOverrideCls = p === 4
-        ? dynamic(_O_P4)
-        : p === 'px'
-          ? dynamic(_O_PPX)
-          : p === '5px'
-            ? dynamic(_O_P5PX)
-            : dynamic(_O_PVAR);
-      padTargetCls = p === 4 || p === '5px' || p === '--p'
-        ? ''
-        : dynamic(_T_PAD);
-    } else if (px != null) {
-        padOverrideCls = dynamic(_O_PX6);
-    } else if (py != null) {
-        padOverrideCls = dynamic(_O_PY2);
-    } else if (pt != null) {
-        padOverrideCls = dynamic(_O_PT4);
-        padTargetCls = dynamic(_T_PAD_PT4);
-    } else if (pr != null) {
-        padOverrideCls = dynamic(_O_PR2);
-        padTargetCls = dynamic(_T_PAD_PR2);
-    } else if (pb != null) {
-        padOverrideCls = dynamic(_O_PB4);
-        padTargetCls = dynamic(_T_PAD_PB4);
-    } else if (ps != null) {
-        padOverrideCls = dynamic(_O_PS4);
-        padTargetCls = dynamic(_T_PAD_PS4);
-    } else if (pe != null) {
-        padOverrideCls = dynamic(_O_PE4);
-        padTargetCls = dynamic(_T_PAD_PE4);
-    } else if (pl != null) {
-        padOverrideCls = dynamic(_O_PL2);
-        padTargetCls = dynamic(_T_PAD_PL2);
-    }
+    const padding = resolvePaddingClasses(resolvePaddingKind(props), p);
 
     // ps/pe: show text content so the inline-start/end direction is obvious
     const showText = ps != null || pe != null;
@@ -246,11 +233,11 @@ export function SpacingViz({ p, px, py, pt, pr, pb, pl, ps, pe, m, mx, my, mt, m
         <div sz={{ w: 40, h: 24, display: 'flex', items: 'center', justify: 'center', overflow: 'hidden' }}>
           <div sz={{ bg: '--sl-color-accent-high', rounded: 'md' }}>
             <div
-              className={`${padOverrideCls} ${dynamic(hatchSz({ dir: pe != null ? 'vert' : 'horiz' }))}`}
+              className={`${padding.overrideClass} ${dynamic(hatchSz({ dir: pe != null ? 'vert' : 'horiz' }))}`}
               {...(p === '--p' ? { style: { '--p': '0.75em' } as React.CSSProperties } : {})}
             >
               <div
-                className={padTargetCls}
+                className={padding.targetClass}
                 sz={[{ w: 8, h: 8, bgImg: { gradient: 'linear', dir: 'to-br' }, from: 'indigo-800', to: 'indigo-900', shrink: 0 }, pe && { textAlign: 'right' }]}
               >
                 {showText && <span sz={{ text: 'xs', fontMono: true, color: 'indigo-200', leading: 'none', select: 'none' }}>ABC</span>}
@@ -285,16 +272,29 @@ const sizingVizSz = szv({
 
 type SizingMode = 's4' | 'sFull' | 'sHalf' | 'sPx' | 'w4' | 'wFull' | 'wHalf' | 'wThird' | 'wPx' | 'h4' | 'hFull';
 
+const SQUARE_SIZING_MODES: Record<string, SizingMode> = {
+    full: 'sFull',
+    '1/2': 'sHalf',
+    px: 'sPx',
+};
+const WIDTH_SIZING_MODES: Record<string, SizingMode> = {
+    full: 'wFull',
+    '1/2': 'wHalf',
+    '1/3': 'wThird',
+    px: 'wPx',
+};
+
+function resolveSizingMode(w: number | string | undefined, h: number | string | undefined): SizingMode {
+    if (w !== undefined && h !== undefined) return SQUARE_SIZING_MODES[String(w)] ?? 's4';
+    if (w !== undefined) return WIDTH_SIZING_MODES[String(w)] ?? 'w4';
+    if (h === 4) return 'h4';
+    if (h !== undefined) return 'hFull';
+    return 's4';
+}
+
 /** Width/height sizing viz. Accepts the actual sz value ('1/2', 'px', …). */
 export function SizingViz({ w, h }: { w?: number | string; h?: number | string }) {
-    const mode: SizingMode =
-        w !== undefined && h !== undefined
-            ? (w === 'full' ? 'sFull' : w === '1/2' ? 'sHalf' : w === 'px' ? 'sPx' : 's4')
-            : w !== undefined
-                ? (w === 'full' ? 'wFull' : w === '1/2' ? 'wHalf' : w === '1/3' ? 'wThird' : w === 'px' ? 'wPx' : 'w4')
-                : h !== undefined
-                    ? (h === 4 ? 'h4' : 'hFull')
-                    : 's4';
+    const mode = resolveSizingMode(w, h);
     return <VizCell justify="start"><div className={dynamic(sizingVizSz({ mode }))} /></VizCell>;
 }
 
@@ -327,20 +327,29 @@ const borderVizSz = szv({
     },
 });
 
+type BorderKind = 'none' | 'b1' | 'b2' | 'b4' | 'solid' | 'dashed' | 'dotted' | 'double';
+
+function resolveBorderKind(border: number | boolean, borderStyle: string | undefined): BorderKind {
+    if (border === 0) return 'none';
+    if (
+        borderStyle === 'dashed' ||
+        borderStyle === 'dotted' ||
+        borderStyle === 'double' ||
+        borderStyle === 'solid'
+    ) {
+        return borderStyle;
+    }
+    if (border === 4) return 'b4';
+    if (border === 2) return 'b2';
+    return 'b1';
+}
+
 /** Border width / style viz. Accepts sz prop names (`border`, `borderStyle`). */
 export function BorderViz({ border = true, borderStyle }: {
     border?: number | boolean; borderStyle?: string;
 }) {
-    const kind =
-        border === 0            ? 'none'   :
-        borderStyle === 'dashed'? 'dashed' :
-        borderStyle === 'dotted'? 'dotted' :
-        borderStyle === 'double'? 'double' :
-        borderStyle === 'solid' ? 'solid'  :
-        border === 4            ? 'b4'     :
-        border === 2            ? 'b2'     :
-                                  'b1';
-    return <VizCell><div className={dynamic(borderVizSz({ kind: kind as 'none' | 'b1' | 'b2' | 'b4' | 'solid' | 'dashed' | 'dotted' | 'double' }))} /></VizCell>;
+    const kind = resolveBorderKind(border, borderStyle);
+    return <VizCell><div className={dynamic(borderVizSz({ kind }))} /></VizCell>;
 }
 
 // ── RadiusViz — szv over all rounded values used in borders.mdx ───────────────
@@ -456,6 +465,13 @@ const COL_SLOTS  = ['c0',  'c1',  'c2' ] as const;
 const ROW_SLOTS  = ['r0',  'r1',  'r2' ] as const;
 const ROWH_SLOTS = ['r0h', 'r1h', 'r2h'] as const;
 
+function resolveFlexSlot(wrap: boolean, isColumn: boolean, needsHeight: boolean, index: number) {
+    if (wrap) return 'wx';
+    if (isColumn) return COL_SLOTS[index];
+    if (needsHeight) return ROWH_SLOTS[index];
+    return ROW_SLOTS[index];
+}
+
 /** Flex layout viz. */
 export function FlexViz({ direction = 'row', wrap = false, justify = 'flex-start', items = 'stretch' }: {
     direction?: string; wrap?: boolean; justify?: string; items?: string;
@@ -479,10 +495,7 @@ export function FlexViz({ direction = 'row', wrap = false, justify = 'flex-start
             }))}>
                 {divs.map(i => (
                     <div key={i} className={dynamic(boxItemSz({
-                        slot: wrap    ? 'wx'
-                            : isCol   ? COL_SLOTS[i]
-                            : needsH  ? ROWH_SLOTS[i]
-                            :           ROW_SLOTS[i],
+                        slot: resolveFlexSlot(wrap, isCol, needsH, i),
                         idx: i,
                         color: isReverse ? 'reverse' : 'normal',
                     }))} />
@@ -562,46 +575,6 @@ function resolveViz(viz: React.ReactNode): React.ReactNode {
     return viz;
 }
 
-/** Parse `key: val, key2: val2` into entries, respecting quoted strings and nested {}. */
-function parseObjEntries(inner: string): Array<{ key: string; val: string }> {
-    const entries: Array<{ key: string; val: string }> = [];
-    let i = 0;
-
-    while (i < inner.length) {
-        while (i < inner.length && (inner[i] === ' ' || inner[i] === ',')) i++;
-        if (i >= inner.length) break;
-
-        const colonPos = inner.indexOf(': ', i);
-        if (colonPos === -1) break;
-        const key = inner.slice(i, colonPos).trim();
-        i = colonPos + 2;
-        while (i < inner.length && inner[i] === ' ') i++;
-
-        let val = '';
-        if (inner[i] === '{') {
-            let depth = 0, start = i;
-            while (i < inner.length) {
-                if (inner[i] === '{') depth++;
-                else if (inner[i] === '}') { depth--; if (depth === 0) { i++; break; } }
-                i++;
-            }
-            val = inner.slice(start, i);
-        } else if (inner[i] === "'" || inner[i] === '"') {
-            const q = inner[i], start = i++;
-            while (i < inner.length && inner[i] !== q) i++;
-            val = inner.slice(start, ++i);
-        } else {
-            const start = i;
-            while (i < inner.length && inner[i] !== ',') i++;
-            val = inner.slice(start, i).trim();
-        }
-
-        if (key) entries.push({ key, val });
-    }
-
-    return entries;
-}
-
 /**
  * Renders an sz prop entry as a syntax-highlighted object token.
  * Handles multi-property and nested objects via recursive entry parsing.
@@ -614,7 +587,7 @@ export function SzToken({ value }: { value: string }) {
         ? trimmed.slice(1, -1).trim()
         : trimmed;
 
-    const entries = parseObjEntries(inner);
+    const entries = parseSzObjectEntries(inner);
 
     // Bare key with no value (e.g. { nowrap })
     if (entries.length === 0) {
@@ -635,10 +608,10 @@ export function SzToken({ value }: { value: string }) {
                 const isBool = val === 'true' || val === 'false';
                 const isStr  = /^['"]/.test(val);
                 const isObj  = val.startsWith('{');
-                const valClass = isNum  ? 'sz-val-num'
-                    : isBool ? 'sz-val-bool'
-                    : isStr  ? 'sz-val-str'
-                    : 'sz-punct';
+                let valClass = 'sz-punct';
+                if (isNum) valClass = 'sz-val-num';
+                else if (isBool) valClass = 'sz-val-bool';
+                else if (isStr) valClass = 'sz-val-str';
                 return (
                     <React.Fragment key={i}>
                         {i > 0 && <span className="sz-punct">{', '}</span>}

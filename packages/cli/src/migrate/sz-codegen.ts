@@ -5,6 +5,8 @@
  * → "{{ p: 4, bg: 'blue-500', hover: { bg: 'blue-600' } }}"
  */
 
+import { escapeSingleQuotedString } from '../utils/string-escape.js';
+
 /**
  * Generate a JSX expression from sz object.
  * @param obj - The sz property object.
@@ -125,7 +127,7 @@ function formatKey(key: string): string {
         return key;
     }
     // Keys starting with @ or containing hyphens, dots, etc. need quotes
-    return `'${key}'`;
+    return `'${escapeSingleQuotedString(key)}'`;
 }
 
 /**
@@ -148,7 +150,7 @@ function formatValue(value: unknown, indent: number): string {
         return String(value);
     }
     if (typeof value === 'string') {
-        return `'${escapeString(value)}'`;
+        return `'${escapeSingleQuotedString(value)}'`;
     }
 
     if (Array.isArray(value)) {
@@ -160,7 +162,9 @@ function formatValue(value: unknown, indent: number): string {
         return formatObjectValue(value as Record<string, unknown>, indent);
     }
 
-    return String(value);
+    // Unsupported sz values must not leak function source or invalid Symbol text
+    // into generated code. Keep the object shape while dropping the value.
+    return 'undefined';
 }
 
 /**
@@ -172,27 +176,22 @@ function formatValue(value: unknown, indent: number): string {
 function formatObjectValue(value: Record<string, unknown>, indent: number): string {
     if (isColorOpacityObj(value)) {
         const opacity =
-            typeof value.op === 'number' ? String(value.op) : `'${escapeString(String(value.op))}'`;
-        return `{ color: '${escapeString(String(value.color))}', op: ${opacity} }`;
+            typeof value.op === 'number'
+                ? String(value.op)
+                : `'${escapeSingleQuotedString(String(value.op))}'`;
+        return `{ color: '${escapeSingleQuotedString(String(value.color))}', op: ${opacity} }`;
     }
     if (!isGradientObj(value)) return objectToString(value, indent);
-    const parts: string[] = [`gradient: '${value.gradient}'`];
+    const parts: string[] = [`gradient: '${escapeSingleQuotedString(value.gradient)}'`];
     if ('dir' in value) {
         const direction =
             typeof value.dir === 'number'
                 ? String(value.dir)
-                : `'${escapeString(String(value.dir))}'`;
+                : `'${escapeSingleQuotedString(String(value.dir))}'`;
         parts.push(`dir: ${direction}`);
     }
-    if ('in' in value) parts.push(`in: '${escapeString(String(value.in))}'`);
+    if ('in' in value) {
+        parts.push(`in: '${escapeSingleQuotedString(String(value.in))}'`);
+    }
     return `{ ${parts.join(', ')} }`;
-}
-
-/**
- * Escapes backslashes and single quotes in a string for JS output.
- * @param s - The string to escape
- * @returns Escaped string
- */
-function escapeString(s: string): string {
-    return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }

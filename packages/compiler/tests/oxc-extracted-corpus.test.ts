@@ -7,11 +7,9 @@
  * corpus signal: as transformOxc gains coverage, update the expected summary.
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-
 import { describe, expect, it } from 'vitest';
 
+import { extractCorpusSnippets } from './extracted-corpus.js';
 import { compareImpls, type ParityComparison } from './oxc-parity-harness.js';
 
 type CorpusCategory =
@@ -22,15 +20,9 @@ type CorpusCategory =
     | 'diagnostics-divergence'
     | 'metadata-divergence';
 
-interface ExtractedSnippet {
-    file: string;
-    index: number;
-    source: string;
-}
-
 const EXPECTED_SUMMARY: Record<CorpusCategory, number> = {
     parity: 8,
-    'surgical-parity': 130,
+    'surgical-parity': 133,
     'oxc-throws': 0,
     // Was 1: the `bg:{ color, op: cond ? 30 : 100 }` snippet — oxc used to diverge
     // (incomplete safelist) and now expands the finite conditional like babel.
@@ -44,7 +36,7 @@ describe('Phase D3 — extracted compiler corpus categories', () => {
     const summary = summarise(snippets);
 
     it('extracts a stable source corpus from existing compiler tests', () => {
-        expect(snippets).toHaveLength(138);
+        expect(snippets).toHaveLength(141);
     });
 
     it('matches the current Babel-vs-oxc category summary', () => {
@@ -68,49 +60,6 @@ describe('Phase D3 — extracted compiler corpus categories', () => {
         expect(summary.counts['surgical-parity']).toBeGreaterThan(0);
     });
 });
-
-function extractCorpusSnippets(): ExtractedSnippet[] {
-    const testsDir = path.resolve(__dirname);
-    const snippets: ExtractedSnippet[] = [];
-
-    for (const file of fs.readdirSync(testsDir).sort()) {
-        // `*-branch-coverage.test.ts` files exist to drive per-file branch
-        // coverage with edge-case inputs; they are not curated parity-corpus
-        // entries. Excluding them keeps this signal a stable, hand-picked set
-        // instead of drifting with every coverage-oriented snippet added.
-        if (
-            !file.endsWith('.test.ts') ||
-            file.startsWith('oxc-') ||
-            file.includes('branch-coverage')
-        ) {
-            continue;
-        }
-        const content = fs.readFileSync(path.join(testsDir, file), 'utf-8');
-        const re = /const\s+(?:source|src)\s*=\s*(['"`])([\s\S]*?)\1\s*;/g;
-        let index = 0;
-        for (const match of content.matchAll(re)) {
-            const source = decodeLiteral(match[1], match[2]);
-            if (!source || !/\bsz(?:Recover)?\s*=/.test(source)) {
-                continue;
-            }
-            snippets.push({ file, index, source });
-            index++;
-        }
-    }
-
-    return snippets;
-}
-
-function decodeLiteral(quote: string, raw: string): string | null {
-    if (quote === '`') {
-        return raw.includes('${') ? null : raw;
-    }
-    try {
-        return Function(`return ${quote}${raw}${quote}`)() as string;
-    } catch {
-        return null;
-    }
-}
 
 function summarise(snippets: readonly ExtractedSnippet[]): {
     counts: Record<CorpusCategory, number>;

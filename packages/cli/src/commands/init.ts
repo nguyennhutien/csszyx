@@ -433,7 +433,7 @@ async function injectVitePlugin(cwd: string): Promise<boolean> {
         .join('\n');
 
     const lastImportMatch = [...content.matchAll(/^import .+$/gm)].pop();
-    if (!lastImportMatch || lastImportMatch.index === undefined) {
+    if (lastImportMatch?.index === undefined) {
         return false;
     }
 
@@ -441,8 +441,8 @@ async function injectVitePlugin(cwd: string): Promise<boolean> {
     content = `${content.slice(0, insertAt)}\n${importBlock}${content.slice(insertAt)}`;
 
     // Inject ...csszyx() as first plugin, before tailwindcss() if present
-    const pluginsMatch = content.match(/plugins\s*:\s*\[/);
-    if (!pluginsMatch || pluginsMatch.index === undefined) {
+    const pluginsMatch = /plugins\s*:\s*\[/.exec(content);
+    if (pluginsMatch?.index === undefined) {
         return false;
     }
 
@@ -490,12 +490,8 @@ export async function injectNextPlugin(cwd: string): Promise<boolean> {
         return true;
     }
 
-    if (content?.includes('csszyx')) {
-        return true;
-    }
-
     // next.config already exists but doesn't have csszyx — too risky to auto-modify
-    return false;
+    return content?.includes('csszyx') ?? false;
 }
 
 /**
@@ -518,8 +514,8 @@ async function setupTsconfig(cwd: string): Promise<void> {
         return;
     }
 
-    const includeMatch = content.match(/"include"\s*:\s*\[/);
-    if (includeMatch && includeMatch.index !== undefined) {
+    const includeMatch = /"include"\s*:\s*\[/.exec(content);
+    if (includeMatch?.index !== undefined) {
         const insertPos = includeMatch.index + includeMatch[0].length;
         content =
             content.slice(0, insertPos) +
@@ -570,8 +566,8 @@ async function ensureTsconfigInclude(cwd: string, entry: string): Promise<void> 
         if (content.includes(entry)) {
             return;
         }
-        const includeMatch = content.match(/"include"\s*:\s*\[/);
-        if (includeMatch && includeMatch.index !== undefined) {
+        const includeMatch = /"include"\s*:\s*\[/.exec(content);
+        if (includeMatch?.index !== undefined) {
             const insertPos = includeMatch.index + includeMatch[0].length;
             await fs.writeFile(
                 tsconfigPath,

@@ -42,8 +42,61 @@ export function loadSections(config) {
     return map;
 }
 
-const CONVENTIONAL =
-    /^(feat|fix|perf|revert|refactor|test|ci|build|chore|docs|style)(\(([^)]+)\))?!?:\s*(.+)$/;
+const CONVENTIONAL_TYPES = new Set([
+    'feat',
+    'fix',
+    'perf',
+    'revert',
+    'refactor',
+    'test',
+    'ci',
+    'build',
+    'chore',
+    'docs',
+    'style',
+]);
+
+/**
+ * Remove a trailing `(#123)` reference without a backtracking regex.
+ * @param {string} text - Subject or description text.
+ * @returns {{ text: string, pr: string | null }} Clean text and PR number.
+ */
+function readTrailingPr(text) {
+    const trimmed = text.trimEnd();
+    if (!trimmed.endsWith(')')) return { text: trimmed, pr: null };
+    const marker = trimmed.lastIndexOf('(#');
+    if (marker === -1) return { text: trimmed, pr: null };
+    const pr = trimmed.slice(marker + 2, -1);
+    if (pr === '' || [...pr].some(character => character < '0' || character > '9')) {
+        return { text: trimmed, pr: null };
+    }
+    return { text: trimmed.slice(0, marker).trimEnd(), pr };
+}
+
+/**
+ * Parse one conventional subject after bullet decoration has been removed.
+ * @param {string} line - Candidate conventional subject.
+ * @returns {{ type: string, scope: string, desc: string } | null} Parsed entry.
+ */
+function parseConventionalLine(line) {
+    const colon = line.indexOf(':');
+    if (colon <= 0) return null;
+
+    let header = line.slice(0, colon);
+    const desc = line.slice(colon + 1).trimStart();
+    if (desc === '') return null;
+    if (header.endsWith('!')) header = header.slice(0, -1);
+
+    const open = header.indexOf('(');
+    const type = open === -1 ? header : header.slice(0, open);
+    if (!CONVENTIONAL_TYPES.has(type)) return null;
+    if (open === -1) return { type, scope: '', desc };
+    if (!header.endsWith(')')) return null;
+
+    const scope = header.slice(open + 1, -1);
+    if (scope === '' || scope.includes(')')) return null;
+    return { type, scope, desc };
+}
 
 /**
  * Extract deduped conventional-commit entries from a list of commit messages.
@@ -57,17 +110,13 @@ export function parseConventional(messages) {
     const out = [];
     for (const message of messages) {
         const firstLine = message.split('\n', 1)[0] ?? '';
-        const prMatch = firstLine.match(/\(#(\d+)\)\s*$/);
-        const pr = prMatch ? prMatch[1] : null;
+        const pr = readTrailingPr(firstLine).pr;
         for (const raw of message.split('\n')) {
             const line = raw.trim().replace(/^[*-]\s+/, '');
-            const m = CONVENTIONAL.exec(line);
-            if (!m) {
-                continue;
-            }
-            const type = m[1];
-            const scope = m[3] ?? '';
-            const desc = m[4].replace(/\s*\(#\d+\)\s*$/, '').trim();
+            const parsed = parseConventionalLine(line);
+            if (!parsed) continue;
+            const { type, scope } = parsed;
+            const desc = readTrailingPr(parsed.desc).text.trim();
             const key = `${type}|${scope}|${desc}`;
             if (seen.has(key)) {
                 continue;
@@ -148,7 +197,8 @@ export function spliceSection(changelog, version, newSection) {
     return [...before, ...newSection.split('\n'), '', ...after]
         .join('\n')
         .replace(/\n{3,}/g, '\n\n')
-        .replace(/\s*$/, '\n');
+        .trimEnd()
+        .concat('\n');
 }
 
 /**

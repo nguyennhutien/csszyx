@@ -57,7 +57,9 @@ const NONE: SzContext = {
  */
 function normalizeKeySegment(segment: string): string {
     let seg = segment.trim();
-    if (seg.length >= 2 && (seg[0] === "'" || seg[0] === '"') && seg[seg.length - 1] === seg[0]) {
+    const singleQuoted = seg.startsWith("'") && seg.endsWith("'");
+    const doubleQuoted = seg.startsWith('"') && seg.endsWith('"');
+    if (seg.length >= 2 && (singleQuoted || doubleQuoted)) {
         seg = seg.slice(1, -1);
     }
     return /^[a-z_$][\w$]*$/i.test(seg) ? seg : '';
@@ -202,112 +204,210 @@ export function parseSzContext(text: string): SzContext {
 
     const afterOpen = text.slice(start.bodyStart);
 
-    // Implicit forms start "inside" the virtual object at depth 1.
-    let depth = start.explicit ? 0 : 1;
-    const segStart: number[] = [];
-    // keyStack[d] = key owning the `{` that opened depth d ('' = unknown);
-    // siblingsAt[d] = keys assigned at depth d since its `{` opened.
-    const keyStack: string[] = [];
-    const siblingsAt: Array<Set<string>> = [];
-    if (start.explicit) {
-        segStart[0] = 0;
-    } else {
-        segStart[1] = 0;
-        keyStack[1] = '';
-        siblingsAt[1] = new Set();
+    const state = createSzContextScanState(start);
+
+    let index = 0;
+    while (index < afterOpen.length) {
+        const step = scanSzContextCharacter(afterOpen, index, start, state);
+        if (step.closed) return NONE;
+        index = step.index + 1;
     }
 
-    let lastColon = -1;
-    let keyAtColon = '';
-
-    for (let i = 0; i < afterOpen.length; i++) {
-        const c = afterOpen[i];
-
-        // Implicit: hitting the attribute's closing quote at depth 1 means
-        // the cursor is past the sz expression entirely.
-        if (!start.explicit && c === start.terminator && depth === 1) {
-            return NONE;
-        }
-
-        if (c === '{') {
-            const owner = lastColon >= (segStart[depth] ?? 0) ? keyAtColon : '';
-            depth++;
-            keyStack[depth] = owner;
-            siblingsAt[depth] = new Set();
-            segStart[depth] = i + 1;
-            lastColon = -1;
-            keyAtColon = '';
-        } else if (c === '}') {
-            if (depth === 0) {
-                return NONE;
-            }
-            segStart.length = depth;
-            keyStack.length = depth;
-            siblingsAt.length = depth;
-            depth--;
-            lastColon = -1;
-            keyAtColon = '';
-        } else if (c === ',' && depth >= 1) {
-            segStart[depth] = i + 1;
-            lastColon = -1;
-            keyAtColon = '';
-        } else if (c === ':' && depth >= 1) {
-            const seg = normalizeKeySegment(afterOpen.slice(segStart[depth] ?? 0, i));
-            if (seg !== '') {
-                lastColon = i;
-                keyAtColon = seg;
-                siblingsAt[depth]?.add(seg);
-            }
-        } else if ((c === '"' || c === "'") && depth >= 1) {
-            const q = c;
-            i++;
-            while (i < afterOpen.length && afterOpen[i] !== q) {
-                if (afterOpen[i] === '\\') {
-                    i++;
-                }
-                i++;
-            }
-        } else if (c === '[' && depth >= 1) {
-            let brackets = 1;
-            i++;
-            while (i < afterOpen.length && brackets > 0) {
-                if (afterOpen[i] === '[') {
-                    brackets++;
-                } else if (afterOpen[i] === ']') {
-                    brackets--;
-                }
-                i++;
-            }
-            i--;
-        }
-    }
-
-    if (depth <= 0) {
-        return NONE;
-    }
+    if (state.depth <= 0) return NONE;
 
     // Owners of depth 2..current, outer→inner (depth 1 — the root — has none).
-    const parents = keyStack.slice(2, depth + 1);
-    const siblings = [...(siblingsAt[depth] ?? [])];
+    const parents = state.keyStack.slice(2, state.depth + 1);
+    const siblings = [...(state.siblingsAt[state.depth] ?? [])];
 
-    if (lastColon >= (segStart[depth] ?? 0)) {
+    if (state.lastColon >= (state.segStart[state.depth] ?? 0)) {
         return {
-            type: depth === 1 ? 'value' : 'variant-value',
-            currentKey: keyAtColon || undefined,
-            depth,
+            type: state.depth === 1 ? 'value' : 'variant-value',
+            currentKey: state.keyAtColon || undefined,
+            depth: state.depth,
             form: start.form,
             parents,
             siblings,
         };
     }
     return {
-        type: depth === 1 ? 'key' : 'variant-key',
+        type: state.depth === 1 ? 'key' : 'variant-key',
         currentKey: undefined,
-        depth,
+        depth: state.depth,
         form: start.form,
         parents,
         siblings,
     };
+}
+
+/** Mutable state for one sz context scan. */
+interface SzContextScanState {
+    depth: number;
+    segStart: number[];
+    keyStack: string[];
+    siblingsAt: Array<Set<string>>;
+    lastColon: number;
+    keyAtColon: string;
+}
+
+/**
+ * Creates context state for explicit and virtual implicit objects.
+ *
+ * @param start - Expression opening description.
+ * @returns Initialized scanner state.
+ */
+function createSzContextScanState(start: SzStart): SzContextScanState {
+    if (start.explicit) {
+        return {
+            depth: 0,
+            segStart: [0],
+            keyStack: [],
+            siblingsAt: [],
+            lastColon: -1,
+            keyAtColon: '',
+        };
+    }
+    const siblingsAt: Array<Set<string>> = [];
+    siblingsAt[1] = new Set();
+    return {
+        depth: 1,
+        segStart: [0, 0],
+        keyStack: ['', ''],
+        siblingsAt,
+        lastColon: -1,
+        keyAtColon: '',
+    };
+}
+
+/** Result of scanning one context character. */
+interface SzContextScanStep {
+    closed: boolean;
+    index: number;
+}
+
+/**
+ * Applies one structural character to the context scanner state.
+ *
+ * @param source - Expression body.
+ * @param index - Current source offset.
+ * @param start - Expression opening description.
+ * @param state - Mutable scanner state.
+ * @returns Updated source offset and whether the expression has closed.
+ */
+function scanSzContextCharacter(
+    source: string,
+    index: number,
+    start: SzStart,
+    state: SzContextScanState,
+): SzContextScanStep {
+    const character = source[index];
+    if (!start.explicit && character === start.terminator && state.depth === 1) {
+        return { closed: true, index };
+    }
+    if (character === '{') openSzContextObject(state, index);
+    else if (character === '}') closeSzContextObject(state);
+    else if (character === ',' && state.depth >= 1) resetSzContextSegment(state, index + 1);
+    else if (character === ':' && state.depth >= 1) recordSzContextKey(source, index, state);
+    else if ((character === '"' || character === "'") && state.depth >= 1) {
+        return { closed: false, index: skipQuotedText(source, index, character) };
+    } else if (character === '[' && state.depth >= 1) {
+        return { closed: false, index: skipBracketText(source, index) };
+    }
+    return { closed: state.depth < 0, index };
+}
+
+/**
+ * Opens a nested object owned by the current key.
+ *
+ * @param state - Mutable scanner state.
+ * @param index - Opening brace offset.
+ */
+function openSzContextObject(state: SzContextScanState, index: number): void {
+    const owner = state.lastColon >= (state.segStart[state.depth] ?? 0) ? state.keyAtColon : '';
+    state.depth++;
+    state.keyStack[state.depth] = owner;
+    state.siblingsAt[state.depth] = new Set();
+    state.segStart[state.depth] = index + 1;
+    state.lastColon = -1;
+    state.keyAtColon = '';
+}
+
+/**
+ * Closes the current object and discards its tracking state.
+ *
+ * @param state - Mutable scanner state.
+ */
+function closeSzContextObject(state: SzContextScanState): void {
+    if (state.depth === 0) {
+        state.depth = -1;
+        return;
+    }
+    state.segStart.length = state.depth;
+    state.keyStack.length = state.depth;
+    state.siblingsAt.length = state.depth;
+    state.depth--;
+    state.lastColon = -1;
+    state.keyAtColon = '';
+}
+
+/**
+ * Starts a new sibling segment.
+ *
+ * @param state - Mutable scanner state.
+ * @param segmentStart - Offset after the comma.
+ */
+function resetSzContextSegment(state: SzContextScanState, segmentStart: number): void {
+    state.segStart[state.depth] = segmentStart;
+    state.lastColon = -1;
+    state.keyAtColon = '';
+}
+
+/**
+ * Records a normalized key before a colon.
+ *
+ * @param source - Expression body.
+ * @param index - Colon offset.
+ * @param state - Mutable scanner state.
+ */
+function recordSzContextKey(source: string, index: number, state: SzContextScanState): void {
+    const segment = normalizeKeySegment(source.slice(state.segStart[state.depth] ?? 0, index));
+    if (segment === '') return;
+    state.lastColon = index;
+    state.keyAtColon = segment;
+    state.siblingsAt[state.depth]?.add(segment);
+}
+
+/**
+ * Skips a quoted fragment and its escaped characters.
+ *
+ * @param source - Source text.
+ * @param start - Opening quote offset.
+ * @param quote - Quote delimiter.
+ * @returns Closing quote offset, or source length when unterminated.
+ */
+function skipQuotedText(source: string, start: number, quote: string): number {
+    let index = start + 1;
+    while (index < source.length && source[index] !== quote) {
+        index += source[index] === '\\' ? 2 : 1;
+    }
+    return index;
+}
+
+/**
+ * Skips a balanced square-bracket fragment.
+ *
+ * @param source - Source text.
+ * @param start - Opening bracket offset.
+ * @returns Closing bracket offset, or final source offset when unterminated.
+ */
+function skipBracketText(source: string, start: number): number {
+    let depth = 1;
+    let index = start + 1;
+    while (index < source.length && depth > 0) {
+        if (source[index] === '[') depth++;
+        else if (source[index] === ']') depth--;
+        index++;
+    }
+    return index - 1;
 }
 
 /**
@@ -399,77 +499,107 @@ export function findSzExpressions(text: string): SzExpression[] {
             break;
         }
 
-        const { start } = hit;
-
-        if (start.explicit) {
-            // Walk braces starting from the `{`, skipping string interiors.
-            let depth = 0;
-            let objEnd = -1;
-            for (let i = start.bodyStart; i < text.length; i++) {
-                const c = text[i];
-                if (c === '"' || c === "'") {
-                    const q = c;
-                    i++;
-                    while (i < text.length && text[i] !== q) {
-                        if (text[i] === '\\') {
-                            i++;
-                        }
-                        i++;
-                    }
-                    continue;
-                }
-                if (c === '{') {
-                    depth++;
-                } else if (c === '}') {
-                    depth--;
-                    if (depth === 0) {
-                        objEnd = i + 1;
-                        break;
-                    }
-                }
-            }
-            if (objEnd !== -1) {
-                results.push({
-                    objText: text.slice(start.bodyStart, objEnd),
-                    startOffset: start.bodyStart,
-                    needsWrap: false,
-                });
-            }
-            searchFrom = objEnd === -1 ? hit.idx + 4 : objEnd;
-        } else {
-            // Walk up to the matching terminator (the attribute's closing quote),
-            // skipping nested string contents (which use the opposite quote).
-            const terminator = start.terminator ?? '"';
-            let end = -1;
-            for (let i = start.bodyStart; i < text.length; i++) {
-                const c = text[i];
-                if (c === terminator) {
-                    end = i;
-                    break;
-                }
-                if (c === '"' || c === "'") {
-                    const q = c;
-                    i++;
-                    while (i < text.length && text[i] !== q) {
-                        if (text[i] === '\\') {
-                            i++;
-                        }
-                        i++;
-                    }
-                }
-            }
-            if (end !== -1) {
-                results.push({
-                    objText: text.slice(start.bodyStart, end),
-                    startOffset: start.bodyStart,
-                    needsWrap: true,
-                });
-            }
-            searchFrom = end === -1 ? hit.idx + 4 : end + 1;
-        }
+        const scan = hit.start.explicit
+            ? scanExplicitSzExpression(text, hit)
+            : scanImplicitSzExpression(text, hit);
+        if (scan.expression) results.push(scan.expression);
+        searchFrom = scan.nextSearchFrom;
     }
 
     return results;
+}
+
+/** Result of scanning one located sz expression. */
+interface SzExpressionScanResult {
+    expression?: SzExpression;
+    nextSearchFrom: number;
+}
+
+/**
+ * Reads a balanced explicit sz object.
+ *
+ * @param text - Full source text.
+ * @param hit - Located expression opening.
+ * @returns Extracted expression and next search offset.
+ */
+function scanExplicitSzExpression(text: string, hit: MarkerHit): SzExpressionScanResult {
+    const end = findExplicitSzObjectEnd(text, hit.start.bodyStart);
+    if (end === -1) return { nextSearchFrom: hit.idx + 4 };
+    return {
+        expression: {
+            objText: text.slice(hit.start.bodyStart, end),
+            startOffset: hit.start.bodyStart,
+            needsWrap: false,
+        },
+        nextSearchFrom: end,
+    };
+}
+
+/**
+ * Finds the end offset after a balanced explicit object.
+ *
+ * @param text - Full source text.
+ * @param start - Opening brace offset.
+ * @returns Offset after the closing brace, or -1 when unterminated.
+ */
+function findExplicitSzObjectEnd(text: string, start: number): number {
+    let depth = 0;
+    let index = start;
+    while (index < text.length) {
+        const character = text[index];
+        if (character === '"' || character === "'") {
+            index = skipQuotedText(text, index, character) + 1;
+            continue;
+        } else if (character === '{') {
+            depth++;
+        } else if (character === '}' && --depth === 0) {
+            return index + 1;
+        }
+        index++;
+    }
+    return -1;
+}
+
+/**
+ * Reads an implicit sz attribute body.
+ *
+ * @param text - Full source text.
+ * @param hit - Located expression opening.
+ * @returns Extracted expression and next search offset.
+ */
+function scanImplicitSzExpression(text: string, hit: MarkerHit): SzExpressionScanResult {
+    const end = findImplicitSzEnd(text, hit.start.bodyStart, hit.start.terminator ?? '"');
+    if (end === -1) return { nextSearchFrom: hit.idx + 4 };
+    return {
+        expression: {
+            objText: text.slice(hit.start.bodyStart, end),
+            startOffset: hit.start.bodyStart,
+            needsWrap: true,
+        },
+        nextSearchFrom: end + 1,
+    };
+}
+
+/**
+ * Finds an implicit attribute terminator while skipping nested strings.
+ *
+ * @param text - Full source text.
+ * @param start - Attribute body offset.
+ * @param terminator - Attribute quote delimiter.
+ * @returns Terminator offset, or -1 when unterminated.
+ */
+function findImplicitSzEnd(text: string, start: number, terminator: string): number {
+    let index = start;
+    while (index < text.length) {
+        const character = text[index];
+        if (character === terminator) return index;
+        if (character === '"' || character === "'") {
+            index = skipQuotedText(text, index, character) + 1;
+            continue;
+        }
+        index++;
+    }
+    return -1;
 }
 
 /**

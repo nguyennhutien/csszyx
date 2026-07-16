@@ -34,6 +34,29 @@ import { nextPrebuild } from './commands/next-prebuild.js';
 import { nextWatch } from './commands/next-watch.js';
 import { scanCollisions } from './commands/scan-collisions.js';
 
+/**
+ * Normalize a repeatable CLI option to its array representation.
+ *
+ * @param value Raw option supplied by cac.
+ * @returns Zero or more option values.
+ */
+function repeatableOption(value: string | string[] | undefined): string[] | undefined {
+    if (value === undefined) return undefined;
+    return Array.isArray(value) ? value : [value];
+}
+
+/**
+ * Normalize the migration runtime-injection flag.
+ *
+ * @param value Raw option supplied by cac.
+ * @returns Supported injection mode, or false when disabled.
+ */
+function runtimeInjection(value: unknown): 'local' | 'cdn' | false {
+    if (value === 'local') return 'local';
+    if (value === 'cdn') return 'cdn';
+    return false;
+}
+
 const cli = cac('csszyx');
 normalizeNextCommandAlias(process.argv);
 
@@ -153,11 +176,7 @@ cli.command(
         await check({
             cwd: options.cwd,
             pattern: options.pattern,
-            ignore: options.ignore
-                ? Array.isArray(options.ignore)
-                    ? options.ignore
-                    : [options.ignore]
-                : undefined,
+            ignore: repeatableOption(options.ignore),
         });
     });
 
@@ -173,11 +192,7 @@ cli.command(
         await scanCollisions({
             cwd: options.cwd,
             pattern: options.pattern,
-            ignore: options.ignore
-                ? Array.isArray(options.ignore)
-                    ? options.ignore
-                    : [options.ignore]
-                : undefined,
+            ignore: repeatableOption(options.ignore),
         });
     });
 
@@ -247,12 +262,7 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
             cwd: dir || options.cwd,
             braces: options.braces,
             injectFouc: options.fouc !== false,
-            injectRuntime:
-                options.injectRuntime === 'local'
-                    ? 'local'
-                    : options.injectRuntime === 'cdn'
-                      ? 'cdn'
-                      : false,
+            injectRuntime: runtimeInjection(options.injectRuntime),
             cdnUrl: options.cdnUrl,
             localPath: options.localPath,
             audit: options.audit,

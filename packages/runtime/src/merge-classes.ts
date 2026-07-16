@@ -33,6 +33,9 @@ import { BOX_ROLE_TOKENS } from './box-role-map.generated.js';
 import { classifyAmbiguousValue, getSzcnGroupsGeneration } from './merge-groups.js';
 import { BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT, normalizeBase, stripVariant } from './split-box.js';
 
+/** Class string accepted by the public and generated merge helpers. */
+type ClassInput = string | false | null | undefined;
+
 /**
  * Utility prefixes that map to more than one CSS property. These route through
  * value-set classification (`merge-groups.ts`) instead of prefix-keyed merging
@@ -90,7 +93,7 @@ function decodeToken(token: string): string {
  * are a different CSS longhand and could flip under RTL — leaving those as
  * keep-both (still cascade-correct, never wrongly dropped).
  *
- * TODO(v2): `border-<width>` is directional too, but the `border` prefix is
+ * Deferred for v2: `border-<width>` is directional too, but the `border` prefix is
  * ambiguous (width vs color vs style), so it needs value-aware classification
  * (the same work as collapsing two `text-<size>` / two `bg-<color>`); deferred.
  */
@@ -179,12 +182,27 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
     if (base.indexOf('--') > 0) {
         return null;
     }
+    const firstSegment = norm.split('-', 1)[0] as string;
+    // A token that belongs to an ambiguous prefix AND classifies to a concrete
+    // value group (e.g. `text-ellipsis`/`text-clip` → `text:overflow`) is a
+    // single mutually-exclusive property, so it must last-wins even when it also
+    // appears in the box-role map. Resolve that BEFORE the box-role under-merge
+    // below, which would otherwise keep both. (Measured: only text-ellipsis and
+    // text-clip are in both sets; every other box-role token classifies to null.)
+    if (AMBIGUOUS_PREFIXES.has(firstSegment)) {
+        const value = norm === firstSegment ? '' : norm.slice(firstSegment.length + 1);
+        const group = classifyAmbiguousValue(firstSegment, value);
+        if (group !== null) {
+            const key = `${variant} ${group}`;
+            return { key, covers: [key] };
+        }
+    }
     // Exact value-keyed tokens (flex/block/italic/underline …) span several CSS
     // properties under one category, so under-merge to avoid dropping a sibling.
     if (BOX_ROLE_TOKENS.has(norm)) {
         return null;
     }
-    const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(norm.split('-', 1)[0] as string) ?? [];
+    const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(firstSegment) ?? [];
     for (const [prefix] of bucket) {
         if (norm === prefix || norm.startsWith(`${prefix}-`)) {
             return classifyMatchedPrefix(norm, variant, prefix);
@@ -219,7 +237,7 @@ let memoDecodeRef: unknown;
  * @returns The merged className string.
  * @example szcn('gap-2 p-4', 'gap-8') // → 'p-4 gap-8'  (gap-8 overrides gap-2)
  */
-export function szcn(...inputs: (string | false | null | undefined)[]): string {
+export function szcn(...inputs: ClassInput[]): string {
     let key = '';
     for (const input of inputs) {
         if (input && typeof input === 'string') {
@@ -271,7 +289,7 @@ export function szcn(...inputs: (string | false | null | undefined)[]): string {
  * @param inputs - Class strings; falsy inputs (`false`/`null`/`undefined`/`''`) are skipped.
  * @returns The merged className string.
  */
-export function _szcn(...inputs: (string | false | null | undefined)[]): string {
+export function _szcn(...inputs: ClassInput[]): string {
     return mergeUncached(inputs);
 }
 
@@ -281,7 +299,7 @@ export function _szcn(...inputs: (string | false | null | undefined)[]): string 
  * @param inputs - Class strings; falsy inputs are skipped.
  * @returns The merged className string.
  */
-function mergeUncached(inputs: readonly (string | false | null | undefined)[]): string {
+function mergeUncached(inputs: readonly ClassInput[]): string {
     const order: string[] = [];
     const byKey = new Map<string, string>();
 

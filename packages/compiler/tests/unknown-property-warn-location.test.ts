@@ -8,6 +8,15 @@ import {
 } from '../src/index.js';
 import { setSzWarnLocation, transform } from '../src/transform-core.js';
 
+function captureWarnings(action: () => void): string[] {
+    const calls: string[] = [];
+    vi.spyOn(console, 'warn').mockImplementation(message => {
+        calls.push(String(message));
+    });
+    action();
+    return calls;
+}
+
 /**
  * The dev-mode "Unknown property" warning must point at the offending sz prop —
  * relative to the project root, with a line — so it is findable in a large
@@ -78,6 +87,22 @@ describe('unknown-property warning — source location', () => {
         const messages = warn.mock.calls.map(c => String(c[0]));
         // Whichever canonical-key/unknown branch fires, it must carry the location.
         expect(messages.some(m => m.includes('at src/X.tsx'))).toBe(true);
+    });
+
+    it.each([
+        'textEllipsis',
+        'textClip',
+    ])('%s emits its class without a Babel or oxc warning', key => {
+        const source = `export const A = () => <div sz={{ ${key}: true }} />;`;
+        expect(
+            transformSourceCode(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code,
+        ).toContain(key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip');
+        expect(transformOxc(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code).toContain(
+            key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip',
+        );
+        expect(warn.mock.calls.some(call => String(call[0]).includes('Unknown property'))).toBe(
+            false,
+        );
     });
 });
 
@@ -167,6 +192,9 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
             // flag-only utilities: emit a class but carry no value, so they were
             // absent from rust's boolean_class table and over-warned (field report)
             'truncate',
+            'css',
+            'textEllipsis',
+            'textClip',
             'blur',
             'grayscale',
             'invert',
@@ -193,6 +221,35 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
         }
         expect(overWarns).toEqual([]);
     });
+
+    runOr('accepts the css escape hatch without diagnosing its sub-properties', () => {
+        const result = transformRust(
+            'export const A = () => <div sz={{ css: { writingMode: "vertical-lr" } }} />;',
+            '/p/F.tsx',
+            { rootDir: '/p' },
+        );
+        expect(result.classes).toContain('[writing-mode:vertical-lr]');
+        expect(result.diagnostics.some(message => message.includes('Unknown property'))).toBe(
+            false,
+        );
+    });
+
+    runOr.each(['textEllipsis', 'textClip'])(
+        '%s emits its class without a native diagnostic',
+        key => {
+            const result = transformRust(
+                `export const A = () => <div sz={{ ${key}: true }} />;`,
+                '/p/F.tsx',
+                { rootDir: '/p' },
+            );
+            expect(result.classes).toContain(
+                key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip',
+            );
+            expect(result.diagnostics.some(message => message.includes('Unknown property'))).toBe(
+                false,
+            );
+        },
+    );
 });
 
 /**
@@ -272,17 +329,8 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
         setSzWarnLocation(undefined);
     });
 
-    const collectWarn = (fn: () => void): string[] => {
-        const calls: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation(m => {
-            calls.push(String(m));
-        });
-        fn();
-        return calls;
-    };
-
     it('oxc names the array/spread cause and keeps the location', () => {
-        const calls = collectWarn(() =>
+        const calls = captureWarnings(() =>
             transformOxc('export const A = () => <div sz={{ 4: true }} />;', '/p/F.tsx', {
                 rootDir: '/p',
             }),
@@ -295,15 +343,14 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
     });
 
     it('the runtime path (no location) uses the same message', () => {
-        const calls = collectWarn(() => transform({ '4': true }));
+        const calls = captureWarnings(() => transform({ '4': true }));
         const msg = calls.find(m => m.includes('numeric key "4"'));
         expect(msg).toBeDefined();
         expect(msg).toContain('an array or a spread');
         expect(msg).not.toContain('Check for typos');
     });
 
-    it('the rust engine emits the same numeric message', () => {
-        if (!isRustTransformAvailable()) return;
+    it.skipIf(!isRustTransformAvailable())('the rust engine emits the same numeric message', () => {
         const diagnostics = transformRust(
             'export const A = () => <div sz={{ 4: true }} />;',
             '/p/F.tsx',
@@ -316,7 +363,7 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
     });
 
     it('a real word typo still says "Check for typos"', () => {
-        const calls = collectWarn(() =>
+        const calls = captureWarnings(() =>
             transformOxc('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
                 rootDir: '/p',
             }),
@@ -479,29 +526,20 @@ describe('CSSZYX_QUIET_SZ_WARNINGS opt-out', () => {
         delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
     });
 
-    const warnsFor = (fn: () => void): string[] => {
-        const calls: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation(m => {
-            calls.push(String(m));
-        });
-        fn();
-        return calls;
-    };
-
     it('warns by default (flag unset)', () => {
-        const calls = warnsFor(() => transform({ xyzzy: 1 }));
+        const calls = captureWarnings(() => transform({ xyzzy: 1 }));
         expect(calls.some(m => m.includes('Unknown property "xyzzy"'))).toBe(true);
     });
 
     it('is silent on the runtime path when set to 1', () => {
         process.env.CSSZYX_QUIET_SZ_WARNINGS = '1';
-        const calls = warnsFor(() => transform({ xyzzy: 1 }));
+        const calls = captureWarnings(() => transform({ xyzzy: 1 }));
         expect(calls.some(m => m.includes('xyzzy'))).toBe(false);
     });
 
     it('is silent on the build path when set to 1', () => {
         process.env.CSSZYX_QUIET_SZ_WARNINGS = '1';
-        const calls = warnsFor(() =>
+        const calls = captureWarnings(() =>
             transformOxc('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
                 rootDir: '/p',
             }),
@@ -511,7 +549,7 @@ describe('CSSZYX_QUIET_SZ_WARNINGS opt-out', () => {
 
     it('only 1 mutes — any other value still warns', () => {
         process.env.CSSZYX_QUIET_SZ_WARNINGS = 'true';
-        const calls = warnsFor(() => transform({ xyzzy: 1 }));
+        const calls = captureWarnings(() => transform({ xyzzy: 1 }));
         expect(calls.some(m => m.includes('xyzzy'))).toBe(true);
     });
 });

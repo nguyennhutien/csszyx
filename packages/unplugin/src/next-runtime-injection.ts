@@ -1,8 +1,7 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
-import { importsRuntimeHelper } from './runtime-import-scan.js';
 
-const DIRECTIVE_PROLOGUE_PREFIX_RE =
-    /^((?:\s|\/\/[^\n]*\n|\/\*(?:[^*]|\*(?!\/))*\*\/)*)(['"]use (?:client|server)['"];?\s*)/;
+import { insertAfterUseDirective } from './directive-prologue.js';
+import { importsRuntimeHelper } from './runtime-import-scan.js';
 
 /** Runtime helpers emitted by csszyx compiler transforms. */
 export type NextRuntimeHelper =
@@ -100,9 +99,5 @@ function runtimeHelpersFromUsage(usage: NextRuntimeImportUsage): NextRuntimeHelp
  * @param importStmt
  */
 function insertRuntimeImport(code: string, importStmt: string): string {
-    const directiveMatch = code.match(DIRECTIVE_PROLOGUE_PREFIX_RE);
-    if (!directiveMatch) {
-        return `${importStmt}${code}`;
-    }
-    return code.replace(directiveMatch[0], `${directiveMatch[1]}${directiveMatch[2]}${importStmt}`);
+    return insertAfterUseDirective(code, importStmt);
 }

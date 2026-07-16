@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import lockfile from 'proper-lockfile';
-import { escapeHtmlAttribute } from './html-escape.js';
+import { escapeHtmlAttribute, renderTailwindScannerCandidates } from './html-escape.js';
 import { sortStrings } from './sort.js';
 
 const DEFAULT_RENAME_RETRIES = 5;
@@ -494,7 +494,11 @@ function renderTailwindSourceHtml(classNames: readonly string[]): string {
     if (classNames.length === 0) {
         return '<!-- csszyx Next safelist: empty -->\n';
     }
-    return `${classNames.map(className => `<div class="${escapeHtmlAttribute(className)}"></div>`).join('\n')}\n`;
+    const structuralHtml = classNames
+        .map(className => `<div class="${escapeHtmlAttribute(className)}"></div>`)
+        .join('\n');
+    const scannerCandidates = renderTailwindScannerCandidates(classNames);
+    return `${structuralHtml}\n${scannerCandidates}`;
 }
 
 /**

@@ -30,7 +30,7 @@ export type SzStringInput = string | null | undefined | false;
  * pre-compiled class strings, and the bare name collided with the object-accepting
  * `SzInput` from `@csszyx/runtime`. This alias is kept for back-compat.
  */
-export type SzInput = SzStringInput;
+export type SzInput = string | null | undefined | false; // NOSONAR: public compatibility alias
 
 /**
  * Dev-only guard: throw when a plain object reaches a string-only helper.
@@ -77,8 +77,7 @@ export function _sz(...classes: SzStringInput[]): string {
     let result = '';
     let needsSpace = false;
 
-    for (let i = 0; i < classes.length; i++) {
-        const cls = classes[i];
+    for (const cls of classes) {
         if (process.env.NODE_ENV !== 'production') {
             assertNotObject(cls, '_sz');
         }
@@ -96,7 +95,11 @@ export function _sz(...classes: SzStringInput[]): string {
 }
 
 /**
- * Merges className strings from compiled array sz props, deduplicating tokens.
+ * Merges className strings from compiled sz props, deduplicating exact tokens.
+ *
+ * This lite-entry compatibility helper intentionally does not ship the full
+ * utility classifier used by root-runtime `_szMerge`/`szcn`; importing that
+ * classifier would turn the ~2 kB lite entry into the full runtime graph.
  *
  * Emitted by the compiler for sz={[varA, cond && varB, ...]} when at least one
  * element is a runtime conditional. All arguments must be pre-compiled strings
@@ -109,8 +112,7 @@ export function _szMerge(...classes: SzStringInput[]): string {
     const seen = new Set<string>();
     const result: string[] = [];
 
-    for (let i = 0; i < classes.length; i++) {
-        const cls = classes[i];
+    for (const cls of classes) {
         if (process.env.NODE_ENV !== 'production') {
             assertNotObject(cls, '_szMerge');
         }

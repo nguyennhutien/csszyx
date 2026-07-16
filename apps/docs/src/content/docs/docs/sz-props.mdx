@@ -26,35 +26,35 @@ characters.
 
 Tailwind class names map to camelCase sz prop keys:
 
-| Tailwind class | sz prop |
-|---|---|
-| `p-4` | `{ p: 4 }` |
-| `px-6` | `{ px: 6 }` |
-| `bg-blue-500` | `{ bg: 'blue-500' }` |
-| `text-white` | `{ color: 'white' }` |
-| `rounded-lg` | `{ rounded: 'lg' }` |
-| `font-bold` | `{ weight: 'bold' }` |
-| `flex` | `{ display: 'flex' }` |
-| `hidden` | `{ display: 'none' }` |
+| Tailwind class | sz prop               |
+| -------------- | --------------------- |
+| `p-4`          | `{ p: 4 }`            |
+| `px-6`         | `{ px: 6 }`           |
+| `bg-blue-500`  | `{ bg: 'blue-500' }`  |
+| `text-white`   | `{ color: 'white' }`  |
+| `rounded-lg`   | `{ rounded: 'lg' }`   |
+| `font-bold`    | `{ weight: 'bold' }`  |
+| `flex`         | `{ display: 'flex' }` |
+| `hidden`       | `{ display: 'none' }` |
 
 ## One key per property
 
 Props that set a single CSS property are written with their **canonical key and
 a value** — one way, no aliases:
 
-| CSS property | sz key | Example |
-|---|---|---|
-| display | `display` | `{ display: 'flex' }`, `{ display: 'none' }` |
-| position | `position` | `{ position: 'absolute' }` |
-| visibility | `visibility` | `{ visibility: 'hidden' }` |
-| isolation | `isolation` | `{ isolation: 'isolate' }` |
-| text-transform | `textTransform` | `{ textTransform: 'uppercase' }` |
-| font-style | `fontStyle` | `{ fontStyle: 'italic' }` |
-| font-smoothing | `fontSmoothing` | `{ fontSmoothing: 'grayscale' }` |
-| text-decoration-line | `decoration` | `{ decoration: 'underline' }` |
+| CSS property         | sz key          | Example                                      |
+| -------------------- | --------------- | -------------------------------------------- |
+| display              | `display`       | `{ display: 'flex' }`, `{ display: 'none' }` |
+| position             | `position`      | `{ position: 'absolute' }`                   |
+| visibility           | `visibility`    | `{ visibility: 'hidden' }`                   |
+| isolation            | `isolation`     | `{ isolation: 'isolate' }`                   |
+| text-transform       | `textTransform` | `{ textTransform: 'uppercase' }`             |
+| font-style           | `fontStyle`     | `{ fontStyle: 'italic' }`                    |
+| font-smoothing       | `fontSmoothing` | `{ fontSmoothing: 'grayscale' }`             |
+| text-decoration-line | `decoration`    | `{ decoration: 'underline' }`                |
 
 ```tsx
-<div sz={{ display: 'flex', position: 'absolute', fontStyle: 'italic' }} />
+<div sz={{ display: "flex", position: "absolute", fontStyle: "italic" }} />
 ```
 
 :::caution[Boolean sugar was removed]
@@ -83,7 +83,7 @@ TypeScript error, so a typo or a legacy CSS-property name fails at compile time.
 `tsc --noEmit` in CI to enforce it across a codebase.
 
 ```tsx
-<div sz={{ bgColor: 'red-500' }} /> // ❌ tsc error — unknown key; use { bg: 'red-500' }
+<div sz={{ bgColor: "red-500" }} /> // ❌ tsc error — unknown key; use { bg: 'red-500' }
 ```
 
 For untyped `sz` (string keys, dynamic objects, or JS files) the build prints a
@@ -110,8 +110,10 @@ To deliberately use a brand-new Tailwind utility csszyx has no key for yet, opt 
 `@ts-expect-error` — a conscious decision; the runtime still emits the class:
 
 ```tsx
-{/* @ts-expect-error - forward-compat utility not yet in csszyx */}
-<div sz={{ someNewUtility: 'x' }} />
+{
+  /* @ts-expect-error - forward-compat utility not yet in csszyx */
+}
+<div sz={{ someNewUtility: "x" }} />;
 ```
 
 Arbitrary variants are allowed by pattern (`@container`, `min-[320px]`, `[&>span]`).
@@ -132,24 +134,31 @@ Two separate layers, don't conflate them:
 
 Whether `sz` is typed depends on how the props are declared:
 
-| `Card`'s props type                                        | `sz` typed?    |
-| :--------------------------------------------------------- | :------------- |
-| `{ title: string }` (fresh type)                           | ❌ TS error    |
-| `ComponentProps<'div'>` / `extends HTMLAttributes<T>`      | ✅ inherited   |
-| `{ title: string } & Pick<ComponentProps<'div'>, 'sz'>`    | ✅ just `sz`   |
+| `Card`'s props type                                     | `sz` typed?  |
+| :------------------------------------------------------ | :----------- |
+| `{ title: string }` (fresh type)                        | ❌ TS error  |
+| `ComponentProps<'div'>` / `extends HTMLAttributes<T>`   | ✅ inherited |
+| `{ title: string } & Pick<ComponentProps<'div'>, 'sz'>` | ✅ just `sz` |
 
 The `Pick` form is the tidiest way to add `sz` to a fresh props type — no import, and
 it tracks csszyx's own `sz` type:
 
 ```tsx
-import type { ComponentProps } from 'react';
+import type { ComponentProps } from "react";
 
-type CardProps = { title: string } & Pick<ComponentProps<'div'>, 'sz' | 'className'>;
+type CardProps = { title: string } & Pick<
+  ComponentProps<"div">,
+  "sz" | "className"
+>;
 
 function Card({ title, sz, className }: CardProps) {
   // The transform rewrites `sz` → `className` before Card runs, so pick `className`
   // too and forward it onto the host element.
-  return <div sz={sz} className={className}>{title}</div>;
+  return (
+    <div sz={sz} className={className}>
+      {title}
+    </div>
+  );
 }
 ```
 
@@ -167,10 +176,11 @@ can flip `sz` from optional to required across the codebase. Declare the prop
 yourself instead; it is stable and also accepts `szv` factory output:
 
 ```tsx
-import type { SzInput } from 'csszyx';
+import type { SzInput } from "csszyx";
 
 type BoxProps<E extends ElementType> = { as?: E; sz?: SzInput };
 ```
+
 :::
 
 ## Typing a component that forwards `sz`
@@ -187,9 +197,12 @@ type the prop with the augmentation's type so it lines up with the element it
 lands on:
 
 ```tsx
-import type { SzPropValue } from '@csszyx/types';
+import type { SzPropValue } from "@csszyx/types";
 
-function Box({ sz, ...rest }: { sz?: SzPropValue } & JSX.IntrinsicElements['div']) {
+function Box({
+  sz,
+  ...rest
+}: { sz?: SzPropValue } & JSX.IntrinsicElements["div"]) {
   return <div sz={sz} {...rest} />;
 }
 ```
@@ -198,12 +211,12 @@ Type the prop as `SzPropValue` and it forwards both ways: onto the host element
 (same type) **and** into the runtime helpers, which accept it directly:
 
 ```tsx
-import type { SzPropValue } from '@csszyx/types';
-import { szr } from '@csszyx/runtime';
+import type { SzPropValue } from "@csszyx/types";
+import { szr } from "@csszyx/runtime";
 
 function Box({ sz, active }: { sz?: SzPropValue; active?: boolean }) {
   // `sz` flows into szr() without a cast, and onto <div> below.
-  return <div sz={sz} className={szr(active && 'ring-2')} />;
+  return <div sz={sz} className={szr(active && "ring-2")} />;
 }
 ```
 
@@ -226,12 +239,15 @@ Define a breakpoint once in Tailwind `@theme` and csszyx auto-generates the type
 manual declaration:
 
 ```css
-@theme { --breakpoint-tablet: 40rem; }
+@theme {
+  --breakpoint-tablet: 40rem;
+}
 ```
 
 ```tsx
 <div sz={{ p: 4, tablet: { p: 6 } }} /> // `tablet:` now type-checks + autocompletes
 ```
+
 :::
 
 ## Nested Variants
@@ -239,25 +255,27 @@ manual declaration:
 Variants (hover, focus, responsive breakpoints) use nested objects:
 
 ```tsx
-<button sz={{
-  bg: 'blue-500',
-  color: 'white',
-  px: 4,
-  py: 2,
-  rounded: 'md',
-  hover: {
-    bg: 'blue-600',
-  },
-  focus: {
-    outline: 'none',
-    ring: 2,
-    ringColor: 'blue-400',
-  },
-  disabled: {
-    opacity: 50,
-    cursor: 'not-allowed',
-  },
-}} />
+<button
+  sz={{
+    bg: "blue-500",
+    color: "white",
+    px: 4,
+    py: 2,
+    rounded: "md",
+    hover: {
+      bg: "blue-600",
+    },
+    focus: {
+      outline: "none",
+      ring: 2,
+      ringColor: "blue-400",
+    },
+    disabled: {
+      opacity: 50,
+      cursor: "not-allowed",
+    },
+  }}
+/>
 ```
 
 ## Responsive Breakpoints
@@ -265,28 +283,32 @@ Variants (hover, focus, responsive breakpoints) use nested objects:
 Responsive modifiers are nested objects with the breakpoint as the key:
 
 ```tsx
-<div sz={{
-  w: 'full',        // width: 100% on mobile
-  md: {
-    w: '1/2',       // width: 50% at md+
-  },
-  lg: {
-    w: '1/3',       // width: 33% at lg+
-  },
-}} />
+<div
+  sz={{
+    w: "full", // width: 100% on mobile
+    md: {
+      w: "1/2", // width: 50% at md+
+    },
+    lg: {
+      w: "1/3", // width: 33% at lg+
+    },
+  }}
+/>
 ```
 
 ## Dark Mode
 
 ```tsx
-<div sz={{
-  bg: 'white',
-  color: 'gray-900',
-  dark: {
-    bg: 'gray-800',
-    color: 'white',
-  },
-}} />
+<div
+  sz={{
+    bg: "white",
+    color: "gray-900",
+    dark: {
+      bg: "gray-800",
+      color: "white",
+    },
+  }}
+/>
 ```
 
 ## Arbitrary Values
@@ -295,12 +317,14 @@ For one-off values not in the Tailwind scale, pass a string. The compiler
 wraps it in `[...]` automatically:
 
 ```tsx
-<div sz={{
-  w: '333px',        // w-[333px]
-  bg: '#316ff6',     // bg-[#316ff6]
-  p: '1.25rem',      // p-[1.25rem]
-  top: '37px',       // top-[37px]
-}} />
+<div
+  sz={{
+    w: "333px", // w-[333px]
+    bg: "#316ff6", // bg-[#316ff6]
+    p: "1.25rem", // p-[1.25rem]
+    top: "37px", // top-[37px]
+  }}
+/>
 ```
 
 :::note[Arbitrary values]
@@ -314,11 +338,13 @@ use explicit units. `{ w: 4 }` → `w-4` (1rem), but `{ w: '4px' }` → `w-[4px]
 Prefix any CSS custom property with `--` and the compiler wraps it in `(...)`:
 
 ```tsx
-<div sz={{
-  bg: '--my-brand-color',    // bg-(--my-brand-color)
-  color: '--text-primary',   // text-(--text-primary)
-  p: '--spacing-lg',         // p-(--spacing-lg)
-}} />
+<div
+  sz={{
+    bg: "--my-brand-color", // bg-(--my-brand-color)
+    color: "--text-primary", // text-(--text-primary)
+    p: "--spacing-lg", // p-(--spacing-lg)
+  }}
+/>
 ```
 
 :::caution[`--name` vs `--name(...)` — parens vs brackets]
@@ -328,11 +354,13 @@ A **bare** `--name` is a CSS variable → parenthesized `x-(--name)`. A
 from the value's shape, so you write neither in `sz`:
 
 ```tsx
-<div sz={{
-  bg: '--brand',                       // variable  → bg-(--brand)
-  text: '--spacing(4)',                // function  → text-[--spacing(4)]
-  color: '--alpha(var(--brand) / 50%)',// function  → text-[--alpha(var(--brand)_/_50%)]
-}} />
+<div
+  sz={{
+    bg: "--brand", // variable  → bg-(--brand)
+    text: "--spacing(4)", // function  → text-[--spacing(4)]
+    color: "--alpha(var(--brand) / 50%)", // function  → text-[--alpha(var(--brand)_/_50%)]
+  }}
+/>
 ```
 
 This holds for **every** value position, not just the examples above. Do not add
@@ -346,19 +374,21 @@ For CSS properties with no sz prop or Tailwind utility equivalent, use the
 them to `[prop:value]` arbitrary-property classes automatically.
 
 ```tsx
-<div sz={{
-  css: {
-    writingMode: 'vertical-lr',    // [writing-mode:vertical-lr]
-    touchAction: 'none',           // [touch-action:none]
-    '--my-color': 'red',           // [--my-color:red]
-  },
-  hover: {
-    css: { cursor: 'crosshair' },  // hover:[cursor:crosshair]
-  },
-  md: {
-    css: { writingMode: 'horizontal-tb' }, // md:[writing-mode:horizontal-tb]
-  },
-}} />
+<div
+  sz={{
+    css: {
+      writingMode: "vertical-lr", // [writing-mode:vertical-lr]
+      touchAction: "none", // [touch-action:none]
+      "--my-color": "red", // [--my-color:red]
+    },
+    hover: {
+      css: { cursor: "crosshair" }, // hover:[cursor:crosshair]
+    },
+    md: {
+      css: { writingMode: "horizontal-tb" }, // md:[writing-mode:horizontal-tb]
+    },
+  }}
+/>
 ```
 
 The `css` key accepts all `CSS.Properties` keys plus CSS custom properties (`--*`) — full IDE autocomplete and typo protection.
@@ -374,11 +404,13 @@ literals** (string, number, boolean), the compiler compiles each branch at build
 time and emits a conditional class expression — no CSS variables, no inline styles:
 
 ```tsx
-<div sz={{
-  bg: isActive ? 'blue-500' : 'gray-200',
-  color: hasError ? 'red-600' : 'gray-900',
-  scale: shrunk ? 75 : 100,
-}} />
+<div
+  sz={{
+    bg: isActive ? "blue-500" : "gray-200",
+    color: hasError ? "red-600" : "gray-900",
+    scale: shrunk ? 75 : 100,
+  }}
+/>
 // Compiler emits:
 // className={`bg-blue-500 text-red-600 ${shrunk ? 'scale-75' : 'scale-100'}` …}
 // (each ternary prop compiled independently, static props merged into a single string)
@@ -387,6 +419,34 @@ time and emits a conditional class expression — no CSS variables, no inline st
 :::note[When does the CSS variable fallback apply?]
 Only when at least one branch is a **runtime expression** (variable, function call, etc.).
 In that case the compiler falls back to `prop-[var(--_sz-prop)]` with an inline `style`.
+
+If the opposite branch is `undefined`, `null`, `false`, or an empty string, that
+branch emits neither the utility class nor the CSS custom-property value. This
+keeps nullable values from becoming strings such as `"undefined"`. Numeric `0`
+is not treated as absent—it remains a valid value.
+
+```tsx
+<div sz={{ flex: typeof flex === "number" ? flex : undefined }} />
+// present: flex-(--_sz-flex) + --_sz-flex: <number>
+// absent:  no flex utility and no --_sz-flex value
+```
+
+When the generated CSS variable sits beside one direct object-literal JSX prop
+spread—or one conditional whose branches are object literals—the compiler
+injects it into every branch's `style`. This preserves authored style without
+evaluating the spread expression twice:
+
+```tsx
+<div sz={{ w: width }} {...(cond ? { style: { flex } } : {})} />
+// → {...(cond
+//   ? { style: { flex, "--_sz-w": __szSpacingVar(width, "w") } }
+//   : { style: { "--_sz-w": __szSpacingVar(width, "w") } })}
+```
+
+Unresolved spreads (`{...props}`), multiple spreads, and object branches with
+their own unknown spreads retain the collision diagnostic. Move their style to
+an explicit `style={...}` prop so the compiler can merge it without guessing
+about evaluation or precedence.
 
 The injected value resolves at runtime the same way the static path lowers the
 same literal: numbers ride the spacing scale (`calc(n * var(--spacing))`),
@@ -399,10 +459,12 @@ as the static form works with any of its values at runtime.
 Works inside variant blocks too:
 
 ```tsx
-<div sz={{
-  p: 4,
-  hover: { scale: isHovered ? 110 : 100 },
-}} />
+<div
+  sz={{
+    p: 4,
+    hover: { scale: isHovered ? 110 : 100 },
+  }}
+/>
 // hover branch: hover:scale-110 or hover:scale-100 — zero runtime
 ```
 
@@ -432,28 +494,42 @@ slot).
   szsc?.title,                      // dynamic element via _szPart
 ]} />
 // → className={_szcn("p-4 text-white", isActive && "bg-blue-500", _szPart(szsc?.title))}
+
+// Finite ternaries compile to class strings instead of deferring objects to _szPart:
+<a sz={[
+  { decoration: 'none' },
+  disabled ? { color: 'muted' } : { color: 'main' },
+  szsc?.link,
+]} />
+// → className={_szcn("no-underline", disabled ? "text-muted" : "text-main", _szPart(szsc?.link))}
+
+// Falsy property branches contribute no utility token (never `flex-undefined`):
+<div sz={[{ decoration: 'none', flex: fluid ? 1 : undefined }, szsc?.root]} />
+// → className={_szcn("no-underline", fluid ? "flex-1" : "", _szPart(szsc?.root))}
 ```
 
 This makes `sz={[defaults, override]}` the one-liner for slot defaults in a
 compound component — no `className` plumbing, no manual `szcn` call:
 
 ```tsx
-function Card({ title, szsc }: SzsProps<'title'> & { title: string }) {
-  return <h3 sz={[{ weight: 'semibold', text: 'base' }, szsc?.title]}>{title}</h3>;
+function Card({ title, szsc }: SzsProps<"title"> & { title: string }) {
+  return (
+    <h3 sz={[{ weight: "semibold", text: "base" }, szsc?.title]}>{title}</h3>
+  );
 }
 ```
 
 Array syntax is especially useful with [`szv()`](/docs/szv) variant objects:
 
 ```tsx
-import { szv } from 'csszyx';
+import { szv } from "csszyx";
 
 const btn = szv({
-  base: { px: 4, py: 2, rounded: 'md' },
-  variants: { intent: { primary: { bg: 'blue-600', color: 'white' } } },
+  base: { px: 4, py: 2, rounded: "md" },
+  variants: { intent: { primary: { bg: "blue-600", color: "white" } } },
 });
 
-<button sz={[btn({ intent: 'primary' }), isLoading && { opacity: 50 }]} />
+<button sz={[btn({ intent: "primary" }), isLoading && { opacity: 50 }]} />;
 ```
 
 :::note[Falsy values]
@@ -507,9 +583,9 @@ Pass a variable directly to `sz` when no properties need overriding — the
 compiler resolves it at build time just like an inline object:
 
 ```tsx
-const item = { p: 3, rounded: 'md', bg: 'white' } as const;
+const item = { p: 3, rounded: "md", bg: "white" } as const;
 
-<div sz={item} />   // → className="p-3 rounded-md bg-white"
+<div sz={item} />; // → className="p-3 rounded-md bg-white"
 ```
 
 Use object spread (`sz={{ ...var, ... }}`) only when you need to **override or
@@ -526,28 +602,29 @@ Multiple spreads and nested variant objects are also resolved statically at
 build time:
 
 ```tsx
-const layout = { display: 'flex', gap: 4 };
-const colors = { bg: 'blue-500', color: 'white' };
+const layout = { display: "flex", gap: 4 };
+const colors = { bg: "blue-500", color: "white" };
 
-<div sz={{ ...layout, ...colors, hover: { opacity: 75 } }} />
+<div sz={{ ...layout, ...colors, hover: { opacity: 75 } }} />;
 // → className="flex gap-4 bg-blue-500 text-white hover:opacity-75"
 ```
 
 ### Conditional Spread with Static Overrides
 
-When the *base* style depends on a runtime condition but additional properties
+When the _base_ style depends on a runtime condition but additional properties
 are fixed, spread the ternary inline. The compiler hoists the condition outward
 and resolves each branch separately — still zero runtime cost:
 
 ```tsx
-const active   = { bg: 'blue-500', color: 'white' } as const;
-const inactive = { bg: 'gray-100', color: 'gray-600' } as const;
+const active = { bg: "blue-500", color: "white" } as const;
+const inactive = { bg: "gray-100", color: "gray-600" } as const;
 
 // rotate is always 45 — compiler emits: isActive ? "bg-blue-500 text-white rotate-45" : "bg-gray-100 text-gray-600 rotate-45"
-<div sz={{ ...(isActive ? active : inactive), rotate: 45 }} />
+<div sz={{ ...(isActive ? active : inactive), rotate: 45 }} />;
 ```
 
 This works as long as:
+
 - **Exactly one** conditional spread (`...(cond ? a : b)`)
 - The **static overrides** are compile-time values (literals, variables)
 
@@ -569,10 +646,7 @@ for runtime data).
 The `sz` prop and `className` prop can coexist. The compiler merges them:
 
 ```tsx
-<div
-  sz={{ p: 4, bg: 'blue-500' }}
-  className="custom-class"
-/>
+<div sz={{ p: 4, bg: "blue-500" }} className="custom-class" />
 // → className="p-4 bg-blue-500 custom-class"
 ```
 

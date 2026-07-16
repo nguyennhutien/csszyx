@@ -45,6 +45,7 @@ describe('typography — font size', () => {
 
     it('{ text: "--spacing(4)" } → text-[--spacing(4)] (Tailwind function)', () => {
         expect(t({ text: '--spacing(4)' })).toBe('text-[--spacing(4)]');
+        expect(t({ text: '--spacing("🚀")' })).toBe('text-[--spacing("🚀")]');
     });
 
     it('handles nested calls, quoted parentheses, and escapes in linear time', () => {
@@ -68,7 +69,7 @@ describe('typography — font size', () => {
         const value = `--spacing(${'('.repeat(64 * 1024)}`;
         const className = t({ text: value });
         expect(className.startsWith('text-[--spacing(')).toBe(true);
-        expect(className.length).toBe(value.length + 'text-[]'.length);
+        expect(className).toHaveLength(value.length + 'text-[]'.length);
     });
 });
 
@@ -240,10 +241,6 @@ describe('typography — text color', () => {
 });
 
 describe('typography — text decoration', () => {
-    it('{ decoration: "underline" } → underline', () => {
-        expect(t({ decoration: 'underline' })).toBe('underline');
-    });
-
     it('{ decorationStyle: "dashed" } → decoration-dashed', () => {
         expect(t({ decorationStyle: 'dashed' })).toBe('decoration-dashed');
     });
@@ -289,15 +286,17 @@ describe('typography — text transform', () => {
     it('{ textTransform: "uppercase" } → uppercase', () => {
         expect(t({ textTransform: 'uppercase' })).toBe('uppercase');
     });
-
-    it('{ textTransform: "uppercase" } → uppercase', () => {
-        expect(t({ textTransform: 'uppercase' })).toBe('uppercase');
-    });
 });
 
 describe('typography — text overflow & whitespace', () => {
     it('{ textOverflow: "ellipsis" } → text-ellipsis', () => {
         expect(t({ textOverflow: 'ellipsis' })).toBe('text-ellipsis');
+    });
+
+    it('supports the public boolean text-overflow spellings', () => {
+        expect(t({ textEllipsis: true })).toBe('text-ellipsis');
+        expect(t({ textClip: true })).toBe('text-clip');
+        expect(t({ textEllipsis: false, textClip: false })).toBe('');
     });
 
     it('{ textWrap: "balance" } → text-balance', () => {

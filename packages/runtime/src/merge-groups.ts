@@ -192,8 +192,8 @@ const COLLISION_BLOCKLIST: Record<keyof typeof customTokens, ReadonlySet<string>
         ...BORDER_STYLES,
     ]),
     textSizes: new Set([...TEXT_ALIGNS, ...TEXT_WRAPS, ...TEXT_OVERFLOWS, ...NAMED_COLORS]),
-    fontFamilies: new Set([...FONT_WEIGHTS]),
-    fontWeights: new Set([...FONT_FAMILIES]),
+    fontFamilies: new Set(FONT_WEIGHTS),
+    fontWeights: new Set(FONT_FAMILIES),
 };
 
 /**
@@ -266,25 +266,36 @@ function registerThemeCategory(
     let changed = false;
     for (const name of names ?? []) {
         if (!name || typeof name !== 'string') continue;
-        if (COLLISION_BLOCKLIST[category].has(name)) {
-            warnOnce(
-                `theme token "${name}" shadows a built-in ${category === 'colors' ? 'utility keyword' : 'value'} — ` +
-                    'szcn will not group classes built from it (they keep the safe keep-both behaviour). ' +
-                    'Rename the token to enable precise merging.',
-            );
-            continue;
-        }
-        const pair = AMBIGUITY_PAIR_BY_CATEGORY[category];
-        if (pair.dropped.has(name)) {
-            warnOnce(pair.message(name));
-            continue;
-        }
+        if (rejectThemeToken(category, name)) continue;
         if (!customTokens[category].has(name)) {
             customTokens[category].add(name);
             changed = true;
         }
     }
     return changed;
+}
+
+/**
+ * Warn and reject a theme token that cannot be grouped safely.
+ * @param category - Theme token category.
+ * @param name - Candidate token name.
+ * @returns Whether the token must be rejected.
+ */
+function rejectThemeToken(category: keyof typeof customTokens, name: string): boolean {
+    if (COLLISION_BLOCKLIST[category].has(name)) {
+        const builtInKind = category === 'colors' ? 'utility keyword' : 'value';
+        warnOnce(
+            `theme token "${name}" shadows a built-in ${builtInKind} — ` +
+                'szcn will not group classes built from it (they keep the safe keep-both behaviour). ' +
+                'Rename the token to enable precise merging.',
+        );
+        return true;
+    }
+
+    const pair = AMBIGUITY_PAIR_BY_CATEGORY[category];
+    if (!pair.dropped.has(name)) return false;
+    warnOnce(pair.message(name));
+    return true;
 }
 
 /**
@@ -300,7 +311,7 @@ function dropAmbiguousThemeTokens(
     pair: (typeof AMBIGUITY_PAIRS)[keyof typeof AMBIGUITY_PAIRS],
 ): boolean {
     let changed = false;
-    for (const name of [...customTokens[first]]) {
+    for (const name of customTokens[first]) {
         if (!customTokens[second].has(name)) continue;
         customTokens[first].delete(name);
         customTokens[second].delete(name);
@@ -465,8 +476,8 @@ function isBackgroundImage(value: string): boolean {
         value.startsWith('radial-') ||
         value.startsWith('conic-') ||
         value === 'conic' ||
-        /^\[url\(/.test(value) ||
-        /^\[image:/.test(value)
+        value.startsWith('[url(') ||
+        value.startsWith('[image:')
     );
 }
 

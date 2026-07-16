@@ -249,6 +249,7 @@ fn transform_static_classes_with_options(
     let has_parser_errors = !diagnostics.is_empty();
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
     diagnostics.extend(runtime_fallback_spread_diagnostics(file, &parsed.ir));
+    diagnostics.extend(style_spread_collision_diagnostics(file, &parsed.ir));
     diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
     diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
     diagnostics.extend(unknown_property_diagnostics(
@@ -468,6 +469,32 @@ fn runtime_fallback_spread_diagnostics(file: &TransformFile, ir: &super::SourceI
         .collect()
 }
 
+/// Warn when generated style custom properties share an element with a prop
+/// spread that may also provide `style`. The explicit generated attribute wins
+/// in JSX source order, so the spread style can otherwise disappear silently.
+fn style_spread_collision_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
+    ir.jsx_opening_elements
+        .iter()
+        .filter(|element| element.has_spread_attribute)
+        .filter(|element| element.safe_style_spread.is_none())
+        .filter(|element| {
+            !element.hoisted_dynamic_css_vars.is_empty()
+                || element.sz_attribute_indices.iter().any(|index| {
+                    ir.sz_attributes[*index]
+                        .dynamic_css_vars
+                        .iter()
+                        .any(|property| !property.hoisted)
+                })
+        })
+        .map(|_| {
+            format!(
+                "[csszyx] possible style override at {}: this element spreads props that may contain style, while sz emits an explicit style attribute. Move the spread style to an explicit style prop so csszyx can merge both values.",
+                file.filename
+            )
+        })
+        .collect()
+}
+
 /// Dev-mode build-log diagnostics for unrecognized sz property keys (likely
 /// typos), located by file and line so they are findable in a large codebase —
 /// parity with the oxc/Babel engines, which previously were the only ones to
@@ -545,7 +572,7 @@ fn deferred_array_object_diagnostics(file: &TransformFile, ir: &super::SourceIr)
             let span = part.dynamic_span?;
             let (line, column) = offset_to_line_column(&file.source, span.start);
             Some(format!(
-                "sz array element at {line}:{}: this object literal contains a runtime value, so the whole element is deferred to _szPart at runtime (its classes are still safelisted best-effort).\n  Suggestion: lift the condition to the element level (cond ? {{ a }} : {{ b }}) or move runtime values to dynamic().",
+                "sz array element at {line}:{}: this object literal contains a runtime value, so the whole element is deferred to _szPart at runtime (its classes are still safelisted best-effort).\n  Suggestion: use finite literal ternary branches when possible, or move truly runtime values to dynamic().",
                 column + 1
             ))
         })

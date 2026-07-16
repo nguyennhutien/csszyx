@@ -148,12 +148,68 @@ pub struct JsxOpeningElementIr {
     pub recovery_attribute_index: Option<usize>,
     /// Whether the opening element already has `data-sz-recovery-token`.
     pub has_recovery_token_attribute: bool,
+    /// Whether the opening element contains a JSX prop spread.
+    #[serde(default)]
+    pub has_spread_attribute: bool,
+    /// Single object-literal spread whose style can safely absorb generated vars.
+    #[serde(default)]
+    pub safe_style_spread: Option<SafeStyleSpreadIr>,
     /// End offset of the last JSX attribute on the opening element.
     pub last_attribute_end: Option<u32>,
     /// String form of the JSX element name used by recovery tokens.
     pub element_name: String,
     /// Dynamic CSS custom properties hoisted from descendant `sz` attributes.
     pub hoisted_dynamic_css_vars: Vec<DynamicCssVarIr>,
+}
+
+/// One JSX prop spread that can absorb compiler-generated style properties.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SafeStyleSpreadIr {
+    /// Full `{...expression}` attribute span.
+    pub attribute_span: TextSpan,
+    /// Object or conditional-object shape carried by the spread.
+    pub expression: SafeStyleSpreadExpressionIr,
+}
+
+/// Safe source shapes accepted for generated style injection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SafeStyleSpreadExpressionIr {
+    /// A direct object-literal spread.
+    Object(SafeStyleSpreadObjectIr),
+    /// A conditional whose two branches are object literals.
+    Conditional {
+        /// Source span of the conditional test.
+        test_span: TextSpan,
+        /// Truthy object branch.
+        consequent: SafeStyleSpreadObjectIr,
+        /// Falsy object branch.
+        alternate: SafeStyleSpreadObjectIr,
+    },
+}
+
+/// Object-literal branch metadata needed for source-preserving style injection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SafeStyleSpreadObjectIr {
+    /// Full object literal span, including braces.
+    pub object_span: TextSpan,
+    /// Whether the object already contains properties.
+    pub has_properties: bool,
+    /// Existing explicit style value, if present.
+    pub style_value: Option<SafeStyleSpreadValueIr>,
+}
+
+/// Existing style value shape inside a safe prop-spread object.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SafeStyleSpreadValueIr {
+    /// Object literal style value, with property-presence metadata.
+    Object {
+        /// Full object literal span.
+        span: TextSpan,
+        /// Whether it already contains properties.
+        has_properties: bool,
+    },
+    /// Any other expression, preserved behind an object spread.
+    Expression(TextSpan),
 }
 
 /// JSX `sz` attribute and its parser-normalized static object.
@@ -228,6 +284,9 @@ pub struct StaticArrayPartIr {
     pub condition_span: Option<TextSpan>,
     /// Classes produced by the static object/string item (empty for dynamic).
     pub classes: Vec<String>,
+    /// Finite ternary carried by an element or one of its static properties.
+    #[serde(default)]
+    pub ternary: Option<StaticTernaryIr>,
     /// Source span of a dynamic item's expression; absent for static items.
     #[serde(default)]
     pub dynamic_span: Option<TextSpan>,
@@ -283,6 +342,9 @@ pub struct DynamicCssVarIr {
     pub variant_prefix: Option<String>,
     /// Whether this declaration was hoisted to an ancestor style prop.
     pub hoisted: bool,
+    /// Whether a companion conditional emits the utility only when the value exists.
+    #[serde(default)]
+    pub skip_class: bool,
 }
 
 /// Runtime value transform used when writing a CSS custom property.
@@ -299,7 +361,7 @@ pub enum DynamicCssVarCategory {
     Angle,
     /// `__szUnitVar(value, "ms", key)`.
     Duration,
-    /// Direct stringification.
+    /// Direct value passthrough so nullish/falsy values omit the custom property.
     Passthrough,
 }
 
@@ -471,6 +533,8 @@ mod tests {
                 style_attribute_index: None,
                 recovery_attribute_index: None,
                 has_recovery_token_attribute: false,
+                has_spread_attribute: false,
+                safe_style_spread: None,
                 last_attribute_end: Some(72),
                 element_name: "div".to_string(),
                 hoisted_dynamic_css_vars: Vec::new(),

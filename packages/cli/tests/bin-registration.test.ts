@@ -24,8 +24,21 @@ describe('csszyx bin', () => {
             logs.push(parts.join(' '));
         });
         await import('../src/bin.js?case=bare');
-        // No command ran; the import itself is the assertion (registration
-        // succeeded and nothing dispatched or exited).
+        const help = logs.join('\n');
+        for (const command of [
+            'init',
+            'doctor',
+            'check',
+            'scan-collisions',
+            'explain',
+            'audit',
+            'generate-types',
+            'migrate',
+            'next-prebuild',
+            'next-watch',
+        ]) {
+            expect(help).toContain(command);
+        }
         expect(process.exitCode).toBeUndefined();
     });
 

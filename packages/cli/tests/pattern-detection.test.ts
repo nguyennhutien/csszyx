@@ -110,26 +110,30 @@ export const Btn = ({ v }) => <button className={btn({ v })} />;
 // ============================================================================
 
 describe('capitalized component className skip', () => {
-    it('skips className on a PascalCase component', () => {
-        const source = '<Button className="px-4 py-2 bg-blue-500" />';
+    it.each([
+        {
+            label: 'PascalCase components',
+            source: '<Button className="px-4 py-2 bg-blue-500" />',
+            changed: false,
+            expectedCode: 'className="px-4 py-2 bg-blue-500"',
+        },
+        {
+            label: 'multi-word PascalCase components',
+            source: '<DialogPanel className="p-6 bg-white rounded-xl shadow-xl" />',
+            changed: false,
+            expectedCode: 'className=',
+        },
+        {
+            label: 'lowercase HTML elements',
+            source: '<button className="px-4 py-2 bg-blue-500" />',
+            changed: true,
+            expectedCode: 'px: 4',
+        },
+    ])('handles className on $label', ({ source, changed, expectedCode }) => {
         const result = migrate(source);
-        // className should NOT be transformed
-        expect(result.changed).toBe(false);
-        expect(result.code).toContain('className="px-4 py-2 bg-blue-500"');
-    });
-
-    it('skips className on a multi-word PascalCase component', () => {
-        const source = '<DialogPanel className="p-6 bg-white rounded-xl shadow-xl" />';
-        const result = migrate(source);
-        expect(result.changed).toBe(false);
-    });
-
-    it('transforms className on lowercase HTML elements', () => {
-        const source = '<button className="px-4 py-2 bg-blue-500" />';
-        const result = migrate(source);
-        expect(result.changed).toBe(true);
-        expect(result.code).not.toContain('className=');
-        expect(result.code).toContain('px: 4');
+        expect(result.changed).toBe(changed);
+        expect(result.code).toContain(expectedCode);
+        expect(result.code.includes('className=')).toBe(!changed);
     });
 
     it('skips className on JSX member expression (Radix/Headless UI pattern)', () => {

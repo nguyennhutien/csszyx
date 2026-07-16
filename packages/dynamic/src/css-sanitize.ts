@@ -43,6 +43,20 @@ function scanUnquotedCssCharacter(char: string, state: CssValueScanState): boole
 }
 
 /**
+ * Consume one character inside a quoted CSS string.
+ * @param value - Complete candidate CSS value.
+ * @param index - Current character index.
+ * @param state - Scanner state to update.
+ * @returns The next character index to scan.
+ */
+function scanQuotedCssCharacter(value: string, index: number, state: CssValueScanState): number {
+    const char = value[index];
+    if (char === '\\') return index + 2;
+    if (char === state.quote) state.quote = null;
+    return index + 1;
+}
+
+/**
  * True when a single CSS *property value* cannot break out of its declaration.
  * Tracks quote and parenthesis state with a linear scan (no backtracking regex):
  * `{`/`}`/`<`/`>` are rejected outside quotes (never valid in a value), a `;` is
@@ -54,24 +68,21 @@ function scanUnquotedCssCharacter(char: string, state: CssValueScanState): boole
  */
 export function isSafeCssValue(value: string): boolean {
     const state: CssValueScanState = { quote: null, parenDepth: 0 };
-    for (let i = 0; i < value.length; i++) {
-        if (value.charCodeAt(i) < 0x20) {
+    let i = 0;
+    while (i < value.length) {
+        const codePoint = value.codePointAt(i);
+        if (codePoint !== undefined && codePoint < 0x20) {
             return false; // raw control char / CR / LF / tab
         }
         const char = value[i] as string;
         if (state.quote !== null) {
-            if (char === '\\') {
-                i++; // skip the escaped character
-                continue;
-            }
-            if (char === state.quote) {
-                state.quote = null;
-            }
+            i = scanQuotedCssCharacter(value, i, state);
             continue;
         }
         if (!scanUnquotedCssCharacter(char, state)) {
             return false;
         }
+        i++;
     }
     return state.quote === null && state.parenDepth === 0;
 }
@@ -109,8 +120,8 @@ export function isUtilityArbitrarySafe(utility: string): boolean {
 
     // Whole-utility arbitrary property: [property:value]
     if (
-        utility.charCodeAt(0) === 0x5b /* [ */ &&
-        utility.charCodeAt(utility.length - 1) === 0x5d /* ] */ &&
+        utility.codePointAt(0) === 0x5b /* [ */ &&
+        utility.codePointAt(utility.length - 1) === 0x5d /* ] */ &&
         inner.includes(':')
     ) {
         const colon = inner.indexOf(':');

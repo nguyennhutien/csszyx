@@ -16,6 +16,7 @@ import type ts from 'typescript/lib/tsserverlibrary';
 const SORT_PREFIX = '14:csszyx:';
 const IDENTIFIER_START = /[A-Z_$]/i;
 const IDENTIFIER_PART = /[\w$]/;
+const BACKSLASH = String.fromCodePoint(92);
 export const DATA_OWNER = '@csszyx/ts-plugin';
 
 /** Quote a value as a single-quoted string literal, escaping backslashes before
@@ -24,7 +25,20 @@ export const DATA_OWNER = '@csszyx/ts-plugin';
  * @returns The safely quoted insertion text.
  */
 function singleQuoted(value: string): string {
-    return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+    const escapedBackslashes = replaceEvery(value, BACKSLASH, BACKSLASH.repeat(2));
+    const escaped = replaceEvery(escapedBackslashes, "'", `${BACKSLASH}'`);
+    return `'${escaped}'`;
+}
+
+/**
+ * Replace every literal occurrence without requiring the ES2021 String library.
+ * @param value - Source text.
+ * @param search - Literal text to replace.
+ * @param replacement - Text inserted for each occurrence.
+ * @returns The replaced text.
+ */
+function replaceEvery(value: string, search: string, replacement: string): string {
+    return value.split(search).join(replacement);
 }
 
 /** Describe an sz key by the Tailwind utility family it emits.

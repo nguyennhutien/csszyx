@@ -44,7 +44,7 @@ describe('_sz', () => {
 
     it('should handle array arguments', () => {
         expect(_sz(['a', 'b'])).toBe('a b');
-        expect(_sz(['a', false && 'b', 'c'])).toBe('a c');
+        expect(_sz(['a', false, 'c'])).toBe('a c');
     });
 
     it('should handle nested array arguments recursively', () => {
@@ -52,8 +52,8 @@ describe('_sz', () => {
     });
 
     it('should handle array arguments with objects', () => {
-        expect(_sz([{ w: 8, h: 8 }, false && { textAlign: 'right' }])).toBe('w-8 h-8');
-        expect(_sz([{ w: 8, h: 8 }, true && { textAlign: 'right' }])).toBe('w-8 h-8 text-right');
+        expect(_sz([{ w: 8, h: 8 }, false])).toBe('w-8 h-8');
+        expect(_sz([{ w: 8, h: 8 }, { textAlign: 'right' }])).toBe('w-8 h-8 text-right');
     });
 });
 describe('_sz2', () => {
@@ -111,8 +111,16 @@ describe('_szMerge', () => {
         expect(_szMerge()).toBe('');
     });
 
-    it('should preserve order of first occurrence', () => {
-        expect(_szMerge('c b a', 'a b c')).toBe('c b a');
+    it('should preserve the order of last occurrence', () => {
+        expect(_szMerge('c b a', 'a b c')).toBe('a b c');
+    });
+
+    it('should let later utility groups override earlier values', () => {
+        expect(_szMerge('gap-2 p-4 text-sm', 'gap-8 text-lg')).toBe('p-4 gap-8 text-lg');
+    });
+
+    it('should apply utility-aware merging after resolving sz objects', () => {
+        expect(_szMerge({ p: 4, gap: 2 }, { p: 8 })).toBe('gap-2 p-8');
     });
 
     it('should handle multiple spaces', () => {

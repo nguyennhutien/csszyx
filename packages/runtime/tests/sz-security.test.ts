@@ -33,9 +33,9 @@ describe('runtime recursion limits', () => {
         expect(() => _szMerge(nestArray(5000) as never)).toThrow(SzDepthError);
     });
 
-    it('normal nested arrays still flatten correctly', () => {
+    it('normal nested arrays flatten with last-occurrence ordering', () => {
         expect(_sz(['a', ['b', 'c']])).toBe('a b c');
-        expect(_szMerge(['a', ['b', 'a']])).toBe('a b');
+        expect(_szMerge(['a', ['b', 'a']])).toBe('b a');
     });
 
     it('szv throws SzDepthError when base and variant nest too deep', () => {

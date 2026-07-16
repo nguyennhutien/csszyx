@@ -566,8 +566,10 @@ function writeReports(rows: BenchRow[], options: CliOptions): void {
         'utf8',
     );
     writeFileSync(join(outDir, `${REPORT_NAME}.md`), renderMarkdown(payload), 'utf8');
-    console.log(`Wrote ${join(options.outDir, `${REPORT_NAME}.md`)}`);
-    console.log(`Wrote ${join(options.outDir, `${REPORT_NAME}.json`)}`);
+    const markdownReportPath = join(options.outDir, `${REPORT_NAME}.md`);
+    const jsonReportPath = join(options.outDir, `${REPORT_NAME}.json`);
+    console.log(`Wrote ${markdownReportPath}`);
+    console.log(`Wrote ${jsonReportPath}`);
 }
 
 /**
@@ -578,6 +580,9 @@ function writeReports(rows: BenchRow[], options: CliOptions): void {
  */
 function renderMarkdown(payload: ReportPayload): string {
     const hasProductionRows = payload.rows.some(row => row.name.includes('vite-production-build'));
+    const productionNote = hasProductionRows
+        ? '- Vite production rows are temporary fixture builds enabled by `--production-build`; they validate real unplugin build hooks, but the synthetic fixture is not a product-size savings claim.\n'
+        : '- Run with `--production-build` to add a temporary Vite production fixture that validates real unplugin build hooks.\n';
     const rows = payload.rows
         .map(
             row =>
@@ -598,7 +603,7 @@ ${rows}
 
 - Pure pipeline rows scan CSS, plan aliases, rewrite CSS, transform TSX without
   aliases, and transform TSX with aliases using the same plan.
-${hasProductionRows ? '- Vite production rows are temporary fixture builds enabled by `--production-build`; they validate real unplugin build hooks, but the synthetic fixture is not a product-size savings claim.\n' : '- Run with `--production-build` to add a temporary Vite production fixture that validates real unplugin build hooks.\n'}- Wall-time rows include the full measured callback for that case. The Vite
+${productionNote}- Wall-time rows include the full measured callback for that case. The Vite
   production row measures a disabled build plus an explicit-token alias build.
 - Negative byte deltas mean alias mode is smaller than disabled mode. Positive
   deltas mean alias declarations cost more than the source/CSS reference

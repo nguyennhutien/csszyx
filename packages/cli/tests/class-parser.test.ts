@@ -908,6 +908,8 @@ describe('class-parser', () => {
             expect(parseClass('text-[0.8rem]')).toEqual({ prop: 'text', value: '0.8rem' });
             expect(parseClass('text-[16px]')).toEqual({ prop: 'text', value: '16px' });
             expect(parseClass('text-[1.5em]')).toEqual({ prop: 'text', value: '1.5em' });
+            expect(parseClass('text-[-.25cqi]')).toEqual({ prop: 'text', value: '-.25cqi' });
+            expect(parseClass('text-[1.5foo]')).toEqual({ prop: 'color', value: '1.5foo' });
             // Arbitrary hex color still → color
             expect(parseClass('text-[#50d71e]')).toEqual({ prop: 'color', value: '#50d71e' });
         });

@@ -179,32 +179,30 @@ describe('existing className/style detection', () => {
         expect(r.code).toContain('className={undefined}');
     });
 
-    it('merges CSS-var class into an existing object style attribute', () => {
-        const jsx = 'const A = ({ v }) => <div style={{ color: "red" }} sz={{ p: v }} />;';
+    it.each([
+        [
+            'an object attribute',
+            'const A = ({ v }) => <div style={{ color: "red" }} sz={{ p: v }} />;',
+            ['color: "red"', '"--_sz-p"'],
+        ],
+        [
+            'a string attribute',
+            'const A = ({ v }) => <div style="color: red; margin-top: 10px" sz={{ p: v }} />;',
+            ['marginTop: "10px"', '"--_sz-p"'],
+        ],
+        [
+            'a custom property',
+            'const A = ({ v }) => <div style="--x: 1px; color: red" sz={{ p: v }} />;',
+            ['"--x": "1px"', '"--_sz-p"'],
+        ],
+        [
+            'a dynamic reference',
+            'const A = ({ v, myStyle }) => <div style={myStyle} sz={{ p: v }} />;',
+            ['...myStyle', '"--_sz-p"'],
+        ],
+    ])('merges CSS variables with %s style', (_label, jsx, expectedCode) => {
         const r = run(jsx);
-        expect(r.code).toContain('color: "red"');
-        expect(r.code).toContain('"--_sz-p"');
-    });
-
-    it('parses an existing string style attribute and merges CSS vars', () => {
-        const jsx =
-            'const A = ({ v }) => <div style="color: red; margin-top: 10px" sz={{ p: v }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('marginTop: "10px"');
-        expect(r.code).toContain('"--_sz-p"');
-    });
-
-    it('preserves a CSS custom property key when parsing a style string', () => {
-        const jsx = 'const A = ({ v }) => <div style="--x: 1px; color: red" sz={{ p: v }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('"--x": "1px"');
-    });
-
-    it('spreads a dynamic style reference alongside injected CSS vars', () => {
-        const jsx = 'const A = ({ v, myStyle }) => <div style={myStyle} sz={{ p: v }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('...myStyle');
-        expect(r.code).toContain('"--_sz-p"');
+        for (const fragment of expectedCode) expect(r.code).toContain(fragment);
     });
 });
 
@@ -391,11 +389,11 @@ describe('sz={[ ... ]} array composition', () => {
         expect(r.classes.has('p-4')).toBe(true);
     });
 
-    it('emits _szPart for a truly dynamic array element and safelists ternary branches', () => {
+    it('precompiles a finite ternary array element', () => {
         const jsx = 'const A = ({ c }) => <div sz={[{ p: 4 }, c ? { m: 2 } : { m: 8 }]} />;';
         const r = run(jsx);
-        expect(r.usesSzPart).toBe(true);
-        expect(r.code).toContain('_szPart(');
+        expect(r.usesSzPart).toBe(false);
+        expect(r.code).toContain('c ? "m-2" : "m-8"');
         expect(r.classes.has('m-2')).toBe(true);
         expect(r.classes.has('m-8')).toBe(true);
     });
@@ -426,64 +424,50 @@ describe('sz={[ ... ]} array composition', () => {
 
 // ── Runtime fallback + diagnostics ──────────────────────────────────────────
 describe('runtime fallback diagnostics', () => {
-    it('warns about a function call and wraps it in _sz', () => {
-        const jsx = 'const A = () => <div sz={getStyles()} />;';
+    it.each([
+        [
+            'a function call',
+            'const A = () => <div sz={getStyles()} />;',
+            'function call `getStyles()`',
+        ],
+        ['a member call', 'const A = () => <div sz={styles.get()} />;', 'function call `get()`'],
+        [
+            'an imported identifier',
+            "import { external } from './x'; const A = () => <div sz={external} />;",
+            'identifier `external`',
+        ],
+        [
+            'a member expression',
+            'const A = ({ o }) => <div sz={o.styles} />;',
+            'member expression is not statically',
+        ],
+        [
+            'a binary expression',
+            'const A = ({ a, b }) => <div sz={a + b} />;',
+            'is not statically analyzable',
+        ],
+        [
+            'an unresolvable object spread',
+            "import { x } from './x'; const A = () => <div sz={{ ...x }} />;",
+            'unresolvable sz spread',
+        ],
+    ])('falls back with a diagnostic for %s', (_label, jsx, diagnostic) => {
         const r = run(jsx);
         expect(r.usesRuntime).toBe(true);
-        expect(r.diagnostics.some(d => d.includes('function call `getStyles()`'))).toBe(true);
-    });
-
-    it('warns about a member-call callee name', () => {
-        const jsx = 'const A = () => <div sz={styles.get()} />;';
-        const r = run(jsx);
-        expect(r.diagnostics.some(d => d.includes('function call `get()`'))).toBe(true);
-    });
-
-    it('warns about an unresolvable identifier', () => {
-        const jsx = "import { external } from './x'; const A = () => <div sz={external} />;";
-        const r = run(jsx);
-        expect(r.usesRuntime).toBe(true);
-        expect(r.diagnostics.some(d => d.includes('identifier `external`'))).toBe(true);
-    });
-
-    it('warns about a member expression', () => {
-        const jsx = 'const A = ({ o }) => <div sz={o.styles} />;';
-        const r = run(jsx);
-        expect(r.diagnostics.some(d => d.includes('member expression is not statically'))).toBe(
-            true,
-        );
-    });
-
-    it('warns about an otherwise non-analyzable expression type', () => {
-        const jsx = 'const A = ({ a, b }) => <div sz={a + b} />;';
-        const r = run(jsx);
-        expect(r.diagnostics.some(d => d.includes('is not statically analyzable'))).toBe(true);
-    });
-
-    it('surfaces an unresolvable top-level object spread as a build warning', () => {
-        const jsx = "import { x } from './x'; const A = () => <div sz={{ ...x }} />;";
-        const r = run(jsx);
-        expect(r.usesRuntime).toBe(true);
-        expect(r.diagnostics.some(d => d.includes('unresolvable sz spread'))).toBe(true);
+        expect(r.diagnostics.some(message => message.includes(diagnostic))).toBe(true);
     });
 });
 
 // ── szv catalog extraction ──────────────────────────────────────────────────
 describe('szv catalog extraction (VariableDeclarator)', () => {
-    it('ignores a declarator whose init is not a call', () => {
-        const jsx = 'const notSzv = 5; const A = () => <div sz={{ p: 4 }} />;';
-        const r = run(jsx);
-        expect(r.code).not.toContain('_szv_catalog');
-    });
-
-    it('ignores a non-szv call', () => {
-        const jsx = 'const x = other({ base: { p: 4 } }); const B = () => <i sz="m-1" />;';
-        const r = run(jsx);
-        expect(r.code).not.toContain('_szv_catalog');
-    });
-
-    it('ignores szv() with no arguments', () => {
-        const jsx = 'const x = szv(); const B = () => <i sz="m-1" />;';
+    it.each([
+        ['a non-call initializer', 'const notSzv = 5; const A = () => <div sz={{ p: 4 }} />;'],
+        [
+            'a different callee',
+            'const x = other({ base: { p: 4 } }); const B = () => <i sz="m-1" />;',
+        ],
+        ['no arguments', 'const x = szv(); const B = () => <i sz="m-1" />;'],
+    ])('does not inject a catalog for %s', (_label, jsx) => {
         const r = run(jsx);
         expect(r.code).not.toContain('_szv_catalog');
     });
@@ -560,42 +544,28 @@ describe('szv catalog extraction (VariableDeclarator)', () => {
 // `@csszyx/dynamic` (which contains "sz") so the visitor actually runs.
 const DYN = "import { dynamic } from '@csszyx/dynamic';\n";
 describe('dynamic()/szr() extraction (CallExpression)', () => {
-    it('ignores an unrelated call whose callee is neither dynamic nor szr', () => {
-        // `szx` contains "sz" so the source is parsed, but the callee check bails.
-        const jsx = 'const A = () => <div className={szx({ p: 4 })} />;';
+    it.each([
+        ['an unrelated call', 'const A = () => <div className={szx({ p: 4 })} />;', []],
+        ['dynamic() without arguments', DYN + 'const A = () => <div className={dynamic()} />;', []],
+        ['szr() without arguments', 'const A = () => <div className={szr()} />;', []],
+        [
+            'an inline szr object',
+            'const A = () => <div className={szr({ p: 4, m: 2 })} />;',
+            ['p-4', 'm-2'],
+        ],
+        [
+            'an inline static dynamic object',
+            DYN + 'const A = () => <div className={dynamic({ p: 4 })} />;',
+            ['p-4'],
+        ],
+        [
+            'a non-static dynamic object',
+            DYN + 'const A = ({ v }) => <div className={dynamic({ p: v })} />;',
+            [],
+        ],
+    ])('collects expected classes from %s', (_label, jsx, expectedClasses) => {
         const r = run(jsx);
-        expect(r.classes.size).toBe(0);
-    });
-
-    it('ignores dynamic() with no arguments', () => {
-        const jsx = DYN + 'const A = () => <div className={dynamic()} />;';
-        const r = run(jsx);
-        expect(r.classes.size).toBe(0);
-    });
-
-    it('ignores szr() with no arguments', () => {
-        const jsx = 'const A = () => <div className={szr()} />;';
-        const r = run(jsx);
-        expect(r.classes.size).toBe(0);
-    });
-
-    it('extracts classes from an inline szr object', () => {
-        const jsx = 'const A = () => <div className={szr({ p: 4, m: 2 })} />;';
-        const r = run(jsx);
-        expect(r.classes.has('p-4')).toBe(true);
-        expect(r.classes.has('m-2')).toBe(true);
-    });
-
-    it('extracts classes from an inline static dynamic() object', () => {
-        const jsx = DYN + 'const A = () => <div className={dynamic({ p: 4 })} />;';
-        const r = run(jsx);
-        expect(r.classes.has('p-4')).toBe(true);
-    });
-
-    it('does not extract from a non-static inline dynamic() object', () => {
-        const jsx = DYN + 'const A = ({ v }) => <div className={dynamic({ p: v })} />;';
-        const r = run(jsx);
-        expect(r.classes.has('p-4')).toBe(false);
+        expect([...r.classes]).toEqual(expectedClasses);
     });
 
     it('extracts from a const identifier with a satisfies wrapper', () => {
@@ -608,28 +578,24 @@ describe('dynamic()/szr() extraction (CallExpression)', () => {
         expect(r.classes.has('rounded-md')).toBe(true);
     });
 
-    it('skips a dynamic(identifier) with no binding at all', () => {
-        const jsx = DYN + 'const A = () => <div className={dynamic(GLOBALTHING)} />;';
-        const r = run(jsx);
-        expect(r.classes.size).toBe(0);
-    });
-
-    it('skips a dynamic(identifier) bound to a non-object', () => {
-        const jsx = DYN + 'const n = 5; const A = () => <div className={dynamic(n)} />;';
-        const r = run(jsx);
-        expect(r.classes.size).toBe(0);
-    });
-
-    it('skips a dynamic(identifier) bound to a non-static object', () => {
-        const jsx =
-            DYN + 'const s = { p: sizeVar }; const A = () => <div className={dynamic(s)} />;';
-        const r = run(jsx);
-        expect(r.classes.size).toBe(0);
-    });
-
-    it('skips a dynamic(imported) unresolvable identifier', () => {
-        const jsx =
-            DYN + "import { s } from './s'; const A = () => <div className={dynamic(s)} />;";
+    it.each([
+        [
+            'an unbound identifier',
+            DYN + 'const A = () => <div className={dynamic(GLOBALTHING)} />;',
+        ],
+        [
+            'a non-object binding',
+            DYN + 'const n = 5; const A = () => <div className={dynamic(n)} />;',
+        ],
+        [
+            'a non-static object binding',
+            DYN + 'const s = { p: sizeVar }; const A = () => <div className={dynamic(s)} />;',
+        ],
+        [
+            'an imported binding',
+            DYN + "import { s } from './s'; const A = () => <div className={dynamic(s)} />;",
+        ],
+    ])('skips dynamic() with %s', (_label, jsx) => {
         const r = run(jsx);
         expect(r.classes.size).toBe(0);
     });
@@ -694,41 +660,34 @@ describe('runtime-fallback safelist candidate collection', () => {
 
 // ── color-object + style-value edge cases ────────────────────────────────────
 describe('partial color-object and style-value categories', () => {
-    it('emits ANGLE-category style value (deg) for a dynamic rotate', () => {
-        const jsx = 'const A = ({ v }) => <div sz={{ rotate: v }} />;';
+    it.each([
+        [
+            'ANGLE',
+            'const A = ({ v }) => <div sz={{ rotate: v }} />;',
+            '__szUnitVar(v, "deg", "rotate")',
+        ],
+        [
+            'DURATION',
+            'const A = ({ v }) => <div sz={{ duration: v }} />;',
+            '__szUnitVar(v, "ms", "duration")',
+        ],
+        ['UNITLESS', 'const A = ({ v }) => <div sz={{ opacity: v }} />;', '"--_sz-opacity": v'],
+    ])('emits the %s dynamic style category', (_category, jsx, expectedCode) => {
         const r = run(jsx);
-        expect(r.code).toContain('__szUnitVar(v, "deg", "rotate")');
+        expect(r.code).toContain(expectedCode);
     });
 
-    it('emits DURATION-category style value (ms) for a dynamic duration', () => {
-        const jsx = 'const A = ({ v }) => <div sz={{ duration: v }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('__szUnitVar(v, "ms", "duration")');
-    });
-
-    it('emits a bare unitless style value for a dynamic opacity', () => {
-        const jsx = 'const A = ({ v }) => <div sz={{ opacity: v }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('"--_sz-opacity": `${v}`');
-    });
-
-    it('handles a static color + static op inside an otherwise-dynamic color object', () => {
-        const jsx =
-            'const A = ({ d }) => <div sz={{ bg: { color: "red-500", op: 20, extra: d } }} />;';
-        const r = run(jsx);
-        // The color+op pair resolves statically; the extra dynamic key pushes the
-        // whole thing to runtime fallback.
-        expect(r.usesRuntime).toBe(true);
-    });
-
-    it('handles a static color with no op inside an otherwise-dynamic color object', () => {
-        const jsx = 'const A = ({ d }) => <div sz={{ bg: { color: "red-500", extra: d } }} />;';
-        const r = run(jsx);
-        expect(r.usesRuntime).toBe(true);
-    });
-
-    it('falls back for an unknown dynamic nested object (not a color, not a variant)', () => {
-        const jsx = 'const A = ({ d }) => <div sz={{ unknownKey: { p: d } }} />;';
+    it.each([
+        [
+            'a static color and opacity',
+            'const A = ({ d }) => <div sz={{ bg: { color: "red-500", op: 20, extra: d } }} />;',
+        ],
+        [
+            'a static color without opacity',
+            'const A = ({ d }) => <div sz={{ bg: { color: "red-500", extra: d } }} />;',
+        ],
+        ['an unknown nested object', 'const A = ({ d }) => <div sz={{ unknownKey: { p: d } }} />;'],
+    ])('uses runtime fallback for %s with dynamic siblings', (_label, jsx) => {
         const r = run(jsx);
         expect(r.usesRuntime).toBe(true);
         expect(r.code).toContain('_sz(');
@@ -797,100 +756,83 @@ describe('szv catalog internals', () => {
         expect(r.classes.has('p-1')).toBe(true);
     });
 
-    it('resolves a spread inside a catalog object', () => {
-        const jsx =
-            'const SH = { p: 3 }; const x = szv({ base: { ...SH, m: 1 }, variants: { s: { a: { w: 2 } } } });';
+    it.each([
+        [
+            'an object spread',
+            'const SH = { p: 3 }; const x = szv({ base: { ...SH, m: 1 }, variants: { s: { a: { w: 2 } } } });',
+            ['p-3', 'm-1', 'w-2'],
+        ],
+        [
+            'nullish leaves with siblings',
+            'const x = szv({ base: { p: null, m: undefined, w: 2 }, variants: { s: { a: { h: 1 } } } });',
+            ['w-2', 'h-1'],
+        ],
+        [
+            'unary numeric leaves',
+            'const x = szv({ base: { mx: -2, my: +3 }, variants: { s: { a: { h: 1 } } } });',
+            ['-mx-2', 'my-3'],
+        ],
+        [
+            'a skipped call leaf',
+            'const x = szv({ base: { p: fn() }, variants: { s: { a: { h: 1 } } } });',
+            ['h-1'],
+        ],
+        [
+            'an unresolvable identifier leaf',
+            'const x = szv({ base: { p: EXT }, variants: { s: { a: { h: 1 } } } });',
+            ['h-1'],
+        ],
+        [
+            'conditional object branches',
+            'const x = szv({ base: { p: 1 }, variants: { s: { a: cond ? { w: 2 } : { w: 8 } } } });',
+            ['w-2', 'w-8'],
+        ],
+        [
+            'a const-bound variant object',
+            'const V = { w: 5 }; const x = szv({ base: { p: 1 }, variants: { s: { a: V } } });',
+            ['w-5'],
+        ],
+        [
+            'a shared const variant object',
+            'const S = { w: 5 }; const x = szv({ base: { p: 1 }, variants: { d: { a: S, b: S } } });',
+            ['w-5'],
+        ],
+    ])('collects catalog classes through %s', (_label, jsx, expectedClasses) => {
         const r = run(jsx);
-        expect(r.classes.has('p-3')).toBe(true);
-        expect(r.classes.has('m-1')).toBe(true);
-        expect(r.classes.has('w-2')).toBe(true);
+        expect([...r.classes]).toEqual(expect.arrayContaining(expectedClasses));
     });
 
-    it('skips null / undefined leaf values but keeps siblings', () => {
-        const jsx =
-            'const x = szv({ base: { p: null, m: undefined, w: 2 }, variants: { s: { a: { h: 1 } } } });';
-        const r = run(jsx);
-        expect(r.classes.has('w-2')).toBe(true);
-        expect(r.classes.has('h-1')).toBe(true);
-    });
-
-    it('handles unary +/- leaf values', () => {
-        const jsx =
-            'const x = szv({ base: { mx: -2, my: +3 }, variants: { s: { a: { h: 1 } } } });';
-        const r = run(jsx);
-        expect(r.classes.has('-mx-2')).toBe(true);
-        expect(r.classes.has('my-3')).toBe(true);
-    });
-
-    it('skips a call-expression leaf but keeps siblings', () => {
-        const jsx = 'const x = szv({ base: { p: fn() }, variants: { s: { a: { h: 1 } } } });';
-        const r = run(jsx);
-        expect(r.classes.has('h-1')).toBe(true);
-    });
-
-    it('skips an unresolvable const leaf identifier', () => {
-        const jsx = 'const x = szv({ base: { p: EXT }, variants: { s: { a: { h: 1 } } } });';
-        const r = run(jsx);
-        expect(r.classes.has('h-1')).toBe(true);
-    });
-
-    it('expands a conditional-object variant value into both branches', () => {
-        const jsx =
-            'const x = szv({ base: { p: 1 }, variants: { s: { a: cond ? { w: 2 } : { w: 8 } } } });';
-        const r = run(jsx);
-        expect(r.classes.has('w-2')).toBe(true);
-        expect(r.classes.has('w-8')).toBe(true);
-    });
-
-    it('resolves a const-bound variant object value', () => {
-        const jsx =
-            'const V = { w: 5 }; const x = szv({ base: { p: 1 }, variants: { s: { a: V } } });';
-        const r = run(jsx);
-        expect(r.classes.has('w-5')).toBe(true);
-    });
-
-    it('memoizes a shared const referenced from two variant values', () => {
-        const jsx =
-            'const S = { w: 5 }; const x = szv({ base: { p: 1 }, variants: { d: { a: S, b: S } } });';
-        const r = run(jsx);
-        expect(r.classes.has('w-5')).toBe(true);
-    });
-
-    it('ignores a reassignable (let) config binding', () => {
-        const jsx = 'let cfg = { base: { p: 1 } }; const x = szv(cfg);';
+    it.each([
+        ['a reassignable binding', 'let cfg = { base: { p: 1 } }; const x = szv(cfg);'],
+        ['a runtime member argument', 'const x = szv(props.cfg); const A = () => <i sz="m-1" />;'],
+        [
+            'a destructured declarator',
+            'const [a] = szv({ base: { p: 1 } }); const A = () => <i sz="m-1" />;',
+        ],
+    ])('does not inject a catalog for %s', (_label, jsx) => {
         const r = run(jsx);
         expect(r.code).not.toContain('_szv_catalog');
     });
 
-    it('ignores a runtime (member-expression) config argument', () => {
-        const jsx = 'const x = szv(props.cfg); const A = () => <i sz="m-1" />;';
+    it.each([
+        [
+            'a computed dimension key',
+            "const x = szv({ base: { p: 1 }, variants: { ['s']: { a: { w: 2 } } } });",
+            'p-1',
+        ],
+        [
+            'a computed value key',
+            "const x = szv({ base: { p: 1 }, variants: { s: { ['a']: { w: 2 } } } });",
+            'p-1',
+        ],
+        [
+            'a numeric leaf key',
+            'const x = szv({ base: { 2: 4 }, variants: { s: { a: { w: 2 } } } });',
+            'w-2',
+        ],
+    ])('keeps valid siblings beside %s', (_label, jsx, expectedClass) => {
         const r = run(jsx);
-        expect(r.code).not.toContain('_szv_catalog');
-    });
-
-    it('ignores a non-identifier declarator id (array destructure)', () => {
-        const jsx = 'const [a] = szv({ base: { p: 1 } }); const A = () => <i sz="m-1" />;';
-        const r = run(jsx);
-        expect(r.code).not.toContain('_szv_catalog');
-    });
-
-    it('skips a computed variant dimension key', () => {
-        const jsx = "const x = szv({ base: { p: 1 }, variants: { ['s']: { a: { w: 2 } } } });";
-        const r = run(jsx);
-        expect(r.classes.has('p-1')).toBe(true);
-    });
-
-    it('skips a computed variant value key', () => {
-        const jsx = "const x = szv({ base: { p: 1 }, variants: { s: { ['a']: { w: 2 } } } });";
-        const r = run(jsx);
-        expect(r.classes.has('p-1')).toBe(true);
-    });
-
-    it('handles a numeric leaf key in a catalog object', () => {
-        const jsx = 'const x = szv({ base: { 2: 4 }, variants: { s: { a: { w: 2 } } } });';
-        const r = run(jsx);
-        // Numeric key ignored by transform; sibling variant class still emitted.
-        expect(r.classes.has('w-2')).toBe(true);
+        expect(r.classes.has(expectedClass)).toBe(true);
     });
 });
 
@@ -922,29 +864,31 @@ describe('partial-path static value shapes', () => {
         expect(r.classes.has('hover:p-(--_sz-hover-p)')).toBe(true);
     });
 
-    it('emits a variant-scoped CSS var for a fully-dynamic conditional inside a variant', () => {
-        const jsx = 'const A = ({ c, d1, d2 }) => <div sz={{ hover: { m: c ? d1 : d2 } }} />;';
+    it.each([
+        {
+            label: 'a fully dynamic variant conditional',
+            jsx: 'const A = ({ c, d1, d2 }) => <div sz={{ hover: { m: c ? d1 : d2 } }} />;',
+            expectedCode: 'hover:m-(--_sz-hover-m)',
+        },
+        {
+            label: 'a dynamic sibling in a color object',
+            jsx: 'const A = ({ d }) => <div sz={{ bg: { color: "red-500", op: "20", extra: d } }} />;',
+            usesRuntime: true,
+        },
+        {
+            label: 'a string-literal key',
+            jsx: "const A = ({ v }) => <div sz={{ 'p': v }} />;",
+            expectedCode: 'p-(--_sz-p)',
+        },
+        {
+            label: 'a numeric-literal key',
+            jsx: 'const A = ({ v }) => <div sz={{ 2: v }} />;',
+            expectedCode: '--_sz-2',
+        },
+    ])('handles $label on the partial path', ({ jsx, expectedCode, usesRuntime }) => {
         const r = run(jsx);
-        expect(r.code).toContain('hover:m-(--_sz-hover-m)');
-    });
-
-    it('handles a static color + static string op inside an otherwise-dynamic color object', () => {
-        const jsx =
-            'const A = ({ d }) => <div sz={{ bg: { color: "red-500", op: "20", extra: d } }} />;';
-        const r = run(jsx);
-        expect(r.usesRuntime).toBe(true);
-    });
-
-    it('supports a string-literal key with a dynamic value', () => {
-        const jsx = "const A = ({ v }) => <div sz={{ 'p': v }} />;";
-        const r = run(jsx);
-        expect(r.code).toContain('p-(--_sz-p)');
-    });
-
-    it('supports a numeric-literal key with a dynamic value', () => {
-        const jsx = 'const A = ({ v }) => <div sz={{ 2: v }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('--_sz-2');
+        if (expectedCode) expect(r.code).toContain(expectedCode);
+        if (usesRuntime) expect(r.usesRuntime).toBe(true);
     });
 });
 
@@ -1263,35 +1207,37 @@ describe('final reachable branches', () => {
         expect(r.usesRuntime).toBe(true);
     });
 
-    it('walks an object-valued catalog leaf through the values lane', () => {
-        const jsx =
-            'const x = szv({ base: { hover: { p: 1 } }, variants: { s: { a: { w: 2 } } } });';
+    it.each([
+        {
+            label: 'an object-valued catalog leaf',
+            jsx: 'const x = szv({ base: { hover: { p: 1 } }, variants: { s: { a: { w: 2 } } } });',
+            expectedClasses: ['hover:p-1', 'w-2'],
+        },
+        {
+            label: 'a shared const catalog leaf',
+            jsx: 'const G = 4; const x = szv({ base: { mx: G, my: G }, variants: { s: { a: { w: 2 } } } });',
+            expectedClasses: ['mx-4', 'my-4'],
+        },
+        {
+            label: 'an unknown camelCase dynamic key',
+            jsx: 'const A = ({ c, dv }) => <div sz={{ hover: { fooBar: c ? 4 : dv } }} />;',
+            expectedCode: 'hover:foo-bar-(--_sz-hover-foo-bar)',
+        },
+        {
+            label: 'an unresolvable nested spread',
+            jsx:
+                "import { imp, imp2 } from './x';\n" +
+                'const A = () => <div sz={{ ...imp, card: { ...imp2, m: 2 } }} />;',
+            expectedClasses: ['m-2'],
+            usesRuntime: true,
+        },
+    ])('covers $label in final branches', ({ jsx, expectedClasses, expectedCode, usesRuntime }) => {
         const r = run(jsx);
-        expect(r.classes.has('hover:p-1')).toBe(true);
-        expect(r.classes.has('w-2')).toBe(true);
-    });
-
-    it('memoizes a const leaf referenced twice in a catalog object (value lane)', () => {
-        const jsx =
-            'const G = 4; const x = szv({ base: { mx: G, my: G }, variants: { s: { a: { w: 2 } } } });';
-        const r = run(jsx);
-        expect(r.classes.has('mx-4')).toBe(true);
-        expect(r.classes.has('my-4')).toBe(true);
-    });
-
-    it('kebab-cases an unknown camelCase conditional-dynamic key inside a variant', () => {
-        const jsx = 'const A = ({ c, dv }) => <div sz={{ hover: { fooBar: c ? 4 : dv } }} />;';
-        const r = run(jsx);
-        expect(r.code).toContain('hover:foo-bar-(--_sz-hover-foo-bar)');
-    });
-
-    it('collects a nested non-variant object with an unresolvable spread in a fallback', () => {
-        const jsx =
-            "import { imp, imp2 } from './x';\n" +
-            'const A = () => <div sz={{ ...imp, card: { ...imp2, m: 2 } }} />;';
-        const r = run(jsx);
-        expect(r.usesRuntime).toBe(true);
-        expect(r.classes.has('m-2')).toBe(true);
+        if (expectedClasses) {
+            expect([...r.classes]).toEqual(expect.arrayContaining(expectedClasses));
+        }
+        if (expectedCode) expect(r.code).toContain(expectedCode);
+        if (usesRuntime) expect(r.usesRuntime).toBe(true);
     });
 
     it('prefixes a variant conditional-both-static prop when the object is not hoistable', () => {

@@ -5,7 +5,7 @@ import {
     transform_sz,
 } from '../pkg/csszyx_core.js';
 
-async function runExamples() {
+function runExamples(): void {
     // 1. Initialize WASM (already called automatically by wasm-bindgen start)
     // init();
 
@@ -53,4 +53,4 @@ async function runExamples() {
     console.log('Recovery Token:', token);
 }
 
-runExamples().catch(console.error);
+runExamples();

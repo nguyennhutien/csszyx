@@ -37,6 +37,9 @@ pre-commit:
         - "**/package.json"
         - ".release-please-manifest.json"
         - "apps/docs/src/styles/landing.css"
+        # Root Biome/ESLint configs ignore playgrounds. Their framework-pinned
+        # local linters (not root ESLint 10) own those fixtures.
+        - "playground/**"
       run: |
         set -e
         pnpm exec biome check --write --no-errors-on-unmatched {staged_files}

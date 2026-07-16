@@ -69,8 +69,13 @@ module.exports = {
 - **sz prop transform** -- Compiles `sz={{ }}` objects into `className` strings. Defaults to the **native Rust engine** through the optional `@csszyx/core-*` platform package; opt back into the previous oxc-parser JavaScript path with `build.parser: "oxc"`, or fall through to Babel with `build.parser: "babel"`.
 - **HTML injection** -- Injects mangle maps and checksums for SSR hydration
 - **HMR support** -- Updates styles instantly during development
-- **CSS mangling** -- Compresses class names (e.g., `text-center` -> `z`) in production builds
+- **CSS mangling** -- Compresses owned class names (e.g., `text-center` -> `z`) while retaining names shared with source-visible `class`/`className` strings and template quasis
 - **File filters** -- Top-level `include` / `exclude` (glob or RegExp) skip large generated files before the AST budget guard fires; see [Config Overview](https://csszyx.com/config/overview#file-filters)
+
+Class mangling runs in Vite, Webpack, and Rollup final-output hooks. The esbuild
+adapter supports source transforms and safelist generation but disables class
+mangling because esbuild does not expose a mutable final-output hook when writing
+directly to disk; explicit `production.mangle: true` emits a warning.
 
 ## Parser selection
 

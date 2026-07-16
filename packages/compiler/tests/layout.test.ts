@@ -111,14 +111,6 @@ describe('layout — display', () => {
         expect(t({ display: 'block' })).toBe('block');
     });
 
-    it('{ display: "block" } → block', () => {
-        expect(t({ display: 'block' })).toBe('block');
-    });
-
-    it('{ display: "inline-block" } → inline-block', () => {
-        expect(t({ display: 'inline-block' })).toBe('inline-block');
-    });
-
     it('{ display: "inline-block" } → inline-block', () => {
         expect(t({ display: 'inline-block' })).toBe('inline-block');
     });
@@ -127,20 +119,8 @@ describe('layout — display', () => {
         expect(t({ display: 'flex' })).toBe('flex');
     });
 
-    it('{ display: "flex" } → flex', () => {
-        expect(t({ display: 'flex' })).toBe('flex');
-    });
-
     it('{ display: "grid" } → grid', () => {
         expect(t({ display: 'grid' })).toBe('grid');
-    });
-
-    it('{ display: "grid" } → grid', () => {
-        expect(t({ display: 'grid' })).toBe('grid');
-    });
-
-    it('{ display: "none" } → hidden', () => {
-        expect(t({ display: 'none' })).toBe('hidden');
     });
 
     it('{ display: "none" } → hidden', () => {
@@ -173,10 +153,6 @@ describe('layout — clear', () => {
 });
 
 describe('layout — isolation', () => {
-    it('{ isolation: "isolate" } → isolate', () => {
-        expect(t({ isolation: 'isolate' })).toBe('isolate');
-    });
-
     it('{ isolation: "isolate" } → isolate', () => {
         expect(t({ isolation: 'isolate' })).toBe('isolate');
     });
@@ -251,20 +227,8 @@ describe('layout — position', () => {
         expect(t({ position: 'static' })).toBe('static');
     });
 
-    it('{ position: "static" } → static', () => {
-        expect(t({ position: 'static' })).toBe('static');
-    });
-
     it('{ position: "absolute" } → absolute', () => {
         expect(t({ position: 'absolute' })).toBe('absolute');
-    });
-
-    it('{ position: "absolute" } → absolute', () => {
-        expect(t({ position: 'absolute' })).toBe('absolute');
-    });
-
-    it('{ position: "relative" } → relative', () => {
-        expect(t({ position: 'relative' })).toBe('relative');
     });
 
     it('{ position: "relative" } → relative', () => {
@@ -363,20 +327,8 @@ describe('layout — visibility', () => {
         expect(t({ visibility: 'visible' })).toBe('visible');
     });
 
-    it('{ visibility: "visible" } → visible', () => {
-        expect(t({ visibility: 'visible' })).toBe('visible');
-    });
-
     it('{ visibility: "hidden" } → invisible', () => {
         expect(t({ visibility: 'hidden' })).toBe('invisible');
-    });
-
-    it('{ visibility: "hidden" } → invisible', () => {
-        expect(t({ visibility: 'hidden' })).toBe('invisible');
-    });
-
-    it('{ visibility: "collapse" } → collapse', () => {
-        expect(t({ visibility: 'collapse' })).toBe('collapse');
     });
 
     it('{ visibility: "collapse" } → collapse', () => {

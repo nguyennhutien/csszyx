@@ -55,6 +55,12 @@ const fixtures: readonly RustParityFixture[] = [
         expected: 'parity',
     },
     {
+        name: 'arbitrary-variant-with-selector-quotes',
+        source: `const X = () => <div sz={{ '[&[data-state="open"]]': { bg: 'red-500' } }} />;`,
+        filename: 'arbitrary-variant-quote.tsx',
+        expected: 'parity',
+    },
+    {
         name: 'sz-with-existing-classname',
         source: 'const X = () => <div className="existing" sz={{ p: 4 }} />;',
         filename: 'merge.tsx',

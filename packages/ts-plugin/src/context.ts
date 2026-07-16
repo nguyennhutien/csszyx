@@ -436,9 +436,13 @@ function csszyxCallAnchor(
     const callName = csszyxCallName(tsMod, sourceFile, call, getChecker(), shouldStop);
     if (callName === 'szr') return resolveChain(path);
     if (callName !== 'szv') return null;
-    const outerFirst = [...path].reverse();
+    const outerFirst = [...path];
+    outerFirst.reverse();
     const styleChain = szvStyleChain(outerFirst);
-    return styleChain === null ? null : resolveChain([...styleChain].reverse());
+    if (styleChain === null) return null;
+    const innerFirst = [...styleChain];
+    innerFirst.reverse();
+    return resolveChain(innerFirst);
 }
 
 /** Append one required static property to a call ancestry path.

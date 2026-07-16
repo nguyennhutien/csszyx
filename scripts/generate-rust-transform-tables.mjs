@@ -27,6 +27,7 @@ const tables = {
     variantMap: extractStringObject('VARIANT_MAP'),
     booleanToClass: extractStringObject('BOOLEAN_TO_CLASS'),
     booleanShorthands: extractStringSet('BOOLEAN_SHORTHANDS'),
+    knownSpecialProperties: extractStringSet('KNOWN_SPECIAL_PROPERTIES'),
     removedBooleanSugar: extractObjectKeys('REMOVED_BOOLEAN_SUGAR'),
     knownVariants: extractStringSet('KNOWN_VARIANTS'),
     ariaStates: extractStringSet('ARIA_STATES'),
@@ -131,6 +132,7 @@ function renderRust({
     variantMap,
     booleanToClass,
     booleanShorthands,
+    knownSpecialProperties,
     removedBooleanSugar,
     knownVariants,
     ariaStates,
@@ -169,6 +171,14 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
     matches!(
         key,
 ${renderMatchPatterns(booleanShorthands)}
+    )
+}
+
+/// Returns true when a property is lowered by a dedicated object branch.
+pub(crate) fn is_known_special_property(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(knownSpecialProperties)}
     )
 }
 

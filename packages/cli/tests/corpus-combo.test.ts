@@ -37,6 +37,71 @@ function readComboFile(filename: string): string[] {
         .filter(line => line && !line.startsWith('#'));
 }
 
+/**
+ * Merge every recognized utility into one last-write-wins sz object.
+ *
+ * @param classes Element utility classes.
+ * @returns Merged sz object and utilities outside migration coverage.
+ */
+function mergeRecognizedClasses(classes: string[]): {
+    mergedSz: Record<string, unknown>;
+    unrecognized: Set<string>;
+} {
+    const mergedSz: Record<string, unknown> = {};
+    const unrecognized = new Set<string>();
+    for (const className of classes) {
+        const parsed = classNameToSzObject(className);
+        if (parsed.unrecognized[0] === className) {
+            unrecognized.add(className);
+        } else {
+            Object.assign(mergedSz, parsed.szObject);
+        }
+    }
+    return { mergedSz, unrecognized };
+}
+
+/**
+ * Check whether one compiler output class traces to the merged input.
+ *
+ * @param className Compiler output class.
+ * @param inputClasses Original element utility set.
+ * @param mergedSz Merged migration output.
+ * @returns True for exact, shorthand, or self-consistent canonical output.
+ */
+function isTraceableOutputClass(
+    className: string,
+    inputClasses: ReadonlySet<string>,
+    mergedSz: Record<string, unknown>,
+): boolean {
+    if (inputClasses.has(className)) return true;
+    const { szObject, unrecognized } = classNameToSzObject(className);
+    if (unrecognized[0] === className) return true;
+    const properties = Object.keys(szObject);
+    if (properties.length > 0 && properties.every(property => property in mergedSz)) return true;
+    return unrecognized.length === 0 && transform(szObject as SzObject).className === className;
+}
+
+/**
+ * Assert that compiling one corpus element cannot invent a utility.
+ *
+ * @param classString Whitespace-separated element classes.
+ */
+function assertComboRoundTrip(classString: string): void {
+    const classes = classString.split(/\s+/).filter(Boolean);
+    const { mergedSz, unrecognized } = mergeRecognizedClasses(classes);
+    if (unrecognized.size === classes.length) return;
+
+    const result = transform(mergedSz as SzObject);
+    if (!result.className) return;
+    const inputClasses = new Set(classes);
+    for (const className of result.className.split(' ').filter(Boolean)) {
+        if (isTraceableOutputClass(className, inputClasses, mergedSz)) continue;
+        expect(className).toBe(
+            `[phantom class in output — not from input "${classString.slice(0, 60)}..."]`,
+        );
+    }
+}
+
 const comboFiles = existsSync(COMBO_DIR)
     ? readdirSync(COMBO_DIR)
           .filter(f => f.endsWith('.txt'))
@@ -56,77 +121,7 @@ describe('corpus combo: real element className strings → one sz object', () =>
         describe(`${source} (${classStrings.length} elements)`, () => {
             for (const classString of classStrings) {
                 it(classString, () => {
-                    const classes = classString.split(/\s+/).filter(Boolean);
-
-                    // Build ONE merged sz object from all classes on this element.
-                    // Last-write wins for conflicts (e.g. p-2 then px-4 → px:4 survives).
-                    const mergedSz: Record<string, unknown> = {};
-                    const unrecognizedSet = new Set<string>();
-
-                    for (const cls of classes) {
-                        const { szObject, unrecognized } = classNameToSzObject(cls);
-                        if (unrecognized.length > 0 && unrecognized[0] === cls) {
-                            unrecognizedSet.add(cls);
-                        } else {
-                            Object.assign(mergedSz, szObject);
-                        }
-                    }
-
-                    // All classes unrecognized → known coverage gap, skip without failing
-                    if (unrecognizedSet.size === classes.length) {
-                        return;
-                    }
-
-                    // Transform the ONE merged sz object
-                    const result = transform(mergedSz as SzObject);
-
-                    // Empty output means all recognized classes used unsupported
-                    // variants (e.g. group-data-[disabled]:) → skip, not a failure
-                    if (result.className === '') {
-                        return;
-                    }
-
-                    // No phantom classes: every output class must come from the input,
-                    // be a known self-consistent upgrade, or be a compiler shorthand
-                    // that combines multiple input-derived props (e.g. text-sm/none
-                    // from {text:'sm', leading:'none'}).
-                    const outputClasses = result.className.split(' ').filter(Boolean);
-                    const inputSet = new Set(classes);
-
-                    for (const outCls of outputClasses) {
-                        if (inputSet.has(outCls)) {
-                            continue;
-                        } // exact match — OK
-
-                        const { szObject: outSz, unrecognized: outUnrec } =
-                            classNameToSzObject(outCls);
-
-                        // Compiler-canonical form with no reverse parse path — known upgrade
-                        if (outUnrec.length > 0 && outUnrec[0] === outCls) {
-                            continue;
-                        }
-
-                        // Shorthand of input-derived props: all sz props in the output
-                        // class must have been contributed by the merged input sz object
-                        // (e.g. text-sm/none ← text:sm + leading:none both in mergedSz)
-                        const outProps = Object.keys(outSz);
-                        if (outProps.length > 0 && outProps.every(prop => prop in mergedSz)) {
-                            continue;
-                        }
-
-                        // Self-consistent upgrade: recompile and check identity
-                        if (outUnrec.length === 0) {
-                            const recompiled = transform(outSz as SzObject).className;
-                            if (recompiled === outCls) {
-                                continue;
-                            }
-                        }
-
-                        // Not in input, not a shorthand, not a known upgrade — phantom class
-                        expect(outCls).toBe(
-                            `[phantom class in output — not from input "${classString.slice(0, 60)}..."]`,
-                        );
-                    }
+                    assertComboRoundTrip(classString);
                 });
             }
         });

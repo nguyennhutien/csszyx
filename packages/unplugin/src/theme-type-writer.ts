@@ -17,25 +17,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
+import { escapeSingleQuotedString, replaceEveryLiteral } from './string-escape.js';
 import type { ParsedTheme } from './theme-scanner.js';
-
-/**
- * Escape a token for safe interpolation into a single-quoted TS string literal so
- * a theme token can't break out of the literal or inject a newline into the
- * generated `.d.ts`. Valid tokens contain none of these, so output is
- * byte-identical for normal input — this only neutralizes hostile tokens rather
- * than relying on the upstream scanner's character allowlist.
- *
- * @param value - the raw theme token / key.
- * @returns the escaped literal body.
- */
-function escapeTsString(value: string): string {
-    return value
-        .replace(/\\/g, '\\\\')
-        .replace(/'/g, "\\'")
-        .replace(/\r/g, '\\r')
-        .replace(/\n/g, '\\n');
-}
 
 /** Options for generating the theme .d.ts file. */
 export interface ThemeTypeWriterOptions {
@@ -58,13 +41,14 @@ export function generateThemeDts(opts: ThemeTypeWriterOptions): string {
     const timestamp = new Date().toISOString();
     // Strip newlines so a path can never break out of the `// Source:` line
     // comment onto a new line of generated TypeScript.
-    const sources = sourceFiles.join(', ').replace(/[\r\n]/g, ' ');
+    const withoutCarriageReturns = replaceEveryLiteral(sourceFiles.join(', '), '\r', ' ');
+    const sources = replaceEveryLiteral(withoutCarriageReturns, '\n', ' ');
 
     const toUnion = (tokens: string[]): string =>
-        tokens.map(t => `'${escapeTsString(t)}'`).join(' | ');
+        tokens.map(t => `'${escapeSingleQuotedString(t)}'`).join(' | ');
     // Quote an interface key only when it is not a bare identifier (e.g. '3xl', '2xl').
     const quoteKey = (key: string): string =>
-        /^[a-z_$][\w$]*$/i.test(key) ? key : `'${escapeTsString(key)}'`;
+        /^[a-z_$][\w$]*$/i.test(key) ? key : `'${escapeSingleQuotedString(key)}'`;
 
     const entries: string[] = [];
     if (theme.colors.length > 0) {

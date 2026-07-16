@@ -27,14 +27,15 @@ test.describe('Next.js SSR Playground', () => {
         const counter = page.locator('[data-testid="count-value"]');
         await expect(counter).toBeVisible();
 
-        // Wait for hydration to complete
-        await page.waitForTimeout(500);
-
         const countRaw = await counter.textContent();
         const count = parseInt(countRaw || '0', 10);
 
-        // Click the Increase button
-        await page.click('button:has-text("Increase")');
+        // The state update is the observable hydration signal; Playwright also
+        // waits for the button to be actionable before dispatching the click.
+        // Scope to the counter card: other demos on the page (edge-cases,
+        // css-var spacing) also have "Increase" buttons, so an unscoped role
+        // locator matches several and trips strict mode.
+        await page.getByTestId('client-counter').getByRole('button', { name: 'Increase' }).click();
 
         // Wait for React state update
         await expect(counter).toHaveText(String(count + 1), { timeout: 5000 });
@@ -95,7 +96,8 @@ test.describe('Next.js SSR Playground', () => {
 });
 
 function asArray<T>(value: T | T[] | undefined): T[] {
-    return value === undefined ? [] : Array.isArray(value) ? value : [value];
+    if (value === undefined) return [];
+    return Array.isArray(value) ? value : [value];
 }
 
 /**

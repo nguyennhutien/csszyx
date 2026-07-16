@@ -3,7 +3,7 @@
  * Calls migrateSource() from @csszyx/cli (Babel AST — handles clsx, ternaries, template literals).
  * Example: '<div className="p-4 bg-blue-500" />' → '<div sz={{ p: 4, bg: "blue-500" }} />'
  *
- * Optional: pass customMap (parsed .csszyx-todo.json) to resolve custom class names during migration.
+ * Optional: pass customMap (a parsed migration-resolution map) for custom class names.
  * Optional: pass injectTodos=true to insert @sz-todo comments above unrecognized elements.
  */
 

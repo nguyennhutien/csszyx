@@ -50,46 +50,30 @@ export function detectFramework(cwd: string): Framework {
 
         const pkg = fs.readJSONSync(pkgPath);
         const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-
-        // Next.js detection
-        if (deps.next) {
-            // Check for app directory
-            const hasAppDir = fs.existsSync(path.join(cwd, 'app'));
-            return hasAppDir ? 'nextjs-app' : 'nextjs-pages';
-        }
-
-        // Nuxt detection
-        if (deps.nuxt) {
-            return 'nuxt';
-        }
-
-        // SvelteKit detection
-        if (deps['@sveltejs/kit']) {
-            return 'sveltekit';
-        }
-
-        // Astro detection
-        if (deps.astro) {
-            return 'astro';
-        }
-
-        // Vite detection
-        if (deps.vite) {
-            if (deps.react || deps['react-dom']) {
-                return 'vite-react';
-            }
-            if (deps.vue) {
-                return 'vite-vue';
-            }
-            if (deps.svelte) {
-                return 'vite-svelte';
-            }
-        }
-
-        return 'unknown';
+        return detectFrameworkDependencies(cwd, deps);
     } catch {
         return 'unknown';
     }
+}
+
+/**
+ * Resolve framework precedence from package dependencies.
+ * @param cwd - Current working directory path.
+ * @param deps - Combined runtime and development dependencies.
+ * @returns The detected framework identifier.
+ */
+function detectFrameworkDependencies(cwd: string, deps: Record<string, unknown>): Framework {
+    if (deps.next) {
+        return fs.existsSync(path.join(cwd, 'app')) ? 'nextjs-app' : 'nextjs-pages';
+    }
+    if (deps.nuxt) return 'nuxt';
+    if (deps['@sveltejs/kit']) return 'sveltekit';
+    if (deps.astro) return 'astro';
+    if (!deps.vite) return 'unknown';
+    if (deps.react || deps['react-dom']) return 'vite-react';
+    if (deps.vue) return 'vite-vue';
+    if (deps.svelte) return 'vite-svelte';
+    return 'unknown';
 }
 
 /**

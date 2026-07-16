@@ -57,12 +57,11 @@ export interface ParseClassOptions {
  * Parse a single Tailwind utility class (no variant prefix) into an sz prop/value.
  * Returns null if the class is not recognized.
  * @param cls - The Tailwind utility class string
- * @param options - Parser output policy.
+ * @param _options - Reserved parser output policy for migration callers.
  * @returns {ParsedClass | null} Parsed prop/value or null if unrecognized
  */
-export function parseClass(cls: string, options: ParseClassOptions = {}): ParsedClass | null {
+export function parseClass(cls: string, _options: ParseClassOptions = {}): ParsedClass | null {
     const { input, source, negative, important } = parseClassModifiers(cls);
-    void options;
 
     const container = parseContainerMarker(input);
     if (container) {
@@ -262,6 +261,16 @@ function parseGradientType(
 }
 
 /**
+ * Decode Tailwind arbitrary-value underscore space markers without ES2021 APIs.
+ *
+ * @param value Encoded arbitrary value.
+ * @returns Value with underscore markers expanded.
+ */
+function decodeArbitrarySpaces(value: string): string {
+    return value.split('_').join(' ');
+}
+
+/**
  * Parse the optional gradient direction suffix.
  *
  * @param input Gradient suffix before interpolation mode.
@@ -274,13 +283,13 @@ function parseGradientDirection(input: string, negative: boolean): string | numb
     }
     const direction = input.slice(1);
     if (direction.startsWith('[') && direction.endsWith(']')) {
-        return direction.slice(1, -1).replace(/_/g, ' ');
+        return decodeArbitrarySpaces(direction.slice(1, -1));
     }
     if (direction.startsWith('(') && direction.endsWith(')')) {
         return direction.slice(1, -1);
     }
     if (/^\d+$/.test(direction)) {
-        const angle = parseInt(direction, 10);
+        const angle = Number.parseInt(direction, 10);
         return negative ? -angle : angle;
     }
     return direction;
@@ -551,7 +560,7 @@ export function disambiguateFont(value: string): ParsedClass | null {
         return { prop: 'weight', value };
     }
     if (/^\d{3}$/.test(value)) {
-        return { prop: 'weight', value: parseInt(value, 10) };
+        return { prop: 'weight', value: Number.parseInt(value, 10) };
     }
     if (FONT_FAMILY_KEYWORDS.has(value)) {
         return { prop: 'fontFamily', value };
@@ -612,7 +621,7 @@ function disambiguateBg(value: string): ParsedClass | null {
     // (e.g. bg-[center_top_1rem]). A color or image arbitrary value never takes
     // this shape, so single-token / non-position arbitraries still fall through.
     if (value.startsWith('[') && value.endsWith(']')) {
-        const inner = value.slice(1, -1).replace(/_/g, ' ');
+        const inner = decodeArbitrarySpaces(value.slice(1, -1));
         if (inner.includes(' ') && BG_POSITION_KEYWORDS.has(inner.split(' ')[0])) {
             return { prop: 'bgPos', value: inner };
         }
@@ -798,7 +807,9 @@ function disambiguateStroke(value: string): ParsedClass | null {
  * @returns Parsed gradient-stop result
  */
 function disambiguateGradientStop(prefix: string, value: string): ParsedClass | null {
-    const posKey = prefix === 'from' ? 'fromPos' : prefix === 'via' ? 'viaPos' : 'toPos';
+    let posKey = 'toPos';
+    if (prefix === 'from') posKey = 'fromPos';
+    else if (prefix === 'via') posKey = 'viaPos';
     if (/^\d+(\.\d+)?%$/.test(value) || /^\d+$/.test(value) || isArbitraryDimension(value)) {
         return { prop: posKey, value: parseStringValue(value) };
     }
@@ -908,8 +919,40 @@ function disambiguateDivide(value: string): ParsedClass | null {
  * CSS length/dimension units — used to decide if an arbitrary value like
  * [1.5px] or [0.8rem] is a *dimension* (maps to width/size prop) vs a color.
  */
-const CSS_DIMENSION_RE =
-    /^-?[\d.]+(?:px|r?em|ex|ch|vw|vh|vmin|vmax|svh|svw|dvh|dvw|lvh|lvw|cqw|cqh|cqi|cqb|%|fr|deg|rad|turn|grad|ms|s|pt|pc|cm|mm|in)$/;
+const CSS_DIMENSION_UNITS = [
+    'vmin',
+    'vmax',
+    'rem',
+    'svh',
+    'svw',
+    'dvh',
+    'dvw',
+    'lvh',
+    'lvw',
+    'cqw',
+    'cqh',
+    'cqi',
+    'cqb',
+    'turn',
+    'grad',
+    'px',
+    'em',
+    'ex',
+    'ch',
+    'vw',
+    'vh',
+    '%',
+    'fr',
+    'deg',
+    'rad',
+    'ms',
+    's',
+    'pt',
+    'pc',
+    'cm',
+    'mm',
+    'in',
+] as const;
 
 /**
  * Returns true when value is an arbitrary bracket expression whose inner
@@ -922,7 +965,11 @@ function isArbitraryDimension(value: string): boolean {
     if (!value.startsWith('[') || !value.endsWith(']')) {
         return false;
     }
-    return CSS_DIMENSION_RE.test(value.slice(1, -1));
+    const dimension = value.slice(1, -1);
+    return CSS_DIMENSION_UNITS.some(unit => {
+        if (!dimension.endsWith(unit)) return false;
+        return /^-?[\d.]+$/.test(dimension.slice(0, -unit.length));
+    });
 }
 
 // ============================================================================
@@ -1011,7 +1058,7 @@ function isValidSpacingValue(value: string): boolean {
  */
 export function parseValue(prefix: string, value: string, negative: boolean): unknown {
     if (value.startsWith('[') && value.endsWith(']')) {
-        return parseArbitraryValue(prefix, value.slice(1, -1).replace(/_/g, ' '), negative);
+        return parseArbitraryValue(prefix, decodeArbitrarySpaces(value.slice(1, -1)), negative);
     }
 
     if (value.startsWith('(') && value.endsWith(')')) {
@@ -1102,7 +1149,7 @@ function parseNumericOrString(prefix: string, value: string, negative: boolean):
 function parseStringValue(value: string): string {
     // Handle arbitrary values
     if (value.startsWith('[') && value.endsWith(']')) {
-        return value.slice(1, -1).replace(/_/g, ' ');
+        return decodeArbitrarySpaces(value.slice(1, -1));
     }
     // Handle CSS variable sugar
     if (value.startsWith('(') && value.endsWith(')')) {

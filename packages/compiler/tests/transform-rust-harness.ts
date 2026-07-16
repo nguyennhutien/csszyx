@@ -146,6 +146,24 @@ export function compareRustVsOxc(
 }
 
 /**
+ * Assert the intentionally divergent contract of one pending Rust fixture.
+ *
+ * @param fixture Pending Rust parity fixture.
+ * @param comparison Current Oxc/Rust comparison.
+ */
+function assertPendingRustParity(
+    fixture: RustParityFixture,
+    comparison: RustParityComparison,
+): void {
+    if (comparison.rustError) return;
+    if (!comparison.classesEqual || !comparison.codeEqual) return;
+    throw new Error(
+        `Fixture "${fixture.name}" marked as pending but Rust matched oxc-JS exactly. ` +
+            'Flip its `expected` to "parity" and drop `pendingReason`.',
+    );
+}
+
+/**
  * Assert that a comparison matches the fixture's expected state. Throws
  * a descriptive error when the actual state differs.
  *
@@ -157,16 +175,8 @@ export function assertExpectedRustParity(
     comparison: RustParityComparison,
 ): void {
     if (fixture.expected === 'pending') {
-        if (comparison.rustError) {
-            return;
-        }
-        if (!comparison.classesEqual || !comparison.codeEqual) {
-            return;
-        }
-        throw new Error(
-            `Fixture "${fixture.name}" marked as pending but Rust matched oxc-JS exactly. ` +
-                'Flip its `expected` to "parity" and drop `pendingReason`.',
-        );
+        assertPendingRustParity(fixture, comparison);
+        return;
     }
     if (comparison.rustError) {
         throw new Error(

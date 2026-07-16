@@ -89,7 +89,7 @@ export function compareImpls(source: string, filename: string): ParityComparison
 
     const oxcClassesSorted = [...oxc.classes].sort();
     return {
-        classesEqual: setsEqual(babelView.classes, oxcClassesSorted),
+        classesEqual: arraysEqual(babelView.classes, oxcClassesSorted),
         codeEqual: babelView.code === oxc.code,
         diagnosticsEqual: arraysEqual(babelView.diagnostics, oxc.diagnostics),
         transformedEqual: babelView.transformed === oxc.transformed,
@@ -133,6 +133,21 @@ export interface ParityFixture {
 }
 
 /**
+ * Assert the intentionally divergent contract of one pending fixture.
+ *
+ * @param fixture Pending parity fixture.
+ * @param comparison Current Babel/Oxc comparison.
+ */
+function assertPendingParity(fixture: ParityFixture, comparison: ParityComparison): void {
+    if (comparison.oxcError && comparison.oxcIsSkeleton) return;
+    if (!comparison.classesEqual || !comparison.codeEqual) return;
+    throw new Error(
+        `Fixture "${fixture.name}" marked as pending but oxc matched Babel exactly. ` +
+            'Flip its `expected` to "parity" and remove `pendingReason`.',
+    );
+}
+
+/**
  * Assert that a comparison matches the fixture's expected state.
  * Throws a descriptive error when the actual state differs.
  *
@@ -141,16 +156,8 @@ export interface ParityFixture {
  */
 export function assertExpectedParity(fixture: ParityFixture, comparison: ParityComparison): void {
     if (fixture.expected === 'pending') {
-        if (comparison.oxcError && comparison.oxcIsSkeleton) {
-            return;
-        }
-        if (!comparison.classesEqual || !comparison.codeEqual) {
-            return;
-        }
-        throw new Error(
-            `Fixture "${fixture.name}" marked as pending but oxc matched Babel exactly. ` +
-                'Flip its `expected` to "parity" and remove `pendingReason`.',
-        );
+        assertPendingParity(fixture, comparison);
+        return;
     }
     if (comparison.oxcError) {
         throw new Error(
@@ -216,25 +223,6 @@ export function summarise(fixtures: readonly ParityFixture[]): string {
         `Phase D parity: ${pct}% — ${parity} full, ${surgical} surgical, ` +
         `${classesOnly} classes-only, ${pending} pending (${total} total)`
     );
-}
-
-/**
- * Sorted-string array equality — sets after `[...set].sort()`.
- *
- * @param a First sorted array.
- * @param b Second sorted array.
- * @returns True iff arrays are element-wise equal.
- */
-function setsEqual(a: readonly string[], b: readonly string[]): boolean {
-    if (a.length !== b.length) {
-        return false;
-    }
-    for (let i = 0; i < a.length; i++) {
-        if (a[i] !== b[i]) {
-            return false;
-        }
-    }
-    return true;
 }
 
 /**

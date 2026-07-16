@@ -14,6 +14,7 @@ use super::{
         CssVariableHoistNode, CssVariableHoistOptions, CssVariableHoistSkipReason,
         CssVariableHoistUsage,
     },
+    lower::dynamic_css_var_class,
     CssVariableMapEntry, DynamicCssVarCategory, SourceIr,
 };
 
@@ -182,12 +183,8 @@ pub fn apply_scoped_css_variable_names(ir: &SourceIr) -> SourceIr {
         let Some((attr_index, prop_index)) = locations.get(location_index).copied() else {
             continue;
         };
-        if let Some(prop) = next
-            .sz_attributes
-            .get_mut(attr_index)
-            .and_then(|attribute| attribute.dynamic_css_vars.get_mut(prop_index))
-        {
-            prop.var_name = entry.name;
+        if let Some(attribute) = next.sz_attributes.get_mut(attr_index) {
+            rename_dynamic_prop(attribute, prop_index, entry.name);
         }
     }
 
@@ -293,14 +290,15 @@ pub fn apply_css_variable_mangling(
             let Some((_, attr_index, prop_index)) = locations.get(location_index).copied() else {
                 continue;
             };
-            if let Some(prop) = next
-                .sz_attributes
-                .get_mut(attr_index)
-                .and_then(|attribute| attribute.dynamic_css_vars.get_mut(prop_index))
-            {
+            if let Some(attribute) = next.sz_attributes.get_mut(attr_index) {
+                let Some(prop) = attribute.dynamic_css_vars.get(prop_index) else {
+                    continue;
+                };
                 push_variable_map(&mut variable_map, &prop.var_name, &plan.name);
-                prop.var_name.clone_from(&plan.name);
-                prop.hoisted = true;
+                rename_dynamic_prop(attribute, prop_index, plan.name.clone());
+                if let Some(prop) = attribute.dynamic_css_vars.get_mut(prop_index) {
+                    prop.hoisted = true;
+                }
                 hoisted_location_ids.insert(location_index);
             }
         }
@@ -330,13 +328,12 @@ pub fn apply_css_variable_mangling(
         let Some((_, attr_index, prop_index)) = locations.get(location_index).copied() else {
             continue;
         };
-        if let Some(prop) = next
-            .sz_attributes
-            .get_mut(attr_index)
-            .and_then(|attribute| attribute.dynamic_css_vars.get_mut(prop_index))
-        {
+        if let Some(attribute) = next.sz_attributes.get_mut(attr_index) {
+            let Some(prop) = attribute.dynamic_css_vars.get(prop_index) else {
+                continue;
+            };
             push_variable_map(&mut variable_map, &prop.var_name, &entry.name);
-            prop.var_name = entry.name;
+            rename_dynamic_prop(attribute, prop_index, entry.name);
         }
     }
 
@@ -348,6 +345,29 @@ pub fn apply_css_variable_mangling(
             .iter()
             .map(format_hoist_skip_diagnostic)
             .collect(),
+    }
+}
+
+fn rename_dynamic_prop(attribute: &mut super::SzAttributeIr, prop_index: usize, name: String) {
+    let Some(prop) = attribute.dynamic_css_vars.get_mut(prop_index) else {
+        return;
+    };
+    let old_class = prop.skip_class.then(|| dynamic_css_var_class(prop));
+    prop.var_name = name;
+    let new_class = prop.skip_class.then(|| dynamic_css_var_class(prop));
+    let (Some(old_class), Some(new_class), Some(ternary)) =
+        (old_class, new_class, attribute.ternary.as_mut())
+    else {
+        return;
+    };
+    for class_name in ternary
+        .consequent_classes
+        .iter_mut()
+        .chain(ternary.alternate_classes.iter_mut())
+    {
+        if *class_name == old_class {
+            class_name.clone_from(&new_class);
+        }
     }
 }
 
@@ -678,6 +698,7 @@ mod tests {
             expression_span: TextSpan { start: 0, end: 0 },
             variant_prefix: None,
             hoisted: false,
+            skip_class: false,
         }
     }
 
@@ -694,6 +715,8 @@ mod tests {
             style_attribute_index: None,
             recovery_attribute_index: None,
             has_recovery_token_attribute: false,
+            has_spread_attribute: false,
+            safe_style_spread: None,
             last_attribute_end: None,
             element_name: "div".to_string(),
             hoisted_dynamic_css_vars: Vec::new(),

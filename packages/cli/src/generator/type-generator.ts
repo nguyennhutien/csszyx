@@ -17,6 +17,7 @@ import {
     extractSpacingKeys,
     flattenColors,
 } from '../scanner/tailwind-scanner.js';
+import { escapeSingleQuotedString } from '../utils/string-escape.js';
 
 /**
  * Type generation options.
@@ -545,34 +546,16 @@ const STATIC_VALUE_TYPES: Record<string, string[]> = {
 };
 
 /**
- * Generate union type string from array of values.
+ * Generate a union whose values are safe single-quoted TypeScript literals.
  *
- * @param {string[]} values - Array of string values to join
- * @returns {string} Union type string (e.g. "'val1' | 'val2'")
+ * @param values Raw theme values to join.
+ * @returns Union type string such as `'val1' | 'val2'`.
  */
-/**
- * Escape a value for safe interpolation into a single-quoted TS string literal,
- * so a theme key cannot break out of the literal (quote/backslash) or inject a
- * newline into the generated `.d.ts`. Valid theme keys contain none of these, so
- * output is byte-identical for normal input. (Keys are emitted as union members,
- * never inside a `/* *​/` comment, so comment-terminator escaping is N/A here.)
- *
- * @param value - the raw theme key/value.
- * @returns the escaped literal body.
- */
-function escapeTsString(value: string): string {
-    return value
-        .replace(/\\/g, '\\\\')
-        .replace(/'/g, "\\'")
-        .replace(/\r/g, '\\r')
-        .replace(/\n/g, '\\n');
-}
-
 function generateUnionType(values: string[]): string {
     if (values.length === 0) {
         return 'string';
     }
-    return values.map(v => `'${escapeTsString(v)}'`).join(' | ');
+    return values.map(v => `'${escapeSingleQuotedString(v)}'`).join(' | ');
 }
 
 /**

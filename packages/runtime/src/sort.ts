@@ -16,5 +16,9 @@
  * @returns a new array sorted ascending by UTF-16 code unit.
  */
 export function sortStrings<T extends string>(values: Iterable<T>): T[] {
-    return [...values].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    return [...values].sort((a, b) => {
+        if (a < b) return -1;
+        if (a > b) return 1;
+        return 0;
+    });
 }

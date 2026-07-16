@@ -313,6 +313,8 @@ export const SZ_KEY_CATEGORY: ReadonlyMap<string, string> = new Map([
     ["tabularNums", "PASSTHROUGH"],
     ["text", "PASSTHROUGH"],
     ["textAlign", "PASSTHROUGH"],
+    ["textClip", "PASSTHROUGH"],
+    ["textEllipsis", "PASSTHROUGH"],
     ["textOverflow", "PASSTHROUGH"],
     ["textShadow", "PASSTHROUGH"],
     ["textShadowColor", "COLOR"],

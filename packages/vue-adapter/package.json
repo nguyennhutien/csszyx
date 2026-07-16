@@ -30,8 +30,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@csszyx/compiler": "workspace:*",
-    "oxc-parser": "0.131.0"
+    "@csszyx/compiler": "workspace:*"
   },
   "peerDependencies": {
     "vue": "^3.0.0"

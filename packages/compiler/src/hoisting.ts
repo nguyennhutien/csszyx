@@ -53,11 +53,9 @@ function findLCA(
             // ancestor's JSXOpeningElement sits on a sibling branch, so accept
             // the wrapper and hoist onto its opening element. A direct
             // JSXOpeningElement in the chain (hand-built maps) still matches.
-            const opening = t.isJSXOpeningElement(current)
-                ? current
-                : t.isJSXElement(current)
-                  ? current.openingElement
-                  : null;
+            let opening: t.JSXOpeningElement | null = null;
+            if (t.isJSXOpeningElement(current)) opening = current;
+            else if (t.isJSXElement(current)) opening = current.openingElement;
             if (opening && opening !== nodeA && opening !== nodeB) {
                 return opening;
             }
@@ -84,45 +82,55 @@ function isFragment(node: t.JSXOpeningElement): boolean {
 }
 
 /**
+ * Read an object-valued JSX style attribute.
+ * @param attribute - Candidate JSX attribute or spread.
+ * @returns The style object, or null for a different/unsupported attribute.
+ */
+function styleObjectFromAttribute(
+    attribute: t.JSXAttribute | t.JSXSpreadAttribute,
+): t.ObjectExpression | null {
+    if (!t.isJSXAttribute(attribute)) return null;
+    if (!t.isJSXIdentifier(attribute.name) || attribute.name.name !== 'style') return null;
+    if (!t.isJSXExpressionContainer(attribute.value)) return null;
+    return t.isObjectExpression(attribute.value.expression) ? attribute.value.expression : null;
+}
+
+/**
+ * Test whether an object property declares a named CSS variable.
+ * @param property - Candidate style object member.
+ * @param varName - CSS variable name.
+ * @returns Whether the property declares that variable.
+ */
+function isStyleVariableProperty(
+    property: t.ObjectMethod | t.ObjectProperty | t.SpreadElement,
+    varName: string,
+): boolean {
+    return (
+        t.isObjectProperty(property) &&
+        t.isStringLiteral(property.key) &&
+        property.key.value === varName
+    );
+}
+
+/**
  * Removes a CSS variable property from a JSX element's style attribute.
  *
  * @param element - The JSX opening element to modify
  * @param varName - The CSS variable name to remove
  */
 function removeStyleVar(element: t.JSXOpeningElement, varName: string): void {
-    for (const attr of element.attributes) {
-        if (!t.isJSXAttribute(attr)) {
-            continue;
-        }
-        if (!t.isJSXIdentifier(attr.name) || attr.name.name !== 'style') {
-            continue;
-        }
-        if (!t.isJSXExpressionContainer(attr.value)) {
-            continue;
-        }
-        const styleObj = attr.value.expression;
-        if (!t.isObjectExpression(styleObj)) {
-            continue;
-        }
-
-        styleObj.properties = styleObj.properties.filter(prop => {
-            if (!t.isObjectProperty(prop)) {
-                return true;
-            }
-            if (t.isStringLiteral(prop.key)) {
-                return prop.key.value !== varName;
-            }
-            return true;
-        });
+    for (let index = 0; index < element.attributes.length; index++) {
+        const styleObj = styleObjectFromAttribute(element.attributes[index]);
+        if (!styleObj) continue;
+        styleObj.properties = styleObj.properties.filter(
+            property => !isStyleVariableProperty(property, varName),
+        );
 
         // If style object is empty, remove the entire style attribute
         if (styleObj.properties.length === 0) {
-            const idx = element.attributes.indexOf(attr);
-            if (idx !== -1) {
-                element.attributes.splice(idx, 1);
-            }
+            element.attributes.splice(index, 1);
         }
-        break;
+        return;
     }
 }
 
@@ -137,26 +145,12 @@ function removeStyleVar(element: t.JSXOpeningElement, varName: string): void {
 function addStyleVar(element: t.JSXOpeningElement, varName: string, valueExpr: t.Expression): void {
     // Find existing style attribute
     for (const attr of element.attributes) {
-        if (!t.isJSXAttribute(attr)) {
-            continue;
-        }
-        if (!t.isJSXIdentifier(attr.name) || attr.name.name !== 'style') {
-            continue;
-        }
-        if (!t.isJSXExpressionContainer(attr.value)) {
-            continue;
-        }
-        const styleObj = attr.value.expression;
-        if (!t.isObjectExpression(styleObj)) {
-            continue;
-        }
+        const styleObj = styleObjectFromAttribute(attr);
+        if (!styleObj) continue;
 
         // Check if variable already exists
-        const existing = styleObj.properties.find(
-            prop =>
-                t.isObjectProperty(prop) &&
-                t.isStringLiteral(prop.key) &&
-                prop.key.value === varName,
+        const existing = styleObj.properties.some(property =>
+            isStyleVariableProperty(property, varName),
         );
         if (!existing) {
             styleObj.properties.push(t.objectProperty(t.stringLiteral(varName), valueExpr));
@@ -173,6 +167,31 @@ function addStyleVar(element: t.JSXOpeningElement, varName: string, valueExpr: t
             ),
         ),
     );
+}
+
+/**
+ * Test whether an unknown AST field value is a Babel node.
+ * @param value - Candidate AST field value.
+ * @returns Whether the value has a node type discriminator.
+ */
+function isAstNode(value: unknown): value is t.Node {
+    return Boolean(value && typeof value === 'object' && 'type' in value);
+}
+
+/**
+ * Add node-valued AST fields to a parent map.
+ * @param value - One AST field value.
+ * @param parent - Node that owns the field.
+ * @param map - Destination child-to-parent map.
+ */
+function mapNodeField(value: unknown, parent: t.Node, map: Map<t.Node, t.Node>): void {
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            if (isAstNode(item)) mapNodeParents(item, parent, map);
+        }
+        return;
+    }
+    if (isAstNode(value)) mapNodeParents(value, parent, map);
 }
 
 /**
@@ -261,15 +280,7 @@ function mapNodeParents(node: t.Node, parent: t.Node | undefined, map: Map<t.Nod
     }
     for (const key of Object.keys(node) as (keyof t.Node)[]) {
         const value = (node as unknown as Record<string, unknown>)[key];
-        if (Array.isArray(value)) {
-            for (const item of value) {
-                if (item && typeof item === 'object' && 'type' in item) {
-                    mapNodeParents(item as t.Node, node, map);
-                }
-            }
-        } else if (value && typeof value === 'object' && 'type' in value) {
-            mapNodeParents(value as t.Node, node, map);
-        }
+        mapNodeField(value, node, map);
     }
 }
 

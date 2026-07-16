@@ -318,6 +318,13 @@ forwarded `szsc` slot) pass through `_szPart`:
 />
 // slot-default one-liner in a compound component:
 <h3 sz={[{ weight: "semibold", text: "base" }, szsc?.title]} />
+
+// Finite ternaries stay compiler-owned, including conditionals inside an object:
+<a sz={[{ decoration: "none" }, disabled ? { color: "muted" } : { color: "main" }, szsc?.link]} />
+// → _szcn("no-underline", disabled ? "text-muted" : "text-main", _szPart(szsc?.link))
+
+<div sz={[{ decoration: "none", flex: fluid ? 1 : undefined }, szsc?.root]} />
+// → _szcn("no-underline", fluid ? "flex-1" : "", _szPart(szsc?.root))
 ```
 
 ## Reusing Styles
@@ -339,7 +346,8 @@ sz={{ scale: shrunk ? 75 : 100 }}            // inline prop ternary — both lit
 - Use `sz={var}` when no override needed (simpler)
 - Use `sz={{ ...var, key: val }}` only when overriding/adding
 - Variables in array elements, ternary branches, and chained initializers all resolve at build time
-- `sz={{ key: cond ? a : b }}` — both literal branches compiled to static Tailwind classes; CSS variable fallback only when a branch is a runtime expression
+- `sz={{ key: cond ? a : b }}` — both literal branches compile to static classes; a runtime branch uses a CSS variable. An opposite `undefined`, `null`, `false`, or `''` branch omits the utility and variable value (`0` remains valid)
+- When runtime `sz` values emit inline CSS variables beside one direct object-literal JSX spread, or one conditional whose branches are object literals, the compiler injects the variables into every spread branch's `style` so both authored and generated values survive. Keep unresolved or multiple spreads' style explicit; csszyx warns when it cannot prove a single-evaluation merge is safe
 - `sz={{ ...(cond ? a : b), static: val }}` — conditional spread hoist: compiler resolves both branches at build time
 - Imported variables / function call results fall back to `_sz()` runtime — dev mode emits a build-time compiler warning explaining the fallback reason and suggesting `szv()` or `dynamic()`
 
@@ -470,6 +478,10 @@ are compiler-injected, do not hand-author them):
     names shadowing built-in keywords, or defined in two conflicting
     categories, are rejected to keep-both — never a wrong merge).
   - Fail-safe: a token szcn cannot confidently group is NEVER dropped.
+- Compiler-injected `_szMerge(existingClassName, compiledSz)` in the full
+  runtime uses the same uncached, mangle-aware utility merge engine as `szcn`,
+  so the compiled `sz` argument wins same-utility conflicts. The intentionally
+  tiny `@csszyx/runtime/lite` compatibility helper only exact-dedupes tokens.
 - `szr` takes sz OBJECTS and concatenates; `szcn` takes STRINGS and overrides.
 
 ```tsx
@@ -692,9 +704,20 @@ In production, class names are mangled for maximum compression:
 
 Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injected automatically.
 
+If an `sz`-generated utility also appears as a static string or template quasi in a
+source-level `class` or `className` attribute/property (including a `clsx(...)`
+expression), csszyx keeps that class unmangled. This ensures raw and `sz` consumers
+continue to reference the same emitted rule. Use `mangleExclude` when the class is
+only visible through an imported constant, DOM selector/class API, ignored
+dependency, downstream macro, or another value unavailable to the source scan.
+
+Final-output class mangling is available in Vite, Webpack, and Rollup. The esbuild
+adapter keeps class names readable (and warns when `production.mangle: true` is
+explicit) because normal esbuild write-to-disk builds do not expose mutable final
+assets; source transforms and safelist generation still run.
+
 Set `production: { mangle: false }` to keep readable class names — the supported way to
-inspect the emitted CSS, and recommended for hybrid apps that also ship non-csszyx
-stylesheets keyed on the original class names. To check what a single `sz` object
+inspect the emitted CSS. To check what a single `sz` object
 compiles to without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
 
 ### AST budget guard

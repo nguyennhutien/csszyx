@@ -25,6 +25,11 @@ const FIXTURE_FILES: Record<string, string> = {
 export const App = ({ isMobile }) => (
     <div className={isMobile ? undefined : 'dems-panel'} sz={{ p: 4 }}>
         <span sz={{ color: 'red-500', hover: { bg: 'zinc-100' } }} />
+        <div sz={{
+            '[&_.tab-item-header]': { py: '0!' },
+            '[&>span]': { text: 'sm' },
+            '[&[data-state="open"]]': { bg: 'brand' },
+        }} />
     </div>
 );
 `,
@@ -109,8 +114,8 @@ async function buildWith(parser: 'rust' | 'oxc'): Promise<BuildArtifacts> {
     // differences.
     const normalizedBundle = bundle.split(basename(root)).join('FIXTURE-ROOT');
     const safelistHtml = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
-    const classList = safelistHtml.match(/class="([^"]*)"/)?.[1] ?? '';
-    const safelistTokens = [...new Set(classList.split(/\s+/).filter(Boolean))].sort();
+    const rawCandidates = safelistHtml.split('<!-- csszyx exact scanner candidates -->\n')[1] ?? '';
+    const safelistTokens = [...new Set(rawCandidates.split(/\s+/).filter(Boolean))].sort();
     return { bundle: normalizedBundle, safelistTokens };
 }
 
@@ -155,6 +160,9 @@ describe('vite production build — engine diff (rust vs oxc)', () => {
             'p-4',
             'text-red-500',
             'hover:bg-zinc-100',
+            '[&_.tab-item-header]:py-0!',
+            '[&>span]:text-sm',
+            '[&[data-state="open"]]:bg-brand',
             'mx-0',
             'bg-tag-blue-bg',
             'bg-tag-red-bg',

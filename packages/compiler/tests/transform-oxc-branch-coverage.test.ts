@@ -125,18 +125,12 @@ describe('transform-oxc: szs slot maps', () => {
         expect(result.diagnostics.join('\n')).toContain('no effect on a host element');
     });
 
-    it('rejects a non-object szs value', () => {
-        const result = run('export const A = () => <Panel szs="nope" />;');
-        expect(result.diagnostics.join('\n')).toContain('every slot must be an identifier key');
-    });
-
-    it('rejects a computed slot key', () => {
-        const result = run('export const A = ({ k }) => <Panel szs={{ [k]: { p: 4 } }} />;');
-        expect(result.diagnostics.join('\n')).toContain('every slot must be an identifier key');
-    });
-
-    it('rejects an identifier-valued slot (not pure literal)', () => {
-        const result = run('export const A = ({ v }) => <Panel szs={{ body: v }} />;');
+    it.each([
+        ['a non-object value', 'export const A = () => <Panel szs="nope" />;'],
+        ['a computed slot key', 'export const A = ({ k }) => <Panel szs={{ [k]: { p: 4 } }} />;'],
+        ['an identifier slot value', 'export const A = ({ v }) => <Panel szs={{ body: v }} />;'],
+    ])('rejects szs with %s', (_label, source) => {
+        const result = run(source);
         expect(result.diagnostics.join('\n')).toContain('every slot must be an identifier key');
     });
 });
@@ -342,7 +336,9 @@ describe('transform-oxc: partial (static + dynamic) objects', () => {
     });
 
     it('emits a passthrough style value for a unitless prop', () => {
-        expect(code('export const A = ({ z }) => <div sz={{ z: z }} />;')).toContain('${z}');
+        expect(code('export const A = ({ z }) => <div sz={{ z: z }} />;')).toContain(
+            '"--_sz-z": z',
+        );
     });
 
     it('lowers a single literal-branch conditional prop into a className ternary', () => {
@@ -461,61 +457,49 @@ describe('transform-oxc: dynamic() / szr() safelisting', () => {
         expect(classesOf(result)).toContain('m-2');
     });
 
-    it('ignores dynamic() with no args', () => {
-        const result = run('const s = dynamic(); export const A = () => <div sz="p-1" />;');
-        expect(classesOf(result)).toEqual(['p-1']);
-    });
-
-    it('ignores dynamic() with a non-object arg', () => {
-        const result = run('const s = dynamic(x); export const A = () => <div sz="p-1" />;');
-        expect(classesOf(result)).toEqual(['p-1']);
-    });
-
-    it('ignores dynamic({ dynamic-value }) that cannot be compiled', () => {
-        const result = run(
+    it.each([
+        ['no arguments', 'const s = dynamic(); export const A = () => <div sz="p-1" />;'],
+        ['a non-object argument', 'const s = dynamic(x); export const A = () => <div sz="p-1" />;'],
+        [
+            'an unresolvable value',
             'export const A = ({ v }) => { const s = dynamic({ p: v }); return <div sz="p-1" />; };',
-        );
-        expect(classesOf(result)).toEqual(['p-1']);
-    });
-
-    it('ignores a non-dynamic call', () => {
-        const result = run('const s = other({ p: 4 }); export const A = () => <div sz="p-1" />;');
+        ],
+        [
+            'a different callee',
+            'const s = other({ p: 4 }); export const A = () => <div sz="p-1" />;',
+        ],
+    ])('does not safelist dynamic classes for %s', (_label, source) => {
+        const result = run(source);
         expect(classesOf(result)).toEqual(['p-1']);
     });
 });
 
 describe('transform-oxc: szv catalog safelisting', () => {
-    it('collects base and variant classes', () => {
-        const result = run(
+    it.each([
+        [
+            'base and variants',
             'const s = szv({ base: { p: 4 }, variants: { size: { lg: { p: 8 } } } }); export const A = () => <div sz="m-1" />;',
-        );
-        expect(classesOf(result)).toEqual(expect.arrayContaining(['p-4', 'p-8']));
-    });
-
-    it('handles szv with no base (defaults to empty)', () => {
-        const result = run(
+            ['p-4', 'p-8'],
+        ],
+        [
+            'variants without a base',
             'const s = szv({ variants: { size: { lg: { p: 8 } } } }); export const A = () => <div sz="m-1" />;',
-        );
-        expect(classesOf(result)).toContain('p-8');
-    });
-
-    it('returns early for szv with no variants', () => {
-        const result = run(
+            ['p-8'],
+        ],
+        [
+            'a base without variants',
             'const s = szv({ base: { p: 4 } }); export const A = () => <div sz="m-1" />;',
-        );
-        expect(classesOf(result)).toContain('p-4');
-    });
-
-    it('ignores szv() with no args', () => {
-        const result = run('const s = szv(); export const A = () => <div sz="m-1" />;');
-        expect(classesOf(result)).toEqual(['m-1']);
-    });
-
-    it('expands finite conditional variant values into both branches', () => {
-        const result = run(
+            ['p-4'],
+        ],
+        ['no arguments', 'const s = szv(); export const A = () => <div sz="m-1" />;', []],
+        [
+            'finite conditional values',
             'const s = szv({ variants: { size: { lg: { p: 1 }, x: (0 ? { p: 2 } : { p: 3 }) } } }); export const A = () => <div sz="m-1" />;',
-        );
-        expect(classesOf(result)).toEqual(expect.arrayContaining(['p-1', 'p-2', 'p-3']));
+            ['p-1', 'p-2', 'p-3'],
+        ],
+    ])('collects classes from szv with %s', (_label, source, expectedClasses) => {
+        const result = run(source);
+        expect(classesOf(result)).toEqual(expect.arrayContaining(['m-1', ...expectedClasses]));
     });
 
     it('resolves a const-bound variant value object', () => {
@@ -751,9 +735,10 @@ describe('transform-oxc: nested & conditional class-source edge cases', () => {
         expect(out).toContain(': undefined');
     });
 
-    it('treats a null-literal conditional branch as dynamic', () => {
+    it('omits a utility for a null-literal conditional branch', () => {
         const out = code('export const A = ({ on }) => <div sz={{ p: on ? null : 2 }} />;');
-        expect(out).toContain('__szSpacingVar(on ? null : 2, "p")');
+        expect(out).toContain('on ? undefined : "p-2"');
+        expect(out).not.toContain('__szSpacingVar');
     });
 
     it('returns null (fallback) when a static-conditional branch is an unbound identifier', () => {

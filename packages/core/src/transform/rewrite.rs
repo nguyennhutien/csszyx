@@ -94,6 +94,7 @@ pub fn rewrite_static_sz_attributes_with_options(
                 .any(|index| ir.sz_attributes[*index].ternary.is_some());
 
             if has_ternary {
+                apply_dynamic_style_props(source, ir, element, &mut magic);
                 rewrite_ternary_sz_attribute(source, ir, element, &mut magic)?;
                 rewrote = true;
                 continue;
@@ -193,14 +194,22 @@ fn rewrite_array_sz_attribute(
             arguments.push(format!("_szPart({expression})"));
             continue;
         }
-        let classes = js_string_literal(&part.classes.join(" "));
-        arguments.push(part.condition_span.map_or_else(
-            || classes.clone(),
-            |span| {
-                let condition = &source[span.start as usize..span.end as usize];
-                format!("{condition} && {classes}")
-            },
-        ));
+        if !part.classes.is_empty() || part.ternary.is_none() {
+            let classes = js_string_literal(&part.classes.join(" "));
+            arguments.push(part.condition_span.map_or_else(
+                || classes.clone(),
+                |span| {
+                    let condition = &source[span.start as usize..span.end as usize];
+                    format!("{condition} && {classes}")
+                },
+            ));
+        }
+        if let Some(ternary) = &part.ternary {
+            let test = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
+            let consequent = js_string_literal(&ternary.consequent_classes.join(" "));
+            let alternate = js_string_literal(&ternary.alternate_classes.join(" "));
+            arguments.push(format!("{test} ? {consequent} : {alternate}"));
+        }
     }
     // `_szcn` = the unmemoized szcn twin: compiled arrays carry per-render
     // runtime parts, which would thrash (and evict) the authored-szcn memo.
@@ -492,6 +501,21 @@ fn apply_dynamic_style_props(
         .collect::<Vec<_>>()
         .join(", ");
 
+    if let Some(spread) = &element.safe_style_spread {
+        if let Some(replacement) = safe_style_spread_source(source, spread, &props) {
+            magic.update_with(
+                spread.attribute_span.start as usize,
+                spread.attribute_span.end as usize,
+                replacement,
+                UpdateOptions {
+                    overwrite: true,
+                    ..UpdateOptions::default()
+                },
+            );
+            return;
+        }
+    }
+
     if let Some(style_index) = element.style_attribute_index {
         let style_attr = &ir.style_attributes[style_index];
         if let Some(expression_span) = style_attr.expression_span {
@@ -514,6 +538,80 @@ fn apply_dynamic_style_props(
         |offset| offset as usize,
     );
     magic.append_right(insert_at, format!(" style={{{{{props}}}}}"));
+}
+
+fn safe_style_spread_source(
+    source: &str,
+    spread: &super::SafeStyleSpreadIr,
+    props: &str,
+) -> Option<String> {
+    let expression = match &spread.expression {
+        super::SafeStyleSpreadExpressionIr::Object(object) => {
+            safe_style_spread_object_source(source, object, props)?
+        }
+        super::SafeStyleSpreadExpressionIr::Conditional {
+            test_span,
+            consequent,
+            alternate,
+        } => {
+            let test = &source[test_span.start as usize..test_span.end as usize];
+            let consequent = safe_style_spread_object_source(source, consequent, props)?;
+            let alternate = safe_style_spread_object_source(source, alternate, props)?;
+            format!("({test} ? {consequent} : {alternate})")
+        }
+    };
+    Some(format!("{{...{expression}}}"))
+}
+
+fn safe_style_spread_object_source(
+    source: &str,
+    object: &super::SafeStyleSpreadObjectIr,
+    props: &str,
+) -> Option<String> {
+    let object_source = &source[object.object_span.start as usize..object.object_span.end as usize];
+    let Some(style_value) = &object.style_value else {
+        return append_object_property(
+            object_source,
+            object.has_properties,
+            &format!("style: {{{props}}}"),
+        );
+    };
+    let (span, replacement) = match style_value {
+        super::SafeStyleSpreadValueIr::Object {
+            span,
+            has_properties,
+        } => {
+            let style_source = &source[span.start as usize..span.end as usize];
+            (
+                *span,
+                append_object_property(style_source, *has_properties, props)?,
+            )
+        }
+        super::SafeStyleSpreadValueIr::Expression(span) => {
+            let value = &source[span.start as usize..span.end as usize];
+            (*span, format!("{{...({value}), {props}}}"))
+        }
+    };
+    let relative_start = (span.start - object.object_span.start) as usize;
+    let relative_end = (span.end - object.object_span.start) as usize;
+    Some(format!(
+        "{}{}{}",
+        &object_source[..relative_start],
+        replacement,
+        &object_source[relative_end..]
+    ))
+}
+
+fn append_object_property(source: &str, has_properties: bool, property: &str) -> Option<String> {
+    let body = source.strip_suffix('}')?;
+    let separator = if !has_properties {
+        ""
+    } else if body.trim_end().ends_with(',') {
+        " "
+    } else {
+        ", "
+    };
+    Some(format!("{body}{separator}{property}}}"))
 }
 
 fn style_prop_source(source: &str, prop: &DynamicCssVarIr) -> String {
@@ -547,7 +645,7 @@ fn dynamic_style_value_source(source: &str, prop: &DynamicCssVarIr) -> String {
                 js_string_literal(&prop.key)
             )
         }
-        DynamicCssVarCategory::Passthrough => format!("`${{{expression}}}`"),
+        DynamicCssVarCategory::Passthrough => expression.to_string(),
     }
 }
 
@@ -557,6 +655,8 @@ fn overwrite_attribute(magic: &mut MagicString<'_>, span: super::TextSpan, class
     // noisy `class=""`.
     let replacement = if class_name.is_empty() {
         "className={undefined}".to_string()
+    } else if class_name.contains('"') {
+        format!("className={{{}}}", js_string_literal(class_name))
     } else {
         format!("className=\"{class_name}\"")
     };
@@ -740,6 +840,17 @@ mod tests {
         assert_eq!(
             rewritten,
             "const App = () => <div className=\"p-(--_sz-p)\" style={{\"--_sz-p\": __szSpacingVar(padVal, \"p\")}} />;"
+        );
+    }
+
+    #[test]
+    fn omits_nullable_dynamic_utility() {
+        let source = "const App = ({ flex }) => <div sz={{ flex: typeof flex === 'number' ? flex : undefined }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = ({ flex }) => <div className={typeof flex === 'number' ? \"flex-(--_sz-flex)\" : undefined} style={{\"--_sz-flex\": typeof flex === 'number' ? flex : undefined}} />;"
         );
     }
 

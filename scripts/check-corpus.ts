@@ -25,65 +25,7 @@ import { fileURLToPath } from 'node:url';
 
 import { parseClass } from '../packages/cli/src/migrate/class-parser.js';
 import { transform } from '../packages/compiler/src/transform.js';
-import { PROPERTY_MAP } from '../packages/compiler/src/transform-core.js';
-
-// ── Build prefix → szKey(s) inverted map ──────────────────────────────────
-// Same TW prefix can map from multiple sz keys (e.g. `text-` ← color + text).
-// We keep ALL candidate keys and try them all during round-trip.
-const prefixToKeys = new Map<string, string[]>();
-for (const [szKey, twPrefix] of Object.entries(PROPERTY_MAP)) {
-    const existing = prefixToKeys.get(twPrefix);
-    if (existing) {
-        existing.push(szKey);
-    } else {
-        prefixToKeys.set(twPrefix, [szKey]);
-    }
-}
-
-// Sort prefixes longest-first for greedy matching
-const sortedPrefixes = [...prefixToKeys.keys()].sort((a, b) => b.length - a.length);
-
-/**
- * Parse a single non-variant Tailwind class into candidate sz objects using
- * longest-prefix-first matching against the inverted PROPERTY_MAP.
- *
- * @param twClass - A bare Tailwind class (no variant prefix, e.g. "p-4", "bg-blue-500")
- * @returns Array of candidate { szKey, value } pairs to try in round-trip
- */
-function classToSzCandidates(
-    twClass: string,
-): Array<{ szKey: string; value: string | number | boolean }> {
-    const candidates: Array<{ szKey: string; value: string | number | boolean }> = [];
-
-    for (const prefix of sortedPrefixes) {
-        const sep = `${prefix}-`;
-        if (twClass === prefix) {
-            // Exact match — boolean property (e.g. "flex", "block")
-            const keys = prefixToKeys.get(prefix);
-            if (keys) {
-                for (const szKey of keys) {
-                    candidates.push({ szKey, value: true });
-                }
-            }
-            break;
-        }
-        if (twClass.startsWith(sep)) {
-            const rawValue = twClass.slice(sep.length);
-            // Numeric value: "p-4" → 4, "p-0.5" → 0.5
-            const num = Number(rawValue);
-            const value = !Number.isNaN(num) && rawValue !== '' ? num : rawValue;
-            const keys = prefixToKeys.get(prefix);
-            if (keys) {
-                for (const szKey of keys) {
-                    candidates.push({ szKey, value });
-                }
-            }
-            break;
-        }
-    }
-
-    return candidates;
-}
+import { classToSzCandidates } from './check-corpus-candidates.js';
 
 // ── Try round-trip for a single class ─────────────────────────────────────
 /**

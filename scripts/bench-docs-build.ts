@@ -395,6 +395,8 @@ function renderReport(payload: ReportPayload): string {
         formatShareBreakdown('Cold', coldFloor, coldBaseline, coldOxc, coldRust),
         formatShareBreakdown('Warm', warmFloor, warmBaseline, warmOxc, warmRust),
     ].filter(Boolean);
+    const shareBreakdownText =
+        shareBreakdown.length > 0 ? `${shareBreakdown.join('\n')}\n\n` : '\n';
 
     return `# Phase E Docs Build Benchmark
 
@@ -422,7 +424,7 @@ Environment:
 - Warm Tailwind-only baseline (no csszyx): ${formatBaselineComparison(warmBaseline, warmOxc, warmRust)}.
 - Cold pipeline floor (no csszyx, no Tailwind): ${formatFloor(coldFloor, coldBaseline)}.
 - Warm pipeline floor (no csszyx, no Tailwind): ${formatFloor(warmFloor, warmBaseline)}.
-${shareBreakdown.length > 0 ? `${shareBreakdown.join('\n')}\n\n` : '\n'}This is an end-to-end production build wall-time benchmark for \`apps/docs\`.
+${shareBreakdownText}This is an end-to-end production build wall-time benchmark for \`apps/docs\`.
 It includes Astro, Vite, Tailwind, csszyx, file IO, build output generation,
 and plugin finalization. The \`no-csszyx\` rows skip the csszyx plugin entirely
 so the remaining Astro/Vite/Tailwind/React pipeline cost is visible as a floor;
@@ -676,7 +678,9 @@ function formatSignedMs(value: number): string {
     if (!Number.isFinite(value)) {
         return 'n/a';
     }
-    const prefix = value > 0 ? '+' : value < 0 ? '-' : '';
+    let prefix = '';
+    if (value > 0) prefix = '+';
+    else if (value < 0) prefix = '-';
     const absolute = Math.abs(value);
     const formatted =
         absolute >= 1000 ? `${(absolute / 1000).toFixed(2)}s` : `${absolute.toFixed(1)}ms`;

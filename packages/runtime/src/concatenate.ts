@@ -16,6 +16,8 @@ import {
     type SzObject,
 } from '@csszyx/compiler/browser';
 
+import { _szcn } from './merge-classes.js';
+
 /** Result of a runtime sz transform. */
 interface TransformResult {
     className: string;
@@ -205,79 +207,24 @@ function appendClassName(current: string, next: string): string {
 }
 
 /**
- * Merges className strings, removing duplicates.
+ * Merges className strings with mangle-aware, utility-group last-wins semantics.
  *
  * Useful when combining multiple className sources that may overlap.
  *
  * @param {...SzInput[]} classes - Class names or SzObjects to merge
- * @returns {string} Merged className string with duplicates removed
+ * @returns {string} Merged className string with later utility conflicts winning
  *
  * @example
  * ```typescript
- * _szMerge('a b c', 'b c d', 'c d e')
- * // Returns: "a b c d e"
+ * _szMerge('gap-2 p-4', 'gap-8')
+ * // Returns: "p-4 gap-8"
  *
  * _szMerge({ p: 4 }, { p: 2, m: 4 })
- * // Returns: "p-4 p-2 m-4" (duplicates from different calls are kept)
+ * // Returns: "p-2 m-4"
  * ```
  */
 export function _szMerge(...classes: SzInput[]): string {
-    return szMergeJoin(classes, 0);
-}
-
-/**
- * Depth-tracked worker for {@link _szMerge}. Bounds nested-array recursion by
- * {@link MAX_SZ_DEPTH} so untrusted deeply nested input cannot overflow the stack.
- *
- * @param classes - the class inputs to join.
- * @param depth - the current recursion depth.
- * @returns the joined className string.
- */
-function szMergeJoin(classes: SzInput[], depth: number): string {
-    assertSzDepth(depth);
-
-    const seen = new Set<string>();
-    const result: string[] = [];
-
-    for (const cls of classes) {
-        appendUniqueClasses(resolveMergedInput(cls, depth), seen, result);
-    }
-
-    return result.join(' ');
-}
-
-/**
- * Resolves one input using the duplicate-removing semantics of {@link szMergeJoin}.
- * @param input - The class input to resolve.
- * @param depth - The current recursion depth.
- * @returns The resolved class string, or an empty string for a falsy input.
- */
-function resolveMergedInput(input: SzInput, depth: number): string {
-    if (!input) {
-        return '';
-    }
-    if (typeof input === 'string') {
-        return input;
-    }
-    if (Array.isArray(input)) {
-        return szMergeJoin(input, depth + 1);
-    }
-    return transform(input).className;
-}
-
-/**
- * Adds the unseen whitespace-delimited classes from one resolved input.
- * @param value - The resolved class string to tokenize.
- * @param seen - Class names already added to the result.
- * @param result - The ordered output class list.
- */
-function appendUniqueClasses(value: string, seen: Set<string>, result: string[]): void {
-    for (const className of value.split(/\s+/)) {
-        if (className && !seen.has(className)) {
-            seen.add(className);
-            result.push(className);
-        }
-    }
+    return _szcn(szJoin(classes, 0));
 }
 
 /**

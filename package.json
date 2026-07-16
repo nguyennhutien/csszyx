@@ -46,6 +46,7 @@
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run dev --parallel",
     "test": "turbo run test",
+    "test:scripts": "node --import tsx/esm --test scripts/*.test.ts",
     "test:coverage": "vitest run --coverage",
     "cov:rust": "cargo llvm-cov --manifest-path packages/core/Cargo.toml --features native-engine --lcov --output-path coverage/rust-lcov.info",
     "cov:rust:summary": "cargo llvm-cov --manifest-path packages/core/Cargo.toml --features native-engine --summary-only",
@@ -109,45 +110,7 @@
   },
   "engines": {
     "node": ">=22.13.0",
-    "pnpm": ">=10.0.0"
+    "pnpm": ">=11.0.0"
   },
-  "pnpm": {
-    "overrides": {
-      "brace-expansion@>=5.0.0 <5.0.7": "^5.0.7",
-      "devalue@>=5.0.0 <5.8.1": "^5.8.1",
-      "esbuild@>=0.17.0 <0.28.1": "^0.28.1",
-      "form-data@>=4.0.0 <4.0.6": "^4.0.6",
-      "http-proxy-middleware@>=2.0.0 <3.0.6": "^3.0.6",
-      "js-yaml@>=4.0.0 <4.2.0": "^4.2.0",
-      "lodash@>=4.0.0 <4.18.0": "^4.18.1",
-      "markdown-it@>=14.0.0 <14.2.0": "^14.2.0",
-      "minimatch@>=10.0.0 <10.2.3": "^10.2.5",
-      "postcss@>=8.0.0 <8.5.10": "^8.5.15",
-      "qs@>=6.0.0 <6.15.2": "^6.15.2",
-      "shell-quote@>=1.0.0 <1.8.4": "^1.8.4",
-      "tmp@>=0.2.0 <0.2.6": "^0.2.7",
-      "undici@>=7.0.0 <7.28.0": "^7.28.0",
-      "vite@>=6.0.0 <6.4.3": "^6.4.3",
-      "vite@>=7.0.0 <7.3.2": "^7.3.5",
-      "vite@>=8.0.0 <8.0.16": "^8.0.16",
-      "ws@>=8.0.0 <8.20.1": "^8.21.0"
-    },
-    "supportedArchitectures": {
-      "os": [
-        "darwin",
-        "linux",
-        "win32"
-      ],
-      "cpu": [
-        "x64",
-        "arm64"
-      ],
-      "libc": [
-        "glibc",
-        "musl"
-      ]
-    },
-    "auditConfig": {}
-  },
-  "packageManager": "pnpm@10.32.1"
+  "packageManager": "pnpm@11.13.0"
 }

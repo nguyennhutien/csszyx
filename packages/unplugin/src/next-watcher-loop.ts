@@ -50,7 +50,7 @@ export class NextWatcherLoop {
     private readonly onError?: (error: unknown) => void;
     private timer: WatcherTimer | undefined;
     private disposed = false;
-    private pendingReasons = new Set<string>();
+    private readonly pendingReasons = new Set<string>();
 
     lastResult: NextWatcherCycleResult | undefined;
     lastError: unknown;

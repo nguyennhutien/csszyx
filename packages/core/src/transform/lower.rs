@@ -80,20 +80,38 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
     classes.extend(attribute.array_parts.iter().flat_map(|part| {
         // Element order: a static part contributes its classes, a dynamic part
         // its safelist candidates — mangle IDs follow discovery order.
-        part.classes.iter().chain(part.candidates.iter()).cloned()
+        part.classes
+            .iter()
+            .chain(part.ternary.iter().flat_map(|ternary| {
+                ternary
+                    .consequent_classes
+                    .iter()
+                    .chain(ternary.alternate_classes.iter())
+            }))
+            .chain(part.candidates.iter())
+            .cloned()
     }));
-    classes.extend(attribute.dynamic_css_vars.iter().map(|prop| {
-        let variant = prop
-            .variant_prefix
-            .as_ref()
-            .map_or_else(String::new, |prefix| format!("{prefix}:"));
-        format!("{variant}{}-({})", prop.class_prefix, prop.var_name)
-    }));
+    classes.extend(
+        attribute
+            .dynamic_css_vars
+            .iter()
+            .filter(|prop| !prop.skip_class)
+            .map(dynamic_css_var_class),
+    );
     if let Some(ternary) = &attribute.ternary {
         classes.extend(ternary.consequent_classes.iter().cloned());
         classes.extend(ternary.alternate_classes.iter().cloned());
     }
     classes
+}
+
+/// Build the Tailwind CSS-variable utility for one dynamic property.
+pub(super) fn dynamic_css_var_class(prop: &super::DynamicCssVarIr) -> String {
+    let variant = prop
+        .variant_prefix
+        .as_ref()
+        .map_or_else(String::new, |prefix| format!("{prefix}:"));
+    format!("{variant}{}-({})", prop.class_prefix, prop.var_name)
 }
 
 /// Lower a static sz object into Tailwind/csszyx class names in source order.
@@ -128,6 +146,7 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
         // import, breaking the native build. Referencing it inline keeps the
         // symbol tied to its single cfg-gated use.
         || super::generated::tables::is_boolean_shorthand(key)
+        || super::generated::tables::is_known_special_property(key)
         || is_removed_boolean_sugar(key)
         || is_known_variant(key)
         || is_aria_state(key)
@@ -1471,6 +1490,9 @@ mod tests {
             // is_known_sz_key must still recognize them or rust warns for a class
             // it emits (field-reported for `truncate`).
             "truncate",
+            "css",
+            "textEllipsis",
+            "textClip",
             "blur",
             "grayscale",
             "invert",

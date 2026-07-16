@@ -164,33 +164,15 @@ describe('transform() — color string validation (JS path)', () => {
     });
 
     describe('valid color strings — pass through, no warn', () => {
-        it('passes bg: "blue-500"', () => {
-            const result = transform({ bg: 'blue-500' });
-            expect(result.className).toBe('bg-blue-500');
-            expect(console.warn).not.toHaveBeenCalled();
-        });
-
-        it('passes bg: "#ff0000" (hex)', () => {
-            const result = transform({ bg: '#ff0000' });
-            expect(result.className).toBe('bg-[#ff0000]');
-            expect(console.warn).not.toHaveBeenCalled();
-        });
-
-        it('passes bg: "--my-color" (CSS variable)', () => {
-            const result = transform({ bg: '--my-color' });
-            expect(result.className).toBe('bg-(--my-color)');
-            expect(console.warn).not.toHaveBeenCalled();
-        });
-
-        it('passes bg: "inherit"', () => {
-            const result = transform({ bg: 'inherit' });
-            expect(result.className).toBe('bg-inherit');
-            expect(console.warn).not.toHaveBeenCalled();
-        });
-
-        it('passes bg: "transparent"', () => {
-            const result = transform({ bg: 'transparent' });
-            expect(result.className).toBe('bg-transparent');
+        it.each([
+            ['blue-500', 'bg-blue-500'],
+            ['#ff0000', 'bg-[#ff0000]'],
+            ['--my-color', 'bg-(--my-color)'],
+            ['inherit', 'bg-inherit'],
+            ['transparent', 'bg-transparent'],
+        ])('passes bg: %s', (value, expectedClass) => {
+            const result = transform({ bg: value });
+            expect(result.className).toBe(expectedClass);
             expect(console.warn).not.toHaveBeenCalled();
         });
     });

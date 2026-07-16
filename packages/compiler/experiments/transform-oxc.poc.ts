@@ -108,7 +108,7 @@ function isSzJsxAttribute(node: OxcNode): node is JsxAttributeNode {
  * @returns Class names mock-derived from the sz object.
  */
 function mockCompileSz(value: OxcNode | null): string[] {
-    if (!value || value.type !== 'JSXExpressionContainer') {
+    if (value?.type !== 'JSXExpressionContainer') {
         return [];
     }
     const expression = (value as unknown as { expression: OxcNode }).expression;
@@ -119,22 +119,24 @@ function mockCompileSz(value: OxcNode | null): string[] {
     return properties
         .filter((p): p is OxcNode & { key: OxcNode; value: OxcNode } => p.type === 'Property')
         .map(prop => {
-            const key = prop.key;
-            const keyName =
-                key.type === 'Identifier'
-                    ? String((key as unknown as { name: string }).name)
-                    : key.type === 'Literal'
-                      ? String((key as unknown as { value: unknown }).value)
-                      : '';
-            const val = prop.value;
-            const valStr =
-                val.type === 'Literal'
-                    ? String((val as unknown as { value: unknown }).value)
-                    : val.type === 'Identifier'
-                      ? String((val as unknown as { name: string }).name)
-                      : '';
-            return `${keyName}-${valStr}`;
+            return `${mockNodeText(prop.key)}-${mockNodeText(prop.value)}`;
         });
+}
+
+/**
+ * Read the identifier/literal text supported by the experiment compiler.
+ *
+ * @param node Property key or value node.
+ * @returns Mock compiler text, or an empty string for unsupported nodes.
+ */
+function mockNodeText(node: OxcNode): string {
+    if (node.type === 'Identifier') {
+        return String((node as unknown as { name: string }).name);
+    }
+    if (node.type === 'Literal') {
+        return String((node as unknown as { value: unknown }).value);
+    }
+    return '';
 }
 
 /**

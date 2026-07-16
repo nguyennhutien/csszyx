@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { handleTheme } from '../src/tools/theme';
+import { handleTheme, themeSchema } from '../src/tools/theme';
 
 describe('csszyx_theme tool', () => {
+    it('describes quoted CSS values without literal backslashes', () => {
+        expect(themeSchema.shape.css.description).toContain('--font-display: "Cal Sans";');
+        expect(themeSchema.shape.css.description).not.toContain('\\"Cal Sans\\"');
+    });
+
     it('should extract tokens from @theme blocks correctly', async () => {
         const css = `
             @theme inline {

@@ -16,6 +16,11 @@
  * @module
  */
 
+import { escapeDoubleQuotedString, replaceEveryLiteral, unicodeEscape } from './string-escape.js';
+
+const LINE_SEPARATOR = String.fromCodePoint(0x2028);
+const PARAGRAPH_SEPARATOR = String.fromCodePoint(0x2029);
+
 /**
  * Makes a JSON string safe to embed in inline scripts and template literals.
  * @param json - Output of `JSON.stringify`.
@@ -23,12 +28,11 @@
  * rewritten as unicode escapes.
  */
 export function escapeJsonForInlineScript(json: string): string {
-    return json
-        .replace(/`/g, '\\u0060') // backtick — ends a template literal
-        .replace(/\$/g, '\\u0024') // blocks ${...} interpolation
-        .replace(/</g, '\\u003c') // blocks </script> tag breakout
-        .replace(/\u2028/g, '\\u2028') // line separator — legal JSON, risky JS
-        .replace(/\u2029/g, '\\u2029'); // paragraph separator — same
+    let escaped = replaceEveryLiteral(json, '`', unicodeEscape('0060'));
+    escaped = replaceEveryLiteral(escaped, '$', unicodeEscape('0024'));
+    escaped = replaceEveryLiteral(escaped, '<', unicodeEscape('003c'));
+    escaped = replaceEveryLiteral(escaped, LINE_SEPARATOR, unicodeEscape('2028'));
+    return replaceEveryLiteral(escaped, PARAGRAPH_SEPARATOR, unicodeEscape('2029'));
 }
 
 /**
@@ -44,5 +48,5 @@ export function escapeJsonForInlineScript(json: string): string {
  * @returns The string with backslashes and double quotes escaped.
  */
 export function escapeForDoubleQuotedString(value: string): string {
-    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    return escapeDoubleQuotedString(value);
 }

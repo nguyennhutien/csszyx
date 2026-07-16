@@ -815,6 +815,10 @@ const ARIA_STATES = new Set([
 // ============================================================================
 // BOOLEAN_SHORTHANDS: Properties that map directly when value is true
 // ============================================================================
+// Object-valued keys lowered by dedicated branches rather than PROPERTY_MAP.
+// This table also feeds native known-key generation so diagnostics cannot drift.
+const KNOWN_SPECIAL_PROPERTIES = new Set(['css']);
+
 // Boolean shorthands kept on purpose. A key stays boolean only when it is NOT a
 // value-alias of a single mutually-exclusive CSS property: composite utilities
 // (truncate, srOnly), additive/stackable flags (font-variant-numeric, which
@@ -826,6 +830,9 @@ const ARIA_STATES = new Set([
 export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
     // Typography (composite — no single-property canonical form)
     'truncate',
+    // Public text-overflow boolean spellings retained alongside textOverflow.
+    'textEllipsis',
+    'textClip',
     // Flexbox (grow/shrink only — flexWrap uses string values)
     'grow',
     'shrink',
@@ -978,6 +985,8 @@ function warnAlignmentValue(rawKey: string, value: unknown): void {
 // BOOLEAN_TO_CLASS: Maps camelCase boolean props to their class names
 // ============================================================================
 const BOOLEAN_TO_CLASS: Record<string, string> = {
+    textEllipsis: 'text-ellipsis',
+    textClip: 'text-clip',
     backdropBlur: 'backdrop-blur',
     backdropGrayscale: 'backdrop-grayscale',
     backdropInvert: 'backdrop-invert',
@@ -1238,6 +1247,48 @@ const FRACTION_SUPPORTED_PROPS = new Set([
     'aspect',
 ]);
 
+const ARBITRARY_LENGTH_UNITS = new Set([
+    'px',
+    'rem',
+    'em',
+    '%',
+    'vh',
+    'vw',
+    'ch',
+    'dvh',
+    'dvw',
+    'svh',
+    'svw',
+    'lvh',
+    'lvw',
+    'cqw',
+    'cqh',
+    'deg',
+    'rad',
+    'turn',
+    'grad',
+    'ms',
+    's',
+    'fr',
+]);
+const LEADING_DECIMAL_UNITS = new Set(['px', 'rem', 'em', '%', 'vh', 'vw', 'ch']);
+
+/**
+ * Returns whether a value is a numeric arbitrary value with a supported unit.
+ *
+ * @param value Candidate property value.
+ * @returns Whether the value needs Tailwind arbitrary-value brackets.
+ */
+function isArbitraryLength(value: string): boolean {
+    const match = /^(-?(?:\d+(?:\.\d+)?|\.\d+))([a-z%]+)?$/.exec(value);
+    if (!match) return false;
+    const leadingDecimal = match[1].replace(/^-/, '').startsWith('.');
+    const unit = match[2];
+    if (!unit) return leadingDecimal;
+    if (leadingDecimal) return LEADING_DECIMAL_UNITS.has(unit);
+    return ARBITRARY_LENGTH_UNITS.has(unit);
+}
+
 /**
  * Checks if a value needs arbitrary brackets
  * @param value - the CSS value to check
@@ -1247,14 +1298,7 @@ function needsArbitraryBrackets(value: string): boolean {
     // Strip user-provided outer brackets before detection so '[100px]' is treated as '100px'
     const v = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
     return (
-        /^\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(
-            v,
-        ) || // Positive units
-        /^-\d+(\.\d+)?(px|rem|em|%|vh|vw|ch|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|deg|rad|turn|grad|ms|s|fr)$/.test(
-            v,
-        ) || // Negative units like -1px, -2rem
-        /^\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(v) || // Values starting with . like .25em
-        /^-\.\d+(px|rem|em|%|vh|vw|ch)?$/.test(v) || // Negative values starting with -. like -.25em
+        isArbitraryLength(v) ||
         v.startsWith('#') || // Hex colors
         v.startsWith('rgb') || // RGB colors
         v.startsWith('hsl') || // HSL colors
@@ -1273,8 +1317,8 @@ function needsArbitraryBrackets(value: string): boolean {
  * Returns whether a character can occur in the ASCII identifier used by
  * Tailwind build-time functions such as `--spacing(4)`.
  *
- * @param code - UTF-16 code unit to classify
- * @returns Whether the code unit is an ASCII identifier character
+ * @param code - Unicode code point to classify
+ * @returns Whether the code point is an ASCII identifier character
  */
 function isAsciiIdentifierCode(code: number): boolean {
     return (
@@ -1287,8 +1331,8 @@ function isAsciiIdentifierCode(code: number): boolean {
 }
 
 /**
- * @param code - UTF-16 code unit to classify
- * @returns Whether the code unit can start an ASCII Tailwind function name
+ * @param code - Unicode code point to classify
+ * @returns Whether the code point can start an ASCII Tailwind function name
  */
 function isAsciiIdentifierStartCode(code: number): boolean {
     return (code >= 65 && code <= 90) || code === 95 || (code >= 97 && code <= 122);
@@ -1305,17 +1349,17 @@ function isAsciiIdentifierStartCode(code: number): boolean {
  */
 function isTailwindBuildFunction(value: string): boolean {
     const length = value.length;
-    if (length < 5 || value.charCodeAt(0) !== 45 || value.charCodeAt(1) !== 45) {
+    if (length < 5 || value.codePointAt(0) !== 45 || value.codePointAt(1) !== 45) {
         return false;
     }
 
-    if (!isAsciiIdentifierStartCode(value.charCodeAt(2))) return false;
+    if (!isAsciiIdentifierStartCode(value.codePointAt(2) ?? -1)) return false;
 
     let index = 3;
-    while (index < length && isAsciiIdentifierCode(value.charCodeAt(index))) {
+    while (index < length && isAsciiIdentifierCode(value.codePointAt(index) ?? -1)) {
         index += 1;
     }
-    if (index === 2 || index >= length || value.charCodeAt(index) !== 40) {
+    if (index === 2 || index >= length || value.codePointAt(index) !== 40) {
         return false;
     }
 
@@ -1331,7 +1375,7 @@ function isTailwindBuildFunction(value: string): boolean {
 function scanTailwindFunctionBody(value: string, start: number): boolean {
     const state = { depth: 0, quote: 0, escaped: false };
     for (let index = start; index < value.length; index++) {
-        const code = value.charCodeAt(index);
+        const code = value.codePointAt(index) ?? -1;
         if (consumeTailwindQuotedCode(code, state)) continue;
         if (code === 40) state.depth += 1;
         if (code === 41) {
@@ -1477,150 +1521,106 @@ export function getVariantPrefix(key: string): string {
  */
 function handleGroupPeer(type: 'group' | 'peer', nestedObj: SzObject, prefix: string): string[] {
     const classes: string[] = [];
-
-    // Helper to standardise arbitrary values (space to underscore)
-    // Fix 11: Space → Underscore Conversion for Arbitrary Values
-    // const toArbitraryValue = (val: string | number): string => {
-    //     return String(val).replace(/ /g, '_');
-    // };
-
     for (const [nestedKey, nestedValue] of Object.entries(nestedObj)) {
-        if (nestedValue === null || nestedValue === undefined || nestedValue === false) {
-            continue;
-        }
-
-        // Special case: group/peer with has selector
-        // { group: { has: { a: { block: true }}}} → group-has-[a]:block
-        if (nestedKey === 'has' && typeof nestedValue === 'object') {
-            for (const [selector, selectorValue] of Object.entries(nestedValue as SzObject)) {
-                if (
-                    selectorValue === null ||
-                    selectorValue === undefined ||
-                    selectorValue === false
-                ) {
-                    continue;
-                }
-                const variantPrefix = `${prefix}${type}-has-[${selector}]:`;
-                const result = transform(selectorValue as SzObject, variantPrefix);
-                if (result.className) {
-                    classes.push(result.className);
-                }
-            }
-            continue;
-        }
-
-        // Special case: group/peer with data attribute
-        // { group: { data: { active: { bg: 'blue' }}}} → group-data-[active]:bg-blue
-        // { group: { data: { 'state=open': { text: 'lg' }}}} → group-data-[state=open]:text-lg
-        if (nestedKey === 'data' && typeof nestedValue === 'object') {
-            for (const [attr, attrValue] of Object.entries(nestedValue as SzObject)) {
-                if (attrValue === null || attrValue === undefined || attrValue === false) {
-                    continue;
-                }
-                const variantPrefix = `${prefix}${type}-data-[${attr}]:`;
-                const result = transform(attrValue as SzObject, variantPrefix);
-                if (result.className) {
-                    classes.push(result.className);
-                }
-            }
-            continue;
-        }
-
-        // Special case: group/peer with aria attribute
-        // { group: { aria: { checked: { bg: 'blue' }}}} → group-aria-checked:bg-blue
-        // { group: { aria: { 'current=page': { ... }}}} → group-aria-[current=page]:
-        if (nestedKey === 'aria' && typeof nestedValue === 'object') {
-            for (const [attr, attrValue] of Object.entries(nestedValue as SzObject)) {
-                if (attrValue === null || attrValue === undefined || attrValue === false) {
-                    continue;
-                }
-                const variantPrefix = ARIA_STATES.has(attr)
-                    ? `${prefix}${type}-aria-${attr}:`
-                    : `${prefix}${type}-aria-[${attr}]:`;
-                const result = transform(attrValue as SzObject, variantPrefix);
-                if (result.className) {
-                    classes.push(result.className);
-                }
-            }
-            continue;
-        }
-
-        // Check if nestedKey is a known variant
-        const isVariant =
-            KNOWN_VARIANTS.has(nestedKey) || KNOWN_VARIANTS.has(getVariantPrefix(nestedKey));
-        // Check if it starts with arbitrary selector syntax
-        const isArbitrary =
-            nestedKey.startsWith('.') ||
-            nestedKey.startsWith('#') ||
-            nestedKey.startsWith('[') ||
-            nestedKey.startsWith(':');
-
-        if (isArbitrary) {
-            // { group: { ".is-published": { block: true }}} → group-[.is-published]:block
-            const variantPrefix = `${prefix}${type}-[${nestedKey}]:`;
-            const result = transform(nestedValue as SzObject, variantPrefix);
-            if (result.className) {
-                classes.push(result.className);
-            }
-        } else if (isVariant) {
-            // { group: { hover: { ... }}} → group-hover:
-            const mappedVariant = getVariantPrefix(nestedKey);
-            const variantPrefix = `${prefix}${type}-${mappedVariant}:`;
-            const result = transform(nestedValue as SzObject, variantPrefix);
-            if (result.className) {
-                classes.push(result.className);
-            }
-        } else if (typeof nestedValue === 'object') {
-            // { group: { name: { hover: { ... }}}} → group-hover/name:
-            // Also handles data/aria inside named group:
-            // { group: { card: { data: { active: { ... }}}}} → group-data-[active]/card:
-            for (const [state, stateValue] of Object.entries(nestedValue as SzObject)) {
-                if (stateValue === null || stateValue === undefined || stateValue === false) {
-                    continue;
-                }
-                // data inside named group
-                if (state === 'data' && typeof stateValue === 'object') {
-                    for (const [attr, attrValue] of Object.entries(stateValue as SzObject)) {
-                        if (attrValue === null || attrValue === undefined || attrValue === false) {
-                            continue;
-                        }
-                        const variantPrefix = `${prefix}${type}-data-[${attr}]/${nestedKey}:`;
-                        const result = transform(attrValue as SzObject, variantPrefix);
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    }
-                    continue;
-                }
-                // aria inside named group
-                if (state === 'aria' && typeof stateValue === 'object') {
-                    for (const [attr, attrValue] of Object.entries(stateValue as SzObject)) {
-                        if (attrValue === null || attrValue === undefined || attrValue === false) {
-                            continue;
-                        }
-                        const ariaSegment = ARIA_STATES.has(attr)
-                            ? `aria-${attr}`
-                            : `aria-[${attr}]`;
-                        const variantPrefix = `${prefix}${type}-${ariaSegment}/${nestedKey}:`;
-                        const result = transform(attrValue as SzObject, variantPrefix);
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    }
-                    continue;
-                }
-                const mappedState = getVariantPrefix(state);
-                const variantPrefix = `${prefix}${type}-${mappedState}/${nestedKey}:`;
-                const result = transform(stateValue as SzObject, variantPrefix);
-                if (result.className) {
-                    classes.push(result.className);
-                }
-            }
-        }
+        collectGroupPeerEntry(type, nestedKey, nestedValue, prefix, classes);
     }
-
     return classes;
 }
+
+/* eslint-disable jsdoc/require-param, jsdoc/require-returns -- Internal variant stages share the handleGroupPeer contract. */
+
+/** Collects one direct or named group/peer entry. */
+function collectGroupPeerEntry(
+    type: 'group' | 'peer',
+    key: string,
+    value: SzValue,
+    prefix: string,
+    classes: string[],
+): void {
+    if (isInactiveVariantValue(value)) return;
+    if (key === 'has' && typeof value === 'object') {
+        collectGroupPeerAttributes(type, 'has', value as SzObject, prefix, '', classes);
+    } else if (key === 'data' && typeof value === 'object') {
+        collectGroupPeerAttributes(type, 'data', value as SzObject, prefix, '', classes);
+    } else if (key === 'aria' && typeof value === 'object') {
+        collectGroupPeerAttributes(type, 'aria', value as SzObject, prefix, '', classes);
+    } else if (isArbitraryGroupPeerKey(key)) {
+        appendVariantClasses(value, `${prefix}${type}-[${key}]:`, classes);
+    } else if (isKnownVariantKey(key)) {
+        appendVariantClasses(value, `${prefix}${type}-${getVariantPrefix(key)}:`, classes);
+    } else if (typeof value === 'object') {
+        collectNamedGroupPeer(type, key, value as SzObject, prefix, classes);
+    }
+}
+
+/** Collects has/data/aria attribute variants with an optional group name. */
+function collectGroupPeerAttributes(
+    type: 'group' | 'peer',
+    kind: 'has' | 'data' | 'aria',
+    values: SzObject,
+    prefix: string,
+    name: string,
+    classes: string[],
+): void {
+    for (const [attribute, value] of Object.entries(values)) {
+        if (isInactiveVariantValue(value)) continue;
+        const segment = groupPeerAttributeSegment(kind, attribute);
+        const suffix = name ? `/${name}` : '';
+        appendVariantClasses(value, `${prefix}${type}-${segment}${suffix}:`, classes);
+    }
+}
+
+/** Builds the Tailwind segment for a group/peer attribute variant. */
+function groupPeerAttributeSegment(kind: 'has' | 'data' | 'aria', attribute: string): string {
+    if (kind === 'has') return `has-[${attribute}]`;
+    if (kind === 'data') return `data-[${attribute}]`;
+    return ARIA_STATES.has(attribute) ? `aria-${attribute}` : `aria-[${attribute}]`;
+}
+
+/** Collects states nested under a named group or peer. */
+function collectNamedGroupPeer(
+    type: 'group' | 'peer',
+    name: string,
+    states: SzObject,
+    prefix: string,
+    classes: string[],
+): void {
+    for (const [state, value] of Object.entries(states)) {
+        if (isInactiveVariantValue(value)) continue;
+        if ((state === 'data' || state === 'aria') && typeof value === 'object') {
+            collectGroupPeerAttributes(type, state, value as SzObject, prefix, name, classes);
+        } else {
+            appendVariantClasses(
+                value,
+                `${prefix}${type}-${getVariantPrefix(state)}/${name}:`,
+                classes,
+            );
+        }
+    }
+}
+
+/** Appends transformed classes for one variant value. */
+function appendVariantClasses(value: SzValue, prefix: string, classes: string[]): void {
+    const result = transform(value as SzObject, prefix);
+    if (result.className) classes.push(result.className);
+}
+
+/** Returns whether a variant value is intentionally absent. */
+function isInactiveVariantValue(value: SzValue): boolean {
+    return value === null || value === undefined || value === false;
+}
+
+/** Returns whether a group/peer key uses arbitrary selector syntax. */
+function isArbitraryGroupPeerKey(key: string): boolean {
+    return key.startsWith('.') || key.startsWith('#') || key.startsWith('[') || key.startsWith(':');
+}
+
+/** Returns whether a key names a supported variant. */
+function isKnownVariantKey(key: string): boolean {
+    return KNOWN_VARIANTS.has(key) || KNOWN_VARIANTS.has(getVariantPrefix(key));
+}
+
+/* eslint-enable jsdoc/require-param, jsdoc/require-returns */
 
 /**
  * Handles has variant with special syntax
@@ -2023,6 +2023,1106 @@ export function transform(
     }
 }
 
+/** Structured background-gradient sz value. */
+interface BackgroundGradientValue {
+    gradient?: string;
+    dir?: string | number;
+    in?: string;
+}
+
+/* eslint-disable jsdoc/require-param, jsdoc/require-returns -- Internal gradient stages share the object-syntax contract. */
+
+/** Builds one background-gradient utility from object syntax. */
+function buildBackgroundGradientClass(gradient: BackgroundGradientValue): string {
+    let className = '';
+    if (gradient.gradient === 'linear') {
+        className = buildLinearGradientClass(gradient.dir ?? 'to-r');
+    } else if (gradient.gradient === 'radial') {
+        className = buildRadialGradientClass(gradient.dir);
+    } else if (gradient.gradient === 'conic') {
+        className = buildConicGradientClass(gradient.dir);
+    }
+    return className && gradient.in ? `${className}/${gradient.in}` : className;
+}
+
+/** Builds a linear background-gradient utility. */
+function buildLinearGradientClass(direction: string | number): string {
+    if (typeof direction === 'number') {
+        return direction < 0 ? `-bg-linear-${Math.abs(direction)}` : `bg-linear-${direction}`;
+    }
+    if (direction.startsWith('--')) return `bg-linear-(${direction})`;
+    if (direction.startsWith('to-')) return `bg-linear-${direction}`;
+    return `bg-linear-[${normalizeArbitraryValue(direction)}]`;
+}
+
+/** Builds a radial background-gradient utility. */
+function buildRadialGradientClass(direction: string | number | undefined): string {
+    if (direction === undefined || direction === null) return 'bg-radial';
+    if (typeof direction !== 'string') return '';
+    return direction.startsWith('--')
+        ? `bg-radial-(${direction})`
+        : `bg-radial-[${normalizeArbitraryValue(direction)}]`;
+}
+
+/** Builds a conic background-gradient utility. */
+function buildConicGradientClass(direction: string | number | undefined): string {
+    if (direction === undefined || direction === null) return 'bg-conic';
+    if (typeof direction === 'number') {
+        return direction < 0 ? `-bg-conic-${Math.abs(direction)}` : `bg-conic-${direction}`;
+    }
+    return direction.startsWith('--')
+        ? `bg-conic-(${direction})`
+        : `bg-conic-[${normalizeArbitraryValue(direction)}]`;
+}
+
+/** Builds a color utility from the `{ color, op }` object syntax. */
+function buildColorObjectClass(
+    key: string,
+    color: { color: string; op?: number | string },
+    prefix: string,
+): string {
+    const utilityPrefix =
+        PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    const rawColor = color.color;
+    const colorValue = formatColorObjectBase(rawColor);
+    if (color.op === undefined) return `${prefix}${utilityPrefix}-${colorValue}`;
+    const opacity = formatOpacity(color.op);
+    warnCustomOpacityToken(rawColor, `${prefix}${utilityPrefix}-${colorValue}/${opacity}`, opacity);
+    return `${prefix}${utilityPrefix}-${colorValue}/${opacity}`;
+}
+
+/** Formats a color-object base using Tailwind variable and arbitrary syntax. */
+function formatColorObjectBase(color: string): string {
+    if (isTailwindBuildFunction(color) || (color.startsWith('--') && color.includes('('))) {
+        return `[${normalizeArbitraryValue(color)}]`;
+    }
+    if (color.startsWith('--')) return `(${color})`;
+    return needsArbitraryBrackets(color)
+        ? `[${normalizeArbitraryValue(color)}]`
+        : normalizeArbitraryValue(color);
+}
+
+/** Warns when a custom theme token may ignore an opacity modifier. */
+function warnCustomOpacityToken(color: string, className: string, opacity: string): void {
+    if (
+        !szDevWarningsEnabled() ||
+        color.startsWith('--') ||
+        needsArbitraryBrackets(color) ||
+        /-\d{2,3}$/.test(color) ||
+        ALPHA_SAFE_NAMED_COLORS.has(color) ||
+        _warnedOpacityTokens.has(color)
+    ) {
+        return;
+    }
+    _warnedOpacityTokens.add(color);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] "${className}"${at}: the /${opacity} opacity applies only if the ` +
+            `"${color}" theme token is alpha-capable (oklch or space-separated RGB). ` +
+            'A comma-separated RGB triplet, or a token that resolves through its own alpha ' +
+            'variable, silently ignores the modifier — verify the emitted rule.',
+    );
+}
+
+/** Dispatches nested variants that use custom Tailwind syntax. */
+function collectSpecialNestedVariant(
+    key: string,
+    value: SzObject,
+    prefix: string,
+): string[] | null {
+    switch (key) {
+        case 'group':
+            return handleGroupPeer('group', value, prefix);
+        case 'peer':
+            return handleGroupPeer('peer', value, prefix);
+        case 'has':
+            return handleHas(value, prefix);
+        case 'not':
+            return handleNot(value, prefix);
+        case 'data':
+            return handleData(value, prefix);
+        case 'aria':
+            return handleAria(value, prefix);
+        case 'supports':
+            return handleSupports(value, prefix);
+        default:
+            return null;
+    }
+}
+
+const KNOWN_BREAKPOINTS = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
+
+/** Collects named and arbitrary min/max breakpoint variants. */
+function collectMinMaxVariants(
+    kind: 'min' | 'max',
+    breakpoints: SzObject,
+    prefix: string,
+    classes: string[],
+): void {
+    for (const [breakpoint, value] of Object.entries(breakpoints)) {
+        if (isInactiveVariantValue(value)) continue;
+        const direct = isArbitraryVariant(breakpoint) || KNOWN_BREAKPOINTS.has(breakpoint);
+        const segment = direct ? `${kind}-${breakpoint}` : `${kind}-[${breakpoint}]`;
+        appendVariantClasses(value, `${prefix}${segment}:`, classes);
+    }
+}
+
+/** Validates and diagnoses one string-valued color property. */
+function validateColorPropertyString(key: string, value: string): boolean {
+    if (hasSlashOpacity(value)) {
+        warnStringColorOpacity(key, value);
+        return false;
+    }
+    if (isValidColorString(value)) return true;
+    if (szDevWarningsEnabled()) {
+        console.warn(
+            `[csszyx] "${key}: '${value}'" is not a recognized color value and will be ignored. ` +
+                'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
+                'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
+        );
+    }
+    return false;
+}
+
+/** Warns that slash opacity requires color-object syntax. */
+function warnStringColorOpacity(key: string, value: string): void {
+    if (!szDevWarningsEnabled()) return;
+    const slash = value.indexOf('/');
+    console.warn(
+        `[csszyx] "${key}: '${value}'" — string slash opacity is not supported. ` +
+            `Use object form: { color: '${value.slice(0, slash)}', op: ${value.slice(slash + 1)} }.`,
+    );
+}
+
+/** Collects direct, named, and arbitrary container-query variants. */
+function collectContainerQueryVariants(
+    key: string,
+    values: SzObject,
+    prefix: string,
+    classes: string[],
+): void {
+    const mappedKey = VARIANT_MAP[key] || key;
+    for (const [nestedKey, value] of Object.entries(values)) {
+        if (isInactiveVariantValue(value)) continue;
+        const target = resolveContainerQueryTarget(mappedKey, nestedKey, value);
+        if (target.wrapProperty) {
+            appendVariantClasses({ [nestedKey]: value }, `${prefix}${target.segment}:`, classes);
+        } else {
+            appendVariantClasses(value, `${prefix}${target.segment}:`, classes);
+        }
+    }
+}
+
+/** Container-query prefix plus whether the nested key remains a property. */
+interface ContainerQueryTarget {
+    segment: string;
+    wrapProperty: boolean;
+}
+
+/** Classifies one nested container-query key. */
+function resolveContainerQueryTarget(
+    mappedKey: string,
+    nestedKey: string,
+    value: SzValue,
+): ContainerQueryTarget {
+    if (isArbitraryVariant(nestedKey)) {
+        return { segment: `${mappedKey}-${nestedKey}`, wrapProperty: false };
+    }
+    if (isArbitraryContainerBreakpoint(mappedKey, nestedKey, value)) {
+        return { segment: `${mappedKey}-[${nestedKey}]`, wrapProperty: false };
+    }
+    const direct =
+        PROPERTY_MAP[nestedKey] ||
+        BOOLEAN_SHORTHANDS.has(nestedKey) ||
+        nestedKey.startsWith('@') ||
+        typeof value !== 'object';
+    return direct
+        ? { segment: mappedKey, wrapProperty: true }
+        : { segment: `${mappedKey}/${nestedKey}`, wrapProperty: false };
+}
+
+/** Returns whether @min/@max should bracket a custom breakpoint key. */
+function isArbitraryContainerBreakpoint(
+    mappedKey: string,
+    nestedKey: string,
+    value: SzValue,
+): boolean {
+    return (
+        (mappedKey === '@min' || mappedKey === '@max') &&
+        typeof value === 'object' &&
+        !KNOWN_BREAKPOINTS.has(nestedKey) &&
+        !PROPERTY_MAP[nestedKey] &&
+        !BOOLEAN_SHORTHANDS.has(nestedKey)
+    );
+}
+
+const WILL_CHANGE_KEYWORDS = new Set(['auto', 'scroll', 'contents', 'transform']);
+
+/** Collects special properties that emit one direct utility. */
+function collectBasicSpecialProperty(
+    rawKey: string,
+    key: string,
+    value: SzValue,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (rawKey === 'willChange' && typeof value === 'string') {
+        classes.push(`${prefix}${formatWillChange(value)}`);
+        return true;
+    }
+    if (typeof value === 'string' && isDirectKeywordProperty(key)) {
+        classes.push(`${prefix}${formatDirectKeywordProperty(key, value)}`);
+        return true;
+    }
+    if (isGradientPositionKey(rawKey) && typeof value === 'number') {
+        classes.push(`${prefix}${rawKey.replace('Pos', '')}-${value}%`);
+        return true;
+    }
+    return false;
+}
+
+/** Formats a will-change value. */
+function formatWillChange(value: string): string {
+    if (WILL_CHANGE_KEYWORDS.has(value)) return `will-change-${value}`;
+    return value.startsWith('--')
+        ? `will-change-(${value})`
+        : `will-change-[${normalizeArbitraryValue(value)}]`;
+}
+
+/** Returns whether a property maps its string value directly to a utility. */
+function isDirectKeywordProperty(key: string): boolean {
+    return key === 'display' || key === 'position' || key === 'visibility' || key === 'isolation';
+}
+
+/** Formats display, position, visibility, and isolation values. */
+function formatDirectKeywordProperty(key: string, value: string): string {
+    if (key === 'display') return value === 'none' ? 'hidden' : value;
+    if (key === 'visibility') return value === 'hidden' ? 'invisible' : value;
+    if (key === 'isolation') return value === 'isolate' ? 'isolate' : `isolation-${value}`;
+    return value;
+}
+
+/** Returns whether a key controls a gradient stop position. */
+function isGradientPositionKey(key: string): boolean {
+    return key === 'fromPos' || key === 'viaPos' || key === 'toPos';
+}
+
+/** Collects closed font style and smoothing modes. */
+function collectFontModeProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (key === 'fontStyle') {
+        let className = '';
+        if (value === 'italic') className = 'italic';
+        else if (value === 'normal') className = 'not-italic';
+        if (className) classes.push(`${prefix}${className}`);
+        else warnUnsupportedFontStyle(value);
+        return true;
+    }
+    if (key !== 'fontSmoothing') return false;
+    let className = '';
+    if (value === 'grayscale') className = 'antialiased';
+    else if (value === 'subpixel') className = 'subpixel-antialiased';
+    if (className) classes.push(`${prefix}${className}`);
+    else if (szDevWarningsEnabled()) {
+        console.warn(
+            `[csszyx] fontSmoothing: '${value}' is not supported — use ` +
+                `'grayscale' or 'subpixel'.`,
+        );
+    }
+    return true;
+}
+
+/** Warns when fontStyle cannot map to a Tailwind class. */
+function warnUnsupportedFontStyle(value: string): void {
+    if (!szDevWarningsEnabled()) return;
+    console.warn(
+        `[csszyx] fontStyle: '${value}' is not supported — Tailwind only models ` +
+            `'italic' and 'normal'. For oblique, use css: { fontStyle: '${value}' }.`,
+    );
+}
+
+const DECORATION_CLASSES = new Set([
+    'underline',
+    'overline',
+    'line-through',
+    'no-underline',
+    'none',
+]);
+const TEXT_TRANSFORM_CLASSES = new Set(['uppercase', 'lowercase', 'capitalize']);
+const FONT_VARIANT_CLASSES = new Set([
+    'normal-nums',
+    'ordinal',
+    'slashed-zero',
+    'lining-nums',
+    'oldstyle-nums',
+    'proportional-nums',
+    'tabular-nums',
+    'diagonal-fractions',
+    'stacked-fractions',
+]);
+
+/** Collects direct text decoration, transform, wrapping, and numeral modes. */
+function collectTextKeywordProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (key === 'decoration' && DECORATION_CLASSES.has(value)) {
+        classes.push(`${prefix}${value === 'none' ? 'no-underline' : value}`);
+        return true;
+    }
+    if (key === 'textTransform' && TEXT_TRANSFORM_CLASSES.has(value)) {
+        classes.push(`${prefix}${value}`);
+        return true;
+    }
+    if (key === 'textTransform' && (value === 'normal-case' || value === 'none')) {
+        classes.push(`${prefix}normal-case`);
+        return true;
+    }
+    if (key === 'fontVariant' && FONT_VARIANT_CLASSES.has(value)) {
+        classes.push(`${prefix}${value}`);
+        return true;
+    }
+    if (key === 'textWrap') {
+        classes.push(`${prefix}text-${value}`);
+        return true;
+    }
+    return false;
+}
+
+const WORD_BREAK_CLASSES: Record<string, string> = {
+    normal: 'break-normal',
+    all: 'break-all',
+    keep: 'break-keep',
+    'break-normal': 'break-normal',
+    'break-all': 'break-all',
+    'break-keep': 'break-keep',
+};
+const OVERFLOW_WRAP_CLASSES: Record<string, string> = {
+    normal: 'wrap-normal',
+    'break-word': 'wrap-break-word',
+    anywhere: 'wrap-anywhere',
+    'wrap-normal': 'wrap-normal',
+    'wrap-break-word': 'wrap-break-word',
+    'wrap-anywhere': 'wrap-anywhere',
+};
+
+/** Collects text flow, line clamp, and list utilities. */
+function collectTextFlowProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    let utility: string | null = null;
+    if (key === 'break') utility = WORD_BREAK_CLASSES[value] || `break-${value}`;
+    else if (key === 'wrap') utility = OVERFLOW_WRAP_CLASSES[value] || `wrap-${value}`;
+    else if (key === 'textOverflow') utility = formatTextOverflow(value);
+    else if (key === 'lineClamp') utility = formatLineClamp(value);
+    else if (key === 'list' || key === 'listStyle') utility = formatListStyle(value);
+    else if (key === 'listPos') utility = `list-${value}`;
+    if (utility === null) return false;
+    classes.push(`${prefix}${utility}`);
+    return true;
+}
+
+/** Formats a text-overflow utility. */
+function formatTextOverflow(value: string): string {
+    return value === 'ellipsis' || value === 'clip' ? `text-${value}` : `text-[${value}]`;
+}
+
+/** Formats a line-clamp utility. */
+function formatLineClamp(value: string): string {
+    if (value === 'none') return 'line-clamp-none';
+    if (value.startsWith('--')) return `line-clamp-(${value})`;
+    const numeric = Number(value);
+    return !Number.isNaN(numeric) && Number.isInteger(numeric)
+        ? `line-clamp-${value}`
+        : `line-clamp-[${value}]`;
+}
+
+/** Formats a list-style utility. */
+function formatListStyle(value: string): string {
+    if (value.startsWith('--')) return `list-(${value})`;
+    return LIST_STYLE_STANDARD.has(value) ? `list-${value}` : `list-[${value}]`;
+}
+
+/** Collects divide, text-decoration, and font-stretch utilities. */
+function collectDecorationProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    let utility: string | null = null;
+    if (key === 'divideStyle') utility = `divide-${value}`;
+    else if (key === 'decorationStyle' || key === 'textDecorationStyle') {
+        utility = `decoration-${value}`;
+    } else if (key === 'decorationColor' || key === 'textDecorationColor') {
+        utility = `decoration-${value}`;
+    } else if (key === 'decorationThickness' || key === 'textDecorationThickness') {
+        utility = formatDecorationThickness(value);
+    } else if (key === 'fontStretch') utility = formatFontStretch(value);
+    if (utility === null) return false;
+    classes.push(`${prefix}${utility}`);
+    return true;
+}
+
+/** Formats text-decoration thickness. */
+function formatDecorationThickness(value: string): string {
+    if (needsArbitraryBrackets(value)) {
+        return `decoration-[${normalizeArbitraryValue(value)}]`;
+    }
+    return value.startsWith('--') ? `decoration-(${value})` : `decoration-${value}`;
+}
+
+/** Formats font-stretch keywords, variables, and percentages. */
+function formatFontStretch(value: string): string {
+    if (FONT_STRETCH_KEYWORDS.has(value)) return `font-${value}`;
+    if (value.startsWith('--')) return `font-stretch-(${value})`;
+    if (!/^\d+(\.\d+)?%$/.test(value)) return `font-stretch-[${value}]`;
+    const numeric = Number.parseFloat(value);
+    return value.includes('.') || !Number.isInteger(numeric)
+        ? `font-stretch-[${value}]`
+        : `font-stretch-${value}`;
+}
+
+const ARBITRARY_EFFECT_KEYS = new Set([
+    'brightness',
+    'contrast',
+    'saturate',
+    'scale',
+    'backdropBrightness',
+    'backdropContrast',
+    'backdropSaturate',
+]);
+
+/** Collects shadow, filter, scale, and gradient-stop string utilities. */
+function collectEffectStringProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    let utility: string | null = null;
+    let includePrefix = true;
+    if (key === 'maxW' && value === 'container') {
+        utility = 'container';
+        includePrefix = false;
+    } else if (key === 'shadowColor') {
+        utility = value.startsWith('--') ? `shadow-(color:${value})` : `shadow-${value}`;
+        includePrefix = false;
+    } else if (key === 'insetShadowColor') {
+        utility = value.startsWith('--')
+            ? `inset-shadow-(color:${value})`
+            : `inset-shadow-${value}`;
+    } else if (ARBITRARY_EFFECT_KEYS.has(key)) {
+        utility = formatArbitraryEffect(key, value);
+        includePrefix = key === 'scale' && value === '3d';
+    } else if (key === 'textShadow') utility = formatTextShadow(value);
+    else if (key === 'textShadowColor') utility = `text-shadow-${value}`;
+    else if (isGradientPositionKey(key)) {
+        utility = formatGradientPosition(key, value);
+        includePrefix = false;
+    }
+    if (utility === null) return false;
+    classes.push(`${includePrefix ? prefix : ''}${utility}`);
+    return true;
+}
+
+/** Formats string-valued filters and scale without numeric coercion. */
+function formatArbitraryEffect(key: string, value: string): string {
+    if (key === 'scale' && value === '3d') return 'scale-3d';
+    const property = key.startsWith('backdrop') ? `backdrop-${key.slice(8).toLowerCase()}` : key;
+    return value.startsWith('--') ? `${property}-(${value})` : `${property}-[${value}]`;
+}
+
+/** Formats a text-shadow utility. */
+function formatTextShadow(value: string): string {
+    if (value === 'none') return 'text-shadow-none';
+    if (value === '') return 'text-shadow';
+    return needsArbitraryBrackets(value)
+        ? `text-shadow-[${normalizeArbitraryValue(value)}]`
+        : `text-shadow-${value}`;
+}
+
+/** Formats a string-valued gradient stop position. */
+function formatGradientPosition(key: string, value: string): string {
+    const property = key.replace('Pos', '');
+    if (value.startsWith('--')) return `${property}-(${value})`;
+    return /^\d+%$/.test(value) ? `${property}-${value}` : `${property}-[${value}]`;
+}
+
+/** Formats background image keywords, gradients, variables, and URLs. */
+function formatBackgroundImage(rawValue: string): string {
+    const value = rawValue.trim();
+    if (value === 'none') return 'bg-none';
+    const normalized = value.startsWith('-') ? value.slice(1) : value;
+    if (normalized.startsWith('repeating-')) {
+        return `bg-[${normalizeArbitraryValue(value)}]`;
+    }
+    if (isBackgroundGradientString(normalized)) {
+        const mapped = normalized.startsWith('gradient-to-')
+            ? normalized.replace('gradient-to-', 'linear-to-')
+            : normalized;
+        return value.startsWith('-') ? `-bg-${mapped}` : `bg-${mapped}`;
+    }
+    if (value.startsWith('--')) return `bg-(image:${value})`;
+    if (value.startsWith('url(')) return `bg-[${value}]`;
+    return `bg-[url(${value})]`;
+}
+
+/** Returns whether a string names a Tailwind background-gradient utility. */
+function isBackgroundGradientString(value: string): boolean {
+    return (
+        value.startsWith('linear-') ||
+        value.startsWith('radial') ||
+        value.startsWith('conic') ||
+        value.startsWith('gradient-to-')
+    );
+}
+
+const SIMPLE_MASK_KEYS = new Set(['maskPos', 'maskSize', 'maskShape', 'maskComposite', 'maskMode']);
+
+/** Collects background position/size/repeat and simple mask utilities. */
+function collectBackgroundMaskProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    let utility: string | null = null;
+    if (key === 'bgPos') utility = formatBackgroundPosition(value);
+    else if (key === 'bgSize') utility = formatBackgroundSize(value);
+    else if (key === 'bgRepeat' || key === 'backgroundRepeat') {
+        utility = formatBackgroundRepeat(value);
+    } else if (key === 'maskRepeat') utility = formatMaskRepeat(value);
+    else if (key === 'maskType') utility = `mask-type-${value}`;
+    else if (SIMPLE_MASK_KEYS.has(key)) utility = `mask-${value}`;
+    if (utility === null) return false;
+    classes.push(`${prefix}${utility}`);
+    return true;
+}
+
+/** Formats a background-position value. */
+function formatBackgroundPosition(value: string): string {
+    if (value.startsWith('--')) return `bg-(${value})`;
+    return value.includes('_') || needsArbitraryBrackets(value)
+        ? `bg-[${normalizeArbitraryValue(value)}]`
+        : `bg-${value}`;
+}
+
+/** Formats a background-size value. */
+function formatBackgroundSize(value: string): string {
+    if (value === 'auto' || value === 'cover' || value === 'contain') return `bg-${value}`;
+    if (value.startsWith('--')) return `bg-size-(${value})`;
+    return `bg-size-[${normalizeArbitraryValue(value)}]`;
+}
+
+/** Formats a background-repeat value. */
+function formatBackgroundRepeat(value: string): string {
+    if (value === 'repeat') return 'bg-repeat';
+    if (value === 'no-repeat') return 'bg-no-repeat';
+    const suffix = value.startsWith('repeat-') ? value.slice(7) : value;
+    return `bg-repeat-${suffix}`;
+}
+
+/** Formats a mask-repeat value. */
+function formatMaskRepeat(value: string): string {
+    if (value === 'repeat') return 'mask-repeat';
+    return value === 'no-repeat' ? 'mask-no-repeat' : `mask-${value}`;
+}
+
+const BORDER_COLOR_SIDES: Record<string, string> = {
+    borderTColor: 't',
+    borderRColor: 'r',
+    borderBColor: 'b',
+    borderLColor: 'l',
+    borderXColor: 'x',
+    borderYColor: 'y',
+};
+
+/** Collects content, border-color, transition, and drop-shadow utilities. */
+function collectContentBorderProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    let utility: string | null = null;
+    if (key === 'alignContent') utility = `content-${value}`;
+    else if (key === 'content') utility = formatContentValue(value);
+    else if (BORDER_COLOR_SIDES[key]) utility = `border-${BORDER_COLOR_SIDES[key]}-${value}`;
+    else if (key === 'transitionBehavior') utility = `transition-${value}`;
+    else if (key === 'dropShadowColor') {
+        utility = value.startsWith('--') ? `drop-shadow-(color:${value})` : `drop-shadow-${value}`;
+    }
+    if (utility === null) return false;
+    classes.push(`${prefix}${utility}`);
+    return true;
+}
+
+/** Formats CSS generated-content values. */
+function formatContentValue(value: string): string {
+    if (value === 'none') return 'content-none';
+    if (value.startsWith('--')) return `content-(${value})`;
+    const inner =
+        value.startsWith('"') && value.endsWith('"') && value.length >= 2
+            ? `'${value.slice(1, -1)}'`
+            : value;
+    return `content-[${inner}]`;
+}
+
+const COMPLEX_TRANSFORM_KEYS = new Set([
+    'origin',
+    'ease',
+    'animate',
+    'filter',
+    'backdropFilter',
+    'dropShadow',
+]);
+const STANDARD_PERSPECTIVE = new Set(['none', 'normal', 'dramatic', 'midrange']);
+const STANDARD_PERSPECTIVE_ORIGINS = new Set([
+    'center',
+    'top',
+    'right',
+    'bottom',
+    'left',
+    'top-left',
+    'top-right',
+    'bottom-left',
+    'bottom-right',
+]);
+
+/** Collects complex transform, perspective, and backface string utilities. */
+function collectTransformStringProperty(
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): boolean {
+    let utility: string | null = null;
+    if (COMPLEX_TRANSFORM_KEYS.has(key) && isComplexUtilityValue(value)) {
+        utility = `${PROPERTY_MAP[key] || key}-[${normalizeArbitraryValue(value)}]`;
+    } else if (key === 'transformStyle') utility = `transform-${value}`;
+    else if (key === 'perspective') utility = formatPerspective(value);
+    else if (key === 'perspectiveOrigin') utility = formatPerspectiveOrigin(value);
+    else if (key === 'backface') utility = `backface-${value}`;
+    if (utility === null) return false;
+    classes.push(`${prefix}${utility}`);
+    return true;
+}
+
+/** Returns whether a utility value requires arbitrary brackets. */
+function isComplexUtilityValue(value: string): boolean {
+    return (
+        needsArbitraryBrackets(value) ||
+        value.includes('(') ||
+        value.includes('_') ||
+        value.includes('%')
+    );
+}
+
+/** Formats a perspective utility. */
+function formatPerspective(value: string): string {
+    if (STANDARD_PERSPECTIVE.has(value)) return `perspective-${value}`;
+    if (value.startsWith('--')) return `perspective-(${value})`;
+    return needsArbitraryBrackets(value)
+        ? `perspective-[${normalizeArbitraryValue(value)}]`
+        : `perspective-${value}`;
+}
+
+/** Formats a perspective-origin utility. */
+function formatPerspectiveOrigin(value: string): string {
+    return STANDARD_PERSPECTIVE_ORIGINS.has(value)
+        ? `perspective-origin-${value}`
+        : `perspective-origin-[${normalizeArbitraryValue(value)}]`;
+}
+
+/** Warns when a fallback key cannot produce a supported sz utility. */
+function warnUnknownSzProperty(key: string, szProp: SzObject): void {
+    if (!szDevWarningsEnabled() || isKnownSzPropertyKey(key)) return;
+    let message = unknownSzPropertyMessage(key);
+    if (!szWarnLocation) message += runtimeSzWarnContext(szProp);
+    console.warn(message);
+    hintProjectScanOnce(szWarnLocation);
+}
+
+/** Returns whether a key belongs to any supported property or variant family. */
+function isKnownSzPropertyKey(key: string): boolean {
+    return Boolean(
+        PROPERTY_MAP[key] ||
+            KNOWN_SPECIAL_PROPERTIES.has(key) ||
+            BOOLEAN_SHORTHANDS.has(key) ||
+            SNAP_DIRECT_MAP[key] ||
+            isGradientPositionKey(key) ||
+            key.startsWith('--') ||
+            key.startsWith('[') ||
+            key.startsWith('@') ||
+            KNOWN_VARIANTS.has(key) ||
+            SPECIAL_VARIANTS.has(key) ||
+            key === 'min' ||
+            key === 'max',
+    );
+}
+
+/** Builds the diagnostic for an unsupported key without runtime context. */
+function unknownSzPropertyMessage(key: string): string {
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    const suggestion = SUGGESTION_MAP[key];
+    if (suggestion) {
+        return `[csszyx] Use the canonical key "${suggestion}" instead of "${key}"${at}.`;
+    }
+    if (/^\d+(?:\.\d+)?$/.test(key)) {
+        return (
+            `[csszyx] sz received a numeric key "${key}"${at}. This usually ` +
+            'means an array or a spread was passed where an object of sz ' +
+            'keys was expected. The value is ignored.'
+        );
+    }
+    return (
+        `[csszyx] Unknown property "${key}" in sz prop${at}. ` +
+        'This will be ignored. Check for typos.'
+    );
+}
+
+/** Builds the fallback class for a string-valued property. */
+function buildGenericStringClass(
+    rawKey: string,
+    key: string,
+    value: string,
+    prefix: string,
+): string {
+    const importantValue = handleImportant(value);
+    const finalValue = normalizeGenericStringValue(rawKey, key, importantValue.value);
+    const className =
+        finalValue.startsWith('-') && NEGATIVE_ALLOWED.has(key)
+            ? `-${prefix}${key}-${finalValue.substring(1)}`
+            : `${prefix}${key}-${finalValue}`;
+    return importantValue.important ? `${className}!` : className;
+}
+
+/** Normalizes string values into Tailwind utility suffix syntax. */
+function normalizeGenericStringValue(rawKey: string, key: string, value: string): string {
+    if (isTailwindBuildFunction(value) || (value.startsWith('--') && value.includes('('))) {
+        return `[${normalizeArbitraryValue(value)}]`;
+    }
+    if (value.startsWith('--')) {
+        const typeHint = CSS_VAR_TYPE_HINTS[rawKey];
+        return typeHint ? `(${typeHint}:${value})` : `(${value})`;
+    }
+    if (value.startsWith('var(')) return `[${normalizeArbitraryValue(value)}]`;
+    if (/^\d+\/\d+$/.test(value)) {
+        return FRACTION_SUPPORTED_PROPS.has(rawKey) ? value : `[${value}]`;
+    }
+    if (key === 'aspect' && /^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)) {
+        return /^\d+\/\d+$/.test(value) ? value : `[${value}]`;
+    }
+    if (needsArbitraryBrackets(value) || /^\d+\.\d+%$/.test(value)) {
+        return `[${normalizeArbitraryValue(value)}]`;
+    }
+    return value;
+}
+
+/** Indexed text-size utility eligible for a matching leading utility. */
+interface TextSizeEntry {
+    index: number;
+    prefix: string;
+    size: string;
+}
+
+/** Indexed leading utility eligible for a matching text-size utility. */
+interface LeadingEntry {
+    index: number;
+    prefix: string;
+    value: string;
+}
+
+const TEXT_SIZE_BASE_RE = /^text-(xs|sm|base|lg|[2-9]?xl|\[[^\]]+\]|\([^)]+\))$/;
+const LEADING_BASE_RE = /^leading-(.+)$/;
+
+/** Merges compatible text-size and line-height utilities with equal prefixes. */
+function mergeTextSizeAndLeading(classes: string[]): string[] {
+    const textEntries: TextSizeEntry[] = [];
+    const leadingEntries: LeadingEntry[] = [];
+    for (let index = 0; index < classes.length; index++) {
+        collectTextLeadingEntry(classes[index], index, textEntries, leadingEntries);
+    }
+    if (textEntries.length === 0 || leadingEntries.length === 0) return classes;
+
+    const mergedClasses = [...classes];
+    const removeIndices = new Set<number>();
+    for (const textEntry of textEntries) {
+        const leadingEntry = findMatchingLeading(textEntry.prefix, leadingEntries, removeIndices);
+        if (!leadingEntry) continue;
+        mergedClasses[textEntry.index] =
+            `${textEntry.prefix}text-${textEntry.size}/${leadingEntry.value}`;
+        removeIndices.add(leadingEntry.index);
+    }
+    return removeIndices.size === 0
+        ? classes
+        : mergedClasses.filter((_, index) => !removeIndices.has(index));
+}
+
+/** Indexes one utility when it is a mergeable text-size or leading class. */
+function collectTextLeadingEntry(
+    className: string,
+    index: number,
+    textEntries: TextSizeEntry[],
+    leadingEntries: LeadingEntry[],
+): void {
+    const lastColon = className.lastIndexOf(':');
+    const prefix = lastColon === -1 ? '' : className.slice(0, lastColon + 1);
+    const base = lastColon === -1 ? className : className.slice(lastColon + 1);
+    const textMatch = TEXT_SIZE_BASE_RE.exec(base);
+    if (textMatch) textEntries.push({ index, prefix, size: textMatch[1] });
+    const leadingMatch = LEADING_BASE_RE.exec(base);
+    if (leadingMatch) leadingEntries.push({ index, prefix, value: leadingMatch[1] });
+}
+
+/** Finds the first unconsumed leading utility with the requested prefix. */
+function findMatchingLeading(
+    prefix: string,
+    entries: LeadingEntry[],
+    consumedIndices: Set<number>,
+): LeadingEntry | undefined {
+    return entries.find(entry => entry.prefix === prefix && !consumedIndices.has(entry.index));
+}
+
+/** Filters empty utilities, applies optional mangling, and joins the result. */
+function finalizeTransformResult(
+    classes: string[],
+    mangleMap?: Record<string, string>,
+): TransformResult {
+    const finalClasses = mergeTextSizeAndLeading(classes).filter(Boolean);
+    const outputClasses = mangleMap
+        ? finalClasses.map(className => mangleMap[className] || className)
+        : finalClasses;
+    return { className: outputClasses.join(' ') };
+}
+
+/** Collects the scalar property forms that remain after specialized dispatch. */
+function collectFallbackProperty(
+    rawKey: string,
+    key: string,
+    value: unknown,
+    prefix: string,
+    szProp: SzObject,
+    classes: string[],
+): void {
+    warnUnknownSzProperty(rawKey, szProp);
+    if (/^\d+(?:\.\d+)?$/.test(rawKey)) return;
+    if (value === true) {
+        const utility = BOOLEAN_SHORTHANDS.has(rawKey) ? BOOLEAN_TO_CLASS[rawKey] || key : key;
+        classes.push(`${prefix}${utility}`);
+        return;
+    }
+    if (rawKey === 'animationDelay') {
+        const delay = typeof value === 'number' ? `${value}ms` : String(value);
+        classes.push(`${prefix}[animation-delay:${delay}]`);
+        return;
+    }
+    if (typeof value === 'number') {
+        const utility =
+            value < 0 && NEGATIVE_ALLOWED.has(key)
+                ? `-${key}-${Math.abs(value)}`
+                : `${key}-${value}`;
+        classes.push(`${prefix}${utility}`);
+        return;
+    }
+    if (typeof value === 'string') {
+        classes.push(buildGenericStringClass(rawKey, key, value, prefix));
+    }
+}
+
+/** Routes object-valued properties to CSS, color, gradient, or variant handling. */
+function collectObjectProperty(
+    rawKey: string,
+    value: unknown,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (rawKey === 'css') {
+        if (isRecordValue(value)) appendArbitraryCss(value, prefix, classes);
+        return true;
+    }
+    if (!isRecordValue(value)) return false;
+    if (rawKey === 'bgImg') {
+        const gradient = buildBackgroundGradientClass(value as BackgroundGradientValue);
+        if (gradient) classes.push(`${prefix}${gradient}`);
+        return true;
+    }
+    if (rawKey in PROPERTY_MAP && 'color' in value) {
+        classes.push(
+            buildColorObjectClass(rawKey, value as { color: string; op?: number | string }, prefix),
+        );
+        return true;
+    }
+    collectNestedVariant(rawKey, value as SzObject, prefix, classes);
+    return true;
+}
+
+/** Returns whether a value is a non-array object. */
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Emits arbitrary CSS declarations from the `css` escape hatch. */
+function appendArbitraryCss(
+    declarations: Record<string, unknown>,
+    prefix: string,
+    classes: string[],
+): void {
+    for (const [property, value] of Object.entries(declarations)) {
+        if (value === null || value === undefined) continue;
+        classes.push(
+            `${prefix}[${camelToKebab(property)}:${normalizeArbitraryValue(String(value))}]`,
+        );
+    }
+}
+
+/** Collects one nested special, breakpoint, container, or standard variant. */
+function collectNestedVariant(
+    rawKey: string,
+    value: SzObject,
+    prefix: string,
+    classes: string[],
+): void {
+    const specialClasses = collectSpecialNestedVariant(rawKey, value, prefix);
+    if (specialClasses !== null) {
+        classes.push(...specialClasses);
+        return;
+    }
+    if (rawKey === 'min' || rawKey === 'max') {
+        collectMinMaxVariants(rawKey, value, prefix, classes);
+        return;
+    }
+    if (rawKey.startsWith('@')) {
+        collectContainerQueryVariants(rawKey, value, prefix, classes);
+        return;
+    }
+    const variantName = isArbitraryVariant(rawKey)
+        ? normalizeArbitraryVariant(rawKey)
+        : getVariantPrefix(rawKey);
+    const nestedResult = transform(value, `${prefix}${variantName}:`);
+    if (nestedResult.className) classes.push(nestedResult.className);
+}
+
+/** Suppresses a removed boolean shorthand and emits its migration warning. */
+function collectRemovedBooleanSugar(rawKey: string, value: unknown): boolean {
+    if (value !== true) return false;
+    const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
+    if (!removed) return false;
+    if (szDevWarningsEnabled()) {
+        console.warn(
+            `[csszyx] "${rawKey}" boolean sugar was removed. Use ` +
+                `{ ${removed.key}: '${removed.value}' } instead, or run \`csszyx migrate\`.`,
+        );
+    }
+    return true;
+}
+
+/** Collects string shortcuts that must run before property-name resolution. */
+function collectUnresolvedStringProperty(
+    rawKey: string,
+    value: unknown,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (typeof value !== 'string') return false;
+    if (rawKey.startsWith('@')) {
+        classes.push(`${prefix}${VARIANT_MAP[rawKey] || rawKey}/${value}`);
+        return true;
+    }
+    if (rawKey === 'group' || rawKey === 'peer') {
+        classes.push(`${prefix}${rawKey}/${value}`);
+        return true;
+    }
+    if (
+        PROPERTY_CATEGORY_MAP[rawKey] === PropertyCategory.COLOR &&
+        !validateColorPropertyString(rawKey, value.replace(/!$/, ''))
+    ) {
+        return true;
+    }
+    const snapClass = SNAP_DIRECT_MAP[rawKey]?.[value];
+    if (snapClass) {
+        classes.push(`${prefix}${snapClass}`);
+        return true;
+    }
+    if (KNOWN_VARIANTS.has(rawKey)) {
+        classes.push(`${prefix}${getVariantPrefix(rawKey)}:${value}`);
+        return true;
+    }
+    return false;
+}
+
+/** Collects custom-property declarations and the container utility forms. */
+function collectUnresolvedDirectProperty(
+    rawKey: string,
+    value: unknown,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (rawKey.startsWith('--')) {
+        classes.push(`${prefix}[${rawKey}:${value}]`);
+        return true;
+    }
+    if (rawKey !== 'container') return false;
+    if (value === true) classes.push(`${prefix}container`);
+    else if (typeof value === 'string') classes.push(`${prefix}@container/${value}`);
+    return true;
+}
+
+/** Collects one property after filtering inactive values and shortcut forms. */
+function collectTransformProperty(
+    rawKey: string,
+    value: SzValue,
+    prefix: string,
+    szProp: SzObject,
+    classes: string[],
+): void {
+    if (value === false || value === null || value === undefined) return;
+    warnAlignmentValue(rawKey, value);
+    if (collectRemovedBooleanSugar(rawKey, value)) return;
+    if (collectObjectProperty(rawKey, value, prefix, classes)) return;
+    if (collectUnresolvedStringProperty(rawKey, value, prefix, classes)) return;
+    if (collectUnresolvedDirectProperty(rawKey, value, prefix, classes)) return;
+
+    const key = PROPERTY_MAP[rawKey] || camelToKebab(rawKey);
+    if (collectBasicSpecialProperty(rawKey, key, value, prefix, classes)) return;
+    if (collectResolvedStringProperty(rawKey, value, prefix, classes)) return;
+    collectFallbackProperty(rawKey, key, value, prefix, szProp, classes);
+}
+
+/** Collects string utilities that require a resolved property context. */
+function collectResolvedStringProperty(
+    rawKey: string,
+    value: unknown,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (typeof value !== 'string') return false;
+    if (collectFontModeProperty(rawKey, value, prefix, classes)) return true;
+    if (collectTextKeywordProperty(rawKey, value, prefix, classes)) return true;
+    if (collectTextFlowProperty(rawKey, value, prefix, classes)) return true;
+    if (collectDecorationProperty(rawKey, value, prefix, classes)) return true;
+    if (collectEffectStringProperty(rawKey, value, prefix, classes)) return true;
+    if (collectContentBorderProperty(rawKey, value, prefix, classes)) return true;
+    if (collectTransformStringProperty(rawKey, value, prefix, classes)) return true;
+    if (rawKey === 'bgImg') {
+        classes.push(`${prefix}${formatBackgroundImage(value)}`);
+        return true;
+    }
+    return collectBackgroundMaskProperty(rawKey, value, prefix, classes);
+}
+
+/* eslint-enable jsdoc/require-param, jsdoc/require-returns */
+
 /**
  * Depth-unchecked transform body. Called by {@link transform} once the depth
  * guard has been applied.
@@ -2040,1437 +3140,10 @@ function transformImpl(
     const classes: string[] = [];
 
     for (const [rawKey, value] of Object.entries(szProp)) {
-        // Skip false/null/undefined values (a false toggle emits nothing).
-        if (value === false || value === null || value === undefined) {
-            continue;
-        }
-
-        // Dev: flag an alignment prop given a CSS-longhand value (dead class).
-        warnAlignmentValue(rawKey, value);
-
-        // Removed boolean-sugar keys (flex/absolute/italic/...): emit nothing and,
-        // in dev, point to the canonical form. Only the boolean `true` form was sugar;
-        // `flex` also names the flex-grow shorthand (`flex: 1`, `flex: 'auto'`), which is
-        // NOT sugar and must pass through, so the intercept is guarded on `value === true`.
-        // The canonical key is one-per-property, so duplicates like
-        // { position:'absolute', relative:true } can no longer occur.
-        if (value === true) {
-            const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
-            if (removed) {
-                if (szDevWarningsEnabled()) {
-                    console.warn(
-                        `[csszyx] "${rawKey}" boolean sugar was removed. Use ` +
-                            `{ ${removed.key}: '${removed.value}' } instead, or run \`csszyx migrate\`.`,
-                    );
-                }
-                continue;
-            }
-        }
-
-        // ================================================================
-        // css: {} — Arbitrary CSS sub-prop
-        // Escape hatch for CSS properties with no sz/Tailwind equivalent.
-        // { css: { writingMode: 'vertical-lr' } } → [writing-mode:vertical-lr]
-        // { css: { '--my-color': 'red' } } → [--my-color:red]
-        // Works inside variants via recursion (hover: { css: { cursor: 'crosshair' } })
-        // ================================================================
-        if (rawKey === 'css') {
-            if (value && typeof value === 'object' && !Array.isArray(value)) {
-                for (const [cssProp, cssVal] of Object.entries(value as Record<string, unknown>)) {
-                    if (cssVal === null || cssVal === undefined) {
-                        continue;
-                    }
-                    const kebab = camelToKebab(cssProp);
-                    classes.push(`${prefix}[${kebab}:${normalizeArbitraryValue(String(cssVal))}]`);
-                }
-            }
-            continue;
-        }
-
-        // { @container: "sidebar" } → @container/sidebar (string value with @ prefix)
-        if (rawKey.startsWith('@') && typeof value === 'string') {
-            const mappedKey = VARIANT_MAP[rawKey] || rawKey;
-            classes.push(`${prefix}${mappedKey}/${value}`);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE bgImg OBJECT SYNTAX (before variant nesting)
-        // { bgImg: { gradient: 'linear', dir: 'to-r', in: 'hsl' } } → bg-linear-to-r/hsl
-        // ================================================================
-        if (
-            rawKey === 'bgImg' &&
-            value !== null &&
-            typeof value === 'object' &&
-            !Array.isArray(value)
-        ) {
-            const grad = value as { gradient?: string; dir?: string | number; in?: string };
-            const gradType = grad.gradient;
-            if (!gradType) {
-                continue;
-            }
-
-            let cls = '';
-            if (gradType === 'linear') {
-                const dir = grad.dir ?? 'to-r'; // default direction
-                if (typeof dir === 'number') {
-                    if (dir < 0) {
-                        cls = `-bg-linear-${Math.abs(dir)}`;
-                    } else {
-                        cls = `bg-linear-${dir}`;
-                    }
-                } else if (typeof dir === 'string') {
-                    if (dir.startsWith('--')) {
-                        cls = `bg-linear-(${dir})`;
-                    } else if (dir.startsWith('to-')) {
-                        cls = `bg-linear-${dir}`;
-                    } else {
-                        // Arbitrary: contains commas, spaces, etc.
-                        cls = `bg-linear-[${normalizeArbitraryValue(dir)}]`;
-                    }
-                }
-            } else if (gradType === 'radial') {
-                const dir = grad.dir;
-                if (dir === undefined || dir === null) {
-                    cls = 'bg-radial';
-                } else if (typeof dir === 'string') {
-                    if (dir.startsWith('--')) {
-                        cls = `bg-radial-(${dir})`;
-                    } else {
-                        cls = `bg-radial-[${normalizeArbitraryValue(dir)}]`;
-                    }
-                }
-            } else if (gradType === 'conic') {
-                const dir = grad.dir;
-                if (dir === undefined || dir === null) {
-                    cls = 'bg-conic';
-                } else if (typeof dir === 'number') {
-                    if (dir < 0) {
-                        cls = `-bg-conic-${Math.abs(dir)}`;
-                    } else {
-                        cls = `bg-conic-${dir}`;
-                    }
-                } else if (typeof dir === 'string') {
-                    if (dir.startsWith('--')) {
-                        cls = `bg-conic-(${dir})`;
-                    } else {
-                        cls = `bg-conic-[${normalizeArbitraryValue(dir)}]`;
-                    }
-                }
-            }
-
-            // Append color interpolation suffix
-            if (grad.in) {
-                cls += `/${grad.in}`;
-            }
-
-            if (cls) {
-                classes.push(`${prefix}${cls}`);
-            }
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE NAMED GROUP/PEER (string value → group/name, peer/name)
-        // ================================================================
-        if ((rawKey === 'group' || rawKey === 'peer') && typeof value === 'string') {
-            classes.push(`${prefix}${rawKey}/${value}`);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE COLOR OBJECT SYNTAX (before variant nesting)
-        // { bg: { color: 'red-500', op: 40 } } → bg-red-500/40
-        // ================================================================
-        if (
-            value !== null &&
-            typeof value === 'object' &&
-            !Array.isArray(value) &&
-            rawKey in PROPERTY_MAP &&
-            'color' in (value as Record<string, unknown>)
-        ) {
-            const colorObj = value as { color: string; op?: number | string };
-            const twPrefix =
-                PROPERTY_MAP[rawKey] || rawKey.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-            const rawColorBase = String(colorObj.color);
-            // CSS variables use (--var) syntax; hex/rgb/hsl/units need [bracket] wrapping;
-            // named colors (e.g. 'blue-500') pass through as-is.
-            const colorBase =
-                isTailwindBuildFunction(rawColorBase) ||
-                (rawColorBase.startsWith('--') && rawColorBase.includes('('))
-                    ? `[${normalizeArbitraryValue(rawColorBase)}]`
-                    : rawColorBase.startsWith('--')
-                      ? `(${rawColorBase})`
-                      : needsArbitraryBrackets(rawColorBase)
-                        ? `[${normalizeArbitraryValue(rawColorBase)}]`
-                        : normalizeArbitraryValue(rawColorBase);
-
-            if (colorObj.op !== undefined) {
-                const opStr = formatOpacity(colorObj.op);
-                // Dev nudge for custom theme tokens: `border-tag-violet-fg/35` is
-                // minted here, but whether the /35 actually applies depends on the
-                // token being alpha-capable (oklch / space-separated RGB). A token
-                // defined as a comma-separated RGB triplet (or one that carries its
-                // own alpha var) silently ignores the modifier — the class NAME then
-                // advertises an opacity the CSS does not deliver. Standard palette
-                // shades (`red-500`) and alpha-safe named colors are exempt.
-                if (
-                    szDevWarningsEnabled() &&
-                    !rawColorBase.startsWith('--') &&
-                    !needsArbitraryBrackets(rawColorBase) &&
-                    !/-\d{2,3}$/.test(rawColorBase) &&
-                    !ALPHA_SAFE_NAMED_COLORS.has(rawColorBase) &&
-                    !_warnedOpacityTokens.has(rawColorBase)
-                ) {
-                    _warnedOpacityTokens.add(rawColorBase);
-                    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-                    console.warn(
-                        `[csszyx] "${prefix}${twPrefix}-${colorBase}/${opStr}"${at}: the ` +
-                            `/${opStr} opacity applies only if the "${rawColorBase}" theme token ` +
-                            'is alpha-capable (oklch or space-separated RGB). A comma-separated ' +
-                            'RGB triplet, or a token that resolves through its own alpha ' +
-                            'variable, silently ignores the modifier — verify the emitted rule.',
-                    );
-                }
-                classes.push(`${prefix}${twPrefix}-${colorBase}/${opStr}`);
-            } else {
-                classes.push(`${prefix}${twPrefix}-${colorBase}`);
-            }
-            continue;
-        }
-
-        // ================================================================
-        // VALIDATE STRING VALUES FOR COLOR PROPERTIES
-        // Slash opacity → warn + suppress (use object form instead)
-        // Unrecognized pattern → warn + suppress
-        // This runs before all specific property handlers, covering all
-        // 18 COLOR-category properties uniformly via PROPERTY_CATEGORY_MAP.
-        // ================================================================
-        if (typeof value === 'string' && PROPERTY_CATEGORY_MAP[rawKey] === PropertyCategory.COLOR) {
-            const strVal = (value as string).replace(/!$/, '');
-
-            if (hasSlashOpacity(strVal)) {
-                if (szDevWarningsEnabled()) {
-                    const slashIdx = strVal.indexOf('/');
-                    const colorPart = strVal.slice(0, slashIdx);
-                    const opPart = strVal.slice(slashIdx + 1);
-                    console.warn(
-                        `[csszyx] "${rawKey}: '${strVal}'" — string slash opacity is not supported. ` +
-                            `Use object form: { color: '${colorPart}', op: ${opPart} }.`,
-                    );
-                }
-                continue;
-            }
-
-            if (!isValidColorString(strVal)) {
-                if (szDevWarningsEnabled()) {
-                    console.warn(
-                        `[csszyx] "${rawKey}: '${strVal}'" is not a recognized color value and will be ignored. ` +
-                            'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
-                            'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
-                    );
-                }
-                continue;
-            }
-            // Valid string → falls through to specific or generic handler
-        }
-
-        // ================================================================
-        // HANDLE NESTED OBJECTS (VARIANTS)
-        // ================================================================
-        if (typeof value === 'object' && !Array.isArray(value)) {
-            // Handle special variants with custom syntax
-            if (rawKey === 'group') {
-                const groupClasses = handleGroupPeer('group', value as SzObject, prefix);
-                classes.push(...groupClasses);
-                continue;
-            }
-
-            if (rawKey === 'peer') {
-                const peerClasses = handleGroupPeer('peer', value as SzObject, prefix);
-                classes.push(...peerClasses);
-                continue;
-            }
-
-            if (rawKey === 'has') {
-                const hasClasses = handleHas(value as SzObject, prefix);
-                classes.push(...hasClasses);
-                continue;
-            }
-
-            if (rawKey === 'not') {
-                const notClasses = handleNot(value as SzObject, prefix);
-                classes.push(...notClasses);
-                continue;
-            }
-
-            if (rawKey === 'data') {
-                const dataClasses = handleData(value as SzObject, prefix);
-                classes.push(...dataClasses);
-                continue;
-            }
-
-            if (rawKey === 'aria') {
-                const ariaClasses = handleAria(value as SzObject, prefix);
-                classes.push(...ariaClasses);
-                continue;
-            }
-
-            if (rawKey === 'supports') {
-                const supportsClasses = handleSupports(value as SzObject, prefix);
-                classes.push(...supportsClasses);
-                continue;
-            }
-
-            // Handle min/max breakpoints with arbitrary values
-            // { min: { '320px': { ... }}} → min-[320px]:...
-            // { min: { md: { ... }}} → min-md:...
-            // { min: { '[320px]': { ... }}} → min-[320px]:... (legacy bracket keys still work)
-            if (rawKey === 'min' || rawKey === 'max') {
-                const KNOWN_BP = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
-                for (const [breakpoint, breakpointValue] of Object.entries(value as SzObject)) {
-                    if (
-                        breakpointValue === null ||
-                        breakpointValue === undefined ||
-                        breakpointValue === false
-                    ) {
-                        continue;
-                    }
-                    let bpStr: string;
-                    if (isArbitraryVariant(breakpoint)) {
-                        // Already has brackets: [320px] → min-[320px]
-                        bpStr = `${rawKey}-${breakpoint}`;
-                    } else if (KNOWN_BP.has(breakpoint)) {
-                        // Named breakpoint: md → min-md
-                        bpStr = `${rawKey}-${breakpoint}`;
-                    } else {
-                        // Arbitrary value without brackets: 320px → min-[320px]
-                        bpStr = `${rawKey}-[${breakpoint}]`;
-                    }
-                    const nestedPrefix = `${prefix}${bpStr}:`;
-                    const result = transform(breakpointValue as SzObject, nestedPrefix);
-                    if (result.className) {
-                        classes.push(result.className);
-                    }
-                }
-                continue;
-            }
-
-            // Handle container queries with @ prefix
-            // { @md: { flex: true }} → @md:flex (direct property)
-            // { @md: { sidebar: { ... }}} → @md/sidebar:... (named container)
-            // { @min: { "[475px]": { ... }}} → @min-[475px]:...
-            if (rawKey.startsWith('@')) {
-                // Map the @ query key through VARIANT_MAP if needed
-                const mappedKey = VARIANT_MAP[rawKey] || rawKey;
-
-                // { @container: "sidebar" } → @container/sidebar
-                if (typeof value === 'string') {
-                    classes.push(`${prefix}${mappedKey}/${value}`);
-                    continue;
-                }
-
-                const KNOWN_BP = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
-                for (const [nestedKey, nestedValue] of Object.entries(value as SzObject)) {
-                    if (
-                        nestedValue === null ||
-                        nestedValue === undefined ||
-                        nestedValue === false
-                    ) {
-                        continue;
-                    }
-                    // Check if it's an arbitrary value like [475px] (legacy bracket keys)
-                    if (isArbitraryVariant(nestedKey)) {
-                        const nestedPrefix = `${prefix}${mappedKey}-${nestedKey}:`;
-                        const result = transform(nestedValue as SzObject, nestedPrefix);
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    } else if (
-                        (mappedKey === '@min' || mappedKey === '@max') &&
-                        nestedValue !== null &&
-                        typeof nestedValue === 'object' &&
-                        !KNOWN_BP.has(nestedKey) &&
-                        !PROPERTY_MAP[nestedKey] &&
-                        !BOOLEAN_SHORTHANDS.has(nestedKey)
-                    ) {
-                        // Auto-wrap arbitrary breakpoint values in brackets
-                        // { '@min': { '475px': { ... }}} → @min-[475px]:...
-                        const nestedPrefix = `${prefix}${mappedKey}-[${nestedKey}]:`;
-                        const result = transform(nestedValue as SzObject, nestedPrefix);
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    } else if (
-                        PROPERTY_MAP[nestedKey] ||
-                        BOOLEAN_SHORTHANDS.has(nestedKey) ||
-                        nestedKey.startsWith('@')
-                    ) {
-                        // Check if nestedKey is a property (not a container name)
-                        // Properties are in PROPERTY_MAP or BOOLEAN_SHORTHANDS
-                        // It's a direct property or another @ query
-                        const nestedPrefix = `${prefix}${mappedKey}:`;
-                        const result = transform(
-                            { [nestedKey]: nestedValue } as SzObject,
-                            nestedPrefix,
-                        );
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    } else if (typeof nestedValue === 'object') {
-                        // It's a named container: @md/sidebar
-                        const nestedPrefix = `${prefix}${mappedKey}/${nestedKey}:`;
-                        const result = transform(nestedValue as SzObject, nestedPrefix);
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    } else {
-                        // Fallback: treat as property
-                        const nestedPrefix = `${prefix}${mappedKey}:`;
-                        const result = transform(
-                            { [nestedKey]: nestedValue } as SzObject,
-                            nestedPrefix,
-                        );
-                        if (result.className) {
-                            classes.push(result.className);
-                        }
-                    }
-                }
-                continue;
-            }
-
-            // Handle arbitrary variants (Fix #5)
-            if (isArbitraryVariant(rawKey)) {
-                const normalizedKey = normalizeArbitraryVariant(rawKey);
-                const nestedPrefix = `${prefix}${normalizedKey}:`;
-                const nestedResult = transform(value as SzObject, nestedPrefix);
-                if (nestedResult.className) {
-                    classes.push(nestedResult.className);
-                }
-                continue;
-            }
-
-            // Standard variant handling
-            const variantName = getVariantPrefix(rawKey);
-            const nestedPrefix = `${prefix}${variantName}:`;
-            const nestedResult = transform(value as SzObject, nestedPrefix);
-            if (nestedResult.className) {
-                classes.push(nestedResult.className);
-            }
-            continue;
-        }
-
-        // Check snap direct mappings
-        if (SNAP_DIRECT_MAP[rawKey] && typeof value === 'string') {
-            const mapped = SNAP_DIRECT_MAP[rawKey][value as string];
-            if (mapped) {
-                classes.push(`${prefix}${mapped}`);
-                continue;
-            }
-        }
-
-        // ================================================================
-        // HANDLE STRING VALUES THAT ARE ACTUALLY VARIANT SHORTCUTS
-        // ================================================================
-        // e.g., { hover: "bg-sky-700" } → hover:bg-sky-700
-        if (typeof value === 'string' && KNOWN_VARIANTS.has(rawKey)) {
-            const variantName = getVariantPrefix(rawKey);
-            classes.push(`${prefix}${variantName}:${value}`);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE CSS CUSTOM PROPERTY DECLARATIONS
-        // ================================================================
-        // { "--my-var": "10px" } → [--my-var:10px]
-        if (rawKey.startsWith('--')) {
-            classes.push(`${prefix}[${rawKey}:${value}]`);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE CONTAINER PROPERTY
-        // ================================================================
-        // { container: true } → container (the utility class)
-        // { container: "sidebar" } → @container/sidebar (named container)
-        if (rawKey === 'container') {
-            if (value === true) {
-                classes.push(`${prefix}container`);
-            } else if (typeof value === 'string') {
-                classes.push(`${prefix}@container/${value}`);
-            }
-            continue;
-        }
-
-        // ================================================================
-        // RESOLVE PROPERTY NAME
-        // ================================================================
-        let key = rawKey;
-        if (PROPERTY_MAP[key]) {
-            key = PROPERTY_MAP[key];
-        } else {
-            // Fallback: Convert camelCase to kebab-case
-            key = key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-        }
-
-        let className = prefix;
-
-        // ================================================================
-        // HANDLE SPECIAL PROPERTIES
-        // ================================================================
-
-        // Handle will-change (opt-in mapping)
-        if (rawKey === 'willChange' && typeof value === 'string') {
-            const WILL_CHANGE_KEYWORDS = new Set(['auto', 'scroll', 'contents', 'transform']);
-            if (WILL_CHANGE_KEYWORDS.has(value)) {
-                classes.push(`${prefix}will-change-${value}`);
-            } else if (value.startsWith('--')) {
-                classes.push(`${prefix}will-change-(${value})`);
-            } else {
-                classes.push(`${prefix}will-change-[${normalizeArbitraryValue(value)}]`);
-            }
-            continue;
-        }
-
-        // Handle display property (special mapping)
-        if (key === 'display') {
-            if (typeof value === 'string') {
-                if (value === 'none') {
-                    className += 'hidden';
-                } else {
-                    className += value;
-                }
-                classes.push(className);
-                continue;
-            }
-        }
-
-        // Handle position property (direct value)
-        if (key === 'position') {
-            if (typeof value === 'string') {
-                className += value;
-                classes.push(className);
-                continue;
-            }
-        }
-
-        // Handle visibility property (direct value mapping)
-        // { visibility: "visible" } → visible
-        // { visibility: "hidden" } → invisible
-        // { visibility: "collapse" } → collapse
-        if (key === 'visibility') {
-            if (typeof value === 'string') {
-                if (value === 'hidden') {
-                    className += 'invisible';
-                } else {
-                    className += value; // visible, collapse
-                }
-                classes.push(className);
-                continue;
-            }
-        }
-
-        // Handle isolation property (direct value only for "isolate")
-        // { isolation: "isolate" } → isolate
-        // { isolation: "auto" } → isolation-auto
-        if (key === 'isolation') {
-            if (typeof value === 'string') {
-                if (value === 'isolate') {
-                    className += 'isolate';
-                } else {
-                    className += `isolation-${value}`;
-                }
-                classes.push(className);
-                continue;
-            }
-        }
-
-        // ================================================================
-        // HANDLE fromPos/viaPos/toPos NUMBER VALUES
-        // { fromPos: 50 } → from-50%, { viaPos: 30 } → via-30%, { toPos: 100 } → to-100%
-        // ================================================================
-        if (
-            (rawKey === 'fromPos' || rawKey === 'viaPos' || rawKey === 'toPos') &&
-            typeof value === 'number'
-        ) {
-            const gradPrefix = rawKey.replace('Pos', '');
-            classes.push(`${prefix}${gradPrefix}-${value}%`);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE DIRECT OUTPUT PROPERTIES (shorthands)
-        // ================================================================
-        if (typeof value === 'string') {
-            // decoration: 'underline' | 'overline' | 'line-through' | 'no-underline' → direct output
-            if (rawKey === 'decoration') {
-                if (
-                    ['underline', 'overline', 'line-through', 'no-underline', 'none'].includes(
-                        value,
-                    )
-                ) {
-                    className += value === 'none' ? 'no-underline' : value;
-                    classes.push(className);
-                    continue;
-                }
-            }
-
-            // textTransform: 'uppercase' | 'lowercase' | 'capitalize' | 'normal-case' → direct
-            // output. The CSS off-value `none` is accepted as an alias for normal-case (its
-            // Tailwind class), since text-transform: none is what normal-case emits.
-            if (rawKey === 'textTransform') {
-                if (['uppercase', 'lowercase', 'capitalize'].includes(value)) {
-                    className += value;
-                    classes.push(className);
-                    continue;
-                }
-                if (value === 'normal-case' || value === 'none') {
-                    className += 'normal-case';
-                    classes.push(className);
-                    continue;
-                }
-            }
-
-            // fontStyle: 'italic' → italic, 'normal' → not-italic. Tailwind only models these
-            // two; oblique has no class. The handler is closed — an unsupported value warns and
-            // emits nothing rather than falling through to a broken `font-style-*` class.
-            if (rawKey === 'fontStyle') {
-                if (value === 'italic') {
-                    className += 'italic';
-                    classes.push(className);
-                    continue;
-                }
-                if (value === 'normal') {
-                    className += 'not-italic';
-                    classes.push(className);
-                    continue;
-                }
-                if (szDevWarningsEnabled()) {
-                    console.warn(
-                        `[csszyx] fontStyle: '${value}' is not supported — Tailwind only models ` +
-                            `'italic' and 'normal'. For oblique, use css: { fontStyle: '${value}' }.`,
-                    );
-                }
-                continue;
-            }
-
-            // fontSmoothing: 'grayscale' → antialiased, 'subpixel' → subpixel-antialiased.
-            // Both set -webkit-/-moz- font-smoothing; the values name the rendering technique
-            // (grayscale vs subpixel/RGB) rather than Tailwind's misleading "antialiased" name.
-            // Closed handler — an unsupported value warns and emits nothing.
-            if (rawKey === 'fontSmoothing') {
-                if (value === 'grayscale') {
-                    className += 'antialiased';
-                    classes.push(className);
-                    continue;
-                }
-                if (value === 'subpixel') {
-                    className += 'subpixel-antialiased';
-                    classes.push(className);
-                    continue;
-                }
-                if (szDevWarningsEnabled()) {
-                    console.warn(
-                        `[csszyx] fontSmoothing: '${value}' is not supported — use ` +
-                            `'grayscale' or 'subpixel'.`,
-                    );
-                }
-                continue;
-            }
-
-            // fontVariant: 'normal-nums' | 'ordinal' | etc → direct output
-            if (rawKey === 'fontVariant') {
-                const FONT_VARIANT_CLASSES = new Set([
-                    'normal-nums',
-                    'ordinal',
-                    'slashed-zero',
-                    'lining-nums',
-                    'oldstyle-nums',
-                    'proportional-nums',
-                    'tabular-nums',
-                    'diagonal-fractions',
-                    'stacked-fractions',
-                ]);
-                if (FONT_VARIANT_CLASSES.has(value)) {
-                    className += value;
-                    classes.push(className);
-                    continue;
-                }
-            }
-
-            // textWrap: 'wrap' | 'nowrap' | 'balance' | 'pretty' → text-wrap, text-nowrap, etc.
-            if (rawKey === 'textWrap') {
-                className += `text-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // break: 'normal' | 'all' | 'keep' → break-normal, break-all, break-keep
-            if (rawKey === 'break') {
-                const wbMap: Record<string, string> = {
-                    normal: 'break-normal',
-                    all: 'break-all',
-                    keep: 'break-keep',
-                    'break-normal': 'break-normal',
-                    'break-all': 'break-all',
-                    'break-keep': 'break-keep',
-                };
-                className += wbMap[value] || `break-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // wrap: 'normal' | 'break-word' | 'anywhere' → wrap-normal, wrap-break-word, wrap-anywhere
-            if (rawKey === 'wrap') {
-                const owMap: Record<string, string> = {
-                    normal: 'wrap-normal',
-                    'break-word': 'wrap-break-word',
-                    anywhere: 'wrap-anywhere',
-                    'wrap-normal': 'wrap-normal',
-                    'wrap-break-word': 'wrap-break-word',
-                    'wrap-anywhere': 'wrap-anywhere',
-                };
-                className += owMap[value] || `wrap-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // textOverflow: 'ellipsis' → text-ellipsis, 'clip' → text-clip
-            if (rawKey === 'textOverflow') {
-                if (value === 'ellipsis' || value === 'clip') {
-                    classes.push(`${prefix}text-${value}`);
-                } else {
-                    classes.push(`${prefix}text-[${value}]`);
-                }
-                continue;
-            }
-
-            // Fix 4: Line Clamp 7+ Arbitrary
-            if (rawKey === 'lineClamp') {
-                const sValue = String(value);
-                if (sValue === 'none') {
-                    className += 'line-clamp-none';
-                } else if (sValue.startsWith('--')) {
-                    className += `line-clamp-(${sValue})`;
-                } else {
-                    // Tailwind v4: line-clamp accepts any number dynamically
-                    const numVal = Number(sValue);
-                    if (!Number.isNaN(numVal) && Number.isInteger(numVal)) {
-                        className += `line-clamp-${sValue}`;
-                    } else {
-                        className += `line-clamp-[${sValue}]`;
-                    }
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // Fix 5: List Style Arbitrary
-            if (rawKey === 'list' || rawKey === 'listStyle') {
-                const sValue = String(value);
-                if (sValue.startsWith('--')) {
-                    className += `list-(${sValue})`;
-                } else if (LIST_STYLE_STANDARD.has(sValue)) {
-                    className += `list-${sValue}`;
-                } else {
-                    className += `list-[${sValue}]`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // listPosition: 'inside' | 'outside' → list-inside, list-outside
-            if (rawKey === 'listPos') {
-                className += `list-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // divideStyle: 'solid' | 'dashed' | etc → divide-solid, divide-dashed
-            if (rawKey === 'divideStyle') {
-                className += `divide-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // decorationStyle: 'solid' | 'dashed' | etc → decoration-solid, decoration-dashed
-            if (rawKey === 'decorationStyle' || rawKey === 'textDecorationStyle') {
-                className += `decoration-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // decorationColor: 'red-500' → decoration-red-500
-            if (rawKey === 'decorationColor' || rawKey === 'textDecorationColor') {
-                className += `decoration-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // decorationThickness: '2' | '3px' → decoration-2, decoration-[3px]
-            if (rawKey === 'decorationThickness' || rawKey === 'textDecorationThickness') {
-                if (needsArbitraryBrackets(value)) {
-                    className += `decoration-[${normalizeArbitraryValue(value)}]`;
-                } else if (value.startsWith('--')) {
-                    className += `decoration-(${value})`;
-                } else {
-                    className += `decoration-${value}`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // fontStretch: '50%' | '125%' → font-stretch-50%, font-stretch-[125%]
-            // fontStretch: '50%' | '125%' → font-stretch-50%, font-stretch-[125%]
-            // Fix 6: Font Stretch Keywords
-            if (rawKey === 'fontStretch') {
-                const sValue = String(value);
-                if (FONT_STRETCH_KEYWORDS.has(sValue)) {
-                    // Keywords use font- prefix: font-ultra-condensed
-                    className += `font-${sValue}`;
-                } else if (sValue.startsWith('--')) {
-                    className += `font-stretch-(${sValue})`;
-                } else if (/^\d+(\.\d+)?%$/.test(sValue)) {
-                    // Percentage values: font-stretch-50%, font-stretch-[110%]
-                    const valNum = parseFloat(sValue);
-                    // Standard tailwind v4 values don't need brackets
-                    if (sValue.includes('.') || !Number.isInteger(valNum)) {
-                        className += `font-stretch-[${sValue}]`;
-                    } else {
-                        className += `font-stretch-${sValue}`;
-                    }
-                } else {
-                    className += `font-stretch-[${sValue}]`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // Fix 12: maxW: 'container' Sugar
-            if (rawKey === 'maxW' && value === 'container') {
-                classes.push('container');
-                continue;
-            }
-
-            // Fix 8: Shadow Color
-            if (rawKey === 'shadowColor') {
-                if (String(value).startsWith('--')) {
-                    classes.push(`shadow-(color:${value})`);
-                } else {
-                    classes.push(`shadow-${value}`);
-                }
-                continue;
-            }
-
-            // insetShadowColor: 'red-500' → inset-shadow-red-500
-            if (rawKey === 'insetShadowColor') {
-                if (String(value).startsWith('--')) {
-                    classes.push(`${prefix}inset-shadow-(color:${value})`);
-                } else {
-                    classes.push(`${prefix}inset-shadow-${value}`);
-                }
-                continue;
-            }
-
-            // Fix 2: Brightness/Contrast/Saturate/Scale — strings are NEVER parsed as numbers
-            if (
-                rawKey === 'brightness' ||
-                rawKey === 'contrast' ||
-                rawKey === 'saturate' ||
-                rawKey === 'scale' ||
-                rawKey === 'backdropBrightness' ||
-                rawKey === 'backdropContrast' ||
-                rawKey === 'backdropSaturate'
-            ) {
-                const prop = rawKey.startsWith('backdrop')
-                    ? `backdrop-${rawKey.slice(8).toLowerCase()}`
-                    : rawKey;
-                const sValue = String(value);
-                if (sValue === '3d' && rawKey === 'scale') {
-                    classes.push(`${prefix}scale-3d`);
-                } else if (sValue.startsWith('--')) {
-                    classes.push(`${prop}-(${sValue})`);
-                } else {
-                    // String values always go to arbitrary []
-                    classes.push(`${prop}-[${sValue}]`);
-                }
-                continue;
-            }
-            // textShadow: 'sm' | 'md' → text-shadow (default), text-shadow-sm, etc.
-            if (rawKey === 'textShadow') {
-                if (value === 'none') {
-                    className += 'text-shadow-none';
-                } else if (value === '') {
-                    className += 'text-shadow';
-                } else if (needsArbitraryBrackets(value)) {
-                    className += `text-shadow-[${normalizeArbitraryValue(value)}]`;
-                } else {
-                    className += `text-shadow-${value}`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // textShadowColor: 'blue-500' → text-shadow-blue-500
-            if (rawKey === 'textShadowColor') {
-                className += `text-shadow-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // fromPos/viaPos/toPos: '10%' → from-10%, to-50%, etc.
-            // Tailwind v4: any integer % is dynamic (bare), decimals need brackets
-            if (rawKey === 'fromPos' || rawKey === 'viaPos' || rawKey === 'toPos') {
-                const gradPrefix = rawKey.replace('Pos', '');
-                const sValue = String(value);
-                if (value.startsWith('--')) {
-                    classes.push(`${gradPrefix}-(${value})`);
-                } else if (/^\d+%$/.test(sValue)) {
-                    // Integer percentage: bare (e.g. from-15%, to-88%)
-                    classes.push(`${gradPrefix}-${sValue}`);
-                } else {
-                    // Decimal percentage or other: brackets (e.g. from-[13.5%])
-                    classes.push(`${gradPrefix}-[${sValue}]`);
-                }
-                continue;
-            }
-
-            // bgImg handler
-            if (rawKey === 'bgImg') {
-                const v = String(value).trim();
-                // Keywords
-                if (v === 'none') {
-                    classes.push(`${prefix}bg-none`);
-                    continue;
-                }
-                // Gradient prefixes: linear-*, radial*, conic* (with optional negative)
-                // v3 compat: gradient-to-* → linear-to-* (v4 renamed bg-gradient-to-* to bg-linear-to-*)
-                // repeating-*-gradient → arbitrary bg-[repeating-*-gradient(...)] (no Tailwind utility)
-                const vNorm = v.startsWith('-') ? v.slice(1) : v;
-                if (vNorm.startsWith('repeating-')) {
-                    classes.push(`${prefix}bg-[${normalizeArbitraryValue(v)}]`);
-                    continue;
-                }
-                if (
-                    vNorm.startsWith('linear-') ||
-                    vNorm.startsWith('radial') ||
-                    vNorm.startsWith('conic') ||
-                    vNorm.startsWith('gradient-to-')
-                ) {
-                    const vMapped = vNorm.startsWith('gradient-to-')
-                        ? vNorm.replace('gradient-to-', 'linear-to-')
-                        : vNorm;
-                    if (v.startsWith('-')) {
-                        classes.push(`${prefix}-bg-${vMapped}`);
-                    } else {
-                        classes.push(`${prefix}bg-${vMapped}`);
-                    }
-                    continue;
-                }
-                // CSS variable
-                if (v.startsWith('--')) {
-                    classes.push(`${prefix}bg-(image:${v})`);
-                    continue;
-                }
-                // Already has url()
-                if (v.startsWith('url(')) {
-                    classes.push(`${prefix}bg-[${v}]`);
-                    continue;
-                }
-                // Arbitrary URL
-                classes.push(`${prefix}bg-[url(${v})]`);
-                continue;
-            }
-
-            // bgPos: 'center' → bg-center, 'center_top_1rem' → bg-[center_top_1rem]
-            if (rawKey === 'bgPos') {
-                const sVal = String(value);
-                if (sVal.startsWith('--')) {
-                    classes.push(`${prefix}bg-(${sVal})`);
-                } else if (sVal.includes('_') || needsArbitraryBrackets(sVal)) {
-                    classes.push(`${prefix}bg-[${normalizeArbitraryValue(sVal)}]`);
-                } else {
-                    classes.push(`${prefix}bg-${sVal}`);
-                }
-                continue;
-            }
-
-            // bgSize: Tailwind v4 uses bg-size-[<value>] for arbitrary background-size.
-            // Keywords (auto/cover/contain) stay as bg-auto/bg-cover/bg-contain via generic map.
-            if (rawKey === 'bgSize') {
-                const sVal = String(value);
-                if (sVal === 'auto' || sVal === 'cover' || sVal === 'contain') {
-                    classes.push(`${prefix}bg-${sVal}`);
-                } else if (sVal.startsWith('--')) {
-                    classes.push(`${prefix}bg-size-(${sVal})`);
-                } else {
-                    classes.push(`${prefix}bg-size-[${normalizeArbitraryValue(sVal)}]`);
-                }
-                continue;
-            }
-
-            // maskPos: 'center' → mask-center
-            if (rawKey === 'maskPos') {
-                className += `mask-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // maskRepeat: 'repeat' → mask-repeat (not mask-repeat-repeat)
-            if (rawKey === 'maskRepeat') {
-                if (value === 'repeat') {
-                    className += 'mask-repeat';
-                } else if (value === 'no-repeat') {
-                    className += 'mask-no-repeat';
-                } else {
-                    className += `mask-${value}`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // bgRepeat: 'repeat' → bg-repeat
-            if (rawKey === 'bgRepeat' || rawKey === 'backgroundRepeat') {
-                if (value === 'repeat') {
-                    className += 'bg-repeat';
-                } else if (value === 'no-repeat') {
-                    className += 'bg-no-repeat';
-                } else {
-                    // Strip optional 'repeat-' prefix so both 'x' and 'repeat-x' produce bg-repeat-x.
-                    // Canonical sz form is the TW suffix ('x', 'y', 'space', 'round') for consistency.
-                    const suffix = value.startsWith('repeat-') ? value.slice(7) : value;
-                    className += `bg-repeat-${suffix}`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // maskSize: 'cover' | 'contain' | 'auto' → mask-auto, mask-cover, mask-contain
-            if (rawKey === 'maskSize') {
-                className += `mask-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // maskShape: 'circle' | 'ellipse' → mask-circle, mask-ellipse
-            if (rawKey === 'maskShape') {
-                className += `mask-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // maskComposite: 'add' | 'subtract' | etc → mask-add, mask-subtract
-            if (rawKey === 'maskComposite') {
-                className += `mask-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // maskMode: 'alpha' | 'luminance' | 'match-source' → mask-alpha, mask-luminance
-            if (rawKey === 'maskMode') {
-                className += `mask-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // maskType: 'alpha' | 'luminance' → mask-type-alpha, mask-type-luminance
-            if (rawKey === 'maskType') {
-                className += `mask-type-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // alignContent → align-content via Tailwind content-* classes.
-            if (rawKey === 'alignContent') {
-                className += `content-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // content → CSS content property (for ::before / ::after).
-            // Values are arbitrary strings so must be wrapped: content-['hello'].
-            // Keeping separate from alignContent eliminates the naming collision:
-            // { alignContent: 'between', content: "''" } now works on one element.
-            if (rawKey === 'content') {
-                if (value === 'none') {
-                    className += 'content-none';
-                } else if (value.startsWith('--')) {
-                    className += `content-(${value})`;
-                } else {
-                    // Tailwind convention: content arbitrary values use single quotes → content-['hello'].
-                    // Normalize double-quote CSS strings to single-quote so both forms produce a
-                    // consistent class name that Tailwind JIT actually generates CSS for.
-                    const inner =
-                        value.startsWith('"') && value.endsWith('"') && value.length >= 2
-                            ? `'${value.slice(1, -1)}'`
-                            : value;
-                    className += `content-[${inner}]`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // Border side colors: borderTColor → border-t-{color}
-            if (rawKey === 'borderTColor') {
-                className += `border-t-${value}`;
-                classes.push(className);
-                continue;
-            }
-            if (rawKey === 'borderRColor') {
-                className += `border-r-${value}`;
-                classes.push(className);
-                continue;
-            }
-            if (rawKey === 'borderBColor') {
-                className += `border-b-${value}`;
-                classes.push(className);
-                continue;
-            }
-            if (rawKey === 'borderLColor') {
-                className += `border-l-${value}`;
-                classes.push(className);
-                continue;
-            }
-            if (rawKey === 'borderXColor') {
-                className += `border-x-${value}`;
-                classes.push(className);
-                continue;
-            }
-            if (rawKey === 'borderYColor') {
-                className += `border-y-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // transitionBehavior: 'discrete' | 'normal' → transition-discrete, transition-normal
-            if (rawKey === 'transitionBehavior') {
-                className += `transition-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // dropShadowColor: 'red-500' → drop-shadow-red-500
-            if (rawKey === 'dropShadowColor') {
-                if (value.startsWith('--')) {
-                    className += `drop-shadow-(color:${value})`;
-                } else {
-                    className += `drop-shadow-${value}`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // Fix 10: Properties that need arbitrary brackets for complex values
-            // (contains parens, underscores, % in multi-part values, etc.)
-            if (
-                rawKey === 'origin' ||
-                rawKey === 'ease' ||
-                rawKey === 'animate' ||
-                rawKey === 'filter' ||
-                rawKey === 'backdropFilter' ||
-                rawKey === 'dropShadow'
-            ) {
-                const sVal = String(value);
-                const prop = PROPERTY_MAP[rawKey] || rawKey;
-                if (
-                    needsArbitraryBrackets(sVal) ||
-                    sVal.includes('(') ||
-                    sVal.includes('_') ||
-                    sVal.includes('%')
-                ) {
-                    classes.push(`${className}${prop}-[${normalizeArbitraryValue(sVal)}]`);
-                    continue;
-                }
-            }
-
-            // transformStyle: 'flat' | '3d' → transform-flat, transform-3d
-            if (rawKey === 'transformStyle') {
-                className += `transform-${value}`;
-                classes.push(className);
-                continue;
-            }
-
-            // perspective: keywords → perspective-*, values → perspective-[value]
-            if (rawKey === 'perspective') {
-                const STANDARD_PERSPECTIVE = new Set(['none', 'normal', 'dramatic', 'midrange']);
-                if (STANDARD_PERSPECTIVE.has(value)) {
-                    className += `perspective-${value}`;
-                } else if (value.startsWith('--')) {
-                    className += `perspective-(${value})`;
-                } else if (needsArbitraryBrackets(value)) {
-                    className += `perspective-[${normalizeArbitraryValue(value)}]`;
-                } else {
-                    className += `perspective-${value}`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // perspectiveOrigin: 'center' | '33%_75%' → perspective-origin-center, perspective-origin-[33%_75%]
-            if (rawKey === 'perspectiveOrigin') {
-                const STANDARD_ORIGINS = new Set([
-                    'center',
-                    'top',
-                    'right',
-                    'bottom',
-                    'left',
-                    'top-left',
-                    'top-right',
-                    'bottom-left',
-                    'bottom-right',
-                ]);
-                if (STANDARD_ORIGINS.has(value)) {
-                    className += `perspective-origin-${value}`;
-                } else {
-                    className += `perspective-origin-[${normalizeArbitraryValue(value)}]`;
-                }
-                classes.push(className);
-                continue;
-            }
-
-            // backfaceVisibility: 'hidden' | 'visible' → backface-hidden, backface-visible
-            if (rawKey === 'backface') {
-                className += `backface-${value}`;
-                classes.push(className);
-                continue;
-            }
-        }
-
-        // ================================================================
-        // GENERIC / FALLBACK HANDLERS
-        // ================================================================
-
-        // Dev-mode warning for unknown properties
-        if (szDevWarningsEnabled()) {
-            // Check if key is known
-            // We use 'key' (resolved kebab-case) for some checks, 'rawKey' for others
-            const isKnown =
-                PROPERTY_MAP[rawKey] ||
-                BOOLEAN_SHORTHANDS.has(rawKey) ||
-                SNAP_DIRECT_MAP[rawKey] ||
-                rawKey === 'fromPos' ||
-                rawKey === 'viaPos' ||
-                rawKey === 'toPos' ||
-                rawKey.startsWith('--') ||
-                rawKey.startsWith('[') ||
-                rawKey.startsWith('@') ||
-                // Variants that fell through (e.g. empty object)
-                KNOWN_VARIANTS.has(rawKey) ||
-                // Parametric/scope variants (group, peer, has, not, data, aria, supports)
-                SPECIAL_VARIANTS.has(rawKey) ||
-                rawKey === 'min' ||
-                rawKey === 'max';
-
-            if (!isKnown) {
-                // ` at <relativePath>:<line>` when a build engine set the location;
-                // empty on the runtime/browser path (no source file to point at).
-                const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-                const suggestion = SUGGESTION_MAP[rawKey];
-                let message: string;
-                if (suggestion) {
-                    message = `[csszyx] Use the canonical key "${suggestion}" instead of "${rawKey}"${at}.`;
-                } else if (/^\d+(?:\.\d+)?$/.test(rawKey)) {
-                    // A numeric (or sequential 0,1,2…) key is almost never a typo:
-                    // it means an array or a spread reached `sz` where an object of
-                    // sz keys was expected (`sz={{ ...someArray }}`, or a value that
-                    // leaked into key position). "Check for typos" points the wrong
-                    // way, so name the actual cause.
-                    message =
-                        `[csszyx] sz received a numeric key "${rawKey}"${at}. This usually ` +
-                        'means an array or a spread was passed where an object of sz ' +
-                        'keys was expected. The value is ignored.';
-                } else {
-                    message =
-                        `[csszyx] Unknown property "${rawKey}" in sz prop${at}. ` +
-                        'This will be ignored. Check for typos.';
-                }
-                // A build warning already carries `at file:line`. A runtime one
-                // (an sz built from a variable / spread / szv()/dynamic() result)
-                // has no static span, so attach what makes it traceable in the
-                // browser/SSR console: the offending object's shape and the first
-                // user stack frame (which the console renders click-to-source).
-                if (!szWarnLocation) {
-                    message += runtimeSzWarnContext(szProp);
-                }
-                console.warn(message);
-                hintProjectScanOnce(szWarnLocation);
-            }
-        }
-
-        // A purely numeric key can never be a CSS property or Tailwind utility —
-        // it is almost always a numeric lookup table (`{ 50: 100 }`) swallowed by
-        // extraction, and the generic fallbacks below would mint garbage classes
-        // like `50-100` straight into the safelist. Skip it (the unknown-property
-        // dev warning above already fired).
-        if (/^\d+(?:\.\d+)?$/.test(rawKey)) {
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE BOOLEAN TRUE VALUES
-        // ================================================================
-        if (value === true) {
-            // Check if it's a known boolean shorthand
-            if (BOOLEAN_SHORTHANDS.has(rawKey)) {
-                // Use the mapped class name if available
-                const mappedClass = BOOLEAN_TO_CLASS[rawKey] || key;
-                className += mappedClass;
-            } else {
-                className += key;
-            }
-            classes.push(className);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE animationDelay — no Tailwind utility, always arbitrary property
-        // 150 → [animation-delay:150ms],  '0.5s' → [animation-delay:0.5s]
-        // Placed before numeric/string blocks because it must intercept both types.
-        // ================================================================
-        if (rawKey === 'animationDelay') {
-            const ms = typeof value === 'number' ? `${value}ms` : String(value);
-            classes.push(`${className}[animation-delay:${ms}]`);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE NUMERIC VALUES
-        // ================================================================
-        if (typeof value === 'number') {
-            // Handle negative values
-            if (value < 0 && NEGATIVE_ALLOWED.has(key)) {
-                className += `-${key}-${Math.abs(value)}`;
-            } else {
-                // Tailwind v4: all <number> values are dynamic — no brackets needed
-                className += `${key}-${value}`;
-            }
-            classes.push(className);
-            continue;
-        }
-
-        // ================================================================
-        // HANDLE STRING VALUES
-        // ================================================================
-        if (typeof value === 'string') {
-            // Check for important modifier (Fix #4)
-            const { value: cleanValue, important } = handleImportant(value);
-            let finalValue = cleanValue;
-
-            // Tailwind build-time functions are arbitrary values, not CSS custom
-            // properties. Classify them before the `--var` sugar so
-            // `--spacing(4)` becomes `[--spacing(4)]`, never `(--spacing(4))`.
-            if (isTailwindBuildFunction(finalValue)) {
-                finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
-            } else if (finalValue.startsWith('--') && finalValue.includes('(')) {
-                // Function-shaped but malformed/unsupported values remain
-                // arbitrary; they must never be mislabeled as CSS variables.
-                finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
-            } else if (finalValue.startsWith('--')) {
-                // v4 Variable Syntax: '--color' → '(--color)'
-                // Ambiguous properties get type hints: fontFamily → 'font-(family-name:--var)'
-                const typeHint = CSS_VAR_TYPE_HINTS[rawKey];
-                if (typeHint) {
-                    finalValue = `(${typeHint}:${finalValue})`;
-                } else {
-                    finalValue = `(${finalValue})`;
-                }
-            } else if (finalValue.startsWith('var(')) {
-                // var(--x) should be wrapped in brackets for arbitrary value syntax
-                finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
-            } else if (/^\d+\/\d+$/.test(finalValue)) {
-                // Check if it's a bare fraction (e.g. 3/4, 1/2)
-                if (!FRACTION_SUPPORTED_PROPS.has(rawKey)) {
-                    // Not in whitelist — wrap in brackets (col-[3/4])
-                    finalValue = `[${finalValue}]`;
-                }
-                // else: allowed bare fraction (w-1/2, basis-1/3)
-            } else if (key === 'aspect' && /^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(finalValue)) {
-                if (
-                    finalValue === 'auto' ||
-                    finalValue === 'square' ||
-                    finalValue === 'video' ||
-                    /^\d+\/\d+$/.test(finalValue)
-                ) {
-                    // standard
-                } else {
-                    finalValue = `[${finalValue}]`;
-                }
-            } else if (needsArbitraryBrackets(finalValue) || /^\d+\.\d+%$/.test(finalValue)) {
-                // Check if needs arbitrary brackets (aspect ratio, percentages with decimals, numbers passed to stroke-width, etc.)
-                finalValue = `[${normalizeArbitraryValue(finalValue)}]`;
-            }
-
-            // check negative string values (-px, -1/2)
-            if (finalValue.startsWith('-') && NEGATIVE_ALLOWED.has(key)) {
-                className = `-${prefix}${key}-${finalValue.substring(1)}`;
-            } else {
-                // Build final class name
-                className += `${key}-${finalValue}`;
-            }
-
-            // Add important modifier
-            if (important) {
-                className += '!';
-            }
-
-            classes.push(className);
-        }
+        collectTransformProperty(rawKey, value, prefix, szProp, classes);
     }
 
-    // Post-processing: merge text-{size} + leading-{value} → text-{size}/{value}
-    //
-    // WHY restricted pattern: text-(.+) is too broad — it also matches color classes
-    // like text-emerald-300 (from `color` prop). Those must NOT be merged with leading.
-    // Only font-size suffixes are valid merge targets: xs, sm, base, lg, [2-9]?xl,
-    // arbitrary [...], or CSS variable (...).
-    let mergedClasses = classes;
-    const textSizeBaseRe = /^text-(xs|sm|base|lg|[2-9]?xl|\[[^\]]+\]|\([^)]+\))$/;
-    const leadingBaseRe = /^leading-(.+)$/;
-    const textEntries: Array<{ index: number; prefix: string; size: string }> = [];
-    const leadingEntries: Array<{ index: number; prefix: string; value: string }> = [];
-    for (let i = 0; i < classes.length; i++) {
-        const cls = classes[i];
-        const lastColon = cls.lastIndexOf(':');
-        const prefix = lastColon === -1 ? '' : cls.slice(0, lastColon + 1);
-        const base = lastColon === -1 ? cls : cls.slice(lastColon + 1);
-        const tm = textSizeBaseRe.exec(base);
-        if (tm) {
-            textEntries.push({ index: i, prefix, size: tm[1] });
-        }
-        const lm = leadingBaseRe.exec(base);
-        if (lm) {
-            leadingEntries.push({ index: i, prefix, value: lm[1] });
-        }
-    }
-    if (textEntries.length > 0 && leadingEntries.length > 0) {
-        const removeIndices = new Set<number>();
-        // Track consumed leading entries so one leading cannot merge with multiple text-size classes.
-        const consumedLeading = new Set<number>();
-        for (const te of textEntries) {
-            const matchingLeading = leadingEntries.find(
-                le => le.prefix === te.prefix && !consumedLeading.has(le.index),
-            );
-            if (matchingLeading) {
-                // Merge: text-lg + leading-7 → text-lg/7
-                mergedClasses[te.index] = `${te.prefix}text-${te.size}/${matchingLeading.value}`;
-                removeIndices.add(matchingLeading.index);
-                consumedLeading.add(matchingLeading.index);
-            }
-        }
-        if (removeIndices.size > 0) {
-            mergedClasses = mergedClasses.filter((_, i) => !removeIndices.has(i));
-        }
-    }
-
-    const finalClasses = mergedClasses.filter(Boolean);
-
-    // Apply mangling if map is provided
-    if (mangleMap) {
-        const mangledClasses = finalClasses.map(cls => mangleMap[cls] || cls);
-        return { className: mangledClasses.join(' ') };
-    }
-
-    return { className: finalClasses.join(' ') };
+    return finalizeTransformResult(classes, mangleMap);
 }
 
 /**

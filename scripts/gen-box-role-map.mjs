@@ -22,7 +22,7 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { transform } from '../packages/compiler/src/transform.js';
 import {
     BOOLEAN_SHORTHANDS,
@@ -434,6 +434,8 @@ const BOX_ROLE_RULES = [
  */
 const BOOLEAN_ROLE = {
     truncate: { role: 'inner', category: 'text' },
+    textEllipsis: { role: 'inner', category: 'text' },
+    textClip: { role: 'inner', category: 'text' },
     container: { role: 'outer', category: 'sizing' },
     prose: { role: 'inner', category: 'text' },
     proseInvert: { role: 'inner', category: 'text' },
@@ -465,8 +467,7 @@ const VALUE_KEYED_ROLE = {
     fontSmoothing: { role: 'inner', category: 'text' },
 };
 
-function build() {
-    // 1. sz key → { role, category }, with coverage + duplicate gates.
+function buildPropertyKeyRoles() {
     const keyRole = new Map();
     for (const rule of BOX_ROLE_RULES) {
         for (const key of rule.keys) {
@@ -489,8 +490,10 @@ function build() {
             `[gen-box-role-map] BOX_ROLE_RULES has key(s) not in PROPERTY_MAP (stale): ${extra.join(', ')}`,
         );
     }
+    return { keyRole, propertyKeys };
+}
 
-    // 2. emitted class prefix → { role, category }, detecting role conflicts.
+function buildPrefixes(keyRole, propertyKeys) {
     const prefixes = new Map();
     for (const key of propertyKeys) {
         const prefix = PROPERTY_MAP[key];
@@ -503,20 +506,21 @@ function build() {
         }
         if (!prior) prefixes.set(prefix, role);
     }
+    return prefixes;
+}
 
-    // 3. value-keyed exact tokens (display/position/decoration/... sugar) — emit
-    //    the REAL token by compiling the canonical { key: value } so we never
-    //    guess the kebab form (e.g. decoration:none → "no-underline").
+function addToken(tokens, token, role) {
+    const prior = tokens.get(token);
+    if (prior && prior.role !== role.role) {
+        throw new Error(
+            `[gen-box-role-map] token "${token}" gets conflicting roles (${prior.role} vs ${role.role})`,
+        );
+    }
+    tokens.set(token, role);
+}
+
+function buildExactTokens() {
     const tokens = new Map();
-    const addToken = (token, role) => {
-        const prior = tokens.get(token);
-        if (prior && prior.role !== role.role) {
-            throw new Error(
-                `[gen-box-role-map] token "${token}" gets conflicting roles (${prior.role} vs ${role.role})`,
-            );
-        }
-        tokens.set(token, role);
-    };
     for (const { key, value } of Object.values(REMOVED_BOOLEAN_SUGAR)) {
         const role = VALUE_KEYED_ROLE[key];
         if (!role) {
@@ -525,7 +529,7 @@ function build() {
             );
         }
         const token = transform({ [key]: value }).className.trim();
-        if (token) addToken(token, role);
+        if (token) addToken(tokens, token, role);
     }
     // boolean shorthands that are not property keys emit a standalone token too.
     for (const shorthand of BOOLEAN_SHORTHANDS) {
@@ -537,20 +541,25 @@ function build() {
             );
         }
         const token = transform({ [shorthand]: true }).className.trim();
-        if (token) addToken(token, role);
+        if (token) addToken(tokens, token, role);
     }
+    return tokens;
+}
 
-    // 4. sz key → { role, category }: every PROPERTY_MAP key (keyRole, validated
-    //    above) plus the boolean shorthands that are their OWN sz key (not a
-    //    property prefix). Same source of truth as the class maps — splitBoxSz
-    //    routes an sz object by these so a key lands on the same side its emitted
-    //    class does (parity with splitBox(compile(x))).
+function buildCompleteKeyRoles(keyRole) {
     const keyRoles = new Map(keyRole);
     for (const shorthand of BOOLEAN_SHORTHANDS) {
         if (shorthand in PROPERTY_MAP) continue;
         keyRoles.set(shorthand, BOOLEAN_ROLE[shorthand]);
     }
+    return keyRoles;
+}
 
+export function buildRoleMaps() {
+    const { keyRole, propertyKeys } = buildPropertyKeyRoles();
+    const prefixes = buildPrefixes(keyRole, propertyKeys);
+    const tokens = buildExactTokens();
+    const keyRoles = buildCompleteKeyRoles(keyRole);
     return { prefixes, tokens, keyRoles };
 }
 
@@ -609,28 +618,33 @@ ${keyEntries.map(entry).join('\n')}
 `;
 }
 
-const json = render(build());
-const check = process.argv.includes('--check');
+function main() {
+    const built = buildRoleMaps();
+    const output = render(built);
+    if (process.argv.includes('--check')) {
+        let current = '';
+        try {
+            current = readFileSync(outPath, 'utf8');
+        } catch {
+            /* missing */
+        }
+        if (current !== output) {
+            console.error(
+                '[gen-box-role-map] box-role-map.generated.ts is stale. Run pnpm gen:box-role and commit.',
+            );
+            process.exitCode = 1;
+            return;
+        }
+        console.log('[gen-box-role-map] up to date.');
+        return;
+    }
 
-if (check) {
-    let current = '';
-    try {
-        current = readFileSync(outPath, 'utf8');
-    } catch {
-        /* missing */
-    }
-    if (current !== json) {
-        console.error(
-            '[gen-box-role-map] box-role-map.generated.ts is stale. Run pnpm gen:box-role and commit.',
-        );
-        process.exit(1);
-    }
-    console.log('[gen-box-role-map] up to date.');
-    process.exit(0);
+    writeFileSync(outPath, output);
+    console.log(
+        `[gen-box-role-map] wrote ${built.prefixes.size} prefixes + ${built.tokens.size} value-keyed tokens + ${built.keyRoles.size} sz keys.`,
+    );
 }
 
-writeFileSync(outPath, json);
-const built = build();
-console.log(
-    `[gen-box-role-map] wrote ${built.prefixes.size} prefixes + ${built.tokens.size} value-keyed tokens + ${built.keyRoles.size} sz keys.`,
-);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    main();
+}

@@ -491,7 +491,7 @@ function slugify(text: string): string {
  * @returns The stripped string.
  */
 function stripMarkdown(text: string): string {
-    return text.replace(/`/g, '').replace(/\*\*/g, '').replace(/\*/g, '').trim();
+    return text.split('`').join('').split('**').join('').split('*').join('').trim();
 }
 
 /**
@@ -902,49 +902,25 @@ function parseCommaSeparatedRow(
 
     const tests: TestCase[] = [];
 
-    if (szObjects.length >= twClasses.length) {
-        // Pair each class with its corresponding sz object
-        for (let i = 0; i < twClasses.length; i++) {
-            const parsed = parseSzProp(szObjects[i]);
-            if (parsed && twClasses[i]) {
-                const id = generateId(
-                    category,
-                    subcategory,
-                    `${concept}-${i + 1}`,
-                    undefined,
-                    idCounter,
-                );
-                tests.push({
-                    id,
-                    szInput: parsed,
-                    expectedClass: twClasses[i],
-                    tailwindVersion: '4',
-                    category,
-                    subcategory,
-                });
-            }
-        }
-    } else {
-        // More classes than objects: pair what we can
-        for (let i = 0; i < Math.min(twClasses.length, szObjects.length); i++) {
-            const parsed = parseSzProp(szObjects[i]);
-            if (parsed && twClasses[i]) {
-                const id = generateId(
-                    category,
-                    subcategory,
-                    `${concept}-${i + 1}`,
-                    undefined,
-                    idCounter,
-                );
-                tests.push({
-                    id,
-                    szInput: parsed,
-                    expectedClass: twClasses[i],
-                    tailwindVersion: '4',
-                    category,
-                    subcategory,
-                });
-            }
+    const pairCount = Math.min(twClasses.length, szObjects.length);
+    for (let i = 0; i < pairCount; i++) {
+        const parsed = parseSzProp(szObjects[i]);
+        if (parsed && twClasses[i]) {
+            const id = generateId(
+                category,
+                subcategory,
+                `${concept}-${i + 1}`,
+                undefined,
+                idCounter,
+            );
+            tests.push({
+                id,
+                szInput: parsed,
+                expectedClass: twClasses[i],
+                tailwindVersion: '4',
+                category,
+                subcategory,
+            });
         }
     }
 
@@ -953,12 +929,20 @@ function parseCommaSeparatedRow(
 
 // ─── Heading Parser ──────────────────────────────────────────────────────────
 
+/** Parsed Markdown heading used by the table state machine. */
+interface Heading {
+    /** Markdown heading depth. */
+    level: number;
+    /** Normalized heading text. */
+    text: string;
+}
+
 /**
  * Parses a markdown heading.
  * @param line The line containing the heading.
  * @returns The level and text of the heading, or null.
  */
-function parseHeading(line: string): { level: number; text: string } | null {
+function parseHeading(line: string): Heading | null {
     const match = line.match(/^(#{2,4})\s+(\S.*)$/);
     if (!match) {
         return null;
@@ -987,6 +971,343 @@ const SKIP_SUBSECTIONS = new Set([
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
+interface ParserState {
+    currentCategory: string;
+    currentSubcategory: string;
+    inTable: boolean;
+    columnInfo: ColumnInfo | null;
+    skipCurrentCategory: boolean;
+    skipCurrentSubsection: boolean;
+    tests: TestCase[];
+    idCounter: Map<string, number>;
+    skippedRows: number;
+    warnings: string[];
+    categoryCounts: Record<string, number>;
+}
+
+/**
+ * Create isolated mutable state for one spec parsing pass.
+ * @returns Empty parser state.
+ */
+function createParserState(): ParserState {
+    return {
+        currentCategory: '',
+        currentSubcategory: '',
+        inTable: false,
+        columnInfo: null,
+        skipCurrentCategory: false,
+        skipCurrentSubsection: false,
+        tests: [],
+        idCounter: new Map<string, number>(),
+        skippedRows: 0,
+        warnings: [],
+        categoryCounts: {},
+    };
+}
+
+/**
+ * Apply a heading transition to parser state.
+ * @param state - Current parser state.
+ * @param heading - Parsed heading level and text.
+ */
+function applyHeading(state: ParserState, heading: Heading): void {
+    state.inTable = false;
+    state.columnInfo = null;
+
+    if (heading.level === 2) {
+        state.currentCategory = heading.text;
+        state.currentSubcategory = '';
+        state.skipCurrentCategory = SKIP_CATEGORIES.has(heading.text);
+        state.skipCurrentSubsection = false;
+        if (!state.skipCurrentCategory) log(`Category: ${heading.text}`);
+        return;
+    }
+
+    if (heading.level === 3) {
+        state.currentSubcategory = heading.text;
+        state.skipCurrentSubsection = SKIP_SUBSECTIONS.has(heading.text);
+        if (!state.skipCurrentCategory && !state.skipCurrentSubsection) {
+            log(`  Subcategory: ${heading.text}`);
+        }
+        return;
+    }
+
+    if (heading.level === 4 && SKIP_SUBSECTIONS.has(heading.text)) {
+        state.skipCurrentSubsection = true;
+    }
+}
+
+/**
+ * Register generated tests and their per-category counts.
+ * @param state - Current parser state.
+ * @param generated - Tests produced by a range or comma expansion.
+ */
+function appendGeneratedTests(state: ParserState, generated: TestCase[]): void {
+    for (const test of generated) {
+        state.tests.push(test);
+        state.categoryCounts[test.category] = (state.categoryCounts[test.category] || 0) + 1;
+    }
+}
+
+/**
+ * Detect whether a row with no Tailwind output still carries an sz object.
+ * @param cells - Parsed table cells.
+ * @param columnInfo - Utility table column layout.
+ * @returns True when at least one sz column contains an object.
+ */
+function hasSzObject(cells: string[], columnInfo: ColumnInfo): boolean {
+    return columnInfo.szIndices.some(({ idx }) => {
+        const szRaw = stripMarkdown(cells[idx] || '');
+        return Boolean(szRaw && szRaw !== 'N/A' && szRaw.startsWith('{'));
+    });
+}
+
+/**
+ * Process one sz column from a utility table row.
+ * @param state - Current parser state.
+ * @param cells - Parsed table cells.
+ * @param szColumn - Current sz column metadata.
+ * @param twCell - Expected Tailwind class cell.
+ * @param concept - Normalized row concept.
+ * @param lineNumber - One-based source line number.
+ * @param columnInfo - Utility table column layout.
+ */
+function processSzColumn(
+    state: ParserState,
+    cells: string[],
+    szColumn: ColumnInfo['szIndices'][number],
+    twCell: string,
+    concept: string,
+    lineNumber: number,
+    columnInfo: ColumnInfo,
+): void {
+    const szRaw = stripMarkdown(cells[szColumn.idx] || '');
+    if (!szRaw || szRaw === 'N/A' || szRaw === 'N/A (Complex string)') return;
+    if (!szRaw.includes('{')) return;
+
+    const range = tryExpandRange(
+        twCell,
+        szRaw,
+        state.currentCategory,
+        state.currentSubcategory,
+        concept,
+        state.idCounter,
+    );
+    if (range.expanded) {
+        appendGeneratedTests(state, range.tests);
+        return;
+    }
+
+    const commaSeparated = parseCommaSeparatedRow(
+        twCell,
+        szRaw,
+        state.currentCategory,
+        state.currentSubcategory,
+        concept,
+        state.idCounter,
+    );
+    if (commaSeparated) {
+        appendGeneratedTests(state, commaSeparated);
+        return;
+    }
+
+    const parsed = parseSzProp(szRaw);
+    if (!parsed) {
+        const message = `Line ${lineNumber}: Could not parse sz prop: "${szRaw.slice(0, 60)}..."`;
+        warn(message);
+        state.warnings.push(message);
+        state.skippedRows++;
+        return;
+    }
+    if (!twCell) {
+        state.skippedRows++;
+        return;
+    }
+
+    const columnLabel = columnInfo.szIndices.length > 1 ? szColumn.label : undefined;
+    state.tests.push({
+        id: generateId(
+            state.currentCategory,
+            state.currentSubcategory,
+            concept,
+            columnLabel,
+            state.idCounter,
+        ),
+        szInput: parsed,
+        expectedClass: twCell,
+        tailwindVersion: '4',
+        category: state.currentCategory,
+        subcategory: state.currentSubcategory || undefined,
+    });
+    state.categoryCounts[state.currentCategory] =
+        (state.categoryCounts[state.currentCategory] || 0) + 1;
+}
+
+/**
+ * Process one data row from a detected utility table.
+ * @param state - Current parser state.
+ * @param line - Markdown table row.
+ * @param lineNumber - One-based source line number.
+ */
+function processTableDataRow(state: ParserState, line: string, lineNumber: number): void {
+    const columnInfo = state.columnInfo;
+    if (!columnInfo?.isUtilityTable) return;
+
+    const cells = splitTableRow(line);
+    const concept = stripMarkdown(cells[columnInfo.conceptIdx] || '');
+    const twCell = stripMarkdown(cells[columnInfo.tailwindIdx] || '');
+    const missingTailwind = !twCell || twCell === 'N/A' || twCell === 'N/A (Complex string)';
+    if (missingTailwind && !hasSzObject(cells, columnInfo)) {
+        state.skippedRows++;
+        return;
+    }
+
+    for (const szColumn of columnInfo.szIndices) {
+        processSzColumn(state, cells, szColumn, twCell, concept, lineNumber, columnInfo);
+    }
+}
+
+/**
+ * Detect and log one table header.
+ * @param state - Current parser state.
+ * @param line - Markdown table header row.
+ */
+function startTable(state: ParserState, line: string): void {
+    const cells = splitTableRow(line);
+    const columnInfo = detectColumns(cells);
+    state.columnInfo = columnInfo;
+    state.inTable = true;
+    if (!columnInfo.isUtilityTable) return;
+
+    const szColumns = columnInfo.szIndices
+        .map(column => `col${column.idx}(${column.label})`)
+        .join(', ');
+    log(`  Table: ${cells.length} columns, tw=col${columnInfo.tailwindIdx}, sz=[${szColumns}]`);
+}
+
+/**
+ * Process one source line through the heading/table state machine.
+ * @param state - Current parser state.
+ * @param line - Source line.
+ * @param lineNumber - One-based source line number.
+ */
+function processSpecLine(state: ParserState, line: string, lineNumber: number): void {
+    const heading = parseHeading(line);
+    if (heading) {
+        applyHeading(state, heading);
+        return;
+    }
+    if (state.skipCurrentCategory || state.skipCurrentSubsection) return;
+
+    if (!isTableRow(line)) {
+        if (state.inTable) {
+            state.inTable = false;
+            state.columnInfo = null;
+        }
+        return;
+    }
+    if (isSeparatorRow(line)) return;
+    if (!state.inTable) {
+        startTable(state, line);
+        return;
+    }
+    processTableDataRow(state, line, lineNumber);
+}
+
+/**
+ * Parse every line from the Markdown spec.
+ * @param lines - Spec source lines.
+ * @returns Completed parser state.
+ */
+export function parseSpecLines(lines: string[]): ParserState {
+    const state = createParserState();
+    for (let index = 0; index < lines.length; index++) {
+        processSpecLine(state, lines[index], index + 1);
+    }
+    return state;
+}
+
+/**
+ * Validate generated test identities and required fields.
+ * @param tests - Generated test cases.
+ */
+function validateGeneratedTests(tests: TestCase[]): void {
+    const seen = new Set<string>();
+    const duplicates: string[] = [];
+    for (const test of tests) {
+        if (seen.has(test.id)) duplicates.push(test.id);
+        seen.add(test.id);
+    }
+
+    if (duplicates.length > 0) {
+        warn(`Found ${duplicates.length} duplicate IDs: ${duplicates.slice(0, 5).join(', ')}...`);
+    } else {
+        log('No duplicate IDs found.');
+    }
+
+    if (tests.length < 200) {
+        warn(`Only ${tests.length} test cases generated (minimum: 200)`);
+    } else {
+        log(`Test count: ${tests.length} (minimum 200 met)`);
+    }
+
+    const invalidCount = tests.filter(
+        test => !test.id || !test.szInput || !test.expectedClass || !test.category,
+    ).length;
+    if (invalidCount > 0) {
+        warn(`${invalidCount} test cases have missing required fields`);
+    } else {
+        log('All test cases have required fields.');
+    }
+}
+
+/**
+ * Serialize and write the generated test suite.
+ * @param outputPath - Destination JSON path.
+ * @param tests - Generated test cases.
+ */
+function writeTestSuite(outputPath: string, tests: TestCase[]): void {
+    const outputDir = path.dirname(outputPath);
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+    const json = JSON.stringify(
+        {
+            version: '1.0.0',
+            generatedAt: new Date().toISOString(),
+            totalTests: tests.length,
+            tests,
+        } satisfies TestSuite,
+        null,
+        2,
+    );
+    try {
+        JSON.parse(json);
+    } catch {
+        console.error('[spec-to-tests] ERROR: Generated JSON is invalid!');
+        process.exit(1);
+    }
+    fs.writeFileSync(outputPath, json, 'utf-8');
+}
+
+/**
+ * Print the parser summary.
+ * @param state - Completed parser state.
+ * @param outputPath - Generated JSON path.
+ */
+function logSummary(state: ParserState, outputPath: string): void {
+    log('');
+    log('=== SUMMARY ===');
+    log(`Total test cases: ${state.tests.length}`);
+    log(`Skipped rows: ${state.skippedRows}`);
+    log(`Warnings: ${state.warnings.length}`);
+    log('');
+    log('Per category:');
+    const counts = Object.entries(state.categoryCounts).sort((a, b) => b[1] - a[1]);
+    for (const [category, count] of counts) log(`  ${category}: ${count}`);
+    log('');
+    log(`Output: ${outputPath}`);
+}
+
 /**
  * Main entry point: parses the spec and writes the generated tests to a JSON file.
  */
@@ -999,285 +1320,25 @@ function main(): void {
         process.exit(1);
     }
 
-    const content = fs.readFileSync(specPath, 'utf-8');
-    const lines = content.split('\n');
+    const lines = fs.readFileSync(specPath, 'utf-8').split('\n');
 
     log(`Parsing: ${specPath}`);
     log(`Total lines: ${lines.length}`);
-
-    // State
-    let currentCategory = '';
-    let currentSubcategory = '';
-    let inTable = false;
-    let columnInfo: ColumnInfo | null = null;
-    let skipCurrentCategory = false;
-    let skipCurrentSubsection = false;
-    const tests: TestCase[] = [];
-    const idCounter = new Map<string, number>();
-    let skippedRows = 0;
-    const warnings: string[] = [];
-    const categoryCounts: Record<string, number> = {};
-
-    for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-        const line = lines[lineNum];
-
-        // Check for headings
-        const heading = parseHeading(line);
-        if (heading) {
-            inTable = false;
-            columnInfo = null;
-
-            if (heading.level === 2) {
-                currentCategory = heading.text;
-                currentSubcategory = '';
-                skipCurrentCategory = SKIP_CATEGORIES.has(heading.text);
-                skipCurrentSubsection = false;
-                if (!skipCurrentCategory) {
-                    log(`Category: ${heading.text}`);
-                }
-            } else if (heading.level === 3) {
-                currentSubcategory = heading.text;
-                skipCurrentSubsection = SKIP_SUBSECTIONS.has(heading.text);
-                if (!skipCurrentCategory && !skipCurrentSubsection) {
-                    log(`  Subcategory: ${heading.text}`);
-                }
-            } else if (heading.level === 4) {
-                if (!SKIP_SUBSECTIONS.has(heading.text)) {
-                    // Keep subcategory but note the sub-subsection for concept context
-                    // Don't overwrite subcategory — it stays as the ### level
-                } else {
-                    skipCurrentSubsection = true;
-                }
-            }
-            continue;
-        }
-
-        // Skip sections
-        if (skipCurrentCategory || skipCurrentSubsection) {
-            continue;
-        }
-
-        // Table detection
-        if (isTableRow(line)) {
-            if (isSeparatorRow(line)) {
-                continue; // Skip separator rows
-            }
-
-            if (!inTable) {
-                // This is a header row — detect columns
-                const cells = splitTableRow(line);
-                columnInfo = detectColumns(cells);
-                inTable = true;
-
-                if (columnInfo.isUtilityTable) {
-                    log(
-                        `  Table: ${cells.length} columns, tw=col${columnInfo.tailwindIdx}, sz=[${columnInfo.szIndices.map(s => `col${s.idx}(${s.label})`).join(', ')}]`,
-                    );
-                }
-                continue;
-            }
-
-            // Data row
-            if (!columnInfo?.isUtilityTable) {
-                continue; // Skip non-utility tables
-            }
-
-            const cells = splitTableRow(line);
-            const conceptRaw = cells[columnInfo.conceptIdx] || '';
-            const concept = stripMarkdown(conceptRaw);
-            const twCell = stripMarkdown(cells[columnInfo.tailwindIdx] || '');
-
-            // Skip empty or N/A Tailwind classes
-            if (!twCell || twCell === 'N/A' || twCell === 'N/A (Complex string)') {
-                // Check if any sz column has data (for boolean sugar columns)
-                let hasAnySz = false;
-                for (const szCol of columnInfo.szIndices) {
-                    const szRaw = stripMarkdown(cells[szCol.idx] || '');
-                    if (szRaw && szRaw !== 'N/A' && szRaw.startsWith('{')) {
-                        hasAnySz = true;
-                    }
-                }
-                if (!hasAnySz) {
-                    skippedRows++;
-                    continue;
-                }
-            }
-
-            // Process each sz column
-            for (const szCol of columnInfo.szIndices) {
-                const szRaw = stripMarkdown(cells[szCol.idx] || '');
-
-                // Skip empty or N/A
-                if (!szRaw || szRaw === 'N/A' || szRaw === 'N/A (Complex string)') {
-                    continue;
-                }
-
-                // Skip non-object values
-                if (!szRaw.includes('{')) {
-                    continue;
-                }
-
-                // Try range expansion first
-                const rangeResult = tryExpandRange(
-                    twCell,
-                    szRaw,
-                    currentCategory,
-                    currentSubcategory,
-                    concept,
-                    idCounter,
-                );
-                if (rangeResult.expanded) {
-                    for (const tc of rangeResult.tests) {
-                        tests.push(tc);
-                        categoryCounts[tc.category] = (categoryCounts[tc.category] || 0) + 1;
-                    }
-                    continue;
-                }
-
-                // Try comma-separated list parsing
-                const commaSepTests = parseCommaSeparatedRow(
-                    twCell,
-                    szRaw,
-                    currentCategory,
-                    currentSubcategory,
-                    concept,
-                    idCounter,
-                );
-                if (commaSepTests) {
-                    for (const tc of commaSepTests) {
-                        tests.push(tc);
-                        categoryCounts[tc.category] = (categoryCounts[tc.category] || 0) + 1;
-                    }
-                    continue;
-                }
-
-                // Standard single-row parsing
-                const parsed = parseSzProp(szRaw);
-                if (!parsed) {
-                    const warnMsg = `Line ${lineNum + 1}: Could not parse sz prop: "${szRaw.slice(0, 60)}..."`;
-                    warn(warnMsg);
-                    warnings.push(warnMsg);
-                    skippedRows++;
-                    continue;
-                }
-
-                // Handle Tailwind class — use as-is (may be space-separated multi-class)
-                const expectedClass = twCell;
-                if (!expectedClass) {
-                    skippedRows++;
-                    continue;
-                }
-
-                const colLabel = columnInfo.szIndices.length > 1 ? szCol.label : undefined;
-                const id = generateId(
-                    currentCategory,
-                    currentSubcategory,
-                    concept,
-                    colLabel,
-                    idCounter,
-                );
-
-                tests.push({
-                    id,
-                    szInput: parsed,
-                    expectedClass,
-                    tailwindVersion: '4',
-                    category: currentCategory,
-                    subcategory: currentSubcategory || undefined,
-                });
-                categoryCounts[currentCategory] = (categoryCounts[currentCategory] || 0) + 1;
-            }
-        } else {
-            // Non-table line — end table state
-            if (inTable) {
-                inTable = false;
-                columnInfo = null;
-            }
-        }
-    }
+    const state = parseSpecLines(lines);
 
     // ─── Validation ──────────────────────────────────────────────────────────
 
     log('');
     log('=== VALIDATION ===');
-
-    // Check for duplicate IDs
-    const idSet = new Set<string>();
-    const duplicates: string[] = [];
-    for (const tc of tests) {
-        if (idSet.has(tc.id)) {
-            duplicates.push(tc.id);
-        }
-        idSet.add(tc.id);
-    }
-
-    if (duplicates.length > 0) {
-        warn(`Found ${duplicates.length} duplicate IDs: ${duplicates.slice(0, 5).join(', ')}...`);
-    } else {
-        log('No duplicate IDs found.');
-    }
-
-    // Check minimum count
-    if (tests.length < 200) {
-        warn(`Only ${tests.length} test cases generated (minimum: 200)`);
-    } else {
-        log(`Test count: ${tests.length} (minimum 200 met)`);
-    }
-
-    // Validate all test cases
-    let invalidCount = 0;
-    for (const tc of tests) {
-        if (!tc.id || !tc.szInput || !tc.expectedClass || !tc.category) {
-            invalidCount++;
-        }
-    }
-    if (invalidCount > 0) {
-        warn(`${invalidCount} test cases have missing required fields`);
-    } else {
-        log('All test cases have required fields.');
-    }
+    validateGeneratedTests(state.tests);
 
     // ─── Output ──────────────────────────────────────────────────────────────
-
-    const suite: TestSuite = {
-        version: '1.0.0',
-        generatedAt: new Date().toISOString(),
-        totalTests: tests.length,
-        tests,
-    };
-
-    // Ensure output directory exists
-    const outputDir = path.dirname(outputPath);
-    if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true });
-    }
-
-    const jsonStr = JSON.stringify(suite, null, 2);
-
-    // Round-trip validation
-    try {
-        JSON.parse(jsonStr);
-    } catch {
-        console.error('[spec-to-tests] ERROR: Generated JSON is invalid!');
-        process.exit(1);
-    }
-
-    fs.writeFileSync(outputPath, jsonStr, 'utf-8');
+    writeTestSuite(outputPath, state.tests);
 
     // ─── Summary ─────────────────────────────────────────────────────────────
-
-    log('');
-    log('=== SUMMARY ===');
-    log(`Total test cases: ${tests.length}`);
-    log(`Skipped rows: ${skippedRows}`);
-    log(`Warnings: ${warnings.length}`);
-    log('');
-    log('Per category:');
-    for (const [cat, count] of Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])) {
-        log(`  ${cat}: ${count}`);
-    }
-    log('');
-    log(`Output: ${outputPath}`);
+    logSummary(state, outputPath);
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+    main();
+}

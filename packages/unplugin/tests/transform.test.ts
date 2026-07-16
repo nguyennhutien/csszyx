@@ -157,280 +157,194 @@ describe('mangleCodeClassesSync — Pass 1 (direct static className strings)', (
 });
 
 describe('mangleCodeClassesSync — Pass 1.5 (template literal quasi strings)', () => {
-    it('mangles the static quasi prefix in a className template literal', () => {
-        // Generated when sz={{ display: 'flex', items: 'center', flexDir: isRow ? 'row' : 'col' }}
-        // Pre-plugin output (in bundle form):  className:`flex items-center ${isRow?"flex-row":"flex-col"}`
-        const code = 'className:`flex items-center ${isRow?"flex-row":"flex-col"}`';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:`z h ${isRow?"a":"b"}`');
-    });
-
-    it('mangles multiple quasi segments (between several interpolations)', () => {
-        // className:`flex ${c1?"flex-row":"flex-col"} items-center ${c2?"scale-75":"scale-100"}`
-        const code =
-            'className:`flex ${c1?"flex-row":"flex-col"} items-center ${c2?"scale-75":"scale-100"}`';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:`z ${c1?"a":"b"} h ${c2?"i":"j"}`');
-    });
-
-    it('does not mangle unknown classes in quasi (skips the quasi unchanged)', () => {
-        const code = 'className:`unknown-class ${cond?"flex-row":"flex-col"}`';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // unknown-class is not in map → mangleClassString returns it unchanged → quasi unchanged
-        expect(result).toContain('unknown-class');
-        // but the ternary strings are still mangled by Pass 2
-        expect(result).toContain('"a"');
-        expect(result).toContain('"b"');
-    });
-
-    it('leaves non-className template literals untouched', () => {
-        const code = 'const x = `flex items-center ${a?"flex-row":"flex-col"}`;';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // No className: prefix → pass 1.5 does not touch it
-        expect(result).toBe(code);
-    });
-
-    it('handles trailing quasi (text after the last interpolation)', () => {
-        const code = 'className:`${cond?"flex-row":"flex-col"} flex items-center`';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:`${cond?"a":"b"} z h`');
-    });
-
-    it('mangles unminified SSR bundle form with space after colon (className: `...`)', () => {
-        // Unminified SSR bundles emit `className: \`...\`` (space after colon)
-        // versus the minified client bundle form `className:\`...\`` (no space).
-        const code = 'className: `flex items-center ${isRow?"flex-row":"flex-col"}`';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:`z h ${isRow?"a":"b"}`');
-    });
-
-    it('mangles chained ternary inside interpolation (size/variant pattern)', () => {
-        // sz={{ display: 'flex', size: s==="sm" ? "rounded-xl" : s==="md" ? "rounded-full" : "p-4", items: "center" }}
-        // Non-class strings ("sm", "md") are values of a comparison, not class names — preserved.
-        const code =
-            'className:`flex ${s==="sm"?"rounded-xl":s==="md"?"rounded-full":"p-4"} items-center`';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:`z ${s==="sm"?"d":s==="md"?"e":"c"} h`');
+    it.each([
+        [
+            'a static prefix',
+            'className:`flex items-center ${isRow?"flex-row":"flex-col"}`',
+            'className:`z h ${isRow?"a":"b"}`',
+        ],
+        [
+            'multiple quasi segments',
+            'className:`flex ${c1?"flex-row":"flex-col"} items-center ${c2?"scale-75":"scale-100"}`',
+            'className:`z ${c1?"a":"b"} h ${c2?"i":"j"}`',
+        ],
+        [
+            'an unknown quasi class',
+            'className:`unknown-class ${cond?"flex-row":"flex-col"}`',
+            'className:`unknown-class ${cond?"a":"b"}`',
+        ],
+        [
+            'a non-className template',
+            'const x = `flex items-center ${a?"flex-row":"flex-col"}`;',
+            'const x = `flex items-center ${a?"flex-row":"flex-col"}`;',
+        ],
+        [
+            'a trailing quasi',
+            'className:`${cond?"flex-row":"flex-col"} flex items-center`',
+            'className:`${cond?"a":"b"} z h`',
+        ],
+        [
+            'an unminified className separator',
+            'className: `flex items-center ${isRow?"flex-row":"flex-col"}`',
+            'className:`z h ${isRow?"a":"b"}`',
+        ],
+        [
+            'a chained interpolation ternary',
+            'className:`flex ${s==="sm"?"rounded-xl":s==="md"?"rounded-full":"p-4"} items-center`',
+            'className:`z ${s==="sm"?"d":s==="md"?"e":"c"} h`',
+        ],
+    ])('mangles %s', (_label, code, expected) => {
+        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(expected);
     });
 });
 
 describe('mangleCodeClassesSync — Pass 2 (ternary className expressions)', () => {
-    it('mangles quoted strings in a simple ternary', () => {
-        const code = 'className:cond?"flex":"items-center"';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:cond?"z":"h"');
-    });
-
-    it('skips expressions without a ternary operator', () => {
-        const code = 'className:someVar';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe(code);
-    });
-
-    it('mangles ternary arg inside a call with a leading static string', () => {
-        // _szMerge("flex", cond?"p-4":"rounded-xl") — the leading static string causes
-        // the old regex (stopped at first comma) to miss the ternary branch strings
-        const code = 'className:r("flex",cond?"p-4":"rounded-xl")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:r("z",cond?"c":"d")');
-    });
-
-    it('mangles multi-arg call: static + && + ternary', () => {
-        // sz array: [baseClass, cond && conditionalClass, ternaryClass]
-        const code = 'className:r("flex",pe&&"p-4",cond?"rounded-xl":"rounded-full")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:r("z",pe&&"c",cond?"d":"e")');
-    });
-
-    it('mangles ternary-only call (no leading static)', () => {
-        const code = 'className:r(cond?"p-4":"rounded-xl")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:r(cond?"c":"d")');
-    });
-
-    it('mangles chained ternary direct expression (3-way variant switcher)', () => {
-        // sz={{ size: s==="sm" ? 4 : s==="md" ? "rounded-xl" : "rounded-full" }}
-        // Compiler emits a direct ternary, no _szMerge wrapper.
-        const code = 'className:s==="sm"?"p-4":s==="md"?"rounded-xl":"rounded-full"';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // "sm" and "md" are comparison strings, not classes → preserved unchanged
-        expect(result).toBe('className:s==="sm"?"c":s==="md"?"d":"e"');
-    });
-
-    it('handles multiple className: blocks in same line (minified multi-component)', () => {
-        // Minified bundle often has many JSX elements on a single line.
-        const code =
-            '{className:isA?"flex":"items-center"},{className:isRow?"flex-row":"flex-col"}';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('{className:isA?"z":"h"},{className:isRow?"a":"b"}');
-    });
-
-    it('does not contaminate adjacent object props (depth-0 comma terminates scan)', () => {
-        // Scanner must stop at the comma separating className from a neighbouring prop
-        // such as id or title, otherwise it could corrupt those string values.
-        const code = '{className:cond?"flex":"items-center",id:"flex-guide"}';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // class strings mangled, "flex-guide" in id prop left untouched
-        expect(result).toBe('{className:cond?"z":"h",id:"flex-guide"}');
-    });
-
-    it('preserves non-class condition strings (variant==="primary" pattern)', () => {
-        // sz={{ bg: variant === 'primary' ? 'violet-500' : undefined, ... }}
-        // "primary" is a comparison operand, not a CSS class — must not be altered.
-        const code = 'className:variant==="primary"?"bg-violet-500 p-4":"flex items-center"';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:variant==="primary"?"g c":"z h"');
+    it.each([
+        ['a simple ternary', 'className:cond?"flex":"items-center"', 'className:cond?"z":"h"'],
+        ['a non-ternary expression', 'className:someVar', 'className:someVar'],
+        [
+            'a call with a static prefix',
+            'className:r("flex",cond?"p-4":"rounded-xl")',
+            'className:r("z",cond?"c":"d")',
+        ],
+        [
+            'a multi-argument call',
+            'className:r("flex",pe&&"p-4",cond?"rounded-xl":"rounded-full")',
+            'className:r("z",pe&&"c",cond?"d":"e")',
+        ],
+        [
+            'a ternary-only call',
+            'className:r(cond?"p-4":"rounded-xl")',
+            'className:r(cond?"c":"d")',
+        ],
+        [
+            'a chained direct ternary',
+            'className:s==="sm"?"p-4":s==="md"?"rounded-xl":"rounded-full"',
+            'className:s==="sm"?"c":s==="md"?"d":"e"',
+        ],
+        [
+            'multiple className blocks',
+            '{className:isA?"flex":"items-center"},{className:isRow?"flex-row":"flex-col"}',
+            '{className:isA?"z":"h"},{className:isRow?"a":"b"}',
+        ],
+        [
+            'an adjacent object property',
+            '{className:cond?"flex":"items-center",id:"flex-guide"}',
+            '{className:cond?"z":"h",id:"flex-guide"}',
+        ],
+        [
+            'a non-class condition operand',
+            'className:variant==="primary"?"bg-violet-500 p-4":"flex items-center"',
+            'className:variant==="primary"?"g c":"z h"',
+        ],
+    ])('mangles %s', (_label, code, expected) => {
+        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(expected);
     });
 });
 
 describe('mangleCodeClassesSync — Pass 2.5 (quoted class-attribute arguments)', () => {
-    it('mangles ternary class strings in Solid SSR ssrAttribute calls', () => {
-        // SolidJS SSR compiles a dynamic class expression (csszyx conditional
-        // spread, statically expanded into a ternary of strings) into:
-        const code =
-            'ssrAttribute("class", props.tone === "warn" ? "flex items-center" : "p-4 rounded-xl", false)';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('ssrAttribute("class", props.tone === "warn" ? "z h" : "c d", false)');
-    });
-
-    it('mangles ternary class strings in Solid client setProperty calls', () => {
-        // Minified solid-js/web client output: l(e,"className",cond?"...":"...")
-        const code = 'l(e,"className",r.tone==="warn"?"flex items-center":"p-4 rounded-xl")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('l(e,"className",r.tone==="warn"?"z h":"c d")');
-    });
-
-    it('preserves non-class condition operands in the ternary condition', () => {
-        const code = 'ssrAttribute("class", kind === "flex" ? "p-4" : "rounded-xl", false)';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // "flex" is a comparison operand inside the class-position ternary; the
-        // shared Pass 2 semantics mangle every quoted string in the expression,
-        // so condition operands that collide with class names are also mapped.
-        // csszyx-generated conditions compare props (tone === "warn"), which do
-        // not collide; this pins the known trade-off explicitly.
-        expect(result).toBe('ssrAttribute("class", kind === "z" ? "c" : "d", false)');
-    });
-
-    it('does not touch quoted object keys ("className": value)', () => {
-        const code = '{"className": cond?"flex":"p-4"}';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe(code);
-    });
-
-    it('leaves non-ternary identifier arguments untouched', () => {
-        const code = 'ssrAttribute("class", someVar, false)';
-        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(code);
-    });
-
-    it('handles multiple ssrAttribute calls in one chunk', () => {
-        const code =
-            'ssrAttribute("class", a ? "flex" : "p-4", false) + ssrAttribute("class", b ? "items-center" : "rounded-xl", false)';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe(
+    it.each([
+        [
+            'Solid SSR attributes',
+            'ssrAttribute("class", props.tone === "warn" ? "flex items-center" : "p-4 rounded-xl", false)',
+            'ssrAttribute("class", props.tone === "warn" ? "z h" : "c d", false)',
+        ],
+        [
+            'Solid client properties',
+            'l(e,"className",r.tone==="warn"?"flex items-center":"p-4 rounded-xl")',
+            'l(e,"className",r.tone==="warn"?"z h":"c d")',
+        ],
+        [
+            'a colliding condition operand',
+            'ssrAttribute("class", kind === "flex" ? "p-4" : "rounded-xl", false)',
+            'ssrAttribute("class", kind === "z" ? "c" : "d", false)',
+        ],
+        [
+            'a quoted object key',
+            '{"className": cond?"flex":"p-4"}',
+            '{"className": cond?"flex":"p-4"}',
+        ],
+        [
+            'a non-ternary argument',
+            'ssrAttribute("class", someVar, false)',
+            'ssrAttribute("class", someVar, false)',
+        ],
+        [
+            'multiple SSR attributes',
+            'ssrAttribute("class", a ? "flex" : "p-4", false) + ssrAttribute("class", b ? "items-center" : "rounded-xl", false)',
             'ssrAttribute("class", a ? "z" : "c", false) + ssrAttribute("class", b ? "h" : "d", false)',
-        );
+        ],
+    ])('mangles %s', (_label, code, expected) => {
+        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(expected);
     });
 });
 
 describe('mangleCodeClassesSync — Pass 3 (runtime helper string args)', () => {
-    it('mangles string after ( in _szMerge call', () => {
-        const code = '_szMerge("flex items-center","p-4")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('_szMerge("z h","c")');
-    });
-
-    it('mangles string after , in _szMerge call', () => {
-        const code = '_szMerge("flex",pe&&"p-4")';
-        // "flex" is after ( → mangled, "p-4" is after && → should be mangled
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('_szMerge("z",pe&&"c")');
-    });
-
-    it('mangles string after && — minified form (sz array conditional element)', () => {
-        // pe&&"text-right" — compiled from sz={[..., pe && { textAlign: 'right' }]}
-        // "p-4" stands in for any single-class string following &&
-        const code = '_szMerge("flex items-center",pe&&"p-4 rounded-xl")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('_szMerge("z h",pe&&"c d")');
-    });
-
-    it('mangles string after && with space — unminified SSR form', () => {
-        const code = '_szMerge("flex items-center", pe && "p-4 rounded-xl")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('_szMerge("z h", pe && "c d")');
-    });
-
-    it('skips string after && if any token is unknown', () => {
-        const code = '_szMerge("flex",pe&&"unknown-class")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('_szMerge("z",pe&&"unknown-class")');
+    it.each([
+        ['a leading argument', '_szMerge("flex items-center","p-4")', '_szMerge("z h","c")'],
+        ['a conditional argument', '_szMerge("flex",pe&&"p-4")', '_szMerge("z",pe&&"c")'],
+        [
+            'a minified conditional string',
+            '_szMerge("flex items-center",pe&&"p-4 rounded-xl")',
+            '_szMerge("z h",pe&&"c d")',
+        ],
+        [
+            'an unminified conditional string',
+            '_szMerge("flex items-center", pe && "p-4 rounded-xl")',
+            '_szMerge("z h", pe && "c d")',
+        ],
+        [
+            'an unknown conditional string',
+            '_szMerge("flex",pe&&"unknown-class")',
+            '_szMerge("z",pe&&"unknown-class")',
+        ],
+    ])('mangles %s', (_label, code, expected) => {
+        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(expected);
     });
 });
 
 describe('mangleCodeClassesSync — real-world integration (multi-pass)', () => {
-    // Button component: sz={[{ display: 'flex', items: 'center', rounded: 'full' },
-    //   variant === 'primary' && { bg: 'violet-500' },
-    //   size === 'lg' ? { scale: 100 } : { scale: 75 }]}
-    // Minified bundle: className:_szMerge("flex items-center rounded-full",variant==="primary"&&"bg-violet-500",size==="lg"?"scale-100":"scale-75")
-    it('Button — static base + && variant + size ternary (minified)', () => {
-        const code =
-            'className:_szMerge("flex items-center rounded-full",variant==="primary"&&"bg-violet-500",size==="lg"?"scale-100":"scale-75")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // Pass 2 sees ternary → mangles all "..." including the && string and ternary branches
-        // Pass 3 is then a no-op (already-mangled tokens not in map)
-        expect(result).toBe(
+    it.each([
+        [
+            'a minified Button',
+            'className:_szMerge("flex items-center rounded-full",variant==="primary"&&"bg-violet-500",size==="lg"?"scale-100":"scale-75")',
             'className:_szMerge("z h e",variant==="primary"&&"g",size==="lg"?"j":"i")',
-        );
-    });
-
-    it('Button — SSR unminified form (spaces after colon + operators)', () => {
-        const code =
-            'className: _szMerge("flex items-center rounded-full", variant === "primary" && "bg-violet-500", size === "lg" ? "scale-100" : "scale-75")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // Pass 2: space after colon is accepted; expression mangled in full
-        expect(result).toBe(
+            false,
+        ],
+        [
+            'an SSR Button',
+            'className: _szMerge("flex items-center rounded-full", variant === "primary" && "bg-violet-500", size === "lg" ? "scale-100" : "scale-75")',
             'className: _szMerge("z h e", variant === "primary" && "g", size === "lg" ? "j" : "i")',
-        );
-    });
-
-    it('Avatar — all-ternary _szMerge, no static base (size variant)', () => {
-        // sz={[ isRow ? { flexDir: 'row' } : { flexDir: 'col' }, isBig ? { size: 24 } : { p: 4 } ]}
-        const code = 'className:_szMerge(isRow?"flex-row":"flex-col",isBig?"size-24":"p-4")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:_szMerge(isRow?"a":"b",isBig?"f":"c")');
-    });
-
-    it('Modal — 4-arg _szMerge: static + two && booleans + ternary', () => {
-        // sz={[{ display: 'flex', items: 'center' }, open && { p: 4 }, active && { rounded: 'xl' },
-        //       full ? { rounded: 'full' } : { scale: 75 }]}
-        const code =
-            'className:_szMerge("flex items-center",open&&"p-4",active&&"rounded-xl",full?"rounded-full":"scale-75")';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe('className:_szMerge("z h",open&&"c",active&&"d",full?"e":"i")');
-    });
-
-    it('full minified JSX line with two sibling elements', () => {
-        // Two React.createElement calls on one line, as produced by esbuild
-        const code =
-            'n.createElement("div",{className:isA?"flex":"items-center"},n.createElement("span",{className:isRow?"flex-row":"flex-col"}))';
-        const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        expect(result).toBe(
+            false,
+        ],
+        [
+            'an all-ternary Avatar',
+            'className:_szMerge(isRow?"flex-row":"flex-col",isBig?"size-24":"p-4")',
+            'className:_szMerge(isRow?"a":"b",isBig?"f":"c")',
+            false,
+        ],
+        [
+            'a four-argument Modal',
+            'className:_szMerge("flex items-center",open&&"p-4",active&&"rounded-xl",full?"rounded-full":"scale-75")',
+            'className:_szMerge("z h",open&&"c",active&&"d",full?"e":"i")',
+            false,
+        ],
+        [
+            'minified sibling elements',
+            'n.createElement("div",{className:isA?"flex":"items-center"},n.createElement("span",{className:isRow?"flex-row":"flex-col"}))',
             'n.createElement("div",{className:isA?"z":"h"},n.createElement("span",{className:isRow?"a":"b"}))',
-        );
-    });
-
-    it('Pass 2 then Pass 3 — no double-mangling on already-mangled strings', () => {
-        // Verifies idempotency: if Pass 2 already mangled the static string inside
-        // _szMerge, Pass 3's lookbehind still runs but must not corrupt the result.
-        // "flex items-center" is static (no ternary alone), so if we include a ternary
-        // the whole expression goes through Pass 2 first.
-        const code =
-            'className:_szMerge("flex items-center",pe&&"p-4",cond?"rounded-xl":"rounded-full")';
+            false,
+        ],
+        [
+            'an idempotent multi-pass expression',
+            'className:_szMerge("flex items-center",pe&&"p-4",cond?"rounded-xl":"rounded-full")',
+            'className:_szMerge("z h",pe&&"c",cond?"d":"e")',
+            true,
+        ],
+    ])('mangles %s', (_label, code, expected, verifyIdempotency) => {
         const result = mangleCodeClassesSync(code, TEST_MANGLE);
-        // Run a second time — idempotent
-        const result2 = mangleCodeClassesSync(result, TEST_MANGLE);
-        expect(result).toBe('className:_szMerge("z h",pe&&"c",cond?"d":"e")');
-        expect(result2).toBe(result); // second pass must be no-op
+        expect(result).toBe(expected);
+        if (verifyIdempotency) expect(mangleCodeClassesSync(result, TEST_MANGLE)).toBe(result);
     });
 });
 

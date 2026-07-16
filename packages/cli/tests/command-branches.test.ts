@@ -174,7 +174,7 @@ describe('generate-types silent and default-output paths', () => {
         // No `output` → default resolves to ./csszyx.d.ts under cwd; silent suppresses logs.
         await generateTypes({ cwd, config: configPath, silent: true });
         expect(readFileSync(join(cwd, 'csszyx.d.ts'), 'utf8')).toContain('brand');
-        expect(logs.length).toBe(0); // silent
+        expect(logs).toHaveLength(0); // silent
     });
 });
 
@@ -182,6 +182,9 @@ describe('pure helper branches', () => {
     it('isColorValue recognizes named and scaled colors', () => {
         expect(isColorValue('red')).toBe(true); // COLOR_NAMES hit
         expect(isColorValue('blue-500')).toBe(true); // scale regex hit
+        expect(isColorValue('rose-950')).toBe(true);
+        expect(isColorValue('transparent-500')).toBe(false);
+        expect(isColorValue('blue-bright')).toBe(false);
         expect(isColorValue('definitely-not-a-color')).toBe(false);
     });
 
@@ -189,6 +192,18 @@ describe('pure helper branches', () => {
         const out = generateSzObjectLiteral({ a: null, b: [1, 2] });
         expect(out).toContain('null');
         expect(out).toContain('[1, 2]');
+    });
+
+    it('sz-codegen drops unsupported values without stringifying objects or functions', () => {
+        const out = generateSzObjectLiteral({
+            missing: undefined,
+            symbol: Symbol('unsafe'),
+            bigint: 1n,
+            callback: () => 'unsafe',
+        });
+        expect([...out.matchAll(/undefined/g)]).toHaveLength(4);
+        expect(out).not.toContain('Symbol(');
+        expect(out).not.toContain('unsafe');
     });
 
     it('flattenColors expands a DEFAULT shade to the bare color name', () => {
@@ -200,7 +215,7 @@ describe('pure helper branches', () => {
 
     it('printBar uses the default width when called with two arguments', () => {
         const bar = printBar([2, 2], 4);
-        expect(bar.length).toBe(20); // default width
+        expect(bar).toHaveLength(20); // default width
         expect(bar).toContain('■');
     });
 

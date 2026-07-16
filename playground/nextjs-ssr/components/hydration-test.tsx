@@ -15,16 +15,16 @@ export function HydrationTest() {
     const [checksum, setChecksum] = useState<string>('');
 
     useEffect(() => {
-        // Check hydration on mount
+        // One-time post-hydration read of the DOM to display SSR→CSR consistency.
+        // This is a legitimate "read from an external system on mount" effect (the
+        // component exists to compare server- vs client-rendered classes); the
+        // react-hooks perf heuristic over-flags the synchronous setState calls, so
+        // they are disabled for this effect block only.
         const testElement = document.getElementById('hydration-test-element');
         if (testElement) {
             const classes = testElement.className;
-            setClientClasses(classes);
-
             // Try to get server-rendered classes from data attribute
             const serverRendered = testElement.dataset.serverClasses || '';
-            setServerClasses(serverRendered);
-
             // Check for csszyx checksum in HTML tag, window, or meta tag
             const csszyxChecksum =
                 document.documentElement.getAttribute('data-sz-checksum') ||
@@ -34,27 +34,25 @@ export function HydrationTest() {
                     .querySelector('meta[name="csszyx-checksum"]')
                     ?.getAttribute('content') ||
                 'N/A';
-            setChecksum(csszyxChecksum);
 
-            // Validate hydration
-            // Note: Since serverRendered is the original Tailwind string,
-            // and classes is the mangled result, we should check if
-            // the mangled result of original matches what we have.
-            // But we already confirmed they match in the browser subagent.
-            // For the UI, we'll just check if classes is mangled (has spaces and is short)
-            if (classes.length < (serverRendered.length || 100) && classes.includes(' ')) {
-                setHydrationStatus('success');
-            } else {
-                setHydrationStatus('success'); // Default to success if we have classes
-            }
+            /* eslint-disable react-hooks/set-state-in-effect -- mount-time external DOM snapshot read */
+            setClientClasses(classes);
+            setServerClasses(serverRendered);
+            setChecksum(csszyxChecksum);
+            // Validate hydration: the mangled client string is expected to be
+            // shorter than the original server Tailwind string. Either branch
+            // reports success once classes are present (this is a demo panel).
+            setHydrationStatus('success');
+            /* eslint-enable react-hooks/set-state-in-effect */
         }
     }, []);
 
+    const mismatchOrPendingSz = hydrationStatus === 'mismatch'
+        ? { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'red-500', op: 20 }, color: 'red-400' }
+        : { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'yellow-500', op: 20 }, color: 'yellow-400' };
     const statusSz = hydrationStatus === 'success'
         ? { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'green-500', op: 20 }, color: 'green-400' }
-        : hydrationStatus === 'mismatch'
-          ? { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'red-500', op: 20 }, color: 'red-400' }
-          : { px: 3, py: 1, text: 'xs', rounded: 'full', weight: 'semibold', bg: { color: 'yellow-500', op: 20 }, color: 'yellow-400' };
+        : mismatchOrPendingSz;
 
     return (
         <div sz={{ p: 6, rounded: 'xl', bg: { color: 'slate-800', op: 50 }, borderColor: 'slate-700', border: true }}>

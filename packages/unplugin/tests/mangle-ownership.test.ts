@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,34 +25,41 @@ afterEach(() => {
 });
 
 /**
- * Builds a fixture with one sz file (csszyx-owned class) and one non-sz file
- * whose author `className` literals reach the regex fallback scan.
+ * Builds a fixture with one app sz file (csszyx-owned class) and one raw-only
+ * `compileSources` package whose author `className` literals must reach prescan.
  * @returns The fixture root directory.
  */
 function createFixture(): string {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-mangle-ownership-')));
     tempDirs.push(root);
     const src = join(root, 'src');
+    const vuiSrc = join(root, 'packages/vui/src');
     mkdirSync(src, { recursive: true });
+    mkdirSync(vuiSrc, { recursive: true });
     writeFileSync(
         join(root, 'index.html'),
         '<html><head></head><body><div id="root"></div><script type="module" src="/src/App.tsx"></script></body></html>',
     );
-    // sz file → csszyx OWNS `p-4`; it is eligible to mangle.
+    // sz file → csszyx owns both classes, but `p-4` also has a raw consumer.
     writeFileSync(
         join(src, 'App.tsx'),
         [
             "import { createRoot } from 'react-dom/client';",
-            "import { Author } from './Author';",
-            'const App = () => <div sz={{ p: 4 }}><Author /></div>;',
+            "import { mangleMap } from 'virtual:csszyx/mangle-map';",
+            "import { Author } from '../packages/vui/src/Author';",
+            'document.documentElement.dataset.fixtureMap = JSON.stringify(mangleMap);',
+            'const App = () => <div sz={{ p: 4, m: 3 }}><Author /></div>;',
             "createRoot(document.getElementById('root')!).render(<App />);",
         ].join('\n'),
     );
-    // Non-sz file → `flex` / `main-body` are AUTHOR classes (an external stylesheet
-    // could own `.flex` / `.main-body`); they must never be mangled.
+    // Mixed known/unknown clsx string reproduces the hybrid orphan: `p-4` is also
+    // sz-owned, while `main-body` is raw-only. Both must keep authored spelling.
     writeFileSync(
-        join(src, 'Author.tsx'),
-        'export const Author = () => <div className="main-body flex">author</div>;',
+        join(vuiSrc, 'Author.tsx'),
+        [
+            "const clsx = (...values: string[]) => values.join(' ');",
+            "export const Author = () => <div className={clsx('z p-4 main-body')}>author</div>;",
+        ].join('\n'),
     );
     return root;
 }
@@ -74,13 +89,18 @@ async function runVite(root: string): Promise<void> {
                 { find: 'react', replacement: requireFromHere.resolve('react') },
             ],
         },
-        plugins: [...(vitePlugin({ build: { cache: false, parser: 'oxc' } }) as PluginOption[])],
+        plugins: [
+            ...(vitePlugin({
+                build: { cache: false, parser: 'oxc' },
+                compileSources: ['packages/vui/src'],
+            }) as PluginOption[]),
+        ],
         build: { emptyOutDir: true, minify: true, outDir: 'dist' },
     });
 }
 
 describe('mangle ownership', () => {
-    it('mangles csszyx-owned sz classes but never author className literals', async () => {
+    it('preserves shared raw classes from an opted-in workspace package', async () => {
         const root = createFixture();
         await runVite(root);
 
@@ -89,13 +109,18 @@ describe('mangle ownership', () => {
         };
         const mangleMap = manifest.mangleMap ?? {};
 
-        // The sz-generated class is owned → present in the mangle map.
-        expect(mangleMap['p-4']).toBeDefined();
-        // Author classes reached the safelist but must NOT be mangle-map keys,
-        // otherwise an external stylesheet's `.flex` / `.main-body` rule would
-        // stop matching the renamed DOM.
-        expect(mangleMap.flex).toBeUndefined();
+        // The sz-only class remains eligible for the optimization.
+        expect(mangleMap['m-3']).toBeDefined();
+        expect(mangleMap['m-3']).not.toBe('z');
+        // The shared raw/sz class is excluded, even inside a mixed clsx string.
+        expect(mangleMap['p-4']).toBeUndefined();
         expect(mangleMap['main-body']).toBeUndefined();
+
+        const bundle = readBuiltJavaScript(root);
+        expect(bundle).toContain('p-4');
+        expect(bundle).toContain('main-body');
+        expect(bundle).toContain('z p-4 main-body');
+        expect(bundle).not.toMatch(/["']p-4["']\s*:/);
     });
 });
 
@@ -106,4 +131,19 @@ describe('mangle ownership', () => {
  */
 function readJson(path: string): unknown {
     return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+/**
+ * Reads the fixture's emitted JavaScript chunks.
+ *
+ * @param root Fixture root directory.
+ * @returns Concatenated production JavaScript.
+ */
+function readBuiltJavaScript(root: string): string {
+    const assetsDir = join(root, 'dist/assets');
+    return readdirSync(assetsDir)
+        .filter(file => file.endsWith('.js'))
+        .sort()
+        .map(file => readFileSync(join(assetsDir, file), 'utf8'))
+        .join('\n');
 }

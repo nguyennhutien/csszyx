@@ -23,6 +23,8 @@ import {
     transformBatch,
 } from '../packages/core/native/index.js';
 
+const BACKSLASH = String.fromCodePoint(92);
+
 interface CliOptions {
     /** Source roots to scan. */
     roots: string[];
@@ -191,7 +193,7 @@ function collectFiles(roots: string[]): ObservedFile[] {
             continue;
         }
         for (const filename of walk(absRoot)) {
-            const repoRelative = relative(REPO_ROOT, filename).replace(/\\/g, '/');
+            const repoRelative = relative(REPO_ROOT, filename).split(BACKSLASH).join('/');
             if (repoRelative.endsWith('.d.ts')) {
                 continue;
             }
@@ -295,6 +297,7 @@ function renderReport(rows: ObservationRow[]): string {
         .sort((a, b) => b.result.metadata.timings.totalNs - a.result.metadata.timings.totalNs)
         .slice(0, 10);
     const diagnosticRows = rows.filter(row => row.result.diagnostics.length > 0).slice(0, 20);
+    const formattedRoots = options.roots.map(root => `\`${root}\``).join(', ');
 
     return `# Phase E Rust ParserPath Observation
 
@@ -304,7 +307,7 @@ Environment:
 
 - Node: ${process.version}
 - Platform: ${process.platform}-${process.arch}
-- Roots: ${options.roots.map(root => `\`${root}\``).join(', ')}
+- Roots: ${formattedRoots}
 - Batch size: ${options.batchSize}
 
 ## Summary

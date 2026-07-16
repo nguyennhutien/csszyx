@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 
+import { highlightSzTokens } from '../../utils/highlight-sz-tokens.js';
+
 // ── Compiler animation data ────────────────────────────────────────
 // Object form is intentional: property values sit after `:` in the bundle, which is
 // outside the lookbehind of the mangler's Pass 3 regex (?<=(?:[,(]|&&)\s*).
@@ -36,7 +38,7 @@ const compileData: CompileEntry[] = [
 
     // Abstract property combinations
     { sz: "{'[&>span]': {color: 'blue'}}", tw: "[&>span]:text-blue" },
-    { sz: "{before: {content: '\"\"', display: 'block'}}", tw: "before:content-['']" },
+    { sz: `{before: {content: '""', display: 'block'}}`, tw: "before:content-['']" },
     { sz: "{xl: {portrait: {bg: {gradient: 'to-r'}}}}", tw: "xl:portrait:bg-gradient-to-r" },
     { sz: "{lg: {landscape: {w: 'full'}}}", tw: "lg:landscape:w-full" },
     { sz: "{print: {display: 'none'}}", tw: "print:hidden" },
@@ -118,22 +120,12 @@ function getNextMangle(): string {
 }
 
 function highlightSz(text: string): string {
-  return text.replace(
-    /("[^"]*"|'[^']*')|([a-zA-Z0-9_]+)(?=\s*:)|(:\s*)(true|false)|(:\s*)([-0-9.]+)|([{}[\],:])/g,
-    (match, s, k, cb, b, cn, n, sym) => {
-      if (s)   return `<span class="string">${s}</span>`;
-      if (k)   return `<span class="key">${k}</span>`;
-      if (b)   return `${cb}<span class="boolean">${b}</span>`;
-      if (n)   return `${cn}<span class="number">${n}</span>`;
-      if (sym) return `<span style="color:light-dark(#94a3b8,#475569)">${sym}</span>`;
-      return match;
-    }
-  );
+  return highlightSzTokens(text, '');
 }
 
 class TextScrambler {
   el: HTMLElement;
-  chars = '!<>-_\\/[]{}—=+*^?#________';
+  chars = String.raw`!<>-_\/[]{}—=+*^?#________`;
   queue: Array<{ from: string; to: string; start: number; end: number; char?: string }> = [];
   frame = 0;
   frameRequest = 0;
@@ -159,7 +151,7 @@ class TextScrambler {
       this.el.innerHTML = highlighted || newText;
       this.el.style.opacity = '0';
       this.el.style.transition = 'opacity 0.8s ease-in-out';
-      void this.el.offsetWidth;
+      this.el.getBoundingClientRect();
       this.el.style.opacity = '1';
       this.resolve();
     } else {
@@ -200,6 +192,98 @@ const ANIM_CONFIG = {
   twTriggerMin: 0, twTriggerRange: 35, mangleTriggerMin: 30, mangleTriggerRange: 25,
 };
 
+interface HeroOpeningElements {
+  container: HTMLElement;
+  cursor: HTMLElement | null;
+  label: HTMLElement | null;
+  mangleRow: HTMLElement | null;
+  opening: HTMLElement | null;
+  sz: HTMLElement | null;
+  tailwindRow: HTMLElement | null;
+}
+
+function waitForOpeningStep(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+function typeOpeningSz(element: HTMLElement | null, text: string, signal: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    let typed = 0;
+    const interval = setInterval(() => {
+      if (signal.aborted) {
+        clearInterval(interval);
+        resolve();
+        return;
+      }
+
+      if (element) element.innerHTML = highlightSzTokens(text.slice(0, ++typed), 'ho-');
+      if (typed >= text.length) {
+        clearInterval(interval);
+        resolve();
+      }
+    }, 32);
+  });
+}
+
+async function runHeroOpening(
+  elements: HeroOpeningElements,
+  signal: AbortSignal,
+  markReady: () => void,
+): Promise<void> {
+  await waitForOpeningStep(250);
+  if (signal.aborted) return;
+  if (elements.label) elements.label.style.opacity = '1';
+
+  await waitForOpeningStep(250);
+  await typeOpeningSz(
+    elements.sz,
+    "sz={{\n  p: 4,\n  bg: 'blue-500',\n  hover: {\n    bg: 'blue-600',\n  },\n}}",
+    signal,
+  );
+  if (signal.aborted) return;
+  if (elements.cursor) {
+    elements.cursor.style.animation = 'none';
+    elements.cursor.style.opacity = '0';
+  }
+
+  await waitForOpeningStep(380);
+  if (signal.aborted) return;
+  if (elements.tailwindRow) elements.tailwindRow.style.opacity = '1';
+
+  await waitForOpeningStep(550);
+  if (signal.aborted) return;
+  if (elements.mangleRow) elements.mangleRow.style.opacity = '1';
+  elements.container.classList.add('start-anim');
+  elements.container.style.opacity = '1';
+  markReady();
+
+  await waitForOpeningStep(900);
+  if (signal.aborted || !elements.opening) return;
+  elements.opening.style.transition = 'opacity 0.8s ease';
+  elements.opening.style.opacity = '0';
+}
+
+interface PositionedAnimationItem {
+  xPos: number;
+}
+
+function waitForItemPosition(
+  item: PositionedAnimationItem,
+  target: number,
+  activeItems: readonly PositionedAnimationItem[],
+): Promise<void> {
+  return new Promise(resolve => {
+    function checkPosition() {
+      if (!activeItems.includes(item) || item.xPos >= target) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(checkPosition);
+    }
+    checkPosition();
+  });
+}
+
 export default function HeroSection() {
   const containerRef = useRef<HTMLDivElement>(null);
   const isReadyRef = useRef(false);
@@ -208,6 +292,7 @@ export default function HeroSection() {
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const openingController = new AbortController();
 
     const mangleCache = new Map<string, string>();
     const tracks: HTMLElement[] = [];
@@ -273,12 +358,12 @@ export default function HeroSection() {
           const iw = (item.el.offsetWidth / Math.max(w, 1)) * 100;
           if (i > 0) {
             const gap = items[i - 1].xPos - (item.xPos + iw);
-            const target =
-              gap > ANIM_CONFIG.minGapPct + 4
-                ? (track as any).speed * ANIM_CONFIG.chaseAcceleration
-                : gap < ANIM_CONFIG.minGapPct
-                  ? items[i - 1].speed * ANIM_CONFIG.brakeDeceleration
-                  : items[i - 1].speed;
+            let target = items[i - 1].speed;
+            if (gap > ANIM_CONFIG.minGapPct + 4) {
+              target = (track as any).speed * ANIM_CONFIG.chaseAcceleration;
+            } else if (gap < ANIM_CONFIG.minGapPct) {
+              target = items[i - 1].speed * ANIM_CONFIG.brakeDeceleration;
+            }
             item.speed += (target - item.speed) * 0.1;
           } else { item.speed = (track as any).speed; }
           item.xPos += item.speed;
@@ -299,27 +384,22 @@ export default function HeroSection() {
       if (!activeItems.includes(item)) return;
       await item.scrambler.setText(item.data.sz, 'phase-sz', false, highlightSz(item.data.sz));
       const twT = ANIM_CONFIG.twTriggerMin + Math.random() * ANIM_CONFIG.twTriggerRange;
-      await new Promise<void>(r => {
-        const c = () => { if (!activeItems.includes(item)) return r(); if (item.xPos >= twT) return r(); requestAnimationFrame(c); };
-        c();
-      });
+      await waitForItemPosition(item, twT, activeItems);
       if (!activeItems.includes(item)) return;
       await item.scrambler.setText(item.data.tw, 'phase-tw', true);
       const mgT = ANIM_CONFIG.mangleTriggerMin + Math.random() * ANIM_CONFIG.mangleTriggerRange;
-      await new Promise<void>(r => {
-        const c = () => { if (!activeItems.includes(item)) return r(); if (item.xPos >= mgT) return r(); requestAnimationFrame(c); };
-        c();
-      });
+      await waitForItemPosition(item, mgT, activeItems);
       if (!activeItems.includes(item)) return;
       const mangled = mangleCache.get(item.data.sz) || (() => { const m = getNextMangle(); mangleCache.set(item.data.sz, m); return m; })();
       await item.scrambler.setText(mangled, 'phase-mangle', true);
     }
 
     schedule();
-    document.addEventListener('visibilitychange', () => {
+    const handleVisibilityChange = () => {
       if (document.hidden) cancelAnimationFrame(rafHandle);
       else schedule();
-    });
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // ── Hero typewriter sequence ───────────────────────────────────────
     const hoSzEl    = document.getElementById('ho-sz');
@@ -329,48 +409,28 @@ export default function HeroSection() {
     const hoLabel   = document.getElementById('ho-label');
     const heroOpen  = document.getElementById('hero-opening');
 
-    const hoSzText = "sz={{\n  p: 4,\n  bg: 'blue-500',\n  hover: {\n    bg: 'blue-600',\n  },\n}}";
-    let hoTyped = 0;
+    runHeroOpening(
+      {
+        container,
+        cursor: hoCursor,
+        label: hoLabel,
+        mangleRow: hoMgRow,
+        opening: heroOpen,
+        sz: hoSzEl,
+        tailwindRow: hoTwRow,
+      },
+      openingController.signal,
+      () => {
+        isReadyRef.current = true;
+        readyTimeRef.current = Date.now();
+      },
+    ).catch(error => console.error('[csszyx docs] hero opening animation failed', error));
 
-    const highlight = (text: string) => text.replace(
-      /("[^"]*"|'[^']*')|([a-zA-Z0-9_]+)(?=\s*:)|(:\s*)(true|false)|(:\s*)([-0-9.]+)|([{}[\],:])/g,
-      (m, s, k, cb, b, cn, n, sym) => {
-        if (s)   return `<span class="ho-string">${s}</span>`;
-        if (k)   return `<span class="ho-key">${k}</span>`;
-        if (b)   return `${cb}<span class="ho-boolean">${b}</span>`;
-        if (n)   return `${cn}<span class="ho-number">${n}</span>`;
-        if (sym) return `<span class="ho-symbol">${sym}</span>`;
-        return m;
-      }
-    );
-
-    setTimeout(() => { if (hoLabel) hoLabel.style.opacity = '1'; }, 250);
-    setTimeout(() => {
-      const iv = setInterval(() => {
-        if (hoSzEl) hoSzEl.innerHTML = highlight(hoSzText.slice(0, ++hoTyped));
-        if (hoTyped >= hoSzText.length) {
-          clearInterval(iv);
-          if (hoCursor) { hoCursor.style.animation = 'none'; hoCursor.style.opacity = '0'; }
-          setTimeout(() => {
-            if (hoTwRow) hoTwRow.style.opacity = '1';
-            setTimeout(() => {
-              if (hoMgRow) hoMgRow.style.opacity = '1';
-              if (container) {
-                container.classList.add('start-anim');
-                container.style.opacity = '1';
-              }
-              isReadyRef.current = true;
-              readyTimeRef.current = Date.now();
-              setTimeout(() => {
-                if (heroOpen) { heroOpen.style.transition = 'opacity 0.8s ease'; heroOpen.style.opacity = '0'; }
-              }, 900);
-            }, 550);
-          }, 380);
-        }
-      }, 32);
-    }, 500);
-
-    return () => { cancelAnimationFrame(rafHandle); };
+    return () => {
+      openingController.abort();
+      cancelAnimationFrame(rafHandle);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   return (<>

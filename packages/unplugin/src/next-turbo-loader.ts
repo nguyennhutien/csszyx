@@ -23,6 +23,7 @@ import {
     createNextSafelistShardFromMetadata,
 } from './next-transform-metadata.js';
 import { runNextWatcherCycle } from './next-watcher-cycle.js';
+import { normalizePathSeparators } from './path-normalization.js';
 import { resolveTransformCacheDir } from './transform-cache.js';
 
 /** Serializable options accepted by the Next Turbopack csszyx loader. */
@@ -320,6 +321,6 @@ function createShardCacheKey(
     return createHash('sha256')
         .update(context.identity.generation)
         .update('\0')
-        .update(path.relative(context.root, metadata.sourcePath).replace(/\\/g, '/'))
+        .update(normalizePathSeparators(path.relative(context.root, metadata.sourcePath)))
         .digest('hex');
 }

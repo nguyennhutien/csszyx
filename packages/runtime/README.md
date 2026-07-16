@@ -25,6 +25,12 @@ Keep it a **direct** dependency: the build transform injects bare
 > the build transform emits calls to them. Don't hand-author them; use the
 > public names below.
 
+The full-runtime `_szMerge` uses the same mangle-aware, utility-group last-wins
+engine as `szcn`; generated `className + sz` merges therefore follow the same
+override contract. The deliberately tiny `@csszyx/runtime/lite` compatibility
+helper only removes exact duplicate tokens—it avoids the classification graph
+that would grow the built lite entry from about 1.7 kB to about 59 kB.
+
 ### `szr(...inputs)` — resolve to a className
 
 Resolves sz objects and/or class strings into one mangle-aware className.

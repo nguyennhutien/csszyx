@@ -60,8 +60,6 @@ describe('watcher failure and startup-error paths', () => {
         const { startNextWatch } = await import('../src/commands/next-watch.js');
         const session = await startNextWatch({ cwd, parserMode: 'babel' });
         // Simulate a chokidar runtime failure after readiness.
-        const { watch } = await import('chokidar');
-        void watch; // (real watcher already attached inside the session)
         // Reach the internal watcher through the failure wiring: emit via a
         // filesystem error is racy, so drive the public close after a failure
         // signal from a forced error event.

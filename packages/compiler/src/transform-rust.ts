@@ -170,12 +170,10 @@ function normalizeGlobalVarAliases(
     if (!input) {
         return [];
     }
-    const entries =
-        input instanceof Map
-            ? input.entries()
-            : Array.isArray(input)
-              ? input
-              : Object.entries(input);
+    let entries: Iterable<[string, string]>;
+    if (input instanceof Map) entries = input.entries();
+    else if (Array.isArray(input)) entries = input;
+    else entries = Object.entries(input);
     return [...entries]
         .filter(([original, alias]) => original.startsWith('--') && alias.startsWith('--'))
         .map(([original, alias]) => ({ original, alias }));

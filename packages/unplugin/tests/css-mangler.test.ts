@@ -117,52 +117,29 @@ describe('Basic Class Selectors', () => {
 // 2. Pseudo-classes and Pseudo-elements (8 tests)
 // ============================================================================
 describe('Pseudo-classes and Pseudo-elements', () => {
-    it('should mangle class with :hover pseudo-class', () => {
-        const css = '.p-4:hover { padding: 2rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a:hover { padding: 2rem; }');
-    });
-
-    it('should mangle class with :focus pseudo-class', () => {
-        const css = '.p-4:focus { outline: none; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a:focus { outline: none; }');
-    });
-
-    it('should mangle class with :active pseudo-class', () => {
-        const css = '.p-4:active { opacity: 0.8; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a:active { opacity: 0.8; }');
-    });
-
-    it('should mangle class with ::before pseudo-element', () => {
-        const css = '.p-4::before { content: ""; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a::before { content: ""; }');
-    });
-
-    it('should mangle class with ::after pseudo-element', () => {
-        const css = '.p-4::after { content: ""; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a::after { content: ""; }');
-    });
-
-    it('should mangle class with :first-child', () => {
-        const css = '.p-4:first-child { margin-top: 0; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a:first-child { margin-top: 0; }');
-    });
-
-    it('should mangle class with :nth-child()', () => {
-        const css = '.p-4:nth-child(2n) { background: gray; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a:nth-child(2n) { background: gray; }');
-    });
-
-    it('should mangle class with multiple pseudo-selectors', () => {
-        const css = '.p-4:hover:focus { transform: scale(1.05); }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a:hover:focus { transform: scale(1.05); }');
+    it.each([
+        [':hover', '.p-4:hover { padding: 2rem; }', '.a:hover { padding: 2rem; }'],
+        [':focus', '.p-4:focus { outline: none; }', '.a:focus { outline: none; }'],
+        [':active', '.p-4:active { opacity: 0.8; }', '.a:active { opacity: 0.8; }'],
+        ['::before', '.p-4::before { content: ""; }', '.a::before { content: ""; }'],
+        ['::after', '.p-4::after { content: ""; }', '.a::after { content: ""; }'],
+        [
+            ':first-child',
+            '.p-4:first-child { margin-top: 0; }',
+            '.a:first-child { margin-top: 0; }',
+        ],
+        [
+            ':nth-child()',
+            '.p-4:nth-child(2n) { background: gray; }',
+            '.a:nth-child(2n) { background: gray; }',
+        ],
+        [
+            'multiple pseudos',
+            '.p-4:hover:focus { transform: scale(1.05); }',
+            '.a:hover:focus { transform: scale(1.05); }',
+        ],
+    ])('mangles %s selectors', (_label, css, expected) => {
+        expect(mangleCSSSync(css, testMangleMap).css).toBe(expected);
     });
 });
 
@@ -170,40 +147,31 @@ describe('Pseudo-classes and Pseudo-elements', () => {
 // 3. Combinators (6 tests)
 // ============================================================================
 describe('Combinators', () => {
-    it('should mangle descendant selector', () => {
-        const css = '.dark .p-4 { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.dark .a { padding: 1rem; }');
-    });
-
-    it('should mangle child selector', () => {
-        const css = '.flex > .p-4 { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.s > .a { padding: 1rem; }');
-    });
-
-    it('should mangle adjacent sibling selector', () => {
-        const css = '.p-4 + .m-4 { margin-left: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a + .b { margin-left: 1rem; }');
-    });
-
-    it('should mangle general sibling selector', () => {
-        const css = '.p-4 ~ .m-4 { margin-left: 0.5rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a ~ .b { margin-left: 0.5rem; }');
-    });
-
-    it('should handle complex combinator chain', () => {
-        const css = '.dark .flex > .p-4:hover { opacity: 1; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.dark .s > .a:hover { opacity: 1; }');
-    });
-
-    it('should mangle nested group-hover pattern', () => {
-        const css = '.group:hover .group-hover\\:opacity-100 { opacity: 1; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.group:hover .k { opacity: 1; }');
+    it.each([
+        ['descendant', '.dark .p-4 { padding: 1rem; }', '.dark .a { padding: 1rem; }'],
+        ['child', '.flex > .p-4 { padding: 1rem; }', '.s > .a { padding: 1rem; }'],
+        [
+            'adjacent sibling',
+            '.p-4 + .m-4 { margin-left: 1rem; }',
+            '.a + .b { margin-left: 1rem; }',
+        ],
+        [
+            'general sibling',
+            '.p-4 ~ .m-4 { margin-left: 0.5rem; }',
+            '.a ~ .b { margin-left: 0.5rem; }',
+        ],
+        [
+            'complex chain',
+            '.dark .flex > .p-4:hover { opacity: 1; }',
+            '.dark .s > .a:hover { opacity: 1; }',
+        ],
+        [
+            'group-hover chain',
+            '.group:hover .group-hover\\:opacity-100 { opacity: 1; }',
+            '.group:hover .k { opacity: 1; }',
+        ],
+    ])('mangles a %s combinator', (_label, css, expected) => {
+        expect(mangleCSSSync(css, testMangleMap).css).toBe(expected);
     });
 });
 
@@ -211,28 +179,29 @@ describe('Combinators', () => {
 // 4. Media Queries and @rules (6 tests)
 // ============================================================================
 describe('Media Queries and @rules', () => {
-    it('should mangle classes inside media query', () => {
-        const css = '@media (min-width: 768px) { .p-4 { padding: 2rem; } }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('@media (min-width: 768px) { .a { padding: 2rem; } }');
-    });
-
-    it('should mangle Tailwind responsive prefix class', () => {
-        const css = '@media (min-width: 768px) { .md\\:p-8 { padding: 2rem; } }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('@media (min-width: 768px) { .h { padding: 2rem; } }');
-    });
-
-    it('should mangle classes inside @supports', () => {
-        const css = '@supports (display: grid) { .grid { display: grid; } }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('@supports (display: grid) { .u { display: grid; } }');
-    });
-
-    it('should mangle classes inside @layer', () => {
-        const css = '@layer utilities { .p-4 { padding: 1rem; } }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('@layer utilities { .a { padding: 1rem; } }');
+    it.each([
+        [
+            'media queries',
+            '@media (min-width: 768px) { .p-4 { padding: 2rem; } }',
+            '@media (min-width: 768px) { .a { padding: 2rem; } }',
+        ],
+        [
+            'responsive media classes',
+            '@media (min-width: 768px) { .md\\:p-8 { padding: 2rem; } }',
+            '@media (min-width: 768px) { .h { padding: 2rem; } }',
+        ],
+        [
+            '@supports',
+            '@supports (display: grid) { .grid { display: grid; } }',
+            '@supports (display: grid) { .u { display: grid; } }',
+        ],
+        [
+            '@layer',
+            '@layer utilities { .p-4 { padding: 1rem; } }',
+            '@layer utilities { .a { padding: 1rem; } }',
+        ],
+    ])('mangles classes inside %s', (_label, css, expected) => {
+        expect(mangleCSSSync(css, testMangleMap).css).toBe(expected);
     });
 
     it('should handle nested @rules', () => {
@@ -258,64 +227,52 @@ describe('Media Queries and @rules', () => {
 // 5. Tailwind-specific Escapes (10 tests)
 // ============================================================================
 describe('Tailwind-specific Escapes', () => {
-    it('should mangle hover: variant class', () => {
-        const css = '.hover\\:bg-blue-500:hover { background: blue; }';
+    it.each([
+        [
+            'hover: variant class',
+            '.hover\\:bg-blue-500:hover { background: blue; }',
+            '.e:hover { background: blue; }',
+        ],
+        [
+            'focus: variant class',
+            '.focus\\:ring-2:focus { ring-width: 2px; }',
+            '.f:focus { ring-width: 2px; }',
+        ],
+        [
+            'dark: variant class',
+            '.dark .dark\\:bg-gray-900 { background: #111827; }',
+            '.dark .g { background: #111827; }',
+        ],
+        [
+            'md: responsive prefix',
+            '@media (min-width: 768px) { .md\\:p-8 { padding: 2rem; } }',
+            '@media (min-width: 768px) { .h { padding: 2rem; } }',
+        ],
+        [
+            '2xl: responsive prefix with numeric escape',
+            '@media (min-width: 1536px) { .\\32 xl\\:p-12 { padding: 3rem; } }',
+            '@media (min-width: 1536px) { .j { padding: 3rem; } }',
+        ],
+        ['class with forward slash (fractions)', '.w-1\\/2 { width: 50%; }', '.m { width: 50%; }'],
+        [
+            'class with dot (decimals)',
+            '.p-0\\.5 { padding: 0.125rem; }',
+            '.n { padding: 0.125rem; }',
+        ],
+        [
+            'important modifier class',
+            '.\\!p-4 { padding: 1rem !important; }',
+            '.r { padding: 1rem !important; }',
+        ],
+        ['negative value class', '.-mt-4 { margin-top: -1rem; }', '.ai { margin-top: -1rem; }'],
+        [
+            'complex nested variant',
+            '.dark .dark\\:hover\\:bg-gray-800:hover { background: #1f2937; }',
+            '.dark .ae:hover { background: #1f2937; }',
+        ],
+    ])('should mangle %s', (_name, css, expectedCSS) => {
         const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.e:hover { background: blue; }');
-    });
-
-    it('should mangle focus: variant class', () => {
-        const css = '.focus\\:ring-2:focus { ring-width: 2px; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.f:focus { ring-width: 2px; }');
-    });
-
-    it('should mangle dark: variant class', () => {
-        const css = '.dark .dark\\:bg-gray-900 { background: #111827; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.dark .g { background: #111827; }');
-    });
-
-    it('should mangle md: responsive prefix', () => {
-        const css = '@media (min-width: 768px) { .md\\:p-8 { padding: 2rem; } }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('@media (min-width: 768px) { .h { padding: 2rem; } }');
-    });
-
-    it('should mangle 2xl: responsive prefix with numeric escape', () => {
-        const css = '@media (min-width: 1536px) { .\\32 xl\\:p-12 { padding: 3rem; } }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('@media (min-width: 1536px) { .j { padding: 3rem; } }');
-    });
-
-    it('should mangle class with forward slash (fractions)', () => {
-        const css = '.w-1\\/2 { width: 50%; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.m { width: 50%; }');
-    });
-
-    it('should mangle class with dot (decimals)', () => {
-        const css = '.p-0\\.5 { padding: 0.125rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.n { padding: 0.125rem; }');
-    });
-
-    it('should mangle important modifier class', () => {
-        const css = '.\\!p-4 { padding: 1rem !important; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.r { padding: 1rem !important; }');
-    });
-
-    it('should mangle negative value class', () => {
-        const css = '.-mt-4 { margin-top: -1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.ai { margin-top: -1rem; }');
-    });
-
-    it('should mangle complex nested variant', () => {
-        const css = '.dark .dark\\:hover\\:bg-gray-800:hover { background: #1f2937; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.dark .ae:hover { background: #1f2937; }');
+        expect(result.css).toBe(expectedCSS);
     });
 });
 
@@ -323,22 +280,22 @@ describe('Tailwind-specific Escapes', () => {
 // 6. Arbitrary Values (6 tests)
 // ============================================================================
 describe('Arbitrary Values', () => {
-    it('should mangle arbitrary pixel value', () => {
-        const css = '.top-\\[117px\\] { top: 117px; }';
+    it.each([
+        ['arbitrary pixel value', '.top-\\[117px\\] { top: 117px; }', '.o { top: 117px; }'],
+        [
+            'arbitrary hex color',
+            '.bg-\\[\\#123456\\] { background: #123456; }',
+            '.p { background: #123456; }',
+        ],
+        ['arbitrary font size', '.text-\\[14px\\] { font-size: 14px; }', '.q { font-size: 14px; }'],
+        [
+            'negative arbitrary value',
+            '.-translate-x-1\\/2 { transform: translateX(-50%); }',
+            '.aj { transform: translateX(-50%); }',
+        ],
+    ])('should mangle %s', (_name, css, expectedCSS) => {
         const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.o { top: 117px; }');
-    });
-
-    it('should mangle arbitrary hex color', () => {
-        const css = '.bg-\\[\\#123456\\] { background: #123456; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.p { background: #123456; }');
-    });
-
-    it('should mangle arbitrary font size', () => {
-        const css = '.text-\\[14px\\] { font-size: 14px; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.q { font-size: 14px; }');
+        expect(result.css).toBe(expectedCSS);
     });
 
     it('should mangle before:content empty string class (before:content)', () => {
@@ -347,12 +304,6 @@ describe('Arbitrary Values', () => {
         const css = `${selector} { content: ''; }`;
         const result = mangleCSSSync(css, testMangleMap);
         expect(result.css).toContain('.ay::before');
-    });
-
-    it('should mangle negative arbitrary value', () => {
-        const css = '.-translate-x-1\\/2 { transform: translateX(-50%); }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.aj { transform: translateX(-50%); }');
     });
 
     it('should preserve unmatched arbitrary value class', () => {
@@ -367,34 +318,35 @@ describe('Arbitrary Values', () => {
 // 7. Multi-class Selectors (5 tests)
 // ============================================================================
 describe('Multi-class Selectors', () => {
-    it('should mangle multiple classes on same element', () => {
-        const css = '.p-4.m-4 { padding: 1rem; margin: 1rem; }';
+    it.each([
+        [
+            'multiple classes on the same element',
+            '.p-4.m-4 { padding: 1rem; margin: 1rem; }',
+            '.a.b { padding: 1rem; margin: 1rem; }',
+        ],
+        [
+            'three classes on the same element',
+            '.flex.items-center.justify-between { display: flex; }',
+            '.s.v.w { display: flex; }',
+        ],
+        [
+            'comma-separated selectors',
+            '.p-4, .m-4 { box-sizing: border-box; }',
+            '.a, .b { box-sizing: border-box; }',
+        ],
+        [
+            'mixed known and unknown classes',
+            '.p-4.custom-class { padding: 1rem; }',
+            '.a.custom-class { padding: 1rem; }',
+        ],
+        [
+            'a complex multi-class selector with a pseudo-class',
+            '.flex.items-center:hover { opacity: 1; }',
+            '.s.v:hover { opacity: 1; }',
+        ],
+    ])('should mangle %s', (_name, css, expectedCSS) => {
         const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a.b { padding: 1rem; margin: 1rem; }');
-    });
-
-    it('should mangle three classes on same element', () => {
-        const css = '.flex.items-center.justify-between { display: flex; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.s.v.w { display: flex; }');
-    });
-
-    it('should mangle comma-separated selectors', () => {
-        const css = '.p-4, .m-4 { box-sizing: border-box; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a, .b { box-sizing: border-box; }');
-    });
-
-    it('should handle mixed known and unknown classes', () => {
-        const css = '.p-4.custom-class { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.a.custom-class { padding: 1rem; }');
-    });
-
-    it('should mangle complex multi-class with pseudo', () => {
-        const css = '.flex.items-center:hover { opacity: 1; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.s.v:hover { opacity: 1; }');
+        expect(result.css).toBe(expectedCSS);
     });
 });
 
@@ -402,47 +354,25 @@ describe('Multi-class Selectors', () => {
 // 8. No-mangle Scenarios (8 tests)
 // ============================================================================
 describe('No-mangle Scenarios', () => {
-    it('should NOT mangle CSS variables in values', () => {
-        const css = '.p-4 { padding: var(--p-4); }';
+    it.each([
+        ['CSS variables in values', '.p-4 { padding: var(--p-4); }', '.a { padding: var(--p-4); }'],
+        ['CSS variable definitions', ':root { --p-4: 1rem; }', ':root { --p-4: 1rem; }'],
+        ['ID selectors', '#p-4 { padding: 1rem; }', '#p-4 { padding: 1rem; }'],
+        [
+            'attribute selectors',
+            '[class="p-4"] { padding: 1rem; }',
+            '[class="p-4"] { padding: 1rem; }',
+        ],
+        ['element selectors', 'div { padding: 1rem; }', 'div { padding: 1rem; }'],
+        [
+            'the universal selector',
+            '* { box-sizing: border-box; }',
+            '* { box-sizing: border-box; }',
+        ],
+        ['data attributes', '[data-p-4] { padding: 1rem; }', '[data-p-4] { padding: 1rem; }'],
+    ])('should not mangle %s', (_name, css, expectedCSS) => {
         const result = mangleCSSSync(css, testMangleMap);
-        // Class should be mangled but variable should not
-        expect(result.css).toBe('.a { padding: var(--p-4); }');
-    });
-
-    it('should NOT mangle CSS variable definitions', () => {
-        const css = ':root { --p-4: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe(':root { --p-4: 1rem; }');
-    });
-
-    it('should NOT mangle ID selectors', () => {
-        const css = '#p-4 { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('#p-4 { padding: 1rem; }');
-    });
-
-    it('should NOT mangle attribute selectors', () => {
-        const css = '[class="p-4"] { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('[class="p-4"] { padding: 1rem; }');
-    });
-
-    it('should NOT mangle element selectors', () => {
-        const css = 'div { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('div { padding: 1rem; }');
-    });
-
-    it('should NOT mangle * universal selector', () => {
-        const css = '* { box-sizing: border-box; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('* { box-sizing: border-box; }');
-    });
-
-    it('should NOT mangle data attributes', () => {
-        const css = '[data-p-4] { padding: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('[data-p-4] { padding: 1rem; }');
+        expect(result.css).toBe(expectedCSS);
     });
 
     it('should NOT mangle partial class matches', () => {
@@ -458,10 +388,50 @@ describe('No-mangle Scenarios', () => {
 // 9. Edge Cases and Stress Tests (10 tests)
 // ============================================================================
 describe('Edge Cases and Stress Tests', () => {
-    it('should handle selector with multiple escapes', () => {
-        const css = '.\\32 xl\\:p-12:hover { padding: 3rem; }';
+    it.each([
+        [
+            'a selector with multiple escapes',
+            '.\\32 xl\\:p-12:hover { padding: 3rem; }',
+            '.j:hover { padding: 3rem; }',
+        ],
+        [
+            'a very long selector',
+            '.dark .group:hover .flex > .items-center.justify-between:first-child .p-4 { opacity: 1; }',
+            '.dark .group:hover .s > .v.w:first-child .a { opacity: 1; }',
+        ],
+        [
+            'the Tailwind peer selector',
+            '.peer:focus ~ .peer-focus\\:ring { ring-width: 2px; }',
+            '.peer:focus ~ .l { ring-width: 2px; }',
+        ],
+        [
+            'the first variant',
+            '.first\\:mt-0:first-child { margin-top: 0; }',
+            '.aq:first-child { margin-top: 0; }',
+        ],
+        [
+            'the placeholder variant',
+            '.placeholder\\:text-gray-400::placeholder { color: #9ca3af; }',
+            '.au::placeholder { color: #9ca3af; }',
+        ],
+        [
+            'the file input variant',
+            '.file\\:mr-4::file-selector-button { margin-right: 1rem; }',
+            '.av::file-selector-button { margin-right: 1rem; }',
+        ],
+        [
+            'the marker variant',
+            '.marker\\:text-blue-500::marker { color: #3b82f6; }',
+            '.aw::marker { color: #3b82f6; }',
+        ],
+        [
+            'the selection variant',
+            '.selection\\:bg-blue-200::selection { background: #bfdbfe; }',
+            '.ax::selection { background: #bfdbfe; }',
+        ],
+    ])('should handle %s', (_name, css, expectedCSS) => {
         const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.j:hover { padding: 3rem; }');
+        expect(result.css).toBe(expectedCSS);
     });
 
     it('should handle empty mangle map', () => {
@@ -469,13 +439,6 @@ describe('Edge Cases and Stress Tests', () => {
         const result = mangleCSSSync(css, {});
         expect(result.css).toBe('.p-4 { padding: 1rem; }');
         expect(result.transformedCount).toBe(0);
-    });
-
-    it('should handle very long selector', () => {
-        const css =
-            '.dark .group:hover .flex > .items-center.justify-between:first-child .p-4 { opacity: 1; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.dark .group:hover .s > .v.w:first-child .a { opacity: 1; }');
     });
 
     it('should preserve CSS structure and formatting', () => {
@@ -487,46 +450,10 @@ describe('Edge Cases and Stress Tests', () => {
         expect(result.css).toContain('.a {');
         expect(result.css).toContain('padding: 1rem;');
     });
-
-    it('should handle special Tailwind peer selector', () => {
-        const css = '.peer:focus ~ .peer-focus\\:ring { ring-width: 2px; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.peer:focus ~ .l { ring-width: 2px; }');
-    });
-
-    it('should handle first/last/odd/even variants', () => {
-        const css = '.first\\:mt-0:first-child { margin-top: 0; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.aq:first-child { margin-top: 0; }');
-    });
-
-    it('should handle placeholder variant', () => {
-        const css = '.placeholder\\:text-gray-400::placeholder { color: #9ca3af; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.au::placeholder { color: #9ca3af; }');
-    });
-
-    it('should handle file input variant', () => {
-        const css = '.file\\:mr-4::file-selector-button { margin-right: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.av::file-selector-button { margin-right: 1rem; }');
-    });
-
-    it('should handle marker variant', () => {
-        const css = '.marker\\:text-blue-500::marker { color: #3b82f6; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.aw::marker { color: #3b82f6; }');
-    });
-
-    it('should handle selection variant', () => {
-        const css = '.selection\\:bg-blue-200::selection { background: #bfdbfe; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toBe('.ax::selection { background: #bfdbfe; }');
-    });
 });
 
 // ============================================================================
-// 10. Unescape/Escape Functions (5 tests)
+// 10. Unescape/Escape Functions (6 tests)
 // ============================================================================
 describe('Unescape/Escape Functions', () => {
     it('should unescape simple backslash', () => {
@@ -548,35 +475,48 @@ describe('Unescape/Escape Functions', () => {
     it('should escape class name for CSS', () => {
         expect(escapeCSSClassName('hover:bg-blue-500')).toBe('hover\\:bg-blue-500');
     });
+
+    it('round-trips every ASCII punctuation character that requires escaping', () => {
+        let punctuation = '';
+        for (const [start, end] of [
+            [33, 47],
+            [58, 64],
+            [91, 94],
+            [96, 96],
+            [123, 126],
+        ]) {
+            for (let codePoint = start; codePoint <= end; codePoint++) {
+                punctuation += String.fromCodePoint(codePoint);
+            }
+        }
+        expect(unescapeTailwindClass(escapeCSSClassName(punctuation))).toBe(punctuation);
+    });
 });
 
 // ============================================================================
 // 11. Additional Coverage for 50+ Tests
 // ============================================================================
 describe('Additional Coverage', () => {
-    it('should handle gradient classes', () => {
-        const css =
-            '.bg-gradient-to-r { background-image: linear-gradient(to right, var(--tw-gradient-stops)); }';
+    it.each([
+        [
+            'gradient classes',
+            '.bg-gradient-to-r { background-image: linear-gradient(to right, var(--tw-gradient-stops)); }',
+            '.ak {',
+        ],
+        ['backdrop filter classes', '.backdrop-blur-sm { backdrop-filter: blur(4px); }', '.an {'],
+        [
+            'divide utilities',
+            '.divide-y > :not([hidden]) ~ :not([hidden]) { border-top-width: 1px; }',
+            '.ao >',
+        ],
+        [
+            'space utilities',
+            '.space-x-4 > :not([hidden]) ~ :not([hidden]) { margin-left: 1rem; }',
+            '.x >',
+        ],
+    ])('should handle %s', (_name, css, expectedCSS) => {
         const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toContain('.ak {');
-    });
-
-    it('should handle backdrop filter classes', () => {
-        const css = '.backdrop-blur-sm { backdrop-filter: blur(4px); }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toContain('.an {');
-    });
-
-    it('should handle divide utilities', () => {
-        const css = '.divide-y > :not([hidden]) ~ :not([hidden]) { border-top-width: 1px; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toContain('.ao >');
-    });
-
-    it('should handle space utilities', () => {
-        const css = '.space-x-4 > :not([hidden]) ~ :not([hidden]) { margin-left: 1rem; }';
-        const result = mangleCSSSync(css, testMangleMap);
-        expect(result.css).toContain('.x >');
+        expect(result.css).toContain(expectedCSS);
     });
 
     it('should return correct mangledClasses list', () => {

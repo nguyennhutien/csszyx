@@ -114,6 +114,20 @@ const OPAQUE_OBJECT_KEYS: ReadonlySet<string> = new Set(['css']);
 export type StyleChainKind = 'style' | 'object-form' | 'opaque' | 'invalid';
 
 /**
+ * Classify one owner in a nested style chain.
+ * @param name - Static owner name, or an empty dynamic placeholder.
+ * @param index - Owner depth, innermost first.
+ * @returns The owner's effect on the chain, or null when it remains style-like.
+ */
+function classifyStyleOwner(name: string, index: number): StyleChainKind | null {
+    if (!name) return null;
+    if (OPAQUE_OBJECT_KEYS.has(name)) return index === 0 ? 'opaque' : 'invalid';
+    if (!PROPERTY_KEYS.has(name)) return null;
+    if (index === 0 && objectValueForm(name) !== null) return 'object-form';
+    return 'invalid';
+}
+
+/**
  * Classify a nested-object chain inside a style region.
  *
  * Variant and unknown keys may own nested style objects freely. A utility
@@ -130,18 +144,9 @@ export function classifyStyleChain(namesInnerFirst: readonly string[]): StyleCha
     let kind: StyleChainKind = 'style';
     for (let index = 0; index < namesInnerFirst.length; index += 1) {
         const name = namesInnerFirst[index] ?? '';
-        if (!name) continue;
-        if (OPAQUE_OBJECT_KEYS.has(name)) {
-            if (index !== 0) return 'invalid';
-            kind = 'opaque';
-            continue;
-        }
-        if (!PROPERTY_KEYS.has(name)) continue;
-        if (index === 0 && objectValueForm(name) !== null) {
-            kind = 'object-form';
-            continue;
-        }
-        return 'invalid';
+        const ownerKind = classifyStyleOwner(name, index);
+        if (ownerKind === 'invalid') return ownerKind;
+        if (ownerKind !== null) kind = ownerKind;
     }
     return kind;
 }

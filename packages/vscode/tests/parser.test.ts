@@ -15,66 +15,29 @@ import {
 } from '../src/parser.js';
 
 describe('parseSzContext — JSX form', () => {
-    it('returns none outside any sz expression', () => {
-        expect(parseSzContext('<div className="foo">').type).toBe('none');
-        expect(parseSzContext('const x = 1;').type).toBe('none');
-    });
-
-    it('returns none after a closed sz expression', () => {
-        expect(parseSzContext('<div sz={{ p: 4 }}>').type).toBe('none');
-    });
-
-    it('returns key at top-level of an empty object', () => {
-        const ctx = parseSzContext('<div sz={{ ');
-        expect(ctx.type).toBe('key');
-        expect(ctx.depth).toBe(1);
-    });
-
-    it('returns key when typing a new prop name', () => {
-        const ctx = parseSzContext('<div sz={{ p: 4, b');
-        expect(ctx.type).toBe('key');
-    });
-
-    it('returns value with currentKey after a colon at top-level', () => {
-        const ctx = parseSzContext('<div sz={{ p: ');
-        expect(ctx.type).toBe('value');
-        expect(ctx.currentKey).toBe('p');
-    });
-
-    it('returns variant-key inside a nested variant object', () => {
-        const ctx = parseSzContext('<div sz={{ hover: { ');
-        expect(ctx.type).toBe('variant-key');
-        expect(ctx.depth).toBe(2);
-    });
-
-    it('returns variant-value inside a nested variant after a colon', () => {
-        const ctx = parseSzContext('<div sz={{ hover: { bg: ');
-        expect(ctx.type).toBe('variant-value');
-        expect(ctx.currentKey).toBe('bg');
-    });
-
-    it('goes back to top-level key after closing a variant object', () => {
-        const ctx = parseSzContext('<div sz={{ hover: { bg: "red" }, ');
-        expect(ctx.type).toBe('key');
-        expect(ctx.depth).toBe(1);
-    });
-
-    it('ignores colons inside strings', () => {
-        const ctx = parseSzContext('<div sz={{ "a:b": ');
-        // String key isn't a bare identifier — walker treats the whole
-        // segment as "not a key", so no key is captured.
-        expect(ctx.type).toBe('key');
-    });
-
-    it('ignores colons inside arbitrary value brackets', () => {
-        const ctx = parseSzContext('<div sz={{ p: [calc(100%-2px)], ');
-        expect(ctx.type).toBe('key');
-    });
-
-    it('balances nested brackets inside an arbitrary value', () => {
-        const ctx = parseSzContext('<div sz={{ w: [minmax(0,arr[i]):x], ');
-        expect(ctx.type).toBe('key');
-        expect(ctx.depth).toBe(1);
+    it.each([
+        ['outside JSX', '<div className="foo">', { type: 'none' }],
+        ['outside source code', 'const x = 1;', { type: 'none' }],
+        ['after a closed expression', '<div sz={{ p: 4 }}>', { type: 'none' }],
+        ['in an empty object', '<div sz={{ ', { type: 'key', depth: 1 }],
+        ['while typing a prop', '<div sz={{ p: 4, b', { type: 'key' }],
+        ['after a top-level colon', '<div sz={{ p: ', { type: 'value', currentKey: 'p' }],
+        ['in a variant object', '<div sz={{ hover: { ', { type: 'variant-key', depth: 2 }],
+        [
+            'after a variant colon',
+            '<div sz={{ hover: { bg: ',
+            { type: 'variant-value', currentKey: 'bg' },
+        ],
+        ['after a closed variant', '<div sz={{ hover: { bg: "red" }, ', { type: 'key', depth: 1 }],
+        ['after a quoted key colon', '<div sz={{ "a:b": ', { type: 'key' }],
+        ['after arbitrary brackets', '<div sz={{ p: [calc(100%-2px)], ', { type: 'key' }],
+        [
+            'after nested arbitrary brackets',
+            '<div sz={{ w: [minmax(0,arr[i]):x], ',
+            { type: 'key', depth: 1 },
+        ],
+    ])('classifies context %s', (_label, source, expected) => {
+        expect(parseSzContext(source)).toMatchObject(expected);
     });
 });
 
@@ -193,48 +156,29 @@ describe('parseSzContext — picks the rightmost open expression', () => {
 });
 
 describe('findSzExpressions', () => {
-    it('extracts a single JSX object', () => {
-        const res = findSzExpressions('<div sz={{ p: 4 }} />');
-        expect(res).toHaveLength(1);
-        expect(res[0].objText).toBe('{ p: 4 }');
-    });
-
-    it('extracts a single HTML attribute object (double quote)', () => {
-        const res = findSzExpressions('<div sz="{ p: 4 }">');
-        expect(res).toHaveLength(1);
-        expect(res[0].objText).toBe('{ p: 4 }');
-    });
-
-    it('extracts a single HTML attribute object (single quote)', () => {
-        const res = findSzExpressions("<div sz='{ p: 4 }'>");
-        expect(res).toHaveLength(1);
-        expect(res[0].objText).toBe('{ p: 4 }');
-    });
-
-    it('extracts multiple expressions in the same text', () => {
-        const res = findSzExpressions('<a sz={{ p: 1 }}></a><b sz="{ p: 2 }"></b>');
-        expect(res).toHaveLength(2);
-        expect(res[0].objText).toBe('{ p: 1 }');
-        expect(res[1].objText).toBe('{ p: 2 }');
-    });
-
-    it('handles nested variant objects inside JSX', () => {
-        const res = findSzExpressions('<div sz={{ hover: { bg: "red" } }} />');
-        expect(res).toHaveLength(1);
-        expect(res[0].objText).toBe('{ hover: { bg: "red" } }');
-    });
-
-    it('handles nested variant objects inside HTML attribute', () => {
-        const res = findSzExpressions('<div sz="{ hover: { bg: \'red\' } }">');
-        expect(res).toHaveLength(1);
-        expect(res[0].objText).toBe("{ hover: { bg: 'red' } }");
-    });
-
-    it('skips braces inside string values', () => {
-        // A stray `}` inside a string must not terminate the object early.
-        const res = findSzExpressions('<div sz={{ css: "a}b" }} />');
-        expect(res).toHaveLength(1);
-        expect(res[0].objText).toBe('{ css: "a}b" }');
+    it.each([
+        ['JSX', '<div sz={{ p: 4 }} />', ['{ p: 4 }']],
+        ['double-quoted HTML', '<div sz="{ p: 4 }">', ['{ p: 4 }']],
+        ['single-quoted HTML', "<div sz='{ p: 4 }'>", ['{ p: 4 }']],
+        [
+            'multiple attributes',
+            '<a sz={{ p: 1 }}></a><b sz="{ p: 2 }"></b>',
+            ['{ p: 1 }', '{ p: 2 }'],
+        ],
+        [
+            'nested JSX variants',
+            '<div sz={{ hover: { bg: "red" } }} />',
+            ['{ hover: { bg: "red" } }'],
+        ],
+        [
+            'nested HTML variants',
+            '<div sz="{ hover: { bg: \'red\' } }">',
+            ["{ hover: { bg: 'red' } }"],
+        ],
+        ['braces inside strings', '<div sz={{ css: "a}b" }} />', ['{ css: "a}b" }']],
+    ])('extracts %s expressions', (_label, source, expectedObjects) => {
+        const res = findSzExpressions(source);
+        expect(res.map(expression => expression.objText)).toEqual(expectedObjects);
     });
 
     it('records the correct startOffset for later range calculations', () => {

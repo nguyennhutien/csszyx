@@ -195,8 +195,8 @@ export function verifyAllTokens(
     const elements = root.querySelectorAll('[data-sz-recovery-token]');
     const results: VerificationResult[] = [];
 
-    for (let i = 0; i < elements.length; i++) {
-        const element = elements[i] as HTMLElement;
+    for (const node of elements) {
+        const element = node as HTMLElement;
         const result = verifyRecoveryToken(element, manifest);
         results.push(result);
     }

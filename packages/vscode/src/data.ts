@@ -103,7 +103,8 @@ export function getValueCompletions(key: string): vscode.CompletionItem[] {
         );
         item.insertText = isNum ? v : `'${v}'`;
         item.filterText = v;
-        item.detail = `${key}: ${isNum ? v : `'${v}'`}`;
+        const detailValue = isNum ? v : `'${v}'`;
+        item.detail = `${key}: ${detailValue}`;
         return item;
     });
 }

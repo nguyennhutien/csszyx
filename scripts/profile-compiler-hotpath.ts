@@ -253,14 +253,15 @@ function readQuoted(code: string, start: number): number {
  */
 function readBalanced(code: string, start: number): number {
     let depth = 0;
-    for (let i = start; i < code.length; i++) {
+    let i = start;
+    while (i < code.length) {
         const ch = code[i];
         if (ch === '"' || ch === "'" || ch === '`') {
             const end = readQuoted(code, i);
             if (end === i) {
                 return start;
             }
-            i = end - 1;
+            i = end;
             continue;
         }
         if (ch === '{') {
@@ -271,6 +272,7 @@ function readBalanced(code: string, start: number): number {
                 return i + 1;
             }
         }
+        i++;
     }
     return start;
 }
@@ -408,33 +410,46 @@ function classTokenToEntry(token: string): { path: string[]; value: SzValue } | 
 }
 
 /**
+ * Check whether one sz entry reproduces a Tailwind class without diagnostics.
+ * @param key Candidate sz property.
+ * @param value Candidate sz value.
+ * @param twClass Expected Tailwind class.
+ * @returns True when the compiler produces the exact class.
+ */
+function reproducesClass(key: string, value: SzValue, twClass: string): boolean {
+    try {
+        const result = transformQuiet({ [key]: value });
+        return !result.warned && result.className === twClass;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Find the first sz property for a mapped prefix that reproduces a class.
+ * @param prefix Tailwind prefix mapped from sz properties.
+ * @param value Candidate sz value.
+ * @param twClass Expected Tailwind class.
+ * @returns Matching sz property, or undefined when none is exact.
+ */
+function findMatchingKey(prefix: string, value: SzValue, twClass: string): string | undefined {
+    return prefixToKeys.get(prefix)?.find(candidate => reproducesClass(candidate, value, twClass));
+}
+
+/**
  * Convert a non-variant Tailwind class to an sz key/value pair.
  * @param twClass Tailwind utility without variants
  * @returns sz key/value pair, or null when unsupported
  */
 function baseClassToEntry(twClass: string): { key: string; value: SzValue } | null {
-    if (!twClass.includes('-')) {
-        try {
-            const result = transformQuiet({ [twClass]: true });
-            if (!result.warned && result.className === twClass) {
-                return { key: twClass, value: true };
-            }
-        } catch {
-            /* not a boolean key */
-        }
+    if (!twClass.includes('-') && reproducesClass(twClass, true, twClass)) {
+        return { key: twClass, value: true };
     }
 
     for (const prefix of sortedPrefixes) {
         const sep = `${prefix}-`;
         if (twClass === prefix) {
-            const key = prefixToKeys.get(prefix)?.find(candidate => {
-                try {
-                    const result = transformQuiet({ [candidate]: true });
-                    return !result.warned && result.className === twClass;
-                } catch {
-                    return false;
-                }
-            });
+            const key = findMatchingKey(prefix, true, twClass);
             return key ? { key, value: true } : null;
         }
         if (!twClass.startsWith(sep)) {
@@ -442,14 +457,7 @@ function baseClassToEntry(twClass: string): { key: string; value: SzValue } | nu
         }
         const rawValue = twClass.slice(sep.length);
         const value = parseValue(rawValue);
-        const key = prefixToKeys.get(prefix)?.find(candidate => {
-            try {
-                const result = transformQuiet({ [candidate]: value });
-                return !result.warned && result.className === twClass;
-            } catch {
-                return false;
-            }
-        });
+        const key = findMatchingKey(prefix, value, twClass);
         return key ? { key, value } : null;
     }
 
