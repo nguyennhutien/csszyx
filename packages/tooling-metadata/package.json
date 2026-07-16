@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/tooling-metadata",
-  "version": "0.11.7",
+  "version": "0.11.8",
   "description": "Shared implementation metadata for csszyx editor and language tooling",
   "private": true,
   "repository": {
