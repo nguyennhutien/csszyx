@@ -6,7 +6,7 @@
  *
  * Supports:
  *   - Multiple @theme blocks per file
- *   - @theme inline { } syntax (inline keyword ignored)
+ *   - @theme option keywords (inline, static, reference, combinations — ignored)
  *   - @theme inside @layer (two-pass strip)
  *   - --color-brand-50 shade suffixes (deduped to 'brand')
  *   - Multi-file merge via mergeThemes()
@@ -115,14 +115,44 @@ function stripLayerWrappers(css: string): string {
  */
 function extractThemeBlocks(css: string): string[] {
     const blocks: string[] = [];
-    // Match @theme (optional "inline" keyword) followed by {
-    const themeStart = /@theme\s+(?:inline\s+)?\{|@theme\{/g;
-    for (const match of css.matchAll(themeStart)) {
-        const openPos = css.indexOf('{', match.index);
-        const closePos = findMatchingBrace(css, openPos);
-        if (closePos !== -1) {
-            blocks.push(css.slice(openPos + 1, closePos));
+    // Find `@theme` followed by any option keywords, then {. Tailwind v4 accepts
+    // option keywords after @theme (`inline`, `static`, `reference`, and their
+    // combinations); only matching `inline` silently dropped `@theme static`
+    // palettes from the szcn groups. A manual scan (mirroring
+    // scanCustomPropertyNames) instead of `[^{};]*\{`, whose scan-to-brace run
+    // was polynomial-by-search on brace-less content.
+    let searchFrom = 0;
+    for (;;) {
+        const at = css.indexOf('@theme', searchFrom);
+        if (at === -1) {
+            break;
         }
+        let cursor = at + '@theme'.length;
+        // The next char must be whitespace or `{` so `@themes {` never matches.
+        const next = css[cursor];
+        if (next !== '{' && next !== ' ' && next !== '\t' && next !== '\n' && next !== '\r') {
+            searchFrom = cursor;
+            continue;
+        }
+        // Walk over option keywords/whitespace to the opening brace; `;`, `}`
+        // and `@` end the at-rule prelude, so stopping there both rejects
+        // `@theme;` and keeps the walk from re-scanning past the next at-rule.
+        while (cursor < css.length) {
+            const ch = css[cursor];
+            if (ch === '{') {
+                const closePos = findMatchingBrace(css, cursor);
+                if (closePos !== -1) {
+                    blocks.push(css.slice(cursor + 1, closePos));
+                }
+                break;
+            }
+            if (ch === ';' || ch === '}' || ch === '@') {
+                break;
+            }
+            cursor++;
+        }
+        // Every character is visited at most once across iterations — linear.
+        searchFrom = Math.max(cursor, at + '@theme'.length);
     }
     return blocks;
 }

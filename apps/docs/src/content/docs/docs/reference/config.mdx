@@ -405,6 +405,15 @@ alone and dedupe even unscanned.) Tokens from hand-written CSS outside `@theme`
 can be registered manually with
 [`registerSzcnGroups`](/docs/reference/runtime/#registerszcngroupsgroups).
 
+When `scanCss` is **unset**, the plugin still discovers `@theme` blocks on its
+own: it walks the project (and any `compileSources` packages) for CSS files
+carrying `@theme` and feeds their tokens to the szcn groups, so last-wins
+merging works with zero config. All `@theme` option keywords (`inline`,
+`static`, `reference`) are recognized. The auto-scan covers **runtime merging
+only** — `.csszyx/theme.d.ts` type generation still requires an explicit
+`scanCss`, and setting one turns the auto-scan off in favor of exactly the
+files you listed.
+
 ### `hydration`
 
 Controls SSR hydration verification.

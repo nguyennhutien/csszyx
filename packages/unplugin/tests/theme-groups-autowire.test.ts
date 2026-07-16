@@ -120,6 +120,67 @@ describe('theme groups auto-wiring (real vite build, zero app wiring)', () => {
     });
 });
 
+describe('zero-config @theme auto-scan (no scanCss, real vite build)', () => {
+    it('discovers @theme static tokens without scanCss and dedupes at runtime', async () => {
+        // vui finding 7, both halves at once: scanCss is UNSET (the plugin must
+        // discover the theme CSS itself) and the block uses the `static` option
+        // keyword (which the scanner used to skip). The bundle must still ship
+        // a registration that makes the later custom color win.
+        loadNativeBinding();
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-theme-noscan-'));
+        tempDirs.push(root);
+        mkdirSync(join(root, 'src'), { recursive: true });
+        writeFileSync(
+            join(root, 'src/theme.css'),
+            `@import 'tailwindcss';
+@theme static {
+    --color-sub: oklch(0.7 0.05 250);
+    --color-danger: oklch(0.6 0.2 25);
+}
+`,
+            'utf8',
+        );
+        writeFileSync(
+            join(root, 'src/main.ts'),
+            `import { szcn } from '@csszyx/runtime';
+export const slotOverride = szcn('text-sub', 'text-danger');
+`,
+            'utf8',
+        );
+
+        await build({
+            root,
+            logLevel: 'silent',
+            plugins: [
+                vitePlugin({
+                    build: { cache: false },
+                    production: { mangle: false },
+                }),
+            ],
+            resolve: {
+                alias: { '@csszyx/runtime': resolve(__dirname, '../../runtime/src/index.ts') },
+            },
+            build: {
+                minify: false,
+                lib: { entry: join(root, 'src/main.ts'), formats: ['es'], fileName: 'bundle' },
+                rollupOptions: { external: ['tailwindcss'] },
+            },
+        });
+
+        const distDir = join(root, 'dist');
+        const files = readdirSync(distDir).filter(f => f.endsWith('.js') || f.endsWith('.mjs'));
+        const bundle = files.map(f => readFileSync(join(distDir, f), 'utf8')).join('\n');
+        expect(bundle).toContain('registerSzcnGroups');
+        expect(bundle).toMatch(/"colors":\s*\[\s*"danger",\s*"sub"\s*\]/);
+
+        const entryFile = files.find(f => f.startsWith('bundle')) ?? files[0];
+        const builtModule = (await import(
+            pathToFileURL(join(distDir, entryFile as string)).href
+        )) as { slotOverride: string };
+        expect(builtModule.slotOverride).toBe('text-danger');
+    }, 60_000);
+});
+
 describe('HMR: editing @theme reloads the generated registration module', () => {
     it('invalidates the virtual module when a scanned CSS file changes', () => {
         const root = mkdtempSync(join(tmpdir(), 'csszyx-theme-hmr-'));
