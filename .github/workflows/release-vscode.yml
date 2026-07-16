@@ -7,23 +7,29 @@ name: Release VS Code Extension
 #     auto-skips it. Marketplace publish therefore needs its own trigger.
 #
 # Auto-trigger: the release-please job in release.yml dispatches this
-# workflow explicitly after cutting a release. A `detect` job then diffs the
+# workflow on `main` after cutting a release. A `detect` job then diffs the
 # extension against the previous release tag and SKIPS the publish when only
 # the release-please version bump changed, so a release that does not touch the
-# extension does not rebuild or re-request Marketplace approval. The `v*` tag trigger below
-# is kept as a manual belt-and-braces path, but it CANNOT fire for normal
-# releases: release-please creates tags with the workflow's GITHUB_TOKEN,
-# and GitHub never triggers workflows from events made with a workflow's
-# own token (Marketplace publishes were silently skipped from v0.9.1
-# until the explicit dispatch was added). Either way the publish job
-# pauses on the `vscode-publish` environment for maintainer approval
+# extension does not rebuild or re-request Marketplace approval. The publish
+# job pauses on the `vscode-publish` environment for maintainer approval
 # before any Marketplace API call. The version itself is read from
 # packages/vscode/package.json — extra-files keeps that field in sync
 # with every release.
 #
-# Manual trigger: workflow_dispatch with optional dry_run (build .vsix
-# without publishing) for verification. A real publish via dispatch is
-# possible but, like the tag path, waits for environment approval.
+# main-only: the vscode-publish environment's deployment policy allows only
+# the main branch, so the publish job additionally guards on `main` and
+# SKIPS any other ref instead of reaching the environment and dying red on
+# protection rules. That rejection is exactly what broke every extension
+# release from v0.11.4 to v0.11.8, when the dispatch still targeted the
+# release tag. There is no `v*` tag trigger for the same reason — and it
+# could never fire for normal releases anyway: release-please creates tags
+# with the workflow's GITHUB_TOKEN, and GitHub never triggers workflows
+# from events made with a workflow's own token (Marketplace publishes were
+# silently skipped from v0.9.1 until the explicit dispatch was added).
+#
+# Manual trigger: workflow_dispatch (pick ref main) with optional dry_run
+# (build .vsix without publishing) for verification. A real publish via
+# dispatch is possible but waits for the same environment approval.
 #
 # Authentication (two paths; the workflow prefers Entra ID when configured):
 #
@@ -50,15 +56,10 @@ name: Release VS Code Extension
 #
 # Either way the `vscode-publish` environment must exist in repo Settings →
 # Environments with a required reviewer — the YAML reference alone gates
-# nothing without it — and its deployment-branch policy must allow the ref the
-# publish runs on (main for a workflow_dispatch on main).
+# nothing without it — with a deployment-branch policy allowing `main` (the
+# only ref the publish job accepts).
 
 on:
-  push:
-    tags:
-      # Single-root release-please tag format (include-component-in-tag:
-      # false, include-v-in-tag: true) — e.g. v0.6.2, v0.7.0.
-      - 'v*'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -102,8 +103,13 @@ jobs:
   publish:
     name: Build and publish to Marketplace
     needs: detect
-    # Skip a version-only bump; a manual force dispatch always publishes.
-    if: needs.detect.outputs.changed == 'true' || github.event.inputs.force == 'true'
+    # Skip a version-only bump (a manual force dispatch always publishes) and
+    # skip any ref other than main — the vscode-publish environment only
+    # allows main, so reaching it from another ref fails the run instead of
+    # skipping it.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (needs.detect.outputs.changed == 'true' || github.event.inputs.force == 'true')
     runs-on: ubuntu-latest
     # Holds the job until a maintainer approves the deployment, the same
     # gate as the npm `npm-publish` environment. Closes the path where a
