@@ -182,12 +182,27 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
     if (base.indexOf('--') > 0) {
         return null;
     }
+    const firstSegment = norm.split('-', 1)[0] as string;
+    // A token that belongs to an ambiguous prefix AND classifies to a concrete
+    // value group (e.g. `text-ellipsis`/`text-clip` → `text:overflow`) is a
+    // single mutually-exclusive property, so it must last-wins even when it also
+    // appears in the box-role map. Resolve that BEFORE the box-role under-merge
+    // below, which would otherwise keep both. (Measured: only text-ellipsis and
+    // text-clip are in both sets; every other box-role token classifies to null.)
+    if (AMBIGUOUS_PREFIXES.has(firstSegment)) {
+        const value = norm === firstSegment ? '' : norm.slice(firstSegment.length + 1);
+        const group = classifyAmbiguousValue(firstSegment, value);
+        if (group !== null) {
+            const key = `${variant} ${group}`;
+            return { key, covers: [key] };
+        }
+    }
     // Exact value-keyed tokens (flex/block/italic/underline …) span several CSS
     // properties under one category, so under-merge to avoid dropping a sibling.
     if (BOX_ROLE_TOKENS.has(norm)) {
         return null;
     }
-    const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(norm.split('-', 1)[0] as string) ?? [];
+    const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(firstSegment) ?? [];
     for (const [prefix] of bucket) {
         if (norm === prefix || norm.startsWith(`${prefix}-`)) {
             return classifyMatchedPrefix(norm, variant, prefix);
