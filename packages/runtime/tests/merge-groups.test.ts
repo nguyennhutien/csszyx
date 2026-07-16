@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { szcn } from '../src/merge-classes.js';
+import { _szcn, szcn } from '../src/merge-classes.js';
 import {
     _resetSzcnGroups,
     getSzcnGroupsGeneration,
@@ -78,6 +78,31 @@ describe('per-prefix classification', () => {
         expect(szcn('text-(--brand)', 'text-sm')).toBe('text-(--brand) text-sm');
     });
 
+    it('explicit data-type hints classify css-variable values', () => {
+        // `(color:--x)` / `[color:var(--x)]` DECLARE the type, so they merge
+        // even though the var name itself is unknown — unlike the bare
+        // `text-(--x)` above, which stays keep-both.
+        expect(szcn('text-(color:--sub)', 'text-(color:--danger)')).toBe('text-(color:--danger)');
+        expect(szcn('text-[color:var(--sub)]', 'text-[color:var(--danger)]')).toBe(
+            'text-[color:var(--danger)]',
+        );
+        expect(szcn('text-(length:--compact)', 'text-(length:--roomy)')).toBe(
+            'text-(length:--roomy)',
+        );
+        expect(szcn('bg-(color:--sub)', 'bg-(color:--danger)')).toBe('bg-(color:--danger)');
+        expect(szcn('border-(color:--sub)', 'border-(color:--danger)')).toBe(
+            'border-(color:--danger)',
+        );
+        // A color hint and a length hint are DIFFERENT properties — co-exist.
+        expect(szcn('text-(color:--sub)', 'text-(length:--roomy)')).toBe(
+            'text-(color:--sub) text-(length:--roomy)',
+        );
+        // Opacity modifier stays within the color group.
+        expect(szcn('text-(color:--sub)/50', 'text-(color:--danger)')).toBe(
+            'text-(color:--danger)',
+        );
+    });
+
     it('bg: seven groups', () => {
         expect(szcn('bg-red-500', 'bg-blue-500')).toBe('bg-blue-500');
         expect(szcn('bg-cover', 'bg-contain')).toBe('bg-contain');
@@ -134,6 +159,18 @@ describe('custom theme registration', () => {
         expect(szcn('text-brand', 'text-red-500')).toBe('text-red-500');
         expect(szcn('bg-brand', 'bg-tag-blue-bg')).toBe('bg-tag-blue-bg');
         expect(szcn('border-brand', 'border-2')).toBe('border-brand border-2');
+    });
+
+    it('a later custom color overrides an earlier one, including via the szs path', () => {
+        // vui finding 7: with --color-sub / --color-danger registered, the
+        // later argument must win — otherwise stylesheet order decides and an
+        // szs-slot override (`szs={{ content: { color: 'danger' } }}` over a
+        // `text-sub` default) silently loses. Compiled szs merges through the
+        // generated `_szcn` entry, so both entries are asserted.
+        registerSzcnGroups({ colors: ['sub', 'danger'] });
+        expect(szcn('text-sub', 'text-danger')).toBe('text-danger');
+        expect(_szcn('text-sub', 'text-danger')).toBe('text-danger');
+        expect(szcn('bg-sub', 'bg-danger')).toBe('bg-danger');
     });
 
     it('registered text sizes and font tokens dedupe', () => {

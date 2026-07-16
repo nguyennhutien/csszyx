@@ -347,7 +347,7 @@ describe('RSC boundary guard', () => {
 // These tests document concrete behavioural gaps in the RSC boundary guard
 // surfaced by the 2026-05-13 audit. Fixed issues stay as regular regression
 // tests; unresolved behavioural bugs use `it.fails(...)`; longer-tail
-// performance work stays as `it.todo(...)`.
+// longer-tail performance work remains explicitly deferred.
 //
 // Severity ordering:
 //   #4 normalizeModuleId perf    — LOW (fine on this repo, may bite large monorepos)

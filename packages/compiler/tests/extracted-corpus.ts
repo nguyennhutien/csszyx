@@ -1,5 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { parseSync } from 'oxc-parser';
+
+type OxcNode = Record<string, unknown>;
 
 export interface ExtractedSnippet {
     file: string;
@@ -72,7 +75,14 @@ function decodeLiteral(quote: string, raw: string): string | null {
     if (quote === '`') return raw.includes('${') ? null : raw;
 
     try {
-        return Function(`return ${quote}${raw}${quote}`)() as string;
+        const parsed = parseSync('corpus-literal.js', `const value=${quote}${raw}${quote}`);
+        if (parsed.errors.length > 0) return null;
+        const body = (parsed.program as unknown as OxcNode).body as OxcNode[];
+        const declaration = (body[0].declarations as OxcNode[])[0];
+        const literal = declaration.init as OxcNode | undefined;
+        return literal?.type === 'Literal' && typeof literal.value === 'string'
+            ? literal.value
+            : null;
     } catch {
         return null;
     }

@@ -132,6 +132,32 @@ describe('hybrid raw-class ownership', () => {
         expect([...collectAuthoredClassNames(source)].sort()).toEqual(['before-after', 'raw']);
     });
 
+    it('falls back safely for malformed and out-of-range JavaScript escapes', () => {
+        const source = String.raw`
+            <div className={'valid\x20fixed \u{110000} \u{GG} \u{ broken \xG1 \x1 \q tail-\x'} />
+        `;
+
+        expect([...collectAuthoredClassNames(source)].sort()).toEqual([
+            'broken',
+            'fixed',
+            'q',
+            'tail-x',
+            'u{',
+            'u{110000}',
+            'u{GG}',
+            'valid',
+            'x1',
+            'xG1',
+        ]);
+    });
+
+    it('removes LF string continuations without splitting one class token', () => {
+        const continuation = `\\${'\n'}`;
+        const source = `<div className={'before-${continuation}after raw'} />`;
+
+        expect([...collectAuthoredClassNames(source)].sort()).toEqual(['before-after', 'raw']);
+    });
+
     it('keeps shared raw/sz classes out of the mangle map', () => {
         const owned = new Set(['bg-bg', 'h-screen', 'overflow-hidden', 'p-4']);
         const authored = new Set(['bg-bg', 'text-text', 'h-screen', 'overflow-hidden']);

@@ -8,6 +8,7 @@ import {
     injectMangleMapScript,
     transformIndexHtml,
 } from '../src/html-transformer.js';
+import { runGeneratedCode } from './vm-test-utils.js';
 
 describe('html-transformer', () => {
     const sampleHtml = '<html lang="en"><head></head><body></body></html>';
@@ -73,7 +74,9 @@ describe('html-transformer', () => {
         });
 
         it('should pretty-print JSON when option is set', () => {
-            const result = injectMangleMapScript(sampleHtml, sampleMap, { prettyPrint: true });
+            const result = injectMangleMapScript(sampleHtml, sampleMap, {
+                prettyPrint: true,
+            });
             expect(result).toContain(JSON.stringify(sampleMap, null, 2));
         });
 
@@ -122,7 +125,7 @@ describe('html-transformer', () => {
                     getAttribute: () => sampleChecksum,
                 },
             };
-            new Function('window', 'document', debugScript ?? '')(win, doc);
+            runGeneratedCode(debugScript ?? '', { window: win, document: doc });
 
             expect(win.__csszyx?.decodeGlobalVar('---gz')).toBe('--brand-primary');
             expect(win.__csszyx?.decodeGlobalVar('--sz')).toBeUndefined();
@@ -146,7 +149,7 @@ describe('html-transformer', () => {
                     getAttribute: () => sampleChecksum,
                 },
             };
-            new Function('window', 'document', debugScript ?? '')(win, doc);
+            runGeneratedCode(debugScript ?? '', { window: win, document: doc });
 
             expect(win.__csszyx?.decodeGlobalVar('--gxz')).toBe('--brand-primary');
             expect(win.__csszyx?.decodeGlobalVar('---gz')).toBeUndefined();

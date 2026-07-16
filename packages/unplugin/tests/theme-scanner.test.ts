@@ -28,6 +28,29 @@ body { margin: 0; }
         expect(result.colors).toEqual(['brand', 'brand-dark']);
     });
 
+    it('extracts tokens from @theme with option keywords (static, reference, combos)', () => {
+        // Tailwind v4 option keywords after @theme must not hide the block:
+        // only matching `inline` silently dropped `@theme static` palettes
+        // from the szcn groups (vui report finding 7).
+        const variants = [
+            '@theme static { --color-danger: red; --color-salmon-a-400: pink; }',
+            '@theme inline static { --color-danger: red; --color-salmon-a-400: pink; }',
+            '@theme reference { --color-danger: red; --color-salmon-a-400: pink; }',
+        ];
+        for (const css of variants) {
+            expect(parseThemeBlocks(css).colors, css).toEqual(['danger', 'salmon-a']);
+        }
+    });
+
+    it('does not treat @themes or other at-rules as a theme block', () => {
+        expect(parseThemeBlocks('@themes { --color-decoy: red; }').colors).toEqual([]);
+    });
+
+    it('ignores unterminated theme preludes and blocks', () => {
+        expect(parseThemeBlocks('@theme static').colors).toEqual([]);
+        expect(parseThemeBlocks('@theme { --color-decoy: red;').colors).toEqual([]);
+    });
+
     it('strips trailing numeric shade suffix from color tokens', () => {
         const css = `
 @theme {

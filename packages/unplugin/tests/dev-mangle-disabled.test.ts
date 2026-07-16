@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { vitePlugin } from '../src/unplugin.js';
@@ -27,7 +29,7 @@ async function injectedMangleMap(command: 'serve' | 'build'): Promise<string> {
         return fn ? await fn.apply(ctx, args) : undefined;
     };
 
-    const root = '/tmp/csszyx-serve-fixture';
+    const root = resolve(homedir(), '.cache/csszyx-tests/dev-mangle');
     await call('configResolved', { root, command });
     await call(
         'transform',

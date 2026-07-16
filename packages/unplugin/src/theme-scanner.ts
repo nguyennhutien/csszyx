@@ -6,7 +6,7 @@
  *
  * Supports:
  *   - Multiple @theme blocks per file
- *   - @theme inline { } syntax (inline keyword ignored)
+ *   - @theme option keywords (inline, static, reference, combinations — ignored)
  *   - @theme inside @layer (two-pass strip)
  *   - --color-brand-50 shade suffixes (deduped to 'brand')
  *   - Multi-file merge via mergeThemes()
@@ -106,6 +106,51 @@ function stripLayerWrappers(css: string): string {
     return result;
 }
 
+/** Theme block body and the cursor where scanning should resume. */
+interface ThemeBlockMatch {
+    body: string | null;
+    end: number;
+}
+
+/**
+ * Validate one `@theme` marker and return its prelude start.
+ *
+ * @param css Complete CSS source.
+ * @param at `@theme` marker offset.
+ * @returns Prelude start, or null when the marker belongs to a longer identifier.
+ */
+function themePreludeStart(css: string, at: number): number | null {
+    const cursor = at + '@theme'.length;
+    const next = css[cursor];
+    const validBoundary =
+        next === '{' || next === ' ' || next === '\t' || next === '\n' || next === '\r';
+    return validBoundary ? cursor : null;
+}
+
+/**
+ * Scan one validated `@theme` prelude and optional body.
+ *
+ * @param css Complete CSS source.
+ * @param start Prelude start after the marker.
+ * @returns Extracted body and the last inspected offset.
+ */
+function readThemeBlock(css: string, start: number): ThemeBlockMatch {
+    for (let cursor = start; cursor < css.length; cursor++) {
+        const character = css[cursor];
+        if (character === '{') {
+            const close = findMatchingBrace(css, cursor);
+            return {
+                body: close === -1 ? null : css.slice(cursor + 1, close),
+                end: close === -1 ? cursor : close,
+            };
+        }
+        if (character === ';' || character === '}' || character === '@') {
+            return { body: null, end: cursor };
+        }
+    }
+    return { body: null, end: css.length };
+}
+
 /**
  * Extract all @theme block bodies from CSS content.
  * Handles nested braces correctly (does not use simple [^}]* regex).
@@ -115,14 +160,31 @@ function stripLayerWrappers(css: string): string {
  */
 function extractThemeBlocks(css: string): string[] {
     const blocks: string[] = [];
-    // Match @theme (optional "inline" keyword) followed by {
-    const themeStart = /@theme\s+(?:inline\s+)?\{|@theme\{/g;
-    for (const match of css.matchAll(themeStart)) {
-        const openPos = css.indexOf('{', match.index);
-        const closePos = findMatchingBrace(css, openPos);
-        if (closePos !== -1) {
-            blocks.push(css.slice(openPos + 1, closePos));
+    // Find `@theme` followed by any option keywords, then {. Tailwind v4 accepts
+    // option keywords after @theme (`inline`, `static`, `reference`, and their
+    // combinations); only matching `inline` silently dropped `@theme static`
+    // palettes from the szcn groups. A manual scan (mirroring
+    // scanCustomPropertyNames) instead of `[^{};]*\{`, whose scan-to-brace run
+    // was polynomial-by-search on brace-less content.
+    let searchFrom = 0;
+    for (;;) {
+        const at = css.indexOf('@theme', searchFrom);
+        if (at === -1) {
+            break;
         }
+        // The next char must be whitespace or `{` so `@themes {` never matches.
+        const preludeStart = themePreludeStart(css, at);
+        if (preludeStart === null) {
+            searchFrom = at + '@theme'.length;
+            continue;
+        }
+        // Walk over option keywords/whitespace to the opening brace; `;`, `}`
+        // and `@` end the at-rule prelude, so stopping there both rejects
+        // `@theme;` and keeps the walk from re-scanning past the next at-rule.
+        const match = readThemeBlock(css, preludeStart);
+        if (match.body !== null) blocks.push(match.body);
+        // Every character is visited at most once across iterations — linear.
+        searchFrom = Math.max(match.end, at + '@theme'.length);
     }
     return blocks;
 }
