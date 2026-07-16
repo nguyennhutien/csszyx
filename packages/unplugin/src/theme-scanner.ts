@@ -106,6 +106,51 @@ function stripLayerWrappers(css: string): string {
     return result;
 }
 
+/** Theme block body and the cursor where scanning should resume. */
+interface ThemeBlockMatch {
+    body: string | null;
+    end: number;
+}
+
+/**
+ * Validate one `@theme` marker and return its prelude start.
+ *
+ * @param css Complete CSS source.
+ * @param at `@theme` marker offset.
+ * @returns Prelude start, or null when the marker belongs to a longer identifier.
+ */
+function themePreludeStart(css: string, at: number): number | null {
+    const cursor = at + '@theme'.length;
+    const next = css[cursor];
+    const validBoundary =
+        next === '{' || next === ' ' || next === '\t' || next === '\n' || next === '\r';
+    return validBoundary ? cursor : null;
+}
+
+/**
+ * Scan one validated `@theme` prelude and optional body.
+ *
+ * @param css Complete CSS source.
+ * @param start Prelude start after the marker.
+ * @returns Extracted body and the last inspected offset.
+ */
+function readThemeBlock(css: string, start: number): ThemeBlockMatch {
+    for (let cursor = start; cursor < css.length; cursor++) {
+        const character = css[cursor];
+        if (character === '{') {
+            const close = findMatchingBrace(css, cursor);
+            return {
+                body: close === -1 ? null : css.slice(cursor + 1, close),
+                end: close === -1 ? cursor : close,
+            };
+        }
+        if (character === ';' || character === '}' || character === '@') {
+            return { body: null, end: cursor };
+        }
+    }
+    return { body: null, end: css.length };
+}
+
 /**
  * Extract all @theme block bodies from CSS content.
  * Handles nested braces correctly (does not use simple [^}]* regex).
@@ -127,32 +172,19 @@ function extractThemeBlocks(css: string): string[] {
         if (at === -1) {
             break;
         }
-        let cursor = at + '@theme'.length;
         // The next char must be whitespace or `{` so `@themes {` never matches.
-        const next = css[cursor];
-        if (next !== '{' && next !== ' ' && next !== '\t' && next !== '\n' && next !== '\r') {
-            searchFrom = cursor;
+        const preludeStart = themePreludeStart(css, at);
+        if (preludeStart === null) {
+            searchFrom = at + '@theme'.length;
             continue;
         }
         // Walk over option keywords/whitespace to the opening brace; `;`, `}`
         // and `@` end the at-rule prelude, so stopping there both rejects
         // `@theme;` and keeps the walk from re-scanning past the next at-rule.
-        while (cursor < css.length) {
-            const ch = css[cursor];
-            if (ch === '{') {
-                const closePos = findMatchingBrace(css, cursor);
-                if (closePos !== -1) {
-                    blocks.push(css.slice(cursor + 1, closePos));
-                }
-                break;
-            }
-            if (ch === ';' || ch === '}' || ch === '@') {
-                break;
-            }
-            cursor++;
-        }
+        const match = readThemeBlock(css, preludeStart);
+        if (match.body !== null) blocks.push(match.body);
         // Every character is visited at most once across iterations — linear.
-        searchFrom = Math.max(cursor, at + '@theme'.length);
+        searchFrom = Math.max(match.end, at + '@theme'.length);
     }
     return blocks;
 }

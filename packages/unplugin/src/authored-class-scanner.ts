@@ -32,6 +32,42 @@ interface DecodedEscape {
 }
 
 /**
+ * Decode a braced Unicode code-point escape.
+ *
+ * @param value Complete raw literal content.
+ * @param cursor Escaped `u` offset after the backslash.
+ * @returns Decoded escape, or null when this is not a valid braced form.
+ */
+function decodeBracedUnicodeEscape(value: string, cursor: number): DecodedEscape | null {
+    if (value[cursor] !== 'u' || value[cursor + 1] !== '{') return null;
+    const close = value.indexOf('}', cursor + 2);
+    const hex = close === -1 ? '' : value.slice(cursor + 2, close);
+    const codePoint = hex && /^[\dA-F]+$/i.test(hex) ? Number.parseInt(hex, 16) : -1;
+    if (codePoint < 0 || codePoint > 0x10ffff) return null;
+    return { value: String.fromCodePoint(codePoint), cursor: close };
+}
+
+/**
+ * Decode a fixed-width hexadecimal escape.
+ *
+ * @param value Complete raw literal content.
+ * @param cursor Escaped character offset after the backslash.
+ * @returns Decoded escape, or null for a different or malformed escape.
+ */
+function decodeFixedWidthEscape(value: string, cursor: number): DecodedEscape | null {
+    const escaped = value[cursor];
+    let width = 0;
+    if (escaped === 'x') width = 2;
+    if (escaped === 'u') width = 4;
+    const hex = value.slice(cursor + 1, cursor + width + 1);
+    if (width === 0 || !isFixedHex(hex, width)) return null;
+    return {
+        value: String.fromCodePoint(Number.parseInt(hex, 16)),
+        cursor: cursor + width,
+    };
+}
+
+/**
  * Whether a string contains exactly the requested number of hex digits.
  *
  * @param value Candidate hexadecimal text.
@@ -61,24 +97,10 @@ function decodeEscape(value: string, cursor: number): DecodedEscape {
     if (escaped === '\r' && value[cursor + 1] === '\n') {
         return { value: '', cursor: cursor + 1 };
     }
-    if (escaped === 'u' && value[cursor + 1] === '{') {
-        const close = value.indexOf('}', cursor + 2);
-        const hex = close === -1 ? '' : value.slice(cursor + 2, close);
-        const codePoint = hex && /^[\dA-F]+$/i.test(hex) ? Number.parseInt(hex, 16) : -1;
-        if (codePoint >= 0 && codePoint <= 0x10ffff) {
-            return { value: String.fromCodePoint(codePoint), cursor: close };
-        }
-    }
-    let width = 0;
-    if (escaped === 'x') width = 2;
-    else if (escaped === 'u') width = 4;
-    const hex = value.slice(cursor + 1, cursor + width + 1);
-    if (width > 0 && isFixedHex(hex, width)) {
-        return {
-            value: String.fromCodePoint(Number.parseInt(hex, 16)),
-            cursor: cursor + width,
-        };
-    }
+    const bracedUnicode = decodeBracedUnicodeEscape(value, cursor);
+    if (bracedUnicode) return bracedUnicode;
+    const fixedWidth = decodeFixedWidthEscape(value, cursor);
+    if (fixedWidth) return fixedWidth;
     const decoded = escaped === '\n' || escaped === '\r' ? '' : escaped;
     return { value: decoded, cursor };
 }
