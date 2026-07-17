@@ -350,5 +350,35 @@
       "p-2"
     ],
     "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ x, y, a, b }) => <div sz={{ p: a ? x : undefined, m: b ? y : undefined }} />;",
+    "classes": [
+      "m-(--_sz-m)",
+      "p-(--_sz-p)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ w, f, on, big }) => <div sz={{ w: w, flex: on ? f : undefined, p: big ? 8 : 2 }} />;",
+    "classes": [
+      "flex-(--_sz-flex)",
+      "p-2",
+      "p-8",
+      "w-(--_sz-w)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ w, f, on, big }) => <div className=\"x\" sz={{ w: w, flex: on ? f : undefined, p: big ? 8 : 2 }} />;",
+    "classes": [
+      "flex-(--_sz-flex)",
+      "p-2",
+      "p-8",
+      "w-(--_sz-w)"
+    ],
+    "rawClassNames": [
+      "x"
+    ]
   }
 ]
