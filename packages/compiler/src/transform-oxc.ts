@@ -2854,7 +2854,96 @@ function collectCandidateObjectProperty(
         const propertyValue = astObjectToSzObject(value, context.filename, context.bindings);
         addPrefixedCandidateClasses(compileSzObject({ [key]: propertyValue }).className, context);
     } catch {
-        collectCandidateExpression(value, context);
+        // Partially-static nested object under a PROPERTY key: walk it WITH
+        // the parent key. The old keyless walk compiled `color: 'black'` as a
+        // bare `{ color }` → a junk `text-black` candidate, while the class
+        // the runtime actually produces (`bg-black/30`) never reached the
+        // safelist. Color-opacity conditionals contribute their COMBINED
+        // per-branch classes first, matching the rust collector.
+        if (collectCandidateColorConditional(key, value, context)) return;
+        collectCandidateKeyedObject([key], value, context);
+    }
+}
+
+/**
+ * Adds both combined branch classes of a color-opacity conditional sub-object
+ * (`bg-black/30`, `bg-black/100`) to the candidates.
+ *
+ * @param key Parent color property key.
+ * @param value Nested color-object literal.
+ * @param context Candidate collection state.
+ * @returns Whether the object was a color-opacity conditional.
+ */
+function collectCandidateColorConditional(
+    key: string,
+    value: ObjectExpressionNode,
+    context: CandidateClassContext,
+): boolean {
+    const result = createPartialObjectResult();
+    const partialContext: PartialObjectContext = {
+        filename: context.filename,
+        bindings: context.bindings,
+        source: '',
+        globalVarAliases: new Map(),
+        cssVariableMap: undefined,
+        variantChain: '',
+    };
+    if (!evaluatePartialColorConditional(key, value, partialContext, result)) return false;
+    for (const entry of result.conditionalClasses) {
+        addPrefixedCandidateClasses(entry.consequent, context);
+        addPrefixedCandidateClasses(entry.alternate, context);
+    }
+    return true;
+}
+
+/**
+ * Best-effort candidates for a nested object under a chain of PROPERTY keys:
+ * each resolvable leaf (and each static conditional branch) compiles at its
+ * full key path. Unresolvable members are skipped — candidates are a safelist
+ * best-effort for runtime-fallback shapes, which always carry a diagnostic.
+ *
+ * @param path Property-key chain from the sz root down to this object.
+ * @param node Nested object literal.
+ * @param context Candidate collection state.
+ */
+function collectCandidateKeyedObject(
+    path: readonly string[],
+    node: ObjectExpressionNode,
+    context: CandidateClassContext,
+): void {
+    const leaf = (subPath: readonly string[], literal: string | number | boolean): void => {
+        let wrapped: unknown = literal;
+        for (let index = subPath.length - 1; index >= 0; index--) {
+            wrapped = { [subPath[index]]: wrapped };
+        }
+        try {
+            addPrefixedCandidateClasses(compileSzObject(wrapped as SzObject).className, context);
+        } catch {
+            // Best-effort — a value the compiler rejects contributes nothing.
+        }
+    };
+    for (const property of node.properties) {
+        if (property.type !== 'Property') continue;
+        const member = property as PropertyNode;
+        if (member.computed) continue;
+        const memberKey = extractKeyName(member.key);
+        if (memberKey === null) continue;
+        const memberPath = [...path, memberKey];
+        const value = unwrapExpression(member.value);
+        if (value.type === 'ObjectExpression') {
+            collectCandidateKeyedObject(memberPath, value as ObjectExpressionNode, context);
+            continue;
+        }
+        if (value.type === 'ConditionalExpression') {
+            const conditional = value as ConditionalExpressionNode;
+            for (const branch of [conditional.consequent, conditional.alternate]) {
+                const literal = extractStaticLiteralValue(branch);
+                if (literal !== null) leaf(memberPath, literal);
+            }
+            continue;
+        }
+        const literal = extractStaticLiteralValue(value);
+        if (literal !== null) leaf(memberPath, literal);
     }
 }
 
@@ -4580,12 +4669,104 @@ function evaluatePartialProperty(
         return evaluateNestedPartialVariant(key, value as ObjectExpressionNode, context, result);
     }
     if (
+        value.type === 'ObjectExpression' &&
+        evaluatePartialColorConditional(key, value as ObjectExpressionNode, context, result)
+    ) {
+        return true;
+    }
+    if (
         value.type === 'ConditionalExpression' &&
         evaluatePartialConditional(key, value as ConditionalExpressionNode, context, result)
     ) {
         return true;
     }
     return evaluateDynamicPartialProperty(key, value, context, result);
+}
+
+/**
+ * Compiles a color-opacity sub-object with a finite conditional on exactly one
+ * of `color`/`op` into a conditional-classes entry whose branches are complete
+ * color-opacity classes (`bg-black/30` | `bg-black/100`) — the rust engine's
+ * static expansion. Kept over a runtime variable so the lanes agree on class
+ * NAMES (cross-parser cache and mangle-map stability).
+ *
+ * @param key Parent color property key.
+ * @param object Nested color-object literal.
+ * @param context Shared evaluation inputs.
+ * @param result Mutable partial result.
+ * @returns Whether a conditional entry was emitted.
+ */
+function evaluatePartialColorConditional(
+    key: string,
+    object: ObjectExpressionNode,
+    context: PartialObjectContext,
+    result: OxcPartialObjectResult,
+): boolean {
+    let staticColor: string | null = null;
+    let colorConditional: ConditionalExpressionNode | null = null;
+    let staticOp: string | number | null = null;
+    let opConditional: ConditionalExpressionNode | null = null;
+    for (const property of object.properties) {
+        if (property.type !== 'Property') return false;
+        const member = property as PropertyNode;
+        const memberKey = member.computed ? null : extractKeyName(member.key);
+        // Any other member means this is not a plain color-opacity object.
+        if (memberKey !== 'color' && memberKey !== 'op') return false;
+        const value = unwrapExpression(member.value);
+        if (value.type === 'ConditionalExpression') {
+            if (memberKey === 'color') colorConditional = value as ConditionalExpressionNode;
+            else opConditional = value as ConditionalExpressionNode;
+            continue;
+        }
+        const literal = extractStaticLiteralValue(value);
+        if (memberKey === 'color') {
+            if (typeof literal !== 'string') return false;
+            staticColor = literal;
+        } else {
+            if (typeof literal !== 'string' && typeof literal !== 'number') return false;
+            staticOp = literal;
+        }
+    }
+
+    const compileBranch = (color: string, op: string | number | null): string => {
+        const value = op === null ? { color } : { color, op };
+        const object = applyGlobalVarAliasesToSzObject(
+            { [key]: value } as unknown as SzObject,
+            context.globalVarAliases,
+            context.cssVariableMap,
+        );
+        return prefixVariantClasses(compileSzObject(object).className, context.variantChain);
+    };
+
+    // Exactly one of color/op may be the conditional; the other must be static.
+    if (opConditional && !colorConditional && staticColor !== null) {
+        const consequent = extractStaticLiteralValue(opConditional.consequent);
+        const alternate = extractStaticLiteralValue(opConditional.alternate);
+        if (
+            (typeof consequent !== 'string' && typeof consequent !== 'number') ||
+            (typeof alternate !== 'string' && typeof alternate !== 'number')
+        ) {
+            return false;
+        }
+        result.conditionalClasses.push({
+            test: opConditional.test,
+            consequent: compileBranch(staticColor, consequent),
+            alternate: compileBranch(staticColor, alternate),
+        });
+        return true;
+    }
+    if (colorConditional && !opConditional) {
+        const consequent = extractStaticLiteralValue(colorConditional.consequent);
+        const alternate = extractStaticLiteralValue(colorConditional.alternate);
+        if (typeof consequent !== 'string' || typeof alternate !== 'string') return false;
+        result.conditionalClasses.push({
+            test: colorConditional.test,
+            consequent: compileBranch(consequent, staticOp),
+            alternate: compileBranch(alternate, staticOp),
+        });
+        return true;
+    }
+    return false;
 }
 
 /**

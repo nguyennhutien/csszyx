@@ -1718,6 +1718,7 @@ fn candidate_classes_from_expression(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn candidate_classes_from_object_expression(
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
@@ -1781,6 +1782,27 @@ fn candidate_classes_from_object_expression(
                                 ));
                             }
                         }
+                        // Nested object under a PROPERTY key (`bg: { … }`) that
+                        // is not fully static: walk it WITH the parent key. The
+                        // old keyless walk compiled `color: 'black'` as a bare
+                        // `{ color }` → a junk `text-black` candidate, while the
+                        // class the runtime actually produces (`bg-black/30`)
+                        // never reached the safelist.
+                        Expression::ObjectExpression(nested) => {
+                            if let Some(ternary) =
+                                color_opacity_ternary_from_object(&key, nested, ctx, variant_keys)
+                            {
+                                classes.extend(ternary.consequent_classes);
+                                classes.extend(ternary.alternate_classes);
+                            } else {
+                                classes.extend(candidate_classes_from_keyed_object(
+                                    std::slice::from_ref(&key),
+                                    nested,
+                                    ctx,
+                                    variant_keys,
+                                ));
+                            }
+                        }
                         _ => {
                             if let Some(static_property) =
                                 static_property_from_object_property(property, ctx)
@@ -1813,6 +1835,88 @@ fn candidate_classes_from_object_expression(
                     classes.extend(prefix_classes(
                         candidate_classes_from_expression(&spread.argument, ctx),
                         variant_prefix,
+                    ));
+                }
+            }
+        }
+    }
+    classes
+}
+
+/// Best-effort candidates for a nested object under a chain of PROPERTY keys:
+/// each resolvable leaf (and each static conditional branch) compiles at its
+/// full key path, so `bg: { color: 'black' }` yields `bg-black`, never a
+/// keyless junk `text-black`. Unresolvable members are skipped — candidates
+/// are a safelist best-effort for runtime-fallback shapes, which always carry
+/// a build diagnostic.
+fn candidate_classes_from_keyed_object(
+    path: &[String],
+    object: &ObjectExpression<'_>,
+    ctx: ResolveContext<'_>,
+    variant_keys: &[String],
+) -> Vec<String> {
+    fn leaf_classes(path: &[String], value: StaticSzValue, variant_keys: &[String]) -> Vec<String> {
+        let mut wrapped = value;
+        for key in path.iter().skip(1).rev() {
+            wrapped = StaticSzValue::Object(StaticSzObject {
+                properties: vec![StaticSzProperty {
+                    key: key.clone(),
+                    span: TextSpan { start: 0, end: 0 },
+                    value: wrapped,
+                }],
+            });
+        }
+        conditional_property_classes(&path[0], wrapped, variant_keys)
+    }
+
+    let mut classes = Vec::new();
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(prop) = property else {
+            continue;
+        };
+        let Some(sub_key) = static_property_key(&prop.key) else {
+            continue;
+        };
+        let mut next_path = path.to_vec();
+        next_path.push(sub_key);
+        match unwrap_expression(&prop.value) {
+            Expression::ObjectExpression(nested) => {
+                classes.extend(candidate_classes_from_keyed_object(
+                    &next_path,
+                    nested,
+                    ctx,
+                    variant_keys,
+                ));
+            }
+            Expression::ConditionalExpression(conditional) => {
+                for branch in [&conditional.consequent, &conditional.alternate] {
+                    if let Some(value) = static_value_from_expression(branch, ctx) {
+                        classes.extend(leaf_classes(
+                            &next_path[..next_path.len() - 1],
+                            StaticSzValue::Object(StaticSzObject {
+                                properties: vec![StaticSzProperty {
+                                    key: next_path[next_path.len() - 1].clone(),
+                                    span: TextSpan { start: 0, end: 0 },
+                                    value,
+                                }],
+                            }),
+                            variant_keys,
+                        ));
+                    }
+                }
+            }
+            _ => {
+                if let Some(value) = static_value_from_expression(&prop.value, ctx) {
+                    classes.extend(leaf_classes(
+                        &next_path[..next_path.len() - 1],
+                        StaticSzValue::Object(StaticSzObject {
+                            properties: vec![StaticSzProperty {
+                                key: next_path[next_path.len() - 1].clone(),
+                                span: TextSpan { start: 0, end: 0 },
+                                value,
+                            }],
+                        }),
+                        variant_keys,
                     ));
                 }
             }
@@ -3490,6 +3594,45 @@ mod tests {
         assert!(!parsed.ir.sz_attributes[0].runtime_fallback);
         assert_eq!(parsed.ir.sz_attributes[0].array_parts.len(), 2);
         assert_eq!(lowered.classes, ["p-4", "rounded-md", "bg-blue-500"]);
+    }
+
+    #[test]
+    fn keyed_candidates_survive_a_runtime_fallback_punt() {
+        // An unresolvable spread punts the object to the runtime, and the
+        // safelist falls back to best-effort candidates. The nested color
+        // object must contribute its REAL runtime classes (bg-black/30,
+        // bg-black/100) at its parent key — the old keyless walk emitted junk
+        // (text-black, op-30) and missed the real ones entirely.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const App = ({ rest, a }) => <div sz={{ ...rest, bg: { color: 'black', op: a ? 30 : 100 }, hover: { m: 2 } }} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(attribute.runtime_fallback);
+        assert!(
+            attribute
+                .candidate_classes
+                .iter()
+                .any(|class| class == "bg-black/30"),
+            "combined color-opacity branch missing from candidates: {:?}",
+            attribute.candidate_classes
+        );
+        assert!(attribute
+            .candidate_classes
+            .contains(&"bg-black/100".to_string()));
+        assert!(attribute
+            .candidate_classes
+            .contains(&"hover:m-2".to_string()));
+        assert!(
+            !attribute
+                .candidate_classes
+                .iter()
+                .any(|class| class == "text-black" || class == "op-30" || class == "op-100"),
+            "keyless junk classes leaked into candidates: {:?}",
+            attribute.candidate_classes
+        );
     }
 
     #[test]

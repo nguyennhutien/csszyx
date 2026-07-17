@@ -283,3 +283,19 @@ describe('multi-ternary parity (property conditionals append template segments)'
         });
     }
 });
+
+describe('punt-path candidate parity (path-aware collectors)', () => {
+    // An unresolvable spread forces the runtime fallback; the safelist then
+    // relies on best-effort candidates. Nested color objects must contribute
+    // their REAL runtime classes at their parent key — the old keyless walk
+    // emitted junk (text-black, op-30) and missed bg-black/30 entirely.
+    const punted =
+        'const App = ({ rest, a }) => <div sz={{ ...rest, bg: { color: "black", op: a ? 30 : 100 }, hover: { m: 2 } }} />;';
+
+    it('babel and oxc collect identical, junk-free candidates', () => {
+        const b = orderedClassesOf(transformSourceCode(punted, 'F.tsx'));
+        const o = orderedClassesOf(transformOxc(punted, 'F.tsx'));
+        expect(b).toEqual(['bg-black/30', 'bg-black/100', 'hover:m-2']);
+        expect(o).toEqual(b);
+    });
+});

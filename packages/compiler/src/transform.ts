@@ -3199,6 +3199,23 @@ interface PartialObjectResult {
     usesUnitVar: boolean;
 }
 
+/**
+ * Creates an empty partial-evaluation result.
+ * @returns Neutral partial object result.
+ */
+function createEmptyPartialResult(): PartialObjectResult {
+    return {
+        staticProps: {} as SzObject,
+        dynamicProps: new Map(),
+        rawClasses: [],
+        conditionalClasses: [],
+        hasSpread: false,
+        usesColorVar: false,
+        usesSpacingVar: false,
+        usesUnitVar: false,
+    };
+}
+
 /** A dynamic property plus the map key used for per-variant deduplication. */
 interface DynamicPropRegistration {
     uniqueKey: string;
@@ -3462,6 +3479,12 @@ function evaluatePartialColorObject(
     if (!colorProperty) return;
     const opacityProperty = properties.get('op');
     const color = t.isStringLiteral(colorProperty.value) ? colorProperty.value.value : null;
+    if (
+        !color &&
+        evaluatePartialColorConditional(key, colorProperty, opacityProperty, variantChain, result)
+    ) {
+        return;
+    }
     if (color && opacityProperty) {
         evaluatePartialColorOpacity(key, color, opacityProperty, variantChain, result);
     } else if (!color && opacityProperty) {
@@ -3469,6 +3492,68 @@ function evaluatePartialColorObject(
     } else if (color) {
         result.staticProps[key] = color as unknown as SzValue;
     }
+}
+
+/**
+ * Compiles one branch of a color-opacity conditional into its complete class
+ * (`bg-black/30`), applying the variant chain — matching the rust engine's
+ * static expansion.
+ * @param key - Color sz property key
+ * @param color - Static color token for this branch
+ * @param op - Static opacity for this branch, if any
+ * @param variantChain - Active nested variant path
+ * @returns The compiled branch class string.
+ */
+function colorOpacityBranchClass(
+    key: string,
+    color: string,
+    op: string | number | undefined,
+    variantChain: string,
+): string {
+    const value = op === undefined ? { color } : { color, op };
+    const className = transform({ [key]: value } as unknown as SzObject).className;
+    return variantChain ? prefixClasses(className, variantChain) : className;
+}
+
+/**
+ * Compiles a color-object whose `color` member is a finite conditional
+ * (`{ color: c ? 'red-700' : 'charcoal', op? }`) into one conditional-classes
+ * entry with a complete color-opacity class per branch — the rust engine's
+ * static expansion, kept instead of a runtime color variable so the lanes
+ * agree on class names.
+ * @param key - Color sz property key
+ * @param colorProperty - Color member holding the conditional
+ * @param opacityProperty - Optional static opacity member
+ * @param variantChain - Active nested variant path
+ * @param result - Partial-object state to update
+ * @returns Whether the conditional entry was emitted.
+ */
+function evaluatePartialColorConditional(
+    key: string,
+    colorProperty: t.ObjectProperty,
+    opacityProperty: t.ObjectProperty | undefined,
+    variantChain: string,
+    result: PartialObjectResult,
+): boolean {
+    const conditional = unwrapTsExpression(colorProperty.value);
+    if (!conditional || !t.isConditionalExpression(conditional)) return false;
+    const consequent = extractStaticLiteralValue(conditional.consequent);
+    const alternate = extractStaticLiteralValue(conditional.alternate);
+    if (typeof consequent !== 'string' || typeof alternate !== 'string') return false;
+    let op: string | number | undefined;
+    if (opacityProperty) {
+        const staticOp = t.isExpression(opacityProperty.value)
+            ? extractStaticLiteralValue(opacityProperty.value)
+            : null;
+        if (typeof staticOp !== 'string' && typeof staticOp !== 'number') return false;
+        op = staticOp;
+    }
+    result.conditionalClasses.push({
+        test: conditional.test,
+        consequent: colorOpacityBranchClass(key, consequent, op, variantChain),
+        alternate: colorOpacityBranchClass(key, alternate, op, variantChain),
+    });
+    return true;
 }
 
 /**
@@ -3492,6 +3577,26 @@ function evaluatePartialColorOpacity(
         return;
     }
     if (!t.isExpression(opacity)) return;
+    // A finite conditional opacity expands to two complete color-opacity
+    // classes (bg-black/30 | bg-black/100) like the rust engine, instead of a
+    // runtime opacity variable — the lanes must agree on class NAMES for
+    // cross-parser cache and mangle-map stability.
+    const conditionalOpacity = unwrapTsExpression(opacity);
+    if (conditionalOpacity && t.isConditionalExpression(conditionalOpacity)) {
+        const consequent = extractStaticLiteralValue(conditionalOpacity.consequent);
+        const alternate = extractStaticLiteralValue(conditionalOpacity.alternate);
+        if (
+            (typeof consequent === 'string' || typeof consequent === 'number') &&
+            (typeof alternate === 'string' || typeof alternate === 'number')
+        ) {
+            result.conditionalClasses.push({
+                test: conditionalOpacity.test,
+                consequent: colorOpacityBranchClass(key, color, consequent, variantChain),
+                alternate: colorOpacityBranchClass(key, color, alternate, variantChain),
+            });
+            return;
+        }
+    }
     const variable = getCSSVariableName(`${key}-op`, variantChain || undefined);
     const uniqueKey = variantChain ? `${variantChain}-${key}-op` : `${key}-op`;
     const prefix = PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
@@ -3937,8 +4042,130 @@ function collectBabelObjectProperty(
     const getBinding = (name: string): ReturnType<typeof context.path.scope.getBinding> =>
         context.path.scope.getBinding(name);
     const flattened = resolveObjectSpreads(value, getBinding) ?? value;
-    if (!tryCollectStaticBabelProperty(key, flattened, context)) {
-        collectCandidatesFromBabelExpr(value, context.path, context.classes);
+    if (tryCollectStaticBabelProperty(key, flattened, context)) return;
+    // Partially-static nested object under a PROPERTY key: walk it WITH the
+    // parent key. The old keyless walk compiled `color: 'black'` as a bare
+    // `{ color }` → a junk `text-black` candidate, while the class the runtime
+    // actually produces (`bg-black/30`) never reached the safelist.
+    if (collectBabelColorConditional(key, flattened, context)) return;
+    collectBabelKeyedObject([key], flattened, context);
+}
+
+/**
+ * Adds both combined branch classes of a color-opacity conditional sub-object
+ * (`bg-black/30`, `bg-black/100`) to the candidates.
+ *
+ * @param key Parent color property key.
+ * @param value Nested color-object literal.
+ * @param context Candidate collection state.
+ * @returns Whether the object was a color-opacity conditional.
+ */
+function collectBabelColorConditional(
+    key: string,
+    value: t.ObjectExpression,
+    context: BabelCandidateContext,
+): boolean {
+    const temp: PartialObjectResult = createEmptyPartialResult();
+    const properties = new Map<string, t.ObjectProperty>();
+    for (const property of value.properties) {
+        if (t.isObjectProperty(property) && !property.computed && t.isIdentifier(property.key)) {
+            properties.set(property.key.name, property);
+        } else {
+            return false;
+        }
+    }
+    if (properties.size !== value.properties.length) return false;
+    for (const memberKey of properties.keys()) {
+        if (memberKey !== 'color' && memberKey !== 'op') return false;
+    }
+    const colorProperty = properties.get('color');
+    if (!colorProperty) return false;
+    if (
+        !evaluatePartialColorConditional(key, colorProperty, properties.get('op'), '', temp) &&
+        !collectBabelOpacityConditional(key, colorProperty, properties.get('op'), temp)
+    ) {
+        return false;
+    }
+    for (const entry of temp.conditionalClasses) {
+        const consequent = context.variantPrefix
+            ? prefixClasses(entry.consequent, context.variantPrefix)
+            : entry.consequent;
+        const alternate = context.variantPrefix
+            ? prefixClasses(entry.alternate, context.variantPrefix)
+            : entry.alternate;
+        addClassTokens(consequent, context.classes);
+        addClassTokens(alternate, context.classes);
+    }
+    return temp.conditionalClasses.length > 0;
+}
+
+/**
+ * Routes the static-color / conditional-opacity half of the candidate check
+ * through {@link evaluatePartialColorOpacity}.
+ *
+ * @param key Parent color property key.
+ * @param colorProperty Static color member.
+ * @param opacityProperty Conditional opacity member.
+ * @param result Temporary partial result receiving conditional entries.
+ * @returns Whether a conditional-opacity entry was produced.
+ */
+function collectBabelOpacityConditional(
+    key: string,
+    colorProperty: t.ObjectProperty,
+    opacityProperty: t.ObjectProperty | undefined,
+    result: PartialObjectResult,
+): boolean {
+    if (!opacityProperty || !t.isStringLiteral(colorProperty.value)) return false;
+    evaluatePartialColorOpacity(key, colorProperty.value.value, opacityProperty, '', result);
+    return result.conditionalClasses.length > 0 && result.dynamicProps.size === 0;
+}
+
+/**
+ * Best-effort candidates for a nested object under a chain of PROPERTY keys:
+ * each resolvable leaf (and each static conditional branch) compiles at its
+ * full key path. Unresolvable members are skipped — candidates are a safelist
+ * best-effort for runtime-fallback shapes, which always carry a diagnostic.
+ *
+ * @param path Property-key chain from the sz root down to this object.
+ * @param node Nested object literal.
+ * @param context Candidate collection state.
+ */
+function collectBabelKeyedObject(
+    path: readonly string[],
+    node: t.ObjectExpression,
+    context: BabelCandidateContext,
+): void {
+    const leaf = (subPath: readonly string[], literal: string | number | boolean): void => {
+        try {
+            const className = transform(wrapSzPath(subPath, literal as SzValue)).className;
+            const prefixed = context.variantPrefix
+                ? prefixClasses(className, context.variantPrefix)
+                : className;
+            addClassTokens(prefixed, context.classes);
+        } catch {
+            // Best-effort — a value the compiler rejects contributes nothing.
+        }
+    };
+    for (const property of node.properties) {
+        if (!t.isObjectProperty(property) || property.computed) continue;
+        const memberKey = getObjectPropertyKey(property);
+        if (memberKey === null || !t.isExpression(property.value)) continue;
+        const memberPath = [...path, memberKey];
+        const value = unwrapTsExpression(property.value);
+        if (!value || !t.isExpression(value)) continue;
+        if (t.isObjectExpression(value)) {
+            collectBabelKeyedObject(memberPath, value, context);
+            continue;
+        }
+        if (t.isConditionalExpression(value)) {
+            for (const branch of [value.consequent, value.alternate]) {
+                const literal = extractStaticLiteralValue(branch);
+                if (literal !== null) leaf(memberPath, literal);
+            }
+            continue;
+        }
+        const literal = extractStaticLiteralValue(value);
+        if (literal !== null) leaf(memberPath, literal);
     }
 }
 

@@ -338,7 +338,8 @@
   {
     "source": "const A = ({ a, b }) => <div sz={{ bg: { color: \"black\", op: a ? 30 : 100 }, p: b ? 2 : undefined }} />;",
     "classes": [
-      "bg-black/(--_sz-bg-op)",
+      "bg-black/100",
+      "bg-black/30",
       "p-2"
     ],
     "rawClassNames": []

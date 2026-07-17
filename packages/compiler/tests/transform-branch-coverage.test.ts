@@ -1228,7 +1228,10 @@ describe('final reachable branches', () => {
             jsx:
                 "import { imp, imp2 } from './x';\n" +
                 'const A = () => <div sz={{ ...imp, card: { ...imp2, m: 2 } }} />;',
-            expectedClasses: ['m-2'],
+            // The runtime resolves {card:{m:2}} to card:m-2 — the path-aware
+            // candidate walk safelists that real class; the old keyless walk
+            // recorded a bare m-2 the runtime never produces.
+            expectedClasses: ['card:m-2'],
             usesRuntime: true,
         },
     ])('covers $label in final branches', ({ jsx, expectedClasses, expectedCode, usesRuntime }) => {
