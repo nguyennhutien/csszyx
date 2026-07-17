@@ -177,5 +177,58 @@
       "starting:opacity-0"
     ],
     "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ width, flex }) => <div sz={{ w: width, flex: typeof flex === \"number\" ? flex : undefined }} />;",
+    "classes": [
+      "flex-(--_sz-flex)",
+      "w-(--_sz-w)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ width, flex, cond }) => <div sz={{ w: width, h: \"max\", flex: cond ? flex : undefined }} />;",
+    "classes": [
+      "flex-(--_sz-flex)",
+      "h-max",
+      "w-(--_sz-w)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ flex, cond }) => <div sz={{ flex: cond ? flex : undefined }} />;",
+    "classes": [
+      "flex-(--_sz-flex)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ width, flex }) => <div sz={{ w: width, flex }} />;",
+    "classes": [
+      "flex-(--_sz-flex)",
+      "w-(--_sz-w)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = () => {\n  // <Box sz={{ mb: 10 }}>x</Box>\n  return <div sz={{ p: 2 }} />;\n};",
+    "classes": [
+      "p-2"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "/** example: <svg sz={{ fill: \"red-500\" }} /> */\nconst A = () => <div sz={{ p: 2 }} />;",
+    "classes": [
+      "p-2"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = () => <div /* sz={{ mt: 8 }} */ sz={{ p: 2 }} />;",
+    "classes": [
+      "p-2"
+    ],
+    "rawClassNames": []
   }
 ]

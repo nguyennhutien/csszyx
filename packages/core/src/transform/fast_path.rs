@@ -74,6 +74,23 @@ pub fn triage_source(file: &TransformFile) -> FastPathTriage {
         });
     }
 
+    // An `sz=` occurrence inside a comment or string literal must never build
+    // static IR: the textual scan below cannot tell it from a real attribute,
+    // so `// <Box sz={{ mb: 10 }} />` used to ship the commented-out classes
+    // into the build (field-reported — babel/oxc parse and ignore comments).
+    // A `None` from the lexer means it hit something it cannot classify
+    // (e.g. a JSX-text apostrophe opening a bogus string); both cases take the
+    // parser path, which owns the real distinction.
+    match non_code_ranges(&file.source) {
+        Some(ranges) if !any_sz_marker_in_ranges(&file.source, &ranges) => {}
+        _ => {
+            return FastPathTriage::NeedsParser(FastPathBailout {
+                filename: file.filename.clone(),
+                reason: FastPathBailoutReason::ContainsSzMarker,
+            });
+        }
+    }
+
     if let Some(ir) = try_static_sz_ir(file) {
         return FastPathTriage::StaticIr(ir);
     }
@@ -82,6 +99,99 @@ pub fn triage_source(file: &TransformFile) -> FastPathTriage {
         filename: file.filename.clone(),
         reason: FastPathBailoutReason::ContainsSzMarker,
     })
+}
+
+/// Byte ranges of comment bodies and string/template literals, found by a
+/// conservative linear lexer. Returns `None` on anything ambiguous — an
+/// unterminated `'`/`"` string reaching a newline (usually an apostrophe in
+/// JSX text) or an unterminated template/block construct — so the caller
+/// bails to the full parser instead of guessing.
+///
+/// The lexer intentionally errs toward over-classifying: a `//` inside a
+/// regex character class reads as a line comment here. That is safe by
+/// construction — the ranges are only ever used to REJECT the fast path, so
+/// a misread costs one file the slower parser lane, never a wrong transform.
+fn non_code_ranges(source: &str) -> Option<Vec<(usize, usize)>> {
+    let bytes = source.as_bytes();
+    let mut ranges = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'/' if bytes.get(i + 1) == Some(&b'/') => {
+                let start = i;
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                ranges.push((start, i));
+            }
+            b'/' if bytes.get(i + 1) == Some(&b'*') => {
+                let start = i;
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                if i + 1 >= bytes.len() {
+                    return None;
+                }
+                i += 2;
+                ranges.push((start, i));
+            }
+            quote @ (b'\'' | b'"') => {
+                let start = i;
+                i += 1;
+                loop {
+                    match bytes.get(i) {
+                        None | Some(b'\n') => return None,
+                        Some(b'\\') => i += 2,
+                        Some(byte) if *byte == quote => {
+                            i += 1;
+                            break;
+                        }
+                        Some(_) => i += 1,
+                    }
+                }
+                ranges.push((start, i));
+            }
+            b'`' => {
+                let start = i;
+                i += 1;
+                loop {
+                    match bytes.get(i) {
+                        None => return None,
+                        Some(b'\\') => i += 2,
+                        Some(b'`') => {
+                            i += 1;
+                            break;
+                        }
+                        Some(_) => i += 1,
+                    }
+                }
+                ranges.push((start, i));
+            }
+            _ => i += 1,
+        }
+    }
+    Some(ranges)
+}
+
+/// True when any attribute-boundary `sz` marker starts inside a non-code range.
+fn any_sz_marker_in_ranges(source: &str, ranges: &[(usize, usize)]) -> bool {
+    if ranges.is_empty() {
+        return false;
+    }
+    let mut search_from = 0;
+    while let Some(relative_start) = source[search_from..].find("sz=") {
+        let index = search_from + relative_start;
+        if is_attribute_boundary(source, index)
+            && ranges
+                .iter()
+                .any(|(start, end)| index >= *start && index < *end)
+        {
+            return true;
+        }
+        search_from = index + 3;
+    }
+    false
 }
 
 fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
@@ -439,5 +549,82 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn static_sz_next_to_a_commented_sz_bails_to_parser() {
+        // The field-reported shape: a commented-out sz block AND a real static
+        // one. Both look identical to the textual scan, so the file must take
+        // the parser lane — fast-pathing it shipped the commented-out classes
+        // (mb-10) into the build while babel/oxc correctly ignored them.
+        for source in [
+            "const A = () => {\n  // <Box sz={{ mb: 10 }}>x</Box>\n  return <div sz={{ p: 2 }} />;\n};",
+            "/** example: <svg sz={{ fill: 'red-500' }} /> */\nconst A = () => <div sz={{ p: 2 }} />;",
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            };
+            assert!(
+                matches!(
+                    triage_source(&file),
+                    FastPathTriage::NeedsParser(super::FastPathBailout {
+                        reason: FastPathBailoutReason::ContainsSzMarker,
+                        ..
+                    })
+                ),
+                "expected NeedsParser for: {source}"
+            );
+        }
+    }
+
+    #[test]
+    fn sz_shaped_text_inside_a_string_bails_to_parser() {
+        // ` sz={{ z: 9 }}` inside an attribute string passes the boundary check
+        // (space before `sz=`), so without string awareness the scan would lift
+        // z-9 out of plain text.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const A = () => <div title=\" sz={{ z: 9 }}\" sz={{ p: 4 }} />;".to_string(),
+        };
+
+        assert!(matches!(
+            triage_source(&file),
+            FastPathTriage::NeedsParser(super::FastPathBailout {
+                reason: FastPathBailoutReason::ContainsSzMarker,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn jsx_text_apostrophe_is_ambiguous_and_bails_to_parser() {
+        // `Don't` in JSX text opens a bogus single-quote "string" that hits a
+        // newline — the lexer refuses to guess and the file takes the parser.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const A = () => <p sz={{ p: 2 }}>Don't panic</p>;\n".to_string(),
+        };
+
+        assert!(matches!(
+            triage_source(&file),
+            FastPathTriage::NeedsParser(super::FastPathBailout {
+                reason: FastPathBailoutReason::ContainsSzMarker,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn benign_comments_and_strings_keep_the_fast_path() {
+        // Comments/strings that do not contain an sz marker must not cost the
+        // file its AST-free lane.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "// layout shell\nconst A = () => <div id=\"shell\" sz={{ p: 4 }} />;"
+                .to_string(),
+        };
+
+        assert!(matches!(triage_source(&file), FastPathTriage::StaticIr(_)));
     }
 }

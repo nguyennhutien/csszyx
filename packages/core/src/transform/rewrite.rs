@@ -368,7 +368,17 @@ fn rewrite_ternary_sz_attribute(
     // Static classes accompanying the conditional (e.g. from a `...CONST` spread
     // or sibling static props): only the conditional stays runtime. Lower just
     // the static object so the ternary's own branch classes are not duplicated.
-    let static_classes = lower_static_sz_object(&only_attribute.object);
+    // Runtime css-var siblings (`w: width`) append their `w-(--_sz-w)` class
+    // here — their style props are emitted by apply_dynamic_style_props — in
+    // the same statics-then-vars order Babel emits.
+    let mut static_classes = lower_static_sz_object(&only_attribute.object);
+    static_classes.extend(
+        only_attribute
+            .dynamic_css_vars
+            .iter()
+            .filter(|prop| !prop.skip_class)
+            .map(super::lower::dynamic_css_var_class),
+    );
 
     if let Some(class_index) = element.class_attribute_index {
         let class_attribute = &ir.class_attributes[class_index];
@@ -851,6 +861,23 @@ mod tests {
         assert_eq!(
             rewritten,
             "const App = ({ flex }) => <div className={typeof flex === 'number' ? \"flex-(--_sz-flex)\" : undefined} style={{\"--_sz-flex\": typeof flex === 'number' ? flex : undefined}} />;"
+        );
+    }
+
+    #[test]
+    fn keeps_runtime_var_siblings_beside_a_nullable_conditional() {
+        // A bare runtime identifier, a static literal, and a nullable ternary in
+        // ONE object used to punt the whole attribute to the runtime fallback,
+        // which never safelists the dynamic utilities — Tailwind emitted no CSS
+        // for them and the styling silently never applied (field-reported).
+        // Expected shape mirrors the Babel output: statics, then var classes,
+        // then the ternary appended in a template literal.
+        let source = "const A = ({ width, flex, cond }) => <div sz={{ w: width, h: 'max', flex: cond ? flex : undefined }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ width, flex, cond }) => <div className={`h-max w-(--_sz-w) ${cond ? \"flex-(--_sz-flex)\" : \"\"}`} style={{\"--_sz-w\": __szSpacingVar(width, \"w\"), \"--_sz-flex\": cond ? flex : undefined}} />;"
         );
     }
 

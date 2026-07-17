@@ -2179,15 +2179,14 @@ fn partial_object_from_object_expression(
         }
     }
 
-    // A single conditional prop may coexist with static properties (e.g.
-    // `{ ...CONST, scale: cond ? 75 : 100 }`): the static part lowers to literal
-    // classes and the conditional becomes a runtime ternary appended in a
-    // template literal, matching the Babel/oxc build-time output. Mixing a
-    // conditional with runtime css vars is still punted to the runtime.
-    if partial.ternary.is_some() && partial.dynamic_css_vars.iter().any(|prop| !prop.skip_class) {
-        return None;
-    }
-
+    // A single conditional prop may coexist with static properties AND runtime
+    // css vars (e.g. `{ w: width, h: 'max', flex: cond ? flex : undefined }`):
+    // statics lower to literal classes, each runtime var contributes its
+    // `<prefix>-(--_sz-*)` class plus a style prop, and the conditional becomes
+    // a runtime ternary appended in a template literal — the same shape the
+    // Babel build-time output emits. This mix used to be punted to the runtime
+    // fallback, which never safelists the dynamic utilities: Tailwind emitted
+    // no CSS for them and the styling silently never applied (field-reported).
     Some(partial)
 }
 

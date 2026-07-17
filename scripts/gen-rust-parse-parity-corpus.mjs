@@ -18,7 +18,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { transformOxc } from '../packages/compiler/src/transform-oxc.js';
+import { transformSourceCode } from '../packages/compiler/src/transform.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outFile = resolve(here, '../packages/core/tests/fixtures/parse-parity-corpus.json');
@@ -53,10 +53,27 @@ const sources = [
     'const A = () => <div sz={{ rounded: "lg", border: 2, shadow: "md" }} />;',
     'const A = () => <div sz={{ forcedColors: { borderColor: "gray" } }} />;',
     'const A = () => <div sz={{ starting: { opacity: 0 }, inert: { opacity: 50 } }} />;',
+    // A bare runtime identifier and a nullable ternary in ONE object: the rust
+    // parser used to punt the whole object and silently drop every dynamic
+    // utility (only statics survived), while oxc/babel emit all of them.
+    'const A = ({ width, flex }) => <div sz={{ w: width, flex: typeof flex === "number" ? flex : undefined }} />;',
+    'const A = ({ width, flex, cond }) => <div sz={{ w: width, h: "max", flex: cond ? flex : undefined }} />;',
+    'const A = ({ flex, cond }) => <div sz={{ flex: cond ? flex : undefined }} />;',
+    'const A = ({ width, flex }) => <div sz={{ w: width, flex }} />;',
+    // sz inside // line and /** doc comments must not contribute classes: the
+    // rust scanner used to extract them while oxc/babel ignore comments.
+    'const A = () => {\n  // <Box sz={{ mb: 10 }}>x</Box>\n  return <div sz={{ p: 2 }} />;\n};',
+    '/** example: <svg sz={{ fill: "red-500" }} /> */\nconst A = () => <div sz={{ p: 2 }} />;',
+    'const A = () => <div /* sz={{ mt: 8 }} */ sz={{ p: 2 }} />;',
 ];
 
 const records = sources.map(source => {
-    const result = transformOxc(source, 'file.tsx');
+    // The full oxc lane INCLUDING its Babel fallback — the behavior the plugin
+    // actually ships. Raw transformOxc encodes a lane bail as "no classes",
+    // which recorded silently-wrong expectations for constructs the oxc lane
+    // punts (that hole hid the rust parser dropping dynamic sz utilities next
+    // to a nullable ternary).
+    const result = transformSourceCode(source, 'file.tsx', { parser: 'oxc' });
     return {
         source,
         classes: sorted(result.classes),
