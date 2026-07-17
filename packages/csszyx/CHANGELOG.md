@@ -1,5 +1,16 @@
 # csszyx
 
+## [0.11.9](https://github.com/nguyennhutien/csszyx/compare/v0.11.8...v0.11.9) (2026-07-16)
+
+### Bug Fixes
+
+* register custom theme colors for szcn without scanCss ([#163](https://github.com/nguyennhutien/csszyx/issues/163))
+* **unplugin:** discover @theme tokens without scanCss and accept option keywords ([#163](https://github.com/nguyennhutien/csszyx/issues/163))
+* **runtime:** classify data-type-hinted css variables in szcn ([#163](https://github.com/nguyennhutien/csszyx/issues/163))
+* restore sitewide search under the docs CSP hardening headers ([#167](https://github.com/nguyennhutien/csszyx/issues/167))
+* **docs:** unbreak sitewide search under the CSP hardening headers ([#167](https://github.com/nguyennhutien/csszyx/issues/167))
+* **docs:** allow the Cloudflare Web Analytics beacon through the CSP ([#167](https://github.com/nguyennhutien/csszyx/issues/167))
+
 ## [0.11.8](https://github.com/nguyennhutien/csszyx/compare/v0.11.7...v0.11.8) (2026-07-16)
 
 ### Bug Fixes
