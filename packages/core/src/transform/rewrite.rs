@@ -398,19 +398,14 @@ fn rewrite_ternary_sz_attribute(
     if let Some(class_index) = element.class_attribute_index {
         let class_attribute = &ir.class_attributes[class_index];
         let existing = class_merge_argument(source, class_attribute);
-        let merge_args = if let [only_ternary] = ternaries.as_slice() {
-            // Preserve the established single-ternary merge shape.
-            if static_classes.is_empty() {
-                format!("{existing}, {}", ternary_source(only_ternary))
-            } else {
-                format!(
-                    "{existing}, {}, {}",
-                    js_string_literal(&static_classes.join(" ")),
-                    ternary_source(only_ternary)
-                )
-            }
-        } else {
-            format!("{existing}, {}", template_literal())
+        // A companion-less single ternary merges bare; anything with static/var
+        // classes merges the SAME template literal the Babel engine emits —
+        // the old 3-arg form (existing, "statics", ternary) was functionally
+        // equal but byte-different, breaking cross-producer transform-cache
+        // reuse for this shape.
+        let merge_args = match (ternaries.as_slice(), static_classes.is_empty()) {
+            ([only_ternary], true) => format!("{existing}, {}", ternary_source(only_ternary)),
+            _ => format!("{existing}, {}", template_literal()),
         };
         magic.update_with(
             class_attribute.attribute_span.start as usize,
@@ -922,6 +917,21 @@ mod tests {
         assert_eq!(
             rewritten,
             "const A = ({ w, a, b }) => <div className={`h-max w-(--_sz-w) ${a ? \"p-2\" : \"\"} ${b ? \"m-4\" : \"\"}`} style={{\"--_sz-w\": __szSpacingVar(w, \"w\")}} />;"
+        );
+    }
+
+    #[test]
+    fn merges_a_single_ternary_with_statics_as_the_babel_template() {
+        // The old 3-arg _szMerge(existing, "statics", ternary) was functionally
+        // equal to Babel's 2-arg template merge but byte-different, breaking
+        // cross-producer transform-cache reuse for this shape.
+        let source =
+            "export const A = ({ on }) => <div className=\"q\" sz={{ bg: 'white', p: on ? 2 : 4 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "export const A = ({ on }) => <div className={_szMerge(\"q\", `bg-white ${on ? \"p-2\" : \"p-4\"}`)} />;"
         );
     }
 
