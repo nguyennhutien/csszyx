@@ -305,4 +305,51 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
             expect(result.code).toContain('(--_sz');
         });
     });
+
+    describe('runtime var beside conditionals (ternary-family sweep)', () => {
+        // Babel is the reference lane for this family: it compiles every shape
+        // below statically while rust/oxc still punt some to the runtime
+        // fallback (tracked in the rust parity corpus KNOWN_DIVERGENCES).
+        // These lock the reference behavior — a babel regression here would
+        // silently re-open the vui finding-1 class of missing CSS.
+        it('keeps the var class beside a finite ternary', () => {
+            const result = transformSourceCode(
+                'const A = ({ w, on }) => <div sz={{ w: w, p: on ? 2 : 4 }} />;',
+            );
+            expect([...result.classes]).toEqual(
+                expect.arrayContaining(['w-(--_sz-w)', 'p-2', 'p-4']),
+            );
+            expect(result.code).toContain('w-(--_sz-w)');
+        });
+
+        it('keeps a variant-prefixed var class beside a nullable ternary', () => {
+            const result = transformSourceCode(
+                'const A = ({ w, on }) => <div sz={{ hover: { w: w }, p: on ? 2 : undefined }} />;',
+            );
+            expect([...result.classes]).toEqual(
+                expect.arrayContaining(['hover:w-(--_sz-hover-w)', 'p-2']),
+            );
+        });
+
+        it('keeps the var class beside TWO nullable ternaries', () => {
+            const result = transformSourceCode(
+                'const A = ({ w, a, b }) => <div sz={{ w: w, p: a ? 2 : undefined, m: b ? 4 : undefined }} />;',
+            );
+            expect([...result.classes]).toEqual(
+                expect.arrayContaining(['w-(--_sz-w)', 'p-2', 'm-4']),
+            );
+            expect(result.code).toContain('${a ?');
+            expect(result.code).toContain('${b ?');
+        });
+
+        it('merges var + nullable ternary into an existing className', () => {
+            const result = transformSourceCode(
+                'const A = ({ w, f, on }) => <div className="x" sz={{ w: w, flex: on ? f : undefined }} />;',
+            );
+            expect(result.code).toContain('_szMerge("x", `w-(--_sz-w) ${on ?');
+            expect([...result.classes]).toEqual(
+                expect.arrayContaining(['w-(--_sz-w)', 'flex-(--_sz-flex)']),
+            );
+        });
+    });
 });

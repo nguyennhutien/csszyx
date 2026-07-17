@@ -238,5 +238,48 @@
       "whitespace-wrap"
     ],
     "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ w, on }) => <div sz={{ w: w, p: on ? 2 : 4 }} />;",
+    "classes": [
+      "p-2",
+      "p-4",
+      "w-(--_sz-w)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ w, on }) => <div sz={{ hover: { w: w }, p: on ? 2 : undefined }} />;",
+    "classes": [
+      "hover:w-(--_sz-hover-w)",
+      "p-2"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ w, a, b }) => <div sz={{ w: w, p: a ? 2 : undefined, m: b ? 4 : undefined }} />;",
+    "classes": [
+      "m-4",
+      "p-2",
+      "w-(--_sz-w)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ f, on }) => <div sz={{ md: { flex: on ? f : undefined } }} />;",
+    "classes": [
+      "md:flex-(--_sz-md-flex)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ w, f, on }) => <div className=\"x\" sz={{ w: w, flex: on ? f : undefined }} />;",
+    "classes": [
+      "flex-(--_sz-flex)",
+      "w-(--_sz-w)"
+    ],
+    "rawClassNames": [
+      "x"
+    ]
   }
 ]

@@ -69,6 +69,15 @@ const sources = [
     // lane (rust always unwrapped casts; babel/oxc used to collapse the whole
     // conditional to a runtime CSS variable).
     'const A = ({ isImage }) => <div sz={{ whitespace: isImage ? "nowrap" : ("wrap" as any) }} />;',
+    // Family sweep around the ternary-beside-runtime-var fix: shapes the lanes
+    // should agree on (finite ternary + var; nullable ternary + var + h) and
+    // shapes rust still punts to runtime (tracked in KNOWN_DIVERGENCES in
+    // parse_parity_corpus.rs until the gap closes).
+    'const A = ({ w, on }) => <div sz={{ w: w, p: on ? 2 : 4 }} />;',
+    'const A = ({ w, on }) => <div sz={{ hover: { w: w }, p: on ? 2 : undefined }} />;',
+    'const A = ({ w, a, b }) => <div sz={{ w: w, p: a ? 2 : undefined, m: b ? 4 : undefined }} />;',
+    'const A = ({ f, on }) => <div sz={{ md: { flex: on ? f : undefined } }} />;',
+    'const A = ({ w, f, on }) => <div className="x" sz={{ w: w, flex: on ? f : undefined }} />;',
 ];
 
 const records = sources.map(source => {

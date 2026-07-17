@@ -17,7 +17,14 @@ mod parse_parity {
 
     /// Sources whose rust parse output is known to diverge from oxc, pending a
     /// fix. Each entry must be removed once the gap is closed.
-    const KNOWN_DIVERGENCES: &[&str] = &[];
+    const KNOWN_DIVERGENCES: &[&str] = &[
+        // TWO conditionals beside a runtime var: `set_partial_ternary` accepts a
+        // single ternary lane, so the second conditional punts the object to the
+        // runtime fallback and the `w-(--_sz-w)` safelist entry is lost. Babel
+        // compiles N conditionals via its conditionalClasses list; closing this
+        // needs StaticTernaryIr to grow multi-ternary support.
+        r#"const A = ({ w, a, b }) => <div sz={{ w: w, p: a ? 2 : undefined, m: b ? 4 : undefined }} />;"#,
+    ];
 
     #[derive(serde::Deserialize)]
     struct ParseRecord {
