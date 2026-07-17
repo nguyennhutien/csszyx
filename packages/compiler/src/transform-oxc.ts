@@ -327,6 +327,8 @@ export function transformOxc(
             )
         ) {
             usesRuntime = true;
+            // With an existing className the fallback emits _szMerge(existing, _sz(...)).
+            usesMerge ||= classNameAttr !== null;
             transformed = true;
             return;
         }
@@ -483,6 +485,11 @@ function transformOxcSzExpression(
         });
         if (result === 'fallback') return { kind: 'fallback', expression };
         if (result === 'complete') return completeOxcSzUsage();
+        if (result === 'complete-merge') {
+            // Babel reports both flags for a className merge, so the injected
+            // helper imports stay byte-identical across the two lanes.
+            return completeOxcSzUsage({ usesMerge: true, usesRuntime: true });
+        }
     }
     if (expression.type === 'ArrayExpression') {
         return transformOxcSzArrayResult(expression as ArrayExpressionNode, context);
@@ -716,7 +723,23 @@ function transformOxcUnsupportedObject(
             context.cssVariableMap,
         );
     if (classExpression) {
-        if (context.classNameAttr || context.szAttrs.length > 1) return null;
+        if (context.szAttrs.length > 1) return null;
+        if (context.classNameAttr) {
+            // Merge the hoisted-conditional class expression with the existing
+            // className, matching the Babel emit — this used to bail the whole
+            // file to the Babel fallback (D2.5+).
+            const existing = classNameMergeArgument(context.classNameAttr, context.source);
+            context.edits.overwrite(
+                context.classNameAttr.start,
+                context.classNameAttr.end,
+                `className={_szMerge(${existing}, ${classExpression})}`,
+            );
+            context.edits.remove(
+                whitespaceStart(context.source, context.szAttr.start),
+                context.szAttr.end,
+            );
+            return completedUnsupportedObject(true, true);
+        }
         context.edits.overwrite(
             context.szAttr.start,
             context.szAttr.end,
@@ -868,7 +891,7 @@ interface OxcStaticConditionalContext {
  */
 function transformOxcStaticConditional(
     context: OxcStaticConditionalContext,
-): 'continue' | 'fallback' | 'complete' {
+): 'continue' | 'fallback' | 'complete' | 'complete-merge' {
     const classExpression = buildStaticConditionalClassExpression(
         context.conditional,
         context.filename,
@@ -879,7 +902,23 @@ function transformOxcStaticConditional(
         context.cssVariableMap,
     );
     if (!classExpression) return 'continue';
-    if (context.classNameAttr || context.szAttributeCount > 1) return 'fallback';
+    if (context.szAttributeCount > 1) return 'fallback';
+    if (context.classNameAttr) {
+        // Same emit as the Babel engine: the compiled ternary merges with the
+        // existing className. This used to route to the runtime fallback,
+        // whose className branch then bailed the whole file to Babel (D2.5+).
+        const existing = classNameMergeArgument(context.classNameAttr, context.source);
+        context.edits.overwrite(
+            context.classNameAttr.start,
+            context.classNameAttr.end,
+            `className={_szMerge(${existing}, ${classExpression})}`,
+        );
+        context.edits.remove(
+            whitespaceStart(context.source, context.szAttr.start),
+            context.szAttr.end,
+        );
+        return 'complete-merge';
+    }
     context.edits.overwrite(
         context.szAttr.start,
         context.szAttr.end,
@@ -1100,12 +1139,6 @@ function transformOxcRuntimeFallback(
     diagnostics: string[],
 ): boolean {
     if (!expression || !attribute) return false;
-    if (classNameAttribute) {
-        throw new OxcNotImplementedError(
-            'D2.5+',
-            `runtime sz fallback combined with existing className at ${filename}:${attribute.start}`,
-        );
-    }
     if (expression.type !== 'ArrayExpression') {
         diagnostics.push(buildRuntimeFallbackDiagnostic(expression, source));
     }
@@ -1122,6 +1155,19 @@ function transformOxcRuntimeFallback(
     }
     collectCandidateClassesFromExpression(expression, filename, bindings, classes, '');
     const expressionSource = source.slice(expression.start, expression.end);
+    if (classNameAttribute) {
+        // Formerly a D2.5+ bail to the Babel lane (one WARN per file — 25 on
+        // one field report). Same emit as Babel and the rust engine: the
+        // existing className merges with the runtime-resolved sz value.
+        const existing = classNameMergeArgument(classNameAttribute, source);
+        edits.overwrite(
+            classNameAttribute.start,
+            classNameAttribute.end,
+            `className={_szMerge(${existing}, _sz(${expressionSource}))}`,
+        );
+        removeOxcAttributes(attributes, source, edits);
+        return true;
+    }
     edits.overwrite(attribute.start, attribute.end, `className={_sz(${expressionSource})}`);
     for (const szAttribute of attributes) {
         if (szAttribute === attribute) continue;

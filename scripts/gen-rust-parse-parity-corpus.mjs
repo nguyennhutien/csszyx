@@ -72,12 +72,12 @@ const sources = [
 ];
 
 const records = sources.map(source => {
-    // The full oxc lane INCLUDING its Babel fallback — the behavior the plugin
-    // actually ships. Raw transformOxc encodes a lane bail as "no classes",
-    // which recorded silently-wrong expectations for constructs the oxc lane
-    // punts (that hole hid the rust parser dropping dynamic sz utilities next
-    // to a nullable ternary).
-    const result = transformSourceCode(source, 'file.tsx', { parser: 'oxc' });
+    // The Babel engine — the canonical reference output, and what the oxc
+    // lane ships when it falls back. Raw transformOxc encodes a lane bail as
+    // "no classes", which recorded silently-wrong expectations for constructs
+    // the oxc lane punts (that hole hid the rust parser dropping dynamic sz
+    // utilities next to a nullable ternary).
+    const result = transformSourceCode(source, 'file.tsx');
     return {
         source,
         classes: sorted(result.classes),

@@ -2491,13 +2491,14 @@ function tryHoistConditionalSpread(
             continue;
         }
 
-        if (t.isConditionalExpression(prop.argument)) {
+        const spreadArgument = unwrapTsExpression(prop.argument);
+        if (t.isConditionalExpression(spreadArgument)) {
             // Allow exactly one conditional spread
             if (conditionalSpreadIdx !== -1) {
                 return null;
             }
             conditionalSpreadIdx = i;
-            conditionalExpr = prop.argument;
+            conditionalExpr = spreadArgument;
         } else {
             // Any other unresolved spread (e.g. imported var) → can't hoist
             return null;
@@ -2508,11 +2509,26 @@ function tryHoistConditionalSpread(
         return null;
     }
 
-    // Build two ObjectExpressions — one per branch — then resolve each recursively.
-    // The conditional spread is replaced by a plain identifier spread for that branch.
-    const otherProps = node.properties.filter((_, i) => i !== conditionalSpreadIdx);
-    const mkObj = (branch: t.Expression): t.ObjectExpression =>
-        t.objectExpression([t.spreadElement(branch), ...otherProps]);
+    // Build two ObjectExpressions — one per branch — then resolve each
+    // recursively. An object-literal branch splices its properties in place
+    // (spread semantics; `resolveObjectSpreads` only follows IDENTIFIER
+    // spreads, so leaving `...{ p: 1 }` in the clone made every inline-branch
+    // hoist fail and pushed the attribute to the runtime while oxc and rust
+    // both compiled the static ternary). Identifier branches keep the spread
+    // for the binding resolver.
+    const mkObj = (branch: t.Expression): t.ObjectExpression => {
+        const inlined = unwrapTsExpression(branch) ?? branch;
+        return t.objectExpression(
+            node.properties.flatMap((prop, i) => {
+                if (i !== conditionalSpreadIdx) {
+                    return [prop];
+                }
+                return t.isObjectExpression(inlined)
+                    ? inlined.properties
+                    : [t.spreadElement(branch as t.Expression)];
+            }),
+        );
+    };
 
     const resolvedA = tryStaticTransformNode(mkObj(conditionalExpr.consequent), getBinding);
     const resolvedB = tryStaticTransformNode(mkObj(conditionalExpr.alternate), getBinding);

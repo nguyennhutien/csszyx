@@ -177,13 +177,13 @@ describe('transform-oxc: conditional sz values', () => {
         expect(out).toContain('? "p-1" : "m-2"');
     });
 
-    it('throws when a conditional sz is combined with a className', () => {
-        expect(() =>
-            transformOxc(
-                'export const A = ({ on }) => <div className="x" sz={on ? { p: 1 } : { m: 2 }} />;',
-                'F.tsx',
-            ),
-        ).toThrow(OxcNotImplementedError);
+    it('merges a conditional sz into an existing className', () => {
+        // Formerly a D2.5+ throw to the Babel fallback; both engines now emit
+        // the same static-ternary merge.
+        const result = run(
+            'export const A = ({ on }) => <div className="x" sz={on ? { p: 1 } : { m: 2 }} />;',
+        );
+        expect(result.code).toContain('className={_szMerge("x", on ? "p-1" : "m-2")}');
     });
 });
 
@@ -653,32 +653,31 @@ describe('transform-oxc: multiple sz attributes', () => {
     });
 });
 
-describe('transform-oxc: className present with conditional/spread → runtime throw', () => {
-    it('throws for a conditional const binding beside a className', () => {
-        expect(() =>
-            transformOxc(
-                'export const A = ({ on }) => { const c = on ? { p: 1 } : { m: 2 }; return <div className="x" sz={c} />; };',
-                'F.tsx',
-            ),
-        ).toThrow(OxcNotImplementedError);
+describe('transform-oxc: className present with conditional/spread', () => {
+    // All three used to throw D2.5+ to the Babel fallback (one WARN per file).
+    // They now lower natively with output identical to the Babel engine.
+    it('merges a conditional const binding beside a className', () => {
+        const result = run(
+            'export const A = ({ on }) => { const c = on ? { p: 1 } : { m: 2 }; return <div className="x" sz={c} />; };',
+        );
+        expect(result.code).toContain('className={_szMerge("x", on ? "p-1" : "m-2")}');
     });
 
-    it('throws for a conditional spread beside a className', () => {
-        expect(() =>
-            transformOxc(
-                'export const A = ({ on }) => <div className="x" sz={{ ...(on ? { p: 1 } : { m: 2 }), block: true }} />;',
-                'F.tsx',
-            ),
-        ).toThrow(OxcNotImplementedError);
+    it('merges a hoisted conditional spread beside a className', () => {
+        const result = run(
+            'export const A = ({ on }) => <div className="x" sz={{ ...(on ? { p: 1 } : { m: 2 }), display: "block" }} />;',
+        );
+        expect(result.code).toContain('className={_szMerge("x", on ? "p-1 block" : "m-2 block")}');
+        expect([...result.classes]).toEqual(expect.arrayContaining(['p-1', 'm-2', 'block']));
     });
 
-    it('throws for a nested conditional object beside a className', () => {
-        expect(() =>
-            transformOxc(
-                "export const A = ({ on }) => <div className='x' sz={{ bg: 'white', borderColor: { color: on ? 'red-700' : 'charcoal', op: 18 } }} />;",
-                'F.tsx',
-            ),
-        ).toThrow(OxcNotImplementedError);
+    it('merges a nested conditional object beside a className', () => {
+        const result = run(
+            "export const A = ({ on }) => <div className='x' sz={{ bg: 'white', borderColor: { color: on ? 'red-700' : 'charcoal', op: 18 } }} />;",
+        );
+        expect(result.code).toContain(
+            'className={_szMerge("x", `bg-white ${on ? "border-red-700/18" : "border-charcoal/18"}`)}',
+        );
     });
 });
 
