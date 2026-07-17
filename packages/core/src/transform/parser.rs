@@ -500,7 +500,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             value_span,
             literal_class_name,
             rewrites_empty_class,
-            ternary,
+            ternaries,
             array_parts,
             runtime_fallback,
             candidate_classes,
@@ -511,7 +511,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 string_value_span(value.span, self.source),
                 Some(value.value.to_string()),
                 true,
-                None,
+                Vec::new(),
                 Vec::new(),
                 false,
                 Vec::new(),
@@ -539,7 +539,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         value_span,
                         None,
                         false,
-                        Some(ternary),
+                        vec![ternary],
                         Vec::new(),
                         false,
                         Vec::new(),
@@ -553,13 +553,13 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         value_span,
                         None,
                         rewrites_empty_class,
-                        None,
+                        Vec::new(),
                         Vec::new(),
                         false,
                         Vec::new(),
                         Vec::new(),
                     )
-                } else if let Some((object, value_span, dynamic_css_vars, ternary)) =
+                } else if let Some((object, value_span, dynamic_css_vars, ternaries)) =
                     partial_object_from_jsx_expression(&container.expression, ctx)
                 {
                     (
@@ -567,7 +567,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         value_span,
                         None,
                         false,
-                        ternary,
+                        ternaries,
                         Vec::new(),
                         false,
                         Vec::new(),
@@ -581,7 +581,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         value_span,
                         None,
                         false,
-                        None,
+                        Vec::new(),
                         array_parts,
                         false,
                         Vec::new(),
@@ -597,7 +597,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         value_span,
                         None,
                         false,
-                        None,
+                        Vec::new(),
                         Vec::new(),
                         true,
                         candidate_classes,
@@ -617,7 +617,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             object,
             literal_class_name,
             rewrites_empty_class,
-            ternary,
+            ternaries,
             array_parts,
             runtime_fallback,
             runtime_fallback_spread: runtime_fallback
@@ -1457,8 +1457,11 @@ fn static_array_parts_from_array_expression(
         }
         if let Expression::ObjectExpression(object) = unwrapped {
             if let Some(partial) = partial_object_from_object_expression(object, ctx, None, &[]) {
-                if partial.dynamic_css_vars.is_empty() {
-                    if let Some(ternary) = partial.ternary {
+                // Array parts keep the single-ternary contract of
+                // StaticArrayPartIr; multi-ternary parts stay on their
+                // existing lane.
+                if partial.dynamic_css_vars.is_empty() && partial.ternaries.len() == 1 {
+                    if let Some(ternary) = partial.ternaries.into_iter().next() {
                         parts.push(StaticArrayPartIr {
                             condition_span: None,
                             classes: lower_static_sz_object(&partial.object),
@@ -2008,7 +2011,9 @@ fn static_object_from_argument(
 struct PartialSzObject {
     object: StaticSzObject,
     dynamic_css_vars: Vec<DynamicCssVarIr>,
-    ternary: Option<StaticTernaryIr>,
+    /// Property-level conditionals in source order — each lowers to one
+    /// appended `${cond ? "…" : "…"}` template segment.
+    ternaries: Vec<StaticTernaryIr>,
 }
 
 fn partial_object_from_jsx_expression(
@@ -2018,19 +2023,19 @@ fn partial_object_from_jsx_expression(
     StaticSzObject,
     TextSpan,
     Vec<DynamicCssVarIr>,
-    Option<StaticTernaryIr>,
+    Vec<StaticTernaryIr>,
 )> {
     match expression {
         JSXExpression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
-            if partial.dynamic_css_vars.is_empty() && partial.ternary.is_none() {
+            if partial.dynamic_css_vars.is_empty() && partial.ternaries.is_empty() {
                 return None;
             }
             Some((
                 partial.object,
                 text_span(object.span),
                 partial.dynamic_css_vars,
-                partial.ternary,
+                partial.ternaries,
             ))
         }
         JSXExpression::TSAsExpression(value) => {
@@ -2056,19 +2061,19 @@ fn partial_object_from_expression(
     StaticSzObject,
     TextSpan,
     Vec<DynamicCssVarIr>,
-    Option<StaticTernaryIr>,
+    Vec<StaticTernaryIr>,
 )> {
     match expression {
         Expression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
-            if partial.dynamic_css_vars.is_empty() && partial.ternary.is_none() {
+            if partial.dynamic_css_vars.is_empty() && partial.ternaries.is_empty() {
                 return None;
             }
             Some((
                 partial.object,
                 text_span(object.span),
                 partial.dynamic_css_vars,
-                partial.ternary,
+                partial.ternaries,
             ))
         }
         Expression::ParenthesizedExpression(value) => {
@@ -2096,7 +2101,7 @@ fn partial_object_from_object_expression(
             return Some(PartialSzObject {
                 object: StaticSzObject::empty(),
                 dynamic_css_vars: Vec::new(),
-                ternary: Some(ternary),
+                ternaries: vec![ternary],
             });
         }
     }
@@ -2106,7 +2111,7 @@ fn partial_object_from_object_expression(
             properties: Vec::with_capacity(object.properties.len()),
         },
         dynamic_css_vars: Vec::new(),
-        ternary: None,
+        ternaries: Vec::new(),
     };
 
     for property in &object.properties {
@@ -2144,7 +2149,7 @@ fn partial_object_from_object_expression(
                             variant_keys,
                         )
                     {
-                        set_partial_ternary(&mut partial, conditional_ternary)?;
+                        set_partial_ternary(&mut partial, conditional_ternary);
                         if let Some(dynamic_prop) = dynamic_prop {
                             partial.dynamic_css_vars.push(dynamic_prop);
                         }
@@ -2153,7 +2158,7 @@ fn partial_object_from_object_expression(
                     if let Some(conditional_ternary) =
                         conditional_class_from_property(&key, conditional, ctx, variant_keys)
                     {
-                        set_partial_ternary(&mut partial, conditional_ternary)?;
+                        set_partial_ternary(&mut partial, conditional_ternary);
                         continue;
                     }
                 }
@@ -2201,7 +2206,8 @@ fn collect_nested_partial_property(
     variant_keys: &[String],
 ) -> Option<()> {
     if let Some(ternary) = color_opacity_ternary_from_object(&key, nested, ctx, variant_keys) {
-        return set_partial_ternary(partial, ternary);
+        set_partial_ternary(partial, ternary);
+        return Some(());
     }
 
     // Value objects with a dynamic sub-field cannot be lowered as variants:
@@ -2223,19 +2229,17 @@ fn collect_nested_partial_property(
         });
     }
     partial.dynamic_css_vars.extend(nested.dynamic_css_vars);
-    if let Some(ternary) = nested.ternary {
-        set_partial_ternary(partial, ternary)?;
+    for ternary in nested.ternaries {
+        set_partial_ternary(partial, ternary);
     }
     Some(())
 }
 
-/// Keep partial lowering deterministic by accepting at most one ternary lane.
-fn set_partial_ternary(partial: &mut PartialSzObject, ternary: StaticTernaryIr) -> Option<()> {
-    if partial.ternary.is_some() {
-        return None;
-    }
-    partial.ternary = Some(ternary);
-    Some(())
+/// Append one property-level conditional, preserving source property order —
+/// the rewrite emits one template segment per entry in this order, and class
+/// discovery order (which fixes production mangle IDs) follows it.
+fn set_partial_ternary(partial: &mut PartialSzObject, ternary: StaticTernaryIr) {
+    partial.ternaries.push(ternary);
 }
 
 fn conditional_spread_ternary_from_object_expression(
@@ -3580,8 +3584,8 @@ mod tests {
         assert!(parsed.diagnostics.is_empty(), "{}", source);
         assert_eq!(parsed.ir.sz_attributes.len(), 1);
         let ternary = parsed.ir.sz_attributes[0]
-            .ternary
-            .as_ref()
+            .ternaries
+            .first()
             .expect("ternary should be recorded");
         assert_eq!(ternary.consequent_classes, ["p-4"]);
         assert_eq!(ternary.alternate_classes, ["p-8"]);
@@ -3728,8 +3732,8 @@ mod tests {
 
         assert!(parsed.diagnostics.is_empty(), "{source}");
         let ternary = parsed.ir.sz_attributes[0]
-            .ternary
-            .as_ref()
+            .ternaries
+            .first()
             .expect("nested conditional should record a ternary");
         assert_eq!(ternary.consequent_classes, ["group-hover:bg-red-500"]);
         assert_eq!(ternary.alternate_classes, ["group-hover:bg-blue-500"]);
@@ -3747,8 +3751,8 @@ mod tests {
 
         assert!(parsed.diagnostics.is_empty(), "{source}");
         let ternary = parsed.ir.sz_attributes[0]
-            .ternary
-            .as_ref()
+            .ternaries
+            .first()
             .expect("nested conditional should record a ternary");
         assert_eq!(ternary.consequent_classes, ["has-[:checked]:bg-red-500"]);
         assert_eq!(ternary.alternate_classes, ["has-[:checked]:bg-blue-500"]);
@@ -3765,8 +3769,8 @@ mod tests {
         assert!(parsed.diagnostics.is_empty(), "{}", source);
         assert_eq!(parsed.ir.sz_attributes.len(), 1);
         let ternary = parsed.ir.sz_attributes[0]
-            .ternary
-            .as_ref()
+            .ternaries
+            .first()
             .expect("local ternary should be recorded");
         assert_eq!(ternary.consequent_classes, ["p-4"]);
         assert_eq!(ternary.alternate_classes, ["p-8"]);

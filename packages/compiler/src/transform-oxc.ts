@@ -768,11 +768,7 @@ function transformOxcUnsupportedObject(
         reservedNames: context.reservedCSSVariableNames,
         globalVarAliases: context.globalVarAliases,
     });
-    if (
-        !partial ||
-        context.szAttrs.length !== 1 ||
-        (partial.hasConditional && context.classNameAttr)
-    ) {
+    if (!partial || context.szAttrs.length !== 1) {
         return null;
     }
     const mergedStyleProps =
@@ -803,8 +799,12 @@ function transformOxcUnsupportedObject(
         spreadStyleRewrite,
     );
     collectOxcClassTokens(partial.className, context.classes);
+    // A literal className beside a conditional also merges through _szMerge
+    // (see rewriteOxcPartialClassName), so it needs the runtime helpers too.
+    const mergesClassName =
+        expressionClassName || (partial.hasConditional && context.classNameAttr !== null);
     return {
-        ...completedUnsupportedObject(expressionClassName, expressionClassName),
+        ...completedUnsupportedObject(mergesClassName, mergesClassName),
         usesColorVar: partial.usesColorVar,
         usesSpacingVar: partial.usesSpacingVar,
         usesUnitVar: partial.usesUnitVar,
@@ -830,7 +830,7 @@ function rewriteOxcPartialClassName(
         context.edits.overwrite(
             context.classNameAttr.start,
             context.classNameAttr.end,
-            `className={_szMerge(${classSource}, ${JSON.stringify(partial.className)})}`,
+            `className={_szMerge(${classSource}, ${partial.classExpression})}`,
         );
         context.edits.remove(
             whitespaceStart(context.source, context.szAttr.start),
@@ -840,12 +840,22 @@ function rewriteOxcPartialClassName(
     }
     if (context.classNameAttr && stringLiteralValue(context.classNameAttr.value) !== null) {
         const existing = stringLiteralValue(context.classNameAttr.value);
-        const merged = [existing, partial.className].filter(Boolean).join(' ');
-        context.edits.overwrite(
-            context.classNameAttr.start,
-            context.classNameAttr.end,
-            `className="${merged}"`,
-        );
+        if (partial.hasConditional) {
+            // A literal className cannot absorb a conditional statically — merge
+            // it with the conditional expression, matching the Babel emit.
+            context.edits.overwrite(
+                context.classNameAttr.start,
+                context.classNameAttr.end,
+                `className={_szMerge(${JSON.stringify(existing)}, ${partial.classExpression})}`,
+            );
+        } else {
+            const merged = [existing, partial.className].filter(Boolean).join(' ');
+            context.edits.overwrite(
+                context.classNameAttr.start,
+                context.classNameAttr.end,
+                `className="${merged}"`,
+            );
+        }
         context.edits.remove(
             whitespaceStart(context.source, context.szAttr.start),
             context.szAttr.end,
@@ -2057,6 +2067,11 @@ interface OxcPartialObjectResult {
 interface OxcPartialTransform {
     className: string;
     classNameAttr: string;
+    /** JS expression carried inside `className={…}` — a plain JSON string for
+     * fully static output, or the conditional template/ternary source. Merge
+     * paths splice THIS into `_szMerge(existing, …)` so conditionals survive
+     * an existing className. */
+    classExpression: string;
     styleProps: string[];
     usesColorVar: boolean;
     usesSpacingVar: boolean;
@@ -3848,16 +3863,11 @@ function buildPartialObjectTransform(
     if (!partial || (partial.dynamicProps.size === 0 && partial.conditionalClasses.length === 0)) {
         return null;
     }
-    // One conditional prop may coexist with static props (the static part stays
-    // build-time, only the conditional becomes a runtime ternary). Mixing a
-    // conditional with runtime css vars still falls back to the runtime.
-    if (
-        partial.conditionalClasses.length > 0 &&
-        (partial.conditionalClasses.length !== 1 ||
-            [...partial.dynamicProps.values()].some(info => !info.skipClass))
-    ) {
-        return null;
-    }
+    // Conditional props coexist with static props AND runtime css vars —
+    // statics and var classes lead, each conditional appends one template
+    // segment (matching the Babel engine). This used to accept only a single
+    // conditional with no vars and punt the rest to the runtime, which never
+    // safelists the var utilities.
 
     const classParts: string[] = [];
     if (Object.keys(partial.staticProps).length > 0) {
@@ -3884,8 +3894,14 @@ function buildPartialObjectTransform(
 
     const className = classParts.filter(Boolean).join(' ');
     let classNameAttr = staticOxcClassNameAttribute(className);
+    let classExpression = JSON.stringify(className);
     if (partial.conditionalClasses.length > 0) {
-        classNameAttr = `className={${buildConditionalClassSource(classParts, partial.conditionalClasses, source)}}`;
+        classExpression = buildConditionalClassSource(
+            classParts,
+            partial.conditionalClasses,
+            source,
+        );
+        classNameAttr = `className={${classExpression}}`;
     } else if (className === '') {
         // An sz that lowers to zero classes emits undefined so the DOM has no
         // class attribute, instead of the noisy class="".
@@ -3900,6 +3916,7 @@ function buildPartialObjectTransform(
     return {
         className,
         classNameAttr,
+        classExpression,
         styleProps,
         usesColorVar: partial.usesColorVar,
         usesSpacingVar: partial.usesSpacingVar,
@@ -5039,12 +5056,12 @@ function buildConditionalClassSource(
     conditionals: OxcConditionalClassEntry[],
     source: string,
 ): string {
+    // classParts ends with each conditional's [consequent, alternate] pair;
+    // what precedes them is the build-time static + css-var class list.
+    const staticParts = classParts.slice(0, -2 * conditionals.length).filter(Boolean);
+    const bare = staticParts.length === 0;
     if (conditionals.length === 1) {
         const [entry] = conditionals;
-        // classParts ends with the conditional's [consequent, alternate]; what
-        // precedes them is the build-time static class list.
-        const staticParts = classParts.slice(0, -2).filter(Boolean);
-        const bare = staticParts.length === 0;
         // In bare value position an empty branch becomes `undefined` so it renders
         // no class attribute. Inside the template literal below it MUST stay an
         // empty string — `${undefined}` would render the text "undefined".
@@ -5056,7 +5073,18 @@ function buildConditionalClassSource(
         }
         return `\`${staticParts.join(' ')} \${${ternary}}\``;
     }
-    return JSON.stringify(classParts.filter(Boolean).join(' '));
+    // N conditionals: template literal appending one `${…}` segment per entry
+    // in property order, byte-for-byte the Babel engine's emission — first
+    // quasi is `"statics "` (trailing space) or empty, single-space separators,
+    // branches always "" (never `undefined`) inside the template.
+    const segments = conditionals
+        .map(entry => {
+            const test = source.slice(entry.test.start, entry.test.end);
+            return `\${${test} ? ${JSON.stringify(entry.consequent)} : ${JSON.stringify(entry.alternate)}}`;
+        })
+        .join(' ');
+    const prefix = bare ? '' : `${staticParts.join(' ')} `;
+    return `\`${prefix}${segments}\``;
 }
 
 /**

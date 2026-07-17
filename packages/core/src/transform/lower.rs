@@ -98,7 +98,7 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
             .filter(|prop| !prop.skip_class)
             .map(dynamic_css_var_class),
     );
-    if let Some(ternary) = &attribute.ternary {
+    for ternary in &attribute.ternaries {
         classes.extend(ternary.consequent_classes.iter().cloned());
         classes.extend(ternary.alternate_classes.iter().cloned());
     }
@@ -2016,7 +2016,7 @@ mod tests {
                 },
                 literal_class_name: None,
                 rewrites_empty_class: false,
-                ternary: None,
+                ternaries: Vec::new(),
                 array_parts: Vec::new(),
                 runtime_fallback: false,
                 runtime_fallback_spread: false,

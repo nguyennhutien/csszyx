@@ -225,13 +225,16 @@ pub struct SzAttributeIr {
     pub literal_class_name: Option<String>,
     /// Whether an empty class result should still rewrite to `className=""`.
     pub rewrites_empty_class: bool,
-    /// Static ternary form — present when `sz={cond ? A : B}` lowered cleanly
-    /// with both branches collapsing to static class lists. When set, the
-    /// attribute carries no static object/literal; rewriters emit a
-    /// `className={cond ? "…" : "…"}` expression in place of the original
-    /// `sz` attribute. When unset the attribute follows the regular static
-    /// object/literal path.
-    pub ternary: Option<StaticTernaryIr>,
+    /// Static ternary forms, in source property order. One entry for the
+    /// attribute-level `sz={cond ? A : B}` form, or one per property-level
+    /// conditional (`p: cond ? 2 : undefined`) — several may coexist with
+    /// static properties and runtime css vars in the same object. Rewriters
+    /// emit a bare `className={cond ? "…" : "…"}` for a single companion-less
+    /// entry, otherwise a template literal appending one `${cond ? "…" : "…"}`
+    /// segment per entry after the static/var classes (matching the Babel
+    /// engine's emission byte-for-byte). Empty when the attribute follows the
+    /// regular static object/literal path.
+    pub ternaries: Vec<StaticTernaryIr>,
     /// Statically compiled array parts. Conditional parts retain only the
     /// condition span; their object payload is lowered to a class string.
     pub array_parts: Vec<StaticArrayPartIr>,
@@ -506,7 +509,7 @@ mod tests {
                 object,
                 literal_class_name: None,
                 rewrites_empty_class: false,
-                ternary: None,
+                ternaries: Vec::new(),
                 array_parts: Vec::new(),
                 runtime_fallback: false,
                 runtime_fallback_spread: false,

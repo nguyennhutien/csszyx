@@ -356,9 +356,14 @@ describe('transform-oxc: partial (static + dynamic) objects', () => {
         expect(result.code).toContain('__szSpacingVar(on ? v : 2, "p")');
     });
 
-    it('falls back to runtime for a conditional + dynamic mix', () => {
+    it('compiles a conditional + dynamic mix statically', () => {
+        // Used to punt to the runtime (losing the m-(--_sz-m) safelist entry);
+        // now the var class leads and the conditional appends a template
+        // segment, matching Babel.
         const result = run('export const A = ({ on, v }) => <div sz={{ x: on ? 1 : 2, m: v }} />;');
-        expect(result.usesRuntime).toBe(true);
+        expect(result.usesRuntime).toBe(false);
+        expect(result.code).toContain('className={`m-(--_sz-m) ${on ? "x-1" : "x-2"}`}');
+        expect([...result.classes]).toEqual(['m-(--_sz-m)', 'x-1', 'x-2']);
     });
 
     it('resolves a bound spread inside a partial object', () => {

@@ -18,12 +18,17 @@ mod parse_parity {
     /// Sources whose rust parse output is known to diverge from oxc, pending a
     /// fix. Each entry must be removed once the gap is closed.
     const KNOWN_DIVERGENCES: &[&str] = &[
-        // TWO conditionals beside a runtime var: `set_partial_ternary` accepts a
-        // single ternary lane, so the second conditional punts the object to the
-        // runtime fallback and the `w-(--_sz-w)` safelist entry is lost. Babel
-        // compiles N conditionals via its conditionalClasses list; closing this
-        // needs StaticTernaryIr to grow multi-ternary support.
-        r#"const A = ({ w, a, b }) => <div sz={{ w: w, p: a ? 2 : undefined, m: b ? 4 : undefined }} />;"#,
+        // A color-opacity sub-object conditional MIXED with a second property
+        // conditional: rust expands the color-op ternary statically
+        // (bg-black/30 + bg-black/100 — both safelisted, no runtime var) while
+        // babel/oxc shift the opacity to a css-var lane
+        // (bg-black/(--_sz-bg-op) + a style var). Both outputs are correct;
+        // they disagree on class NAMES, which matters for cross-parser cache
+        // and mangle-map stability. Surfaced (not caused) by multi-ternary
+        // support — before it, rust punted this mix to the runtime with junk
+        // candidates. Closing direction: align babel/oxc to rust's static
+        // expansion (fewer runtime vars), a JS-lane follow-up.
+        r#"const A = ({ a, b }) => <div sz={{ bg: { color: "black", op: a ? 30 : 100 }, p: b ? 2 : undefined }} />;"#,
     ];
 
     #[derive(serde::Deserialize)]

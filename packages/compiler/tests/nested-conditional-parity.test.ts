@@ -196,3 +196,90 @@ describe('nested finite-conditional parity', () => {
         expect(oxc(twoConditionals)).toBe(babel(twoConditionals));
     });
 });
+
+/**
+ * Multi-ternary fixtures: N property-level conditionals append one template
+ * segment each, coexisting with statics, runtime vars, and an existing
+ * className. Discovery ORDER is asserted (not just the set) — production
+ * mangle IDs are assigned in discovery order across engines.
+ */
+const MULTI_TERNARY: Array<{ name: string; src: string; ordered: string[] }> = [
+    {
+        name: 'two finite ternaries',
+        src: 'export const A = ({ a, b }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;',
+        ordered: ['p-2', 'p-4', 'm-1', 'm-3'],
+    },
+    {
+        name: 'three finite ternaries',
+        src: 'export const A = ({ a, b, c }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3, h: c ? "max" : "full" }} />;',
+        ordered: ['p-2', 'p-4', 'm-1', 'm-3', 'h-max', 'h-full'],
+    },
+    {
+        name: 'statics + runtime var + two nullable ternaries',
+        src: 'export const A = ({ w, a, b }) => <div sz={{ w: w, h: "max", p: a ? 2 : undefined, m: b ? 4 : undefined }} />;',
+        ordered: ['h-max', 'w-(--_sz-w)', 'p-2', 'm-4'],
+    },
+    {
+        name: 'two ternaries merged into an existing className',
+        src: 'export const A = ({ a, b }) => <div className="x" sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;',
+        ordered: ['p-2', 'p-4', 'm-1', 'm-3'],
+    },
+    {
+        name: 'variant-wrapped ternary beside a nullable ternary',
+        src: 'export const A = ({ a, b }) => <div sz={{ hover: { p: a ? 1 : 2 }, m: b ? 4 : undefined }} />;',
+        ordered: ['hover:p-1', 'hover:p-2', 'm-4'],
+    },
+];
+
+/**
+ * Collapse the babel-reprint vs oxc-surgical whitespace difference inside a
+ * style object literal (`style={{ "--x": … }}` vs `style={{"--x": …}}`).
+ * Established surgical-parity behavior — className bytes stay unnormalized.
+ * @param code - a transformed element string.
+ * @returns the element with style-brace padding removed.
+ */
+function normalizeStyleBraces(code: string): string {
+    return code.replaceAll('{{ ', '{{').replaceAll(' }}', '}}');
+}
+
+// The vitest rust lane loads the PREBUILT native binary, which may predate
+// multi-ternary support (the cargo parity corpus is the source-level rust
+// gate). Probe the actual capability instead of pinning a version — these
+// assertions self-arm once a binary with the feature ships.
+const rustHasMultiTernary = (): boolean => {
+    if (!isRustTransformAvailable()) return false;
+    try {
+        const probe = transformRust(
+            'const P = ({ a, b }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;',
+            'probe.tsx',
+        );
+        return (typeof probe === 'string' ? probe : probe.code).includes('${');
+    } catch {
+        return false;
+    }
+};
+
+describe('multi-ternary parity (property conditionals append template segments)', () => {
+    for (const fixture of MULTI_TERNARY) {
+        it(`babel and oxc agree byte-for-byte — ${fixture.name}`, () => {
+            const b = babel(fixture.src);
+            expect(b, 'babel must not fall back to the runtime helper').not.toContain('_sz(');
+            expect(normalizeStyleBraces(oxc(fixture.src))).toBe(normalizeStyleBraces(b));
+            expect(orderedClassesOf(transformOxc(fixture.src, 'F.tsx')), 'class ORDER').toEqual(
+                orderedClassesOf(transformSourceCode(fixture.src, 'F.tsx')),
+            );
+            expect(orderedClassesOf(transformSourceCode(fixture.src, 'F.tsx'))).toEqual(
+                fixture.ordered,
+            );
+        });
+
+        it.skipIf(!rustHasMultiTernary())(`rust matches oxc/babel — ${fixture.name}`, () => {
+            expect(normalizeStyleBraces(rust(fixture.src))).toBe(
+                normalizeStyleBraces(babel(fixture.src)),
+            );
+            expect(orderedClassesOf(transformRust(fixture.src, 'F.tsx'))).toEqual(
+                orderedClassesOf(transformSourceCode(fixture.src, 'F.tsx')),
+            );
+        });
+    }
+});

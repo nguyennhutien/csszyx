@@ -250,7 +250,7 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
             object,
             literal_class_name: None,
             rewrites_empty_class: false,
-            ternary: None,
+            ternaries: Vec::new(),
             array_parts: Vec::new(),
             runtime_fallback: false,
             runtime_fallback_spread: false,

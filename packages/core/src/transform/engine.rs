@@ -310,7 +310,7 @@ fn transform_static_classes_with_options(
             let has_runtime_like_sz = element.sz_attribute_indices.iter().any(|index| {
                 let attribute = &parsed.ir.sz_attributes[*index];
                 // Arrays merge their className through szcn, not _szMerge.
-                (attribute.runtime_fallback || attribute.ternary.is_some())
+                (attribute.runtime_fallback || !attribute.ternaries.is_empty())
                     && attribute.array_parts.is_empty()
             });
             let has_static_sz = element

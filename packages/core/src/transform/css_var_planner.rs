@@ -355,16 +355,15 @@ fn rename_dynamic_prop(attribute: &mut super::SzAttributeIr, prop_index: usize, 
     let old_class = prop.skip_class.then(|| dynamic_css_var_class(prop));
     prop.var_name = name;
     let new_class = prop.skip_class.then(|| dynamic_css_var_class(prop));
-    let (Some(old_class), Some(new_class), Some(ternary)) =
-        (old_class, new_class, attribute.ternary.as_mut())
-    else {
+    let (Some(old_class), Some(new_class)) = (old_class, new_class) else {
         return;
     };
-    for class_name in ternary
-        .consequent_classes
-        .iter_mut()
-        .chain(ternary.alternate_classes.iter_mut())
-    {
+    for class_name in attribute.ternaries.iter_mut().flat_map(|ternary| {
+        ternary
+            .consequent_classes
+            .iter_mut()
+            .chain(ternary.alternate_classes.iter_mut())
+    }) {
         if *class_name == old_class {
             class_name.clone_from(&new_class);
         }
@@ -680,7 +679,7 @@ mod tests {
             object: StaticSzObject::empty(),
             literal_class_name: None,
             rewrites_empty_class: false,
-            ternary: None,
+            ternaries: Vec::new(),
             array_parts: Vec::new(),
             runtime_fallback: false,
             runtime_fallback_spread: false,

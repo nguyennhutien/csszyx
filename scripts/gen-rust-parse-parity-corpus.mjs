@@ -69,15 +69,23 @@ const sources = [
     // lane (rust always unwrapped casts; babel/oxc used to collapse the whole
     // conditional to a runtime CSS variable).
     'const A = ({ isImage }) => <div sz={{ whitespace: isImage ? "nowrap" : ("wrap" as any) }} />;',
-    // Family sweep around the ternary-beside-runtime-var fix: shapes the lanes
-    // should agree on (finite ternary + var; nullable ternary + var + h) and
-    // shapes rust still punts to runtime (tracked in KNOWN_DIVERGENCES in
-    // parse_parity_corpus.rs until the gap closes).
+    // Family sweep around the ternary-beside-runtime-var fix: finite ternary +
+    // var, variant-prefixed var, nullable-in-variant, className merge.
     'const A = ({ w, on }) => <div sz={{ w: w, p: on ? 2 : 4 }} />;',
     'const A = ({ w, on }) => <div sz={{ hover: { w: w }, p: on ? 2 : undefined }} />;',
     'const A = ({ w, a, b }) => <div sz={{ w: w, p: a ? 2 : undefined, m: b ? 4 : undefined }} />;',
     'const A = ({ f, on }) => <div sz={{ md: { flex: on ? f : undefined } }} />;',
     'const A = ({ w, f, on }) => <div className="x" sz={{ w: w, flex: on ? f : undefined }} />;',
+    // Multi-ternary lane: N property conditionals append one template segment
+    // each, coexisting with statics, runtime vars, variants, an existing
+    // className, and color-opacity sub-object conditionals.
+    'const A = ({ a, b }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;',
+    'const A = ({ a, b, c }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3, h: c ? "max" : "full" }} />;',
+    'const A = ({ a, b }) => <div className="x" sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;',
+    'const A = ({ w, a, b }) => <div sz={{ w: w, h: "max", p: a ? 2 : undefined, m: b ? 4 : undefined }} />;',
+    'const A = ({ a, b }) => <div sz={{ hover: { p: a ? 1 : 2 }, m: b ? 4 : undefined }} />;',
+    'const A = ({ a, b }) => <div sz={{ bg: { color: "black", op: a ? 30 : 100 }, p: b ? 2 : undefined }} />;',
+    'const A = ({ a, b }) => <div sz={{ p: a ? 2 : undefined, m: b ? 4 : undefined }} />;',
 ];
 
 const records = sources.map(source => {
