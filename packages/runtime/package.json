@@ -60,11 +60,11 @@
     "@csszyx/core": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
+    "@types/node": "^20.19.43",
     "jsdom": "^23.0.0",
     "typescript": "^6.0.3",
     "vite-plugin-wasm": "^3.3.0",
-    "vitest": "^4.1.9",
+    "vitest": "^4.1.10",
     "unbuild": "^3.6.1"
   },
   "optionalDependencies": {

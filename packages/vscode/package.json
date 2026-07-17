@@ -103,12 +103,12 @@
     "@csszyx/compiler": "workspace:*",
     "@csszyx/tooling-metadata": "workspace:*",
     "@csszyx/ts-plugin": "workspace:*",
-    "@types/node": "^20.11.0",
-    "@types/vscode": "^1.85.0",
-    "@vscode/vsce": "^3.0.0",
+    "@types/node": "^20.19.43",
+    "@types/vscode": "^1.125.0",
+    "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9",
+    "vitest": "^4.1.10",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.3.2"
   }

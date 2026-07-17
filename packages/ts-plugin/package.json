@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@csszyx/tooling-metadata": "workspace:*",
-    "@types/node": "^20.11.0",
+    "@types/node": "^20.19.43",
     "c8": "^10.1.3",
     "esbuild": "^0.28.1",
     "typescript": "~5.9.0"

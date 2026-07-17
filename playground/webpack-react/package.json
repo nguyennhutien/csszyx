@@ -15,26 +15,26 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@swc/core": "^1.15.10",
+    "@swc/core": "^1.15.43",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "autoprefixer": "^10.4.23",
+    "autoprefixer": "^10.5.2",
     "css-loader": "^7.1.2",
     "html-loader": "^5.1.0",
-    "html-webpack-plugin": "^5.6.0",
-    "mini-css-extract-plugin": "^2.10.0",
+    "html-webpack-plugin": "^5.6.7",
+    "mini-css-extract-plugin": "^2.10.2",
     "postcss": "^8.5.6",
     "postcss-loader": "^8.2.0",
     "style-loader": "^4.0.0",
     "swc-loader": "^0.2.7",
     "@tailwindcss/postcss": "^4.3.2",
     "tailwindcss": "^4.3.2",
-    "ts-loader": "^9.5.1",
+    "ts-loader": "^9.6.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",
-    "webpack": "^5.91.0",
+    "webpack": "^5.108.4",
     "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^5.2.5",
+    "webpack-dev-server": "^5.2.6",
     "@csszyx/compiler": "workspace:*"
   }
 }
