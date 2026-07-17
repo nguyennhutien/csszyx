@@ -131,6 +131,15 @@ const FULL_PARITY: Array<{ name: string; src: string; contains: string[] }> = [
         src: 'export const A = ({ c }) => <div sz={{ group: { hover: { borderColor: { color: c ? "red-700" : "charcoal", op: 18 } } } }} />;',
         contains: ['group-hover:border-red-700/18', 'group-hover:border-charcoal/18'],
     },
+    {
+        // An `as`-cast around a literal branch is still a finite choice: every
+        // lane resolves through the cast (rust always did; babel/oxc used to
+        // collapse the conditional to a runtime CSS variable and drop the
+        // resolvable static branches).
+        name: 'as-cast literal branch',
+        src: 'export const A = ({ c }) => <div sz={{ whitespace: c ? "nowrap" : ("wrap" as any) }} />;',
+        contains: ['whitespace-nowrap', 'whitespace-wrap'],
+    },
 ];
 
 describe('nested finite-conditional parity', () => {

@@ -65,6 +65,10 @@ const sources = [
     'const A = () => {\n  // <Box sz={{ mb: 10 }}>x</Box>\n  return <div sz={{ p: 2 }} />;\n};',
     '/** example: <svg sz={{ fill: "red-500" }} /> */\nconst A = () => <div sz={{ p: 2 }} />;',
     'const A = () => <div /* sz={{ mt: 8 }} */ sz={{ p: 2 }} />;',
+    // An `as`-cast literal in a conditional branch resolves statically in every
+    // lane (rust always unwrapped casts; babel/oxc used to collapse the whole
+    // conditional to a runtime CSS variable).
+    'const A = ({ isImage }) => <div sz={{ whitespace: isImage ? "nowrap" : ("wrap" as any) }} />;',
 ];
 
 const records = sources.map(source => {

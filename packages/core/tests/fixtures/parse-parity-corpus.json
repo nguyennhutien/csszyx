@@ -230,5 +230,13 @@
       "p-2"
     ],
     "rawClassNames": []
+  },
+  {
+    "source": "const A = ({ isImage }) => <div sz={{ whitespace: isImage ? \"nowrap\" : (\"wrap\" as any) }} />;",
+    "classes": [
+      "whitespace-nowrap",
+      "whitespace-wrap"
+    ],
+    "rawClassNames": []
   }
 ]

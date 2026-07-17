@@ -3240,17 +3240,27 @@ function createDynamicPropRegistration(
  * @returns primitive value or null
  */
 function extractStaticLiteralValue(node: t.Expression): string | number | boolean | null {
-    if (t.isStringLiteral(node)) {
-        return node.value;
+    // See through `as`/`satisfies` casts and parens: `cond ? 'nowrap' : ('wrap'
+    // as any)` must resolve the literal like the rust engine does (its
+    // unwrap_expression runs before every static check) — treating the cast as
+    // opaque collapsed the whole conditional to a runtime CSS variable and
+    // discarded the resolvable static branch.
+    const value = unwrapTsExpression(node) ?? node;
+    if (t.isStringLiteral(value)) {
+        return value.value;
     }
-    if (t.isNumericLiteral(node)) {
-        return node.value;
+    if (t.isNumericLiteral(value)) {
+        return value.value;
     }
-    if (t.isBooleanLiteral(node)) {
-        return node.value;
+    if (t.isBooleanLiteral(value)) {
+        return value.value;
     }
-    if (t.isUnaryExpression(node) && node.operator === '-' && t.isNumericLiteral(node.argument)) {
-        return -node.argument.value;
+    if (
+        t.isUnaryExpression(value) &&
+        value.operator === '-' &&
+        t.isNumericLiteral(value.argument)
+    ) {
+        return -value.argument.value;
     }
     return null;
 }
