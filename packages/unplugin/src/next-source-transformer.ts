@@ -7,6 +7,7 @@ import {
     transformRust,
     transformSourceCode,
 } from '@csszyx/compiler';
+import { babelFallbackReason } from './babel-fallback-reason.js';
 import { normalizePathSeparators } from './path-normalization.js';
 import {
     createTransformCacheKey,
@@ -272,7 +273,7 @@ function runNextSourceTransform(
             throw error;
         }
         const result = transformSourceCode(input.source, filename, compilerOptions);
-        const reason = error instanceof Error ? error.message : String(error);
+        const reason = babelFallbackReason(error);
         result.diagnostics.push(
             `[csszyx] oxc parser fell back to Babel for ${filename}: ${reason}`,
         );

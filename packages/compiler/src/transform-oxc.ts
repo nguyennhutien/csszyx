@@ -69,12 +69,21 @@ export type TransformOxcResult = SourceTransformResult;
  */
 export class OxcNotImplementedError extends Error {
     /**
+     * User-facing description of the unimplemented construct, without the
+     * internal slice label. Fallback warnings must print THIS, not `message` —
+     * the slice codes are planning shorthand and leaked verbatim into build
+     * logs ("D2.5+ not implemented yet", field-reported as baffling).
+     */
+    readonly detail: string;
+
+    /**
      * @param slice The Phase D slice expected to implement this path.
      * @param detail What the caller asked for that is not yet wired.
      */
     constructor(slice: string, detail: string) {
         super(`transformOxc: ${slice} not implemented yet — ${detail}`);
         this.name = 'OxcNotImplementedError';
+        this.detail = detail;
     }
 }
 

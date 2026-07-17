@@ -36,6 +36,7 @@ import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } fro
 import type { PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
+import { babelFallbackReason } from './babel-fallback-reason.js';
 import { mangleCSSSync } from './css-mangler.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
@@ -2773,7 +2774,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         error: unknown,
     ): SourceTransformResult {
         const result = transformSourceCode(source, effectiveFilename, compilerOptions);
-        const reason = error instanceof Error ? error.message : String(error);
+        const reason = babelFallbackReason(error);
         result.diagnostics.push(
             `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason}`,
         );
