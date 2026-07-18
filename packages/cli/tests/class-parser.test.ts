@@ -1015,11 +1015,17 @@ describe('class-parser', () => {
                 value: 'sm',
                 extra: { prop: 'leading', value: 'tight' },
             });
-            // Brackets survive so unitless line-height keeps its semantics.
+            // Bracket content unwraps to a STRING — numeric strings are the
+            // unitless ratio, which the compiler re-brackets on merge.
             expect(parseClass('text-sm/[1.4]')).toEqual({
                 prop: 'text',
                 value: 'sm',
-                extra: { prop: 'leading', value: '[1.4]' },
+                extra: { prop: 'leading', value: '1.4' },
+            });
+            expect(parseClass('text-sm/[1.5]')).toEqual({
+                prop: 'text',
+                value: 'sm',
+                extra: { prop: 'leading', value: '1.5' },
             });
             expect(parseClass('text-[14px]/6')).toEqual({
                 prop: 'text',

@@ -426,16 +426,20 @@ const SHADOW_SIZE_PROPS = new Set(['shadow', 'insetShadow', 'textShadow', 'dropS
 
 /**
  * Normalizes a text line-height modifier into the documented `leading` value.
+ * sz value semantics: a NUMBER rides Tailwind's spacing scale (bare class),
+ * a numeric STRING is the unitless ratio (the compiler auto-brackets it) —
+ * so the bare/bracket distinction survives without brackets in sz.
  * @param raw - The modifier substring after the slash, brackets/parens intact.
  * @returns The `leading` sz value that merges back into the same class.
  */
 function parseLeadingModifier(raw: string): string | number {
-    // Bare numbers stay numeric ({ leading: 6 } → leading-6 → text-sm/6).
+    // Bare numbers are spacing-scale steps ({ leading: 6 } → text-sm/6).
     if (/^\d+(\.\d+)?$/.test(raw)) return Number(raw);
     // CSS vars use the documented sugar ({ leading: '--lh' } → leading-(--lh)).
     if (raw.startsWith('(') && raw.endsWith(')')) return raw.slice(1, -1);
-    // Bracketed arbitrary values stay bracketed so the merged class keeps the
-    // unitless-line-height semantics (text-sm/[1.4], not text-sm/1.4).
+    // Bracketed values unwrap: numeric content becomes the ratio STRING
+    // ('1.4' → text-sm/[1.4]); unit values re-bracket via the arbitrary path.
+    if (raw.startsWith('[') && raw.endsWith(']')) return raw.slice(1, -1);
     return raw;
 }
 

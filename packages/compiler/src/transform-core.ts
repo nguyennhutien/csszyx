@@ -2947,6 +2947,21 @@ function collectFallbackProperty(
         classes.push(`${prefix}[animation-delay:${delay}]`);
         return;
     }
+    // leading: numbers ride Tailwind's spacing scale (leading-1.5 = 0.375rem)
+    // like every other spacing utility; numeric STRINGS are the unitless
+    // line-height ratio and auto-bracket (leading: '1.5' → leading-[1.5]).
+    // Non-quarter-step numbers (1.4) have no bare spelling — Tailwind drops
+    // leading-1.4 — so they bracket too instead of emitting a dead class.
+    if (rawKey === 'leading' || rawKey === 'lineHeight') {
+        if (typeof value === 'number' && (value * 4) % 1 !== 0) {
+            classes.push(`${prefix}leading-[${value}]`);
+            return;
+        }
+        if (typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value)) {
+            classes.push(`${prefix}leading-[${value}]`);
+            return;
+        }
+    }
     if (typeof value === 'number') {
         const utility =
             value < 0 && NEGATIVE_ALLOWED.has(key)

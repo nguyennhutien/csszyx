@@ -206,6 +206,13 @@ const corpus = [
     { text: 'base', leading: 1.5 },
     { text: '14px', leading: 6 },
     { text: 'sm', leading: 'tight' },
+    // leading semantics: number = spacing scale, numeric string = unitless
+    // ratio (auto-bracketed), non-quarter-step number = ratio fallback
+    { text: 'sm', leading: '1.4' },
+    { text: 'sm', leading: '1.5' },
+    { leading: 1.4 },
+    { leading: '1.5' },
+    { leading: '6' },
     { flex: '1/2' },
     { group: 'item' },
     { peer: 'form' },

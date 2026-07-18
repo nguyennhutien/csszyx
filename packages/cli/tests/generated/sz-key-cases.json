@@ -5078,6 +5078,12 @@
                 },
                 {
                     "sz": {
+                        "leading": "1.5"
+                    },
+                    "class": "leading-[1.5]"
+                },
+                {
+                    "sz": {
                         "leading": "3rem"
                     },
                     "class": "leading-[3rem]"
@@ -5105,6 +5111,7 @@
                 "leading-7",
                 "leading-8",
                 "leading-9",
+                "leading-[1.5]",
                 "leading-[3rem]",
                 "leading-loose",
                 "leading-none",

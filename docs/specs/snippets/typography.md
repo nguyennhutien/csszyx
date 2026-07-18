@@ -101,24 +101,27 @@ Controlling the tracking (letter spacing).
 
 Controlling the leading (line height).
 
-| Concept          | CSS Rule                   | Tailwind v4 Class                                                                                       | `sz` Prop (Object Syntax)  | Note                          |
-| :--------------- | :------------------------- | :------------------------------------------------------------------------------------------------------ | :------------------------- | :---------------------------- |
-| **Keywords**     | `line-height: 1.5`         | `leading-none`, `leading-tight`, `leading-snug`, `leading-normal`, `leading-relaxed`, `leading-loose`   | `{ leading: 'none' }` etc. |                               |
-| **Fixed**        | `line-height: .75rem`(etc) | `leading-3`, `leading-4`, `leading-5`, `leading-6`, `leading-7`, `leading-8`, `leading-9`, `leading-10` | `{ leading: 3 }` etc.      | Maps to spacing scale.        |
-| **Arbitrary**    | `line-height: 3rem`        | `leading-[3rem]`                                                                                        | `{ leading: '3rem' }`      |                               |
-| **CSS Variable** | `line-height: var(--l)`    | `leading-(--l)`                                                                                         | `{ leading: '--l' }`       | **Sugar**: Auto-detects `--`. |
+| Concept            | CSS Rule                   | Tailwind v4 Class                                                                                       | `sz` Prop (Object Syntax)  | Note                                                                                                                                           |
+| :----------------- | :------------------------- | :------------------------------------------------------------------------------------------------------ | :------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Keywords**       | `line-height: 1.5`         | `leading-none`, `leading-tight`, `leading-snug`, `leading-normal`, `leading-relaxed`, `leading-loose`   | `{ leading: 'none' }` etc. |                                                                                                                                                |
+| **Fixed**          | `line-height: .75rem`(etc) | `leading-3`, `leading-4`, `leading-5`, `leading-6`, `leading-7`, `leading-8`, `leading-9`, `leading-10` | `{ leading: 3 }` etc.      | **Number = spacing scale** (length, quarter steps: `1.5` → `0.375rem`).                                                                        |
+| **Unitless Ratio** | `line-height: 1.5`         | `leading-[1.5]`                                                                                         | `{ leading: '1.5' }`       | **Numeric STRING = ratio** (× font-size), auto-bracketed. A non-quarter-step number (`1.4`) also brackets — Tailwind has no bare class for it. |
+| **Arbitrary**      | `line-height: 3rem`        | `leading-[3rem]`                                                                                        | `{ leading: '3rem' }`      |                                                                                                                                                |
+| **CSS Variable**   | `line-height: var(--l)`    | `leading-(--l)`                                                                                         | `{ leading: '--l' }`       | **Sugar**: Auto-detects `--`.                                                                                                                  |
 
 ### Text/Leading Shorthand
 
 When both `text` (font-size) and `leading` (line-height) are specified together, they are automatically merged into a single Tailwind class using the `/` shorthand syntax.
 
-| Input                               | Output             | Note                                     |
-| :---------------------------------- | :----------------- | :--------------------------------------- |
-| `{ text: 'lg', leading: 7 }`        | `text-lg/7`        | Numeric leading merged with text size.   |
-| `{ text: 'sm', leading: 'tight' }`  | `text-sm/tight`    | Keyword leading merged with text size.   |
-| `{ text: 'xl', leading: '1.5rem' }` | `text-xl/[1.5rem]` | Arbitrary leading merged with text size. |
-| `{ text: 'lg' }`                    | `text-lg`          | No merge — `leading` not present.        |
-| `{ leading: 7 }`                    | `leading-7`        | No merge — `text` not present.           |
+| Input                               | Output             | Note                                                                                      |
+| :---------------------------------- | :----------------- | :---------------------------------------------------------------------------------------- |
+| `{ text: 'lg', leading: 7 }`        | `text-lg/7`        | Numeric leading merged with text size.                                                    |
+| `{ text: 'sm', leading: 'tight' }`  | `text-sm/tight`    | Keyword leading merged with text size.                                                    |
+| `{ text: 'sm', leading: '1.5' }`    | `text-sm/[1.5]`    | Numeric string = unitless ratio (1.5 × font-size).                                        |
+| `{ text: 'sm', leading: 1.5 }`      | `text-sm/1.5`      | Number = spacing scale (`calc(var(--spacing) * 1.5)` = 0.375rem — a length, not a ratio). |
+| `{ text: 'xl', leading: '1.5rem' }` | `text-xl/[1.5rem]` | Arbitrary leading merged with text size.                                                  |
+| `{ text: 'lg' }`                    | `text-lg`          | No merge — `leading` not present.                                                         |
+| `{ leading: 7 }`                    | `leading-7`        | No merge — `text` not present.                                                            |
 
 ## Text Align
 

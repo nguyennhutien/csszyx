@@ -623,9 +623,22 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             if let Some(grad) = gradient_stop_prefix(key) {
                 return Some(format!("{prefix}{grad}-{}%", format_abs_number(*value)));
             }
+            // leading numbers ride the spacing scale like Tailwind's bare
+            // syntax; non-quarter-step values (1.4) have no bare spelling —
+            // Tailwind drops leading-1.4 — so they bracket as the unitless
+            // ratio instead of emitting a dead class. Mirrors the oxc lane.
+            if (key == "leading" || key == "lineHeight") && (value * 4.0).fract() != 0.0 {
+                return Some(format!("{prefix}leading-[{}]", format_abs_number(*value)));
+            }
             Some(format_number_class(class_key.as_ref(), *value, prefix))
         }
         StaticSzValue::String(value) => {
+            // leading numeric STRINGS are the unitless line-height ratio and
+            // auto-bracket (leading: '1.5' → leading-[1.5]); bare numbers ride
+            // the spacing scale. Mirrors the oxc lane.
+            if (key == "leading" || key == "lineHeight") && is_unsigned_decimal(value) {
+                return Some(format!("{prefix}leading-[{value}]"));
+            }
             if key == "bgImg" {
                 return Some(format_bg_img_string(value, prefix));
             }

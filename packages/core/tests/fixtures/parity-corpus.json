@@ -2754,6 +2754,123 @@
     "oxc": "text-sm/tight"
   },
   {
+    "sz": "{\"text\":\"sm\",\"leading\":\"1.4\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "text",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "sm"
+          }
+        },
+        {
+          "key": "leading",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "1.4"
+          }
+        }
+      ]
+    },
+    "oxc": "text-sm/[1.4]"
+  },
+  {
+    "sz": "{\"text\":\"sm\",\"leading\":\"1.5\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "text",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "sm"
+          }
+        },
+        {
+          "key": "leading",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "1.5"
+          }
+        }
+      ]
+    },
+    "oxc": "text-sm/[1.5]"
+  },
+  {
+    "sz": "{\"leading\":1.4}",
+    "ir": {
+      "properties": [
+        {
+          "key": "leading",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 1.4
+          }
+        }
+      ]
+    },
+    "oxc": "leading-[1.4]"
+  },
+  {
+    "sz": "{\"leading\":\"1.5\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "leading",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "1.5"
+          }
+        }
+      ]
+    },
+    "oxc": "leading-[1.5]"
+  },
+  {
+    "sz": "{\"leading\":\"6\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "leading",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "6"
+          }
+        }
+      ]
+    },
+    "oxc": "leading-[6]"
+  },
+  {
     "sz": "{\"flex\":\"1/2\"}",
     "ir": {
       "properties": [
