@@ -2714,7 +2714,7 @@ fn kebab_case(value: &str) -> String {
     out
 }
 
-fn dynamic_css_var_category(key: &str) -> DynamicCssVarCategory {
+pub fn dynamic_css_var_category(key: &str) -> DynamicCssVarCategory {
     match key {
         "p" | "pt" | "pr" | "pb" | "pl" | "px" | "py" | "ps" | "pe" | "pbs" | "pbe" | "m"
         | "mt" | "mr" | "mb" | "ml" | "mx" | "my" | "ms" | "me" | "mbs" | "mbe" | "spaceX"

@@ -519,6 +519,7 @@ fn unknown_property_diagnostics(
     let location = relativize_diagnostic_path(&file.filename, root_dir);
     let mut out = Vec::new();
     let mut unknown = Vec::new();
+    let mut dead_steps = Vec::new();
     for attr in &ir.sz_attributes {
         unknown.clear();
         collect_unknown_sz_keys(&attr.object, &mut unknown);
@@ -536,6 +537,16 @@ fn unknown_property_diagnostics(
                     "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. This will be ignored. Check for typos."
                 ));
             }
+        }
+        dead_steps.clear();
+        super::lower::collect_dead_spacing_steps(&attr.object, &mut dead_steps);
+        for (key, value, offset) in &dead_steps {
+            let (line, _) = offset_to_line_column(&file.source, *offset);
+            // Wording matches the JS engines' warnDeadSpacingStep so a
+            // `build.parser` flip does not change the diagnostic text.
+            out.push(format!(
+                "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
+            ));
         }
     }
     out

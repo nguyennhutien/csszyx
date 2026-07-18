@@ -223,6 +223,70 @@ pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(St
     }
 }
 
+/// Collects spacing-scale properties whose numeric value is not a quarter
+/// step — Tailwind's bare spacing syntax only accepts multiples of 0.25, so
+/// `p-1.4` generates no CSS, and a unitless bracket is no escape (`padding:
+/// 1.4` is invalid CSS). Same descent rules as `collect_unknown_sz_keys`;
+/// `leading` is excluded because it falls back to the unitless-ratio bracket.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_dead_spacing_steps(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, f64, u32)>,
+) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::Number(value) => {
+                if is_dead_spacing_step(&property.key, *value) {
+                    out.push((property.key.clone(), *value, property.span.start));
+                }
+            }
+            StaticSzValue::String(value) => {
+                let unsigned = value.strip_prefix('-').unwrap_or(value);
+                if is_unsigned_decimal(unsigned) {
+                    if let Ok(parsed) = value.parse::<f64>() {
+                        if is_dead_spacing_step(&property.key, parsed) {
+                            out.push((property.key.clone(), parsed, property.span.start));
+                        }
+                    }
+                }
+            }
+            StaticSzValue::Object(nested) => {
+                if matches!(
+                    property.key.as_str(),
+                    "css"
+                        | "bgImg"
+                        | "supports"
+                        | "data"
+                        | "not"
+                        | "aria"
+                        | "has"
+                        | "group"
+                        | "peer"
+                ) {
+                    continue;
+                }
+                if property_prefix(&property.key).is_some()
+                    && object_string_property(nested, "color").is_some()
+                {
+                    continue;
+                }
+                collect_dead_spacing_steps(nested, out);
+            }
+            StaticSzValue::Boolean(_) => {}
+        }
+    }
+}
+
+/// Whether a bare numeric value on a spacing-scale key has no Tailwind class.
+#[cfg(feature = "native-engine")]
+fn is_dead_spacing_step(key: &str, value: f64) -> bool {
+    (value * 4.0).fract() != 0.0
+        && matches!(
+            super::parser::dynamic_css_var_category(key),
+            super::ir::DynamicCssVarCategory::Spacing
+        )
+}
+
 fn merge_text_size_and_leading(mut classes: Vec<String>) -> Vec<String> {
     let mut consumed = vec![false; classes.len()];
 
@@ -1964,6 +2028,32 @@ mod tests {
             };
             assert_eq!(lower_static_sz_object(&object), [expected]);
         }
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collects_dead_spacing_steps() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("p", StaticSzValue::Number(1.4)),
+                property("m", StaticSzValue::Number(1.5)),
+                property("gap", StaticSzValue::String("1.1".into())),
+                property("w", StaticSzValue::String("1.4rem".into())),
+                property("leading", StaticSzValue::Number(1.4)),
+                property(
+                    "hover",
+                    StaticSzValue::Object(StaticSzObject {
+                        properties: vec![property("p", StaticSzValue::Number(2.3))],
+                    }),
+                ),
+            ],
+        };
+        let mut out: Vec<(String, f64, u32)> = Vec::new();
+        super::collect_dead_spacing_steps(&object, &mut out);
+        let keys: Vec<(&str, f64)> = out.iter().map(|(k, v, _)| (k.as_str(), *v)).collect();
+        // 1.5 is a quarter step, "1.4rem" carries a unit, and leading falls
+        // back to the unitless-ratio bracket — none of those warn.
+        assert_eq!(keys, [("p", 1.4), ("gap", 1.1), ("p", 2.3)]);
     }
 
     #[test]

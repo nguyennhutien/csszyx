@@ -1143,6 +1143,36 @@ function handleImportant(value: string): { value: string; important: boolean } {
 /** Named colors whose slash-opacity always works (alpha-capable by definition). */
 const ALPHA_SAFE_NAMED_COLORS = new Set(['white', 'black', 'transparent', 'current', 'inherit']);
 
+/** Spacing-scale values already nudged about dead quarter steps (once each). */
+const _warnedSpacingSteps = new Set<string>();
+
+/**
+ * Warns when a numeric spacing value is not a quarter step. Tailwind's bare
+ * spacing syntax only accepts multiples of 0.25 — `p-1.4` generates no CSS —
+ * and a unitless bracket is no escape here (`padding: 1.4` is invalid CSS),
+ * so the only fix is a real step or a unit value.
+ * @param key - The sz property key.
+ * @param value - The numeric value about to be emitted bare.
+ */
+function warnDeadSpacingStep(key: string, value: number): void {
+    if (
+        !szDevWarningsEnabled() ||
+        PROPERTY_CATEGORY_MAP[key] !== PropertyCategory.SPACING ||
+        (value * 4) % 1 === 0
+    ) {
+        return;
+    }
+    const token = `${key}:${value}`;
+    if (_warnedSpacingSteps.has(token)) return;
+    _warnedSpacingSteps.add(token);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] "${key}: ${value}"${at}: ${value} is not on Tailwind's spacing scale ` +
+            '(quarter steps only), so the class generates no CSS. Use a quarter step ' +
+            `(1.25, 1.5, 1.75) or a unit value ("${value}rem").`,
+    );
+}
+
 /** Custom theme tokens already nudged about slash-opacity (once per token). */
 const _warnedOpacityTokens = new Set<string>();
 
@@ -2963,6 +2993,7 @@ function collectFallbackProperty(
         }
     }
     if (typeof value === 'number') {
+        warnDeadSpacingStep(rawKey, value);
         const utility =
             value < 0 && NEGATIVE_ALLOWED.has(key)
                 ? `-${key}-${Math.abs(value)}`
@@ -2971,6 +3002,7 @@ function collectFallbackProperty(
         return;
     }
     if (typeof value === 'string') {
+        if (/^-?\d+(?:\.\d+)?$/.test(value)) warnDeadSpacingStep(rawKey, Number(value));
         classes.push(buildGenericStringClass(rawKey, key, value, prefix));
     }
 }
