@@ -2634,7 +2634,7 @@
     "oxc": "drop-shadow-(color:--c)/40"
   },
   {
-    "sz": "{\"text\":\"sm/6\"}",
+    "sz": "{\"text\":\"sm\",\"leading\":6}",
     "ir": {
       "properties": [
         {
@@ -2645,7 +2645,18 @@
           },
           "value": {
             "kind": "string",
-            "value": "sm/6"
+            "value": "sm"
+          }
+        },
+        {
+          "key": "leading",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 6
           }
         }
       ]
@@ -2653,7 +2664,7 @@
     "oxc": "text-sm/6"
   },
   {
-    "sz": "{\"text\":\"base/1.5\"}",
+    "sz": "{\"text\":\"base\",\"leading\":1.5}",
     "ir": {
       "properties": [
         {
@@ -2664,7 +2675,18 @@
           },
           "value": {
             "kind": "string",
-            "value": "base/1.5"
+            "value": "base"
+          }
+        },
+        {
+          "key": "leading",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 1.5
           }
         }
       ]
@@ -2672,7 +2694,7 @@
     "oxc": "text-base/1.5"
   },
   {
-    "sz": "{\"text\":\"[14px]/6\"}",
+    "sz": "{\"text\":\"14px\",\"leading\":6}",
     "ir": {
       "properties": [
         {
@@ -2683,12 +2705,53 @@
           },
           "value": {
             "kind": "string",
-            "value": "[14px]/6"
+            "value": "14px"
+          }
+        },
+        {
+          "key": "leading",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 6
           }
         }
       ]
     },
     "oxc": "text-[14px]/6"
+  },
+  {
+    "sz": "{\"text\":\"sm\",\"leading\":\"tight\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "text",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "sm"
+          }
+        },
+        {
+          "key": "leading",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "tight"
+          }
+        }
+      ]
+    },
+    "oxc": "text-sm/tight"
   },
   {
     "sz": "{\"flex\":\"1/2\"}",

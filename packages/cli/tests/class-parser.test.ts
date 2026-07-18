@@ -996,11 +996,41 @@ describe('class-parser', () => {
             expect(parseClass('shadow-(--s)/50')).toEqual({ prop: 'shadow', value: '(--s)/50' });
         });
 
-        it('font-size with line-height modifier keeps the verbatim string form', () => {
-            expect(parseClass('text-sm/6')).toEqual({ prop: 'text', value: 'sm/6' });
-            expect(parseClass('text-base/1.5')).toEqual({ prop: 'text', value: 'base/1.5' });
-            expect(parseClass('text-sm/[1.4]')).toEqual({ prop: 'text', value: 'sm/[1.4]' });
-            expect(parseClass('text-[14px]/6')).toEqual({ prop: 'text', value: '[14px]/6' });
+        it('font-size with line-height modifier splits into the documented two-token form', () => {
+            // The sz surface is { text, leading }; the compiler merges the
+            // pair back into the slash class (typography spec, Automatic
+            // Merge section).
+            expect(parseClass('text-sm/6')).toEqual({
+                prop: 'text',
+                value: 'sm',
+                extra: { prop: 'leading', value: 6 },
+            });
+            expect(parseClass('text-base/1.5')).toEqual({
+                prop: 'text',
+                value: 'base',
+                extra: { prop: 'leading', value: 1.5 },
+            });
+            expect(parseClass('text-sm/tight')).toEqual({
+                prop: 'text',
+                value: 'sm',
+                extra: { prop: 'leading', value: 'tight' },
+            });
+            // Brackets survive so unitless line-height keeps its semantics.
+            expect(parseClass('text-sm/[1.4]')).toEqual({
+                prop: 'text',
+                value: 'sm',
+                extra: { prop: 'leading', value: '[1.4]' },
+            });
+            expect(parseClass('text-[14px]/6')).toEqual({
+                prop: 'text',
+                value: '14px',
+                extra: { prop: 'leading', value: 6 },
+            });
+            expect(parseClass('text-sm/(--lh)')).toEqual({
+                prop: 'text',
+                value: 'sm',
+                extra: { prop: 'leading', value: '--lh' },
+            });
             // A color base still takes the color object.
             expect(parseClass('text-red-500/50')).toEqual({
                 prop: 'color',

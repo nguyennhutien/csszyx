@@ -200,10 +200,12 @@ const corpus = [
     { textShadowColor: '--c' },
     { shadowColor: { color: '--c', op: 12.5 } },
     { dropShadowColor: { color: '--c', op: 40 } },
-    // Slash-modifier shapes the migrate reverse parser emits verbatim
-    { text: 'sm/6' },
-    { text: 'base/1.5' },
-    { text: '[14px]/6' },
+    // Slash-modifier shapes the migrate reverse parser emits
+    // (text/leading is the documented two-token form the engines merge)
+    { text: 'sm', leading: 6 },
+    { text: 'base', leading: 1.5 },
+    { text: '14px', leading: 6 },
+    { text: 'sm', leading: 'tight' },
     { flex: '1/2' },
     { group: 'item' },
     { peer: 'form' },

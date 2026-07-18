@@ -42,6 +42,8 @@ export interface ParsedClass {
     prop: string;
     value: unknown; // string | number | boolean | object
     cssProperty?: string;
+    /** Companion prop emitted alongside `prop` (text-sm/6 → text + leading). */
+    extra?: { prop: string; value: unknown };
 }
 
 /** Parser options for migration-specific output policy. */
@@ -389,13 +391,25 @@ function disambiguateAndParse(
 
     // Apply opacity
     if (opacity !== undefined && typeof result.value === 'string') {
-        // When the disambiguator classified the base as a SIZE, the modifier
-        // belongs to the size utility itself — shadow opacity (shadow-sm/12.5,
-        // shadow-(--s)/50) or line-height (text-sm/6): keep the verbatim
-        // string form the compiler passes through unchanged. Color-classified
-        // results (prop `color`, `shadowColor`, …) take the { color, op }
-        // object instead.
-        if (SIZE_MODIFIER_PROPS.has(result.prop)) {
+        // text-sm/6 is the font-size/line-height shorthand: the documented sz
+        // surface is two tokens — { text: 'sm', leading: 6 } — which the
+        // compiler merges back into the slash class.
+        if (result.prop === 'text') {
+            // Re-locate the slash in the RAW value — the disambiguated value
+            // may have lost its brackets (text-[14px]/6 → value '14px').
+            const rawModifier = rawValue.slice(findTopLevelSlash(rawValue) + 1);
+            return {
+                prop: 'text',
+                value: result.value,
+                extra: { prop: 'leading', value: parseLeadingModifier(rawModifier) },
+            };
+        }
+        // A modifier on the shadow SIZE utility (shadow-sm/12.5,
+        // shadow-(--s)/50) is the shadow's own opacity, not a color: keep the
+        // verbatim string form the compiler passes through unchanged.
+        // Color-classified results (prop `color`, `shadowColor`, …) take the
+        // { color, op } object instead.
+        if (SHADOW_SIZE_PROPS.has(result.prop)) {
             return { prop: result.prop, value: rawValue };
         }
         return {
@@ -407,8 +421,23 @@ function disambiguateAndParse(
     return result;
 }
 
-/** Size-utility props whose slash modifier is not a color opacity. */
-const SIZE_MODIFIER_PROPS = new Set(['shadow', 'insetShadow', 'textShadow', 'dropShadow', 'text']);
+/** Shadow-size props whose slash modifier applies to the size utility itself. */
+const SHADOW_SIZE_PROPS = new Set(['shadow', 'insetShadow', 'textShadow', 'dropShadow']);
+
+/**
+ * Normalizes a text line-height modifier into the documented `leading` value.
+ * @param raw - The modifier substring after the slash, brackets/parens intact.
+ * @returns The `leading` sz value that merges back into the same class.
+ */
+function parseLeadingModifier(raw: string): string | number {
+    // Bare numbers stay numeric ({ leading: 6 } → leading-6 → text-sm/6).
+    if (/^\d+(\.\d+)?$/.test(raw)) return Number(raw);
+    // CSS vars use the documented sugar ({ leading: '--lh' } → leading-(--lh)).
+    if (raw.startsWith('(') && raw.endsWith(')')) return raw.slice(1, -1);
+    // Bracketed arbitrary values stay bracketed so the merged class keeps the
+    // unitless-line-height semantics (text-sm/[1.4], not text-sm/1.4).
+    return raw;
+}
 
 /**
  * Separates a top-level color opacity modifier from a utility value.
