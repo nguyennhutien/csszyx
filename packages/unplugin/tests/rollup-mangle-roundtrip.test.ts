@@ -59,7 +59,7 @@ function cssEmitterPlugin(): Plugin {
  */
 function assetSource(output: Array<OutputAsset | OutputChunk>, fileName: string): string {
     const asset = output.find(entry => entry.type === 'asset' && entry.fileName === fileName);
-    if (!asset || asset.type !== 'asset') throw new Error(`Missing Rollup asset: ${fileName}`);
+    if (asset?.type !== 'asset') throw new Error(`Missing Rollup asset: ${fileName}`);
     return asset.source.toString();
 }
 
@@ -82,7 +82,7 @@ describe('pure Rollup production mangle round-trip', () => {
         await build.close();
 
         const chunk = output.find(entry => entry.type === 'chunk');
-        if (!chunk || chunk.type !== 'chunk') throw new Error('Missing Rollup JavaScript chunk');
+        if (chunk?.type !== 'chunk') throw new Error('Missing Rollup JavaScript chunk');
         const manifest = JSON.parse(assetSource(output, 'csszyx-manifest.json')) as {
             mangleMap: Record<string, string>;
         };

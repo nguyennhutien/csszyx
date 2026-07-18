@@ -10,20 +10,20 @@
   },
   "dependencies": {
     "@csszyx/dynamic": "workspace:*",
-    "@tailwindcss/vite": "^4.3.2",
+    "@tailwindcss/vite": "^4.3.3",
     "csszyx": "workspace:*",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "tailwindcss": "^4.3.2"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@csszyx/compiler": "workspace:*",
     "@csszyx/ts-plugin": "workspace:*",
     "@csszyx/types": "workspace:*",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
-    "@vitejs/plugin-react": "^6.0.2",
-    "typescript": "^5.4.5",
-    "vite": "^8.0.13"
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^6.0.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.5"
   }
 }

@@ -608,8 +608,7 @@ function formatShareBreakdown(
     rust: BuildStats | undefined,
 ): string {
     if (
-        !floor ||
-        floor.status !== 'measured' ||
+        floor?.status !== 'measured' ||
         !baseline ||
         baseline.status !== 'measured' ||
         !oxc ||

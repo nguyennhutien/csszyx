@@ -56,7 +56,7 @@
   },
   "devDependencies": {
     "@napi-rs/cli": "3.6.2",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   },
   "optionalDependencies": {
     "@csszyx/core-darwin-arm64": "workspace:*",

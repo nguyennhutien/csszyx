@@ -34,16 +34,15 @@ describe('isValidMangleMap', () => {
         expect(isValidMangleMap({ 'gap-8': 7 })).toBe(false);
     });
 
-    it.each([
-        '__proto__',
-        'constructor',
-        'prototype',
-    ])('rejects the prototype-pollution key %s', key => {
-        // Build via defineProperty so the dangerous key is an own enumerable entry.
-        const obj: Record<string, unknown> = {};
-        Object.defineProperty(obj, key, { value: 'x', enumerable: true, configurable: true });
-        expect(isValidMangleMap(obj)).toBe(false);
-    });
+    it.each(['__proto__', 'constructor', 'prototype'])(
+        'rejects the prototype-pollution key %s',
+        key => {
+            // Build via defineProperty so the dangerous key is an own enumerable entry.
+            const obj: Record<string, unknown> = {};
+            Object.defineProperty(obj, key, { value: 'x', enumerable: true, configurable: true });
+            expect(isValidMangleMap(obj)).toBe(false);
+        },
+    );
 });
 
 describe('CSR recovery toggle', () => {

@@ -109,10 +109,12 @@ describe('SzCompanionProvider', () => {
         const items = itemsAt('const A = () => <div sz={{|', trigger('{'));
         expect(items?.length).toBeGreaterThan(300);
         const bg = items?.find(item => item.label === 'bg');
-        expect((bg?.insertText as { value: string }).value).toBe('bg: $1');
-        expect((bg?.command as { command: string }).command).toBe('editor.action.triggerSuggest');
+        expect((bg?.insertText as { value: string } | undefined)?.value).toBe('bg: $1');
+        expect((bg?.command as { command: string } | undefined)?.command).toBe(
+            'editor.action.triggerSuggest',
+        );
         const hover = items?.find(item => item.label === 'hover');
-        expect((hover?.insertText as { value: string }).value).toBe('hover: { $1 }');
+        expect((hover?.insertText as { value: string } | undefined)?.value).toBe('hover: { $1 }');
     });
 
     it('opens per-key values on a standalone colon — no space required', () => {

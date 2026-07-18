@@ -319,14 +319,17 @@ ${STATIC}`,
         ["color: 'red-500'", 'text-red-500'],
         ["rounded: 'lg'", 'rounded-lg'],
         ['inset: 0', 'inset-0'],
-    ])('szv variant key `%s` safelists `%s` on every engine (with static sz present)', (leaf, cls) => {
-        expectCatalogParity(
-            `${IMPORT}
+    ])(
+        'szv variant key `%s` safelists `%s` on every engine (with static sz present)',
+        (leaf, cls) => {
+            expectCatalogParity(
+                `${IMPORT}
 const s = szv({ variants: { layout: { x: { ${leaf} } } } });
 ${STATIC}`,
-            ['p-4', cls],
-        );
-    });
+                ['p-4', cls],
+            );
+        },
+    );
 
     it('a full multi-key variant keeps every side next to the static sz', () => {
         expectCatalogParity(
