@@ -651,6 +651,8 @@ export const FRACTION_SUPPORTED = new Set([
     'translate-y',
     'translate',
     'aspect',
+    // flex-1/2 → flex: calc(1/2 * 100%) — a fraction, not a color modifier
+    'flex',
 ]);
 
 // ============================================================================

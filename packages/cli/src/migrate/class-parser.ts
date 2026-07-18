@@ -111,9 +111,18 @@ function parseClassModifiers(cls: string): {
  */
 function parseContainerMarker(input: string): ParsedClass | null {
     if (input === '@container') return { prop: '@container', value: true };
-    return input.startsWith('@container/')
-        ? { prop: '@container', value: input.slice('@container/'.length) }
-        : null;
+    if (input.startsWith('@container/')) {
+        return { prop: '@container', value: input.slice('@container/'.length) };
+    }
+    // Named group/peer markers (group/item, peer/form) — the slash names the
+    // marker, it is not an opacity modifier.
+    if (input.startsWith('group/')) {
+        return { prop: 'group', value: input.slice('group/'.length) };
+    }
+    if (input.startsWith('peer/')) {
+        return { prop: 'peer', value: input.slice('peer/'.length) };
+    }
+    return null;
 }
 
 /**
@@ -380,11 +389,13 @@ function disambiguateAndParse(
 
     // Apply opacity
     if (opacity !== undefined && typeof result.value === 'string') {
-        // A modifier on the shadow SIZE utility (shadow-sm/12.5,
-        // shadow-(--s)/50) is the shadow's own opacity, not a color: keep the
-        // verbatim string form the compiler passes through unchanged. Only
-        // *Color props take the { color, op } object.
-        if (SHADOW_SIZE_PROPS.has(result.prop)) {
+        // When the disambiguator classified the base as a SIZE, the modifier
+        // belongs to the size utility itself — shadow opacity (shadow-sm/12.5,
+        // shadow-(--s)/50) or line-height (text-sm/6): keep the verbatim
+        // string form the compiler passes through unchanged. Color-classified
+        // results (prop `color`, `shadowColor`, …) take the { color, op }
+        // object instead.
+        if (SIZE_MODIFIER_PROPS.has(result.prop)) {
             return { prop: result.prop, value: rawValue };
         }
         return {
@@ -396,8 +407,8 @@ function disambiguateAndParse(
     return result;
 }
 
-/** Shadow-size props whose slash modifier applies to the size utility itself. */
-const SHADOW_SIZE_PROPS = new Set(['shadow', 'insetShadow', 'textShadow', 'dropShadow']);
+/** Size-utility props whose slash modifier is not a color opacity. */
+const SIZE_MODIFIER_PROPS = new Set(['shadow', 'insetShadow', 'textShadow', 'dropShadow', 'text']);
 
 /**
  * Separates a top-level color opacity modifier from a utility value.
@@ -411,7 +422,7 @@ function extractOpacity(
 ): { value: string; opacity?: string | number } {
     const slashIndex = findTopLevelSlash(rawValue);
     const isFraction = FRACTION_SUPPORTED.has(prefix) && /^\d+\/\d+$/.test(rawValue);
-    if (slashIndex === -1 || isGradientPrefix(prefix) || isFraction) {
+    if (slashIndex === -1 || isFraction) {
         return { value: rawValue };
     }
     return {
@@ -444,15 +455,6 @@ function parseOpacity(rawOpacity: string): string | number {
 function numericOpacity(value: string): string | number {
     const numeric = Number(value);
     return Number.isNaN(numeric) ? value : numeric;
-}
-
-/**
- * Checks if a prefix is a gradient stop prefix.
- * @param prefix - The prefix to check
- * @returns {boolean} True if from, via, or to
- */
-function isGradientPrefix(prefix: string): boolean {
-    return prefix === 'from' || prefix === 'via' || prefix === 'to';
 }
 
 /**

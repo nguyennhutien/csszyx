@@ -952,6 +952,70 @@ describe('class-parser', () => {
                 value: { color: 'blue-500', op: '--alpha' },
             });
         });
+
+        it('gradient stops take the color object form', () => {
+            expect(parseClass('from-purple-500/70')).toEqual({
+                prop: 'from',
+                value: { color: 'purple-500', op: 70 },
+            });
+            expect(parseClass('via-purple-500/70')).toEqual({
+                prop: 'via',
+                value: { color: 'purple-500', op: 70 },
+            });
+            expect(parseClass('to-purple-500/70')).toEqual({
+                prop: 'to',
+                value: { color: 'purple-500', op: 70 },
+            });
+            expect(parseClass('from-(--c)/40')).toEqual({
+                prop: 'from',
+                value: { color: '--c', op: 40 },
+            });
+            // Stop positions never carry a modifier and stay untouched.
+            expect(parseClass('from-30%')).toEqual({ prop: 'fromPos', value: '30%' });
+        });
+    });
+
+    // ========================================================================
+    // SIZE-UTILITY SLASH MODIFIERS (not color opacity)
+    // ========================================================================
+    describe('size-utility slash modifiers', () => {
+        it('named shadow sizes keep the verbatim string form', () => {
+            expect(parseClass('shadow-sm/12.5')).toEqual({ prop: 'shadow', value: 'sm/12.5' });
+            expect(parseClass('text-shadow-sm/12.5')).toEqual({
+                prop: 'textShadow',
+                value: 'sm/12.5',
+            });
+            expect(parseClass('drop-shadow-sm/12.5')).toEqual({
+                prop: 'dropShadow',
+                value: 'sm/12.5',
+            });
+            expect(parseClass('inset-shadow-sm/12.5')).toEqual({
+                prop: 'insetShadow',
+                value: 'sm/12.5',
+            });
+            expect(parseClass('shadow-(--s)/50')).toEqual({ prop: 'shadow', value: '(--s)/50' });
+        });
+
+        it('font-size with line-height modifier keeps the verbatim string form', () => {
+            expect(parseClass('text-sm/6')).toEqual({ prop: 'text', value: 'sm/6' });
+            expect(parseClass('text-base/1.5')).toEqual({ prop: 'text', value: 'base/1.5' });
+            expect(parseClass('text-sm/[1.4]')).toEqual({ prop: 'text', value: 'sm/[1.4]' });
+            expect(parseClass('text-[14px]/6')).toEqual({ prop: 'text', value: '[14px]/6' });
+            // A color base still takes the color object.
+            expect(parseClass('text-red-500/50')).toEqual({
+                prop: 'color',
+                value: { color: 'red-500', op: 50 },
+            });
+        });
+
+        it('flex fractions are fractions, not opacity', () => {
+            expect(parseClass('flex-1/2')).toEqual({ prop: 'flex', value: '1/2' });
+        });
+
+        it('named group/peer markers keep their name', () => {
+            expect(parseClass('group/item')).toEqual({ prop: 'group', value: 'item' });
+            expect(parseClass('peer/form')).toEqual({ prop: 'peer', value: 'form' });
+        });
     });
 
     // ========================================================================
