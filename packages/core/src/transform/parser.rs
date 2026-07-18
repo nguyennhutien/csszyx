@@ -93,12 +93,15 @@ pub fn parse_source_shell_with_budget(
         visitor.ast_budget_exceeded
     };
 
+    // oxc 0.140 folds warnings into `diagnostics`; only error-severity entries
+    // are parse failures, matching the old `errors` field.
     let mut diagnostics: Vec<String> = parsed
-        .errors
-        .iter()
+        .diagnostics
+        .errors()
         .map(std::string::ToString::to_string)
         .collect();
-    if !parsed.errors.is_empty() || parsed.panicked {
+    let error_count = diagnostics.len();
+    if error_count > 0 || parsed.panicked {
         // A file the parser rejects contributes nothing (or only fragments) to
         // the safelist, and unlike the JS engines there is no Babel fallback on
         // the native path — so make the skip observable. The bundler plugin
@@ -110,7 +113,7 @@ pub fn parse_source_shell_with_budget(
             format!(
                 "[csszyx] parse error in {}: the native engine could not fully scan this file ({} syntax error(s))",
                 file.filename,
-                parsed.errors.len()
+                error_count
             ),
         );
     }
@@ -587,9 +590,9 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         Vec::new(),
                         Vec::new(),
                     )
-                } else if let Some(value_span) =
-                    runtime_fallback_span_from_jsx_expression(&container.expression)
-                {
+                } else {
+                    let value_span =
+                        runtime_fallback_span_from_jsx_expression(&container.expression)?;
                     let candidate_classes =
                         candidate_classes_from_jsx_expression(&container.expression, ctx);
                     (
@@ -603,8 +606,6 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         candidate_classes,
                         Vec::new(),
                     )
-                } else {
-                    return None;
                 }
             }
             _ => return None,

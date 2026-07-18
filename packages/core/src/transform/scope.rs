@@ -293,7 +293,7 @@ mod tests {
         assert!(
             !parsed.panicked,
             "fixture failed to parse: {:?}",
-            parsed.errors
+            parsed.diagnostics
         );
         let scope = DeclaratorScope::from_program(&parsed.program);
         (scope, source.to_string())

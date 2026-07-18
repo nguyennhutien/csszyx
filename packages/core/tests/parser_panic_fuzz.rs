@@ -23,7 +23,7 @@ mod parser_panic_fuzz {
             self.0 = self.0.wrapping_add(0x6D2B_79F5);
             let mut z = self.0;
             z = (z ^ (z >> 15)).wrapping_mul(z | 1);
-            z ^= z.wrapping_add((z ^ (z >> 7)).wrapping_mul(z | 61));
+            z ^= z.wrapping_add((z ^ (z >> 7)).wrapping_mul(z | 0x3D));
             z ^ (z >> 14)
         }
         const fn below(&mut self, n: usize) -> usize {
