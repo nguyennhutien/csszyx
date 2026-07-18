@@ -47,10 +47,12 @@ async function boot(options = {}): Promise<Booted> {
 }
 
 describe('transform hook branch edges', () => {
-    it('returns null for a file that is neither a source nor a CSS module', async () => {
+    it('skips a file that is neither a source nor a CSS module', async () => {
         const { root, transform } = await boot();
         const result = await transform('binary-bytes', path.join(root, 'src/logo.png'));
-        expect(result).toBeNull();
+        // unplugin v3 short-circuits transformInclude misses to undefined;
+        // bundlers treat undefined and null the same (no-op).
+        expect(result).toBeUndefined();
     });
 
     it('transforms sz props in a Vue SFC', async () => {

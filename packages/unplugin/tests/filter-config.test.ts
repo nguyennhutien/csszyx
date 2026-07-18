@@ -18,7 +18,9 @@ describe('csszyx plugin include/exclude filters', () => {
 
         expect(prePlugin.transformInclude(file)).toBe(false);
         expect(() => prePlugin.transform(hugeSzSource(), file)).not.toThrow(ASTBudgetExceededError);
-        expect(prePlugin.transform(hugeSzSource(), file)).toBeNull();
+        // unplugin v3 short-circuits excluded files to undefined before the
+        // handler runs; bundlers treat undefined and null the same (no-op).
+        expect(prePlugin.transform(hugeSzSource(), file)).toBeUndefined();
     });
 
     it('keeps non-excluded source files eligible for transform', () => {

@@ -20,7 +20,7 @@ import { z } from 'zod';
 
 export const validateSchema = z.object({
     sz: z
-        .record(z.any())
+        .record(z.string(), z.any())
         .describe('The sz prop object to validate. Example: { padding: 4, bg: "blue-500" }'),
 });
 

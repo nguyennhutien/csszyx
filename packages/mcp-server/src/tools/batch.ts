@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 export const batchSchema = z.object({
     items: z
-        .array(z.record(z.any()))
+        .array(z.record(z.string(), z.any()))
         .describe(
             "Array of sz prop objects to expand. Example: [{ p: 4 }, { m: 2, bg: 'red-500' }]",
         ),

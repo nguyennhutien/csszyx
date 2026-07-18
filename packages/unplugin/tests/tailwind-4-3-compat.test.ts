@@ -2,7 +2,7 @@ import { compile } from '@tailwindcss/node';
 import { describe, expect, it } from 'vitest';
 
 describe('Tailwind 4.3 compatibility', () => {
-    it('compiles csszyx candidates with Tailwind 4.3.2 semantics', async () => {
+    it('compiles csszyx candidates with Tailwind 4.3 semantics', async () => {
         const compiler = await compile(
             '@import "tailwindcss"; @theme { --spacing: 0.25rem; --color-brand: oklch(60% 0.2 250); }',
             { base: process.cwd(), onDependency() {} },
@@ -26,8 +26,13 @@ describe('Tailwind 4.3 compatibility', () => {
         expect(css).toContain('margin: 0');
         expect(css).toContain('margin: var(--spacing)');
         expect(css).toContain('.tab-item-header');
-        expect(css).toContain('padding-block: 0 !important');
-        expect(css).toContain('&>span');
+        // Tailwind 4.3.2 printed the zero as `0`, 4.3.3 prints `0px`; both
+        // resolve identically, so accept either spelling.
+        expect(css).toMatch(/padding-block: 0(px)? !important/);
+        // 4.3.2 emitted a nested `&>span` block; 4.3.3 flattens the arbitrary
+        // variant into the selector itself (`.\[...\] > span {`). Both target
+        // the same child combinator.
+        expect(css).toMatch(/&>span|> span\s*\{/);
         expect(css).toContain('[data-a="x"]');
         expect(css).toContain("[data-b='y']");
     });
