@@ -277,6 +277,52 @@ pub(crate) fn collect_dead_spacing_steps(
     }
 }
 
+/// Collects PROPERTY keys whose value is an object that is not the
+/// `{ color, op }` form. The lowering falls through to variant handling and
+/// emits classes like `p:bg-red-500` — `p:` matches no Tailwind variant, so
+/// the styles silently generate no CSS. Reports the first nested keys so the
+/// diagnostic can echo the stray shape; descends like the lowering does.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_property_object_values(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, u32)>,
+) {
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            continue;
+        };
+        // Parametric/scope variants and object-shaped value keys take nested
+        // objects legitimately.
+        if matches!(
+            property.key.as_str(),
+            "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
+        ) {
+            continue;
+        }
+        // The `{ color, op }` object form on a property key is the documented
+        // color-opacity spelling.
+        if property_prefix(&property.key).is_some()
+            && object_string_property(nested, "color").is_some()
+        {
+            continue;
+        }
+        if property_prefix(&property.key).is_some()
+            && !super::generated::tables::is_known_variant(&property.key)
+        {
+            let nested_keys = nested
+                .properties
+                .iter()
+                .take(3)
+                .map(|p| p.key.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push((property.key.clone(), nested_keys, property.span.start));
+            continue;
+        }
+        collect_property_object_values(nested, out);
+    }
+}
+
 /// Whether a bare numeric value on a spacing-scale key has no Tailwind class.
 #[cfg(feature = "native-engine")]
 fn is_dead_spacing_step(key: &str, value: f64) -> bool {
@@ -2054,6 +2100,56 @@ mod tests {
         // 1.5 is a quarter step, "1.4rem" carries a unit, and leading falls
         // back to the unitless-ratio bracket — none of those warn.
         assert_eq!(keys, [("p", 1.4), ("gap", 1.1), ("p", 2.3)]);
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collects_property_object_values() {
+        let color_op = StaticSzValue::Object(StaticSzObject {
+            properties: vec![
+                property("color", StaticSzValue::String("blue-500".into())),
+                property("op", StaticSzValue::Number(50.0)),
+            ],
+        });
+        let object = StaticSzObject {
+            properties: vec![
+                // Property key with a stray object → reported with nested keys.
+                property(
+                    "p",
+                    StaticSzValue::Object(StaticSzObject {
+                        properties: vec![property("bg", StaticSzValue::String("red-500".into()))],
+                    }),
+                ),
+                // Color-op form on a property key is documented — silent.
+                property("bg", color_op),
+                // Variant nesting is legit, but the walk descends into it.
+                property(
+                    "hover",
+                    StaticSzValue::Object(StaticSzObject {
+                        properties: vec![property(
+                            "shadow",
+                            StaticSzValue::Object(StaticSzObject {
+                                properties: vec![property("op", StaticSzValue::Number(12.5))],
+                            }),
+                        )],
+                    }),
+                ),
+                // Parametric variants own their nested shape — silent.
+                property(
+                    "data",
+                    StaticSzValue::Object(StaticSzObject {
+                        properties: vec![property("active", StaticSzValue::Boolean(true))],
+                    }),
+                ),
+            ],
+        };
+        let mut out: Vec<(String, String, u32)> = Vec::new();
+        super::collect_property_object_values(&object, &mut out);
+        let found: Vec<(&str, &str)> = out
+            .iter()
+            .map(|(k, n, _)| (k.as_str(), n.as_str()))
+            .collect();
+        assert_eq!(found, [("p", "bg"), ("shadow", "op")]);
     }
 
     #[test]

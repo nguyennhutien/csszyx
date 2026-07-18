@@ -3030,8 +3030,43 @@ function collectObjectProperty(
         );
         return true;
     }
+    warnPropertyObjectValue(rawKey, value);
     collectNestedVariant(rawKey, value as SzObject, prefix, classes);
     return true;
+}
+
+/** Property keys already nudged about stray object values (once each). */
+const _warnedPropertyObjects = new Set<string>();
+
+/**
+ * Warns when a PROPERTY key receives an object that is not the `{ color, op }`
+ * form. The lowering falls through to variant handling and emits classes like
+ * `p:bg-red-500` — `p:` matches no Tailwind variant, so the styles silently
+ * generate no CSS. Keys that are genuine variants (hover, sm, group…) never
+ * reach here with a property meaning: PROPERTY_MAP and the variant sets are
+ * disjoint (locked by test).
+ * @param key - The sz key holding the object.
+ * @param value - The stray object value (used to name the nested keys).
+ */
+function warnPropertyObjectValue(key: string, value: Record<string, unknown>): void {
+    if (
+        !szDevWarningsEnabled() ||
+        !(key in PROPERTY_MAP) ||
+        KNOWN_VARIANTS.has(key) ||
+        SPECIAL_VARIANTS.has(key) ||
+        _warnedPropertyObjects.has(key)
+    ) {
+        return;
+    }
+    _warnedPropertyObjects.add(key);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    const nested = Object.keys(value).slice(0, 3).join(', ');
+    console.warn(
+        `[csszyx] "${key}" is a property, not a variant, but received an object ` +
+            `{ ${nested} }${at}. This compiles to "${key}:*" classes that match no ` +
+            `Tailwind variant and generate no CSS. Move the nested keys up a level, ` +
+            `or for color opacity use { color: '...', op: ... }.`,
+    );
 }
 
 /** Returns whether a value is a non-array object. */
