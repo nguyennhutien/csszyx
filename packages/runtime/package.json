@@ -67,9 +67,6 @@
     "vite-plugin-wasm": "^3.6.0",
     "vitest": "^4.1.10"
   },
-  "optionalDependencies": {
-    "@esbuild/linux-arm64": "^0.19.12"
-  },
   "sideEffects": false,
   "engines": {
     "node": ">=22.12.0"
