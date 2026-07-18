@@ -2634,6 +2634,252 @@
     "oxc": "drop-shadow-(color:--c)/40"
   },
   {
+    "sz": "{\"text\":\"sm/6\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "text",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "sm/6"
+          }
+        }
+      ]
+    },
+    "oxc": "text-sm/6"
+  },
+  {
+    "sz": "{\"text\":\"base/1.5\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "text",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "base/1.5"
+          }
+        }
+      ]
+    },
+    "oxc": "text-base/1.5"
+  },
+  {
+    "sz": "{\"text\":\"[14px]/6\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "text",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "[14px]/6"
+          }
+        }
+      ]
+    },
+    "oxc": "text-[14px]/6"
+  },
+  {
+    "sz": "{\"flex\":\"1/2\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "flex",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "1/2"
+          }
+        }
+      ]
+    },
+    "oxc": "flex-1/2"
+  },
+  {
+    "sz": "{\"group\":\"item\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "group",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "item"
+          }
+        }
+      ]
+    },
+    "oxc": "group/item"
+  },
+  {
+    "sz": "{\"peer\":\"form\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "peer",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "form"
+          }
+        }
+      ]
+    },
+    "oxc": "peer/form"
+  },
+  {
+    "sz": "{\"from\":{\"color\":\"purple-500\",\"op\":70}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "from",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "color",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "purple-500"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 70
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "from-purple-500/70"
+  },
+  {
+    "sz": "{\"via\":{\"color\":\"--c\",\"op\":40}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "via",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "color",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "--c"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 40
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "via-(--c)/40"
+  },
+  {
+    "sz": "{\"to\":{\"color\":\"purple-500\",\"op\":70}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "to",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "color",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "purple-500"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 70
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "to-purple-500/70"
+  },
+  {
     "sz": "{\"opacity\":80}",
     "ir": {
       "properties": [
@@ -12873,25 +13119,6 @@
       ]
     },
     "oxc": "flex-[2_2_0%]"
-  },
-  {
-    "sz": "{\"flex\":\"1/2\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "flex",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "1/2"
-          }
-        }
-      ]
-    },
-    "oxc": "flex-1/2"
   },
   {
     "sz": "{\"flex\":4}",

@@ -790,6 +790,11 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             if key == "@container" {
                 return Some(format!("{prefix}@container/{value}"));
             }
+            // Named scope markers: { group: 'item' } → group/item, mirroring
+            // the oxc `collectUnresolvedStringProperty` branch.
+            if key == "group" || key == "peer" {
+                return Some(format!("{prefix}{key}/{value}"));
+            }
             // Gradient color-stop positions reuse the from/via/to prefix. CSS vars
             // use the paren form, bare integer percents stay bare, the rest bracket.
             if let Some(grad) = gradient_stop_prefix(key) {
@@ -1943,6 +1948,21 @@ mod tests {
         ] {
             let object = StaticSzObject {
                 properties: vec![property(key, StaticSzValue::String("--c".into()))],
+            };
+            assert_eq!(lower_static_sz_object(&object), [expected]);
+        }
+    }
+
+    #[test]
+    fn lowers_named_scope_markers() {
+        // { group: 'item' } is the marker CLASS (group/item), not a variant —
+        // the generic kebab fallthrough would wrongly emit group-item.
+        for (key, value, expected) in [
+            ("group", "item", "group/item"),
+            ("peer", "form", "peer/form"),
+        ] {
+            let object = StaticSzObject {
+                properties: vec![property(key, StaticSzValue::String(value.into()))],
             };
             assert_eq!(lower_static_sz_object(&object), [expected]);
         }
