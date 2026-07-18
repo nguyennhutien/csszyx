@@ -20,9 +20,13 @@ describe('csszyx bin', () => {
     it('registers every command without dispatching on a bare invocation', async () => {
         process.argv = ['node', 'csszyx'];
         const logs: string[] = [];
-        vi.spyOn(console, 'log').mockImplementation((...parts: unknown[]) => {
+        const capture = (...parts: unknown[]): void => {
             logs.push(parts.join(' '));
-        });
+        };
+        // cac 7 prints help through console.info (cac 6 used console.log);
+        // capture both so the assertion tracks the banner, not the channel.
+        vi.spyOn(console, 'log').mockImplementation(capture);
+        vi.spyOn(console, 'info').mockImplementation(capture);
         await import('../src/bin.js?case=bare');
         const help = logs.join('\n');
         for (const command of [
