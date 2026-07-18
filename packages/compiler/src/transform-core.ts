@@ -2075,6 +2075,18 @@ function buildConicGradientClass(direction: string | number | undefined): string
         : `bg-conic-[${normalizeArbitraryValue(direction)}]`;
 }
 
+/**
+ * Shadow-family utility prefixes where a bare `(--var)` suffix is parsed by
+ * Tailwind as the shadow VALUE (`--tw-shadow: var(--c)`), so a var used as a
+ * color needs the `(color:--var)` hint to land on `--tw-shadow-color`.
+ */
+const SHADOW_COLOR_HINT_PREFIXES = new Set([
+    'shadow',
+    'inset-shadow',
+    'text-shadow',
+    'drop-shadow',
+]);
+
 /** Builds a color utility from the `{ color, op }` object syntax. */
 function buildColorObjectClass(
     key: string,
@@ -2084,7 +2096,12 @@ function buildColorObjectClass(
     const utilityPrefix =
         PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
     const rawColor = color.color;
-    const colorValue = formatColorObjectBase(rawColor);
+    const colorValue =
+        SHADOW_COLOR_HINT_PREFIXES.has(utilityPrefix) &&
+        rawColor.startsWith('--') &&
+        !rawColor.includes('(')
+            ? `(color:${rawColor})`
+            : formatColorObjectBase(rawColor);
     if (color.op === undefined) return `${prefix}${utilityPrefix}-${colorValue}`;
     const opacity = formatOpacity(color.op);
     warnCustomOpacityToken(rawColor, `${prefix}${utilityPrefix}-${colorValue}/${opacity}`, opacity);
@@ -2525,8 +2542,11 @@ function collectEffectStringProperty(
         utility = formatArbitraryEffect(key, value);
         includePrefix = key === 'scale' && value === '3d';
     } else if (key === 'textShadow') utility = formatTextShadow(value);
-    else if (key === 'textShadowColor') utility = `text-shadow-${value}`;
-    else if (isGradientPositionKey(key)) {
+    else if (key === 'textShadowColor') {
+        // Bare `text-shadow-(--c)` would set the shadow VALUE, not its color;
+        // the `color:` hint keeps the var on --tw-text-shadow-color.
+        utility = value.startsWith('--') ? `text-shadow-(color:${value})` : `text-shadow-${value}`;
+    } else if (isGradientPositionKey(key)) {
         utility = formatGradientPosition(key, value);
         includePrefix = false;
     }

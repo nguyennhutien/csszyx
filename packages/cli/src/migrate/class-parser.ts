@@ -380,6 +380,13 @@ function disambiguateAndParse(
 
     // Apply opacity
     if (opacity !== undefined && typeof result.value === 'string') {
+        // A modifier on the shadow SIZE utility (shadow-sm/12.5,
+        // shadow-(--s)/50) is the shadow's own opacity, not a color: keep the
+        // verbatim string form the compiler passes through unchanged. Only
+        // *Color props take the { color, op } object.
+        if (SHADOW_SIZE_PROPS.has(result.prop)) {
+            return { prop: result.prop, value: rawValue };
+        }
         return {
             prop: result.prop,
             value: { color: result.value, op: opacity },
@@ -388,6 +395,9 @@ function disambiguateAndParse(
 
     return result;
 }
+
+/** Shadow-size props whose slash modifier applies to the size utility itself. */
+const SHADOW_SIZE_PROPS = new Set(['shadow', 'insetShadow', 'textShadow', 'dropShadow']);
 
 /**
  * Separates a top-level color opacity modifier from a utility value.
@@ -480,6 +490,10 @@ function disambiguate(prefix: string, value: string, negative: boolean): ParsedC
             return disambiguateInsetRing(value, negative);
         case 'inset-shadow':
             return disambiguateInsetShadow(value);
+        case 'text-shadow':
+            return disambiguateShadowFamily('textShadow', 'textShadowColor', value);
+        case 'drop-shadow':
+            return disambiguateShadowFamily('dropShadow', 'dropShadowColor', value);
         case 'stroke':
             return disambiguateStroke(value);
         case 'from':
@@ -771,14 +785,43 @@ function disambiguateInsetRing(value: string, negative: boolean): ParsedClass | 
  * @returns Parsed class with insetShadow or insetShadowColor prop, or null.
  */
 function disambiguateInsetShadow(value: string): ParsedClass | null {
-    const INSET_SHADOW_SIZE_KEYWORDS = new Set(['sm', 'md', 'lg', 'xl', '2xl', 'none', 'inner']);
-    if (INSET_SHADOW_SIZE_KEYWORDS.has(value)) {
-        return { prop: 'insetShadow', value };
-    }
     if (isArbitraryDimension(value)) {
         return { prop: 'insetShadow', value: parseStringValue(value) };
     }
-    return { prop: 'insetShadowColor', value: parseStringValue(value) };
+    return disambiguateShadowFamily('insetShadow', 'insetShadowColor', value);
+}
+
+/**
+ * Shared size/color/var disambiguation for the shadow-family prefixes
+ * (text-shadow-*, drop-shadow-*, inset-shadow-*), mirroring
+ * `disambiguateShadow`: named sizes and arbitrary values set the shadow
+ * itself, `(color:--c)` and color-ish suffixes set its color.
+ * @param sizeProp - The sz prop holding the shadow value (e.g. `textShadow`).
+ * @param colorProp - The sz prop holding the shadow color.
+ * @param value - The suffix after the shadow-family prefix.
+ * @returns Parsed class on the size or color prop.
+ */
+function disambiguateShadowFamily(
+    sizeProp: string,
+    colorProp: string,
+    value: string,
+): ParsedClass | null {
+    if (SHADOW_SIZE_KEYWORDS.has(value)) {
+        return { prop: sizeProp, value };
+    }
+    // CSS-var paren form: (color:--c) is the color, (--v) is the shadow value.
+    if (value.startsWith('(') && value.endsWith(')')) {
+        const inner = value.slice(1, -1);
+        if (inner.startsWith('color:')) {
+            return { prop: colorProp, value: inner.slice('color:'.length) };
+        }
+        return { prop: sizeProp, value: inner };
+    }
+    // Arbitrary bracket values describe the shadow itself.
+    if (value.startsWith('[') && value.endsWith(']')) {
+        return { prop: sizeProp, value: parseStringValue(value) };
+    }
+    return { prop: colorProp, value: parseStringValue(value) };
 }
 
 /**

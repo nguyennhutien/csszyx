@@ -2413,6 +2413,227 @@
     "oxc": "shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)]"
   },
   {
+    "sz": "{\"shadow\":\"sm/12.5\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "shadow",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "sm/12.5"
+          }
+        }
+      ]
+    },
+    "oxc": "shadow-sm/12.5"
+  },
+  {
+    "sz": "{\"shadow\":\"2xl/50\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "shadow",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "2xl/50"
+          }
+        }
+      ]
+    },
+    "oxc": "shadow-2xl/50"
+  },
+  {
+    "sz": "{\"textShadow\":\"sm/12.5\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "textShadow",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "sm/12.5"
+          }
+        }
+      ]
+    },
+    "oxc": "text-shadow-sm/12.5"
+  },
+  {
+    "sz": "{\"dropShadow\":\"sm/12.5\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "dropShadow",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "sm/12.5"
+          }
+        }
+      ]
+    },
+    "oxc": "drop-shadow-sm/12.5"
+  },
+  {
+    "sz": "{\"insetShadow\":\"sm/12.5\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "insetShadow",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "sm/12.5"
+          }
+        }
+      ]
+    },
+    "oxc": "inset-shadow-sm/12.5"
+  },
+  {
+    "sz": "{\"shadowColor\":\"--c\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "shadowColor",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--c"
+          }
+        }
+      ]
+    },
+    "oxc": "shadow-(color:--c)"
+  },
+  {
+    "sz": "{\"textShadowColor\":\"--c\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "textShadowColor",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--c"
+          }
+        }
+      ]
+    },
+    "oxc": "text-shadow-(color:--c)"
+  },
+  {
+    "sz": "{\"shadowColor\":{\"color\":\"--c\",\"op\":12.5}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "shadowColor",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "color",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "--c"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 12.5
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "shadow-(color:--c)/12.5"
+  },
+  {
+    "sz": "{\"dropShadowColor\":{\"color\":\"--c\",\"op\":40}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "dropShadowColor",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "color",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "--c"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 40
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "drop-shadow-(color:--c)/40"
+  },
+  {
     "sz": "{\"opacity\":80}",
     "ir": {
       "properties": [
@@ -14649,50 +14870,6 @@
     "oxc": "inset-shadow-none"
   },
   {
-    "sz": "{\"insetShadowColor\":{\"color\":\"--c\",\"op\":30}}",
-    "ir": {
-      "properties": [
-        {
-          "key": "insetShadowColor",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "object",
-            "value": {
-              "properties": [
-                {
-                  "key": "color",
-                  "span": {
-                    "start": 0,
-                    "end": 0
-                  },
-                  "value": {
-                    "kind": "string",
-                    "value": "--c"
-                  }
-                },
-                {
-                  "key": "op",
-                  "span": {
-                    "start": 0,
-                    "end": 0
-                  },
-                  "value": {
-                    "kind": "number",
-                    "value": 30
-                  }
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
-    "oxc": "inset-shadow-(--c)/30"
-  },
-  {
     "sz": "{\"insetShadowColor\":{\"color\":\"black\",\"op\":30}}",
     "ir": {
       "properties": [
@@ -24577,50 +24754,6 @@
       ]
     },
     "oxc": "shadow-xs"
-  },
-  {
-    "sz": "{\"shadowColor\":{\"color\":\"--c\",\"op\":50}}",
-    "ir": {
-      "properties": [
-        {
-          "key": "shadowColor",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "object",
-            "value": {
-              "properties": [
-                {
-                  "key": "color",
-                  "span": {
-                    "start": 0,
-                    "end": 0
-                  },
-                  "value": {
-                    "kind": "string",
-                    "value": "--c"
-                  }
-                },
-                {
-                  "key": "op",
-                  "span": {
-                    "start": 0,
-                    "end": 0
-                  },
-                  "value": {
-                    "kind": "number",
-                    "value": 50
-                  }
-                }
-              ]
-            }
-          }
-        }
-      ]
-    },
-    "oxc": "shadow-(--c)/50"
   },
   {
     "sz": "{\"shadowColor\":\"blue-500\"}",

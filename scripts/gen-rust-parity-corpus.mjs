@@ -189,6 +189,17 @@ const corpus = [
     // effects / filters
     { shadow: 'lg' },
     { shadow: '0 35px 60px -15px rgba(0,0,0,0.3)' },
+    // Tailwind 4.3.3: fractional opacity modifiers on named shadow sizes
+    { shadow: 'sm/12.5' },
+    { shadow: '2xl/50' },
+    { textShadow: 'sm/12.5' },
+    { dropShadow: 'sm/12.5' },
+    { insetShadow: 'sm/12.5' },
+    // Shadow-family var colors need the `color:` type hint in both engines
+    { shadowColor: '--c' },
+    { textShadowColor: '--c' },
+    { shadowColor: { color: '--c', op: 12.5 } },
+    { dropShadowColor: { color: '--c', op: 40 } },
     { opacity: 80 },
     { mixBlend: 'multiply' },
     { blur: 'sm' },

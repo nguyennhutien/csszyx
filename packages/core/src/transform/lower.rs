@@ -1004,6 +1004,10 @@ fn css_var_type_hint(key: &str) -> Option<&'static str> {
         "fontFamily" => Some("family-name"),
         "weight" => Some("weight"),
         "text" => Some("length"),
+        // Shadow-family color keys: a bare `shadow-(--c)` is parsed by
+        // Tailwind as the shadow VALUE (`--tw-shadow: var(--c)`), so the var
+        // needs the `color:` hint to land on `--tw-*-shadow-color`.
+        "shadowColor" | "insetShadowColor" | "textShadowColor" | "dropShadowColor" => Some("color"),
         _ => None,
     }
 }
@@ -1082,7 +1086,17 @@ fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str)
     {
         format!("[{}]", normalize_arbitrary_value(raw_color))
     } else if raw_color.starts_with("--") {
-        format!("({raw_color})")
+        // Shadow-family prefixes parse a bare `(--var)` suffix as the shadow
+        // VALUE, so a var used as a color needs the `color:` hint. Mirrors
+        // `buildColorObjectClass` in the Babel/oxc transform.
+        if matches!(
+            tw_prefix,
+            "shadow" | "inset-shadow" | "text-shadow" | "drop-shadow"
+        ) {
+            format!("(color:{raw_color})")
+        } else {
+            format!("({raw_color})")
+        }
     } else if needs_brackets(raw_color) {
         format!("[{}]", normalize_arbitrary_value(raw_color))
     } else {
@@ -1889,6 +1903,49 @@ mod tests {
         );
         // No `op` member → plain color utility, no slash.
         assert_eq!(color_op("bg", "white", None), ["bg-white"]);
+    }
+
+    #[test]
+    fn lowers_shadow_family_var_colors_with_color_hint() {
+        // Object form: a bare `(--c)` after a shadow-family prefix would set
+        // the shadow VALUE, so the lowering adds the `color:` hint.
+        assert_eq!(
+            color_op("shadowColor", "--c", Some(StaticSzValue::Number(50.0))),
+            ["shadow-(color:--c)/50"]
+        );
+        assert_eq!(
+            color_op("insetShadowColor", "--c", Some(StaticSzValue::Number(30.0))),
+            ["inset-shadow-(color:--c)/30"]
+        );
+        assert_eq!(
+            color_op("textShadowColor", "--c", Some(StaticSzValue::Number(25.0))),
+            ["text-shadow-(color:--c)/25"]
+        );
+        assert_eq!(
+            color_op("dropShadowColor", "--c", Some(StaticSzValue::Number(40.0))),
+            ["drop-shadow-(color:--c)/40"]
+        );
+        // Fractional half-step opacity stays bare (Tailwind 4.3.3 supports
+        // fractional modifiers on shadow utilities).
+        assert_eq!(
+            color_op("shadowColor", "--c", Some(StaticSzValue::Number(12.5))),
+            ["shadow-(color:--c)/12.5"]
+        );
+        // Non-shadow color prefixes keep the bare paren form.
+        assert_eq!(color_op("bg", "--c", None), ["bg-(--c)"]);
+
+        // String form routes through the generic CSS-var type hints.
+        for (key, expected) in [
+            ("shadowColor", "shadow-(color:--c)"),
+            ("insetShadowColor", "inset-shadow-(color:--c)"),
+            ("textShadowColor", "text-shadow-(color:--c)"),
+            ("dropShadowColor", "drop-shadow-(color:--c)"),
+        ] {
+            let object = StaticSzObject {
+                properties: vec![property(key, StaticSzValue::String("--c".into()))],
+            };
+            assert_eq!(lower_static_sz_object(&object), [expected]);
+        }
     }
 
     #[test]
