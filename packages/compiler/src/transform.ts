@@ -1795,9 +1795,7 @@ function collectRuntimeLiteralClasses(
  * @param callee Call-expression callee.
  * @returns Whether the call supports literal class extraction.
  */
-function isRuntimeLiteralCall(
-    callee: t.Expression | t.V8IntrinsicIdentifier,
-): callee is t.Identifier {
+function isRuntimeLiteralCall(callee: t.Node): callee is t.Identifier {
     return t.isIdentifier(callee) && (callee.name === 'dynamic' || callee.name === 'szr');
 }
 
@@ -4216,9 +4214,10 @@ function tryCollectStaticBabelProperty(
     context: BabelCandidateContext,
 ): boolean {
     if (!isBabelCandidateLiteral(value)) return false;
-    const object = evaluateStaticObject(
-        t.objectExpression([t.objectProperty(t.identifier(key), value)]),
-    );
+    // Keys like `2` or `'a-b'` are not identifier names — Babel 8 validates
+    // builder input and throws where Babel 7 silently accepted them.
+    const keyNode = t.isValidIdentifier(key) ? t.identifier(key) : t.stringLiteral(key);
+    const object = evaluateStaticObject(t.objectExpression([t.objectProperty(keyNode, value)]));
     if (object === null) return false;
     const result = transform(object);
     const className = context.variantPrefix

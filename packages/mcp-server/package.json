@@ -31,7 +31,7 @@
     "llms-full.txt"
   ],
   "engines": {
-    "node": ">=22.12.0"
+    "node": "^22.18.0 || >=24.11.0"
   },
   "dependencies": {
     "@csszyx/cli": "workspace:*",

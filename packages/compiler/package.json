@@ -77,9 +77,9 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@babel/core": "^7.29.7",
-    "@babel/traverse": "^7.29.7",
-    "@babel/types": "^7.29.7",
+    "@babel/core": "^8.0.1",
+    "@babel/traverse": "^8.0.4",
+    "@babel/types": "^8.0.4",
     "@csszyx/core": "workspace:*",
     "magic-string": "1.0.0",
     "oxc-parser": "0.140.0"
@@ -95,6 +95,6 @@
   },
   "sideEffects": false,
   "engines": {
-    "node": ">=22.12.0"
+    "node": "^22.18.0 || >=24.11.0"
   }
 }
