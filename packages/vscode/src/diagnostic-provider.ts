@@ -71,7 +71,7 @@ function createUnknownKeyDiagnostic(
     startOffset: number,
     key: string,
 ): vscode.Diagnostic | null {
-    const keyPattern = new RegExp(`\\b${escapeRegex(key)}\\s*:`);
+    const keyPattern = new RegExp(String.raw`\b${escapeRegex(key)}\s*:`);
     const localMatch = keyPattern.exec(expressionSource);
     if (!localMatch) {
         return null;
