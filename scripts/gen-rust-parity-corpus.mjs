@@ -189,6 +189,36 @@ const corpus = [
     // effects / filters
     { shadow: 'lg' },
     { shadow: '0 35px 60px -15px rgba(0,0,0,0.3)' },
+    // Tailwind 4.3.3: fractional opacity modifiers on named shadow sizes
+    { shadow: 'sm/12.5' },
+    { shadow: '2xl/50' },
+    { textShadow: 'sm/12.5' },
+    { dropShadow: 'sm/12.5' },
+    { insetShadow: 'sm/12.5' },
+    // Shadow-family var colors need the `color:` type hint in both engines
+    { shadowColor: '--c' },
+    { textShadowColor: '--c' },
+    { shadowColor: { color: '--c', op: 12.5 } },
+    { dropShadowColor: { color: '--c', op: 40 } },
+    // Slash-modifier shapes the migrate reverse parser emits
+    // (text/leading is the documented two-token form the engines merge)
+    { text: 'sm', leading: 6 },
+    { text: 'base', leading: 1.5 },
+    { text: '14px', leading: 6 },
+    { text: 'sm', leading: 'tight' },
+    // leading semantics: number = spacing scale, numeric string = unitless
+    // ratio (auto-bracketed), non-quarter-step number = ratio fallback
+    { text: 'sm', leading: '1.4' },
+    { text: 'sm', leading: '1.5' },
+    { leading: 1.4 },
+    { leading: '1.5' },
+    { leading: '6' },
+    { flex: '1/2' },
+    { group: 'item' },
+    { peer: 'form' },
+    { from: { color: 'purple-500', op: 70 } },
+    { via: { color: '--c', op: 40 } },
+    { to: { color: 'purple-500', op: 70 } },
     { opacity: 80 },
     { mixBlend: 'multiply' },
     { blur: 'sm' },

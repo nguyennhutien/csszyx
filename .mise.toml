@@ -1,7 +1,8 @@
 [tools]
-node = "22.22.1"
+node = "24.18.0"
 pnpm = "11.13.0"
-rust = "1.93.0"
+rust = "1.97.1"
 "npm:@anthropic-ai/claude-code" = "latest"
 "npm:@openai/codex" = "latest"
+"npm:@google/gemini-cli" = "latest"
 "cargo:cocogitto" = "7.0.0"

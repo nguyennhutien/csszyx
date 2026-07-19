@@ -714,7 +714,7 @@ function formatFloor(
     baseline: HmrStats | undefined,
     field: 'medianMs' | 'p95Ms',
 ): string {
-    if (!floor || floor.status !== 'measured') {
+    if (floor?.status !== 'measured') {
         return 'not measured successfully';
     }
     const parts: string[] = [`${formatMs(floor[field])} (Astro/Vite/React only)`];
@@ -743,8 +743,7 @@ function formatShareBreakdown(
     rust: HmrStats | undefined,
 ): string {
     if (
-        !floor ||
-        floor.status !== 'measured' ||
+        floor?.status !== 'measured' ||
         !baseline ||
         baseline.status !== 'measured' ||
         !oxc ||
@@ -777,7 +776,7 @@ function formatBaselineComparison(
     rust: HmrStats | undefined,
     field: 'medianMs' | 'p95Ms',
 ): string {
-    if (!baseline || baseline.status !== 'measured') {
+    if (baseline?.status !== 'measured') {
         return 'not measured successfully';
     }
     const parts: string[] = [`${formatMs(baseline[field])} (Tailwind only)`];

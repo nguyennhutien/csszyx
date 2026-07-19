@@ -35,6 +35,19 @@ if [ "${CSSZYX_PERSONAL_DEVCONTAINER:-0}" = "1" ]; then
         echo "[poststart] WARN: dotfiles-ai global linker not found (skipping)"
     fi
 
+    # Re-verify the agent tooling binaries (rtk, codegraph) on every start.
+    # They install at postCreate, but npm-global binaries live under the
+    # active node version's prefix, so a node major bump inside a living
+    # container orphans them until the next rebuild. The installer is
+    # idempotent with a version-check fast path, so this is a cheap self-heal
+    # (same rationale as the AI CLI upgrade below).
+    if [ -f "$dotfiles_ai/scripts/install-agent-tooling-binaries.sh" ]; then
+        bash "$dotfiles_ai/scripts/install-agent-tooling-binaries.sh" \
+            || echo "[poststart] WARN: install-agent-tooling-binaries.sh exited $? (continuing)"
+    else
+        echo "[poststart] WARN: agent tooling installer not found (skipping)"
+    fi
+
     # Pull the newest claude-code + codex on every container start. Unthrottled
     # here (a deliberate start = check latest now); the per-shell path in
     # ensure-claude-sync.sh throttles to once/day. Runs before the configure

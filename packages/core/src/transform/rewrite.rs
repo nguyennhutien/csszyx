@@ -91,7 +91,7 @@ pub fn rewrite_static_sz_attributes_with_options(
             let has_ternary = element
                 .sz_attribute_indices
                 .iter()
-                .any(|index| ir.sz_attributes[*index].ternary.is_some());
+                .any(|index| !ir.sz_attributes[*index].ternaries.is_empty());
 
             if has_ternary {
                 apply_dynamic_style_props(source, ir, element, &mut magic);
@@ -330,6 +330,7 @@ fn rewrite_static_sz_with_existing_class(
 /// Multiple `sz` attributes are still unsupported for ternary because the
 /// runtime expression shape would need ordered merging across separate source
 /// spans.
+#[allow(clippy::too_many_lines)]
 fn rewrite_ternary_sz_attribute(
     source: &str,
     ir: &SourceIr,
@@ -340,46 +341,71 @@ fn rewrite_ternary_sz_attribute(
         return Err(StaticRewriteUnsupported::EmptyClassList);
     }
     let only_attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
-    let ternary = only_attribute
-        .ternary
-        .as_ref()
-        .expect("ternary presence already verified by caller");
-    let test_source = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
-    let consequent = ternary.consequent_classes.join(" ");
-    let alternate = ternary.alternate_classes.join(" ");
-    let ternary_source = format!("{test_source} ? \"{consequent}\" : \"{alternate}\"");
-    // Bare value position (no companion static classes, no existing className): an
-    // empty branch becomes `undefined` so it renders no class attribute. The
-    // `_szMerge(...)` and template-literal forms below keep "" — `${undefined}`
-    // would render the text "undefined", and a bare `undefined` arg is needless.
-    let branch = |cls: &str| {
-        if cls.is_empty() {
-            "undefined".to_string()
-        } else {
-            format!("\"{cls}\"")
-        }
-    };
-    let bare_ternary_source = format!(
-        "{test_source} ? {} : {}",
-        branch(&consequent),
-        branch(&alternate)
+    let ternaries = &only_attribute.ternaries;
+    debug_assert!(!ternaries.is_empty(), "caller verified ternary presence");
+
+    // Static classes accompanying the conditionals (e.g. from a `...CONST`
+    // spread or sibling static props): only the conditionals stay runtime.
+    // Lower just the static object so the ternaries' own branch classes are
+    // not duplicated. Runtime css-var siblings (`w: width`) append their
+    // `w-(--_sz-w)` class here — their style props are emitted by
+    // apply_dynamic_style_props — in the same statics-then-vars order Babel
+    // emits.
+    let mut static_classes = lower_static_sz_object(&only_attribute.object);
+    static_classes.extend(
+        only_attribute
+            .dynamic_css_vars
+            .iter()
+            .filter(|prop| !prop.skip_class)
+            .map(super::lower::dynamic_css_var_class),
     );
 
-    // Static classes accompanying the conditional (e.g. from a `...CONST` spread
-    // or sibling static props): only the conditional stays runtime. Lower just
-    // the static object so the ternary's own branch classes are not duplicated.
-    let static_classes = lower_static_sz_object(&only_attribute.object);
+    // One `test ? "…" : "…"` expression per conditional. Branches stay ""
+    // in every interpolated position — `${undefined}` would render the text
+    // "undefined". Only the bare single-ternary value position below uses
+    // `undefined` for an empty branch (renders no class attribute).
+    let ternary_source = |ternary: &super::StaticTernaryIr| {
+        let test = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
+        format!(
+            "{test} ? \"{}\" : \"{}\"",
+            ternary.consequent_classes.join(" "),
+            ternary.alternate_classes.join(" ")
+        )
+    };
+
+    // Template literal appending one `${…}` segment per conditional after the
+    // static/var classes — byte-for-byte the Babel engine's emission: first
+    // quasi is `"statics "` (trailing space) or empty, separator is a single
+    // space.
+    let template_literal = || {
+        let mut out = String::from("`");
+        if !static_classes.is_empty() {
+            out.push_str(&static_classes.join(" "));
+            out.push(' ');
+        }
+        for (index, ternary) in ternaries.iter().enumerate() {
+            if index > 0 {
+                out.push(' ');
+            }
+            out.push_str("${");
+            out.push_str(&ternary_source(ternary));
+            out.push('}');
+        }
+        out.push('`');
+        out
+    };
 
     if let Some(class_index) = element.class_attribute_index {
         let class_attribute = &ir.class_attributes[class_index];
         let existing = class_merge_argument(source, class_attribute);
-        let merge_args = if static_classes.is_empty() {
-            format!("{existing}, {ternary_source}")
-        } else {
-            format!(
-                "{existing}, {}, {ternary_source}",
-                js_string_literal(&static_classes.join(" "))
-            )
+        // A companion-less single ternary merges bare; anything with static/var
+        // classes merges the SAME template literal the Babel engine emits —
+        // the old 3-arg form (existing, "statics", ternary) was functionally
+        // equal but byte-different, breaking cross-producer transform-cache
+        // reuse for this shape.
+        let merge_args = match (ternaries.as_slice(), static_classes.is_empty()) {
+            ([only_ternary], true) => format!("{existing}, {}", ternary_source(only_ternary)),
+            _ => format!("{existing}, {}", template_literal()),
         };
         magic.update_with(
             class_attribute.attribute_span.start as usize,
@@ -395,16 +421,28 @@ fn rewrite_ternary_sz_attribute(
             only_attribute.attribute_span.end as usize,
         );
     } else {
-        // No companion class: emit the conditional alone, or a template literal
-        // `\`<static> ${cond ? "…" : "…"}\`` when static classes accompany it.
-        let replacement = if static_classes.is_empty() {
-            format!("className={{{bare_ternary_source}}}")
-        } else {
-            format!(
-                "className={{`{} ${{{ternary_source}}}`}}",
-                static_classes.join(" ")
-            )
-        };
+        let replacement =
+            if let ([only_ternary], true) = (ternaries.as_slice(), static_classes.is_empty()) {
+                // Bare value position: an empty branch becomes `undefined` so it
+                // renders no class attribute.
+                let branch = |classes: &[String]| {
+                    let joined = classes.join(" ");
+                    if joined.is_empty() {
+                        "undefined".to_string()
+                    } else {
+                        format!("\"{joined}\"")
+                    }
+                };
+                let test = &source
+                    [only_ternary.test_span.start as usize..only_ternary.test_span.end as usize];
+                format!(
+                    "className={{{test} ? {} : {}}}",
+                    branch(&only_ternary.consequent_classes),
+                    branch(&only_ternary.alternate_classes)
+                )
+            } else {
+                format!("className={{{}}}", template_literal())
+            };
         magic.update_with(
             only_attribute.attribute_span.start as usize,
             only_attribute.attribute_span.end as usize,
@@ -851,6 +889,78 @@ mod tests {
         assert_eq!(
             rewritten,
             "const App = ({ flex }) => <div className={typeof flex === 'number' ? \"flex-(--_sz-flex)\" : undefined} style={{\"--_sz-flex\": typeof flex === 'number' ? flex : undefined}} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_two_property_ternaries_as_template_segments() {
+        // Byte-parity with the Babel engine: one `${…}` segment per
+        // conditional in source property order, single-space separators.
+        let source = "const A = ({ a, b }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ a, b }) => <div className={`${a ? \"p-2\" : \"p-4\"} ${b ? \"m-1\" : \"m-3\"}`} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_two_nullable_ternaries_beside_statics_and_a_runtime_var() {
+        // The shape the single-ternary IR used to punt whole to the runtime
+        // (losing the w-(--_sz-w) safelist entry). Statics and var classes
+        // lead, then one template segment per conditional; empty branches stay
+        // "" inside the template.
+        let source = "const A = ({ w, a, b }) => <div sz={{ w: w, h: 'max', p: a ? 2 : undefined, m: b ? 4 : undefined }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ w, a, b }) => <div className={`h-max w-(--_sz-w) ${a ? \"p-2\" : \"\"} ${b ? \"m-4\" : \"\"}`} style={{\"--_sz-w\": __szSpacingVar(w, \"w\")}} />;"
+        );
+    }
+
+    #[test]
+    fn merges_a_single_ternary_with_statics_as_the_babel_template() {
+        // The old 3-arg _szMerge(existing, "statics", ternary) was functionally
+        // equal to Babel's 2-arg template merge but byte-different, breaking
+        // cross-producer transform-cache reuse for this shape.
+        let source =
+            "export const A = ({ on }) => <div className=\"q\" sz={{ bg: 'white', p: on ? 2 : 4 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "export const A = ({ on }) => <div className={_szMerge(\"q\", `bg-white ${on ? \"p-2\" : \"p-4\"}`)} />;"
+        );
+    }
+
+    #[test]
+    fn merges_two_property_ternaries_into_an_existing_class_name() {
+        let source =
+            "const A = ({ a, b }) => <div className=\"x\" sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ a, b }) => <div className={_szMerge(\"x\", `${a ? \"p-2\" : \"p-4\"} ${b ? \"m-1\" : \"m-3\"}`)} />;"
+        );
+    }
+
+    #[test]
+    fn keeps_runtime_var_siblings_beside_a_nullable_conditional() {
+        // A bare runtime identifier, a static literal, and a nullable ternary in
+        // ONE object used to punt the whole attribute to the runtime fallback,
+        // which never safelists the dynamic utilities — Tailwind emitted no CSS
+        // for them and the styling silently never applied (field-reported).
+        // Expected shape mirrors the Babel output: statics, then var classes,
+        // then the ternary appended in a template literal.
+        let source = "const A = ({ width, flex, cond }) => <div sz={{ w: width, h: 'max', flex: cond ? flex : undefined }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ width, flex, cond }) => <div className={`h-max w-(--_sz-w) ${cond ? \"flex-(--_sz-flex)\" : \"\"}`} style={{\"--_sz-w\": __szSpacingVar(width, \"w\"), \"--_sz-flex\": cond ? flex : undefined}} />;"
         );
     }
 

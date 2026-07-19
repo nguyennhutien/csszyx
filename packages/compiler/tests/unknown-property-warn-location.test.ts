@@ -89,21 +89,21 @@ describe('unknown-property warning — source location', () => {
         expect(messages.some(m => m.includes('at src/X.tsx'))).toBe(true);
     });
 
-    it.each([
-        'textEllipsis',
-        'textClip',
-    ])('%s emits its class without a Babel or oxc warning', key => {
-        const source = `export const A = () => <div sz={{ ${key}: true }} />;`;
-        expect(
-            transformSourceCode(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code,
-        ).toContain(key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip');
-        expect(transformOxc(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code).toContain(
-            key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip',
-        );
-        expect(warn.mock.calls.some(call => String(call[0]).includes('Unknown property'))).toBe(
-            false,
-        );
-    });
+    it.each(['textEllipsis', 'textClip'])(
+        '%s emits its class without a Babel or oxc warning',
+        key => {
+            const source = `export const A = () => <div sz={{ ${key}: true }} />;`;
+            expect(
+                transformSourceCode(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code,
+            ).toContain(key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip');
+            expect(transformOxc(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code).toContain(
+                key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip',
+            );
+            expect(warn.mock.calls.some(call => String(call[0]).includes('Unknown property'))).toBe(
+                false,
+            );
+        },
+    );
 });
 
 /**

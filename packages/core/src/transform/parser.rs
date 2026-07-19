@@ -93,12 +93,15 @@ pub fn parse_source_shell_with_budget(
         visitor.ast_budget_exceeded
     };
 
+    // oxc 0.140 folds warnings into `diagnostics`; only error-severity entries
+    // are parse failures, matching the old `errors` field.
     let mut diagnostics: Vec<String> = parsed
-        .errors
-        .iter()
+        .diagnostics
+        .errors()
         .map(std::string::ToString::to_string)
         .collect();
-    if !parsed.errors.is_empty() || parsed.panicked {
+    let error_count = diagnostics.len();
+    if error_count > 0 || parsed.panicked {
         // A file the parser rejects contributes nothing (or only fragments) to
         // the safelist, and unlike the JS engines there is no Babel fallback on
         // the native path — so make the skip observable. The bundler plugin
@@ -110,7 +113,7 @@ pub fn parse_source_shell_with_budget(
             format!(
                 "[csszyx] parse error in {}: the native engine could not fully scan this file ({} syntax error(s))",
                 file.filename,
-                parsed.errors.len()
+                error_count
             ),
         );
     }
@@ -500,7 +503,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             value_span,
             literal_class_name,
             rewrites_empty_class,
-            ternary,
+            ternaries,
             array_parts,
             runtime_fallback,
             candidate_classes,
@@ -511,7 +514,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 string_value_span(value.span, self.source),
                 Some(value.value.to_string()),
                 true,
-                None,
+                Vec::new(),
                 Vec::new(),
                 false,
                 Vec::new(),
@@ -539,7 +542,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         value_span,
                         None,
                         false,
-                        Some(ternary),
+                        vec![ternary],
                         Vec::new(),
                         false,
                         Vec::new(),
@@ -553,13 +556,13 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         value_span,
                         None,
                         rewrites_empty_class,
-                        None,
+                        Vec::new(),
                         Vec::new(),
                         false,
                         Vec::new(),
                         Vec::new(),
                     )
-                } else if let Some((object, value_span, dynamic_css_vars, ternary)) =
+                } else if let Some((object, value_span, dynamic_css_vars, ternaries)) =
                     partial_object_from_jsx_expression(&container.expression, ctx)
                 {
                     (
@@ -567,7 +570,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         value_span,
                         None,
                         false,
-                        ternary,
+                        ternaries,
                         Vec::new(),
                         false,
                         Vec::new(),
@@ -581,15 +584,15 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         value_span,
                         None,
                         false,
-                        None,
+                        Vec::new(),
                         array_parts,
                         false,
                         Vec::new(),
                         Vec::new(),
                     )
-                } else if let Some(value_span) =
-                    runtime_fallback_span_from_jsx_expression(&container.expression)
-                {
+                } else {
+                    let value_span =
+                        runtime_fallback_span_from_jsx_expression(&container.expression)?;
                     let candidate_classes =
                         candidate_classes_from_jsx_expression(&container.expression, ctx);
                     (
@@ -597,14 +600,12 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         value_span,
                         None,
                         false,
-                        None,
+                        Vec::new(),
                         Vec::new(),
                         true,
                         candidate_classes,
                         Vec::new(),
                     )
-                } else {
-                    return None;
                 }
             }
             _ => return None,
@@ -617,7 +618,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             object,
             literal_class_name,
             rewrites_empty_class,
-            ternary,
+            ternaries,
             array_parts,
             runtime_fallback,
             runtime_fallback_spread: runtime_fallback
@@ -1457,8 +1458,11 @@ fn static_array_parts_from_array_expression(
         }
         if let Expression::ObjectExpression(object) = unwrapped {
             if let Some(partial) = partial_object_from_object_expression(object, ctx, None, &[]) {
-                if partial.dynamic_css_vars.is_empty() {
-                    if let Some(ternary) = partial.ternary {
+                // Array parts keep the single-ternary contract of
+                // StaticArrayPartIr; multi-ternary parts stay on their
+                // existing lane.
+                if partial.dynamic_css_vars.is_empty() && partial.ternaries.len() == 1 {
+                    if let Some(ternary) = partial.ternaries.into_iter().next() {
                         parts.push(StaticArrayPartIr {
                             condition_span: None,
                             classes: lower_static_sz_object(&partial.object),
@@ -1715,6 +1719,7 @@ fn candidate_classes_from_expression(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn candidate_classes_from_object_expression(
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
@@ -1778,6 +1783,27 @@ fn candidate_classes_from_object_expression(
                                 ));
                             }
                         }
+                        // Nested object under a PROPERTY key (`bg: { … }`) that
+                        // is not fully static: walk it WITH the parent key. The
+                        // old keyless walk compiled `color: 'black'` as a bare
+                        // `{ color }` → a junk `text-black` candidate, while the
+                        // class the runtime actually produces (`bg-black/30`)
+                        // never reached the safelist.
+                        Expression::ObjectExpression(nested) => {
+                            if let Some(ternary) =
+                                color_opacity_ternary_from_object(&key, nested, ctx, variant_keys)
+                            {
+                                classes.extend(ternary.consequent_classes);
+                                classes.extend(ternary.alternate_classes);
+                            } else {
+                                classes.extend(candidate_classes_from_keyed_object(
+                                    std::slice::from_ref(&key),
+                                    nested,
+                                    ctx,
+                                    variant_keys,
+                                ));
+                            }
+                        }
                         _ => {
                             if let Some(static_property) =
                                 static_property_from_object_property(property, ctx)
@@ -1810,6 +1836,88 @@ fn candidate_classes_from_object_expression(
                     classes.extend(prefix_classes(
                         candidate_classes_from_expression(&spread.argument, ctx),
                         variant_prefix,
+                    ));
+                }
+            }
+        }
+    }
+    classes
+}
+
+/// Best-effort candidates for a nested object under a chain of PROPERTY keys:
+/// each resolvable leaf (and each static conditional branch) compiles at its
+/// full key path, so `bg: { color: 'black' }` yields `bg-black`, never a
+/// keyless junk `text-black`. Unresolvable members are skipped — candidates
+/// are a safelist best-effort for runtime-fallback shapes, which always carry
+/// a build diagnostic.
+fn candidate_classes_from_keyed_object(
+    path: &[String],
+    object: &ObjectExpression<'_>,
+    ctx: ResolveContext<'_>,
+    variant_keys: &[String],
+) -> Vec<String> {
+    fn leaf_classes(path: &[String], value: StaticSzValue, variant_keys: &[String]) -> Vec<String> {
+        let mut wrapped = value;
+        for key in path.iter().skip(1).rev() {
+            wrapped = StaticSzValue::Object(StaticSzObject {
+                properties: vec![StaticSzProperty {
+                    key: key.clone(),
+                    span: TextSpan { start: 0, end: 0 },
+                    value: wrapped,
+                }],
+            });
+        }
+        conditional_property_classes(&path[0], wrapped, variant_keys)
+    }
+
+    let mut classes = Vec::new();
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(prop) = property else {
+            continue;
+        };
+        let Some(sub_key) = static_property_key(&prop.key) else {
+            continue;
+        };
+        let mut next_path = path.to_vec();
+        next_path.push(sub_key);
+        match unwrap_expression(&prop.value) {
+            Expression::ObjectExpression(nested) => {
+                classes.extend(candidate_classes_from_keyed_object(
+                    &next_path,
+                    nested,
+                    ctx,
+                    variant_keys,
+                ));
+            }
+            Expression::ConditionalExpression(conditional) => {
+                for branch in [&conditional.consequent, &conditional.alternate] {
+                    if let Some(value) = static_value_from_expression(branch, ctx) {
+                        classes.extend(leaf_classes(
+                            &next_path[..next_path.len() - 1],
+                            StaticSzValue::Object(StaticSzObject {
+                                properties: vec![StaticSzProperty {
+                                    key: next_path[next_path.len() - 1].clone(),
+                                    span: TextSpan { start: 0, end: 0 },
+                                    value,
+                                }],
+                            }),
+                            variant_keys,
+                        ));
+                    }
+                }
+            }
+            _ => {
+                if let Some(value) = static_value_from_expression(&prop.value, ctx) {
+                    classes.extend(leaf_classes(
+                        &next_path[..next_path.len() - 1],
+                        StaticSzValue::Object(StaticSzObject {
+                            properties: vec![StaticSzProperty {
+                                key: next_path[next_path.len() - 1].clone(),
+                                span: TextSpan { start: 0, end: 0 },
+                                value,
+                            }],
+                        }),
+                        variant_keys,
                     ));
                 }
             }
@@ -2008,7 +2116,9 @@ fn static_object_from_argument(
 struct PartialSzObject {
     object: StaticSzObject,
     dynamic_css_vars: Vec<DynamicCssVarIr>,
-    ternary: Option<StaticTernaryIr>,
+    /// Property-level conditionals in source order — each lowers to one
+    /// appended `${cond ? "…" : "…"}` template segment.
+    ternaries: Vec<StaticTernaryIr>,
 }
 
 fn partial_object_from_jsx_expression(
@@ -2018,19 +2128,19 @@ fn partial_object_from_jsx_expression(
     StaticSzObject,
     TextSpan,
     Vec<DynamicCssVarIr>,
-    Option<StaticTernaryIr>,
+    Vec<StaticTernaryIr>,
 )> {
     match expression {
         JSXExpression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
-            if partial.dynamic_css_vars.is_empty() && partial.ternary.is_none() {
+            if partial.dynamic_css_vars.is_empty() && partial.ternaries.is_empty() {
                 return None;
             }
             Some((
                 partial.object,
                 text_span(object.span),
                 partial.dynamic_css_vars,
-                partial.ternary,
+                partial.ternaries,
             ))
         }
         JSXExpression::TSAsExpression(value) => {
@@ -2056,19 +2166,19 @@ fn partial_object_from_expression(
     StaticSzObject,
     TextSpan,
     Vec<DynamicCssVarIr>,
-    Option<StaticTernaryIr>,
+    Vec<StaticTernaryIr>,
 )> {
     match expression {
         Expression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
-            if partial.dynamic_css_vars.is_empty() && partial.ternary.is_none() {
+            if partial.dynamic_css_vars.is_empty() && partial.ternaries.is_empty() {
                 return None;
             }
             Some((
                 partial.object,
                 text_span(object.span),
                 partial.dynamic_css_vars,
-                partial.ternary,
+                partial.ternaries,
             ))
         }
         Expression::ParenthesizedExpression(value) => {
@@ -2096,7 +2206,7 @@ fn partial_object_from_object_expression(
             return Some(PartialSzObject {
                 object: StaticSzObject::empty(),
                 dynamic_css_vars: Vec::new(),
-                ternary: Some(ternary),
+                ternaries: vec![ternary],
             });
         }
     }
@@ -2106,7 +2216,7 @@ fn partial_object_from_object_expression(
             properties: Vec::with_capacity(object.properties.len()),
         },
         dynamic_css_vars: Vec::new(),
-        ternary: None,
+        ternaries: Vec::new(),
     };
 
     for property in &object.properties {
@@ -2144,7 +2254,7 @@ fn partial_object_from_object_expression(
                             variant_keys,
                         )
                     {
-                        set_partial_ternary(&mut partial, conditional_ternary)?;
+                        set_partial_ternary(&mut partial, conditional_ternary);
                         if let Some(dynamic_prop) = dynamic_prop {
                             partial.dynamic_css_vars.push(dynamic_prop);
                         }
@@ -2153,7 +2263,7 @@ fn partial_object_from_object_expression(
                     if let Some(conditional_ternary) =
                         conditional_class_from_property(&key, conditional, ctx, variant_keys)
                     {
-                        set_partial_ternary(&mut partial, conditional_ternary)?;
+                        set_partial_ternary(&mut partial, conditional_ternary);
                         continue;
                     }
                 }
@@ -2179,15 +2289,14 @@ fn partial_object_from_object_expression(
         }
     }
 
-    // A single conditional prop may coexist with static properties (e.g.
-    // `{ ...CONST, scale: cond ? 75 : 100 }`): the static part lowers to literal
-    // classes and the conditional becomes a runtime ternary appended in a
-    // template literal, matching the Babel/oxc build-time output. Mixing a
-    // conditional with runtime css vars is still punted to the runtime.
-    if partial.ternary.is_some() && partial.dynamic_css_vars.iter().any(|prop| !prop.skip_class) {
-        return None;
-    }
-
+    // A single conditional prop may coexist with static properties AND runtime
+    // css vars (e.g. `{ w: width, h: 'max', flex: cond ? flex : undefined }`):
+    // statics lower to literal classes, each runtime var contributes its
+    // `<prefix>-(--_sz-*)` class plus a style prop, and the conditional becomes
+    // a runtime ternary appended in a template literal — the same shape the
+    // Babel build-time output emits. This mix used to be punted to the runtime
+    // fallback, which never safelists the dynamic utilities: Tailwind emitted
+    // no CSS for them and the styling silently never applied (field-reported).
     Some(partial)
 }
 
@@ -2202,7 +2311,8 @@ fn collect_nested_partial_property(
     variant_keys: &[String],
 ) -> Option<()> {
     if let Some(ternary) = color_opacity_ternary_from_object(&key, nested, ctx, variant_keys) {
-        return set_partial_ternary(partial, ternary);
+        set_partial_ternary(partial, ternary);
+        return Some(());
     }
 
     // Value objects with a dynamic sub-field cannot be lowered as variants:
@@ -2224,19 +2334,17 @@ fn collect_nested_partial_property(
         });
     }
     partial.dynamic_css_vars.extend(nested.dynamic_css_vars);
-    if let Some(ternary) = nested.ternary {
-        set_partial_ternary(partial, ternary)?;
+    for ternary in nested.ternaries {
+        set_partial_ternary(partial, ternary);
     }
     Some(())
 }
 
-/// Keep partial lowering deterministic by accepting at most one ternary lane.
-fn set_partial_ternary(partial: &mut PartialSzObject, ternary: StaticTernaryIr) -> Option<()> {
-    if partial.ternary.is_some() {
-        return None;
-    }
-    partial.ternary = Some(ternary);
-    Some(())
+/// Append one property-level conditional, preserving source property order —
+/// the rewrite emits one template segment per entry in this order, and class
+/// discovery order (which fixes production mangle IDs) follows it.
+fn set_partial_ternary(partial: &mut PartialSzObject, ternary: StaticTernaryIr) {
+    partial.ternaries.push(ternary);
 }
 
 fn conditional_spread_ternary_from_object_expression(
@@ -2607,7 +2715,7 @@ fn kebab_case(value: &str) -> String {
     out
 }
 
-fn dynamic_css_var_category(key: &str) -> DynamicCssVarCategory {
+pub fn dynamic_css_var_category(key: &str) -> DynamicCssVarCategory {
     match key {
         "p" | "pt" | "pr" | "pb" | "pl" | "px" | "py" | "ps" | "pe" | "pbs" | "pbe" | "m"
         | "mt" | "mr" | "mb" | "ml" | "mx" | "my" | "ms" | "me" | "mbs" | "mbe" | "spaceX"
@@ -3490,6 +3598,45 @@ mod tests {
     }
 
     #[test]
+    fn keyed_candidates_survive_a_runtime_fallback_punt() {
+        // An unresolvable spread punts the object to the runtime, and the
+        // safelist falls back to best-effort candidates. The nested color
+        // object must contribute its REAL runtime classes (bg-black/30,
+        // bg-black/100) at its parent key — the old keyless walk emitted junk
+        // (text-black, op-30) and missed the real ones entirely.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const App = ({ rest, a }) => <div sz={{ ...rest, bg: { color: 'black', op: a ? 30 : 100 }, hover: { m: 2 } }} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(attribute.runtime_fallback);
+        assert!(
+            attribute
+                .candidate_classes
+                .iter()
+                .any(|class| class == "bg-black/30"),
+            "combined color-opacity branch missing from candidates: {:?}",
+            attribute.candidate_classes
+        );
+        assert!(attribute
+            .candidate_classes
+            .contains(&"bg-black/100".to_string()));
+        assert!(attribute
+            .candidate_classes
+            .contains(&"hover:m-2".to_string()));
+        assert!(
+            !attribute
+                .candidate_classes
+                .iter()
+                .any(|class| class == "text-black" || class == "op-30" || class == "op-100"),
+            "keyless junk classes leaked into candidates: {:?}",
+            attribute.candidate_classes
+        );
+    }
+
+    #[test]
     fn parser_shell_keeps_empty_static_array_rewriteable() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -3581,8 +3728,8 @@ mod tests {
         assert!(parsed.diagnostics.is_empty(), "{}", source);
         assert_eq!(parsed.ir.sz_attributes.len(), 1);
         let ternary = parsed.ir.sz_attributes[0]
-            .ternary
-            .as_ref()
+            .ternaries
+            .first()
             .expect("ternary should be recorded");
         assert_eq!(ternary.consequent_classes, ["p-4"]);
         assert_eq!(ternary.alternate_classes, ["p-8"]);
@@ -3729,8 +3876,8 @@ mod tests {
 
         assert!(parsed.diagnostics.is_empty(), "{source}");
         let ternary = parsed.ir.sz_attributes[0]
-            .ternary
-            .as_ref()
+            .ternaries
+            .first()
             .expect("nested conditional should record a ternary");
         assert_eq!(ternary.consequent_classes, ["group-hover:bg-red-500"]);
         assert_eq!(ternary.alternate_classes, ["group-hover:bg-blue-500"]);
@@ -3748,8 +3895,8 @@ mod tests {
 
         assert!(parsed.diagnostics.is_empty(), "{source}");
         let ternary = parsed.ir.sz_attributes[0]
-            .ternary
-            .as_ref()
+            .ternaries
+            .first()
             .expect("nested conditional should record a ternary");
         assert_eq!(ternary.consequent_classes, ["has-[:checked]:bg-red-500"]);
         assert_eq!(ternary.alternate_classes, ["has-[:checked]:bg-blue-500"]);
@@ -3766,8 +3913,8 @@ mod tests {
         assert!(parsed.diagnostics.is_empty(), "{}", source);
         assert_eq!(parsed.ir.sz_attributes.len(), 1);
         let ternary = parsed.ir.sz_attributes[0]
-            .ternary
-            .as_ref()
+            .ternaries
+            .first()
             .expect("local ternary should be recorded");
         assert_eq!(ternary.consequent_classes, ["p-4"]);
         assert_eq!(ternary.alternate_classes, ["p-8"]);

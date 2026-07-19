@@ -18,7 +18,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { transformOxc } from '../packages/compiler/src/transform-oxc.js';
+import { transformSourceCode } from '../packages/compiler/src/transform.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outFile = resolve(here, '../packages/core/tests/fixtures/parse-parity-corpus.json');
@@ -53,10 +53,54 @@ const sources = [
     'const A = () => <div sz={{ rounded: "lg", border: 2, shadow: "md" }} />;',
     'const A = () => <div sz={{ forcedColors: { borderColor: "gray" } }} />;',
     'const A = () => <div sz={{ starting: { opacity: 0 }, inert: { opacity: 50 } }} />;',
+    // A bare runtime identifier and a nullable ternary in ONE object: the rust
+    // parser used to punt the whole object and silently drop every dynamic
+    // utility (only statics survived), while oxc/babel emit all of them.
+    'const A = ({ width, flex }) => <div sz={{ w: width, flex: typeof flex === "number" ? flex : undefined }} />;',
+    'const A = ({ width, flex, cond }) => <div sz={{ w: width, h: "max", flex: cond ? flex : undefined }} />;',
+    'const A = ({ flex, cond }) => <div sz={{ flex: cond ? flex : undefined }} />;',
+    'const A = ({ width, flex }) => <div sz={{ w: width, flex }} />;',
+    // sz inside // line and /** doc comments must not contribute classes: the
+    // rust scanner used to extract them while oxc/babel ignore comments.
+    'const A = () => {\n  // <Box sz={{ mb: 10 }}>x</Box>\n  return <div sz={{ p: 2 }} />;\n};',
+    '/** example: <svg sz={{ fill: "red-500" }} /> */\nconst A = () => <div sz={{ p: 2 }} />;',
+    'const A = () => <div /* sz={{ mt: 8 }} */ sz={{ p: 2 }} />;',
+    // An `as`-cast literal in a conditional branch resolves statically in every
+    // lane (rust always unwrapped casts; babel/oxc used to collapse the whole
+    // conditional to a runtime CSS variable).
+    'const A = ({ isImage }) => <div sz={{ whitespace: isImage ? "nowrap" : ("wrap" as any) }} />;',
+    // Family sweep around the ternary-beside-runtime-var fix: finite ternary +
+    // var, variant-prefixed var, nullable-in-variant, className merge.
+    'const A = ({ w, on }) => <div sz={{ w: w, p: on ? 2 : 4 }} />;',
+    'const A = ({ w, on }) => <div sz={{ hover: { w: w }, p: on ? 2 : undefined }} />;',
+    'const A = ({ w, a, b }) => <div sz={{ w: w, p: a ? 2 : undefined, m: b ? 4 : undefined }} />;',
+    'const A = ({ f, on }) => <div sz={{ md: { flex: on ? f : undefined } }} />;',
+    'const A = ({ w, f, on }) => <div className="x" sz={{ w: w, flex: on ? f : undefined }} />;',
+    // Multi-ternary lane: N property conditionals append one template segment
+    // each, coexisting with statics, runtime vars, variants, an existing
+    // className, and color-opacity sub-object conditionals.
+    'const A = ({ a, b }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;',
+    'const A = ({ a, b, c }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3, h: c ? "max" : "full" }} />;',
+    'const A = ({ a, b }) => <div className="x" sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;',
+    'const A = ({ w, a, b }) => <div sz={{ w: w, h: "max", p: a ? 2 : undefined, m: b ? 4 : undefined }} />;',
+    'const A = ({ a, b }) => <div sz={{ hover: { p: a ? 1 : 2 }, m: b ? 4 : undefined }} />;',
+    'const A = ({ a, b }) => <div sz={{ bg: { color: "black", op: a ? 30 : 100 }, p: b ? 2 : undefined }} />;',
+    'const A = ({ a, b }) => <div sz={{ p: a ? 2 : undefined, m: b ? 4 : undefined }} />;',
+    // Multi-ternary × dynamic-var combos: both nullable branches runtime, and
+    // the kitchen sink (var + runtime-branch ternary + finite ternary +
+    // className merge).
+    'const A = ({ x, y, a, b }) => <div sz={{ p: a ? x : undefined, m: b ? y : undefined }} />;',
+    'const A = ({ w, f, on, big }) => <div sz={{ w: w, flex: on ? f : undefined, p: big ? 8 : 2 }} />;',
+    'const A = ({ w, f, on, big }) => <div className="x" sz={{ w: w, flex: on ? f : undefined, p: big ? 8 : 2 }} />;',
 ];
 
 const records = sources.map(source => {
-    const result = transformOxc(source, 'file.tsx');
+    // The Babel engine — the canonical reference output, and what the oxc
+    // lane ships when it falls back. Raw transformOxc encodes a lane bail as
+    // "no classes", which recorded silently-wrong expectations for constructs
+    // the oxc lane punts (that hole hid the rust parser dropping dynamic sz
+    // utilities next to a nullable ternary).
+    const result = transformSourceCode(source, 'file.tsx');
     return {
         source,
         classes: sorted(result.classes),

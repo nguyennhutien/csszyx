@@ -224,6 +224,21 @@ const fixtures: readonly ParityFixture[] = [
         filename: 'ternary-empty-branch.tsx',
         expected: 'surgical-parity',
     },
+    {
+        // The former D2.5+ bail: a runtime sz beside an existing className used
+        // to throw to the Babel fallback with a per-file WARN (25 on one field
+        // report). Both engines now emit _szMerge(existing, _sz(value)).
+        name: 'sz-runtime-fallback-existing-class-literal',
+        source: 'const X = ({ s }) => <div className="x y" sz={s} />;',
+        filename: 'runtime-existing-class-literal.tsx',
+        expected: 'surgical-parity',
+    },
+    {
+        name: 'sz-runtime-fallback-existing-class-expression',
+        source: 'const X = ({ s, dyn }) => <div className={dyn} sz={s} />;',
+        filename: 'runtime-existing-class-expression.tsx',
+        expected: 'surgical-parity',
+    },
 ];
 
 describe('Phase D — Babel vs oxc parity', () => {

@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 export const expandSchema = z.object({
     sz: z
-        .record(z.any())
+        .record(z.string(), z.any())
         .describe(
             "The sz prop object to expand. Example: { p: 4, bg: 'blue-500', hover: { bg: 'blue-700' } }",
         ),

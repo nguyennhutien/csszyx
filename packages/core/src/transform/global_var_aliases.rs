@@ -36,7 +36,7 @@ pub fn apply_global_var_aliases(
     let mut variable_map = Vec::new();
     for attribute in &mut next.sz_attributes {
         rewrite_object(&mut attribute.object, &alias_map, &mut variable_map);
-        if let Some(ternary) = &mut attribute.ternary {
+        for ternary in &mut attribute.ternaries {
             rewrite_ternary_classes(ternary, &alias_map, &mut variable_map);
         }
         for part in &mut attribute.array_parts {
@@ -153,7 +153,7 @@ mod tests {
             },
             literal_class_name: None,
             rewrites_empty_class: false,
-            ternary: None,
+            ternaries: Vec::new(),
             array_parts: Vec::new(),
             runtime_fallback: false,
             runtime_fallback_spread: false,

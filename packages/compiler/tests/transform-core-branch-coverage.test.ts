@@ -466,11 +466,13 @@ describe('numeric, boolean-sugar, and finalValue classification', () => {
 
 describe('text-size + leading merge post-processing', () => {
     it('merges a matching text-size and leading pair', () => {
-        expect(cls({ text: 'lg', leading: '7' })).toBe('text-lg/7');
+        // Number = spacing-scale leading (a numeric STRING would be the
+        // unitless ratio and merge bracketed: text-lg/[7]).
+        expect(cls({ text: 'lg', leading: 7 })).toBe('text-lg/7');
     });
     it('does NOT merge when prefixes differ (removeIndices stays empty)', () => {
         // text-lg has no prefix; the leading sits under hover: — no merge.
-        expect(cls({ text: 'lg', hover: { leading: '7' } })).toBe('text-lg hover:leading-7');
+        expect(cls({ text: 'lg', hover: { leading: 7 } })).toBe('text-lg hover:leading-7');
     });
     it('mangleMap rewrites the emitted classes', () => {
         expect(transform({ p: 4 }, '', { 'p-4': 'x' }).className).toBe('x');

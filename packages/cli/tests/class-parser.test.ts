@@ -952,6 +952,106 @@ describe('class-parser', () => {
                 value: { color: 'blue-500', op: '--alpha' },
             });
         });
+
+        it('gradient stops take the color object form', () => {
+            expect(parseClass('from-purple-500/70')).toEqual({
+                prop: 'from',
+                value: { color: 'purple-500', op: 70 },
+            });
+            expect(parseClass('via-purple-500/70')).toEqual({
+                prop: 'via',
+                value: { color: 'purple-500', op: 70 },
+            });
+            expect(parseClass('to-purple-500/70')).toEqual({
+                prop: 'to',
+                value: { color: 'purple-500', op: 70 },
+            });
+            expect(parseClass('from-(--c)/40')).toEqual({
+                prop: 'from',
+                value: { color: '--c', op: 40 },
+            });
+            // Stop positions never carry a modifier and stay untouched.
+            expect(parseClass('from-30%')).toEqual({ prop: 'fromPos', value: '30%' });
+        });
+    });
+
+    // ========================================================================
+    // SIZE-UTILITY SLASH MODIFIERS (not color opacity)
+    // ========================================================================
+    describe('size-utility slash modifiers', () => {
+        it('named shadow sizes keep the verbatim string form', () => {
+            expect(parseClass('shadow-sm/12.5')).toEqual({ prop: 'shadow', value: 'sm/12.5' });
+            expect(parseClass('text-shadow-sm/12.5')).toEqual({
+                prop: 'textShadow',
+                value: 'sm/12.5',
+            });
+            expect(parseClass('drop-shadow-sm/12.5')).toEqual({
+                prop: 'dropShadow',
+                value: 'sm/12.5',
+            });
+            expect(parseClass('inset-shadow-sm/12.5')).toEqual({
+                prop: 'insetShadow',
+                value: 'sm/12.5',
+            });
+            expect(parseClass('shadow-(--s)/50')).toEqual({ prop: 'shadow', value: '(--s)/50' });
+        });
+
+        it('font-size with line-height modifier splits into the documented two-token form', () => {
+            // The sz surface is { text, leading }; the compiler merges the
+            // pair back into the slash class (typography spec, Automatic
+            // Merge section).
+            expect(parseClass('text-sm/6')).toEqual({
+                prop: 'text',
+                value: 'sm',
+                extra: { prop: 'leading', value: 6 },
+            });
+            expect(parseClass('text-base/1.5')).toEqual({
+                prop: 'text',
+                value: 'base',
+                extra: { prop: 'leading', value: 1.5 },
+            });
+            expect(parseClass('text-sm/tight')).toEqual({
+                prop: 'text',
+                value: 'sm',
+                extra: { prop: 'leading', value: 'tight' },
+            });
+            // Bracket content unwraps to a STRING — numeric strings are the
+            // unitless ratio, which the compiler re-brackets on merge.
+            expect(parseClass('text-sm/[1.4]')).toEqual({
+                prop: 'text',
+                value: 'sm',
+                extra: { prop: 'leading', value: '1.4' },
+            });
+            expect(parseClass('text-sm/[1.5]')).toEqual({
+                prop: 'text',
+                value: 'sm',
+                extra: { prop: 'leading', value: '1.5' },
+            });
+            expect(parseClass('text-[14px]/6')).toEqual({
+                prop: 'text',
+                value: '14px',
+                extra: { prop: 'leading', value: 6 },
+            });
+            expect(parseClass('text-sm/(--lh)')).toEqual({
+                prop: 'text',
+                value: 'sm',
+                extra: { prop: 'leading', value: '--lh' },
+            });
+            // A color base still takes the color object.
+            expect(parseClass('text-red-500/50')).toEqual({
+                prop: 'color',
+                value: { color: 'red-500', op: 50 },
+            });
+        });
+
+        it('flex fractions are fractions, not opacity', () => {
+            expect(parseClass('flex-1/2')).toEqual({ prop: 'flex', value: '1/2' });
+        });
+
+        it('named group/peer markers keep their name', () => {
+            expect(parseClass('group/item')).toEqual({ prop: 'group', value: 'item' });
+            expect(parseClass('peer/form')).toEqual({ prop: 'peer', value: 'form' });
+        });
     });
 
     // ========================================================================
@@ -1146,6 +1246,23 @@ describe('class-parser', () => {
             expect(parseClass('shadow-(--s)')).toEqual({ prop: 'shadow', value: '--s' });
             expect(parseClass('shadow-(color:--c)')).toEqual({
                 prop: 'shadowColor',
+                value: '--c',
+            });
+            // same split across the shadow family prefixes
+            expect(parseClass('text-shadow-(color:--c)')).toEqual({
+                prop: 'textShadowColor',
+                value: '--c',
+            });
+            expect(parseClass('text-shadow-(--v)')).toEqual({
+                prop: 'textShadow',
+                value: '--v',
+            });
+            expect(parseClass('inset-shadow-(color:--c)')).toEqual({
+                prop: 'insetShadowColor',
+                value: '--c',
+            });
+            expect(parseClass('drop-shadow-(color:--c)')).toEqual({
+                prop: 'dropShadowColor',
                 value: '--c',
             });
             // decoration length form is thickness, not color

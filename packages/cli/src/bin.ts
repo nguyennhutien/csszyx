@@ -313,8 +313,20 @@ cli.command('').action(() => {
 cli.help();
 cli.version(VERSION);
 
-// Parse CLI arguments
-cli.parse();
+// Parse CLI arguments. cac 7 throws a CACError for unknown commands and
+// unused/missing args (cac 6 silently fell through to help) — surface it as
+// a one-line message plus help instead of a stack trace.
+try {
+    cli.parse();
+} catch (error) {
+    if (error instanceof Error && error.name === 'CACError') {
+        console.error(`csszyx: ${error.message}\n`);
+        cli.outputHelp();
+        process.exitCode = 1;
+    } else {
+        throw error;
+    }
+}
 
 function normalizeNextCommandAlias(argv: string[]): void {
     if (argv[2] === 'next' && (argv[3] === 'prebuild' || argv[3] === 'watch')) {

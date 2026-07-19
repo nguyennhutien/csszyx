@@ -100,7 +100,7 @@ const hoverAt = (source: string) => {
  * @returns The accumulated markdown value.
  */
 function markdownOf(hover: { contents: unknown } | undefined): string {
-    return (hover?.contents as { value: string }).value;
+    return (hover?.contents as { value: string } | undefined)?.value ?? '';
 }
 
 afterEach(() => {
@@ -113,7 +113,7 @@ describe('SzHoverProvider — real transform output', () => {
         const md = markdownOf(hover);
         expect(md).toContain('**CSSzyx** → generated classes:');
         expect(md).toContain('p-4 bg-red-500');
-        expect((hover?.contents as { isTrusted: boolean }).isTrusted).toBe(true);
+        expect((hover?.contents as { isTrusted: boolean } | undefined)?.isTrusted).toBe(true);
     });
 
     it('resolves variants through the real compiler', () => {

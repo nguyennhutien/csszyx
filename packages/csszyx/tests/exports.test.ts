@@ -16,6 +16,7 @@ describe('csszyx umbrella exports', () => {
     it('exposes the documented authoring helpers', () => {
         // Public composition/authoring names users import from `csszyx`.
         for (const name of ['szr', 'szcn', 'szv'] as const) {
+            // biome-ignore lint/performance/noDynamicNamespaceImportAccess: enumerating the export surface is this test's purpose
             expect(typeof csszyx[name], name).toBe('function');
         }
     });
@@ -28,6 +29,7 @@ describe('csszyx umbrella exports', () => {
             'vitePlugin',
             'webpackPlugin',
         ] as const) {
+            // biome-ignore lint/performance/noDynamicNamespaceImportAccess: enumerating the export surface is this test's purpose
             expect(typeof csszyx[name], name).toBe('function');
         }
     });

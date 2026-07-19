@@ -31,14 +31,12 @@ describe('value-keyed canonical forms are the only spelling', () => {
         expect(transform(sz).className).toBe(expected);
     });
 
-    it.each([
-        { absolute: true },
-        { flex: true },
-        { underline: true },
-        { italic: true },
-    ] as const)('removed boolean sugar %o emits nothing', sz => {
-        expect(transform(sz).className).toBe('');
-    });
+    it.each([{ absolute: true }, { flex: true }, { underline: true }, { italic: true }] as const)(
+        'removed boolean sugar %o emits nothing',
+        sz => {
+            expect(transform(sz).className).toBe('');
+        },
+    );
 });
 
 describe('CSS-property-name keys resolve to real Tailwind utilities', () => {

@@ -11,19 +11,19 @@
   "dependencies": {
     "@csszyx/dynamic": "workspace:*",
     "@csszyx/vars": "workspace:*",
-    "@tailwindcss/vite": "^4.3.2",
+    "@tailwindcss/vite": "^4.3.3",
     "csszyx": "workspace:*",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
-    "tailwindcss": "^4.3.2"
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@csszyx/compiler": "workspace:*",
     "@csszyx/types": "workspace:*",
-    "@types/react": "^17.0.2",
-    "@types/react-dom": "^17.0.2",
-    "@vitejs/plugin-react": "^6.0.2",
-    "typescript": "^5.4.5",
-    "vite": "^8.0.13"
+    "@types/react": "^17.0.93",
+    "@types/react-dom": "^17.0.26",
+    "@vitejs/plugin-react": "^6.0.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.5"
   }
 }

@@ -13,22 +13,22 @@
     "dependencies": {
         "@csszyx/runtime": "workspace:*",
         "@csszyx/unplugin": "workspace:*",
-        "@tailwindcss/postcss": "^4.3.2",
+        "@tailwindcss/postcss": "^4.3.3",
         "csszyx": "workspace:*",
-        "next": "^15.5.18",
-        "react": "^19.0.0",
-        "react-dom": "^19.0.0",
-        "tailwindcss": "^4.3.2"
+        "next": "^15.5.20",
+        "react": "^19.2.4",
+        "react-dom": "^19.2.4",
+        "tailwindcss": "^4.3.3"
     },
     "devDependencies": {
         "@csszyx/compiler": "workspace:*",
         "@csszyx/types": "workspace:^",
-        "@eslint/eslintrc": "^3.2.0",
-        "@types/node": "^20.11.0",
-        "@types/react": "^19.0.0",
-        "@types/react-dom": "^19.0.0",
-        "eslint": "^9.0.0",
-        "eslint-config-next": "^16.2.9",
-        "typescript": "^5.4.5"
+        "@eslint/eslintrc": "^3.3.6",
+        "@types/node": "^22.20.1",
+        "@types/react": "^19.2.17",
+        "@types/react-dom": "^19.2.3",
+        "eslint": "^9.39.5",
+        "eslint-config-next": "^16.2.10",
+        "typescript": "^5.9.3"
     }
 }

@@ -42,6 +42,8 @@ export interface ParsedClass {
     prop: string;
     value: unknown; // string | number | boolean | object
     cssProperty?: string;
+    /** Companion prop emitted alongside `prop` (text-sm/6 → text + leading). */
+    extra?: { prop: string; value: unknown };
 }
 
 /** Parser options for migration-specific output policy. */
@@ -111,9 +113,18 @@ function parseClassModifiers(cls: string): {
  */
 function parseContainerMarker(input: string): ParsedClass | null {
     if (input === '@container') return { prop: '@container', value: true };
-    return input.startsWith('@container/')
-        ? { prop: '@container', value: input.slice('@container/'.length) }
-        : null;
+    if (input.startsWith('@container/')) {
+        return { prop: '@container', value: input.slice('@container/'.length) };
+    }
+    // Named group/peer markers (group/item, peer/form) — the slash names the
+    // marker, it is not an opacity modifier.
+    if (input.startsWith('group/')) {
+        return { prop: 'group', value: input.slice('group/'.length) };
+    }
+    if (input.startsWith('peer/')) {
+        return { prop: 'peer', value: input.slice('peer/'.length) };
+    }
+    return null;
 }
 
 /**
@@ -380,6 +391,27 @@ function disambiguateAndParse(
 
     // Apply opacity
     if (opacity !== undefined && typeof result.value === 'string') {
+        // text-sm/6 is the font-size/line-height shorthand: the documented sz
+        // surface is two tokens — { text: 'sm', leading: 6 } — which the
+        // compiler merges back into the slash class.
+        if (result.prop === 'text') {
+            // Re-locate the slash in the RAW value — the disambiguated value
+            // may have lost its brackets (text-[14px]/6 → value '14px').
+            const rawModifier = rawValue.slice(findTopLevelSlash(rawValue) + 1);
+            return {
+                prop: 'text',
+                value: result.value,
+                extra: { prop: 'leading', value: parseLeadingModifier(rawModifier) },
+            };
+        }
+        // A modifier on the shadow SIZE utility (shadow-sm/12.5,
+        // shadow-(--s)/50) is the shadow's own opacity, not a color: keep the
+        // verbatim string form the compiler passes through unchanged.
+        // Color-classified results (prop `color`, `shadowColor`, …) take the
+        // { color, op } object instead.
+        if (SHADOW_SIZE_PROPS.has(result.prop)) {
+            return { prop: result.prop, value: rawValue };
+        }
         return {
             prop: result.prop,
             value: { color: result.value, op: opacity },
@@ -387,6 +419,28 @@ function disambiguateAndParse(
     }
 
     return result;
+}
+
+/** Shadow-size props whose slash modifier applies to the size utility itself. */
+const SHADOW_SIZE_PROPS = new Set(['shadow', 'insetShadow', 'textShadow', 'dropShadow']);
+
+/**
+ * Normalizes a text line-height modifier into the documented `leading` value.
+ * sz value semantics: a NUMBER rides Tailwind's spacing scale (bare class),
+ * a numeric STRING is the unitless ratio (the compiler auto-brackets it) —
+ * so the bare/bracket distinction survives without brackets in sz.
+ * @param raw - The modifier substring after the slash, brackets/parens intact.
+ * @returns The `leading` sz value that merges back into the same class.
+ */
+function parseLeadingModifier(raw: string): string | number {
+    // Bare numbers are spacing-scale steps ({ leading: 6 } → text-sm/6).
+    if (/^\d+(\.\d+)?$/.test(raw)) return Number(raw);
+    // CSS vars use the documented sugar ({ leading: '--lh' } → leading-(--lh)).
+    if (raw.startsWith('(') && raw.endsWith(')')) return raw.slice(1, -1);
+    // Bracketed values unwrap: numeric content becomes the ratio STRING
+    // ('1.4' → text-sm/[1.4]); unit values re-bracket via the arbitrary path.
+    if (raw.startsWith('[') && raw.endsWith(']')) return raw.slice(1, -1);
+    return raw;
 }
 
 /**
@@ -401,7 +455,7 @@ function extractOpacity(
 ): { value: string; opacity?: string | number } {
     const slashIndex = findTopLevelSlash(rawValue);
     const isFraction = FRACTION_SUPPORTED.has(prefix) && /^\d+\/\d+$/.test(rawValue);
-    if (slashIndex === -1 || isGradientPrefix(prefix) || isFraction) {
+    if (slashIndex === -1 || isFraction) {
         return { value: rawValue };
     }
     return {
@@ -434,15 +488,6 @@ function parseOpacity(rawOpacity: string): string | number {
 function numericOpacity(value: string): string | number {
     const numeric = Number(value);
     return Number.isNaN(numeric) ? value : numeric;
-}
-
-/**
- * Checks if a prefix is a gradient stop prefix.
- * @param prefix - The prefix to check
- * @returns {boolean} True if from, via, or to
- */
-function isGradientPrefix(prefix: string): boolean {
-    return prefix === 'from' || prefix === 'via' || prefix === 'to';
 }
 
 /**
@@ -480,6 +525,10 @@ function disambiguate(prefix: string, value: string, negative: boolean): ParsedC
             return disambiguateInsetRing(value, negative);
         case 'inset-shadow':
             return disambiguateInsetShadow(value);
+        case 'text-shadow':
+            return disambiguateShadowFamily('textShadow', 'textShadowColor', value);
+        case 'drop-shadow':
+            return disambiguateShadowFamily('dropShadow', 'dropShadowColor', value);
         case 'stroke':
             return disambiguateStroke(value);
         case 'from':
@@ -771,14 +820,43 @@ function disambiguateInsetRing(value: string, negative: boolean): ParsedClass | 
  * @returns Parsed class with insetShadow or insetShadowColor prop, or null.
  */
 function disambiguateInsetShadow(value: string): ParsedClass | null {
-    const INSET_SHADOW_SIZE_KEYWORDS = new Set(['sm', 'md', 'lg', 'xl', '2xl', 'none', 'inner']);
-    if (INSET_SHADOW_SIZE_KEYWORDS.has(value)) {
-        return { prop: 'insetShadow', value };
-    }
     if (isArbitraryDimension(value)) {
         return { prop: 'insetShadow', value: parseStringValue(value) };
     }
-    return { prop: 'insetShadowColor', value: parseStringValue(value) };
+    return disambiguateShadowFamily('insetShadow', 'insetShadowColor', value);
+}
+
+/**
+ * Shared size/color/var disambiguation for the shadow-family prefixes
+ * (text-shadow-*, drop-shadow-*, inset-shadow-*), mirroring
+ * `disambiguateShadow`: named sizes and arbitrary values set the shadow
+ * itself, `(color:--c)` and color-ish suffixes set its color.
+ * @param sizeProp - The sz prop holding the shadow value (e.g. `textShadow`).
+ * @param colorProp - The sz prop holding the shadow color.
+ * @param value - The suffix after the shadow-family prefix.
+ * @returns Parsed class on the size or color prop.
+ */
+function disambiguateShadowFamily(
+    sizeProp: string,
+    colorProp: string,
+    value: string,
+): ParsedClass | null {
+    if (SHADOW_SIZE_KEYWORDS.has(value)) {
+        return { prop: sizeProp, value };
+    }
+    // CSS-var paren form: (color:--c) is the color, (--v) is the shadow value.
+    if (value.startsWith('(') && value.endsWith(')')) {
+        const inner = value.slice(1, -1);
+        if (inner.startsWith('color:')) {
+            return { prop: colorProp, value: inner.slice('color:'.length) };
+        }
+        return { prop: sizeProp, value: inner };
+    }
+    // Arbitrary bracket values describe the shadow itself.
+    if (value.startsWith('[') && value.endsWith(']')) {
+        return { prop: sizeProp, value: parseStringValue(value) };
+    }
+    return { prop: colorProp, value: parseStringValue(value) };
 }
 
 /**

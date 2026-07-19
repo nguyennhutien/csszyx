@@ -1143,6 +1143,36 @@ function handleImportant(value: string): { value: string; important: boolean } {
 /** Named colors whose slash-opacity always works (alpha-capable by definition). */
 const ALPHA_SAFE_NAMED_COLORS = new Set(['white', 'black', 'transparent', 'current', 'inherit']);
 
+/** Spacing-scale values already nudged about dead quarter steps (once each). */
+const _warnedSpacingSteps = new Set<string>();
+
+/**
+ * Warns when a numeric spacing value is not a quarter step. Tailwind's bare
+ * spacing syntax only accepts multiples of 0.25 — `p-1.4` generates no CSS —
+ * and a unitless bracket is no escape here (`padding: 1.4` is invalid CSS),
+ * so the only fix is a real step or a unit value.
+ * @param key - The sz property key.
+ * @param value - The numeric value about to be emitted bare.
+ */
+function warnDeadSpacingStep(key: string, value: number): void {
+    if (
+        !szDevWarningsEnabled() ||
+        PROPERTY_CATEGORY_MAP[key] !== PropertyCategory.SPACING ||
+        (value * 4) % 1 === 0
+    ) {
+        return;
+    }
+    const token = `${key}:${value}`;
+    if (_warnedSpacingSteps.has(token)) return;
+    _warnedSpacingSteps.add(token);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] "${key}: ${value}"${at}: ${value} is not on Tailwind's spacing scale ` +
+            '(quarter steps only), so the class generates no CSS. Use a quarter step ' +
+            `(1.25, 1.5, 1.75) or a unit value ("${value}rem").`,
+    );
+}
+
 /** Custom theme tokens already nudged about slash-opacity (once per token). */
 const _warnedOpacityTokens = new Set<string>();
 
@@ -2075,6 +2105,18 @@ function buildConicGradientClass(direction: string | number | undefined): string
         : `bg-conic-[${normalizeArbitraryValue(direction)}]`;
 }
 
+/**
+ * Shadow-family utility prefixes where a bare `(--var)` suffix is parsed by
+ * Tailwind as the shadow VALUE (`--tw-shadow: var(--c)`), so a var used as a
+ * color needs the `(color:--var)` hint to land on `--tw-shadow-color`.
+ */
+const SHADOW_COLOR_HINT_PREFIXES = new Set([
+    'shadow',
+    'inset-shadow',
+    'text-shadow',
+    'drop-shadow',
+]);
+
 /** Builds a color utility from the `{ color, op }` object syntax. */
 function buildColorObjectClass(
     key: string,
@@ -2084,7 +2126,12 @@ function buildColorObjectClass(
     const utilityPrefix =
         PROPERTY_MAP[key] || key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
     const rawColor = color.color;
-    const colorValue = formatColorObjectBase(rawColor);
+    const colorValue =
+        SHADOW_COLOR_HINT_PREFIXES.has(utilityPrefix) &&
+        rawColor.startsWith('--') &&
+        !rawColor.includes('(')
+            ? `(color:${rawColor})`
+            : formatColorObjectBase(rawColor);
     if (color.op === undefined) return `${prefix}${utilityPrefix}-${colorValue}`;
     const opacity = formatOpacity(color.op);
     warnCustomOpacityToken(rawColor, `${prefix}${utilityPrefix}-${colorValue}/${opacity}`, opacity);
@@ -2515,24 +2562,32 @@ function collectEffectStringProperty(
         utility = 'container';
         includePrefix = false;
     } else if (key === 'shadowColor') {
-        utility = value.startsWith('--') ? `shadow-(color:${value})` : `shadow-${value}`;
+        utility = formatShadowFamilyColor('shadow', value);
         includePrefix = false;
     } else if (key === 'insetShadowColor') {
-        utility = value.startsWith('--')
-            ? `inset-shadow-(color:${value})`
-            : `inset-shadow-${value}`;
+        utility = formatShadowFamilyColor('inset-shadow', value);
     } else if (ARBITRARY_EFFECT_KEYS.has(key)) {
         utility = formatArbitraryEffect(key, value);
         includePrefix = key === 'scale' && value === '3d';
     } else if (key === 'textShadow') utility = formatTextShadow(value);
-    else if (key === 'textShadowColor') utility = `text-shadow-${value}`;
-    else if (isGradientPositionKey(key)) {
+    else if (key === 'textShadowColor') {
+        utility = formatShadowFamilyColor('text-shadow', value);
+    } else if (isGradientPositionKey(key)) {
         utility = formatGradientPosition(key, value);
         includePrefix = false;
     }
     if (utility === null) return false;
     classes.push(`${includePrefix ? prefix : ''}${utility}`);
     return true;
+}
+
+/**
+ * Formats a shadow-family color utility. A bare `X-(--c)` would set the shadow
+ * VALUE, not its color; the `color:` hint keeps the var on the family's
+ * `--tw-*-shadow-color` slot.
+ */
+function formatShadowFamilyColor(base: string, value: string): string {
+    return value.startsWith('--') ? `${base}-(color:${value})` : `${base}-${value}`;
 }
 
 /** Formats string-valued filters and scale without numeric coercion. */
@@ -2906,6 +2961,26 @@ function finalizeTransformResult(
     return { className: outputClasses.join(' ') };
 }
 
+/** Formats a numeric utility, hoisting the sign for negative-capable keys. */
+function formatNumericUtility(key: string, value: number): string {
+    return value < 0 && NEGATIVE_ALLOWED.has(key)
+        ? `-${key}-${Math.abs(value)}`
+        : `${key}-${value}`;
+}
+
+/**
+ * Whether a leading/lineHeight value must bracket as an unitless ratio.
+ * Numbers ride Tailwind's spacing scale (leading-1.5 = 0.375rem) like every
+ * other spacing utility; numeric STRINGS are the unitless line-height ratio
+ * and auto-bracket (leading: '1.5' → leading-[1.5]). Non-quarter-step numbers
+ * (1.4) have no bare spelling — Tailwind drops leading-1.4 — so they bracket
+ * too instead of emitting a dead class.
+ */
+function isUnitlessLeadingRatio(value: unknown): boolean {
+    if (typeof value === 'number') return (value * 4) % 1 !== 0;
+    return typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value);
+}
+
 /** Collects the scalar property forms that remain after specialized dispatch. */
 function collectFallbackProperty(
     rawKey: string,
@@ -2927,15 +3002,17 @@ function collectFallbackProperty(
         classes.push(`${prefix}[animation-delay:${delay}]`);
         return;
     }
+    if ((rawKey === 'leading' || rawKey === 'lineHeight') && isUnitlessLeadingRatio(value)) {
+        classes.push(`${prefix}leading-[${value}]`);
+        return;
+    }
     if (typeof value === 'number') {
-        const utility =
-            value < 0 && NEGATIVE_ALLOWED.has(key)
-                ? `-${key}-${Math.abs(value)}`
-                : `${key}-${value}`;
-        classes.push(`${prefix}${utility}`);
+        warnDeadSpacingStep(rawKey, value);
+        classes.push(`${prefix}${formatNumericUtility(key, value)}`);
         return;
     }
     if (typeof value === 'string') {
+        if (/^-?\d+(?:\.\d+)?$/.test(value)) warnDeadSpacingStep(rawKey, Number(value));
         classes.push(buildGenericStringClass(rawKey, key, value, prefix));
     }
 }
@@ -2963,8 +3040,43 @@ function collectObjectProperty(
         );
         return true;
     }
+    warnPropertyObjectValue(rawKey, value);
     collectNestedVariant(rawKey, value as SzObject, prefix, classes);
     return true;
+}
+
+/** Property keys already nudged about stray object values (once each). */
+const _warnedPropertyObjects = new Set<string>();
+
+/**
+ * Warns when a PROPERTY key receives an object that is not the `{ color, op }`
+ * form. The lowering falls through to variant handling and emits classes like
+ * `p:bg-red-500` — `p:` matches no Tailwind variant, so the styles silently
+ * generate no CSS. Keys that are genuine variants (hover, sm, group…) never
+ * reach here with a property meaning: PROPERTY_MAP and the variant sets are
+ * disjoint (locked by test).
+ * @param key - The sz key holding the object.
+ * @param value - The stray object value (used to name the nested keys).
+ */
+function warnPropertyObjectValue(key: string, value: Record<string, unknown>): void {
+    if (
+        !szDevWarningsEnabled() ||
+        !(key in PROPERTY_MAP) ||
+        KNOWN_VARIANTS.has(key) ||
+        SPECIAL_VARIANTS.has(key) ||
+        _warnedPropertyObjects.has(key)
+    ) {
+        return;
+    }
+    _warnedPropertyObjects.add(key);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    const nested = Object.keys(value).slice(0, 3).join(', ');
+    console.warn(
+        `[csszyx] "${key}" is a property, not a variant, but received an object ` +
+            `{ ${nested} }${at}. This compiles to "${key}:*" classes that match no ` +
+            `Tailwind variant and generate no CSS. Move the nested keys up a level, ` +
+            `or for color opacity use { color: '...', op: ... }.`,
+    );
 }
 
 /** Returns whether a value is a non-array object. */

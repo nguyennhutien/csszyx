@@ -17,7 +17,7 @@ export const migrateSchema = z.object({
             'JSX/TSX code snippet containing className attributes to transform. Example: \'<div className="p-4 bg-blue-500" />\'',
         ),
     customMap: z
-        .record(z.unknown())
+        .record(z.string(), z.unknown())
         .optional()
         .describe(
             'Parsed .csszyx-todo.json map. Values: sz object, Tailwind string, "sz:keep", "sz:remove", "sz:todo", null, or false.',

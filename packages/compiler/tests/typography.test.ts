@@ -189,6 +189,25 @@ describe('typography — line height (leading)', () => {
     it('{ leading: "--l" } → leading-(--l) (css variable)', () => {
         expect(t({ leading: '--l' })).toBe('leading-(--l)');
     });
+
+    // Numbers ride the spacing scale (a LENGTH: leading-1.5 = 0.375rem);
+    // numeric strings are the unitless ratio and auto-bracket. Tailwind has
+    // no bare class for non-quarter-step numbers, so those bracket too.
+    it('{ leading: 1.5 } → leading-1.5 (spacing scale, quarter step)', () => {
+        expect(t({ leading: 1.5 })).toBe('leading-1.5');
+    });
+
+    it('{ leading: "1.5" } → leading-[1.5] (numeric string = unitless ratio)', () => {
+        expect(t({ leading: '1.5' })).toBe('leading-[1.5]');
+    });
+
+    it('{ leading: 1.4 } → leading-[1.4] (non-quarter-step number falls back to ratio)', () => {
+        expect(t({ leading: 1.4 })).toBe('leading-[1.4]');
+    });
+
+    it('{ leading: "6" } → leading-[6] (integer string is still a ratio)', () => {
+        expect(t({ leading: '6' })).toBe('leading-[6]');
+    });
 });
 
 describe('typography — text/leading shorthand', () => {
@@ -205,6 +224,18 @@ describe('typography — text/leading shorthand', () => {
     it('{ text: "xl", leading: "1.5rem" } → text-xl/[1.5rem]', () => {
         const result = t({ text: 'xl', leading: '1.5rem' });
         expect(result).toBe('text-xl/[1.5rem]');
+    });
+
+    it('{ text: "sm", leading: "1.5" } → text-sm/[1.5] (ratio merges bracketed)', () => {
+        expect(t({ text: 'sm', leading: '1.5' })).toBe('text-sm/[1.5]');
+    });
+
+    it('{ text: "sm", leading: 1.5 } → text-sm/1.5 (spacing scale merges bare)', () => {
+        expect(t({ text: 'sm', leading: 1.5 })).toBe('text-sm/1.5');
+    });
+
+    it('{ text: "sm", leading: 1.4 } → text-sm/[1.4] (no bare class for 1.4)', () => {
+        expect(t({ text: 'sm', leading: 1.4 })).toBe('text-sm/[1.4]');
     });
 });
 

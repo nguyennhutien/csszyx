@@ -37,20 +37,12 @@ describe('isParserMode', () => {
         expect(isParserMode(mode)).toBe(true);
     });
 
-    it.each([
-        undefined,
-        null,
-        '',
-        'foo',
-        'RUST',
-        'Oxc',
-        0,
-        false,
-        {},
-        ['rust'],
-    ])('rejects the invalid value %p', value => {
-        expect(isParserMode(value)).toBe(false);
-    });
+    it.each([undefined, null, '', 'foo', 'RUST', 'Oxc', 0, false, {}, ['rust']])(
+        'rejects the invalid value %p',
+        value => {
+            expect(isParserMode(value)).toBe(false);
+        },
+    );
 });
 
 describe('resolveParserMode — default-rust graceful degradation', () => {
@@ -93,33 +85,33 @@ describe('resolveParserMode — explicit rust keeps its loud-failure contract', 
         expect(resolveParserMode(input)).toMatchObject({ parser: 'rust', degraded: false });
     });
 
-    it.each([
-        true,
-        false,
-    ])('env CSSZYX_PARSER=rust is explicit and never degrades (available=%s)', available => {
-        const { input, probe } = setup({ envParser: 'rust', rustAvailable: available });
-        expect(resolveParserMode(input)).toEqual({
-            parser: 'rust',
-            degraded: false,
-            explicit: true,
-        });
-        expect(probe).not.toHaveBeenCalled();
-    });
+    it.each([true, false])(
+        'env CSSZYX_PARSER=rust is explicit and never degrades (available=%s)',
+        available => {
+            const { input, probe } = setup({ envParser: 'rust', rustAvailable: available });
+            expect(resolveParserMode(input)).toEqual({
+                parser: 'rust',
+                degraded: false,
+                explicit: true,
+            });
+            expect(probe).not.toHaveBeenCalled();
+        },
+    );
 });
 
 describe('resolveParserMode — non-rust parsers never probe', () => {
-    it.each([
-        'oxc',
-        'babel',
-    ] as const)('config %s resolves without consulting the native probe', mode => {
-        const { input, probe } = setup({ configParser: mode, rustAvailable: false });
-        expect(resolveParserMode(input)).toEqual({
-            parser: mode,
-            degraded: false,
-            explicit: true,
-        });
-        expect(probe).not.toHaveBeenCalled();
-    });
+    it.each(['oxc', 'babel'] as const)(
+        'config %s resolves without consulting the native probe',
+        mode => {
+            const { input, probe } = setup({ configParser: mode, rustAvailable: false });
+            expect(resolveParserMode(input)).toEqual({
+                parser: mode,
+                degraded: false,
+                explicit: true,
+            });
+            expect(probe).not.toHaveBeenCalled();
+        },
+    );
 
     it.each(['oxc', 'babel'] as const)('env %s resolves without probing', mode => {
         const { input, probe } = setup({ envParser: mode, rustAvailable: false });
@@ -160,40 +152,35 @@ describe('resolveParserMode — precedence (env > config > default)', () => {
 });
 
 describe('resolveParserMode — invalid / empty env is ignored (falls through)', () => {
-    it.each([
-        'foo',
-        '',
-        'RUST',
-        'oxc ',
-        ' rust',
-        'native',
-    ])('invalid env %p falls back to config rust (explicit) — no degrade', bad => {
-        const { input, probe } = setup({
-            envParser: bad,
-            configParser: 'rust',
-            rustAvailable: false,
-        });
-        expect(resolveParserMode(input)).toEqual({
-            parser: 'rust',
-            degraded: false,
-            explicit: true,
-        });
-        expect(probe).not.toHaveBeenCalled();
-    });
+    it.each(['foo', '', 'RUST', 'oxc ', ' rust', 'native'])(
+        'invalid env %p falls back to config rust (explicit) — no degrade',
+        bad => {
+            const { input, probe } = setup({
+                envParser: bad,
+                configParser: 'rust',
+                rustAvailable: false,
+            });
+            expect(resolveParserMode(input)).toEqual({
+                parser: 'rust',
+                degraded: false,
+                explicit: true,
+            });
+            expect(probe).not.toHaveBeenCalled();
+        },
+    );
 
-    it.each([
-        'foo',
-        '',
-        'RUST',
-    ])('invalid env %p with no config → default rust, which DOES degrade when unavailable', bad => {
-        const { input, probe } = setup({ envParser: bad, rustAvailable: false });
-        expect(resolveParserMode(input)).toEqual({
-            parser: 'oxc',
-            degraded: true,
-            explicit: false,
-        });
-        expect(probe).toHaveBeenCalledTimes(1);
-    });
+    it.each(['foo', '', 'RUST'])(
+        'invalid env %p with no config → default rust, which DOES degrade when unavailable',
+        bad => {
+            const { input, probe } = setup({ envParser: bad, rustAvailable: false });
+            expect(resolveParserMode(input)).toEqual({
+                parser: 'oxc',
+                degraded: true,
+                explicit: false,
+            });
+            expect(probe).toHaveBeenCalledTimes(1);
+        },
+    );
 
     it('empty-string env + default rust + available → rust (no degrade)', () => {
         const { input } = setup({ envParser: '', rustAvailable: true });
@@ -202,18 +189,18 @@ describe('resolveParserMode — invalid / empty env is ignored (falls through)',
 });
 
 describe('resolveParserMode — non-rust defaults', () => {
-    it.each([
-        'oxc',
-        'babel',
-    ] as const)('a %s default with no overrides resolves to itself and never probes', def => {
-        const { input, probe } = setup({ defaultParser: def, rustAvailable: false });
-        expect(resolveParserMode(input)).toEqual({
-            parser: def,
-            degraded: false,
-            explicit: false,
-        });
-        expect(probe).not.toHaveBeenCalled();
-    });
+    it.each(['oxc', 'babel'] as const)(
+        'a %s default with no overrides resolves to itself and never probes',
+        def => {
+            const { input, probe } = setup({ defaultParser: def, rustAvailable: false });
+            expect(resolveParserMode(input)).toEqual({
+                parser: def,
+                degraded: false,
+                explicit: false,
+            });
+            expect(probe).not.toHaveBeenCalled();
+        },
+    );
 });
 
 describe('resolveParserMode — robustness / no hidden side effects', () => {

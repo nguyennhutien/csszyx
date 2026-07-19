@@ -109,18 +109,20 @@ describe('SzCompletionProvider — key positions', () => {
         const bg = items?.find(item => item.label === 'bg');
         expect(bg?.kind).toBe(9); // Property
         expect(bg?.detail).toBe('sz prop → bg-*');
-        expect((bg?.insertText as { value: string }).value).toBe('bg: $1,');
+        expect((bg?.insertText as { value: string } | undefined)?.value).toBe('bg: $1,');
 
         const container = items?.find(item => item.label === 'container');
         expect(container?.kind).toBe(4); // Field (boolean shorthand)
-        expect((container?.insertText as { value: string }).value).toBe('container: true,');
+        expect((container?.insertText as { value: string } | undefined)?.value).toBe(
+            'container: true,',
+        );
 
         const css = items?.find(item => item.label === 'css');
-        expect((css?.insertText as { value: string }).value).toBe('css: { $1 },');
+        expect((css?.insertText as { value: string } | undefined)?.value).toBe('css: { $1 },');
 
         const hover = items?.find(item => item.label === 'hover');
         expect(hover?.kind).toBe(8); // Module (variant)
-        expect((hover?.insertText as { value: string }).value).toBe('hover: { $1 },');
+        expect((hover?.insertText as { value: string } | undefined)?.value).toBe('hover: { $1 },');
 
         expect(labels).toContain('p');
     });
@@ -134,7 +136,7 @@ describe('SzCompletionProvider — key positions', () => {
         expect(labels).not.toContain('hover');
         expect(labels).not.toContain('css');
         const p = items?.find(item => item.label === 'p');
-        expect((p?.insertText as { value: string }).value).toBe('p: $1,');
+        expect((p?.insertText as { value: string } | undefined)?.value).toBe('p: $1,');
     });
 });
 

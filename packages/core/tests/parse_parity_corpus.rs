@@ -83,4 +83,41 @@ mod parse_parity {
             newly_fixed.join("\n  ")
         );
     }
+
+    /// Discovery-ORDER parity for the multi-ternary lane. The corpus test
+    /// above compares SORTED class sets, which is blind to ordering — but
+    /// production mangle IDs are assigned in discovery order, so rust must
+    /// list statics, then var classes, then each conditional's branches in
+    /// source property order, exactly like the JS engines. The vitest ordered
+    /// fixtures cover this through the napi binding only once a binary with
+    /// multi-ternary support ships; this test covers the source tree now.
+    #[test]
+    fn multi_ternary_discovery_order() {
+        let cases: &[(&str, &[&str])] = &[
+            (
+                r"const A = ({ a, b }) => <div sz={{ p: a ? 2 : 4, m: b ? 1 : 3 }} />;",
+                &["p-2", "p-4", "m-1", "m-3"],
+            ),
+            (
+                r#"const A = ({ w, a, b }) => <div sz={{ w: w, h: "max", p: a ? 2 : undefined, m: b ? 4 : undefined }} />;"#,
+                &["h-max", "w-(--_sz-w)", "p-2", "m-4"],
+            ),
+            (
+                r#"const A = ({ w, f, on, big }) => <div className="x" sz={{ w: w, flex: on ? f : undefined, p: big ? 8 : 2 }} />;"#,
+                &["w-(--_sz-w)", "flex-(--_sz-flex)", "p-8", "p-2"],
+            ),
+        ];
+        for (source, expected) in cases {
+            let file = TransformFile {
+                filename: "file.tsx".to_string(),
+                source: (*source).to_string(),
+            };
+            let results =
+                transform_batch(std::slice::from_ref(&file)).expect("transform_batch failed");
+            assert_eq!(
+                results[0].classes, *expected,
+                "discovery order diverged for: {source}"
+            );
+        }
+    }
 }

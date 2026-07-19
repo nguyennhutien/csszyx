@@ -69,12 +69,21 @@ export type TransformOxcResult = SourceTransformResult;
  */
 export class OxcNotImplementedError extends Error {
     /**
+     * User-facing description of the unimplemented construct, without the
+     * internal slice label. Fallback warnings must print THIS, not `message` —
+     * the slice codes are planning shorthand and leaked verbatim into build
+     * logs ("D2.5+ not implemented yet", field-reported as baffling).
+     */
+    readonly detail: string;
+
+    /**
      * @param slice The Phase D slice expected to implement this path.
      * @param detail What the caller asked for that is not yet wired.
      */
     constructor(slice: string, detail: string) {
         super(`transformOxc: ${slice} not implemented yet — ${detail}`);
         this.name = 'OxcNotImplementedError';
+        this.detail = detail;
     }
 }
 
@@ -327,6 +336,8 @@ export function transformOxc(
             )
         ) {
             usesRuntime = true;
+            // With an existing className the fallback emits _szMerge(existing, _sz(...)).
+            usesMerge ||= classNameAttr !== null;
             transformed = true;
             return;
         }
@@ -483,6 +494,11 @@ function transformOxcSzExpression(
         });
         if (result === 'fallback') return { kind: 'fallback', expression };
         if (result === 'complete') return completeOxcSzUsage();
+        if (result === 'complete-merge') {
+            // Babel reports both flags for a className merge, so the injected
+            // helper imports stay byte-identical across the two lanes.
+            return completeOxcSzUsage({ usesMerge: true, usesRuntime: true });
+        }
     }
     if (expression.type === 'ArrayExpression') {
         return transformOxcSzArrayResult(expression as ArrayExpressionNode, context);
@@ -716,7 +732,23 @@ function transformOxcUnsupportedObject(
             context.cssVariableMap,
         );
     if (classExpression) {
-        if (context.classNameAttr || context.szAttrs.length > 1) return null;
+        if (context.szAttrs.length > 1) return null;
+        if (context.classNameAttr) {
+            // Merge the hoisted-conditional class expression with the existing
+            // className, matching the Babel emit — this used to bail the whole
+            // file to the Babel fallback (D2.5+).
+            const existing = classNameMergeArgument(context.classNameAttr, context.source);
+            context.edits.overwrite(
+                context.classNameAttr.start,
+                context.classNameAttr.end,
+                `className={_szMerge(${existing}, ${classExpression})}`,
+            );
+            context.edits.remove(
+                whitespaceStart(context.source, context.szAttr.start),
+                context.szAttr.end,
+            );
+            return completedUnsupportedObject(true, true);
+        }
         context.edits.overwrite(
             context.szAttr.start,
             context.szAttr.end,
@@ -736,11 +768,7 @@ function transformOxcUnsupportedObject(
         reservedNames: context.reservedCSSVariableNames,
         globalVarAliases: context.globalVarAliases,
     });
-    if (
-        !partial ||
-        context.szAttrs.length !== 1 ||
-        (partial.hasConditional && context.classNameAttr)
-    ) {
+    if (!partial || context.szAttrs.length !== 1) {
         return null;
     }
     const mergedStyleProps =
@@ -771,8 +799,12 @@ function transformOxcUnsupportedObject(
         spreadStyleRewrite,
     );
     collectOxcClassTokens(partial.className, context.classes);
+    // A literal className beside a conditional also merges through _szMerge
+    // (see rewriteOxcPartialClassName), so it needs the runtime helpers too.
+    const mergesClassName =
+        expressionClassName || (partial.hasConditional && context.classNameAttr !== null);
     return {
-        ...completedUnsupportedObject(expressionClassName, expressionClassName),
+        ...completedUnsupportedObject(mergesClassName, mergesClassName),
         usesColorVar: partial.usesColorVar,
         usesSpacingVar: partial.usesSpacingVar,
         usesUnitVar: partial.usesUnitVar,
@@ -798,7 +830,7 @@ function rewriteOxcPartialClassName(
         context.edits.overwrite(
             context.classNameAttr.start,
             context.classNameAttr.end,
-            `className={_szMerge(${classSource}, ${JSON.stringify(partial.className)})}`,
+            `className={_szMerge(${classSource}, ${partial.classExpression})}`,
         );
         context.edits.remove(
             whitespaceStart(context.source, context.szAttr.start),
@@ -808,12 +840,22 @@ function rewriteOxcPartialClassName(
     }
     if (context.classNameAttr && stringLiteralValue(context.classNameAttr.value) !== null) {
         const existing = stringLiteralValue(context.classNameAttr.value);
-        const merged = [existing, partial.className].filter(Boolean).join(' ');
-        context.edits.overwrite(
-            context.classNameAttr.start,
-            context.classNameAttr.end,
-            `className="${merged}"`,
-        );
+        if (partial.hasConditional) {
+            // A literal className cannot absorb a conditional statically — merge
+            // it with the conditional expression, matching the Babel emit.
+            context.edits.overwrite(
+                context.classNameAttr.start,
+                context.classNameAttr.end,
+                `className={_szMerge(${JSON.stringify(existing)}, ${partial.classExpression})}`,
+            );
+        } else {
+            const merged = [existing, partial.className].filter(Boolean).join(' ');
+            context.edits.overwrite(
+                context.classNameAttr.start,
+                context.classNameAttr.end,
+                `className="${merged}"`,
+            );
+        }
         context.edits.remove(
             whitespaceStart(context.source, context.szAttr.start),
             context.szAttr.end,
@@ -868,7 +910,7 @@ interface OxcStaticConditionalContext {
  */
 function transformOxcStaticConditional(
     context: OxcStaticConditionalContext,
-): 'continue' | 'fallback' | 'complete' {
+): 'continue' | 'fallback' | 'complete' | 'complete-merge' {
     const classExpression = buildStaticConditionalClassExpression(
         context.conditional,
         context.filename,
@@ -879,7 +921,23 @@ function transformOxcStaticConditional(
         context.cssVariableMap,
     );
     if (!classExpression) return 'continue';
-    if (context.classNameAttr || context.szAttributeCount > 1) return 'fallback';
+    if (context.szAttributeCount > 1) return 'fallback';
+    if (context.classNameAttr) {
+        // Same emit as the Babel engine: the compiled ternary merges with the
+        // existing className. This used to route to the runtime fallback,
+        // whose className branch then bailed the whole file to Babel (D2.5+).
+        const existing = classNameMergeArgument(context.classNameAttr, context.source);
+        context.edits.overwrite(
+            context.classNameAttr.start,
+            context.classNameAttr.end,
+            `className={_szMerge(${existing}, ${classExpression})}`,
+        );
+        context.edits.remove(
+            whitespaceStart(context.source, context.szAttr.start),
+            context.szAttr.end,
+        );
+        return 'complete-merge';
+    }
     context.edits.overwrite(
         context.szAttr.start,
         context.szAttr.end,
@@ -1100,12 +1158,6 @@ function transformOxcRuntimeFallback(
     diagnostics: string[],
 ): boolean {
     if (!expression || !attribute) return false;
-    if (classNameAttribute) {
-        throw new OxcNotImplementedError(
-            'D2.5+',
-            `runtime sz fallback combined with existing className at ${filename}:${attribute.start}`,
-        );
-    }
     if (expression.type !== 'ArrayExpression') {
         diagnostics.push(buildRuntimeFallbackDiagnostic(expression, source));
     }
@@ -1122,6 +1174,19 @@ function transformOxcRuntimeFallback(
     }
     collectCandidateClassesFromExpression(expression, filename, bindings, classes, '');
     const expressionSource = source.slice(expression.start, expression.end);
+    if (classNameAttribute) {
+        // Formerly a D2.5+ bail to the Babel lane (one WARN per file — 25 on
+        // one field report). Same emit as Babel and the rust engine: the
+        // existing className merges with the runtime-resolved sz value.
+        const existing = classNameMergeArgument(classNameAttribute, source);
+        edits.overwrite(
+            classNameAttribute.start,
+            classNameAttribute.end,
+            `className={_szMerge(${existing}, _sz(${expressionSource}))}`,
+        );
+        removeOxcAttributes(attributes, source, edits);
+        return true;
+    }
     edits.overwrite(attribute.start, attribute.end, `className={_sz(${expressionSource})}`);
     for (const szAttribute of attributes) {
         if (szAttribute === attribute) continue;
@@ -2002,6 +2067,11 @@ interface OxcPartialObjectResult {
 interface OxcPartialTransform {
     className: string;
     classNameAttr: string;
+    /** JS expression carried inside `className={…}` — a plain JSON string for
+     * fully static output, or the conditional template/ternary source. Merge
+     * paths splice THIS into `_szMerge(existing, …)` so conditionals survive
+     * an existing className. */
+    classExpression: string;
     styleProps: string[];
     usesColorVar: boolean;
     usesSpacingVar: boolean;
@@ -2784,7 +2854,122 @@ function collectCandidateObjectProperty(
         const propertyValue = astObjectToSzObject(value, context.filename, context.bindings);
         addPrefixedCandidateClasses(compileSzObject({ [key]: propertyValue }).className, context);
     } catch {
-        collectCandidateExpression(value, context);
+        // Partially-static nested object under a PROPERTY key: walk it WITH
+        // the parent key. The old keyless walk compiled `color: 'black'` as a
+        // bare `{ color }` → a junk `text-black` candidate, while the class
+        // the runtime actually produces (`bg-black/30`) never reached the
+        // safelist. Color-opacity conditionals contribute their COMBINED
+        // per-branch classes first, matching the rust collector.
+        if (collectCandidateColorConditional(key, value, context)) return;
+        collectCandidateKeyedObject([key], value, context);
+    }
+}
+
+/**
+ * Adds both combined branch classes of a color-opacity conditional sub-object
+ * (`bg-black/30`, `bg-black/100`) to the candidates.
+ *
+ * @param key Parent color property key.
+ * @param value Nested color-object literal.
+ * @param context Candidate collection state.
+ * @returns Whether the object was a color-opacity conditional.
+ */
+function collectCandidateColorConditional(
+    key: string,
+    value: ObjectExpressionNode,
+    context: CandidateClassContext,
+): boolean {
+    const result = createPartialObjectResult();
+    const partialContext: PartialObjectContext = {
+        filename: context.filename,
+        bindings: context.bindings,
+        source: '',
+        globalVarAliases: new Map(),
+        cssVariableMap: undefined,
+        variantChain: '',
+    };
+    if (!evaluatePartialColorConditional(key, value, partialContext, result)) return false;
+    for (const entry of result.conditionalClasses) {
+        addPrefixedCandidateClasses(entry.consequent, context);
+        addPrefixedCandidateClasses(entry.alternate, context);
+    }
+    return true;
+}
+
+/**
+ * Best-effort candidates for a nested object under a chain of PROPERTY keys:
+ * each resolvable leaf (and each static conditional branch) compiles at its
+ * full key path. Unresolvable members are skipped — candidates are a safelist
+ * best-effort for runtime-fallback shapes, which always carry a diagnostic.
+ *
+ * @param path Property-key chain from the sz root down to this object.
+ * @param node Nested object literal.
+ * @param context Candidate collection state.
+ */
+function collectCandidateKeyedObject(
+    path: readonly string[],
+    node: ObjectExpressionNode,
+    context: CandidateClassContext,
+): void {
+    for (const property of node.properties) {
+        if (property.type !== 'Property') continue;
+        const member = property as PropertyNode;
+        if (member.computed) continue;
+        const memberKey = extractKeyName(member.key);
+        if (memberKey === null) continue;
+        collectCandidateKeyedValue([...path, memberKey], unwrapExpression(member.value), context);
+    }
+}
+
+/**
+ * Dispatches one keyed-object member value: recurse into objects, take both
+ * static branches of conditionals, and compile static literals at their path.
+ *
+ * @param memberPath Property-key chain down to this value.
+ * @param value Unwrapped member value.
+ * @param context Candidate collection state.
+ */
+function collectCandidateKeyedValue(
+    memberPath: readonly string[],
+    value: OxcNode,
+    context: CandidateClassContext,
+): void {
+    if (value.type === 'ObjectExpression') {
+        collectCandidateKeyedObject(memberPath, value as ObjectExpressionNode, context);
+        return;
+    }
+    if (value.type === 'ConditionalExpression') {
+        const conditional = value as ConditionalExpressionNode;
+        for (const branch of [conditional.consequent, conditional.alternate]) {
+            const literal = extractStaticLiteralValue(branch);
+            if (literal !== null) collectCandidateKeyedLeaf(memberPath, literal, context);
+        }
+        return;
+    }
+    const literal = extractStaticLiteralValue(value);
+    if (literal !== null) collectCandidateKeyedLeaf(memberPath, literal, context);
+}
+
+/**
+ * Compiles one static leaf at its full key path into candidate classes.
+ *
+ * @param subPath Property-key chain down to the leaf.
+ * @param literal Static leaf value.
+ * @param context Candidate collection state.
+ */
+function collectCandidateKeyedLeaf(
+    subPath: readonly string[],
+    literal: string | number | boolean,
+    context: CandidateClassContext,
+): void {
+    let wrapped: unknown = literal;
+    for (let index = subPath.length - 1; index >= 0; index--) {
+        wrapped = { [subPath[index]]: wrapped };
+    }
+    try {
+        addPrefixedCandidateClasses(compileSzObject(wrapped as SzObject).className, context);
+    } catch {
+        // Best-effort — a value the compiler rejects contributes nothing.
     }
 }
 
@@ -3793,16 +3978,11 @@ function buildPartialObjectTransform(
     if (!partial || (partial.dynamicProps.size === 0 && partial.conditionalClasses.length === 0)) {
         return null;
     }
-    // One conditional prop may coexist with static props (the static part stays
-    // build-time, only the conditional becomes a runtime ternary). Mixing a
-    // conditional with runtime css vars still falls back to the runtime.
-    if (
-        partial.conditionalClasses.length > 0 &&
-        (partial.conditionalClasses.length !== 1 ||
-            [...partial.dynamicProps.values()].some(info => !info.skipClass))
-    ) {
-        return null;
-    }
+    // Conditional props coexist with static props AND runtime css vars —
+    // statics and var classes lead, each conditional appends one template
+    // segment (matching the Babel engine). This used to accept only a single
+    // conditional with no vars and punt the rest to the runtime, which never
+    // safelists the var utilities.
 
     const classParts: string[] = [];
     if (Object.keys(partial.staticProps).length > 0) {
@@ -3829,8 +4009,14 @@ function buildPartialObjectTransform(
 
     const className = classParts.filter(Boolean).join(' ');
     let classNameAttr = staticOxcClassNameAttribute(className);
+    let classExpression = JSON.stringify(className);
     if (partial.conditionalClasses.length > 0) {
-        classNameAttr = `className={${buildConditionalClassSource(classParts, partial.conditionalClasses, source)}}`;
+        classExpression = buildConditionalClassSource(
+            classParts,
+            partial.conditionalClasses,
+            source,
+        );
+        classNameAttr = `className={${classExpression}}`;
     } else if (className === '') {
         // An sz that lowers to zero classes emits undefined so the DOM has no
         // class attribute, instead of the noisy class="".
@@ -3845,6 +4031,7 @@ function buildPartialObjectTransform(
     return {
         className,
         classNameAttr,
+        classExpression,
         styleProps,
         usesColorVar: partial.usesColorVar,
         usesSpacingVar: partial.usesSpacingVar,
@@ -4497,7 +4684,7 @@ function evaluatePartialProperty(
     if (property.type === 'SpreadElement') {
         return evaluatePartialSpread(property as SpreadElementNode, context, result);
     }
-    if (property.type !== 'Property') return false;
+    // An oxc object-expression member is a Property whenever it is not a spread.
     const objectProperty = property as PropertyNode;
     const key = objectProperty.computed ? null : extractKeyName(objectProperty.key);
     if (key === null) return false;
@@ -4508,12 +4695,183 @@ function evaluatePartialProperty(
         return evaluateNestedPartialVariant(key, value as ObjectExpressionNode, context, result);
     }
     if (
+        value.type === 'ObjectExpression' &&
+        evaluatePartialColorConditional(key, value as ObjectExpressionNode, context, result)
+    ) {
+        return true;
+    }
+    if (
         value.type === 'ConditionalExpression' &&
         evaluatePartialConditional(key, value as ConditionalExpressionNode, context, result)
     ) {
         return true;
     }
     return evaluateDynamicPartialProperty(key, value, context, result);
+}
+
+/**
+ * Compiles a color-opacity sub-object with a finite conditional on exactly one
+ * of `color`/`op` into a conditional-classes entry whose branches are complete
+ * color-opacity classes (`bg-black/30` | `bg-black/100`) — the rust engine's
+ * static expansion. Kept over a runtime variable so the lanes agree on class
+ * NAMES (cross-parser cache and mangle-map stability).
+ *
+ * @param key Parent color property key.
+ * @param object Nested color-object literal.
+ * @param context Shared evaluation inputs.
+ * @param result Mutable partial result.
+ * @returns Whether a conditional entry was emitted.
+ */
+function evaluatePartialColorConditional(
+    key: string,
+    object: ObjectExpressionNode,
+    context: PartialObjectContext,
+    result: OxcPartialObjectResult,
+): boolean {
+    const members = scanColorOpMembers(object);
+    if (!members) return false;
+    const { staticColor, colorConditional, staticOp, opConditional } = members;
+
+    const compileBranch: ColorOpacityBranchCompiler = (color, op) => {
+        const value = op === null ? { color } : { color, op };
+        const aliased = applyGlobalVarAliasesToSzObject(
+            { [key]: value } as unknown as SzObject,
+            context.globalVarAliases,
+            context.cssVariableMap,
+        );
+        return prefixVariantClasses(compileSzObject(aliased).className, context.variantChain);
+    };
+
+    // Exactly one of color/op may be the conditional; the other must be static.
+    if (opConditional && !colorConditional && staticColor !== null) {
+        return emitOpacityConditionalEntry(opConditional, staticColor, compileBranch, result);
+    }
+    if (colorConditional && !opConditional) {
+        return emitColorConditionalEntry(colorConditional, staticOp, compileBranch, result);
+    }
+    return false;
+}
+
+/** A static opacity literal, or null when the object carries none. */
+type StaticOpacity = string | number | null;
+
+/** Compiles one conditional branch's color/op pair into its class string. */
+type ColorOpacityBranchCompiler = (color: string, op: StaticOpacity) => string;
+
+/** Static/conditional split of a plain `{ color, op }` object's members. */
+interface ColorOpMembers {
+    staticColor: string | null;
+    colorConditional: ConditionalExpressionNode | null;
+    staticOp: StaticOpacity;
+    opConditional: ConditionalExpressionNode | null;
+}
+
+/**
+ * Scans a candidate `{ color, op }` object literal into its static and
+ * conditional members.
+ *
+ * @param object Nested object literal.
+ * @returns The member split, or null when any member is not a plain
+ *   color/op key with a static or conditional value.
+ */
+function scanColorOpMembers(object: ObjectExpressionNode): ColorOpMembers | null {
+    const members: ColorOpMembers = {
+        staticColor: null,
+        colorConditional: null,
+        staticOp: null,
+        opConditional: null,
+    };
+    for (const property of object.properties) {
+        if (property.type !== 'Property') return null;
+        const member = property as PropertyNode;
+        const memberKey = member.computed ? null : extractKeyName(member.key);
+        // Any other member means this is not a plain color-opacity object.
+        if (memberKey !== 'color' && memberKey !== 'op') return null;
+        if (!scanColorOpMember(memberKey, unwrapExpression(member.value), members)) return null;
+    }
+    return members;
+}
+
+/**
+ * Records one color/op member's static or conditional value.
+ *
+ * @param memberKey Member key, `color` or `op`.
+ * @param value Unwrapped member value.
+ * @param members Mutable member split.
+ * @returns Whether the value is a supported static or conditional shape.
+ */
+function scanColorOpMember(memberKey: string, value: OxcNode, members: ColorOpMembers): boolean {
+    if (value.type === 'ConditionalExpression') {
+        if (memberKey === 'color') members.colorConditional = value as ConditionalExpressionNode;
+        else members.opConditional = value as ConditionalExpressionNode;
+        return true;
+    }
+    const literal = extractStaticLiteralValue(value);
+    if (memberKey === 'color') {
+        if (typeof literal !== 'string') return false;
+        members.staticColor = literal;
+        return true;
+    }
+    if (typeof literal !== 'string' && typeof literal !== 'number') return false;
+    members.staticOp = literal;
+    return true;
+}
+
+/**
+ * Emits the conditional entry for a static color with a conditional opacity.
+ *
+ * @param opConditional Conditional opacity member value.
+ * @param staticColor Static color value.
+ * @param compileBranch Branch compiler bound to the parent key and context.
+ * @param result Mutable partial result.
+ * @returns Whether both branches were static and an entry was emitted.
+ */
+function emitOpacityConditionalEntry(
+    opConditional: ConditionalExpressionNode,
+    staticColor: string,
+    compileBranch: ColorOpacityBranchCompiler,
+    result: OxcPartialObjectResult,
+): boolean {
+    const consequent = extractStaticLiteralValue(opConditional.consequent);
+    const alternate = extractStaticLiteralValue(opConditional.alternate);
+    if (
+        (typeof consequent !== 'string' && typeof consequent !== 'number') ||
+        (typeof alternate !== 'string' && typeof alternate !== 'number')
+    ) {
+        return false;
+    }
+    result.conditionalClasses.push({
+        test: opConditional.test,
+        consequent: compileBranch(staticColor, consequent),
+        alternate: compileBranch(staticColor, alternate),
+    });
+    return true;
+}
+
+/**
+ * Emits the conditional entry for a conditional color with a static opacity.
+ *
+ * @param colorConditional Conditional color member value.
+ * @param staticOp Static opacity value, or null when absent.
+ * @param compileBranch Branch compiler bound to the parent key and context.
+ * @param result Mutable partial result.
+ * @returns Whether both branches were static strings and an entry was emitted.
+ */
+function emitColorConditionalEntry(
+    colorConditional: ConditionalExpressionNode,
+    staticOp: StaticOpacity,
+    compileBranch: ColorOpacityBranchCompiler,
+    result: OxcPartialObjectResult,
+): boolean {
+    const consequent = extractStaticLiteralValue(colorConditional.consequent);
+    const alternate = extractStaticLiteralValue(colorConditional.alternate);
+    if (typeof consequent !== 'string' || typeof alternate !== 'string') return false;
+    result.conditionalClasses.push({
+        test: colorConditional.test,
+        consequent: compileBranch(consequent, staticOp),
+        alternate: compileBranch(alternate, staticOp),
+    });
+    return true;
 }
 
 /**
@@ -4984,12 +5342,12 @@ function buildConditionalClassSource(
     conditionals: OxcConditionalClassEntry[],
     source: string,
 ): string {
+    // classParts ends with each conditional's [consequent, alternate] pair;
+    // what precedes them is the build-time static + css-var class list.
+    const staticParts = classParts.slice(0, -2 * conditionals.length).filter(Boolean);
+    const bare = staticParts.length === 0;
     if (conditionals.length === 1) {
         const [entry] = conditionals;
-        // classParts ends with the conditional's [consequent, alternate]; what
-        // precedes them is the build-time static class list.
-        const staticParts = classParts.slice(0, -2).filter(Boolean);
-        const bare = staticParts.length === 0;
         // In bare value position an empty branch becomes `undefined` so it renders
         // no class attribute. Inside the template literal below it MUST stay an
         // empty string — `${undefined}` would render the text "undefined".
@@ -5001,7 +5359,18 @@ function buildConditionalClassSource(
         }
         return `\`${staticParts.join(' ')} \${${ternary}}\``;
     }
-    return JSON.stringify(classParts.filter(Boolean).join(' '));
+    // N conditionals: template literal appending one `${…}` segment per entry
+    // in property order, byte-for-byte the Babel engine's emission — first
+    // quasi is `"statics "` (trailing space) or empty, single-space separators,
+    // branches always "" (never `undefined`) inside the template.
+    const segments = conditionals
+        .map(entry => {
+            const test = source.slice(entry.test.start, entry.test.end);
+            return `\${${test} ? ${JSON.stringify(entry.consequent)} : ${JSON.stringify(entry.alternate)}}`;
+        })
+        .join(' ');
+    const prefix = bare ? '' : `${staticParts.join(' ')} `;
+    return `\`${prefix}${segments}\``;
 }
 
 /**

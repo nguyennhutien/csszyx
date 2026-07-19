@@ -98,7 +98,7 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
             .filter(|prop| !prop.skip_class)
             .map(dynamic_css_var_class),
     );
-    if let Some(ternary) = &attribute.ternary {
+    for ternary in &attribute.ternaries {
         classes.extend(ternary.consequent_classes.iter().cloned());
         classes.extend(ternary.alternate_classes.iter().cloned());
     }
@@ -221,6 +221,116 @@ pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(St
             collect_unknown_sz_keys(nested, out);
         }
     }
+}
+
+/// Collects spacing-scale properties whose numeric value is not a quarter
+/// step — Tailwind's bare spacing syntax only accepts multiples of 0.25, so
+/// `p-1.4` generates no CSS, and a unitless bracket is no escape (`padding:
+/// 1.4` is invalid CSS). Same descent rules as `collect_unknown_sz_keys`;
+/// `leading` is excluded because it falls back to the unitless-ratio bracket.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_dead_spacing_steps(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, f64, u32)>,
+) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::Number(value) => {
+                if is_dead_spacing_step(&property.key, *value) {
+                    out.push((property.key.clone(), *value, property.span.start));
+                }
+            }
+            StaticSzValue::String(value) => {
+                let unsigned = value.strip_prefix('-').unwrap_or(value);
+                if is_unsigned_decimal(unsigned) {
+                    if let Ok(parsed) = value.parse::<f64>() {
+                        if is_dead_spacing_step(&property.key, parsed) {
+                            out.push((property.key.clone(), parsed, property.span.start));
+                        }
+                    }
+                }
+            }
+            StaticSzValue::Object(nested) => {
+                if matches!(
+                    property.key.as_str(),
+                    "css"
+                        | "bgImg"
+                        | "supports"
+                        | "data"
+                        | "not"
+                        | "aria"
+                        | "has"
+                        | "group"
+                        | "peer"
+                ) {
+                    continue;
+                }
+                if property_prefix(&property.key).is_some()
+                    && object_string_property(nested, "color").is_some()
+                {
+                    continue;
+                }
+                collect_dead_spacing_steps(nested, out);
+            }
+            StaticSzValue::Boolean(_) => {}
+        }
+    }
+}
+
+/// Collects PROPERTY keys whose value is an object that is not the
+/// `{ color, op }` form. The lowering falls through to variant handling and
+/// emits classes like `p:bg-red-500` — `p:` matches no Tailwind variant, so
+/// the styles silently generate no CSS. Reports the first nested keys so the
+/// diagnostic can echo the stray shape; descends like the lowering does.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_property_object_values(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, u32)>,
+) {
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            continue;
+        };
+        // Parametric/scope variants and object-shaped value keys take nested
+        // objects legitimately.
+        if matches!(
+            property.key.as_str(),
+            "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
+        ) {
+            continue;
+        }
+        // The `{ color, op }` object form on a property key is the documented
+        // color-opacity spelling.
+        if property_prefix(&property.key).is_some()
+            && object_string_property(nested, "color").is_some()
+        {
+            continue;
+        }
+        if property_prefix(&property.key).is_some()
+            && !super::generated::tables::is_known_variant(&property.key)
+        {
+            let nested_keys = nested
+                .properties
+                .iter()
+                .take(3)
+                .map(|p| p.key.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push((property.key.clone(), nested_keys, property.span.start));
+            continue;
+        }
+        collect_property_object_values(nested, out);
+    }
+}
+
+/// Whether a bare numeric value on a spacing-scale key has no Tailwind class.
+#[cfg(feature = "native-engine")]
+fn is_dead_spacing_step(key: &str, value: f64) -> bool {
+    (value * 4.0).fract() != 0.0
+        && matches!(
+            super::parser::dynamic_css_var_category(key),
+            super::ir::DynamicCssVarCategory::Spacing
+        )
 }
 
 fn merge_text_size_and_leading(mut classes: Vec<String>) -> Vec<String> {
@@ -623,9 +733,22 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             if let Some(grad) = gradient_stop_prefix(key) {
                 return Some(format!("{prefix}{grad}-{}%", format_abs_number(*value)));
             }
+            // leading numbers ride the spacing scale like Tailwind's bare
+            // syntax; non-quarter-step values (1.4) have no bare spelling —
+            // Tailwind drops leading-1.4 — so they bracket as the unitless
+            // ratio instead of emitting a dead class. Mirrors the oxc lane.
+            if (key == "leading" || key == "lineHeight") && (value * 4.0).fract() != 0.0 {
+                return Some(format!("{prefix}leading-[{}]", format_abs_number(*value)));
+            }
             Some(format_number_class(class_key.as_ref(), *value, prefix))
         }
         StaticSzValue::String(value) => {
+            // leading numeric STRINGS are the unitless line-height ratio and
+            // auto-bracket (leading: '1.5' → leading-[1.5]); bare numbers ride
+            // the spacing scale. Mirrors the oxc lane.
+            if (key == "leading" || key == "lineHeight") && is_unsigned_decimal(value) {
+                return Some(format!("{prefix}leading-[{value}]"));
+            }
             if key == "bgImg" {
                 return Some(format_bg_img_string(value, prefix));
             }
@@ -789,6 +912,11 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             // Named container: { '@container': 'sidebar' } → @container/sidebar.
             if key == "@container" {
                 return Some(format!("{prefix}@container/{value}"));
+            }
+            // Named scope markers: { group: 'item' } → group/item, mirroring
+            // the oxc `collectUnresolvedStringProperty` branch.
+            if key == "group" || key == "peer" {
+                return Some(format!("{prefix}{key}/{value}"));
             }
             // Gradient color-stop positions reuse the from/via/to prefix. CSS vars
             // use the paren form, bare integer percents stay bare, the rest bracket.
@@ -1004,6 +1132,10 @@ fn css_var_type_hint(key: &str) -> Option<&'static str> {
         "fontFamily" => Some("family-name"),
         "weight" => Some("weight"),
         "text" => Some("length"),
+        // Shadow-family color keys: a bare `shadow-(--c)` is parsed by
+        // Tailwind as the shadow VALUE (`--tw-shadow: var(--c)`), so the var
+        // needs the `color:` hint to land on `--tw-*-shadow-color`.
+        "shadowColor" | "insetShadowColor" | "textShadowColor" | "dropShadowColor" => Some("color"),
         _ => None,
     }
 }
@@ -1082,7 +1214,17 @@ fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str)
     {
         format!("[{}]", normalize_arbitrary_value(raw_color))
     } else if raw_color.starts_with("--") {
-        format!("({raw_color})")
+        // Shadow-family prefixes parse a bare `(--var)` suffix as the shadow
+        // VALUE, so a var used as a color needs the `color:` hint. Mirrors
+        // `buildColorObjectClass` in the Babel/oxc transform.
+        if matches!(
+            tw_prefix,
+            "shadow" | "inset-shadow" | "text-shadow" | "drop-shadow"
+        ) {
+            format!("(color:{raw_color})")
+        } else {
+            format!("({raw_color})")
+        }
     } else if needs_brackets(raw_color) {
         format!("[{}]", normalize_arbitrary_value(raw_color))
     } else {
@@ -1892,6 +2034,140 @@ mod tests {
     }
 
     #[test]
+    fn lowers_shadow_family_var_colors_with_color_hint() {
+        // Object form: a bare `(--c)` after a shadow-family prefix would set
+        // the shadow VALUE, so the lowering adds the `color:` hint.
+        assert_eq!(
+            color_op("shadowColor", "--c", Some(StaticSzValue::Number(50.0))),
+            ["shadow-(color:--c)/50"]
+        );
+        assert_eq!(
+            color_op("insetShadowColor", "--c", Some(StaticSzValue::Number(30.0))),
+            ["inset-shadow-(color:--c)/30"]
+        );
+        assert_eq!(
+            color_op("textShadowColor", "--c", Some(StaticSzValue::Number(25.0))),
+            ["text-shadow-(color:--c)/25"]
+        );
+        assert_eq!(
+            color_op("dropShadowColor", "--c", Some(StaticSzValue::Number(40.0))),
+            ["drop-shadow-(color:--c)/40"]
+        );
+        // Fractional half-step opacity stays bare (Tailwind 4.3.3 supports
+        // fractional modifiers on shadow utilities).
+        assert_eq!(
+            color_op("shadowColor", "--c", Some(StaticSzValue::Number(12.5))),
+            ["shadow-(color:--c)/12.5"]
+        );
+        // Non-shadow color prefixes keep the bare paren form.
+        assert_eq!(color_op("bg", "--c", None), ["bg-(--c)"]);
+
+        // String form routes through the generic CSS-var type hints.
+        for (key, expected) in [
+            ("shadowColor", "shadow-(color:--c)"),
+            ("insetShadowColor", "inset-shadow-(color:--c)"),
+            ("textShadowColor", "text-shadow-(color:--c)"),
+            ("dropShadowColor", "drop-shadow-(color:--c)"),
+        ] {
+            let object = StaticSzObject {
+                properties: vec![property(key, StaticSzValue::String("--c".into()))],
+            };
+            assert_eq!(lower_static_sz_object(&object), [expected]);
+        }
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collects_dead_spacing_steps() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("p", StaticSzValue::Number(1.4)),
+                property("m", StaticSzValue::Number(1.5)),
+                property("gap", StaticSzValue::String("1.1".into())),
+                property("w", StaticSzValue::String("1.4rem".into())),
+                property("leading", StaticSzValue::Number(1.4)),
+                property(
+                    "hover",
+                    StaticSzValue::Object(StaticSzObject {
+                        properties: vec![property("p", StaticSzValue::Number(2.3))],
+                    }),
+                ),
+            ],
+        };
+        let mut out: Vec<(String, f64, u32)> = Vec::new();
+        super::collect_dead_spacing_steps(&object, &mut out);
+        let keys: Vec<(&str, f64)> = out.iter().map(|(k, v, _)| (k.as_str(), *v)).collect();
+        // 1.5 is a quarter step, "1.4rem" carries a unit, and leading falls
+        // back to the unitless-ratio bracket — none of those warn.
+        assert_eq!(keys, [("p", 1.4), ("gap", 1.1), ("p", 2.3)]);
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collects_property_object_values() {
+        let color_op = StaticSzValue::Object(StaticSzObject {
+            properties: vec![
+                property("color", StaticSzValue::String("blue-500".into())),
+                property("op", StaticSzValue::Number(50.0)),
+            ],
+        });
+        let object = StaticSzObject {
+            properties: vec![
+                // Property key with a stray object → reported with nested keys.
+                property(
+                    "p",
+                    StaticSzValue::Object(StaticSzObject {
+                        properties: vec![property("bg", StaticSzValue::String("red-500".into()))],
+                    }),
+                ),
+                // Color-op form on a property key is documented — silent.
+                property("bg", color_op),
+                // Variant nesting is legit, but the walk descends into it.
+                property(
+                    "hover",
+                    StaticSzValue::Object(StaticSzObject {
+                        properties: vec![property(
+                            "shadow",
+                            StaticSzValue::Object(StaticSzObject {
+                                properties: vec![property("op", StaticSzValue::Number(12.5))],
+                            }),
+                        )],
+                    }),
+                ),
+                // Parametric variants own their nested shape — silent.
+                property(
+                    "data",
+                    StaticSzValue::Object(StaticSzObject {
+                        properties: vec![property("active", StaticSzValue::Boolean(true))],
+                    }),
+                ),
+            ],
+        };
+        let mut out: Vec<(String, String, u32)> = Vec::new();
+        super::collect_property_object_values(&object, &mut out);
+        let found: Vec<(&str, &str)> = out
+            .iter()
+            .map(|(k, n, _)| (k.as_str(), n.as_str()))
+            .collect();
+        assert_eq!(found, [("p", "bg"), ("shadow", "op")]);
+    }
+
+    #[test]
+    fn lowers_named_scope_markers() {
+        // { group: 'item' } is the marker CLASS (group/item), not a variant —
+        // the generic kebab fallthrough would wrongly emit group-item.
+        for (key, value, expected) in [
+            ("group", "item", "group/item"),
+            ("peer", "form", "peer/form"),
+        ] {
+            let object = StaticSzObject {
+                properties: vec![property(key, StaticSzValue::String(value.into()))],
+            };
+            assert_eq!(lower_static_sz_object(&object), [expected]);
+        }
+    }
+
+    #[test]
     fn kebab_cases_unknown_keys() {
         let object = StaticSzObject {
             properties: vec![property("breakWord", StaticSzValue::Boolean(true))],
@@ -2016,7 +2292,7 @@ mod tests {
                 },
                 literal_class_name: None,
                 rewrites_empty_class: false,
-                ternary: None,
+                ternaries: Vec::new(),
                 array_parts: Vec::new(),
                 runtime_fallback: false,
                 runtime_fallback_spread: false,

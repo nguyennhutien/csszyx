@@ -9,12 +9,12 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "@astrojs/solid-js": "^5.0.0",
-    "@tailwindcss/vite": "^4.3.2",
-    "astro": "^6.4.6",
+    "@astrojs/solid-js": "^7.0.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.1.1",
     "csszyx": "workspace:*",
-    "solid-js": "^1.9.0",
-    "tailwindcss": "^4.3.2"
+    "solid-js": "^1.9.14",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@csszyx/types": "workspace:*",

@@ -359,6 +359,8 @@ interface ParsedClassToken {
     prop: string;
     value: unknown;
     cssProperty?: string;
+    /** Companion prop emitted alongside `prop` (text-sm/6 → text + leading). */
+    extra?: { prop: string; value: unknown };
 }
 
 interface ClassNameConversionState {
@@ -562,6 +564,14 @@ function applyParsedToken(token: string, state: ClassNameConversionState): void 
         parsedToken.prop,
         cloneParsedValue(parsedToken.value),
     );
+    if (parsedToken.extra) {
+        setNestedValue(
+            state.szObject,
+            parsedToken.keyPath,
+            parsedToken.extra.prop,
+            cloneParsedValue(parsedToken.extra.value),
+        );
+    }
 }
 
 /**
@@ -604,6 +614,7 @@ function parseClassToken(token: string): ParsedClassToken | null {
         prop: parsed.prop,
         value: parsed.value,
         cssProperty: parsed.cssProperty,
+        extra: parsed.extra,
     };
 }
 

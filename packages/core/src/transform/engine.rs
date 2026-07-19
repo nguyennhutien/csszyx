@@ -310,7 +310,7 @@ fn transform_static_classes_with_options(
             let has_runtime_like_sz = element.sz_attribute_indices.iter().any(|index| {
                 let attribute = &parsed.ir.sz_attributes[*index];
                 // Arrays merge their className through szcn, not _szMerge.
-                (attribute.runtime_fallback || attribute.ternary.is_some())
+                (attribute.runtime_fallback || !attribute.ternaries.is_empty())
                     && attribute.array_parts.is_empty()
             });
             let has_static_sz = element
@@ -519,6 +519,8 @@ fn unknown_property_diagnostics(
     let location = relativize_diagnostic_path(&file.filename, root_dir);
     let mut out = Vec::new();
     let mut unknown = Vec::new();
+    let mut dead_steps = Vec::new();
+    let mut property_objects = Vec::new();
     for attr in &ir.sz_attributes {
         unknown.clear();
         collect_unknown_sz_keys(&attr.object, &mut unknown);
@@ -536,6 +538,26 @@ fn unknown_property_diagnostics(
                     "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. This will be ignored. Check for typos."
                 ));
             }
+        }
+        dead_steps.clear();
+        super::lower::collect_dead_spacing_steps(&attr.object, &mut dead_steps);
+        for (key, value, offset) in &dead_steps {
+            let (line, _) = offset_to_line_column(&file.source, *offset);
+            // Wording matches the JS engines' warnDeadSpacingStep so a
+            // `build.parser` flip does not change the diagnostic text.
+            out.push(format!(
+                "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
+            ));
+        }
+        property_objects.clear();
+        super::lower::collect_property_object_values(&attr.object, &mut property_objects);
+        for (key, nested, offset) in &property_objects {
+            let (line, _) = offset_to_line_column(&file.source, *offset);
+            // Wording matches the JS engines' warnPropertyObjectValue so a
+            // `build.parser` flip does not change the diagnostic text.
+            out.push(format!(
+                "[csszyx] \"{key}\" is a property, not a variant, but received an object {{ {nested} }} at {location}:{line}. This compiles to \"{key}:*\" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use {{ color: '...', op: ... }}."
+            ));
         }
     }
     out
@@ -643,6 +665,22 @@ mod tests {
         assert_eq!(result.metadata.timings.parse_ns, 0);
         assert!(result.classes.is_empty());
         assert!(result.raw_class_names.is_empty());
+    }
+
+    #[test]
+    fn static_engine_reports_property_object_diagnostic() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const App = () => <div sz={{ p: { bg: 'red-500' } }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(result.diagnostics.iter().any(|d| {
+            d.contains("\"p\" is a property, not a variant")
+                && d.contains("{ bg }")
+                && d.contains("generate no CSS")
+        }));
     }
 
     #[test]
