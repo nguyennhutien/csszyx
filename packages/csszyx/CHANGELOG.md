@@ -1,5 +1,13 @@
 # csszyx
 
+## [0.11.10](https://github.com/nguyennhutien/csszyx/compare/v0.11.9...v0.11.10) (2026-07-19)
+
+
+### Bug Fixes
+
+* correct slash-modifier handling across engines and adopt current toolchain majors ([#169](https://github.com/nguyennhutien/csszyx/issues/169)) ([81a668c](https://github.com/nguyennhutien/csszyx/commit/81a668ca0c2c3272decf60992a2dff7400c74d9b))
+* harden runtime CSS and dependency security ([#172](https://github.com/nguyennhutien/csszyx/issues/172)) ([f89bd3b](https://github.com/nguyennhutien/csszyx/commit/f89bd3b5a054db52fa75b2bbaf1e626bd603fe48))
+
 ## [0.11.9](https://github.com/nguyennhutien/csszyx/compare/v0.11.8...v0.11.9) (2026-07-16)
 
 ### Bug Fixes
