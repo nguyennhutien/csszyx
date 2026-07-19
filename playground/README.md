@@ -5,6 +5,10 @@ safelisting, production mangling, and SSR hydration in actual bundler + framewor
 combinations. The Playwright suites in [`packages/e2e`](../packages/e2e) start
 these apps and assert against the served output.
 
+These fixtures are local and CI test applications. They must not be deployed or
+exposed as production services; version pins may intentionally preserve older
+framework majors for compatibility coverage.
+
 ## Playgrounds
 
 | Directory                           | Stack                         | Exercises                                                                                                 |

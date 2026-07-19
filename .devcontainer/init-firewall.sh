@@ -179,6 +179,10 @@ CORE_WILDCARD_DOMAINS=(
 
     # Error reporting used by installed tooling
     sentry.io
+
+    # Quality checks
+    sonarcloud.io
+    snyk.io
 )
 
 if [ -n "${CSSZYX_FIREWALL_EXTRA_DOMAINS:-}" ]; then

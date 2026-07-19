@@ -93,6 +93,10 @@ describe('css: {} — arbitrary CSS sub-prop', () => {
         it('numeric values are converted to strings', () => {
             expect(t({ css: { zIndex: 10 } })).toBe('[z-index:10]');
         });
+
+        it('preserves valid falsy scalar values', () => {
+            expect(t({ css: { zIndex: 0, '--empty': '' } })).toBe('[z-index:0] [--empty:]');
+        });
     });
 
     describe('edge cases', () => {
@@ -100,9 +104,16 @@ describe('css: {} — arbitrary CSS sub-prop', () => {
             expect(t({ p: 4, css: {} })).toBe('p-4');
         });
 
-        it('null/undefined values inside css are skipped', () => {
+        it('non-scalar runtime values inside css are skipped', () => {
             const result = t({
-                css: { writingMode: 'vertical-lr', touchAction: null as unknown as string },
+                css: {
+                    writingMode: 'vertical-lr',
+                    touchAction: null as unknown as string,
+                    cursor: undefined as unknown as string,
+                    '--boolean': false as unknown as string,
+                    '--object': { value: 'invalid' } as unknown as string,
+                    '--array': ['invalid'] as unknown as string,
+                },
             });
             expect(result).toBe('[writing-mode:vertical-lr]');
         });
