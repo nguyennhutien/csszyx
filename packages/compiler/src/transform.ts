@@ -2515,7 +2515,7 @@ function tryHoistConditionalSpread(
     // both compiled the static ternary). Identifier branches keep the spread
     // for the binding resolver.
     const mkObj = (branch: t.Expression): t.ObjectExpression => {
-        const inlined = unwrapTsExpression(branch) ?? branch;
+        const inlined = unwrapTsExpression(branch);
         return t.objectExpression(
             node.properties.flatMap((prop, i) => {
                 if (i !== conditionalSpreadIdx) {
@@ -3007,6 +3007,9 @@ function pushCatalogExtra(extras: SzObject[], extra: SzObject, budget: CatalogEx
  * @param node - The node to unwrap.
  * @returns The innermost non-wrapper expression node.
  */
+function unwrapTsExpression(node: t.Expression): t.Expression;
+function unwrapTsExpression(node: t.Node): t.Node;
+function unwrapTsExpression(node: t.Node | null | undefined): t.Node | null | undefined;
 function unwrapTsExpression(node: t.Node | null | undefined): t.Node | null | undefined {
     let current = node;
     while (
@@ -3276,7 +3279,7 @@ function extractStaticLiteralValue(node: t.Expression): string | number | boolea
     // unwrap_expression runs before every static check) — treating the cast as
     // opaque collapsed the whole conditional to a runtime CSS variable and
     // discarded the resolvable static branch.
-    const value = unwrapTsExpression(node) ?? node;
+    const value = unwrapTsExpression(node);
     if (t.isStringLiteral(value)) {
         return value.value;
     }
@@ -3534,15 +3537,14 @@ function evaluatePartialColorConditional(
     result: PartialObjectResult,
 ): boolean {
     const conditional = unwrapTsExpression(colorProperty.value);
-    if (!conditional || !t.isConditionalExpression(conditional)) return false;
+    if (!t.isConditionalExpression(conditional)) return false;
     const consequent = extractStaticLiteralValue(conditional.consequent);
     const alternate = extractStaticLiteralValue(conditional.alternate);
     if (typeof consequent !== 'string' || typeof alternate !== 'string') return false;
     let op: string | number | undefined;
     if (opacityProperty) {
-        const staticOp = t.isExpression(opacityProperty.value)
-            ? extractStaticLiteralValue(opacityProperty.value)
-            : null;
+        // A literal object member's value is always an expression.
+        const staticOp = extractStaticLiteralValue(opacityProperty.value as t.Expression);
         if (typeof staticOp !== 'string' && typeof staticOp !== 'number') return false;
         op = staticOp;
     }
@@ -4064,20 +4066,9 @@ function collectBabelColorConditional(
     context: BabelCandidateContext,
 ): boolean {
     const temp: PartialObjectResult = createEmptyPartialResult();
-    const properties = new Map<string, t.ObjectProperty>();
-    for (const property of value.properties) {
-        if (t.isObjectProperty(property) && !property.computed && t.isIdentifier(property.key)) {
-            properties.set(property.key.name, property);
-        } else {
-            return false;
-        }
-    }
-    if (properties.size !== value.properties.length) return false;
-    for (const memberKey of properties.keys()) {
-        if (memberKey !== 'color' && memberKey !== 'op') return false;
-    }
-    const colorProperty = properties.get('color');
-    if (!colorProperty) return false;
+    const properties = mapColorOpMembers(value);
+    const colorProperty = properties?.get('color');
+    if (!properties || !colorProperty) return false;
     if (
         !evaluatePartialColorConditional(key, colorProperty, properties.get('op'), '', temp) &&
         !collectBabelOpacityConditional(key, colorProperty, properties.get('op'), temp)
@@ -4085,16 +4076,45 @@ function collectBabelColorConditional(
         return false;
     }
     for (const entry of temp.conditionalClasses) {
-        const consequent = context.variantPrefix
-            ? prefixClasses(entry.consequent, context.variantPrefix)
-            : entry.consequent;
-        const alternate = context.variantPrefix
-            ? prefixClasses(entry.alternate, context.variantPrefix)
-            : entry.alternate;
-        addClassTokens(consequent, context.classes);
-        addClassTokens(alternate, context.classes);
+        addPrefixedBabelClassTokens(entry.consequent, context);
+        addPrefixedBabelClassTokens(entry.alternate, context);
     }
     return temp.conditionalClasses.length > 0;
+}
+
+/**
+ * Maps a plain `{ color, op }` object literal to its members, or null when any
+ * member is computed, spread, duplicated, or not a color/op key.
+ *
+ * @param value Nested object literal.
+ * @returns Member map, or null when the object is not a color-opacity shape.
+ */
+function mapColorOpMembers(value: t.ObjectExpression): Map<string, t.ObjectProperty> | null {
+    const properties = new Map<string, t.ObjectProperty>();
+    for (const property of value.properties) {
+        if (!t.isObjectProperty(property) || property.computed || !t.isIdentifier(property.key)) {
+            return null;
+        }
+        properties.set(property.key.name, property);
+    }
+    if (properties.size !== value.properties.length) return null;
+    for (const memberKey of properties.keys()) {
+        if (memberKey !== 'color' && memberKey !== 'op') return null;
+    }
+    return properties;
+}
+
+/**
+ * Adds a class string to the candidates under the context's variant prefix.
+ *
+ * @param classNames Space-separated class names.
+ * @param context Candidate collection state.
+ */
+function addPrefixedBabelClassTokens(classNames: string, context: BabelCandidateContext): void {
+    const prefixed = context.variantPrefix
+        ? prefixClasses(classNames, context.variantPrefix)
+        : classNames;
+    addClassTokens(prefixed, context.classes);
 }
 
 /**
@@ -4133,37 +4153,61 @@ function collectBabelKeyedObject(
     node: t.ObjectExpression,
     context: BabelCandidateContext,
 ): void {
-    const leaf = (subPath: readonly string[], literal: string | number | boolean): void => {
-        try {
-            const className = transform(wrapSzPath(subPath, literal as SzValue)).className;
-            const prefixed = context.variantPrefix
-                ? prefixClasses(className, context.variantPrefix)
-                : className;
-            addClassTokens(prefixed, context.classes);
-        } catch {
-            // Best-effort — a value the compiler rejects contributes nothing.
-        }
-    };
     for (const property of node.properties) {
         if (!t.isObjectProperty(property) || property.computed) continue;
         const memberKey = getObjectPropertyKey(property);
-        if (memberKey === null || !t.isExpression(property.value)) continue;
-        const memberPath = [...path, memberKey];
-        const value = unwrapTsExpression(property.value);
-        if (!value || !t.isExpression(value)) continue;
-        if (t.isObjectExpression(value)) {
-            collectBabelKeyedObject(memberPath, value, context);
-            continue;
+        if (memberKey === null) continue;
+        // A literal object member's value is always an expression.
+        const value = unwrapTsExpression(property.value as t.Expression);
+        collectBabelKeyedValue([...path, memberKey], value, context);
+    }
+}
+
+/**
+ * Dispatches one keyed-object member value: recurse into objects, take both
+ * static branches of conditionals, and compile static literals at their path.
+ *
+ * @param memberPath Property-key chain down to this value.
+ * @param value Unwrapped member value.
+ * @param context Candidate collection state.
+ */
+function collectBabelKeyedValue(
+    memberPath: readonly string[],
+    value: t.Expression,
+    context: BabelCandidateContext,
+): void {
+    if (t.isObjectExpression(value)) {
+        collectBabelKeyedObject(memberPath, value, context);
+        return;
+    }
+    if (t.isConditionalExpression(value)) {
+        for (const branch of [value.consequent, value.alternate]) {
+            const literal = extractStaticLiteralValue(branch);
+            if (literal !== null) collectBabelKeyedLeaf(memberPath, literal, context);
         }
-        if (t.isConditionalExpression(value)) {
-            for (const branch of [value.consequent, value.alternate]) {
-                const literal = extractStaticLiteralValue(branch);
-                if (literal !== null) leaf(memberPath, literal);
-            }
-            continue;
-        }
-        const literal = extractStaticLiteralValue(value);
-        if (literal !== null) leaf(memberPath, literal);
+        return;
+    }
+    const literal = extractStaticLiteralValue(value);
+    if (literal !== null) collectBabelKeyedLeaf(memberPath, literal, context);
+}
+
+/**
+ * Compiles one static leaf at its full key path into candidate classes.
+ *
+ * @param subPath Property-key chain down to the leaf.
+ * @param literal Static leaf value.
+ * @param context Candidate collection state.
+ */
+function collectBabelKeyedLeaf(
+    subPath: readonly string[],
+    literal: string | number | boolean,
+    context: BabelCandidateContext,
+): void {
+    try {
+        const className = transform(wrapSzPath(subPath, literal as SzValue)).className;
+        addPrefixedBabelClassTokens(className, context);
+    } catch {
+        // Best-effort — a value the compiler rejects contributes nothing.
     }
 }
 

@@ -2911,39 +2911,65 @@ function collectCandidateKeyedObject(
     node: ObjectExpressionNode,
     context: CandidateClassContext,
 ): void {
-    const leaf = (subPath: readonly string[], literal: string | number | boolean): void => {
-        let wrapped: unknown = literal;
-        for (let index = subPath.length - 1; index >= 0; index--) {
-            wrapped = { [subPath[index]]: wrapped };
-        }
-        try {
-            addPrefixedCandidateClasses(compileSzObject(wrapped as SzObject).className, context);
-        } catch {
-            // Best-effort — a value the compiler rejects contributes nothing.
-        }
-    };
     for (const property of node.properties) {
         if (property.type !== 'Property') continue;
         const member = property as PropertyNode;
         if (member.computed) continue;
         const memberKey = extractKeyName(member.key);
         if (memberKey === null) continue;
-        const memberPath = [...path, memberKey];
-        const value = unwrapExpression(member.value);
-        if (value.type === 'ObjectExpression') {
-            collectCandidateKeyedObject(memberPath, value as ObjectExpressionNode, context);
-            continue;
+        collectCandidateKeyedValue([...path, memberKey], unwrapExpression(member.value), context);
+    }
+}
+
+/**
+ * Dispatches one keyed-object member value: recurse into objects, take both
+ * static branches of conditionals, and compile static literals at their path.
+ *
+ * @param memberPath Property-key chain down to this value.
+ * @param value Unwrapped member value.
+ * @param context Candidate collection state.
+ */
+function collectCandidateKeyedValue(
+    memberPath: readonly string[],
+    value: OxcNode,
+    context: CandidateClassContext,
+): void {
+    if (value.type === 'ObjectExpression') {
+        collectCandidateKeyedObject(memberPath, value as ObjectExpressionNode, context);
+        return;
+    }
+    if (value.type === 'ConditionalExpression') {
+        const conditional = value as ConditionalExpressionNode;
+        for (const branch of [conditional.consequent, conditional.alternate]) {
+            const literal = extractStaticLiteralValue(branch);
+            if (literal !== null) collectCandidateKeyedLeaf(memberPath, literal, context);
         }
-        if (value.type === 'ConditionalExpression') {
-            const conditional = value as ConditionalExpressionNode;
-            for (const branch of [conditional.consequent, conditional.alternate]) {
-                const literal = extractStaticLiteralValue(branch);
-                if (literal !== null) leaf(memberPath, literal);
-            }
-            continue;
-        }
-        const literal = extractStaticLiteralValue(value);
-        if (literal !== null) leaf(memberPath, literal);
+        return;
+    }
+    const literal = extractStaticLiteralValue(value);
+    if (literal !== null) collectCandidateKeyedLeaf(memberPath, literal, context);
+}
+
+/**
+ * Compiles one static leaf at its full key path into candidate classes.
+ *
+ * @param subPath Property-key chain down to the leaf.
+ * @param literal Static leaf value.
+ * @param context Candidate collection state.
+ */
+function collectCandidateKeyedLeaf(
+    subPath: readonly string[],
+    literal: string | number | boolean,
+    context: CandidateClassContext,
+): void {
+    let wrapped: unknown = literal;
+    for (let index = subPath.length - 1; index >= 0; index--) {
+        wrapped = { [subPath[index]]: wrapped };
+    }
+    try {
+        addPrefixedCandidateClasses(compileSzObject(wrapped as SzObject).className, context);
+    } catch {
+        // Best-effort — a value the compiler rejects contributes nothing.
     }
 }
 
@@ -4658,7 +4684,7 @@ function evaluatePartialProperty(
     if (property.type === 'SpreadElement') {
         return evaluatePartialSpread(property as SpreadElementNode, context, result);
     }
-    if (property.type !== 'Property') return false;
+    // An oxc object-expression member is a Property whenever it is not a spread.
     const objectProperty = property as PropertyNode;
     const key = objectProperty.computed ? null : extractKeyName(objectProperty.key);
     if (key === null) return false;
@@ -4702,71 +4728,144 @@ function evaluatePartialColorConditional(
     context: PartialObjectContext,
     result: OxcPartialObjectResult,
 ): boolean {
-    let staticColor: string | null = null;
-    let colorConditional: ConditionalExpressionNode | null = null;
-    let staticOp: string | number | null = null;
-    let opConditional: ConditionalExpressionNode | null = null;
-    for (const property of object.properties) {
-        if (property.type !== 'Property') return false;
-        const member = property as PropertyNode;
-        const memberKey = member.computed ? null : extractKeyName(member.key);
-        // Any other member means this is not a plain color-opacity object.
-        if (memberKey !== 'color' && memberKey !== 'op') return false;
-        const value = unwrapExpression(member.value);
-        if (value.type === 'ConditionalExpression') {
-            if (memberKey === 'color') colorConditional = value as ConditionalExpressionNode;
-            else opConditional = value as ConditionalExpressionNode;
-            continue;
-        }
-        const literal = extractStaticLiteralValue(value);
-        if (memberKey === 'color') {
-            if (typeof literal !== 'string') return false;
-            staticColor = literal;
-        } else {
-            if (typeof literal !== 'string' && typeof literal !== 'number') return false;
-            staticOp = literal;
-        }
-    }
+    const members = scanColorOpMembers(object);
+    if (!members) return false;
+    const { staticColor, colorConditional, staticOp, opConditional } = members;
 
     const compileBranch = (color: string, op: string | number | null): string => {
         const value = op === null ? { color } : { color, op };
-        const object = applyGlobalVarAliasesToSzObject(
+        const aliased = applyGlobalVarAliasesToSzObject(
             { [key]: value } as unknown as SzObject,
             context.globalVarAliases,
             context.cssVariableMap,
         );
-        return prefixVariantClasses(compileSzObject(object).className, context.variantChain);
+        return prefixVariantClasses(compileSzObject(aliased).className, context.variantChain);
     };
 
     // Exactly one of color/op may be the conditional; the other must be static.
     if (opConditional && !colorConditional && staticColor !== null) {
-        const consequent = extractStaticLiteralValue(opConditional.consequent);
-        const alternate = extractStaticLiteralValue(opConditional.alternate);
-        if (
-            (typeof consequent !== 'string' && typeof consequent !== 'number') ||
-            (typeof alternate !== 'string' && typeof alternate !== 'number')
-        ) {
-            return false;
-        }
-        result.conditionalClasses.push({
-            test: opConditional.test,
-            consequent: compileBranch(staticColor, consequent),
-            alternate: compileBranch(staticColor, alternate),
-        });
-        return true;
+        return emitOpacityConditionalEntry(opConditional, staticColor, compileBranch, result);
     }
     if (colorConditional && !opConditional) {
-        const consequent = extractStaticLiteralValue(colorConditional.consequent);
-        const alternate = extractStaticLiteralValue(colorConditional.alternate);
-        if (typeof consequent !== 'string' || typeof alternate !== 'string') return false;
-        result.conditionalClasses.push({
-            test: colorConditional.test,
-            consequent: compileBranch(consequent, staticOp),
-            alternate: compileBranch(alternate, staticOp),
-        });
-        return true;
+        return emitColorConditionalEntry(colorConditional, staticOp, compileBranch, result);
     }
     return false;
+}
+
+/** Static/conditional split of a plain `{ color, op }` object's members. */
+interface ColorOpMembers {
+    staticColor: string | null;
+    colorConditional: ConditionalExpressionNode | null;
+    staticOp: string | number | null;
+    opConditional: ConditionalExpressionNode | null;
+}
+
+/**
+ * Scans a candidate `{ color, op }` object literal into its static and
+ * conditional members.
+ *
+ * @param object Nested object literal.
+ * @returns The member split, or null when any member is not a plain
+ *   color/op key with a static or conditional value.
+ */
+function scanColorOpMembers(object: ObjectExpressionNode): ColorOpMembers | null {
+    const members: ColorOpMembers = {
+        staticColor: null,
+        colorConditional: null,
+        staticOp: null,
+        opConditional: null,
+    };
+    for (const property of object.properties) {
+        if (property.type !== 'Property') return null;
+        const member = property as PropertyNode;
+        const memberKey = member.computed ? null : extractKeyName(member.key);
+        // Any other member means this is not a plain color-opacity object.
+        if (memberKey !== 'color' && memberKey !== 'op') return null;
+        if (!scanColorOpMember(memberKey, unwrapExpression(member.value), members)) return null;
+    }
+    return members;
+}
+
+/**
+ * Records one color/op member's static or conditional value.
+ *
+ * @param memberKey Member key, `color` or `op`.
+ * @param value Unwrapped member value.
+ * @param members Mutable member split.
+ * @returns Whether the value is a supported static or conditional shape.
+ */
+function scanColorOpMember(memberKey: string, value: OxcNode, members: ColorOpMembers): boolean {
+    if (value.type === 'ConditionalExpression') {
+        if (memberKey === 'color') members.colorConditional = value as ConditionalExpressionNode;
+        else members.opConditional = value as ConditionalExpressionNode;
+        return true;
+    }
+    const literal = extractStaticLiteralValue(value);
+    if (memberKey === 'color') {
+        if (typeof literal !== 'string') return false;
+        members.staticColor = literal;
+        return true;
+    }
+    if (typeof literal !== 'string' && typeof literal !== 'number') return false;
+    members.staticOp = literal;
+    return true;
+}
+
+/**
+ * Emits the conditional entry for a static color with a conditional opacity.
+ *
+ * @param opConditional Conditional opacity member value.
+ * @param staticColor Static color value.
+ * @param compileBranch Branch compiler bound to the parent key and context.
+ * @param result Mutable partial result.
+ * @returns Whether both branches were static and an entry was emitted.
+ */
+function emitOpacityConditionalEntry(
+    opConditional: ConditionalExpressionNode,
+    staticColor: string,
+    compileBranch: (color: string, op: string | number | null) => string,
+    result: OxcPartialObjectResult,
+): boolean {
+    const consequent = extractStaticLiteralValue(opConditional.consequent);
+    const alternate = extractStaticLiteralValue(opConditional.alternate);
+    if (
+        (typeof consequent !== 'string' && typeof consequent !== 'number') ||
+        (typeof alternate !== 'string' && typeof alternate !== 'number')
+    ) {
+        return false;
+    }
+    result.conditionalClasses.push({
+        test: opConditional.test,
+        consequent: compileBranch(staticColor, consequent),
+        alternate: compileBranch(staticColor, alternate),
+    });
+    return true;
+}
+
+/**
+ * Emits the conditional entry for a conditional color with a static opacity.
+ *
+ * @param colorConditional Conditional color member value.
+ * @param staticOp Static opacity value, or null when absent.
+ * @param compileBranch Branch compiler bound to the parent key and context.
+ * @param result Mutable partial result.
+ * @returns Whether both branches were static strings and an entry was emitted.
+ */
+function emitColorConditionalEntry(
+    colorConditional: ConditionalExpressionNode,
+    staticOp: string | number | null,
+    compileBranch: (color: string, op: string | number | null) => string,
+    result: OxcPartialObjectResult,
+): boolean {
+    const consequent = extractStaticLiteralValue(colorConditional.consequent);
+    const alternate = extractStaticLiteralValue(colorConditional.alternate);
+    if (typeof consequent !== 'string' || typeof alternate !== 'string') return false;
+    result.conditionalClasses.push({
+        test: colorConditional.test,
+        consequent: compileBranch(consequent, staticOp),
+        alternate: compileBranch(alternate, staticOp),
+    });
+    return true;
 }
 
 /**

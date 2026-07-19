@@ -2562,20 +2562,16 @@ function collectEffectStringProperty(
         utility = 'container';
         includePrefix = false;
     } else if (key === 'shadowColor') {
-        utility = value.startsWith('--') ? `shadow-(color:${value})` : `shadow-${value}`;
+        utility = formatShadowFamilyColor('shadow', value);
         includePrefix = false;
     } else if (key === 'insetShadowColor') {
-        utility = value.startsWith('--')
-            ? `inset-shadow-(color:${value})`
-            : `inset-shadow-${value}`;
+        utility = formatShadowFamilyColor('inset-shadow', value);
     } else if (ARBITRARY_EFFECT_KEYS.has(key)) {
         utility = formatArbitraryEffect(key, value);
         includePrefix = key === 'scale' && value === '3d';
     } else if (key === 'textShadow') utility = formatTextShadow(value);
     else if (key === 'textShadowColor') {
-        // Bare `text-shadow-(--c)` would set the shadow VALUE, not its color;
-        // the `color:` hint keeps the var on --tw-text-shadow-color.
-        utility = value.startsWith('--') ? `text-shadow-(color:${value})` : `text-shadow-${value}`;
+        utility = formatShadowFamilyColor('text-shadow', value);
     } else if (isGradientPositionKey(key)) {
         utility = formatGradientPosition(key, value);
         includePrefix = false;
@@ -2583,6 +2579,15 @@ function collectEffectStringProperty(
     if (utility === null) return false;
     classes.push(`${includePrefix ? prefix : ''}${utility}`);
     return true;
+}
+
+/**
+ * Formats a shadow-family color utility. A bare `X-(--c)` would set the shadow
+ * VALUE, not its color; the `color:` hint keeps the var on the family's
+ * `--tw-*-shadow-color` slot.
+ */
+function formatShadowFamilyColor(base: string, value: string): string {
+    return value.startsWith('--') ? `${base}-(color:${value})` : `${base}-${value}`;
 }
 
 /** Formats string-valued filters and scale without numeric coercion. */
@@ -2956,6 +2961,26 @@ function finalizeTransformResult(
     return { className: outputClasses.join(' ') };
 }
 
+/** Formats a numeric utility, hoisting the sign for negative-capable keys. */
+function formatNumericUtility(key: string, value: number): string {
+    return value < 0 && NEGATIVE_ALLOWED.has(key)
+        ? `-${key}-${Math.abs(value)}`
+        : `${key}-${value}`;
+}
+
+/**
+ * Whether a leading/lineHeight value must bracket as an unitless ratio.
+ * Numbers ride Tailwind's spacing scale (leading-1.5 = 0.375rem) like every
+ * other spacing utility; numeric STRINGS are the unitless line-height ratio
+ * and auto-bracket (leading: '1.5' → leading-[1.5]). Non-quarter-step numbers
+ * (1.4) have no bare spelling — Tailwind drops leading-1.4 — so they bracket
+ * too instead of emitting a dead class.
+ */
+function isUnitlessLeadingRatio(value: unknown): boolean {
+    if (typeof value === 'number') return (value * 4) % 1 !== 0;
+    return typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value);
+}
+
 /** Collects the scalar property forms that remain after specialized dispatch. */
 function collectFallbackProperty(
     rawKey: string,
@@ -2977,28 +3002,13 @@ function collectFallbackProperty(
         classes.push(`${prefix}[animation-delay:${delay}]`);
         return;
     }
-    // leading: numbers ride Tailwind's spacing scale (leading-1.5 = 0.375rem)
-    // like every other spacing utility; numeric STRINGS are the unitless
-    // line-height ratio and auto-bracket (leading: '1.5' → leading-[1.5]).
-    // Non-quarter-step numbers (1.4) have no bare spelling — Tailwind drops
-    // leading-1.4 — so they bracket too instead of emitting a dead class.
-    if (rawKey === 'leading' || rawKey === 'lineHeight') {
-        if (typeof value === 'number' && (value * 4) % 1 !== 0) {
-            classes.push(`${prefix}leading-[${value}]`);
-            return;
-        }
-        if (typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value)) {
-            classes.push(`${prefix}leading-[${value}]`);
-            return;
-        }
+    if ((rawKey === 'leading' || rawKey === 'lineHeight') && isUnitlessLeadingRatio(value)) {
+        classes.push(`${prefix}leading-[${value}]`);
+        return;
     }
     if (typeof value === 'number') {
         warnDeadSpacingStep(rawKey, value);
-        const utility =
-            value < 0 && NEGATIVE_ALLOWED.has(key)
-                ? `-${key}-${Math.abs(value)}`
-                : `${key}-${value}`;
-        classes.push(`${prefix}${utility}`);
+        classes.push(`${prefix}${formatNumericUtility(key, value)}`);
         return;
     }
     if (typeof value === 'string') {
