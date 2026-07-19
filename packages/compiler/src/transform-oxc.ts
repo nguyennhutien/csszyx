@@ -4732,7 +4732,7 @@ function evaluatePartialColorConditional(
     if (!members) return false;
     const { staticColor, colorConditional, staticOp, opConditional } = members;
 
-    const compileBranch = (color: string, op: string | number | null): string => {
+    const compileBranch: ColorOpacityBranchCompiler = (color, op) => {
         const value = op === null ? { color } : { color, op };
         const aliased = applyGlobalVarAliasesToSzObject(
             { [key]: value } as unknown as SzObject,
@@ -4752,11 +4752,17 @@ function evaluatePartialColorConditional(
     return false;
 }
 
+/** A static opacity literal, or null when the object carries none. */
+type StaticOpacity = string | number | null;
+
+/** Compiles one conditional branch's color/op pair into its class string. */
+type ColorOpacityBranchCompiler = (color: string, op: StaticOpacity) => string;
+
 /** Static/conditional split of a plain `{ color, op }` object's members. */
 interface ColorOpMembers {
     staticColor: string | null;
     colorConditional: ConditionalExpressionNode | null;
-    staticOp: string | number | null;
+    staticOp: StaticOpacity;
     opConditional: ConditionalExpressionNode | null;
 }
 
@@ -4823,7 +4829,7 @@ function scanColorOpMember(memberKey: string, value: OxcNode, members: ColorOpMe
 function emitOpacityConditionalEntry(
     opConditional: ConditionalExpressionNode,
     staticColor: string,
-    compileBranch: (color: string, op: string | number | null) => string,
+    compileBranch: ColorOpacityBranchCompiler,
     result: OxcPartialObjectResult,
 ): boolean {
     const consequent = extractStaticLiteralValue(opConditional.consequent);
@@ -4853,8 +4859,8 @@ function emitOpacityConditionalEntry(
  */
 function emitColorConditionalEntry(
     colorConditional: ConditionalExpressionNode,
-    staticOp: string | number | null,
-    compileBranch: (color: string, op: string | number | null) => string,
+    staticOp: StaticOpacity,
+    compileBranch: ColorOpacityBranchCompiler,
     result: OxcPartialObjectResult,
 ): boolean {
     const consequent = extractStaticLiteralValue(colorConditional.consequent);

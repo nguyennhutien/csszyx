@@ -663,25 +663,28 @@ describe('runtime-fallback safelist candidate collection', () => {
     const fallback = (member: string): string =>
         `import { imported } from './x';\nconst A = ({ cond, dynVar, k }) => <div sz={{ ...imported, ${member} }} />;`;
 
-    it('expands a conditional color with a static opacity into both branch candidates', () => {
-        const r = run(fallback('bg: { color: cond ? "red-500" : "blue-500", op: 50 }'));
+    it.each([
+        [
+            'a conditional color with a static opacity',
+            'bg: { color: cond ? "red-500" : "blue-500", op: 50 }',
+            ['bg-red-500/50', 'bg-blue-500/50'],
+        ],
+        [
+            'a static color with a conditional opacity',
+            'bg: { color: "red-500", op: cond ? 20 : 80 }',
+            ['bg-red-500/20', 'bg-red-500/80'],
+        ],
+        [
+            'a variant-nested conditional color with its prefix',
+            'hover: { bg: { color: cond ? "red-500" : "blue-500", op: 50 } }',
+            ['hover:bg-red-500/50', 'hover:bg-blue-500/50'],
+        ],
+    ])('expands %s into both branch candidates', (_label, member, expected) => {
+        const r = run(fallback(member));
         expect(r.usesRuntime).toBe(true);
-        expect(r.classes.has('bg-red-500/50')).toBe(true);
-        expect(r.classes.has('bg-blue-500/50')).toBe(true);
-    });
-
-    it('expands a static color with a conditional opacity into both branch candidates', () => {
-        const r = run(fallback('bg: { color: "red-500", op: cond ? 20 : 80 }'));
-        expect(r.usesRuntime).toBe(true);
-        expect(r.classes.has('bg-red-500/20')).toBe(true);
-        expect(r.classes.has('bg-red-500/80')).toBe(true);
-    });
-
-    it('prefixes conditional color-opacity candidates nested under a variant', () => {
-        const r = run(fallback('hover: { bg: { color: cond ? "red-500" : "blue-500", op: 50 } }'));
-        expect(r.usesRuntime).toBe(true);
-        expect(r.classes.has('hover:bg-red-500/50')).toBe(true);
-        expect(r.classes.has('hover:bg-blue-500/50')).toBe(true);
+        for (const className of expected) {
+            expect(r.classes.has(className)).toBe(true);
+        }
     });
 
     it('falls through to the keyed walk when a color member is dynamic', () => {
