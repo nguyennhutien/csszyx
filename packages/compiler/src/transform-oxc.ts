@@ -4500,7 +4500,8 @@ function isDomJsxOpening(opening: JsxOpeningElementNode): boolean {
         return false;
     }
     const name = String((opening.name as unknown as { name: string }).name);
-    return name.length > 0 && name.charAt(0) === name.charAt(0).toLowerCase();
+    const firstCharacter = name.charAt(0);
+    return firstCharacter !== '' && name.startsWith(firstCharacter.toLowerCase());
 }
 
 /**

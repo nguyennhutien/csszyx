@@ -1245,6 +1245,21 @@ function rewriteCssWithValidatedGlobalVarPlan(
 }
 
 /**
+ * Identifies PostCSS syntax failures that should leave third-party CSS untouched.
+ *
+ * @param error CSS mangler failure.
+ * @returns True for a PostCSS syntax error.
+ */
+function isCssSyntaxError(error: unknown): boolean {
+    return (
+        !!error &&
+        typeof error === 'object' &&
+        'name' in error &&
+        (error as { name: string }).name === 'CssSyntaxError'
+    );
+}
+
+/**
  * Ensures the CSS-derived validation plan matches the early source-transform
  * alias table exactly.
  *
@@ -1787,6 +1802,22 @@ function scanClassExpression(source: string, from: number): number {
 }
 
 /**
+ * Finds the offset after a balanced template interpolation.
+ *
+ * @param templateContent Template contents without backticks.
+ * @param bodyStart Offset after the opening interpolation delimiter.
+ * @returns Offset after the closing brace, or content length when unterminated.
+ */
+function findTemplateInterpolationEnd(templateContent: string, bodyStart: number): number {
+    let depth = 0;
+    for (let cursor = bodyStart; cursor < templateContent.length; cursor++) {
+        if (templateContent[cursor] === '{') depth++;
+        else if (templateContent[cursor] === '}' && depth-- === 0) return cursor + 1;
+    }
+    return templateContent.length;
+}
+
+/**
  * Mangles class strings in bundled code (JS/HTML assets) using the given mangle map.
  *
  * Exported for unit testing; the plugin calls this via the thin private wrapper that
@@ -1875,22 +1906,6 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
             value: mangled === trimmed ? quasi : quasi.replace(trimmed, mangled),
             changed: mangled !== trimmed,
         };
-    }
-
-    /**
-     * Finds the offset after a balanced template interpolation.
-     *
-     * @param templateContent Template contents without backticks.
-     * @param bodyStart Offset after the opening interpolation delimiter.
-     * @returns Offset after the closing brace, or content length when unterminated.
-     */
-    function findTemplateInterpolationEnd(templateContent: string, bodyStart: number): number {
-        let depth = 0;
-        for (let cursor = bodyStart; cursor < templateContent.length; cursor++) {
-            if (templateContent[cursor] === '{') depth++;
-            else if (templateContent[cursor] === '}' && depth-- === 0) return cursor + 1;
-        }
-        return templateContent.length;
     }
 
     /**
@@ -4081,9 +4096,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     state.sawTailwindEntry &&
                     !state.tailwindEntryScoped
                 ) {
-                    if (state.inMonorepo === undefined) {
-                        state.inMonorepo = isMonorepoPackage(state.rootDir);
-                    }
+                    state.inMonorepo ??= isMonorepoPackage(state.rootDir);
                     if (
                         shouldWarnUnscopedMonorepo(
                             state.sawTailwindEntry,
@@ -4400,21 +4413,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             manifest.cssVarMetrics = state.cssVarMetrics;
         }
         return manifest;
-    }
-
-    /**
-     * Identify PostCSS syntax failures that should leave third-party CSS untouched.
-     *
-     * @param error CSS mangler failure.
-     * @returns True for a PostCSS syntax error.
-     */
-    function isCssSyntaxError(error: unknown): boolean {
-        return (
-            !!error &&
-            typeof error === 'object' &&
-            'name' in error &&
-            (error as { name: string }).name === 'CssSyntaxError'
-        );
     }
 
     /**

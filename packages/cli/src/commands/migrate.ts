@@ -210,7 +210,8 @@ async function prepareMigration(options: MigrateOptions): Promise<MigrationConte
     }
     const customMap = resolveTodosPath ? loadResolutionMap(cwd, resolveTodosPath) : undefined;
     if (resolveTodosPath && !customMap) return null;
-    reportMigrationMode(audit, dryRun);
+    if (audit) reportAuditMode();
+    else if (dryRun) reportDryRunMode();
     return { options, cwd, dryRun, audit, resolveTodosPath, injectTodos, customMap };
 }
 
@@ -229,13 +230,14 @@ function loadResolutionMap(cwd: string, filePath: string): CsszyxTodoMap | undef
     }
 }
 
-/** Reports the selected non-default migration mode. */
-function reportMigrationMode(audit: boolean, dryRun: boolean): void {
-    if (audit) {
-        printInfo('Audit mode — scanning for unrecognized classes to generate a mapping file...');
-    } else if (dryRun) {
-        printInfo('Dry run mode — no files will be modified');
-    }
+/** Reports that migration is collecting unresolved classes without writing sources. */
+function reportAuditMode(): void {
+    printInfo('Audit mode — scanning for unrecognized classes to generate a mapping file...');
+}
+
+/** Reports that migration will preview changes without writing sources. */
+function reportDryRunMode(): void {
+    printInfo('Dry run mode — no files will be modified');
 }
 
 /** Creates and initializes the migration log. */
