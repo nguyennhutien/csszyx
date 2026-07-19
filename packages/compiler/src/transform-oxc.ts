@@ -235,33 +235,33 @@ export function transformOxc(
         };
 
         transformed =
-            transformOxcRecoveryAttribute(
-                openingAttributes.recovery,
-                openingAttributes.alreadyTagged,
-                lastAttr,
+            transformOxcRecoveryAttribute({
+                attribute: openingAttributes.recovery,
+                alreadyTagged: openingAttributes.alreadyTagged,
+                lastAttribute: lastAttr,
                 openingNode,
-                effectiveFilename,
+                filename: effectiveFilename,
                 source,
                 edits,
                 diagnostics,
                 recoveryTokens,
-            ) || transformed;
+            }) || transformed;
         collectOxcRawClassName(classNameAttr, rawClassNames);
 
         transformed =
-            transformOxcSzsAttributes(
-                szsAttrs,
+            transformOxcSzsAttributes({
+                attributes: szsAttrs,
                 openingNode,
-                effectiveFilename,
-                options?.rootDir,
-                objectBindings,
+                filename: effectiveFilename,
+                rootDir: options?.rootDir,
+                bindings: objectBindings,
                 source,
                 edits,
                 diagnostics,
-                szsPendingClasses,
+                pendingClasses: szsPendingClasses,
                 globalVarAliases,
                 cssVariableMap,
-            ) || transformed;
+            }) || transformed;
         if (szAttrs.length === 0) {
             applyHoistedStyleProps();
             return;
@@ -322,18 +322,18 @@ export function transformOxc(
         setSzWarnLocation(undefined);
 
         if (
-            transformOxcRuntimeFallback(
-                runtimeFallbackExpr,
-                runtimeFallbackAttr,
-                szAttrs,
-                classNameAttr,
-                effectiveFilename,
-                objectBindings,
+            transformOxcRuntimeFallback({
+                expression: runtimeFallbackExpr,
+                attribute: runtimeFallbackAttr,
+                attributes: szAttrs,
+                classNameAttribute: classNameAttr,
+                filename: effectiveFilename,
+                bindings: objectBindings,
                 source,
                 edits,
                 classes,
                 diagnostics,
-            )
+            })
         ) {
             usesRuntime = true;
             // With an existing className the fallback emits _szMerge(existing, _sz(...)).
@@ -1133,30 +1133,22 @@ function hasOxcTopLevelSpread(expression: ObjectExpressionNode): boolean {
 /**
  * Emits the oxc runtime fallback for one unresolved sz expression.
  *
- * @param expression Unresolved sz expression.
- * @param attribute Attribute owning the expression.
- * @param attributes All sz attributes on the element.
- * @param classNameAttribute Existing class attribute.
- * @param filename Source filename.
- * @param bindings Static object bindings.
- * @param source Original source.
- * @param edits Pending source edits.
- * @param classes Tailwind discovery set.
- * @param diagnostics Compiler diagnostics.
+ * @param params Runtime fallback inputs.
  * @returns Whether runtime fallback was emitted.
  */
-function transformOxcRuntimeFallback(
-    expression: OxcNode | null,
-    attribute: JsxAttributeNode | null,
-    attributes: JsxAttributeNode[],
-    classNameAttribute: JsxAttributeNode | null,
-    filename: string,
-    bindings: Map<string, ObjectExpressionNode>,
-    source: string,
-    edits: MagicString,
-    classes: Set<string>,
-    diagnostics: string[],
-): boolean {
+function transformOxcRuntimeFallback(params: OxcRuntimeFallbackParams): boolean {
+    const {
+        expression,
+        attribute,
+        attributes,
+        classNameAttribute,
+        filename,
+        bindings,
+        source,
+        edits,
+        classes,
+        diagnostics,
+    } = params;
     if (!expression || !attribute) return false;
     if (expression.type !== 'ArrayExpression') {
         diagnostics.push(buildRuntimeFallbackDiagnostic(expression, source));
@@ -1193,6 +1185,20 @@ function transformOxcRuntimeFallback(
         edits.remove(whitespaceStart(source, szAttribute.start), szAttribute.end);
     }
     return true;
+}
+
+/** Inputs required to lower one unresolved oxc sz expression. */
+interface OxcRuntimeFallbackParams {
+    readonly expression: OxcNode | null;
+    readonly attribute: JsxAttributeNode | null;
+    readonly attributes: JsxAttributeNode[];
+    readonly classNameAttribute: JsxAttributeNode | null;
+    readonly filename: string;
+    readonly bindings: Map<string, ObjectExpressionNode>;
+    readonly source: string;
+    readonly edits: MagicString;
+    readonly classes: Set<string>;
+    readonly diagnostics: string[];
 }
 
 /** Relevant attributes collected from one oxc JSX opening element. */
@@ -1431,28 +1437,21 @@ function collectOxcOpeningAttributes(attributes: OxcNode[]): OxcOpeningAttribute
 /**
  * Emits one validated inline recovery token.
  *
- * @param attribute Recovery attribute.
- * @param alreadyTagged Whether the element already has a token.
- * @param lastAttribute Last JSX attribute for insertion.
- * @param openingNode Owning opening element.
- * @param filename Source filename.
- * @param source Original source.
- * @param edits Pending source edits.
- * @param diagnostics Compiler diagnostics.
- * @param recoveryTokens Recovery token catalog.
+ * @param params Recovery attribute inputs.
  * @returns Whether a token was emitted.
  */
-function transformOxcRecoveryAttribute(
-    attribute: JsxAttributeNode | null,
-    alreadyTagged: boolean,
-    lastAttribute: JsxAttributeNode | null,
-    openingNode: JsxOpeningElementNode,
-    filename: string,
-    source: string,
-    edits: MagicString,
-    diagnostics: string[],
-    recoveryTokens: Map<string, TokenData>,
-): boolean {
+function transformOxcRecoveryAttribute(params: OxcRecoveryAttributeParams): boolean {
+    const {
+        attribute,
+        alreadyTagged,
+        lastAttribute,
+        openingNode,
+        filename,
+        source,
+        edits,
+        diagnostics,
+        recoveryTokens,
+    } = params;
     if (!attribute || alreadyTagged) return false;
     const recoveryValue = stringLiteralValue(attribute.value);
     if (recoveryValue === null) {
@@ -1484,6 +1483,19 @@ function transformOxcRecoveryAttribute(
         path: `${filename}:${line}:${column}`,
     });
     return true;
+}
+
+/** Inputs required to validate and emit one oxc recovery attribute. */
+interface OxcRecoveryAttributeParams {
+    readonly attribute: JsxAttributeNode | null;
+    readonly alreadyTagged: boolean;
+    readonly lastAttribute: JsxAttributeNode | null;
+    readonly openingNode: JsxOpeningElementNode;
+    readonly filename: string;
+    readonly source: string;
+    readonly edits: MagicString;
+    readonly diagnostics: string[];
+    readonly recoveryTokens: Map<string, TokenData>;
 }
 
 /**
@@ -1567,32 +1579,23 @@ function compileOxcSzsEntries(
 /**
  * Compiles one oxc szs attribute.
  *
- * @param attribute szs attribute.
- * @param openingNode Owning JSX opening element.
- * @param filename Source filename.
- * @param rootDir Project root for diagnostics.
- * @param bindings Static object bindings.
- * @param source Original source.
- * @param edits Pending source edits.
- * @param diagnostics Compiler diagnostics.
- * @param pendingClasses Ordered szs class collection.
- * @param globalVarAliases Global CSS variable aliases.
- * @param cssVariableMap Emitted CSS variable mapping.
+ * @param params szs attribute inputs.
  * @returns Whether the attribute was transformed.
  */
-function transformOxcSzsAttribute(
-    attribute: JsxAttributeNode,
-    openingNode: JsxOpeningElementNode,
-    filename: string,
-    rootDir: string | undefined,
-    bindings: Map<string, ObjectExpressionNode>,
-    source: string,
-    edits: MagicString,
-    diagnostics: string[],
-    pendingClasses: string[],
-    globalVarAliases: Map<string, string>,
-    cssVariableMap: Map<string, CssVariableMangleValue>,
-): boolean {
+function transformOxcSzsAttribute(params: OxcSzsAttributeParams): boolean {
+    const {
+        attribute,
+        openingNode,
+        filename,
+        rootDir,
+        bindings,
+        source,
+        edits,
+        diagnostics,
+        pendingClasses,
+        globalVarAliases,
+        cssVariableMap,
+    } = params;
     if (isHostOpeningElementName(openingNode.name as unknown as OxcNode)) {
         diagnostics.push(
             `[csszyx] szs at ${filename}: ` +
@@ -1649,50 +1652,44 @@ function transformOxcSzsAttribute(
 /**
  * Compiles all szs attributes on one opening element.
  *
- * @param attributes szs attributes.
- * @param openingNode Owning JSX opening element.
- * @param filename Source filename.
- * @param rootDir Project root for diagnostics.
- * @param bindings Static object bindings.
- * @param source Original source.
- * @param edits Pending source edits.
- * @param diagnostics Compiler diagnostics.
- * @param pendingClasses Ordered szs class collection.
- * @param globalVarAliases Global CSS variable aliases.
- * @param cssVariableMap Emitted CSS variable mapping.
+ * @param params Opening-element szs inputs.
  * @returns Whether any attribute was transformed.
  */
-function transformOxcSzsAttributes(
-    attributes: JsxAttributeNode[],
-    openingNode: JsxOpeningElementNode,
-    filename: string,
-    rootDir: string | undefined,
-    bindings: Map<string, ObjectExpressionNode>,
-    source: string,
-    edits: MagicString,
-    diagnostics: string[],
-    pendingClasses: string[],
-    globalVarAliases: Map<string, string>,
-    cssVariableMap: Map<string, CssVariableMangleValue>,
-): boolean {
+function transformOxcSzsAttributes(params: OxcSzsAttributesParams): boolean {
+    const { attributes, ...sharedParams } = params;
     let transformed = false;
     for (const attribute of attributes) {
         transformed =
-            transformOxcSzsAttribute(
+            transformOxcSzsAttribute({
                 attribute,
-                openingNode,
-                filename,
-                rootDir,
-                bindings,
-                source,
-                edits,
-                diagnostics,
-                pendingClasses,
-                globalVarAliases,
-                cssVariableMap,
-            ) || transformed;
+                ...sharedParams,
+            }) || transformed;
     }
     return transformed;
+}
+
+/** Shared inputs for lowering szs attributes on one oxc opening element. */
+interface OxcSzsTransformParams {
+    readonly openingNode: JsxOpeningElementNode;
+    readonly filename: string;
+    readonly rootDir: string | undefined;
+    readonly bindings: Map<string, ObjectExpressionNode>;
+    readonly source: string;
+    readonly edits: MagicString;
+    readonly diagnostics: string[];
+    readonly pendingClasses: string[];
+    readonly globalVarAliases: Map<string, string>;
+    readonly cssVariableMap: Map<string, CssVariableMangleValue>;
+}
+
+/** Inputs for lowering one szs attribute. */
+interface OxcSzsAttributeParams extends OxcSzsTransformParams {
+    readonly attribute: JsxAttributeNode;
+}
+
+/** Inputs for lowering all szs attributes on an opening element. */
+interface OxcSzsAttributesParams extends OxcSzsTransformParams {
+    readonly attributes: JsxAttributeNode[];
 }
 
 /**
