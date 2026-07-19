@@ -3091,7 +3091,7 @@ function appendArbitraryCss(
     classes: string[],
 ): void {
     for (const [property, value] of Object.entries(declarations)) {
-        if (value === null || value === undefined) continue;
+        if (typeof value !== 'string' && typeof value !== 'number') continue;
         classes.push(
             `${prefix}[${camelToKebab(property)}:${normalizeArbitraryValue(String(value))}]`,
         );

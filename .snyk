@@ -1,0 +1,17 @@
+# Snyk policy for intentional compatibility fixtures.
+version: v1.25.0
+ignore:
+  SNYK-JS-NEXT-15105315:
+    - "@csszyx/playground-nextjs-ssr@0.0.0 > next@15.5.20":
+        reason: >-
+          Stable Next.js 15 compatibility fixture. The PPR/cacheComponents and
+          NEXT_PRIVATE_MINIMAL_MODE conditions required for exploitation are
+          absent; the private fixture is started only for ephemeral E2E tests.
+        expires: "2026-10-19T00:00:00.000Z"
+  SNYK-JS-NEXT-15674556:
+    - "@csszyx/playground-nextjs-ssr@0.0.0 > next@15.5.20":
+        reason: >-
+          Intentional Next.js 15 compatibility fixture. Its server is ephemeral
+          and never deployed, so the temporary availability risk is accepted to
+          preserve major-version regression coverage.
+        expires: "2026-10-19T00:00:00.000Z"
