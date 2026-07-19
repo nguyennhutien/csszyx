@@ -16,10 +16,10 @@
         "pages:deploy": "pnpm build && wrangler pages deploy dist"
     },
     "dependencies": {
-        "@astrojs/react": "^5.0.7",
-        "@astrojs/starlight": "^0.38.5",
+        "@astrojs/react": "^6.0.1",
+        "@astrojs/starlight": "^0.41.3",
         "@tailwindcss/vite": "^4.3.3",
-        "astro": "^6.4.8",
+        "astro": "^7.1.1",
         "csszyx": "workspace:*",
         "expressive-code-twoslash": "^0.6.1",
         "react": "^19.2.4",
