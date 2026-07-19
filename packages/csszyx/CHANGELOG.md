@@ -2,11 +2,31 @@
 
 ## [0.11.10](https://github.com/nguyennhutien/csszyx/compare/v0.11.9...v0.11.10) (2026-07-19)
 
+### Features
+
+* **core:** compile any number of sz property conditionals statically ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
 
 ### Bug Fixes
 
-* correct slash-modifier handling across engines and adopt current toolchain majors ([#169](https://github.com/nguyennhutien/csszyx/issues/169)) ([81a668c](https://github.com/nguyennhutien/csszyx/commit/81a668ca0c2c3272decf60992a2dff7400c74d9b))
-* harden runtime CSS and dependency security ([#172](https://github.com/nguyennhutien/csszyx/issues/172)) ([f89bd3b](https://github.com/nguyennhutien/csszyx/commit/f89bd3b5a054db52fa75b2bbaf1e626bd603fe48))
+* correct slash-modifier handling across engines and adopt current toolchain majors ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **core:** stop the rust parser silently dropping or inventing sz classes ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **compiler:** resolve as-cast literals in conditional sz branches ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **compiler:** lower className merges natively in the oxc and babel lanes ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **unplugin:** keep internal slice labels out of the Babel-fallback warning ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **compiler:** converge the color-opacity conditional lane and punt-path safelists ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **core:** merge a single ternary with statics as the Babel template ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **deps:** move published runtime deps to current majors ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **runtime:** drop leaked esbuild binary from optional deps ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **compiler:** route shadow-family var colors through the color hint ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **cli:** stop misreading slash modifiers as color opacity in migrate ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **core:** emit named group and peer markers as slash classes ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **cli:** split font-size line-height shorthand into text plus leading ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **compiler:** give unitless line-height a bracket-free sz spelling ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **compiler:** warn when a spacing number is not a quarter step ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **compiler:** warn when a property key receives an object value ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **core:** move the native engine to current oxc, napi, and rust ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* **compiler:** adopt the new babel major and raise the engines floor ([#169](https://github.com/nguyennhutien/csszyx/issues/169))
+* harden runtime CSS and dependency security ([#172](https://github.com/nguyennhutien/csszyx/issues/172))
 
 ## [0.11.9](https://github.com/nguyennhutien/csszyx/compare/v0.11.8...v0.11.9) (2026-07-16)
 
