@@ -2976,7 +2976,7 @@ function formatNumericUtility(key: string, value: number): string {
  * (1.4) have no bare spelling — Tailwind drops leading-1.4 — so they bracket
  * too instead of emitting a dead class.
  */
-function isUnitlessLeadingRatio(value: unknown): boolean {
+function isUnitlessLeadingRatio(value: unknown): value is number | string {
     if (typeof value === 'number') return (value * 4) % 1 !== 0;
     return typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value);
 }

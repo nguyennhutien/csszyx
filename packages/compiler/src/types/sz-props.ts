@@ -1408,19 +1408,19 @@ export interface TransformProps {
         | '3d'
         | number
         | (string & {});
-    scaleX?: TransformProps['scale'];
-    scaleY?: TransformProps['scale'];
+    scaleX?: NonNullable<TransformProps['scale']>;
+    scaleY?: NonNullable<TransformProps['scale']>;
     /** @see https://tailwindcss.com/docs/scale (Z-axis, 3D) */
-    scaleZ?: TransformProps['scale'];
+    scaleZ?: NonNullable<TransformProps['scale']>;
 
     /** @see https://tailwindcss.com/docs/rotate */
     rotate?: 0 | 1 | 2 | 3 | 6 | 12 | 45 | 90 | 180 | number | (string & {});
     /** @see https://tailwindcss.com/docs/rotate (X-axis, 3D) */
-    rotateX?: TransformProps['rotate'];
+    rotateX?: NonNullable<TransformProps['rotate']>;
     /** @see https://tailwindcss.com/docs/rotate (Y-axis, 3D) */
-    rotateY?: TransformProps['rotate'];
+    rotateY?: NonNullable<TransformProps['rotate']>;
     /** @see https://tailwindcss.com/docs/rotate (Z-axis, 3D) */
-    rotateZ?: TransformProps['rotate'];
+    rotateZ?: NonNullable<TransformProps['rotate']>;
 
     /** @see https://tailwindcss.com/docs/translate — shorthand sets both axes */
     translate?: SpacingValue | FractionValue;

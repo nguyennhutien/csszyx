@@ -272,13 +272,13 @@ function parseGradientType(
 }
 
 /**
- * Decode Tailwind arbitrary-value underscore space markers without ES2021 APIs.
+ * Decode Tailwind arbitrary-value underscore space markers.
  *
  * @param value Encoded arbitrary value.
  * @returns Value with underscore markers expanded.
  */
 function decodeArbitrarySpaces(value: string): string {
-    return value.split('_').join(' ');
+    return value.replaceAll('_', ' ');
 }
 
 /**

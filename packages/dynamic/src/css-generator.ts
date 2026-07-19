@@ -37,13 +37,13 @@ function warnUnsafeArbitrary(utility: string): void {
 }
 
 /**
- * Expand Tailwind arbitrary-value underscores without requiring ES2021 String APIs.
+ * Expand Tailwind arbitrary-value underscores.
  *
  * @param value Encoded arbitrary value.
  * @returns Value with underscore space markers expanded.
  */
 function expandArbitrarySpaces(value: string): string {
-    return value.split('_').join(' ');
+    return value.replaceAll('_', ' ');
 }
 
 // ── Variant metadata ──────────────────────────────────────────────────────────
@@ -851,8 +851,8 @@ function resolveRadiusDeclaration(utility: string): string | null {
     if (value in ROUNDED_DIRECTIONS) return ROUNDED_DIRECTIONS[value];
     const directional = /^([trblse]+)-(.+)$/.exec(value);
     if (directional && directional[1] in ROUNDED_DIRECTIONS) {
-        return ROUNDED_DIRECTIONS[directional[1]].replace(
-            /var\(--radius\)/g,
+        return ROUNDED_DIRECTIONS[directional[1]].replaceAll(
+            'var(--radius)',
             resolveRadiusValue(directional[2]),
         );
     }

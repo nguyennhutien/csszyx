@@ -18,7 +18,7 @@ export function insertAfterUseDirective(code: string, insertion: string): string
         offset += triviaLength;
     }
 
-    const directive = code.slice(offset).match(USE_DIRECTIVE_RE);
+    const directive = USE_DIRECTIVE_RE.exec(code.slice(offset));
     if (!directive) return `${insertion}${code}`;
 
     const insertionOffset = offset + directive[0].length;
@@ -33,9 +33,9 @@ export function insertAfterUseDirective(code: string, insertion: string): string
  */
 function leadingTriviaLength(source: string): number {
     return (
-        source.match(LEADING_WHITESPACE_RE)?.[0].length ??
-        source.match(LINE_COMMENT_RE)?.[0].length ??
-        source.match(BLOCK_COMMENT_RE)?.[0].length ??
+        LEADING_WHITESPACE_RE.exec(source)?.[0].length ??
+        LINE_COMMENT_RE.exec(source)?.[0].length ??
+        BLOCK_COMMENT_RE.exec(source)?.[0].length ??
         0
     );
 }
