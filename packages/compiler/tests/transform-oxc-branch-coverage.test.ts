@@ -863,3 +863,116 @@ describe('transform-oxc: mangleVars value keys & categories', () => {
         expect(result.code).toContain('--used');
     });
 });
+
+// ── runtime-fallback candidate collection (color-conditional + keyed walk) ──
+describe('oxc runtime-fallback candidate collection', () => {
+    // The `...imported` spread is unresolvable, so the whole sz falls back to
+    // _sz() and every member goes through CANDIDATE collection.
+    const fallback = (member: string): string =>
+        `import { imported } from './x';\nexport const A = ({ cond, dynVar, k }) => <div sz={{ ...imported, ${member} }} />;`;
+
+    it('expands a conditional color with a static numeric opacity into both branches', () => {
+        const result = run(fallback('bg: { color: cond ? "red-500" : "blue-500", op: 20 }'));
+        expect(result.usesRuntime).toBe(true);
+        expect(result.classes.has('bg-red-500/20')).toBe(true);
+        expect(result.classes.has('bg-blue-500/20')).toBe(true);
+    });
+
+    it('walks keyed-object members: nested object, conditional, computed, and static', () => {
+        const result = run(
+            fallback(
+                'bg: { color: cond ? "red-500" : dynVar, extra: { p: 2 }, ["x" + k]: 2, op: 50 }',
+            ),
+        );
+        expect(result.usesRuntime).toBe(true);
+        // The static branch of the conditional compiles at its full path.
+        expect(result.classes.has('bg-red-500')).toBe(true);
+    });
+
+    it('declines a color object with a dynamic member value', () => {
+        const result = run(fallback('bg: { color: dynVar, op: 20 }'));
+        expect(result.usesRuntime).toBe(true);
+        expect([...result.classes].some(c => c.startsWith('bg-'))).toBe(false);
+    });
+});
+
+// ── duplicate sz attributes bail to the runtime path ────────────────────────
+describe('duplicate sz attributes', () => {
+    it('declines fast-path and static lowering when an element repeats sz', () => {
+        const src = 'export const A = () => <div sz={{ p: 1 }} sz={{ m: 2 }} />;';
+        const result = run(src);
+        // Two sz attributes on one element are ambiguous — the transform must
+        // not pick one silently.
+        expect(result.code).not.toContain('className="p-1"');
+        expect(result.code).not.toContain('className="m-2"');
+    });
+});
+
+// ── remaining candidate/partial edges ───────────────────────────────────────
+describe('oxc candidate and partial-lane edges', () => {
+    const fallback = (member: string): string =>
+        `import { imported } from './x';\nexport const A = ({ cond, dynVar, k }) => <div sz={{ ...imported, ${member} }} />;`;
+
+    it('skips spread and numeric-literal members inside a keyed candidate object', () => {
+        const result = run(fallback('bg: { color: cond ? "red-500" : dynVar, ...dynVar, 5: 2 }'));
+        expect(result.usesRuntime).toBe(true);
+        expect(result.classes.has('bg-red-500')).toBe(true);
+    });
+
+    it('skips a bigint-literal member key inside a keyed candidate object', () => {
+        const result = run(fallback('bg: { 5n: 2, color: cond ? "red-500" : dynVar }'));
+        expect(result.usesRuntime).toBe(true);
+        expect(result.classes.has('bg-red-500')).toBe(true);
+    });
+
+    it('declines a color object holding a computed member', () => {
+        const result = run(fallback('bg: { color: cond ? "red-500" : "blue-500", [k]: 1 }'));
+        expect(result.usesRuntime).toBe(true);
+        expect([...result.classes].some(c => c.includes('/'))).toBe(false);
+    });
+
+    it('declines an opacity conditional whose branches are not literals', () => {
+        const left = run(fallback('bg: { color: "red-500", op: cond ? dynVar : 20 }'));
+        expect([...left.classes].some(c => c.includes('/'))).toBe(false);
+        const right = run(fallback('bg: { color: "red-500", op: cond ? 20 : dynVar }'));
+        expect([...right.classes].some(c => c.includes('/'))).toBe(false);
+    });
+
+    it('declines a color conditional whose alternate branch is dynamic', () => {
+        const result = run(fallback('bg: { color: cond ? "red-500" : dynVar, op: 50 }'));
+        expect(result.usesRuntime).toBe(true);
+        // The keyed walk still salvages the static branch, but no combined
+        // slash candidates emit.
+        expect([...result.classes].some(c => c.includes('/'))).toBe(false);
+    });
+
+    it('declines a color object where both color and op are conditional', () => {
+        const result = run(
+            fallback('bg: { color: cond ? "red-500" : "blue-500", op: k ? 20 : 80 }'),
+        );
+        expect(result.usesRuntime).toBe(true);
+        // No single-test branch pair exists, so no combined candidates emit.
+        expect([...result.classes].some(c => c.includes('/'))).toBe(false);
+    });
+
+    it('skips an empty compiled class when partial statics produce none', () => {
+        const result = run('export const A = ({ dynVar }) => <div sz={{ css: {}, w: dynVar }} />;');
+        expect(result.code).toContain('w-(--');
+        expect(result.code).not.toContain('className=" ');
+    });
+
+    it('bails a static value conditional to runtime when the element repeats sz', () => {
+        const src =
+            'export const A = ({ on }) => <div sz={on ? { p: 1 } : { p: 2 }} sz={{ m: 1 }} />;';
+        const result = run(src);
+        // Two sz attributes are ambiguous — no lone hoisted ternary may win.
+        expect(result.usesRuntime).toBe(true);
+    });
+
+    it('bails a conditional-spread object to runtime when the element repeats sz', () => {
+        const src =
+            'export const A = ({ on }) => <div sz={{ ...(on ? { p: 1 } : { m: 2 }) }} sz={{ m: 1 }} />;';
+        const result = run(src);
+        expect(result.usesRuntime).toBe(true);
+    });
+});

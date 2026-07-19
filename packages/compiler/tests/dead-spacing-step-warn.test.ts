@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { type SzObject, transform } from '../src/transform.js';
+import { type SzObject, setSzWarnLocation, transform } from '../src/transform.js';
 
 /**
  * Tailwind's bare spacing syntax only accepts quarter steps (multiples of
@@ -49,6 +49,15 @@ describe('dead spacing-step warning (dev)', () => {
         expect(warns({ leading: 1.4 } as SzObject)).toHaveLength(0);
         // opacity is not a spacing-scale utility.
         expect(warns({ opacity: 33.3 } as SzObject)).toHaveLength(0);
+    });
+
+    it('appends the source location when the build engine has set one', () => {
+        setSzWarnLocation('src/App.tsx:12');
+        try {
+            expect(warns({ px: 2.2 } as SzObject)[0]).toContain(' at src/App.tsx:12');
+        } finally {
+            setSzWarnLocation(undefined);
+        }
     });
 
     it('de-dups repeated signatures', () => {

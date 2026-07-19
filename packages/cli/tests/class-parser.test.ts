@@ -1248,6 +1248,23 @@ describe('class-parser', () => {
                 prop: 'shadowColor',
                 value: '--c',
             });
+            // same split across the shadow family prefixes
+            expect(parseClass('text-shadow-(color:--c)')).toEqual({
+                prop: 'textShadowColor',
+                value: '--c',
+            });
+            expect(parseClass('text-shadow-(--v)')).toEqual({
+                prop: 'textShadow',
+                value: '--v',
+            });
+            expect(parseClass('inset-shadow-(color:--c)')).toEqual({
+                prop: 'insetShadowColor',
+                value: '--c',
+            });
+            expect(parseClass('drop-shadow-(color:--c)')).toEqual({
+                prop: 'dropShadowColor',
+                value: '--c',
+            });
             // decoration length form is thickness, not color
             expect(parseClass('decoration-[3px]')).toEqual({
                 prop: 'decorationThickness',
