@@ -117,7 +117,7 @@ function scanCssSourceWithOptionalCache(
  */
 function normalizeBuildAssetPath(rootDir: string, fileName: string): string {
     return (path.isAbsolute(fileName) ? fileName : path.join(rootDir, fileName)).replaceAll(
-        /\\/g,
+        '\\',
         '/',
     );
 }

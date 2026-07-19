@@ -852,7 +852,7 @@ function resolveRadiusDeclaration(utility: string): string | null {
     const directional = /^([trblse]+)-(.+)$/.exec(value);
     if (directional && directional[1] in ROUNDED_DIRECTIONS) {
         return ROUNDED_DIRECTIONS[directional[1]].replaceAll(
-            /var\(--radius\)/g,
+            'var(--radius)',
             resolveRadiusValue(directional[2]),
         );
     }

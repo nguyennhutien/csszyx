@@ -61,6 +61,11 @@ describe('mangleCodeClassesSync — template literal (Pass 1.5) edges', () => {
     ])('preserves %s while mangling classes', (_label, code, expected) => {
         expect(mangleCodeClassesSync(code, MAP)).toBe(expected);
     });
+
+    it('leaves an unterminated interpolation with no known classes unchanged', () => {
+        const code = 'className:`unknown ${cond?"other":"fallback"`';
+        expect(mangleCodeClassesSync(code, MAP)).toBe(code);
+    });
 });
 
 describe('mangleCodeClassesSync — ternary (Pass 2) edges', () => {
