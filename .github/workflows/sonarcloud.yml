@@ -20,10 +20,14 @@ jobs:
   sonarcloud:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Fork PRs cannot read SONAR_TOKEN; the push runs cover them.
+    # Fork PRs and Dependabot PRs cannot read SONAR_TOKEN — Dependabot runs
+    # against a separate secrets store, so the scanner would fail 401 rather
+    # than report anything. Neither touches analysed source, and the push runs
+    # on main cover them.
     if: >-
       ${{ github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository }}
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]') }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
