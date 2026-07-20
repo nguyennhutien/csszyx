@@ -4,33 +4,44 @@
 # carryforward keeps a flag's last coverage when a build does not re-run that
 # language's tests, so a TS-only change does not show a phantom Rust drop.
 #
-# Status checks are informational for now (they comment but do not block merges)
-# while TS coverage is brought above the OpenSSF Silver target of 80%.
+# Patch checks reject uncovered changed lines. Project checks are zero-slack
+# ratchets, with Rust additionally enforcing the repository's 90% minimum.
 
 codecov:
   require_ci_to_pass: true
+  notify:
+    after_n_builds: 2
 
 coverage:
   status:
     project:
       default:
         target: auto
-        threshold: 1%
-        informational: true
+        threshold: 0%
       typescript:
-        target: 80%
+        target: auto
+        threshold: 0%
         flags:
           - typescript
-        informational: true
       rust:
-        target: 80%
+        target: 90%
+        threshold: 0%
         flags:
           - rust
-        informational: true
     patch:
       default:
-        target: 80%
-        informational: true
+        target: 100%
+        threshold: 0%
+      typescript:
+        target: 100%
+        threshold: 0%
+        flags:
+          - typescript
+      rust:
+        target: 100%
+        threshold: 0%
+        flags:
+          - rust
 
 flags:
   typescript:
@@ -57,8 +68,7 @@ component_management:
     statuses:
       - type: project
         target: auto
-        threshold: 1%
-        informational: true
+        threshold: 0%
   individual_components:
     - component_id: pkg_cli
       name: cli
@@ -105,4 +115,5 @@ component_management:
 
 comment:
   layout: "header, flags, components, files"
+  after_n_builds: 2
   require_changes: false
