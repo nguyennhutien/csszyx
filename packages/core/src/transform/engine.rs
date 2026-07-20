@@ -684,6 +684,56 @@ mod tests {
     }
 
     #[test]
+    fn static_engine_reports_only_unsafe_style_spread_collisions() {
+        for source in [
+            "const A=({width,props})=><div sz={{w:width}} {...props}/>;",
+            "const A=({width,cond,rest})=><div sz={{w:width}} {...(cond?{...rest}:{})}/>;",
+            "const A=({width,key,value})=><div sz={{w:width}} {...{[key]:value}}/>;",
+            "const A=({width,a,b})=><div sz={{w:width}} {...a} {...b}/>;",
+        ] {
+            let result = transform_static_classes(
+                &TransformFile {
+                    filename: "/repo/src/App.tsx".to_string(),
+                    source: source.to_string(),
+                },
+                0,
+                std::time::Instant::now(),
+            );
+
+            assert!(
+                result
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.contains("possible style override")),
+                "{source}"
+            );
+        }
+
+        for source in [
+            "const A=({width})=><div sz={{w:width}} {...{}}/>;",
+            "const A=({width,base})=><div sz={{w:width}} {...{style:base}}/>;",
+            "const A=({width,cond})=><div sz={{w:width}} {...(cond?{}:{})}/>;",
+        ] {
+            let result = transform_static_classes(
+                &TransformFile {
+                    filename: "/repo/src/App.tsx".to_string(),
+                    source: source.to_string(),
+                },
+                0,
+                std::time::Instant::now(),
+            );
+
+            assert!(
+                result
+                    .diagnostics
+                    .iter()
+                    .all(|diagnostic| !diagnostic.contains("possible style override")),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
     fn static_engine_rewrites_single_static_sz_attribute() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),

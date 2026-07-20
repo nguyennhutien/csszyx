@@ -4077,6 +4077,53 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_classifies_only_spreads_that_can_absorb_generated_style() {
+        for spread in [
+            "{...{}}",
+            "{...{id: 'x'}}",
+            "{...{style: {}}}",
+            "{...{style: { flex }}}",
+            "{...{style: base}}",
+            "{...(active ? {style: {flex}} : {})}",
+        ] {
+            let source = format!(
+                "const X = ({{ width, active, flex, base }}) => <div sz={{{{ w: width }}}} {spread} />;"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let element = &parsed.ir.jsx_opening_elements[0];
+
+            assert!(element.has_spread_attribute, "{spread}");
+            assert!(element.safe_style_spread.is_some(), "{spread}");
+        }
+
+        for attributes in [
+            "{...props}",
+            "{...(active ? props : {})}",
+            "{...(active ? {} : props)}",
+            "{...{...props}}",
+            "{...{[key]: value}}",
+            "{...{style: base, style: override}}",
+            "{...{}} {...props}",
+            "{...{}} style={base}",
+        ] {
+            let source = format!(
+                "const X = ({{ width, active, props, key, value, base, override }}) => <div sz={{{{ w: width }}}} {attributes} />;"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let element = &parsed.ir.jsx_opening_elements[0];
+
+            assert!(element.has_spread_attribute, "{attributes}");
+            assert!(element.safe_style_spread.is_none(), "{attributes}");
+        }
+    }
+
+    #[test]
     fn parser_shell_reports_invalid_tsx() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),

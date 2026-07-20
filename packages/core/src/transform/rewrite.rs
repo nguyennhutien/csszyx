@@ -1033,6 +1033,48 @@ mod tests {
     }
 
     #[test]
+    fn merges_dynamic_style_vars_into_safe_object_spreads() {
+        let cases = [
+            (
+                "const A=({width})=><div sz={{w:width}} {...{}}/>;",
+                "const A=({width})=><div className=\"w-(--_sz-w)\" {...{style: {\"--_sz-w\": __szSpacingVar(width, \"w\")}}}/>;",
+            ),
+            (
+                "const A=({width})=><div sz={{w:width}} {...{id:'x'}}/>;",
+                "const A=({width})=><div className=\"w-(--_sz-w)\" {...{id:'x', style: {\"--_sz-w\": __szSpacingVar(width, \"w\")}}}/>;",
+            ),
+            (
+                "const A=({width,flex})=><div sz={{w:width}} {...{style:{flex,},}}/>;",
+                "const A=({width,flex})=><div className=\"w-(--_sz-w)\" {...{style:{flex, \"--_sz-w\": __szSpacingVar(width, \"w\")},}}/>;",
+            ),
+            (
+                "const A=({width,base})=><div sz={{w:width}} {...{style:base,id:'x'}}/>;",
+                "const A=({width,base})=><div className=\"w-(--_sz-w)\" {...{style:{...(base), \"--_sz-w\": __szSpacingVar(width, \"w\")},id:'x'}}/>;",
+            ),
+        ];
+
+        for (source, expected) in cases {
+            let rewritten = rewrite(source).expect("rewritten");
+            assert_eq!(rewritten, expected, "{source}");
+            assert!(!rewritten.contains(" style={{"), "{source}");
+        }
+    }
+
+    #[test]
+    fn merges_dynamic_style_vars_into_each_conditional_spread_branch() {
+        let source =
+            "const A=({width,cond,flex})=><div sz={{w:width}} {...(cond?{style:{flex,},}:{})}/>;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A=({width,cond,flex})=><div className=\"w-(--_sz-w)\" {...(cond ? {style:{flex, \"--_sz-w\": __szSpacingVar(width, \"w\")},} : {style: {\"--_sz-w\": __szSpacingVar(width, \"w\")}})}/>;"
+        );
+        assert_eq!(rewritten.matches("__szSpacingVar").count(), 2);
+        assert!(!rewritten.contains(" style={{"));
+    }
+
+    #[test]
     fn rewrites_identifier_backed_spread() {
         // `{ ...BASE, m: 2 }` resolves BASE through the declarator scope
         // and flattens its initializer's properties in source order before
