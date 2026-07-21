@@ -3544,7 +3544,7 @@ mod tests {
 
     #[test]
     fn parser_shell_safelists_static_array_candidates_before_runtime_spread() {
-        let source = "const BASE = { p: 4 }; const App = ({ active, items }) => <div sz={([BASE, active && { m: 2 }, ...items] satisfies unknown[])} />;";
+        let source = "const BASE = { p: 4 }; const App = ({ active, items }) => <div sz={([BASE, { w: 3 }, active && ((((BASE as const) satisfies object)!)), active && { m: 2 }, ...items] satisfies unknown[])} />;";
         let parsed = parse_source_shell(&TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: source.to_string(),
@@ -3554,6 +3554,7 @@ mod tests {
         assert!(attribute.runtime_fallback);
         assert!(attribute.array_parts.is_empty());
         assert!(attribute.candidate_classes.contains(&"p-4".to_string()));
+        assert!(attribute.candidate_classes.contains(&"w-3".to_string()));
         assert!(attribute.candidate_classes.contains(&"m-2".to_string()));
     }
 
