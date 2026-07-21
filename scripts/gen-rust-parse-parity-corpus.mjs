@@ -46,6 +46,7 @@ const sources = [
     'const A = ({ on }) => <div sz={(on ? { p: 2 } : { p: 4 }) satisfies object} />;',
     'const A = ({ on }) => <div sz={(on ? { p: 2 } : { p: 4 })!} />;',
     'const STYLE = (on ? { p: 2 } : { p: 4 }) as const; const A = () => <div sz={STYLE} />;',
+    'const STYLE = ((on ? { p: 2 } : { p: 4 }) as const)!; const A = () => <div sz={STYLE} />;',
     'const A = () => <div className="flex gap-2" sz={{ p: 4 }} />;',
     'const A = () => <div className="sport-neon p-4" />;',
     'const A = () => <div className={`a ${x}`} />;',

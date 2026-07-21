@@ -129,6 +129,14 @@
     "rawClassNames": []
   },
   {
+    "source": "const STYLE = ((on ? { p: 2 } : { p: 4 }) as const)!; const A = () => <div sz={STYLE} />;",
+    "classes": [
+      "p-2",
+      "p-4"
+    ],
+    "rawClassNames": []
+  },
+  {
     "source": "const A = () => <div className=\"flex gap-2\" sz={{ p: 4 }} />;",
     "classes": [
       "p-4"
