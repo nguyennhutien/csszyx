@@ -1801,6 +1801,46 @@ mod tests {
     }
 
     #[test]
+    fn merges_text_size_and_leading_only_within_the_same_variant() {
+        let matching = StaticSzObject {
+            properties: vec![
+                property(
+                    "hover",
+                    object(vec![property("text", StaticSzValue::String("sm".into()))]),
+                ),
+                property(
+                    "hover",
+                    object(vec![property(
+                        "leading",
+                        StaticSzValue::String("tight".into()),
+                    )]),
+                ),
+            ],
+        };
+        assert_eq!(lower_static_sz_object(&matching), ["hover:text-sm/tight"]);
+
+        let mismatched = StaticSzObject {
+            properties: vec![
+                property(
+                    "hover",
+                    object(vec![property("text", StaticSzValue::String("sm".into()))]),
+                ),
+                property(
+                    "focus",
+                    object(vec![property(
+                        "leading",
+                        StaticSzValue::String("tight".into()),
+                    )]),
+                ),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&mismatched),
+            ["hover:text-sm", "focus:leading-tight"]
+        );
+    }
+
+    #[test]
     fn lowers_not_and_aria_variant_matrix() {
         let declaration = |key: &str, value: StaticSzValue| StaticSzObject {
             properties: vec![property(key, value)],
@@ -1820,7 +1860,10 @@ mod tests {
         assert_eq!(
             lower_static_sz_object(&declaration(
                 "not",
-                object(vec![property("hover", padding())]),
+                object(vec![
+                    property("hover", padding()),
+                    property("ignored", StaticSzValue::Boolean(false)),
+                ]),
             )),
             ["not-hover:p-4"]
         );
@@ -1853,6 +1896,7 @@ mod tests {
                 property(
                     "group",
                     object(vec![
+                        property("ignored", StaticSzValue::Boolean(false)),
                         property("data", object(vec![property("active", padding(1.0))])),
                         property(
                             "aria",
@@ -2040,6 +2084,10 @@ mod tests {
             (
                 gradient("linear", Some(StaticSzValue::String("--a".into())), None),
                 Some("bg-linear-(--a)"),
+            ),
+            (
+                gradient("linear", Some(StaticSzValue::Boolean(true)), None),
+                None,
             ),
             (
                 gradient(
