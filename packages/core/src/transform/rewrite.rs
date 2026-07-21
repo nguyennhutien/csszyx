@@ -1444,6 +1444,44 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_array_ternary_to_one_merge_argument() {
+        let source =
+            "const App = ({ active }) => <div sz={[active ? { p: 2 } : { p: 4 }, { m: 1 }]} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = ({ active }) => <div className={_szcn(active ? \"p-2\" : \"p-4\", \"m-1\")} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_each_dynamic_css_var_category() {
+        let source = "const App = ({ color, angle, milliseconds, value }) => <div sz={{ bg: color, rotate: angle, duration: milliseconds, opacity: value }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert!(rewritten.contains("\"--_sz-bg\": __szColorVar(color)"));
+        assert!(rewritten.contains("\"--_sz-rotate\": __szUnitVar(angle, \"deg\", \"rotate\")"));
+        assert!(rewritten
+            .contains("\"--_sz-duration\": __szUnitVar(milliseconds, \"ms\", \"duration\")"));
+        assert!(rewritten.contains("\"--_sz-opacity\": value"));
+    }
+
+    #[test]
+    fn rejects_multiple_runtime_expression_attributes() {
+        for source in [
+            "const App=({ a, b }) => <div sz={a ? { p: 2 } : { p: 4 }} sz={b ? { m: 2 } : { m: 4 }} />;",
+            "const App=({ a, b }) => <div sz={a} sz={b} />;",
+        ] {
+            assert_eq!(
+                rewrite(source),
+                Err(StaticRewriteUnsupported::EmptyClassList),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
     fn rewrites_runtime_fallback_with_dynamic_classname_to_merge_helper() {
         let source = "const X = ({ styles }) => <div className={getClass()} sz={styles} />;";
         let rewritten = rewrite(source).expect("rewritten");
