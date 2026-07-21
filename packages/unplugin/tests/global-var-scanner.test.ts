@@ -628,6 +628,19 @@ describe('rewriteGlobalVarCssAliases', () => {
         expect(result.css).toContain('@media (width > var(--brand-breakpoint))');
         expect(result.css).toContain('width: var(---gz);');
     });
+
+    it('leaves malformed var() calls without a variable name untouched', () => {
+        const css = ':root { --brand-primary: red; color: var(   ); }';
+        const plan = planGlobalVarAliases({
+            scans: [scanGlobalVarCss(css)],
+            tokens: ['--brand-primary'],
+        });
+
+        const result = rewriteGlobalVarCssAliases({ css, plan });
+
+        expect(result.css).toContain('color: var(   )');
+        expect(result.rewrittenReferences).toBe(0);
+    });
 });
 
 // Regression guard for the scan cache being a best-effort optimization, not a

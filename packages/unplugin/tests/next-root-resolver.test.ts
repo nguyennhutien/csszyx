@@ -103,6 +103,20 @@ describe('Next app root resolver', () => {
         });
     });
 
+    it('walks upward from an existing loader file rather than treating it as a directory', () => {
+        const root = tempRoot();
+        const appRoot = join(root, 'apps/web');
+        const loaderFile = join(appRoot, 'src/app/page.tsx');
+        writePackageJson(appRoot);
+        mkdirSync(join(appRoot, 'src/app'), { recursive: true });
+        writeFileSync(loaderFile, 'export default function Page() {}');
+
+        expect(resolveNextAppRoot({ loaderContext: loaderFile, cwd: root })).toEqual({
+            root: appRoot,
+            source: 'loader-context',
+        });
+    });
+
     it('keeps sibling workspace app caches isolated', () => {
         const root = tempRoot();
         const webRoot = join(root, 'apps/web');
