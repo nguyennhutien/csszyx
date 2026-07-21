@@ -153,6 +153,21 @@ const throwingLoggerProxy = init({ typescript: ts }).create({
 assert.strictEqual(throwingLoggerProxy.getCompletionsAtPosition('/x.tsx', 0), base);
 assert.strictEqual(throwingLoggerAttempts, 1, 'logger failures never mask completion failures');
 
+let programlessAttempts = 0;
+const programlessProxy = init({ typescript: ts }).create({
+    config: {},
+    languageService: {
+        ...service,
+        getProgram: () => {
+            programlessAttempts += 1;
+            return undefined;
+        },
+    },
+    project: { projectService: { logger: { info: () => {} } } },
+});
+assert.strictEqual(programlessProxy.getCompletionsAtPosition('/x.tsx', 0), base);
+assert.strictEqual(programlessAttempts, 1, 'a temporarily missing program is a healthy no-op');
+
 // Correct but late results are still returned, then the deadline failure opens
 // the same protective circuit as an exception.
 const realDeadlineNow = performance.now.bind(performance);
