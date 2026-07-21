@@ -824,6 +824,29 @@ mod tests {
     }
 
     #[test]
+    fn escapes_quotes_in_static_string_sz_attribute() {
+        let source = "export const App = () => <div sz='content-[\"x\"]' />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "export const App = () => <div className={\"content-[\\\"x\\\"]\"} />;"
+        );
+    }
+
+    #[test]
+    fn reports_static_ir_without_an_opening_element_group() {
+        let source = "export const App = () => <div sz={{ p: 4 }} />;";
+        let mut ir = parse(source);
+        ir.jsx_opening_elements.clear();
+
+        assert_eq!(
+            rewrite_static_sz_attributes(source, "/repo/src/App.tsx", &ir),
+            Err(StaticRewriteUnsupported::NoStaticOpeningElement)
+        );
+    }
+
+    #[test]
     fn rewrites_empty_static_object_sz_attribute() {
         let source = "export const App = () => <div sz={{}} />;";
         let rewritten = rewrite(source).expect("rewritten");
