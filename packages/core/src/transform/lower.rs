@@ -1162,9 +1162,16 @@ fn format_bg_img_object(object: &StaticSzObject, prefix: &str) -> Option<String>
             },
             None => "bg-linear-to-r".to_string(),
         },
-        "radial" => match object_string_property(object, "dir") {
-            Some(value) if value.starts_with("--") => format!("bg-radial-({value})"),
-            Some(value) => format!("bg-radial-[{}]", normalize_arbitrary_value(value)),
+        "radial" => match object.properties.iter().find(|prop| prop.key == "dir") {
+            Some(prop) => match &prop.value {
+                StaticSzValue::String(value) if value.starts_with("--") => {
+                    format!("bg-radial-({value})")
+                }
+                StaticSzValue::String(value) => {
+                    format!("bg-radial-[{}]", normalize_arbitrary_value(value))
+                }
+                _ => return None,
+            },
             None => "bg-radial".to_string(),
         },
         "conic" => match object.properties.iter().find(|prop| prop.key == "dir") {
@@ -1604,6 +1611,10 @@ mod tests {
         }
     }
 
+    fn object(properties: Vec<StaticSzProperty>) -> StaticSzValue {
+        StaticSzValue::Object(StaticSzObject { properties })
+    }
+
     #[test]
     fn is_known_sz_key_accepts_valid_keys_and_rejects_typos() {
         // Real properties, variants, special-cased keys, removed sugar, escapes.
@@ -1789,6 +1800,50 @@ mod tests {
     }
 
     #[test]
+    fn lowers_not_and_aria_variant_matrix() {
+        let declaration = |key: &str, value: StaticSzValue| StaticSzObject {
+            properties: vec![property(key, value)],
+        };
+        let padding = || object(vec![property("p", StaticSzValue::Number(4.0))]);
+
+        assert_eq!(
+            lower_static_sz_object(&declaration(
+                "not",
+                object(vec![property(
+                    "supports",
+                    object(vec![property("display:grid", padding())]),
+                )]),
+            )),
+            ["not-supports-[display:grid]:p-4"]
+        );
+        assert_eq!(
+            lower_static_sz_object(&declaration(
+                "not",
+                object(vec![property("hover", padding())]),
+            )),
+            ["not-hover:p-4"]
+        );
+        assert_eq!(
+            lower_static_sz_object(&declaration(
+                "not",
+                object(vec![property("focusVisible", padding())]),
+            )),
+            ["not-focus-visible:p-4"]
+        );
+        assert_eq!(
+            lower_static_sz_object(&declaration(
+                "aria",
+                object(vec![
+                    property("checked", padding()),
+                    property("busy=true", padding()),
+                    property("ignored", StaticSzValue::Boolean(false)),
+                ]),
+            )),
+            ["aria-checked:p-4", "aria-[busy=true]:p-4"]
+        );
+    }
+
+    #[test]
     fn lowers_responsive_breakpoints() {
         // Helpers to build nested variant objects compactly.
         fn obj(props: Vec<StaticSzProperty>) -> StaticSzValue {
@@ -1892,6 +1947,127 @@ mod tests {
         };
 
         assert_eq!(lower_static_sz_object(&object), ["bg-linear-to-br"]);
+    }
+
+    #[test]
+    fn lowers_background_image_gradient_matrix() {
+        let gradient = |kind: &str, dir: Option<StaticSzValue>, interpolation: Option<&str>| {
+            let mut properties = vec![property(
+                "gradient",
+                StaticSzValue::String(kind.to_string()),
+            )];
+            if let Some(dir) = dir {
+                properties.push(property("dir", dir));
+            }
+            if let Some(interpolation) = interpolation {
+                properties.push(property(
+                    "in",
+                    StaticSzValue::String(interpolation.to_string()),
+                ));
+            }
+            StaticSzObject {
+                properties: vec![property("bgImg", object(properties))],
+            }
+        };
+
+        for (input, expected) in [
+            (
+                gradient("linear", Some(StaticSzValue::Number(45.0)), None),
+                Some("bg-linear-45"),
+            ),
+            (
+                gradient("linear", Some(StaticSzValue::Number(-45.0)), None),
+                Some("-bg-linear-45"),
+            ),
+            (
+                gradient("linear", Some(StaticSzValue::String("--a".into())), None),
+                Some("bg-linear-(--a)"),
+            ),
+            (
+                gradient(
+                    "linear",
+                    Some(StaticSzValue::String("45deg in oklab".into())),
+                    None,
+                ),
+                Some("bg-linear-[45deg_in_oklab]"),
+            ),
+            (
+                gradient("linear", None, Some("oklch")),
+                Some("bg-linear-to-r/oklch"),
+            ),
+            (gradient("radial", None, None), Some("bg-radial")),
+            (
+                gradient("radial", Some(StaticSzValue::String("--a".into())), None),
+                Some("bg-radial-(--a)"),
+            ),
+            (
+                gradient(
+                    "radial",
+                    Some(StaticSzValue::String("circle at top".into())),
+                    None,
+                ),
+                Some("bg-radial-[circle_at_top]"),
+            ),
+            (gradient("conic", None, None), Some("bg-conic")),
+            (
+                gradient("conic", Some(StaticSzValue::Number(45.0)), None),
+                Some("bg-conic-45"),
+            ),
+            (
+                gradient("conic", Some(StaticSzValue::Number(-45.0)), None),
+                Some("-bg-conic-45"),
+            ),
+            (
+                gradient("conic", Some(StaticSzValue::String("--a".into())), None),
+                Some("bg-conic-(--a)"),
+            ),
+            (
+                gradient(
+                    "conic",
+                    Some(StaticSzValue::String("from 45deg".into())),
+                    None,
+                ),
+                Some("bg-conic-[from_45deg]"),
+            ),
+            (
+                gradient("radial", Some(StaticSzValue::Number(5.0)), None),
+                None,
+            ),
+            (gradient("unknown", None, None), None),
+        ] {
+            let classes = lower_static_sz_object(&input);
+            assert_eq!(classes.first().map(String::as_str), expected);
+            assert_eq!(classes.len(), usize::from(expected.is_some()));
+        }
+
+        let missing_gradient = StaticSzObject {
+            properties: vec![property(
+                "bgImg",
+                object(vec![property("dir", StaticSzValue::String("to-r".into()))]),
+            )],
+        };
+        assert!(lower_static_sz_object(&missing_gradient).is_empty());
+    }
+
+    #[test]
+    fn lowers_font_stretch_value_shapes() {
+        let object = StaticSzObject {
+            properties: ["condensed", "--f", "50%", "50.5%", "wide"]
+                .into_iter()
+                .map(|value| property("fontStretch", StaticSzValue::String(value.into())))
+                .collect(),
+        };
+
+        assert_eq!(
+            lower_static_sz_object(&object),
+            [
+                "font-condensed",
+                "font-stretch-(--f)",
+                "font-stretch-50%",
+                "font-stretch-[50.5%]",
+                "font-stretch-[wide]",
+            ]
+        );
     }
 
     #[test]
