@@ -256,9 +256,7 @@ pub fn apply_css_variable_mangling(
 
     let mut hoisted_location_ids = std::collections::HashSet::new();
     for plan in hoist_plans {
-        let Some(&first_location_index) = plan.usage_ids.first() else {
-            continue;
-        };
+        let first_location_index = plan.usage_ids[0];
         let (_, first_attr_index, first_prop_index) = locations[first_location_index];
         let mut hoisted_prop =
             next.sz_attributes[first_attr_index].dynamic_css_vars[first_prop_index].clone();

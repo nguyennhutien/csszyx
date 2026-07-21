@@ -2133,9 +2133,6 @@ fn partial_object_from_jsx_expression(
     match expression {
         JSXExpression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
-            if partial.dynamic_css_vars.is_empty() && partial.ternaries.is_empty() {
-                return None;
-            }
             Some((
                 partial.object,
                 text_span(object.span),
@@ -2171,9 +2168,6 @@ fn partial_object_from_expression(
     match expression {
         Expression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
-            if partial.dynamic_css_vars.is_empty() && partial.ternaries.is_empty() {
-                return None;
-            }
             Some((
                 partial.object,
                 text_span(object.span),

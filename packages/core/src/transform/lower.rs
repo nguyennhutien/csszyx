@@ -2492,6 +2492,7 @@ mod tests {
                 property("p", StaticSzValue::Number(1.4)),
                 property("m", StaticSzValue::Number(1.5)),
                 property("gap", StaticSzValue::String("1.1".into())),
+                property("mx", StaticSzValue::String("1.5".into())),
                 property("w", StaticSzValue::String("1.4rem".into())),
                 property("leading", StaticSzValue::Number(1.4)),
                 property("hidden", StaticSzValue::Boolean(true)),
