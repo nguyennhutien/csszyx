@@ -178,16 +178,11 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             return;
         }
 
-        let before = self.ir.jsx_opening_elements.len();
+        let index = self.ir.jsx_opening_elements.len();
         self.visit_jsx_opening_element(&element.opening_element);
-        if self.ir.jsx_opening_elements.len() > before {
-            let index = self.ir.jsx_opening_elements.len() - 1;
-            self.element_stack.push(index);
-            self.visit_jsx_children(&element.children);
-            self.element_stack.pop();
-        } else {
-            self.visit_jsx_children(&element.children);
-        }
+        self.element_stack.push(index);
+        self.visit_jsx_children(&element.children);
+        self.element_stack.pop();
         if let Some(closing_element) = &element.closing_element {
             self.visit_jsx_closing_element(closing_element);
         }
@@ -221,10 +216,6 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
     }
 
     fn visit_jsx_opening_element(&mut self, element: &JSXOpeningElement<'a>) {
-        if self.ast_budget_exceeded {
-            return;
-        }
-
         let element_name = jsx_element_name(&element.name);
         let mut sz_attribute_indices = Vec::new();
         let mut class_attribute_index = None;
@@ -3430,6 +3421,7 @@ mod tests {
                     p: dense ? 1 : 2,
                     hidden: true,
                     [dynamicKey]: 9,
+                    1n: { p: 77 },
                     helper() {},
                     m: runtimeValue,
                     ...runtimeBase,
@@ -3463,7 +3455,7 @@ mod tests {
                 lowered.classes
             );
         }
-        for ignored in ["p-99", "p-88"] {
+        for ignored in ["p-99", "p-88", "p-77"] {
             assert!(
                 !lowered.classes.contains(&ignored.to_string()),
                 "computed catalog key leaked {ignored}: {:?}",
@@ -4613,6 +4605,24 @@ mod tests {
         );
         assert_eq!(attribute.dynamic_css_vars.len(), 1);
         assert!(attribute.dynamic_css_vars[0].skip_class);
+    }
+
+    #[test]
+    fn parser_shell_defers_nullable_container_values_to_runtime() {
+        for present in ["[]", "() => 1", "function () {}"] {
+            let source =
+                format!("const X=({{ c }}) => <div sz={{{{ p: c ? null : {present} }}}} />;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.clone(),
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
+
+            assert!(parsed.diagnostics.is_empty(), "{source}");
+            assert!(!attribute.runtime_fallback, "{source}");
+            assert!(attribute.ternaries.is_empty(), "{source}");
+            assert_eq!(attribute.dynamic_css_vars.len(), 1, "{source}");
+        }
     }
 
     #[test]
