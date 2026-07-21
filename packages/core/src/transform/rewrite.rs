@@ -172,9 +172,6 @@ fn rewrite_array_sz_attribute(
         return Err(StaticRewriteUnsupported::EmptyClassList);
     }
     let attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
-    if attribute.array_parts.is_empty() {
-        return Err(StaticRewriteUnsupported::EmptyClassList);
-    }
 
     let mut arguments = Vec::with_capacity(
         attribute.array_parts.len() + usize::from(element.class_attribute_index.is_some()),
