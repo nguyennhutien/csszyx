@@ -4200,6 +4200,34 @@ mod tests {
     }
 
     #[test]
+    fn nested_keyed_candidates_match_each_static_runtime_branch() {
+        let fallback = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const App = ({ rest, active }) => <div sz={{ ...rest, bg: { palette: { tone: active ? 'red-500' : 'blue-500' } } }} />;".to_string(),
+        });
+        let candidates = &fallback.ir.sz_attributes[0].candidate_classes;
+
+        assert!(fallback.ir.sz_attributes[0].runtime_fallback);
+        for color in ["red-500", "blue-500"] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Static.tsx".to_string(),
+                source: format!(
+                    "const App = () => <div sz={{{{ bg: {{ palette: {{ tone: '{color}' }} }} }}}} />;"
+                ),
+            });
+            let expected = lower_source_ir_classes(&parsed.ir).classes;
+
+            assert!(!expected.is_empty(), "{color}");
+            assert!(
+                expected.iter().all(|class| candidates.contains(class)),
+                "missing {color} branch: expected {expected:?}, candidates {candidates:?}"
+            );
+        }
+        assert!(!candidates.iter().any(|class| class == "text-red-500"));
+        assert!(!candidates.iter().any(|class| class == "text-blue-500"));
+    }
+
+    #[test]
     fn candidate_walk_preserves_variants_conditionals_and_static_spreads() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
