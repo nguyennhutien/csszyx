@@ -4216,6 +4216,69 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_classifies_nullable_property_branches() {
+        let source = "const X=({ c, value }) => <div sz={{ p: c ? null : 4, m: c ? 2 : false, w: c ? undefined : value, h: c ? null : undefined }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(parsed.diagnostics.is_empty(), "{source}");
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(attribute.ternaries.len(), 4);
+        assert_eq!(
+            attribute.ternaries[0].consequent_classes,
+            Vec::<String>::new()
+        );
+        assert_eq!(attribute.ternaries[0].alternate_classes, ["p-4"]);
+        assert_eq!(attribute.ternaries[1].consequent_classes, ["m-2"]);
+        assert_eq!(
+            attribute.ternaries[1].alternate_classes,
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            attribute.ternaries[2].consequent_classes,
+            Vec::<String>::new()
+        );
+        assert_eq!(attribute.ternaries[2].alternate_classes, ["w-(--_sz-w)"]);
+        assert_eq!(
+            attribute.ternaries[3].consequent_classes,
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            attribute.ternaries[3].alternate_classes,
+            Vec::<String>::new()
+        );
+        assert_eq!(attribute.dynamic_css_vars.len(), 1);
+        assert!(attribute.dynamic_css_vars[0].skip_class);
+    }
+
+    #[test]
+    fn parser_shell_rejects_non_color_opacity_object_shapes() {
+        for property in [
+            "bg: { ...rest }",
+            "bg: { [key]: value }",
+            "bg: { color: 123, op: value }",
+            "bg: { color: c ? 1 : 'red-500' }",
+            "bg: { color: c ? 'red-500' : 1 }",
+            "bg: { color: c ? 'red-500' : 'blue-500', op: c ? 20 : 40 }",
+        ] {
+            let source =
+                format!("const X=({{ c, key, rest, value }}) => <div sz={{{{ {property} }}}} />;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
+
+            assert!(attribute.runtime_fallback, "{property}");
+            assert!(attribute.dynamic_css_vars.is_empty(), "{property}");
+            assert!(attribute.ternaries.is_empty(), "{property}");
+        }
+    }
+
+    #[test]
     fn parser_shell_resolves_function_body_local_static_ternary() {
         let source = "const X = ({ active }) => {\n  const ON = { p: 4 } as const;\n  const OFF = { p: 8 } as const;\n  return <div sz={active ? ON : OFF} />;\n};";
         let parsed = parse_source_shell(&TransformFile {
