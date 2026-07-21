@@ -400,7 +400,10 @@ fn span(start: usize, end: usize) -> Option<TextSpan> {
 
 #[cfg(test)]
 mod tests {
-    use super::{triage_source, FastPathBailoutReason, FastPathTriage};
+    use super::{
+        element_name, is_identifier_key, parse_simple_string, triage_source, FastPathBailoutReason,
+        FastPathTriage,
+    };
     use crate::transform::TransformFile;
 
     #[test]
@@ -437,6 +440,35 @@ mod tests {
         assert_eq!(ir.jsx_opening_elements.len(), 1);
         assert_eq!(ir.jsx_opening_elements[0].element_name, "div");
         assert_eq!(ir.sz_attributes[0].object.properties.len(), 3);
+    }
+
+    #[test]
+    fn lexical_helpers_reject_ambiguous_tokens() {
+        assert_eq!(
+            parse_simple_string("'safe-token'"),
+            Some("safe-token".to_string())
+        );
+        assert_eq!(parse_simple_string("'mismatched\""), None);
+        assert_eq!(parse_simple_string(r"'escaped\\value'"), None);
+
+        assert!(!is_identifier_key(""));
+        assert!(is_identifier_key("$token_2"));
+
+        assert_eq!(element_name("</div>"), None);
+        assert_eq!(element_name("<{dynamic} />"), None);
+    }
+
+    #[test]
+    fn boolean_values_remain_on_the_ast_free_path() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const App=()=> <div sz={{ truncate: true, flex: false }} />;".to_string(),
+        };
+
+        let FastPathTriage::StaticIr(ir) = triage_source(&file) else {
+            panic!("expected AST-free static IR");
+        };
+        assert_eq!(ir.sz_attributes[0].object.properties.len(), 2);
     }
 
     #[test]
