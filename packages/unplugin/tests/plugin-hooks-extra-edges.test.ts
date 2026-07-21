@@ -60,6 +60,14 @@ describe('virtual-module load hook', () => {
         // With no parsed theme, every group falls back to an empty array.
         expect(source).toContain('[]');
     });
+
+    it('leaves unknown virtual modules to the remaining plugin chain', async () => {
+        const h = harness();
+        await h.invoke('configResolved', { root: h.root, command: 'build' });
+        // unplugin normalizes the source hook's `null` pass-through to undefined
+        // on the Vite adapter surface.
+        await expect(h.invoke('load', '\0csszyx:unknown')).resolves.toBeUndefined();
+    });
 });
 
 describe('watchChange delete', () => {
@@ -145,5 +153,24 @@ describe('buildEnd unscoped-monorepo content-scope warning', () => {
 
         const message = warn.mock.calls.map(c => String(c[0])).join('\n');
         expect(message).toContain('UNSCOPED in a monorepo');
+    });
+});
+
+describe('buildEnd skipped workspace-package warning', () => {
+    it('reports sz source that needs compileSources opt-in', async () => {
+        const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-skip-be-')));
+        tempDirs.push(root);
+        const packageSource = path.join(root, 'packages', 'ui', 'src', 'Card.tsx');
+        fs.mkdirSync(path.dirname(packageSource), { recursive: true });
+        fs.writeFileSync(packageSource, 'export const Card = () => <div sz={{ p: 4 }} />;');
+
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const h = harness({}, root);
+        await h.invoke('configResolved', { root, command: 'build' });
+        await h.invoke('buildEnd');
+
+        const message = warn.mock.calls.map(call => String(call[0])).join('\n');
+        expect(message).toContain('compileSources');
+        expect(message).toContain('packages/ui/src/Card.tsx');
     });
 });
