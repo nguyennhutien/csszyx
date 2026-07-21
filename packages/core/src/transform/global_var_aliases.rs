@@ -226,6 +226,47 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_nested_objects_and_property_ternary_classes() {
+        let source = "const A=({on})=><div sz={{hover:{bg:'--brand-primary'},color:on?'--brand-primary':'--brand-secondary'}}/>;";
+        let ir = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        })
+        .ir;
+
+        let result = apply_global_var_aliases(
+            &ir,
+            &[
+                GlobalVarAliasEntry {
+                    original: "--brand-primary".to_string(),
+                    alias: "--g0".to_string(),
+                },
+                GlobalVarAliasEntry {
+                    original: "--brand-secondary".to_string(),
+                    alias: "--g1".to_string(),
+                },
+            ],
+        );
+        let attribute = &result.ir.sz_attributes[0];
+
+        let StaticSzValue::Object(nested) = &attribute.object.properties[0].value else {
+            panic!("hover should remain a nested static object");
+        };
+        assert_eq!(
+            nested.properties[0].value,
+            StaticSzValue::String("--g0".to_string())
+        );
+        assert!(attribute.ternaries.iter().all(|ternary| {
+            ternary
+                .consequent_classes
+                .iter()
+                .chain(&ternary.alternate_classes)
+                .all(|class_name| !class_name.contains("--brand-"))
+        }));
+        assert_eq!(result.variable_map.len(), 2);
+    }
+
+    #[test]
     fn ignores_invalid_aliases_and_preserves_non_string_static_values() {
         let mut ir = SourceIr::empty("/repo/src/App.tsx".to_string(), 100);
         ir.sz_attributes.push(SzAttributeIr {
