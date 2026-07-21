@@ -130,22 +130,6 @@ pub(super) fn transform_file_with_options(
     }
 }
 
-/// Lower and rewrite AST-free static IR from the conservative fast path.
-fn transform_fast_static_ir(
-    file: &TransformFile,
-    ir: &super::SourceIr,
-    triage_ns: u64,
-    total_start: Instant,
-) -> TransformResult {
-    transform_fast_static_ir_with_options(
-        file,
-        ir,
-        triage_ns,
-        total_start,
-        &TransformOptions::default(),
-    )
-}
-
 fn transform_fast_static_ir_with_options(
     file: &TransformFile,
     ir: &super::SourceIr,
@@ -645,8 +629,14 @@ fn elapsed_ns(start: Instant) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{transform_file, transform_static_classes, transform_static_classes_with_options};
-    use crate::transform::{ParserPath, TransformFile, TransformOptions, TransformProducer};
+    use super::{
+        merge_variable_maps, transform_file, transform_file_with_options, transform_static_classes,
+        transform_static_classes_with_options,
+    };
+    use crate::transform::{
+        CssVariableMapEntry, GlobalVarAliasEntry, ParserPath, TransformFile, TransformOptions,
+        TransformProducer,
+    };
 
     #[test]
     fn transform_file_skips_parser_for_no_sz_sources() {
@@ -665,6 +655,126 @@ mod tests {
         assert_eq!(result.metadata.timings.parse_ns, 0);
         assert!(result.classes.is_empty());
         assert!(result.raw_class_names.is_empty());
+    }
+
+    #[test]
+    fn transform_file_rejects_pathological_source_nesting() {
+        let nested = "{".repeat(super::MAX_SOURCE_NESTING_DEPTH + 1);
+        let file = TransformFile {
+            filename: "/repo/src/Generated.tsx".to_string(),
+            source: format!("const generated = {nested};"),
+        };
+
+        let result = transform_file(&file);
+
+        assert_eq!(result.code, file.source);
+        assert!(!result.metadata.transformed);
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.contains("source nesting exceeded 64 levels")
+                && diagnostic.contains("prevents a parser stack overflow")
+        }));
+    }
+
+    #[test]
+    fn transform_options_apply_aliases_and_dynamic_var_mangling() {
+        let aliased = transform_file_with_options(
+            &TransformFile {
+                filename: "/repo/src/Alias.tsx".to_string(),
+                source: "const App=()=> <div sz={{ bg: '--brand-primary' }} />;".to_string(),
+            },
+            TransformOptions {
+                global_var_aliases: vec![GlobalVarAliasEntry {
+                    original: "--brand-primary".to_string(),
+                    alias: "--g0".to_string(),
+                }],
+                ..TransformOptions::default()
+            },
+        );
+        assert_eq!(aliased.classes, ["bg-(--g0)"]);
+        assert!(aliased.code.contains("bg-(--g0)"));
+        assert_eq!(
+            aliased.css_variable_map,
+            [CssVariableMapEntry {
+                original: "--brand-primary".to_string(),
+                mangled: "--g0".to_string(),
+            }]
+        );
+
+        let mangled = transform_file_with_options(
+            &TransformFile {
+                filename: "/repo/src/Dynamic.tsx".to_string(),
+                source: "const App=({pad}) => <section><div sz={{p:pad}}/><span sz={{p:pad}}/></section>;"
+                    .to_string(),
+            },
+            TransformOptions {
+                mangle_vars: true,
+                ..TransformOptions::default()
+            },
+        );
+        assert!(mangled.code.contains("p-(--cz)"));
+        assert_eq!(mangled.classes, ["p-(--cz)", "p-(--cz)"]);
+        assert_eq!(
+            mangled.css_variable_map,
+            [CssVariableMapEntry {
+                original: "--_sz-p".to_string(),
+                mangled: "--cz".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn variable_map_merge_preserves_order_and_removes_exact_duplicates() {
+        let entry = |original: &str, mangled: &str| CssVariableMapEntry {
+            original: original.to_string(),
+            mangled: mangled.to_string(),
+        };
+        assert_eq!(
+            merge_variable_maps(
+                Some(vec![entry("--a", "--x"), entry("--b", "--y")]),
+                Some(vec![entry("--a", "--x"), entry("--a", "--z")]),
+            ),
+            [
+                entry("--a", "--x"),
+                entry("--b", "--y"),
+                entry("--a", "--z"),
+            ]
+        );
+        assert!(merge_variable_maps(None, None).is_empty());
+    }
+
+    #[test]
+    fn diagnostics_distinguish_numeric_dead_step_and_deferred_array_values() {
+        let file = TransformFile {
+            filename: "/repo/src/Diagnostics.tsx".to_string(),
+            source: "const App=({pad}) => <><div sz={{ 1.5: 2, p: 1.4 }} /><span sz={[{ m: pad }]} /></>;"
+                .to_string(),
+        };
+        let result = transform_static_classes_with_options(
+            &file,
+            0,
+            std::time::Instant::now(),
+            TransformOptions {
+                root_dir: Some("/repo/".to_string()),
+                ..TransformOptions::default()
+            },
+        );
+
+        assert!(
+            result.diagnostics.iter().any(|diagnostic| {
+                diagnostic.contains("numeric key \"1.5\"")
+                    && diagnostic.contains("src/Diagnostics.tsx:1")
+            }),
+            "{:?}",
+            result.diagnostics
+        );
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("not on Tailwind's spacing scale")));
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.contains("object literal contains a runtime value")
+                && diagnostic.contains("deferred to _szPart")
+        }));
     }
 
     #[test]
