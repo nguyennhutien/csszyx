@@ -252,10 +252,12 @@ fn distance_to_ancestor(
 #[cfg(test)]
 mod tests {
     use super::{
-        plan_component_variable_hoists, plan_component_variable_hoists_with_diagnostics,
-        CssVariableHoistDiagnostic, CssVariableHoistNode, CssVariableHoistOptions,
-        CssVariableHoistPlan, CssVariableHoistSkipReason, CssVariableHoistUsage,
+        ancestor_chain, distance_to_ancestor, plan_component_variable_hoists,
+        plan_component_variable_hoists_with_diagnostics, CssVariableHoistDiagnostic,
+        CssVariableHoistNode, CssVariableHoistOptions, CssVariableHoistPlan,
+        CssVariableHoistSkipReason, CssVariableHoistUsage,
     };
+    use std::collections::HashMap;
 
     #[test]
     fn hoists_identical_component_tier_vars_to_lowest_common_ancestor() {
@@ -418,6 +420,18 @@ mod tests {
                 usage_count: 2,
                 max_depth: None,
             }]
+        );
+    }
+
+    #[test]
+    fn unknown_nodes_fail_closed_during_ancestor_walks() {
+        let root = node("root", None);
+        let node_by_id = HashMap::from([("root", &root)]);
+
+        assert!(ancestor_chain("missing", &node_by_id).is_empty());
+        assert_eq!(
+            distance_to_ancestor("missing", "root", &node_by_id),
+            usize::MAX
         );
     }
 
