@@ -466,6 +466,12 @@ mod tests {
     }
 
     #[test]
+    fn span_reports_empty_and_non_empty_ranges() {
+        assert!(TextSpan::new(4, 4).expect("valid span").is_empty());
+        assert!(!TextSpan::new(4, 5).expect("valid span").is_empty());
+    }
+
+    #[test]
     fn empty_source_ir_reports_noop() {
         let ir = SourceIr::empty("/repo/src/App.tsx".to_string(), 128);
 

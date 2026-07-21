@@ -255,6 +255,7 @@ mod tests {
     fn test_tier5_encoding() {
         assert_eq!(encode(8476), "zzz");
         assert_eq!(encode(8477), "zzy");
+        assert_eq!(encode(11_180), "yzz");
     }
 
     #[test]

@@ -630,13 +630,30 @@ fn elapsed_ns(start: Instant) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        merge_variable_maps, transform_file, transform_file_with_options, transform_static_classes,
+        merge_variable_maps, relativize_diagnostic_path, transform_file,
+        transform_file_with_options, transform_static_classes,
         transform_static_classes_with_options,
     };
     use crate::transform::{
         CssVariableMapEntry, GlobalVarAliasEntry, ParserPath, TransformFile, TransformOptions,
         TransformProducer,
     };
+
+    #[test]
+    fn diagnostic_paths_are_relative_only_below_the_configured_root() {
+        assert_eq!(
+            relativize_diagnostic_path("/repo/src/App.tsx", Some("/repo/")),
+            "src/App.tsx"
+        );
+        assert_eq!(
+            relativize_diagnostic_path("/other/App.tsx", Some("/repo")),
+            "/other/App.tsx"
+        );
+        assert_eq!(
+            relativize_diagnostic_path("src/App.tsx", None),
+            "src/App.tsx"
+        );
+    }
 
     #[test]
     fn transform_file_skips_parser_for_no_sz_sources() {
