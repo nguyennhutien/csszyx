@@ -3165,6 +3165,20 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_ignores_recovered_empty_jsx_attribute_expressions() {
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const App = () => <div className={/* empty */} style={/* empty */} sz={/* empty */} />;".to_string(),
+        });
+
+        assert!(!parsed.panicked);
+        assert!(!parsed.diagnostics.is_empty());
+        assert!(parsed.ir.class_attributes.is_empty());
+        assert!(parsed.ir.style_attributes.is_empty());
+        assert!(parsed.ir.sz_attributes.is_empty());
+    }
+
+    #[test]
     fn parser_shell_extracts_static_dynamic_call_classes() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -4789,6 +4803,19 @@ mod tests {
         assert!(parsed.ir.sz_attributes[0].runtime_fallback);
         assert_eq!(parsed.ir.sz_attributes[0].value_span.len(), 6);
         assert!(parsed.ir.unsupported_sz_attribute_spans.is_empty());
+    }
+
+    #[test]
+    fn parser_shell_keeps_direct_call_runtime_fallback_candidates_empty() {
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const App = () => <div sz={makeStyles()} />;".to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(attribute.runtime_fallback);
+        assert!(attribute.candidate_classes.is_empty());
     }
 
     #[test]
