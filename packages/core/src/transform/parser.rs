@@ -421,7 +421,6 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             self.ir.szs_diagnostics.push(unsupported_message);
             return;
         };
-        let ctx = self.resolve_context();
         let mut entries = Vec::with_capacity(slot_map.properties.len());
         for property in &slot_map.properties {
             let ObjectPropertyKind::ObjectProperty(prop) = property else {
@@ -450,12 +449,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     });
                 }
                 Expression::ObjectExpression(object) => {
-                    if !is_pure_literal_szs_object(object) {
-                        self.ir.szs_diagnostics.push(unsupported_message);
-                        return;
-                    }
-                    let Some(static_object) = static_object_from_object_expression(object, ctx)
-                    else {
+                    let Some(static_object) = static_szs_object(object) else {
                         self.ir.szs_diagnostics.push(unsupported_message);
                         return;
                     };
@@ -1146,36 +1140,56 @@ fn jsx_attribute_name<'a>(name: &'a JSXAttributeName<'a>) -> Option<&'a str> {
     }
 }
 
-/// Whether a value is allowed inside an `szs` slot object: string / number /
+/// Convert a value allowed inside an `szs` slot object: string / number /
 /// boolean literals, a negated number, or a nested object of the same.
 /// Deliberately STRICTER than the sz path (no identifiers, spreads,
 /// conditionals, parens, or `as` casts) so all three engines can enforce the
 /// exact same contract without a scope resolver.
-fn is_pure_literal_szs_value(expression: &Expression<'_>) -> bool {
+fn static_szs_value(expression: &Expression<'_>) -> Option<StaticSzValue> {
     match expression {
-        Expression::StringLiteral(_)
-        | Expression::NumericLiteral(_)
-        | Expression::BooleanLiteral(_) => true,
+        Expression::StringLiteral(value) => Some(StaticSzValue::String(value.value.to_string())),
+        Expression::NumericLiteral(value) => Some(StaticSzValue::Number(value.value)),
+        Expression::BooleanLiteral(value) => Some(StaticSzValue::Boolean(value.value)),
         Expression::UnaryExpression(unary) => {
-            unary.operator == UnaryOperator::UnaryNegation
-                && matches!(unary.argument, Expression::NumericLiteral(_))
+            if unary.operator != UnaryOperator::UnaryNegation {
+                return None;
+            }
+            let Expression::NumericLiteral(value) = &unary.argument else {
+                return None;
+            };
+            Some(StaticSzValue::Number(-value.value))
         }
-        Expression::ObjectExpression(object) => is_pure_literal_szs_object(object),
-        _ => false,
+        Expression::ObjectExpression(object) => {
+            Some(StaticSzValue::Object(static_szs_object(object)?))
+        }
+        _ => None,
     }
 }
 
-/// Whether every property of an object is a non-computed identifier-keyed
-/// pure-literal value (see [`is_pure_literal_szs_value`]).
-fn is_pure_literal_szs_object(object: &ObjectExpression<'_>) -> bool {
-    object.properties.iter().all(|property| {
+/// Convert an object only when every property is a non-computed,
+/// identifier-keyed pure literal (see [`static_szs_value`]).
+fn static_szs_object(object: &ObjectExpression<'_>) -> Option<StaticSzObject> {
+    let mut properties = Vec::with_capacity(object.properties.len());
+    for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(prop) = property else {
-            return false;
+            return None;
         };
-        !prop.computed
-            && matches!(prop.key, PropertyKey::StaticIdentifier(_))
-            && is_pure_literal_szs_value(&prop.value)
-    })
+        if prop.computed {
+            return None;
+        }
+        let PropertyKey::StaticIdentifier(identifier) = &prop.key else {
+            return None;
+        };
+        merge_static_property(
+            &mut properties,
+            StaticSzProperty {
+                key: identifier.name.to_string(),
+                value: static_szs_value(&prop.value)?,
+                span: text_span(prop.span),
+            },
+        );
+    }
+    Some(StaticSzObject { properties })
 }
 
 /// Minimal JSON string-body escape (backslash, quote, control chars) so the
@@ -3095,8 +3109,9 @@ mod tests {
     fn parser_shell_collects_dynamic_class_attributes() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
-            source: "export const App = () => <div className={getClass()} sz={{ p: 4 }} />;"
-                .to_string(),
+            source:
+                "export const App = () => <div className={getClass()} sz={{ p: 4, truncate: true }} />;"
+                    .to_string(),
         };
 
         let parsed = parse_source_shell(&file);
@@ -3110,7 +3125,7 @@ mod tests {
         );
         let lowered = lower_source_ir_classes(&parsed.ir);
         assert!(lowered.raw_class_names.is_empty());
-        assert_eq!(lowered.classes, ["p-4"]);
+        assert_eq!(lowered.classes, ["p-4", "truncate"]);
     }
 
     #[test]
@@ -4493,6 +4508,10 @@ mod tests {
             "const X=({slot})=> <Card szs={{ [slot]: { p: 2 } }} />;",
             "const X=()=> <Card szs={{ 'header': { p: 2 } }} />;",
             "const X=({value})=> <Card szs={{ header: { p: value } }} />;",
+            "const X=()=> <Card szs={{ header: { p: +2 } }} />;",
+            "const X=({value})=> <Card szs={{ header: { p: -value } }} />;",
+            "const X=({key})=> <Card szs={{ header: { [key]: 2 } }} />;",
+            "const X=()=> <Card szs={{ header: { 'p': 2 } }} />;",
             "const X=({header})=> <Card szs={{header}} />;",
         ] {
             let parsed = parse_source_shell(&TransformFile {
