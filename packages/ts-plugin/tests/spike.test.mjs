@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const ts = require('typescript');
 const { computeSzEntries } = require('../dist/core.js');
 
-function entriesAtMarker(source) {
+function entriesAtMarker(source, { forceUnresolvedSymbols = false } = {}) {
     const marker = source.indexOf('/*|*/');
     assert.ok(marker >= 0, 'source must contain the /*|*/ marker');
     const clean = source.replace('/*|*/', '');
@@ -33,9 +33,20 @@ function entriesAtMarker(source) {
         getDirectories: ts.sys.getDirectories,
     };
     const ls = ts.createLanguageService(host);
+    let service = ls;
+    if (forceUnresolvedSymbols) {
+        const program = ls.getProgram();
+        assert.ok(program, 'language service must expose its program');
+        const checker = Object.create(program.getTypeChecker());
+        checker.getSymbolAtLocation = () => undefined;
+        const programWithoutSymbols = Object.create(program);
+        programWithoutSymbols.getTypeChecker = () => checker;
+        service = Object.create(ls);
+        service.getProgram = () => programWithoutSymbols;
+    }
     return computeSzEntries(
         ts,
-        ls,
+        service,
         fileName,
         marker,
         { enabled: true, values: true, maxEntries: 512, deadlineMs: 20, failureThreshold: 3 },
@@ -118,6 +129,32 @@ test('named import receivers cannot spoof namespace provenance', () => {
         "import { theme } from 'csszyx'; theme.szv({ base: { /*|*/ } });",
     );
     assert.strictEqual(names.length, 0);
+});
+
+test('incomplete checker falls back only to proven csszyx import spellings', () => {
+    const fallbackNames = source =>
+        entriesAtMarker(source, { forceUnresolvedSymbols: true }).map(entry => entry.name);
+
+    assert.ok(
+        fallbackNames(
+            "import { szv as variants } from 'csszyx'; variants({ base: { /*|*/ } });",
+        ).includes('bg'),
+    );
+    assert.ok(
+        fallbackNames(
+            "import * as runtime from '@csszyx/runtime'; runtime.szr({ hover: { /*|*/ } });",
+        ).includes('p'),
+    );
+    assert.strictEqual(
+        fallbackNames("import { szv } from 'unrelated'; szv({ base: { /*|*/ } });").length,
+        0,
+    );
+    assert.strictEqual(
+        fallbackNames(
+            "import csszyx from 'csszyx'; csszyx.szv({ base: { /*|*/ } });",
+        ).length,
+        0,
+    );
 });
 
 test('conditional JSX sz branches retain context', () => {
