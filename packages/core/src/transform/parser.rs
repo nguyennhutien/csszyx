@@ -3221,6 +3221,7 @@ mod tests {
                 const g = dynamic({ minH: 6 } satisfies object);
                 const ignoredMember = tools.dynamic({ p: 99 });
                 const ignoredEmpty = dynamic();
+                const ignoredCall = dynamic(makeStyles());
                 const ignoredCallee = other({ p: 100 });
             "
             .to_string(),
@@ -4806,16 +4807,21 @@ mod tests {
     }
 
     #[test]
-    fn parser_shell_keeps_direct_call_runtime_fallback_candidates_empty() {
-        let parsed = parse_source_shell(&TransformFile {
-            filename: "/repo/src/App.tsx".to_string(),
-            source: "const App = () => <div sz={makeStyles()} />;".to_string(),
-        });
-        let attribute = &parsed.ir.sz_attributes[0];
+    fn parser_shell_keeps_call_runtime_fallback_candidates_empty() {
+        for source in [
+            "const App = () => <div sz={makeStyles()} />;",
+            "const RUNTIME = makeStyles(); const App = () => <div sz={RUNTIME} />;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
 
-        assert!(parsed.diagnostics.is_empty());
-        assert!(attribute.runtime_fallback);
-        assert!(attribute.candidate_classes.is_empty());
+            assert!(parsed.diagnostics.is_empty(), "{source}");
+            assert!(attribute.runtime_fallback, "{source}");
+            assert!(attribute.candidate_classes.is_empty(), "{source}");
+        }
     }
 
     #[test]
