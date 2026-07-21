@@ -3595,6 +3595,39 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_resolves_partial_objects_through_ts_wrappers() {
+        for (expression, expected_class) in [
+            ("({ p: value } as const)", "p-(--_sz-p)"),
+            ("({ m: value } satisfies object)", "m-(--_sz-m)"),
+            ("({ w: value })!", "w-(--_sz-w)"),
+            ("(({ h: value }))", "h-(--_sz-h)"),
+        ] {
+            let source = format!("const App=({{value}})=><div sz={{{expression}}}/>;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
+            let lowered = lower_source_ir_classes(&parsed.ir);
+
+            assert!(parsed.diagnostics.is_empty(), "{expression}");
+            assert!(!attribute.runtime_fallback, "{expression}");
+            assert_eq!(attribute.dynamic_css_vars.len(), 1, "{expression}");
+            assert_eq!(lowered.classes, [expected_class], "{expression}");
+        }
+
+        let source = "const EMPTY={} as const; const App=()=> <div sz={EMPTY}/>;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(attribute.object.is_empty());
+        assert!(attribute.rewrites_empty_class);
+        assert!(!attribute.runtime_fallback);
+    }
+
+    #[test]
     fn parser_shell_records_composite_jsx_element_names() {
         let source = "const App=()=> <><UI.Card szRecover='csr'/><UI.Layout.Panel szRecover='csr'/><this.View szRecover='csr'/><svg:path szRecover='csr'/></>;";
         let parsed = parse_source_shell(&TransformFile {
