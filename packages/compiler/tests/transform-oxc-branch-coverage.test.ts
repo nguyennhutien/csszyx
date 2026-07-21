@@ -745,6 +745,17 @@ describe('transform-oxc: nested & conditional class-source edge cases', () => {
         expect(out).not.toContain('__szSpacingVar');
     });
 
+    it('omits a utility when both conditional branches are absent', () => {
+        const out = code(
+            'export const A = ({ on }) => <div sz={{ p: on ? undefined : void 0 }} />;',
+        );
+        // Keep the test expression observable even though neither branch emits
+        // a class; arbitrary tests may carry side effects.
+        expect(out).toContain('className={on ? undefined : undefined}');
+        expect(out).not.toContain('p-(--');
+        expect(out).not.toContain('__szSpacingVar');
+    });
+
     it('returns null (fallback) when a static-conditional branch is an unbound identifier', () => {
         const B4 = 'const B4 = { m: 2 };';
         const result = run(
