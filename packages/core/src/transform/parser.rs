@@ -3250,6 +3250,30 @@ mod tests {
     }
 
     #[test]
+    fn szv_catalog_resolves_conditional_object_candidates_with_memo_and_cycle_guards() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "import { szv } from '@csszyx/runtime'; declare const dense: boolean; const COMPACT = { p: 2 }; const RELAXED = { m: 4 }; const CHOICE = dense ? COMPACT : RELAXED; const LOOP = LOOP; const DIMENSION = { direct: CHOICE, memoized: CHOICE, spread: { ...CHOICE, bg: 'red-500' }, cyclic: LOOP }; const s = szv({ variants: { layout: DIMENSION } });".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(lowered.classes.contains(&"p-2".to_string()));
+        assert!(lowered.classes.contains(&"m-4".to_string()));
+        assert!(lowered.classes.contains(&"bg-red-500".to_string()));
+        assert_eq!(
+            lowered
+                .classes
+                .iter()
+                .filter(|class| class.as_str() == "p-2")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn parser_shell_extracts_numeric_szv_variant_keys() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),

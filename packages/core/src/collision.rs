@@ -307,4 +307,16 @@ mod tests {
         assert_eq!(total, 3);
         assert!((0.0..=1.0).contains(&rate));
     }
+
+    #[test]
+    fn test_wasm_facade_delegates_collision_state() {
+        let mut detector = WasmCollisionDetector::default();
+
+        assert_eq!(detector.count(), 0);
+        assert!(!detector.has_collision());
+        let first = detector.add("#ff0000");
+        assert_eq!(detector.add("#ff0000"), first);
+        assert_eq!(detector.count(), 1);
+        assert!(!detector.has_collision());
+    }
 }
