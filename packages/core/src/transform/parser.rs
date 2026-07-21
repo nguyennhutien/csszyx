@@ -3740,6 +3740,7 @@ mod tests {
     fn parser_shell_safelists_static_array_candidates_before_runtime_spread() {
         for source in [
             "const BASE = { p: 4 }; const App = ({ active, items }) => <div sz={([BASE, { w: 3 }, active && ((((BASE as const) satisfies object)!)), active && { m: 2 }, ...items] satisfies unknown[])} />;",
+            "const App = ({ active, items }) => <div sz={[active && UNKNOWN, active && makeStyles(), { p: 4 }, { w: 3 }, { m: 2 }, ...items]} />;",
             "const App = ({ items }) => <div sz={[{ p: 4 }, { w: 3 }, { m: 2 }, ...items]} />;",
             "const STYLE = [...items, { p: 4 }, { w: 3 }, { m: 2 }]; const App = () => <div sz={STYLE} />;",
             "const App = ({ active, items }) => <div sz={active ? [...items, { p: 4 }] : [...items, { w: 3 }, { m: 2 }]} />;",

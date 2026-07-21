@@ -2494,6 +2494,7 @@ mod tests {
                 property("gap", StaticSzValue::String("1.1".into())),
                 property("w", StaticSzValue::String("1.4rem".into())),
                 property("leading", StaticSzValue::Number(1.4)),
+                property("hidden", StaticSzValue::Boolean(true)),
                 property(
                     "hover",
                     StaticSzValue::Object(StaticSzObject {
