@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { collectAuthoredClassNames } from '../src/authored-class-scanner.js';
+import { collectAuthoredClassNames, findBalancedCodeEnd } from '../src/authored-class-scanner.js';
 import {
     collectMangleHybridHazards,
     mangleEligibleClasses,
@@ -106,6 +106,30 @@ describe('hybrid raw-class ownership', () => {
             'disabled',
             'm-2',
         ]);
+    });
+
+    it('collects quoted Astro class:list expressions', () => {
+        const source = `<section class:list="m-2 astro-quoted" />`;
+
+        expect([...collectAuthoredClassNames(source)].sort()).toEqual(['astro-quoted', 'm-2']);
+    });
+
+    it('bounds malformed expressions and retains completed authored literals', () => {
+        const unterminatedBrace = '{factory(`unterminated template';
+        expect(findBalancedCodeEnd(unterminatedBrace, 1)).toBe(unterminatedBrace.length);
+
+        const source = [
+            "const props = { className: clsx('tail-class')",
+            'const A = () => <div className={' + '`escaped\\`tick p-4',
+        ].join('\n');
+        expect([...collectAuthoredClassNames(source)].sort()).toEqual([
+            'escaped`tick',
+            'p-4',
+            'tail-class',
+        ]);
+        expect(collectAuthoredClassNames('<div class:list=dynamic className=dynamic />').size).toBe(
+            0,
+        );
     });
 
     it('decodes static concatenation, JavaScript whitespace escapes, and entities', () => {
