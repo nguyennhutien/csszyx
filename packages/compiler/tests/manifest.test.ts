@@ -154,6 +154,20 @@ describe('ManifestBuilder', () => {
         const manifest = builder.build();
         expect(manifest.tokens.token1.component).toBe('Input');
     });
+
+    it('preserves an already-relative source path', () => {
+        const builder = new ManifestBuilder('build123');
+        builder.addToken('token1', {
+            mode: 'csr',
+            component: 'Button',
+            filePath: 'generated/Button.tsx',
+            line: 10,
+            column: 5,
+            buildId: 'build123',
+        });
+
+        expect(builder.build().tokens.token1.path).toBe('generated/Button.tsx');
+    });
 });
 
 describe('serializeManifest', () => {
