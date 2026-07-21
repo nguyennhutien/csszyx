@@ -3143,6 +3143,31 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_extracts_catalog_call_wrapper_matrix() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: r"
+                const BASE = { h: 5 } as const;
+                const a = dynamic(({ p: 1 }));
+                const b = dynamic(({ m: 2 } as const));
+                const c = dynamic(({ gap: 3 } satisfies object));
+                const d = dynamic(({ w: 4 })!);
+                const e = dynamic(BASE!);
+                const ignoredMember = tools.dynamic({ p: 99 });
+                const ignoredEmpty = dynamic();
+                const ignoredCallee = other({ p: 100 });
+            "
+            .to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(lowered.classes, ["p-1", "m-2", "gap-3", "w-4", "h-5"]);
+    }
+
+    #[test]
     fn parser_shell_extracts_static_szv_catalog_classes() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -3818,6 +3843,39 @@ mod tests {
             "keyless junk classes leaked into candidates: {:?}",
             attribute.candidate_classes
         );
+    }
+
+    #[test]
+    fn candidate_walk_preserves_variants_conditionals_and_static_spreads() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const STATIC = { m: 2 } as const; const App = ({ rest, cond, runtime }) => <div sz={{ ...rest, ...STATIC, ...(cond ? { p: 6 } : { p: 8 }), hover: { p: cond ? 2 : 4, bg: { color: cond ? 'red-500' : 'blue-500', op: 30 }, borderColor: runtime }, w: cond ? 10 : runtime }} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(attribute.runtime_fallback);
+        for class in [
+            "m-2",
+            "p-6",
+            "p-8",
+            "hover:p-2",
+            "hover:p-4",
+            "hover:bg-red-500/30",
+            "hover:bg-blue-500/30",
+            "w-10",
+        ] {
+            assert!(
+                attribute
+                    .candidate_classes
+                    .iter()
+                    .any(|found| found == class),
+                "missing {class}: {:?}",
+                attribute.candidate_classes
+            );
+        }
     }
 
     #[test]
