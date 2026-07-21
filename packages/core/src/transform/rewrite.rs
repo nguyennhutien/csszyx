@@ -264,12 +264,11 @@ fn rewrite_static_sz_element(
         return Ok(());
     }
 
-    let Some((first_index, rest)) = element.sz_attribute_indices.split_first() else {
-        return Ok(());
-    };
-    let first_attribute = &ir.sz_attributes[*first_index];
+    // The caller dispatches here only for elements carrying at least one sz
+    // attribute; array, ternary, and runtime fallbacks take earlier lanes.
+    let first_attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
     overwrite_attribute(magic, first_attribute.attribute_span, &classes.join(" "));
-    for index in rest {
+    for index in element.sz_attribute_indices.iter().skip(1) {
         let attribute = &ir.sz_attributes[*index];
         magic.remove(
             whitespace_start(source, attribute.attribute_span.start as usize),
@@ -759,6 +758,7 @@ mod tests {
         assert_eq!(opening_attribute_insert_offset("<div   >", 8), 4);
         assert_eq!(opening_attribute_insert_offset("<div   />", 9), 7);
         assert_eq!(opening_attribute_insert_offset("<div", 4), 4);
+        assert_eq!(opening_attribute_insert_offset("<div   ", 7), 4);
     }
 
     #[test]

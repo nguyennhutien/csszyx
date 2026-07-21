@@ -563,17 +563,18 @@ fn lower_aria_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<S
 /// for states, `{ has: { img: {...} } }` → `has-[img]:…` for raw selectors.
 fn lower_has_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
     for property in &object.properties {
-        if let StaticSzValue::Object(body) = &property.value {
-            let selector = property.key.as_str();
-            let next_prefix = if selector.starts_with(':') {
-                format!("{prefix}has-[{selector}]:")
-            } else if is_known_variant(selector) {
-                format!("{prefix}has-[:{selector}]:")
-            } else {
-                format!("{prefix}has-[{selector}]:")
-            };
-            lower_object_into(body, &next_prefix, classes);
-        }
+        let StaticSzValue::Object(body) = &property.value else {
+            continue;
+        };
+        let selector = property.key.as_str();
+        let next_prefix = if selector.starts_with(':') {
+            format!("{prefix}has-[{selector}]:")
+        } else if is_known_variant(selector) {
+            format!("{prefix}has-[:{selector}]:")
+        } else {
+            format!("{prefix}has-[{selector}]:")
+        };
+        lower_object_into(body, &next_prefix, classes);
     }
 }
 
@@ -613,14 +614,15 @@ fn lower_group_peer_variant(
             }
             "aria" => {
                 for attr in &nested.properties {
-                    if let StaticSzValue::Object(body) = &attr.value {
-                        let np = if is_aria_state(&attr.key) {
-                            format!("{prefix}{scope}-aria-{}:", attr.key)
-                        } else {
-                            format!("{prefix}{scope}-aria-[{}]:", attr.key)
-                        };
-                        lower_object_into(body, &np, classes);
-                    }
+                    let StaticSzValue::Object(body) = &attr.value else {
+                        continue;
+                    };
+                    let np = if is_aria_state(&attr.key) {
+                        format!("{prefix}{scope}-aria-{}:", attr.key)
+                    } else {
+                        format!("{prefix}{scope}-aria-[{}]:", attr.key)
+                    };
+                    lower_object_into(body, &np, classes);
                 }
                 continue;
             }
@@ -661,15 +663,16 @@ fn lower_group_peer_variant(
                 }
                 "aria" => {
                     for attr in &state_body.properties {
-                        if let StaticSzValue::Object(body) = &attr.value {
-                            let aria_segment = if is_aria_state(&attr.key) {
-                                format!("aria-{}", attr.key)
-                            } else {
-                                format!("aria-[{}]", attr.key)
-                            };
-                            let np = format!("{prefix}{scope}-{aria_segment}/{nested_key}:");
-                            lower_object_into(body, &np, classes);
-                        }
+                        let StaticSzValue::Object(body) = &attr.value else {
+                            continue;
+                        };
+                        let aria_segment = if is_aria_state(&attr.key) {
+                            format!("aria-{}", attr.key)
+                        } else {
+                            format!("aria-[{}]", attr.key)
+                        };
+                        let np = format!("{prefix}{scope}-{aria_segment}/{nested_key}:");
+                        lower_object_into(body, &np, classes);
                     }
                 }
                 _ => {
