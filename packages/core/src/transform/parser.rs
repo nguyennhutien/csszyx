@@ -3824,6 +3824,61 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_deep_merges_nested_static_array_objects() {
+        let source = "const App=()=> <div sz={[{ hover: { p: 2, m: 1 }, focus: { w: 2 } }, { hover: { p: 4, bg: 'red-500' }, focus: { h: 3 } }]} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty(), "{source}");
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(
+            lowered.classes,
+            [
+                "hover:p-4",
+                "hover:m-1",
+                "hover:bg-red-500",
+                "focus:w-2",
+                "focus:h-3",
+            ]
+        );
+    }
+
+    #[test]
+    fn parser_shell_preserves_static_wrappers_inside_objects_and_arrays() {
+        let source = "const SIZE=2; const CLASS='p-2'; const App=()=> <div sz={[CLASS, { ...({ p: 1 } satisfies object), ...({ m: 2 }!), w: SIZE!, h: undefined! }]} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty(), "{source}");
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(lowered.classes, ["p-1", "m-2", "w-2"]);
+    }
+
+    #[test]
+    fn parser_shell_keeps_unsupported_unary_values_runtime_bound() {
+        let source = "const App=({ value })=> <div sz={{ p: -value, m: ~2 }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(parsed.diagnostics.is_empty(), "{source}");
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(attribute.dynamic_css_vars.len(), 2);
+        assert_eq!(attribute.dynamic_css_vars[0].key, "p");
+        assert_eq!(attribute.dynamic_css_vars[1].key, "m");
+    }
+
+    #[test]
     fn parser_shell_collects_runtime_array_candidate_classes() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
