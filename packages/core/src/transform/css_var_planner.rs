@@ -397,6 +397,10 @@ fn extract_quoted_custom_property_keys(expression: &str) -> Vec<String> {
         let start = index + 1;
         index = start;
         while index < bytes.len() && bytes[index] != quote {
+            if bytes[index] == b'\\' && index + 1 < bytes.len() {
+                index += 2;
+                continue;
+            }
             index += 1;
         }
         if index >= bytes.len() {
@@ -770,6 +774,10 @@ mod tests {
             ["--first", "--second"]
         );
         assert!(extract_quoted_custom_property_keys("{'--unterminated").is_empty());
+        assert_eq!(
+            extract_quoted_custom_property_keys(r#"{note: 'it\'s', '--reserved': 1}"#),
+            ["--reserved"]
+        );
         assert!(has_redundant_outer_parens("(`)` + '(x)')"));
         assert!(has_redundant_outer_parens("((value))"));
         assert!(!has_redundant_outer_parens("(value) + other"));
