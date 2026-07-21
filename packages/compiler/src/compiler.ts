@@ -1,4 +1,4 @@
-import { version as getWasmVersion, init, transform_sz } from '@csszyx/core';
+import { generate_token, version as getWasmVersion, init, transform_sz } from '@csszyx/core';
 
 import { stripInvalidColorStrings } from './color-validation.js';
 import type { SzObject } from './transform.js';
@@ -138,7 +138,6 @@ export class CsszyxCompiler {
     }): string {
         if (this.wasmLoaded) {
             try {
-                const { generate_token } = require('@csszyx/core');
                 return generate_token(
                     metadata.component,
                     metadata.filePath,
