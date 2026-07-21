@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SUMMARY_PREFIXES = ['FNF:', 'FNH:', 'LF:', 'LH:', 'BRF:', 'BRH:'];
+const WASM_ONLY_START = '// coverage:wasm-only:start';
+const WASM_ONLY_END = '// coverage:wasm-only:end';
 
 function testModuleStart(source) {
     const lines = source.split(/\r?\n/);
@@ -19,6 +21,22 @@ function lineNumber(record) {
     return Number(record.slice(record.indexOf(':') + 1).split(',', 1)[0]);
 }
 
+function wasmOnlyRanges(source) {
+    const ranges = [];
+    let start;
+    for (const [index, line] of source.split(/\r?\n/).entries()) {
+        if (line.trim() === WASM_ONLY_START) {
+            if (start !== undefined) return [];
+            start = index + 1;
+        } else if (line.trim() === WASM_ONLY_END) {
+            if (start === undefined) return [];
+            ranges.push([start, index + 1]);
+            start = undefined;
+        }
+    }
+    return start === undefined ? ranges : [];
+}
+
 function summary(prefix, total, hit) {
     return [`${prefix}F:${total}`, `${prefix}H:${hit}`];
 }
@@ -27,21 +45,29 @@ function filterRecord(record, readSource) {
     const sourceFile = record.find(line => line.startsWith('SF:'))?.slice(3);
     if (!sourceFile?.includes('/packages/core/src/')) return [...record, 'end_of_record'];
 
-    const cutoff = testModuleStart(readSource(sourceFile));
-    if (cutoff === undefined) return [...record, 'end_of_record'];
+    const source = readSource(sourceFile);
+    const cutoff = testModuleStart(source);
+    const wasmRanges = wasmOnlyRanges(source);
+    if (cutoff === undefined && wasmRanges.length === 0) return [...record, 'end_of_record'];
+
+    const isExcludedLine = line =>
+        (cutoff !== undefined && line >= cutoff) ||
+        wasmRanges.some(([start, end]) => line >= start && line <= end);
 
     const removedFunctions = new Set(
         record
-            .filter(line => line.startsWith('FN:') && lineNumber(line) >= cutoff)
+            .filter(line => line.startsWith('FN:') && isExcludedLine(lineNumber(line)))
             .map(line => line.slice(line.lastIndexOf(',') + 1)),
     );
     const kept = record.filter(line => {
         if (SUMMARY_PREFIXES.some(prefix => line.startsWith(prefix))) return false;
-        if (line.startsWith('FN:')) return lineNumber(line) < cutoff;
+        if (line.startsWith('FN:')) return !isExcludedLine(lineNumber(line));
         if (line.startsWith('FNDA:')) {
             return !removedFunctions.has(line.slice(line.indexOf(',') + 1));
         }
-        if (line.startsWith('DA:') || line.startsWith('BRDA:')) return lineNumber(line) < cutoff;
+        if (line.startsWith('DA:') || line.startsWith('BRDA:')) {
+            return !isExcludedLine(lineNumber(line));
+        }
         return line !== 'end_of_record';
     });
 

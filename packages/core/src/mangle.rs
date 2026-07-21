@@ -52,6 +52,9 @@ pub type MangleMap = HashMap<String, String>;
 /// // Use compute_checksum_internal() for pure-Rust usage.
 /// let checksum = compute_mangle_checksum(js_map);
 /// ```
+// Native LLVM coverage cannot execute a JsValue boundary. This adapter is
+// exercised through pkg-node in tests/integration.test.ts.
+// coverage:wasm-only:start
 #[wasm_bindgen]
 pub fn compute_mangle_checksum(map: JsValue) -> Result<String, JsValue> {
     // Deserialize JavaScript object to HashMap
@@ -60,6 +63,7 @@ pub fn compute_mangle_checksum(map: JsValue) -> Result<String, JsValue> {
 
     Ok(compute_checksum_internal(&mangle_map))
 }
+// coverage:wasm-only:end
 
 /// Internal checksum computation (native Rust, no WASM overhead).
 ///
@@ -132,6 +136,9 @@ pub fn verify_checksum_internal(map: &MangleMap, expected_checksum: &str) -> boo
 /// # Returns
 ///
 /// `true` if checksum matches, `false` otherwise
+// Native LLVM coverage cannot execute a JsValue boundary. This adapter is
+// exercised through pkg-node in tests/integration.test.ts.
+// coverage:wasm-only:start
 #[wasm_bindgen]
 pub fn verify_mangle_checksum(map: JsValue, expected_checksum: &str) -> Result<bool, JsValue> {
     let mangle_map: MangleMap = serde_wasm_bindgen::from_value(map)
@@ -139,6 +146,7 @@ pub fn verify_mangle_checksum(map: JsValue, expected_checksum: &str) -> Result<b
 
     Ok(verify_checksum_internal(&mangle_map, expected_checksum))
 }
+// coverage:wasm-only:end
 
 #[cfg(test)]
 mod tests {
