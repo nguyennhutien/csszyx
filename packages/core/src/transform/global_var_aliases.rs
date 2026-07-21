@@ -139,6 +139,25 @@ mod tests {
     };
 
     #[test]
+    fn returns_the_original_ir_when_no_valid_aliases_exist() {
+        let ir = SourceIr::empty("/repo/src/App.tsx".to_string(), 100);
+
+        let empty = apply_global_var_aliases(&ir, &[]);
+        assert_eq!(empty.ir, ir);
+        assert!(empty.variable_map.is_empty());
+
+        let invalid = apply_global_var_aliases(
+            &ir,
+            &[GlobalVarAliasEntry {
+                original: "brand-primary".to_string(),
+                alias: "g0".to_string(),
+            }],
+        );
+        assert_eq!(invalid.ir, ir);
+        assert!(invalid.variable_map.is_empty());
+    }
+
+    #[test]
     fn rewrites_static_object_values_and_records_metadata() {
         let mut ir = SourceIr::empty("/repo/src/App.tsx".to_string(), 100);
         ir.sz_attributes.push(SzAttributeIr {
