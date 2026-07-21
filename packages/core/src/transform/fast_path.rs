@@ -199,7 +199,6 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
     let mut ir = SourceIr::empty(file.filename.clone(), source_len);
     let mut search_from = 0;
     let mut found = false;
-    let mut element_spans = Vec::<TextSpan>::new();
     let sz_attribute_count = count_sz_attributes(&file.source);
 
     while let Some(relative_start) = file.source[search_from..].find("sz={{") {
@@ -228,9 +227,6 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
         let close_relative = file.source[inner_start..opening_end].find("}}")?;
         let inner_end = inner_start + close_relative;
         let attribute_end = inner_end + 2;
-        if attribute_end > opening_end {
-            return None;
-        }
 
         let object = parse_flat_static_object(&file.source[inner_start..inner_end], inner_start)?;
         if object.is_empty() {
@@ -238,10 +234,6 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
         }
 
         let opening_span = span(opening_start, opening_end)?;
-        if element_spans.contains(&opening_span) {
-            return None;
-        }
-        element_spans.push(opening_span);
 
         let attribute_index = ir.sz_attributes.len();
         ir.sz_attributes.push(SzAttributeIr {

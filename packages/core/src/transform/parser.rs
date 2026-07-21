@@ -358,13 +358,6 @@ fn safe_style_spread_from_attribute(spread: &JSXSpreadAttribute<'_>) -> Option<S
 
 /// Capture one object-literal spread branch with at most one explicit style key.
 fn safe_style_spread_object(object: &ObjectExpression<'_>) -> Option<SafeStyleSpreadObjectIr> {
-    if object
-        .properties
-        .iter()
-        .any(|property| matches!(property, ObjectPropertyKind::SpreadProperty(_)))
-    {
-        return None;
-    }
     let mut style_value = None;
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
@@ -919,9 +912,6 @@ fn lenient_catalog_objects<'a>(
     depth: usize,
     budget: &mut CatalogExtrasBudget,
 ) -> Vec<StaticSzObject> {
-    if depth > MAX_CATALOG_DEPTH {
-        return vec![StaticSzObject::empty()];
-    }
     let mut primary = StaticSzObject::empty();
     let mut extras: Vec<StaticSzObject> = Vec::new();
     for property in &object.properties {
@@ -956,10 +946,8 @@ fn lenient_catalog_objects<'a>(
                 if values.is_empty() {
                     continue;
                 }
-                let rest = values.split_off(1);
-                let Some(first) = values.pop() else {
-                    continue;
-                };
+                let first = values.remove(0);
+                let rest = values;
                 let span = text_span(prop.span);
                 merge_static_property(
                     &mut primary.properties,
