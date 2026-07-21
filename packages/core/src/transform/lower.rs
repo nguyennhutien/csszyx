@@ -242,13 +242,15 @@ pub(crate) fn collect_dead_spacing_steps(
             }
             StaticSzValue::String(value) => {
                 let unsigned = value.strip_prefix('-').unwrap_or(value);
-                if is_unsigned_decimal(unsigned) {
-                    if let Ok(parsed) = value.parse::<f64>() {
-                        if is_dead_spacing_step(&property.key, parsed) {
-                            out.push((property.key.clone(), parsed, property.span.start));
-                        }
-                    }
-                }
+                value
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|_| is_unsigned_decimal(unsigned))
+                    .filter(|parsed| is_dead_spacing_step(&property.key, *parsed))
+                    .into_iter()
+                    .for_each(|parsed| {
+                        out.push((property.key.clone(), parsed, property.span.start));
+                    });
             }
             StaticSzValue::Object(nested) => {
                 if matches!(
@@ -562,11 +564,7 @@ fn lower_aria_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<S
 /// Lowers the `has` variant: `{ has: { checked: {...} } }` → `has-[:checked]:…`
 /// for states, `{ has: { img: {...} } }` → `has-[img]:…` for raw selectors.
 fn lower_has_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
-    for property in &object.properties {
-        let StaticSzValue::Object(body) = &property.value else {
-            continue;
-        };
-        let selector = property.key.as_str();
+    for (selector, body) in object_children(object) {
         let next_prefix = if selector.starts_with(':') {
             format!("{prefix}has-[{selector}]:")
         } else if is_known_variant(selector) {
@@ -604,23 +602,18 @@ fn lower_group_peer_variant(
                 continue;
             }
             "data" => {
-                for attr in &nested.properties {
-                    if let StaticSzValue::Object(body) = &attr.value {
-                        let np = format!("{prefix}{scope}-data-[{}]:", attr.key);
-                        lower_object_into(body, &np, classes);
-                    }
+                for (attribute, body) in object_children(nested) {
+                    let np = format!("{prefix}{scope}-data-[{attribute}]:");
+                    lower_object_into(body, &np, classes);
                 }
                 continue;
             }
             "aria" => {
-                for attr in &nested.properties {
-                    let StaticSzValue::Object(body) = &attr.value else {
-                        continue;
-                    };
-                    let np = if is_aria_state(&attr.key) {
-                        format!("{prefix}{scope}-aria-{}:", attr.key)
+                for (attribute, body) in object_children(nested) {
+                    let np = if is_aria_state(attribute) {
+                        format!("{prefix}{scope}-aria-{attribute}:")
                     } else {
-                        format!("{prefix}{scope}-aria-[{}]:", attr.key)
+                        format!("{prefix}{scope}-aria-[{attribute}]:")
                     };
                     lower_object_into(body, &np, classes);
                 }
@@ -654,22 +647,17 @@ fn lower_group_peer_variant(
             };
             match state.key.as_str() {
                 "data" => {
-                    for attr in &state_body.properties {
-                        if let StaticSzValue::Object(body) = &attr.value {
-                            let np = format!("{prefix}{scope}-data-[{}]/{nested_key}:", attr.key);
-                            lower_object_into(body, &np, classes);
-                        }
+                    for (attribute, body) in object_children(state_body) {
+                        let np = format!("{prefix}{scope}-data-[{attribute}]/{nested_key}:");
+                        lower_object_into(body, &np, classes);
                     }
                 }
                 "aria" => {
-                    for attr in &state_body.properties {
-                        let StaticSzValue::Object(body) = &attr.value else {
-                            continue;
-                        };
-                        let aria_segment = if is_aria_state(&attr.key) {
-                            format!("aria-{}", attr.key)
+                    for (attribute, body) in object_children(state_body) {
+                        let aria_segment = if is_aria_state(attribute) {
+                            format!("aria-{attribute}")
                         } else {
-                            format!("aria-[{}]", attr.key)
+                            format!("aria-[{attribute}]")
                         };
                         let np = format!("{prefix}{scope}-{aria_segment}/{nested_key}:");
                         lower_object_into(body, &np, classes);
@@ -683,6 +671,16 @@ fn lower_group_peer_variant(
             }
         }
     }
+}
+
+fn object_children(object: &StaticSzObject) -> impl Iterator<Item = (&str, &StaticSzObject)> {
+    object
+        .properties
+        .iter()
+        .filter_map(|property| match &property.value {
+            StaticSzValue::Object(body) => Some((property.key.as_str(), body)),
+            _ => None,
+        })
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1888,7 +1886,13 @@ mod tests {
                     "group",
                     object(vec![
                         property("ignored", StaticSzValue::Boolean(false)),
-                        property("data", object(vec![property("active", padding(1.0))])),
+                        property(
+                            "data",
+                            object(vec![
+                                property("active", padding(1.0)),
+                                property("ignored", StaticSzValue::Boolean(false)),
+                            ]),
+                        ),
                         property(
                             "aria",
                             object(vec![

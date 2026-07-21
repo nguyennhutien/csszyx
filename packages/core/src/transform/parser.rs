@@ -3337,6 +3337,16 @@ mod tests {
 
         assert!(parsed.diagnostics.is_empty());
         assert!(lowered.classes.is_empty());
+
+        let mut extras = Vec::new();
+        let mut exhausted = super::CatalogExtrasBudget {
+            extras: 0,
+            explores: 0,
+            object_memo: std::collections::HashMap::new(),
+            value_memo: std::collections::HashMap::new(),
+        };
+        super::push_catalog_extra(&mut extras, super::StaticSzObject::empty(), &mut exhausted);
+        assert!(extras.is_empty());
     }
 
     #[test]
