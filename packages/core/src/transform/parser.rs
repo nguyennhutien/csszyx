@@ -237,19 +237,18 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
         let mut last_attribute_end = None;
 
         for item in &element.attributes {
-            let JSXAttributeItem::Attribute(attr) = item else {
-                let spread = match item {
-                    JSXAttributeItem::SpreadAttribute(spread) => spread,
-                    JSXAttributeItem::Attribute(_) => unreachable!("attribute matched above"),
-                };
-                has_spread_attribute = true;
-                spread_count += 1;
-                safe_style_spread = if spread_count == 1 {
-                    safe_style_spread_from_attribute(spread)
-                } else {
-                    None
-                };
-                continue;
+            let attr = match item {
+                JSXAttributeItem::Attribute(attr) => attr,
+                JSXAttributeItem::SpreadAttribute(spread) => {
+                    has_spread_attribute = true;
+                    spread_count += 1;
+                    safe_style_spread = if spread_count == 1 {
+                        safe_style_spread_from_attribute(spread)
+                    } else {
+                        None
+                    };
+                    continue;
+                }
             };
             last_attribute_end = Some(attr.span.end);
             if let Some(name) = jsx_attribute_name(&attr.name) {
@@ -499,6 +498,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             ternaries,
             array_parts,
             runtime_fallback,
+            runtime_fallback_spread,
             candidate_classes,
             dynamic_css_vars,
         ) = match &attr.value {
@@ -509,6 +509,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 true,
                 Vec::new(),
                 Vec::new(),
+                false,
                 false,
                 Vec::new(),
                 Vec::new(),
@@ -538,6 +539,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         vec![ternary],
                         Vec::new(),
                         false,
+                        false,
                         Vec::new(),
                         Vec::new(),
                     )
@@ -551,6 +553,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         rewrites_empty_class,
                         Vec::new(),
                         Vec::new(),
+                        false,
                         false,
                         Vec::new(),
                         Vec::new(),
@@ -566,6 +569,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         ternaries,
                         Vec::new(),
                         false,
+                        false,
                         Vec::new(),
                         dynamic_css_vars,
                     )
@@ -579,6 +583,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         Vec::new(),
                         array_parts,
+                        false,
                         false,
                         Vec::new(),
                         Vec::new(),
@@ -596,6 +601,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         Vec::new(),
                         Vec::new(),
                         true,
+                        jsx_expression_has_top_level_spread(&container.expression),
                         candidate_classes,
                         Vec::new(),
                     )
@@ -614,8 +620,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             ternaries,
             array_parts,
             runtime_fallback,
-            runtime_fallback_spread: runtime_fallback
-                && jsx_attribute_value_has_top_level_spread(attr.value.as_ref()),
+            runtime_fallback_spread,
             candidate_classes,
             dynamic_css_vars,
         });
@@ -1579,20 +1584,11 @@ fn runtime_fallback_span_from_expression(expression: &Expression<'_>) -> Option<
     }
 }
 
-/// Returns true when the `sz` attribute value is an object literal carrying a
+/// Returns true when an `sz` expression is an object literal carrying a
 /// top-level spread (`sz={{ ...x }}`). This is the unresolvable-spread shape
 /// that forces a runtime fallback the static layer can't evaluate — flagged so
 /// a build-log diagnostic can surface it, distinct from other fallback shapes
 /// (e.g. a dynamic value-object sub-field) which must not warn.
-fn jsx_attribute_value_has_top_level_spread(value: Option<&JSXAttributeValue<'_>>) -> bool {
-    match value {
-        Some(JSXAttributeValue::ExpressionContainer(container)) => {
-            jsx_expression_has_top_level_spread(&container.expression)
-        }
-        _ => false,
-    }
-}
-
 fn jsx_expression_has_top_level_spread(expression: &JSXExpression<'_>) -> bool {
     match expression {
         JSXExpression::TSAsExpression(value) => expression_has_top_level_spread(&value.expression),
