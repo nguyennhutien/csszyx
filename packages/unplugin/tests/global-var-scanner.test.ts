@@ -269,16 +269,29 @@ describe('planGlobalVarAliases', () => {
 }
 `);
 
-        const plan = planGlobalVarAliases({
+        const prefixPlan = planGlobalVarAliases({
             scans: [scan],
             tokens: ['--brand-primary', '--app-gap'],
             reserved: ['--brand-*'],
         });
 
-        expect(plan.diagnostics).toEqual([
+        expect(prefixPlan.diagnostics).toEqual([
             expect.objectContaining({
                 code: 'tailwind-reserved',
                 name: '--brand-primary',
+            }),
+        ]);
+
+        const exactPlan = planGlobalVarAliases({
+            scans: [scan],
+            tokens: ['--brand-primary', '--app-gap'],
+            reserved: ['--app-gap'],
+        });
+
+        expect(exactPlan.diagnostics).toEqual([
+            expect.objectContaining({
+                code: 'tailwind-reserved',
+                name: '--app-gap',
             }),
         ]);
     });
