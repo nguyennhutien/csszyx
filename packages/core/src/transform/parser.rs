@@ -3575,18 +3575,38 @@ mod tests {
 
     #[test]
     fn parser_shell_safelists_static_array_candidates_before_runtime_spread() {
-        let source = "const BASE = { p: 4 }; const App = ({ active, items }) => <div sz={([BASE, { w: 3 }, active && ((((BASE as const) satisfies object)!)), active && { m: 2 }, ...items] satisfies unknown[])} />;";
-        let parsed = parse_source_shell(&TransformFile {
-            filename: "/repo/src/App.tsx".to_string(),
-            source: source.to_string(),
-        });
-        let attribute = &parsed.ir.sz_attributes[0];
+        for source in [
+            "const BASE = { p: 4 }; const App = ({ active, items }) => <div sz={([BASE, { w: 3 }, active && ((((BASE as const) satisfies object)!)), active && { m: 2 }, ...items] satisfies unknown[])} />;",
+            "const App = ({ items }) => <div sz={[{ p: 4 }, { w: 3 }, { m: 2 }, ...items]} />;",
+            "const STYLE = [...items, { p: 4 }, { w: 3 }, { m: 2 }]; const App = () => <div sz={STYLE} />;",
+            "const App = ({ active, items }) => <div sz={active ? [...items, { p: 4 }] : [...items, { w: 3 }, { m: 2 }]} />;",
+            "const App = ({ active, items }) => <div sz={active && [...items, { p: 4 }, { w: 3 }, { m: 2 }]} />;",
+            "const App = ({ items }) => <div sz={(([...items, { p: 4 }, { w: 3 }, { m: 2 }]!)!)} />;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
 
-        assert!(attribute.runtime_fallback);
-        assert!(attribute.array_parts.is_empty());
-        assert!(attribute.candidate_classes.contains(&"p-4".to_string()));
-        assert!(attribute.candidate_classes.contains(&"w-3".to_string()));
-        assert!(attribute.candidate_classes.contains(&"m-2".to_string()));
+            assert!(attribute.runtime_fallback, "{source}");
+            assert!(attribute.array_parts.is_empty(), "{source}");
+            assert!(
+                attribute.candidate_classes.contains(&"p-4".to_string()),
+                "{source}: {:?}",
+                attribute.candidate_classes
+            );
+            assert!(
+                attribute.candidate_classes.contains(&"w-3".to_string()),
+                "{source}: {:?}",
+                attribute.candidate_classes
+            );
+            assert!(
+                attribute.candidate_classes.contains(&"m-2".to_string()),
+                "{source}: {:?}",
+                attribute.candidate_classes
+            );
+        }
     }
 
     #[test]
@@ -3991,7 +4011,7 @@ mod tests {
     fn candidate_walk_preserves_variants_conditionals_and_static_spreads() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
-            source: "const STATIC = { m: 2 } as const; const App = ({ rest, cond, runtime }) => <div sz={{ ...rest, ...STATIC, ...(cond ? { p: 6 } : { p: 8 }), hover: { p: cond ? 2 : 4, bg: { color: cond ? 'red-500' : 'blue-500', op: 30 }, borderColor: runtime }, w: cond ? 10 : runtime }} />;".to_string(),
+            source: "const STATIC = { m: 2 } as const; const App = ({ rest, cond, runtime }) => <div sz={{ ...rest, ...STATIC, ...(cond ? { p: 6 } : { p: 8 }), hover: { p: cond ? 2 : 4, bg: { color: cond ? 'red-500' : 'blue-500', op: 30 }, borderColor: runtime }, w: cond ? 10 : runtime, h: cond ? runtime : 'full' }} />;".to_string(),
         };
 
         let parsed = parse_source_shell(&file);
@@ -4008,6 +4028,7 @@ mod tests {
             "hover:bg-red-500/30",
             "hover:bg-blue-500/30",
             "w-10",
+            "h-full",
         ] {
             assert!(
                 attribute
