@@ -18,6 +18,7 @@ import {
 const tempDirs: string[] = [];
 afterEach(() => {
     for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
 });
 
@@ -86,6 +87,25 @@ describe('transformIndexHtml recovery injection', () => {
         expect(result).toContain('csszyx');
         // The output differs from the input because hydration data was injected.
         expect(result).not.toBe(html);
+    });
+
+    it('reports stripped dev-only recovery sites in production', async () => {
+        vi.stubEnv('NODE_ENV', 'production');
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const h = harness({ build: { parser: 'oxc', cache: false } });
+        await h.invoke('configResolved', { root: h.root, command: 'build' });
+        await h.invoke(
+            'transform',
+            'const A = () => <div szRecover="dev-only" sz={{ p: 4 }} />;',
+            path.join(h.root, 'src/DevOnly.tsx'),
+        );
+        const html = '<html><head></head><body></body></html>';
+        const result = (await h.invoke('transformIndexHtml', html)) as string;
+
+        expect(result).not.toContain('__SZ_RECOVERY_MANIFEST__');
+        expect(warn.mock.calls.map(call => String(call[0])).join('\n')).toContain(
+            'Stripped 1 szRecover="dev-only" token',
+        );
     });
 });
 
