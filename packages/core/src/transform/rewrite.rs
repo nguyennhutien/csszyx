@@ -765,6 +765,26 @@ mod tests {
     }
 
     #[test]
+    fn rewrites_typescript_wrapped_static_ternaries() {
+        let cases = [
+            "const A=({on})=><div sz={(on?{p:2}:{p:4}) as const}/>;",
+            "const A=({on})=><div sz={(on?{p:2}:{p:4}) satisfies object}/>;",
+            "const A=({on})=><div sz={(on?{p:2}:{p:4})!}/>;",
+            "const STYLE=(on?{p:2}:{p:4}) as const; const A=()=> <div sz={STYLE}/>;",
+        ];
+
+        for source in cases {
+            let rewritten = rewrite(source).expect("wrapped ternary should be rewritten");
+
+            assert!(
+                rewritten.contains("className={on ? \"p-2\" : \"p-4\"}"),
+                "{source}: {rewritten}"
+            );
+            assert!(!rewritten.contains(" sz="), "{source}: {rewritten}");
+        }
+    }
+
+    #[test]
     fn merges_existing_static_class_attribute() {
         let source = "export const App = () => <div className=\"block\" sz={{ p: 4 }} />;";
         let rewritten = rewrite(source).expect("rewritten");

@@ -1269,6 +1269,18 @@ fn static_ternary_from_jsx_expression(
             let (ternary, _) = static_ternary_from_expression(initializer, ctx)?;
             Some((ternary, text_span(identifier.span)))
         }
+        JSXExpression::ParenthesizedExpression(value) => {
+            static_ternary_from_expression(&value.expression, ctx)
+        }
+        JSXExpression::TSAsExpression(value) => {
+            static_ternary_from_expression(&value.expression, ctx)
+        }
+        JSXExpression::TSSatisfiesExpression(value) => {
+            static_ternary_from_expression(&value.expression, ctx)
+        }
+        JSXExpression::TSNonNullExpression(value) => {
+            static_ternary_from_expression(&value.expression, ctx)
+        }
         _ => None,
     }
 }
