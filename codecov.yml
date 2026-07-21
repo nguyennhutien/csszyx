@@ -5,7 +5,7 @@
 # language's tests, so a TS-only change does not show a phantom Rust drop.
 #
 # Patch checks reject uncovered changed lines. Project checks are zero-slack
-# ratchets, with Rust additionally enforcing the repository's 95% minimum.
+# ratchets, with Rust additionally enforcing the repository's 97% minimum.
 
 codecov:
   require_ci_to_pass: true
@@ -24,7 +24,7 @@ coverage:
         flags:
           - typescript
       rust:
-        target: 95%
+        target: 97%
         threshold: 0%
         flags:
           - rust
