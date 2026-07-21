@@ -3406,6 +3406,101 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_classifies_mixed_array_parts_through_typescript_wrappers() {
+        let source = "const STATIC={rounded:'md'}; const App=({active,styles,width})=><div sz={(['base  flex',active&&'m-2',active?{p:2}:'p-4',active&&styles,{w:width},STATIC] as const)}/>;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let parts = &parsed.ir.sz_attributes[0].array_parts;
+
+        assert_eq!(parts.len(), 6);
+        assert_eq!(parts[0].classes, ["base", "flex"]);
+        assert_eq!(parts[1].classes, ["m-2"]);
+        assert!(parts[1].condition_span.is_some());
+        let ternary = parts[2].ternary.as_ref().expect("static ternary");
+        assert_eq!(ternary.consequent_classes, ["p-2"]);
+        assert_eq!(ternary.alternate_classes, ["p-4"]);
+        assert!(parts[3].dynamic_span.is_some());
+        assert!(!parts[3].dynamic_object_literal);
+        assert!(parts[4].dynamic_span.is_some());
+        assert!(parts[4].dynamic_object_literal);
+        assert_eq!(parts[5].classes, ["rounded-md"]);
+    }
+
+    #[test]
+    fn parser_shell_safelists_static_array_candidates_before_runtime_spread() {
+        let source = "const BASE = { p: 4 }; const App = ({ active, items }) => <div sz={([BASE, active && { m: 2 }, ...items] satisfies unknown[])} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(attribute.runtime_fallback);
+        assert!(attribute.array_parts.is_empty());
+        assert!(attribute.candidate_classes.contains(&"p-4".to_string()));
+        assert!(attribute.candidate_classes.contains(&"m-2".to_string()));
+    }
+
+    #[test]
+    fn parser_shell_preserves_wrapped_runtime_values_and_spread_diagnostics() {
+        for expression in [
+            "(styles as unknown)",
+            "(styles satisfies unknown)",
+            "styles!",
+            "((styles))",
+        ] {
+            let source = format!("const App=({{styles}})=><div sz={{{expression}}}/>;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
+
+            assert!(attribute.runtime_fallback, "{expression}");
+            assert!(!attribute.runtime_fallback_spread, "{expression}");
+        }
+
+        for expression in [
+            "({ ...props } as const)",
+            "({ ...props } satisfies Record<string, unknown>)",
+            "({ ...props })!",
+            "(({ ...props }))",
+        ] {
+            let source = format!("const App=({{props}})=><div sz={{{expression}}}/>;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
+
+            assert!(attribute.runtime_fallback, "{expression}");
+            assert!(attribute.runtime_fallback_spread, "{expression}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_records_composite_jsx_element_names() {
+        let source = "const App=()=> <><UI.Card szRecover='csr'/><UI.Layout.Panel szRecover='csr'/><this.View szRecover='csr'/><svg:path szRecover='csr'/></>;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let names = parsed
+            .ir
+            .jsx_opening_elements
+            .iter()
+            .map(|element| element.element_name.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            ["<>", "UI.Card", "UI.Layout.Panel", "this.View", "svg:path"]
+        );
+    }
+
+    #[test]
     fn parser_shell_preserves_nested_static_sz_object() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
