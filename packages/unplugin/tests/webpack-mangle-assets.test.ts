@@ -40,7 +40,9 @@ class EmitExtraAssetsPlugin {
                     const { RawSource } = compiler.webpack.sources;
                     compilation.emitAsset(
                         'page.html',
-                        new RawSource('<div class="m-3 author-kept"></div>'),
+                        new RawSource(
+                            '<div class="m-3 author-kept"></div><aside class=\'m-3\'></aside>',
+                        ),
                     );
                     compilation.emitAsset('extra.js', new RawSource('var x={className:"m-3"};'));
                 },
@@ -117,6 +119,7 @@ describe('webpack processAssets mangle pass', () => {
         expect(html).toContain(token as string);
         expect(html).not.toContain('m-3');
         expect(html).toContain('author-kept');
+        expect(html).toContain(`<aside class='${token}'></aside>`);
 
         // The extra JS asset's class string is mangled too.
         const extraJs = readFileSync(join(root, 'dist/extra.js'), 'utf8');

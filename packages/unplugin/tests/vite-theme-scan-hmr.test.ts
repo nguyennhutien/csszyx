@@ -69,4 +69,31 @@ describe('vite theme scan on hot update', () => {
         // No matching CSS → the scan returns early and never writes theme.d.ts.
         expect(fs.existsSync(path.join(root, '.csszyx', 'theme.d.ts'))).toBe(false);
     });
+
+    it('refreshes zero-config theme groups when any CSS file changes', async () => {
+        const root = fs.realpathSync(
+            fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-theme-auto-hmr-')),
+        );
+        tempDirs.push(root);
+        const themeCss = path.join(root, 'theme.css');
+        fs.writeFileSync(themeCss, '@theme {\n  --color-brand: #123456;\n}\n', 'utf8');
+        const plugins = vitePlugin({});
+        await invokeHook(plugins, 'configResolved', { root, command: 'serve' });
+
+        let invalidations = 0;
+        const themeModule = {};
+        const server = {
+            config: { root },
+            watcher: { emit() {} },
+            moduleGraph: {
+                getModuleById: () => themeModule,
+                invalidateModule: (module: unknown) => {
+                    expect(module).toBe(themeModule);
+                    invalidations += 1;
+                },
+            },
+        };
+        await invokeHook(plugins, 'handleHotUpdate', { file: themeCss, server, modules: [] });
+        expect(invalidations).toBe(1);
+    });
 });
