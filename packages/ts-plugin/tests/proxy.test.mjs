@@ -153,6 +153,35 @@ const throwingLoggerProxy = init({ typescript: ts }).create({
 assert.strictEqual(throwingLoggerProxy.getCompletionsAtPosition('/x.tsx', 0), base);
 assert.strictEqual(throwingLoggerAttempts, 1, 'logger failures never mask completion failures');
 
+// Correct but late results are still returned, then the deadline failure opens
+// the same protective circuit as an exception.
+const realDeadlineNow = performance.now.bind(performance);
+const deadlineTimeline = [0, 0, 2, 2, 2];
+let deadlineClockIndex = 0;
+let deadlineProgramAttempts = 0;
+performance.now = () =>
+    deadlineTimeline[Math.min(deadlineClockIndex++, deadlineTimeline.length - 1)];
+try {
+    const deadlineService = {
+        ...service,
+        getProgram: () => {
+            deadlineProgramAttempts += 1;
+            return undefined;
+        },
+    };
+    const deadlineProxy = init({ typescript: ts }).create({
+        config: { deadlineMs: 1, failureThreshold: 1 },
+        languageService: deadlineService,
+        project: { projectService: { logger: { info: () => {} } } },
+    });
+    assert.strictEqual(deadlineProxy.getCompletionsAtPosition('/x.tsx', 0), base);
+    assert.strictEqual(deadlineProgramAttempts, 1);
+    assert.strictEqual(deadlineProxy.getCompletionsAtPosition('/x.tsx', 0), base);
+    assert.strictEqual(deadlineProgramAttempts, 1, 'a deadline overrun opens the circuit');
+} finally {
+    performance.now = realDeadlineNow;
+}
+
 // Half-open recovery: an open circuit re-arms after its cooldown, so transient
 // slowness (a cold checker, a loaded machine) does not disable completions for
 // the whole session — the plugin retries without a configuration change.

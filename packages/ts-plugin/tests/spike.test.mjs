@@ -79,6 +79,10 @@ test('a plain object literal is left untouched', () => {
     assert.strictEqual(names.length, 0);
 });
 
+test('a cursor with no object ancestry is left untouched', () => {
+    assert.strictEqual(namesAtMarker('const value = 1 + /*|*/2;').length, 0);
+});
+
 test('unsupported scanner hosts fail open without whole-file fallback', () => {
     const tsWithoutTokenScanner = Object.create(ts);
     Object.defineProperty(tsWithoutTokenScanner, 'getTokenAtPosition', { value: undefined });
@@ -257,6 +261,15 @@ test('computed variant keys are not treated as static style ancestry', () => {
     assert.strictEqual(
         namesAtMarker("const key = 'hover'; const A = () => <div sz={{ [key]: { /*|*/ } }} />;")
             .length,
+        0,
+    );
+});
+
+test('pathological call ancestry stops at the traversal bound', () => {
+    let nested = '{ /*|*/ }';
+    for (let depth = 0; depth < 40; depth += 1) nested = `{ level${depth}: ${nested} }`;
+    assert.strictEqual(
+        namesAtMarker(`import { szr } from 'csszyx'; szr(${nested});`).length,
         0,
     );
 });
