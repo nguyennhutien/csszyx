@@ -779,6 +779,7 @@ mod tests {
             ["--reserved"]
         );
         assert!(has_redundant_outer_parens("(`)` + '(x)')"));
+        assert!(has_redundant_outer_parens(r#"('it\'s')"#));
         assert!(has_redundant_outer_parens("((value))"));
         assert!(!has_redundant_outer_parens("(value) + other"));
         assert!(!has_redundant_outer_parens("value)"));
