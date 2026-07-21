@@ -3362,6 +3362,60 @@ mod tests {
     }
 
     #[test]
+    fn szv_catalog_skips_malformed_members_without_losing_static_siblings() {
+        let source = r"
+            const LOOP = LOOP;
+            const ignoredLiteral = szv(1);
+            const ignoredRuntimeConfig = szv(runtimeConfig);
+            const ignoredDynamic = dynamic(runtimeValue);
+            const styles = szv({
+                ...runtimeConfig,
+                base: {
+                    p: dense ? 1 : 2,
+                    hidden: true,
+                    [dynamicKey]: 9,
+                    helper() {},
+                    m: runtimeValue,
+                    ...runtimeBase,
+                },
+                variants: {
+                    ...runtimeDimensions,
+                    [dynamicKey]: { on: { p: 99 } },
+                    invalid: runtimeDimension,
+                    cyclic: LOOP,
+                    called: makeDimension(),
+                    tone: {
+                        ...runtimeVariants,
+                        [dynamicKey]: { p: 88 },
+                        ok: { bg: 'red-500' },
+                    },
+                },
+            });
+        ";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/catalog.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        for class_name in ["p-1", "p-2", "bg-red-500"] {
+            assert!(
+                lowered.classes.contains(&class_name.to_string()),
+                "missing {class_name}: {:?}",
+                lowered.classes
+            );
+        }
+        for ignored in ["p-99", "p-88"] {
+            assert!(
+                !lowered.classes.contains(&ignored.to_string()),
+                "computed catalog key leaked {ignored}: {:?}",
+                lowered.classes
+            );
+        }
+    }
+
+    #[test]
     fn parser_shell_extracts_szv_dis_value_cases() {
         // szv lowers "dị" variant/important/negative/arbitrary/css-var values in
         // the catalog directly — these must match the same shapes the JS engines
