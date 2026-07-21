@@ -476,6 +476,22 @@ describe('Unescape/Escape Functions', () => {
         expect(escapeCSSClassName('hover:bg-blue-500')).toBe('hover\\:bg-blue-500');
     });
 
+    it.each([
+        ['a leading digit', '2xl:p-12', '\\32 xl\\:p-12'],
+        ['a hyphen followed by a digit', '-2', '\\-2'],
+        ['two leading hyphens', '--custom', '\\--custom'],
+    ])('should escape %s as a valid CSS identifier', (_case, className, escaped) => {
+        expect(escapeCSSClassName(className)).toBe(escaped);
+        expect(unescapeTailwindClass(escaped)).toBe(className);
+    });
+
+    it('should preserve a literal backslash when matching parser-normalized selectors', () => {
+        const result = mangleCSSSync('.foo\\\\bar { color: red; }', { 'foo\\bar': 'a' });
+
+        expect(result.css).toBe('.a { color: red; }');
+        expect(result.mangledClasses).toEqual(['foo\\bar']);
+    });
+
     it('round-trips every ASCII punctuation character that requires escaping', () => {
         let punctuation = '';
         for (const [start, end] of [
