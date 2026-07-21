@@ -94,9 +94,6 @@ function objectToValue(node: ObjectExpression): Record<string, unknown> {
         if (name === null) {
             throw new ExplainParseError(`unsupported key type "${key.type}"`);
         }
-        if (property.value.type === 'AssignmentPattern' || property.value.type === 'RestElement') {
-            throw new ExplainParseError('pattern values are not supported');
-        }
         result[name] = literalToValue(property.value as Expression);
     }
     return result;

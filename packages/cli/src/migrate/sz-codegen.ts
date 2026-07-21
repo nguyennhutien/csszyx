@@ -34,14 +34,8 @@ export function generateSzHtmlValue(obj: Record<string, unknown>, braces = false
     if (braces) {
         return s;
     }
-    // Strip outermost braces: "{ ... }" → "..."
-    if (s.startsWith('{ ') && s.endsWith(' }')) {
-        return s.slice(2, -2);
-    }
-    if (s.startsWith('{') && s.endsWith('}')) {
-        return s.slice(1, -1).trim();
-    }
-    return s;
+    // objectToString always emits one outer object-literal brace pair.
+    return s.slice(1, -1).trim();
 }
 
 /**
