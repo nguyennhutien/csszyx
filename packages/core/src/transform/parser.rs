@@ -3057,7 +3057,10 @@ fn string_value_span(span: Span, source: &str) -> TextSpan {
 
 #[cfg(test)]
 mod tests {
-    use super::{escape_json_string, parse_source_shell, source_type_for_path, string_value_span};
+    use super::{
+        escape_json_string, parse_source_shell, parse_source_shell_with_budget,
+        source_type_for_path, string_value_span, MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
+    };
     use crate::transform::{lower::lower_source_ir_classes, TransformFile};
     use oxc_span::Span;
 
@@ -3301,6 +3304,43 @@ mod tests {
     }
 
     #[test]
+    fn szv_catalog_caps_branch_expansion_and_nested_objects() {
+        use std::fmt::Write as _;
+
+        let mut source = String::from(
+            "import { szv } from '@csszyx/runtime'; declare const c: boolean; const styles = szv({ base: {",
+        );
+        for i in 0..=(MAX_CATALOG_BRANCH_EXTRAS + 4) {
+            let _ = write!(source, "p{i}: c ? {i} : {},", i + 1);
+        }
+        source.push_str("} });");
+
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/branch-cap.tsx".to_string(),
+            source,
+        });
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(lowered.classes.len(), MAX_CATALOG_BRANCH_EXTRAS * 2 + 5);
+
+        let mut nested = "{ p: 4 }".to_string();
+        for _ in 0..=(MAX_CATALOG_DEPTH + 1) {
+            nested = format!("{{ hover: {nested} }}");
+        }
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/depth-cap.tsx".to_string(),
+            source: format!(
+                "import {{ szv }} from '@csszyx/runtime'; const DEEP = {nested}; const styles = szv({{ base: DEEP }});"
+            ),
+        });
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(lowered.classes.is_empty());
+    }
+
+    #[test]
     fn szv_catalog_resolves_const_scalar_refs_and_skips_null_undefined() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -3386,7 +3426,9 @@ mod tests {
     fn szv_catalog_skips_malformed_members_without_losing_static_siblings() {
         let source = r"
             const LOOP = LOOP;
+            const NUMBER = 1;
             const ignoredLiteral = szv(1);
+            const ignoredNumberBinding = szv(NUMBER);
             const ignoredRuntimeConfig = szv(runtimeConfig);
             const ignoredDynamic = dynamic(runtimeValue);
             const styles = szv({
@@ -3409,6 +3451,7 @@ mod tests {
                         ...runtimeVariants,
                         [dynamicKey]: { p: 88 },
                         ok: { bg: 'red-500' },
+                        called: makeStyle(),
                     },
                 },
             });
@@ -3434,6 +3477,36 @@ mod tests {
                 lowered.classes
             );
         }
+    }
+
+    #[test]
+    fn parser_budget_stops_nested_jsx_without_corrupting_partial_ir() {
+        let file = TransformFile {
+            filename: "/repo/src/Budget.tsx".to_string(),
+            source: "export const App = () => <><main sz={{ p: 1 }}><section><span sz={{ m: 2 }} /></section></main><aside sz={{ w: 3 }} /></>;".to_string(),
+        };
+
+        let mut saw_partial_ir = false;
+        for budget in 0..64 {
+            let parsed = parse_source_shell_with_budget(&file, budget);
+
+            assert!(!parsed.panicked);
+            assert!(parsed.diagnostics.is_empty());
+            if parsed.ast_budget_exceeded && !parsed.ir.jsx_opening_elements.is_empty() {
+                saw_partial_ir = true;
+            }
+            for element in &parsed.ir.jsx_opening_elements {
+                if let Some(parent) = element.parent_element_index {
+                    assert!(parent < parsed.ir.jsx_opening_elements.len());
+                }
+                assert!(element
+                    .sz_attribute_indices
+                    .iter()
+                    .all(|index| *index < parsed.ir.sz_attributes.len()));
+            }
+        }
+
+        assert!(saw_partial_ir);
     }
 
     #[test]
