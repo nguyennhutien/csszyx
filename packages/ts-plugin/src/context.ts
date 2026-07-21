@@ -345,18 +345,21 @@ function jsxAttributeAnchor(
     return resolveChain(chain.slice(0, -1));
 }
 
-/** Append a static JSX property name while staying permissive for computed names.
+/** Append one required static property to a JSX ancestry chain.
  * @param tsMod - TypeScript instance injected by the host.
  * @param property - Property crossed by the ancestry walk.
  * @param chain - Mutable inner-to-outer property chain.
+ * @returns Whether the property has a usable static name.
  */
 function appendJsxProperty(
     tsMod: typeof ts,
     property: ts.PropertyAssignment,
     chain: string[],
-): void {
+): boolean {
     const name = propertyName(tsMod, property);
-    if (name !== undefined) chain.push(name);
+    if (name === undefined) return false;
+    chain.push(name);
+    return true;
 }
 
 /** Classify JSX sz and slot-level szs ancestry.
@@ -378,8 +381,7 @@ function jsxAnchor(tsMod: typeof ts, object: ts.ObjectLiteralExpression): StyleR
         }
         if (tsMod.isPropertyAssignment(parent)) {
             nested = true;
-            // Computed names cannot be validated; stay permissive.
-            appendJsxProperty(tsMod, parent, chain);
+            if (!appendJsxProperty(tsMod, parent, chain)) return null;
             node = parent;
             continue;
         }

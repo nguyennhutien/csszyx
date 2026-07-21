@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const ts = require('typescript');
 const { computeSzEntries } = require('../dist/core.js');
 
-function entriesAtMarker(source, { forceUnresolvedSymbols = false } = {}) {
+function entriesAtMarker(source, { forceUnresolvedSymbols = false, tsModule = ts } = {}) {
     const marker = source.indexOf('/*|*/');
     assert.ok(marker >= 0, 'source must contain the /*|*/ marker');
     const clean = source.replace('/*|*/', '');
@@ -45,7 +45,7 @@ function entriesAtMarker(source, { forceUnresolvedSymbols = false } = {}) {
         service.getProgram = () => programWithoutSymbols;
     }
     return computeSzEntries(
-        ts,
+        tsModule,
         service,
         fileName,
         marker,
@@ -77,6 +77,17 @@ test('sz={{ }} JSX attribute offers sz keys', () => {
 test('a plain object literal is left untouched', () => {
     const names = namesAtMarker('const config = { /*|*/ };');
     assert.strictEqual(names.length, 0);
+});
+
+test('unsupported scanner hosts fail open without whole-file fallback', () => {
+    const tsWithoutTokenScanner = Object.create(ts);
+    Object.defineProperty(tsWithoutTokenScanner, 'getTokenAtPosition', { value: undefined });
+    assert.strictEqual(
+        entriesAtMarker('const A = () => <div sz={{ /*|*/ }} />;', {
+            tsModule: tsWithoutTokenScanner,
+        }).length,
+        0,
+    );
 });
 
 // 4. Value position (after a colon) is not a key slot.
@@ -240,6 +251,19 @@ test('nested objects under non-form properties and css get no suggestions', () =
     assert.ok(
         namesAtMarker('const A = () => <div sz={{ customVariant: { /*|*/ } }} />;').includes('bg'),
     );
+});
+
+test('computed variant keys are not treated as static style ancestry', () => {
+    assert.strictEqual(
+        namesAtMarker("const key = 'hover'; const A = () => <div sz={{ [key]: { /*|*/ } }} />;")
+            .length,
+        0,
+    );
+});
+
+test('incomplete value slots tolerate bounded whitespace before the colon', () => {
+    const entries = entriesAtMarker('const A = () => <div sz={{ bg   : re/*|*/ }} />;');
+    assert.ok(entries.some(entry => entry.name === 'red-500'));
 });
 
 // A COLOR property's object value is the documented `{ color, op }` form — the
