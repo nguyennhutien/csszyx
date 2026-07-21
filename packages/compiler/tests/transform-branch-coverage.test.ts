@@ -271,6 +271,14 @@ describe('sz partial (CSS variable) path', () => {
         expect(r.code).not.toContain('style={{');
     });
 
+    it('preserves a fully absent conditional test without emitting a utility', () => {
+        const jsx = 'const A = ({ c }) => <div sz={{ p: c ? undefined : void 0 }} />;';
+        const r = run(jsx);
+        expect(r.code).toContain('className={c ? undefined : undefined}');
+        expect(r.code).not.toContain('p-(--');
+        expect(r.code).not.toContain('__szSpacingVar');
+    });
+
     it('mixes a static prop with a conditional prop (template literal className)', () => {
         const jsx = 'const A = ({ c }) => <div sz={{ bg: "red-500", scale: c ? 75 : 100 }} />;';
         const r = run(jsx);
