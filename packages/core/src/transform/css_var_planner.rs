@@ -176,13 +176,9 @@ pub fn apply_scoped_css_variable_names(ir: &SourceIr) -> SourceIr {
         }
     }
 
-    for entry in plan_css_variable_names(&usages) {
-        let Ok(location_index) = entry.id.parse::<usize>() else {
-            continue;
-        };
-        let Some((attr_index, prop_index)) = locations.get(location_index).copied() else {
-            continue;
-        };
+    for ((attr_index, prop_index), entry) in
+        locations.into_iter().zip(plan_css_variable_names(&usages))
+    {
         if let Some(attribute) = next.sz_attributes.get_mut(attr_index) {
             rename_dynamic_prop(attribute, prop_index, entry.name);
         }
@@ -228,26 +224,26 @@ pub fn apply_css_variable_mangling(
         .iter()
         .enumerate()
         .map(|(index, element)| CssVariableHoistNode {
-            id: index.to_string(),
-            parent_id: element
-                .parent_element_index
-                .map(|parent| parent.to_string()),
+            id: index,
+            parent_id: element.parent_element_index,
             can_host: element.can_host_style,
         })
         .collect::<Vec<_>>();
     let hoist_usages = component_plan
         .iter()
-        .filter_map(|entry| {
-            let location_index = entry.id.parse::<usize>().ok()?;
-            let (element_index, attr_index, prop_index) = *locations.get(location_index)?;
-            let prop = &ir.sz_attributes[attr_index].dynamic_css_vars[prop_index];
-            Some(CssVariableHoistUsage {
-                id: entry.id.clone(),
-                element_id: element_index.to_string(),
-                name: entry.name.clone(),
-                value_key: dynamic_value_key(source, prop),
-            })
-        })
+        .zip(locations.iter().copied())
+        .enumerate()
+        .map(
+            |(location_index, (entry, (element_index, attr_index, prop_index)))| {
+                let prop = &ir.sz_attributes[attr_index].dynamic_css_vars[prop_index];
+                CssVariableHoistUsage {
+                    id: location_index,
+                    element_id: element_index,
+                    name: entry.name.clone(),
+                    value_key: dynamic_value_key(source, prop),
+                }
+            },
+        )
         .collect::<Vec<_>>();
     let hoist_analysis = plan_component_variable_hoists_with_diagnostics(
         &hoist_nodes,
@@ -260,47 +256,29 @@ pub fn apply_css_variable_mangling(
 
     let mut hoisted_location_ids = std::collections::HashSet::new();
     for plan in hoist_plans {
-        let Some(first_usage_id) = plan.usage_ids.first() else {
+        let Some(&first_location_index) = plan.usage_ids.first() else {
             continue;
         };
-        let Ok(first_location_index) = first_usage_id.parse::<usize>() else {
-            continue;
-        };
-        let Some((_, first_attr_index, first_prop_index)) =
-            locations.get(first_location_index).copied()
-        else {
-            continue;
-        };
+        let (_, first_attr_index, first_prop_index) = locations[first_location_index];
         let mut hoisted_prop =
             next.sz_attributes[first_attr_index].dynamic_css_vars[first_prop_index].clone();
         hoisted_prop.var_name.clone_from(&plan.name);
         hoisted_prop.hoisted = false;
-        if let Some(target) = next.jsx_opening_elements.get_mut(
-            plan.target_element_id
-                .parse::<usize>()
-                .unwrap_or(usize::MAX),
-        ) {
-            target.hoisted_dynamic_css_vars.push(hoisted_prop);
-        }
+        next.jsx_opening_elements[plan.target_element_id]
+            .hoisted_dynamic_css_vars
+            .push(hoisted_prop);
 
-        for usage_id in plan.usage_ids {
-            let Ok(location_index) = usage_id.parse::<usize>() else {
-                continue;
-            };
-            let Some((_, attr_index, prop_index)) = locations.get(location_index).copied() else {
-                continue;
-            };
-            if let Some(attribute) = next.sz_attributes.get_mut(attr_index) {
-                let Some(prop) = attribute.dynamic_css_vars.get(prop_index) else {
-                    continue;
-                };
-                push_variable_map(&mut variable_map, &prop.var_name, &plan.name);
-                rename_dynamic_prop(attribute, prop_index, plan.name.clone());
-                if let Some(prop) = attribute.dynamic_css_vars.get_mut(prop_index) {
-                    prop.hoisted = true;
-                }
-                hoisted_location_ids.insert(location_index);
-            }
+        for location_index in plan.usage_ids {
+            let (_, attr_index, prop_index) = locations[location_index];
+            let attribute = &mut next.sz_attributes[attr_index];
+            push_variable_map(
+                &mut variable_map,
+                &attribute.dynamic_css_vars[prop_index].var_name,
+                &plan.name,
+            );
+            rename_dynamic_prop(attribute, prop_index, plan.name.clone());
+            attribute.dynamic_css_vars[prop_index].hoisted = true;
+            hoisted_location_ids.insert(location_index);
         }
     }
 
@@ -321,20 +299,23 @@ pub fn apply_css_variable_mangling(
             },
         )
         .collect::<Vec<_>>();
-    for entry in plan_css_variable_names_with_options(&scoped_usages, &plan_options) {
-        let Ok(location_index) = entry.id.parse::<usize>() else {
-            continue;
-        };
-        let Some((_, attr_index, prop_index)) = locations.get(location_index).copied() else {
-            continue;
-        };
-        if let Some(attribute) = next.sz_attributes.get_mut(attr_index) {
-            let Some(prop) = attribute.dynamic_css_vars.get(prop_index) else {
-                continue;
-            };
-            push_variable_map(&mut variable_map, &prop.var_name, &entry.name);
-            rename_dynamic_prop(attribute, prop_index, entry.name);
-        }
+    for ((_, attr_index, prop_index), entry) in locations
+        .iter()
+        .enumerate()
+        .filter(|(location_index, _)| !hoisted_location_ids.contains(location_index))
+        .map(|(_, location)| *location)
+        .zip(plan_css_variable_names_with_options(
+            &scoped_usages,
+            &plan_options,
+        ))
+    {
+        let attribute = &mut next.sz_attributes[attr_index];
+        push_variable_map(
+            &mut variable_map,
+            &attribute.dynamic_css_vars[prop_index].var_name,
+            &entry.name,
+        );
+        rename_dynamic_prop(attribute, prop_index, entry.name);
     }
 
     CssVariableMangling {
@@ -349,9 +330,7 @@ pub fn apply_css_variable_mangling(
 }
 
 fn rename_dynamic_prop(attribute: &mut super::SzAttributeIr, prop_index: usize, name: String) {
-    let Some(prop) = attribute.dynamic_css_vars.get_mut(prop_index) else {
-        return;
-    };
+    let prop = &mut attribute.dynamic_css_vars[prop_index];
     let old_class = prop.skip_class.then(|| dynamic_css_var_class(prop));
     prop.var_name = name;
     let new_class = prop.skip_class.then(|| dynamic_css_var_class(prop));
@@ -505,9 +484,6 @@ fn has_redundant_outer_parens(expression: &str) -> bool {
             if depth == 0 && index != last_index {
                 return false;
             }
-        }
-        if depth < 0 {
-            return false;
         }
     }
     depth == 0
