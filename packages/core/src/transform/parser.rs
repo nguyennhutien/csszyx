@@ -3453,6 +3453,71 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_classifies_array_control_flow_and_falsy_entries() {
+        let source = r"
+            const STATIC = { m: 2 } as const;
+            const App = ({ cond, other, styles, gap }) => <div sz={[
+                , false, null, undefined, 0, '',
+                'block hover:p-2',
+                cond && 'focus:m-2',
+                cond && ({ p: 4 } as const),
+                cond && (other ? { p: 6 } : { p: 8 }),
+                cond ? 'text-sm' : 'text-lg',
+                cond ? { bg: 'red-500' } : { bg: 'blue-500' },
+                { m: 1, p: cond ? 2 : 4 },
+                { gap },
+                STATIC,
+                styles,
+            ]} />;
+        ";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(!attribute.runtime_fallback);
+        // `undefined` remains a runtime slot and an empty string remains an
+        // empty static slot so authored array positions retain szcn ordering.
+        assert_eq!(
+            attribute.array_parts.len(),
+            12,
+            "{:#?}",
+            attribute.array_parts
+        );
+        for class in [
+            "block",
+            "hover:p-2",
+            "focus:m-2",
+            "p-4",
+            "p-6",
+            "p-8",
+            "text-sm",
+            "text-lg",
+            "bg-red-500",
+            "bg-blue-500",
+            "m-1",
+            "p-2",
+            "m-2",
+        ] {
+            assert!(
+                lowered.classes.iter().any(|found| found == class),
+                "{class}"
+            );
+        }
+        assert!(attribute
+            .array_parts
+            .iter()
+            .any(|part| part.dynamic_object_literal));
+        assert!(attribute
+            .array_parts
+            .iter()
+            .any(|part| part.dynamic_span.is_some() && !part.candidates.is_empty()));
+    }
+
+    #[test]
     fn parser_shell_safelists_static_array_candidates_before_runtime_spread() {
         let source = "const BASE = { p: 4 }; const App = ({ active, items }) => <div sz={([BASE, active && { m: 2 }, ...items] satisfies unknown[])} />;";
         let parsed = parse_source_shell(&TransformFile {
