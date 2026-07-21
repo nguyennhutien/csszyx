@@ -3074,6 +3074,20 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_accepts_jsx_in_plain_javascript_files() {
+        let file = TransformFile {
+            filename: "/repo/src/App.js".to_string(),
+            source: "export const App = () => <div sz={{ p: 4 }} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(parsed.ir.sz_attributes.len(), 1);
+        assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["p-4"]);
+    }
+
+    #[test]
     fn parser_shell_collects_class_attributes() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
