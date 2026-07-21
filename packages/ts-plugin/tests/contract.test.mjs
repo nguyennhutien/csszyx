@@ -31,6 +31,15 @@ const merged = mergeCompletions(
 );
 assert.deepStrictEqual(base.entries, [baseEntry]);
 assert.deepStrictEqual(merged?.entries.map(entry => entry.name), ['bg', 'hover']);
+assert.deepStrictEqual(
+    mergeCompletions(undefined, [{ name: 'p', kind: 'var', kindModifiers: '', sortText: '0' }], 10),
+    {
+        isGlobalCompletion: false,
+        isMemberCompletion: true,
+        isNewIdentifierLocation: true,
+        entries: [{ name: 'p', kind: 'var', kindModifiers: '', sortText: '0' }],
+    },
+);
 
 assert.strictEqual(completionDetails(ts, 'bg', undefined), undefined);
 assert.strictEqual(

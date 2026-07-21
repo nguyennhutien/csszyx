@@ -59,6 +59,18 @@ assert.strictEqual(ownedDetails.name, 'p');
 assert.match(ownedDetails.documentation[0].text, /sz key/);
 assert.strictEqual(detailFallbackCalls, 0, 'owned details never consult the base service');
 
+const hostileDetails = proxy.getCompletionEntryDetails(
+    '/x.tsx',
+    0,
+    'hostile',
+    undefined,
+    undefined,
+    undefined,
+    new Proxy({}, { getOwnPropertyDescriptor: () => { throw new Error('hostile metadata'); } }),
+);
+assert.strictEqual(hostileDetails.name, 'hostile');
+assert.strictEqual(detailFallbackCalls, 1, 'malformed metadata fails open to the base service');
+
 const foreignDetails = proxy.getCompletionEntryDetails(
     '/x.tsx',
     0,
@@ -69,7 +81,7 @@ const foreignDetails = proxy.getCompletionEntryDetails(
     { owner: 'host' },
 );
 assert.strictEqual(foreignDetails.name, 'foreign');
-assert.strictEqual(detailFallbackCalls, 1, 'foreign details delegate to the base service');
+assert.strictEqual(detailFallbackCalls, 2, 'foreign details delegate to the base service');
 
 assert.strictEqual(proxy.getCompletionsAtPosition('/x.tsx', 0), base);
 assert.strictEqual(proxy.getCompletionsAtPosition('/x.tsx', 0), base);
