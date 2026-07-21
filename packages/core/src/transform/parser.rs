@@ -4048,6 +4048,44 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_enforces_szs_literal_shape_matrix() {
+        for source in [
+            "const X=()=> <Card szs />;",
+            "const X=()=> <Card szs='p-2' />;",
+            "const X=({slots})=> <Card szs={slots} />;",
+            "const X=({slots})=> <Card szs={{...slots}} />;",
+            "const X=({slot})=> <Card szs={{ [slot]: { p: 2 } }} />;",
+            "const X=()=> <Card szs={{ 'header': { p: 2 } }} />;",
+            "const X=({value})=> <Card szs={{ header: { p: value } }} />;",
+            "const X=({header})=> <Card szs={{header}} />;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            assert!(parsed.ir.szs_attributes.is_empty(), "{source}");
+            assert_eq!(parsed.ir.szs_diagnostics.len(), 1, "{source}");
+            assert!(
+                parsed.ir.szs_diagnostics[0].contains("Attribute left unchanged"),
+                "{source}"
+            );
+        }
+
+        let source = r#"const X=()=> <Card szs={{ header: { m: -2, opacity: true, content: "a\\b", hover: { p: 1 }, css: { zIndex: 2 } } }} />;"#;
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let entry = &parsed.ir.szs_attributes[0].entries[0];
+
+        assert!(parsed.ir.szs_diagnostics.is_empty());
+        assert!(entry.class_name.contains("-m-2"));
+        assert!(entry.class_name.contains("hover:p-1"));
+        assert!(entry.class_name.contains("[z-index:2]"));
+        assert!(entry.emit_text.contains("\\\\"));
+    }
+
+    #[test]
     fn parser_shell_expands_conditional_under_attachment_variant() {
         // A finite conditional nested under the `group` attachment variant must
         // join the variants the way the static path does (`group-hover:`), not the
