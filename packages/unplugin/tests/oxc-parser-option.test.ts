@@ -488,6 +488,22 @@ describe('csszyx parser selection', () => {
         );
     });
 
+    it('preserves mixed scoped and hoisted CSS variable tiers in runtime metadata', () => {
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'oxc', cache: false },
+            production: { mangleVars: true },
+        }) as TransformHook[];
+        const source =
+            'const App = ({ pad, gap }) => <main><section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section><aside sz={{ p: gap }} /></main>;';
+
+        prePlugin.transform.call({ warn: vi.fn() }, source, '/repo/src/App.tsx');
+        const moduleSource = String(prePlugin.load?.(RESOLVED_VIRTUAL_MODULE_ID));
+
+        expect(moduleSource).toContain('"--_sz-p": [');
+        expect(moduleSource).toContain('"--cz"');
+        expect(moduleSource).toContain('"--sz"');
+    });
+
     it('replaces per-file CSS variable metadata instead of append-only accumulation', () => {
         const [prePlugin] = vitePlugin({
             build: { parser: 'oxc', cache: false },
