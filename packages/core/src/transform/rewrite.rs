@@ -849,6 +849,37 @@ mod tests {
     }
 
     #[test]
+    fn merges_existing_class_with_conditional_array_parts() {
+        let source = "const base = { p: 4 }; const App = ({ active }) => <div className=\"block\" sz={[base, active && { m: 2 }]} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const base = { p: 4 }; const App = ({ active }) => <div className={_szcn(\"block\", \"p-4\", active && \"m-2\")} />;"
+        );
+    }
+
+    #[test]
+    fn rejects_multiple_array_sz_attributes_on_one_element() {
+        let source = "const App = ({ active }) => <div sz={[active && { p: 2 }]} sz={[active && { m: 2 }]} />;";
+
+        assert_eq!(
+            rewrite(source),
+            Err(StaticRewriteUnsupported::EmptyClassList)
+        );
+    }
+
+    #[test]
+    fn rewrites_empty_slot_map_to_compiled_prop() {
+        let source = "const App = () => <Card szs={{}} />;";
+
+        assert_eq!(
+            rewrite(source).expect("rewritten"),
+            "const App = () => <Card szsc={{}} />;"
+        );
+    }
+
+    #[test]
     fn skips_null_and_undefined_static_object_values() {
         let source = "export const App = () => <div sz={{ p: 4, gap: null, m: undefined }} />;";
         let rewritten = rewrite(source).expect("rewritten");
