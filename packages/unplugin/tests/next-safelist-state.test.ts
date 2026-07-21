@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -7,6 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
     acquireNextSafelistStateLock,
     atomicRenameWithRetry,
+    atomicWriteFileSync,
     materializeNextSafelist,
     readNextSafelistStateLockMetadata,
     resolveNextSafelistStatePaths,
@@ -275,6 +284,29 @@ describe('Next safelist state', () => {
 
         expect(attempts).toBe(4);
         expect(readFileSync(to, 'utf8')).toBe('ok');
+    });
+
+    it('removes the temporary file after bounded rename retries are exhausted', () => {
+        const root = tempRoot();
+        const destination = join(root, 'nested', 'state.json');
+        const locked = new Error('locked') as NodeJS.ErrnoException;
+        locked.code = 'EBUSY';
+
+        expect(() =>
+            atomicWriteFileSync(destination, 'state', {
+                maxRetries: 1,
+                retryDelayMs: 1,
+                renameSync: () => {
+                    throw locked;
+                },
+            }),
+        ).toThrow(locked);
+        expect(existsSync(destination)).toBe(false);
+        expect(
+            existsSync(join(root, 'nested'))
+                ? readdirSync(join(root, 'nested')).filter(name => name.startsWith('.tmp-'))
+                : [],
+        ).toEqual([]);
     });
 
     // Path-collision policy tests below. These pin the current "source paths
