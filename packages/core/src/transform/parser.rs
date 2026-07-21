@@ -3179,6 +3179,8 @@ mod tests {
                 const c = dynamic(({ gap: 3 } satisfies object));
                 const d = dynamic(({ w: 4 })!);
                 const e = dynamic(BASE!);
+                const f = dynamic(BASE);
+                const g = dynamic({ minH: 6 } satisfies object);
                 const ignoredMember = tools.dynamic({ p: 99 });
                 const ignoredEmpty = dynamic();
                 const ignoredCallee = other({ p: 100 });
@@ -3190,7 +3192,10 @@ mod tests {
         let lowered = lower_source_ir_classes(&parsed.ir);
 
         assert!(parsed.diagnostics.is_empty());
-        assert_eq!(lowered.classes, ["p-1", "m-2", "gap-3", "w-4", "h-5"]);
+        assert_eq!(
+            lowered.classes,
+            ["p-1", "m-2", "gap-3", "w-4", "h-5", "h-5", "min-h-6"]
+        );
     }
 
     #[test]
@@ -3587,6 +3592,8 @@ mod tests {
     #[test]
     fn parser_shell_preserves_wrapped_runtime_values_and_spread_diagnostics() {
         for expression in [
+            "styles as unknown",
+            "styles satisfies unknown",
             "(styles as unknown)",
             "(styles satisfies unknown)",
             "styles!",
@@ -3604,6 +3611,8 @@ mod tests {
         }
 
         for expression in [
+            "{ ...props } as const",
+            "{ ...props } satisfies Record<string, unknown>",
             "({ ...props } as const)",
             "({ ...props } satisfies Record<string, unknown>)",
             "({ ...props })!",
@@ -3624,6 +3633,8 @@ mod tests {
     #[test]
     fn parser_shell_resolves_partial_objects_through_ts_wrappers() {
         for (expression, expected_class) in [
+            ("{ minW: value } as const", "min-w-(--_sz-min-w)"),
+            ("{ maxW: value } satisfies object", "max-w-(--_sz-max-w)"),
             ("({ p: value } as const)", "p-(--_sz-p)"),
             ("({ m: value } satisfies object)", "m-(--_sz-m)"),
             ("({ w: value })!", "w-(--_sz-w)"),
@@ -3784,6 +3795,22 @@ mod tests {
         );
         assert!(parsed.ir.jsx_opening_elements[0].has_recovery_token_attribute);
         assert_eq!(parsed.ir.jsx_opening_elements[0].element_name, "div");
+
+        let dev_only = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Dev.tsx".to_string(),
+            source: "const Dev = () => <Panel szRecover='dev-only' />;".to_string(),
+        });
+        assert_eq!(
+            dev_only.ir.recovery_attributes[0].mode,
+            super::RecoveryMode::DevOnly
+        );
+
+        let invalid = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Invalid.tsx".to_string(),
+            source: "const Invalid = () => <Panel szRecover='sometimes' />;".to_string(),
+        });
+        assert!(invalid.ir.recovery_attributes.is_empty());
+        assert_eq!(invalid.ir.unsupported_recovery_attribute_spans.len(), 1);
     }
 
     #[test]
@@ -4022,6 +4049,18 @@ mod tests {
             (
                 "export const App = () => <div sz={([{ display: 'flex' }] as const)} />;",
                 vec!["flex"],
+            ),
+            (
+                "export const App = () => <div sz={['raw', { p: 2 }] as const} />;",
+                vec!["raw", "p-2"],
+            ),
+            (
+                "export const App = () => <div sz={['raw', { m: 3 }] satisfies unknown[]} />;",
+                vec!["raw", "m-3"],
+            ),
+            (
+                "export const App = () => <div sz={['raw', { gap: 4 }]!} />;",
+                vec!["raw", "gap-4"],
             ),
         ];
 
