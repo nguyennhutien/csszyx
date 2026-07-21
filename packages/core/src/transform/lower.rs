@@ -472,11 +472,6 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
                 next_prefix.push(':');
                 lower_object_into(nested, &next_prefix, classes);
             }
-            StaticSzValue::Boolean(false) => {
-                if let Some(class_name) = false_boolean_class(&property.key) {
-                    classes.push(format!("{prefix}{class_name}"));
-                }
-            }
             value => {
                 if let Some(class_name) = format_static_class(&property.key, value, prefix) {
                     classes.push(class_name);
@@ -685,13 +680,6 @@ fn lower_group_peer_variant(
             }
         }
     }
-}
-
-const fn false_boolean_class(_key: &str) -> Option<&'static str> {
-    // The italic/antialiased `false` aliases were removed along with the boolean
-    // sugar. Use the canonical key with a value instead ({ fontStyle: 'normal' },
-    // { fontSmoothing: 'subpixel' }). No key currently maps a `false` to a class.
-    None
 }
 
 #[allow(clippy::too_many_lines)]
