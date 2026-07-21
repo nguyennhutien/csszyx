@@ -522,13 +522,15 @@ mod tests {
     use std::collections::HashSet;
 
     use super::{
-        apply_scoped_css_variable_names, normalize_dynamic_expression_key, plan_css_variable_names,
+        apply_css_variable_mangling, apply_scoped_css_variable_names,
+        extract_quoted_custom_property_keys, has_redundant_outer_parens,
+        normalize_dynamic_expression_key, plan_css_variable_names,
         plan_css_variable_names_with_options, CssVariablePlanInput, CssVariablePlanOptions,
         CssVariableTier,
     };
     use crate::transform::{
-        DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr, SourceIr, StaticSzObject,
-        SzAttributeIr, TextSpan,
+        parser::parse_source_shell, DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr,
+        SourceIr, StaticSzObject, SzAttributeIr, TextSpan, TransformFile,
     };
 
     fn usage(id: &str, tier: CssVariableTier, property_key: &str) -> CssVariablePlanInput {
@@ -670,6 +672,108 @@ mod tests {
             planned.sz_attributes[1].dynamic_css_vars[0].var_name,
             "--sz"
         );
+    }
+
+    #[test]
+    fn mangles_every_dynamic_value_category_and_respects_style_reservations() {
+        let source = "const A=({value})=><div style={{'--sz':1, \"--sy\":2}} sz={{w:value,bg:value,rotate:value,duration:value,opacity:value}}/>;";
+        let ir = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        })
+        .ir;
+
+        let result = apply_css_variable_mangling(&ir, source, None);
+        let vars = &result.ir.sz_attributes[0].dynamic_css_vars;
+
+        assert_eq!(vars.len(), 5);
+        assert_eq!(
+            vars.iter().map(|prop| prop.category).collect::<Vec<_>>(),
+            [
+                DynamicCssVarCategory::Spacing,
+                DynamicCssVarCategory::Color,
+                DynamicCssVarCategory::Angle,
+                DynamicCssVarCategory::Duration,
+                DynamicCssVarCategory::Passthrough,
+            ]
+        );
+        assert!(vars
+            .iter()
+            .all(|prop| prop.var_name != "--sz" && prop.var_name != "--sy"));
+        assert_eq!(result.variable_map.len(), 5);
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn reports_each_component_hoist_rejection_reason() {
+        let cases = [
+            (
+                "const A=({pad})=><><div sz={{p:pad}}/><span sz={{p:pad}}/></>;",
+                None,
+                "non-host-ancestor",
+            ),
+            (
+                "const A=({pad})=><div sz={{p:pad}}/>; const B=({pad})=><span sz={{p:pad}}/>;",
+                None,
+                "no-lca",
+            ),
+            (
+                "const A=({pad})=><section><div><span sz={{p:pad}}/><b sz={{p:pad}}/></div></section>;",
+                Some(0),
+                "max-depth (maxDepth 0)",
+            ),
+        ];
+
+        for (source, max_depth, marker) in cases {
+            let ir = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            })
+            .ir;
+            let result = apply_css_variable_mangling(&ir, source, max_depth);
+
+            assert_eq!(result.diagnostics.len(), 1, "{marker}");
+            assert!(result.diagnostics[0].contains(marker), "{marker}");
+            assert!(result
+                .ir
+                .sz_attributes
+                .iter()
+                .flat_map(|attribute| &attribute.dynamic_css_vars)
+                .all(|prop| !prop.hoisted));
+        }
+    }
+
+    #[test]
+    fn rewrites_conditional_dynamic_classes_when_scoped_names_change() {
+        let source = "const A=({active,flex})=><div sz={{flex:active?flex:undefined}}/>;";
+        let ir = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        })
+        .ir;
+        let original_class = ir.sz_attributes[0].ternaries[0].consequent_classes[0].clone();
+
+        let result = apply_css_variable_mangling(&ir, source, None);
+        let attribute = &result.ir.sz_attributes[0];
+
+        assert!(original_class.contains("--_sz-flex"));
+        assert!(attribute.ternaries[0].consequent_classes[0].contains("--sz"));
+        assert_eq!(attribute.dynamic_css_vars[0].var_name, "--sz");
+    }
+
+    #[test]
+    fn quoted_custom_property_scanner_and_paren_guard_fail_closed() {
+        assert_eq!(
+            extract_quoted_custom_property_keys(
+                "{'--first': 1, \"--second\" : 2, '--not-a-key', plain: '--value'}"
+            ),
+            ["--first", "--second"]
+        );
+        assert!(extract_quoted_custom_property_keys("{'--unterminated").is_empty());
+        assert!(has_redundant_outer_parens("(`)` + '(x)')"));
+        assert!(has_redundant_outer_parens("((value))"));
+        assert!(!has_redundant_outer_parens("(value) + other"));
+        assert!(!has_redundant_outer_parens("value)"));
     }
 
     fn sz_attribute(dynamic_css_vars: Vec<DynamicCssVarIr>) -> SzAttributeIr {
