@@ -3761,6 +3761,39 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_preserves_static_siblings_in_nested_partial_variants() {
+        let source = "const App=({value})=> <div sz={{ p: null, hover: { m: 2, w: value } }}/>;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(attribute.object.properties.len(), 1);
+        assert_eq!(attribute.dynamic_css_vars.len(), 1);
+        assert_eq!(attribute.dynamic_css_vars[0].key, "w");
+        assert_eq!(
+            attribute.dynamic_css_vars[0].variant_prefix.as_deref(),
+            Some("hover")
+        );
+        assert_eq!(lowered.classes, ["hover:m-2", "hover:w-(--_sz-hover-w)"]);
+
+        for source in [
+            "const App=({a,b})=> <div sz={{ ...(a ? { p: 2 } : { p: 4 }), ...(b ? { m: 1 } : { m: 3 }) }}/>;",
+            "const App=()=> <div sz={{ hover: { p: () => 2 } }}/>;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Fallback.tsx".to_string(),
+                source: source.to_string(),
+            });
+            assert!(parsed.ir.sz_attributes[0].runtime_fallback, "{source}");
+        }
+    }
+
+    #[test]
     fn parser_shell_records_composite_jsx_element_names() {
         let source = "const App=()=> <><UI.Card szRecover='csr'/><UI.Layout.Panel szRecover='csr'/><this.View szRecover='csr'/><this szRecover='csr' data:marker='x'/><svg:path szRecover='csr'/></>;";
         let parsed = parse_source_shell(&TransformFile {
