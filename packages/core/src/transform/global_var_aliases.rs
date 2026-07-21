@@ -307,6 +307,10 @@ mod tests {
                     original: "--brand-primary".to_string(),
                     alias: "g0".to_string(),
                 },
+                GlobalVarAliasEntry {
+                    original: "--unused".to_string(),
+                    alias: "--g9".to_string(),
+                },
             ],
         );
 
