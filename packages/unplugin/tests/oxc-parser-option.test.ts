@@ -489,10 +489,10 @@ describe('csszyx parser selection', () => {
     });
 
     it('preserves mixed scoped and hoisted CSS variable tiers in runtime metadata', () => {
-        const [prePlugin] = vitePlugin({
+        const [prePlugin, postPlugin] = vitePlugin({
             build: { parser: 'oxc', cache: false },
             production: { mangleVars: true },
-        }) as TransformHook[];
+        }) as [TransformHook, GenerateBundleHook];
         const source =
             'const App = ({ pad, gap }) => <main><section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section><aside sz={{ p: gap }} /></main>;';
 
@@ -502,6 +502,20 @@ describe('csszyx parser selection', () => {
         expect(moduleSource).toContain('"--_sz-p": [');
         expect(moduleSource).toContain('"--cz"');
         expect(moduleSource).toContain('"--sz"');
+
+        const emitted: Array<{ fileName: string; source: string }> = [];
+        postPlugin.generateBundle.call(
+            { emitFile: asset => emitted.push(asset as { fileName: string; source: string }) },
+            {},
+            {},
+        );
+        const manifestAsset = emitted.find(asset => asset.fileName === 'csszyx-manifest.json');
+        expect(manifestAsset).toBeDefined();
+        const manifest = JSON.parse(manifestAsset?.source ?? '{}') as {
+            cssVarMetrics?: { componentClassUses: number; scopedClassUses: number };
+        };
+        expect(manifest.cssVarMetrics?.componentClassUses).toBe(2);
+        expect(manifest.cssVarMetrics?.scopedClassUses).toBe(1);
     });
 
     it('replaces per-file CSS variable metadata instead of append-only accumulation', () => {
