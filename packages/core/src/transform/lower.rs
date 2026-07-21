@@ -242,15 +242,15 @@ pub(crate) fn collect_dead_spacing_steps(
             }
             StaticSzValue::String(value) => {
                 let unsigned = value.strip_prefix('-').unwrap_or(value);
-                value
-                    .parse::<f64>()
-                    .ok()
-                    .filter(|_| is_unsigned_decimal(unsigned))
-                    .filter(|parsed| is_dead_spacing_step(&property.key, *parsed))
-                    .into_iter()
-                    .for_each(|parsed| {
+                match value.parse::<f64>() {
+                    Ok(parsed)
+                        if is_unsigned_decimal(unsigned)
+                            && is_dead_spacing_step(&property.key, parsed) =>
+                    {
                         out.push((property.key.clone(), parsed, property.span.start));
-                    });
+                    }
+                    _ => {}
+                }
             }
             StaticSzValue::Object(nested) => {
                 if matches!(

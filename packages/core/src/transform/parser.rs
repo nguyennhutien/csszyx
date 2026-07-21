@@ -1392,108 +1392,108 @@ fn static_array_parts_from_array_expression(
         }
         // A spread element keeps the whole array a runtime value.
         let expression = element.as_expression()?;
-        let unwrapped = unwrap_expression(expression);
-        if is_falsy_array_element(unwrapped) {
-            continue;
+        if let Some(part) = static_array_part_from_expression(expression, ctx) {
+            parts.push(part);
         }
-        if let Expression::StringLiteral(value) = unwrapped {
-            parts.push(StaticArrayPartIr {
-                condition_span: None,
-                classes: split_class_tokens(&value.value),
-                ternary: None,
-                dynamic_span: None,
-                candidates: Vec::new(),
-                dynamic_object_literal: false,
-            });
-            continue;
-        }
-        if let Expression::LogicalExpression(logical) = unwrapped {
-            if logical.operator.is_and() {
-                let right = unwrap_expression(&logical.right);
-                let classes = if let Expression::StringLiteral(value) = right {
-                    Some(split_class_tokens(&value.value))
-                } else {
-                    array_element_static_object(right, ctx)
-                        .map(|object| lower_static_sz_object(&object))
-                };
-                if let Some(classes) = classes {
-                    if !classes.is_empty() {
-                        parts.push(StaticArrayPartIr {
-                            condition_span: Some(text_span(logical.left.span())),
-                            classes,
-                            ternary: None,
-                            dynamic_span: None,
-                            candidates: Vec::new(),
-                            dynamic_object_literal: false,
-                        });
-                    }
-                    continue;
-                }
-                // Dynamic right side: the whole guarded element resolves at
-                // runtime through `_szPart`.
-                parts.push(StaticArrayPartIr {
-                    condition_span: None,
-                    classes: Vec::new(),
-                    ternary: None,
-                    dynamic_span: Some(text_span(expression.span())),
-                    candidates: candidate_classes_from_expression(expression, ctx),
-                    dynamic_object_literal: false,
-                });
-                continue;
-            }
-        }
-        if let Expression::ConditionalExpression(conditional) = unwrapped {
-            if let Some(ternary) = static_array_ternary_from_conditional(conditional, ctx) {
-                parts.push(StaticArrayPartIr {
-                    condition_span: None,
-                    classes: Vec::new(),
-                    ternary: Some(ternary),
-                    dynamic_span: None,
-                    candidates: Vec::new(),
-                    dynamic_object_literal: false,
-                });
-                continue;
-            }
-        }
-        if let Some(object) = array_element_static_object(unwrapped, ctx) {
-            parts.push(StaticArrayPartIr {
-                condition_span: None,
-                classes: lower_static_sz_object(&object),
-                ternary: None,
-                dynamic_span: None,
-                candidates: Vec::new(),
-                dynamic_object_literal: false,
-            });
-            continue;
-        }
-        if let Expression::ObjectExpression(object) = unwrapped {
-            if let Some(partial) = partial_object_from_object_expression(object, ctx, None, &[]) {
-                // Array parts keep the single-ternary contract of
-                // StaticArrayPartIr; multi-ternary parts stay on their
-                // existing lane.
-                if partial.dynamic_css_vars.is_empty() && partial.ternaries.len() == 1 {
-                    if let Some(ternary) = partial.ternaries.into_iter().next() {
-                        parts.push(StaticArrayPartIr {
-                            condition_span: None,
-                            classes: lower_static_sz_object(&partial.object),
-                            ternary: Some(ternary),
-                            dynamic_span: None,
-                            candidates: Vec::new(),
-                            dynamic_object_literal: false,
-                        });
-                        continue;
-                    }
-                }
-            }
-        }
-        // Safelist best-effort: static object literals reachable inside the
-        // dynamic expression (ternary branches, etc.) still get their CSS.
-        // An object literal that lands here carried a runtime value, so the
-        // whole element defers to `_szPart` — flagged for a build diagnostic.
-        parts.push(dynamic_array_part(expression, unwrapped, ctx));
     }
 
     Some(parts)
+}
+
+fn static_array_part_from_expression(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticArrayPartIr> {
+    let unwrapped = unwrap_expression(expression);
+    if is_falsy_array_element(unwrapped) {
+        return None;
+    }
+    if let Expression::StringLiteral(value) = unwrapped {
+        return Some(static_array_part(split_class_tokens(&value.value), None));
+    }
+    let logical = match unwrapped {
+        Expression::LogicalExpression(logical) if logical.operator.is_and() => Some(logical),
+        _ => None,
+    };
+    if let Some(logical) = logical {
+        let right = unwrap_expression(&logical.right);
+        let classes = if let Expression::StringLiteral(value) = right {
+            Some(split_class_tokens(&value.value))
+        } else {
+            array_element_static_object(right, ctx).map(|object| lower_static_sz_object(&object))
+        };
+        return match classes {
+            None => Some({
+                // Dynamic right side: the whole guarded element resolves at
+                // runtime through `_szPart`.
+                dynamic_array_part(expression, unwrapped, ctx)
+            }),
+            Some(classes) if classes.is_empty() => None,
+            Some(classes) => Some(static_array_part(
+                classes,
+                Some(text_span(logical.left.span())),
+            )),
+        };
+    }
+    let conditional_part = match unwrapped {
+        Expression::ConditionalExpression(conditional) => {
+            static_array_ternary_from_conditional(conditional, ctx)
+        }
+        _ => None,
+    }
+    .map(|ternary| StaticArrayPartIr {
+        condition_span: None,
+        classes: Vec::new(),
+        ternary: Some(ternary),
+        dynamic_span: None,
+        candidates: Vec::new(),
+        dynamic_object_literal: false,
+    });
+    if conditional_part.is_some() {
+        return conditional_part;
+    }
+    if let Some(object) = array_element_static_object(unwrapped, ctx) {
+        return Some(static_array_part(lower_static_sz_object(&object), None));
+    }
+    let partial = match unwrapped {
+        Expression::ObjectExpression(object) => {
+            partial_object_from_object_expression(object, ctx, None, &[])
+        }
+        _ => None,
+    };
+    if let Some(mut partial) = partial
+        .filter(|partial| partial.dynamic_css_vars.is_empty() && partial.ternaries.len() == 1)
+    {
+        // Array parts keep the single-ternary contract of StaticArrayPartIr;
+        // multi-ternary parts stay on their existing runtime lane.
+        return Some(StaticArrayPartIr {
+            condition_span: None,
+            classes: lower_static_sz_object(&partial.object),
+            ternary: Some(partial.ternaries.remove(0)),
+            dynamic_span: None,
+            candidates: Vec::new(),
+            dynamic_object_literal: false,
+        });
+    }
+    // Safelist best-effort: static object literals reachable inside the
+    // dynamic expression (ternary branches, etc.) still get their CSS.
+    // An object literal that lands here carried a runtime value, so the
+    // whole element defers to `_szPart` — flagged for a build diagnostic.
+    Some(dynamic_array_part(expression, unwrapped, ctx))
+}
+
+const fn static_array_part(
+    classes: Vec<String>,
+    condition_span: Option<TextSpan>,
+) -> StaticArrayPartIr {
+    StaticArrayPartIr {
+        condition_span,
+        classes,
+        ternary: None,
+        dynamic_span: None,
+        candidates: Vec::new(),
+        dynamic_object_literal: false,
+    }
 }
 
 /// Preserve one unresolved array element for runtime lowering and safelisting.
@@ -3673,7 +3673,7 @@ mod tests {
             const App = ({ cond, other, styles, gap }) => <div sz={[
                 , false, null, undefined, 0, '',
                 'block hover:p-2',
-                cond && 'focus:m-2',
+                cond && '', cond && 'focus:m-2',
                 cond && ({ p: 4 } as const),
                 cond && (other ? { p: 6 } : { p: 8 }),
                 cond ? 'text-sm' : 'text-lg',

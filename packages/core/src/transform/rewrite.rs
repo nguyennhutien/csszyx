@@ -1142,6 +1142,27 @@ mod tests {
     }
 
     #[test]
+    fn falls_back_when_a_safe_spread_ir_no_longer_matches_source() {
+        let source = "const A=({width})=><div sz={{w:width}} {...{}}/>;";
+        let mut ir = parse(source);
+        let spread = ir.jsx_opening_elements[0]
+            .safe_style_spread
+            .as_mut()
+            .expect("safe spread");
+        let crate::transform::SafeStyleSpreadExpressionIr::Object(object) = &mut spread.expression
+        else {
+            panic!("object spread");
+        };
+        object.object_span.end -= 1;
+
+        let rewritten = rewrite_static_sz_attributes(source, "/repo/src/App.tsx", &ir)
+            .expect("fallback rewrite");
+
+        assert!(rewritten.contains(" style={{\"--_sz-w\":"));
+        assert!(rewritten.contains("{...{}}"));
+    }
+
+    #[test]
     fn merges_dynamic_style_vars_into_each_conditional_spread_branch() {
         let source =
             "const A=({width,cond,flex})=><div sz={{w:width}} {...(cond?{style:{flex,},}:{})}/>;";
