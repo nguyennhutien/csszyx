@@ -735,7 +735,8 @@ fn opening_attribute_insert_offset(source: &str, opening_end: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{
-        rewrite_static_sz_attributes, rewrite_static_sz_attributes_with_options, RewriteOptions,
+        opening_attribute_insert_offset, rewrite_static_sz_attributes,
+        rewrite_static_sz_attributes_with_options, whitespace_start, RewriteOptions,
         StaticRewriteUnsupported,
     };
     use crate::transform::{parser::parse_source_shell, TransformFile};
@@ -750,6 +751,14 @@ mod tests {
 
     fn rewrite(source: &str) -> Result<String, StaticRewriteUnsupported> {
         rewrite_static_sz_attributes(source, "/repo/src/App.tsx", &parse(source))
+    }
+
+    #[test]
+    fn attribute_offset_helpers_handle_spaced_and_non_self_closing_tags() {
+        assert_eq!(whitespace_start("<div   sz", 7), 4);
+        assert_eq!(opening_attribute_insert_offset("<div   >", 8), 4);
+        assert_eq!(opening_attribute_insert_offset("<div   />", 9), 7);
+        assert_eq!(opening_attribute_insert_offset("<div", 4), 4);
     }
 
     #[test]

@@ -3057,8 +3057,9 @@ fn string_value_span(span: Span, source: &str) -> TextSpan {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_source_shell, source_type_for_path};
+    use super::{escape_json_string, parse_source_shell, source_type_for_path, string_value_span};
     use crate::transform::{lower::lower_source_ir_classes, TransformFile};
+    use oxc_span::Span;
 
     #[test]
     fn parser_shell_accepts_valid_tsx() {
@@ -3138,6 +3139,26 @@ mod tests {
         let lowered = lower_source_ir_classes(&parsed.ir);
         assert!(lowered.raw_class_names.is_empty());
         assert_eq!(lowered.classes, ["p-4"]);
+    }
+
+    #[test]
+    fn parser_shell_ignores_bare_class_and_tracks_literal_style_attributes() {
+        let source =
+            "const A=()=> <><span class style/><p className='kept' style='--brand: red'/></>;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(parsed.ir.class_attributes.len(), 1);
+        assert_eq!(parsed.ir.class_attributes[0].value, "kept");
+        assert_eq!(parsed.ir.style_attributes.len(), 2);
+        assert!(parsed
+            .ir
+            .style_attributes
+            .iter()
+            .all(|attribute| attribute.expression_span.is_none()));
     }
 
     #[test]
@@ -3741,7 +3762,7 @@ mod tests {
 
     #[test]
     fn parser_shell_records_composite_jsx_element_names() {
-        let source = "const App=()=> <><UI.Card szRecover='csr'/><UI.Layout.Panel szRecover='csr'/><this.View szRecover='csr'/><svg:path szRecover='csr'/></>;";
+        let source = "const App=()=> <><UI.Card szRecover='csr'/><UI.Layout.Panel szRecover='csr'/><this.View szRecover='csr'/><this szRecover='csr' data:marker='x'/><svg:path szRecover='csr'/></>;";
         let parsed = parse_source_shell(&TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: source.to_string(),
@@ -3755,7 +3776,14 @@ mod tests {
 
         assert_eq!(
             names,
-            ["<>", "UI.Card", "UI.Layout.Panel", "this.View", "svg:path"]
+            [
+                "<>",
+                "UI.Card",
+                "UI.Layout.Panel",
+                "this.View",
+                "this",
+                "svg:path"
+            ]
         );
     }
 
@@ -4341,6 +4369,7 @@ mod tests {
             "const X=()=> <Card szs='p-2' />;",
             "const X=({slots})=> <Card szs={slots} />;",
             "const X=({slots})=> <Card szs={{...slots}} />;",
+            "const X=({slots})=> <Card szs={{ header: { ...slots } }} />;",
             "const X=({slot})=> <Card szs={{ [slot]: { p: 2 } }} />;",
             "const X=()=> <Card szs={{ 'header': { p: 2 } }} />;",
             "const X=({value})=> <Card szs={{ header: { p: value } }} />;",
@@ -4370,6 +4399,14 @@ mod tests {
         assert!(entry.class_name.contains("hover:p-1"));
         assert!(entry.class_name.contains("[z-index:2]"));
         assert!(entry.emit_text.contains("\\\\"));
+        assert_eq!(
+            escape_json_string("quote=\" line\nreturn\rtab\t slash\\"),
+            "quote=\\\" line\\nreturn\\rtab\\t slash\\\\"
+        );
+        assert_eq!(
+            string_value_span(Span::new(0, 3), "raw"),
+            super::TextSpan { start: 0, end: 3 }
+        );
     }
 
     #[test]

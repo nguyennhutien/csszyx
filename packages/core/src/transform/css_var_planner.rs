@@ -527,14 +527,14 @@ mod tests {
 
     use super::{
         apply_css_variable_mangling, apply_scoped_css_variable_names,
-        extract_quoted_custom_property_keys, has_redundant_outer_parens,
-        normalize_dynamic_expression_key, plan_css_variable_names,
-        plan_css_variable_names_with_options, CssVariablePlanInput, CssVariablePlanOptions,
-        CssVariableTier,
+        collect_static_style_custom_property_names, extract_quoted_custom_property_keys,
+        has_redundant_outer_parens, normalize_dynamic_expression_key, plan_css_variable_names,
+        plan_css_variable_names_with_options, push_variable_map, CssVariablePlanInput,
+        CssVariablePlanOptions, CssVariableTier,
     };
     use crate::transform::{
         parser::parse_source_shell, DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr,
-        SourceIr, StaticSzObject, SzAttributeIr, TextSpan, TransformFile,
+        SourceIr, StaticSzObject, StyleAttributeIr, SzAttributeIr, TextSpan, TransformFile,
     };
 
     fn usage(id: &str, tier: CssVariableTier, property_key: &str) -> CssVariablePlanInput {
@@ -782,7 +782,25 @@ mod tests {
         assert!(has_redundant_outer_parens(r#"('it\'s')"#));
         assert!(has_redundant_outer_parens("((value))"));
         assert!(!has_redundant_outer_parens("(value) + other"));
+        assert!(!has_redundant_outer_parens("(value)(other)"));
         assert!(!has_redundant_outer_parens("value)"));
+
+        let ir = SourceIr {
+            filename: "style.tsx".to_string(),
+            source_span: TextSpan { start: 0, end: 0 },
+            style_attributes: vec![StyleAttributeIr {
+                attribute_span: TextSpan { start: 0, end: 0 },
+                expression_span: None,
+            }],
+            ..SourceIr::empty("style.tsx".to_string(), 0)
+        };
+        assert!(collect_static_style_custom_property_names(&ir, "").is_empty());
+
+        let mut map = Vec::new();
+        push_variable_map(&mut map, "--same", "--same");
+        push_variable_map(&mut map, "--old", "--new");
+        push_variable_map(&mut map, "--old", "--new");
+        assert_eq!(map.len(), 1);
     }
 
     fn sz_attribute(dynamic_css_vars: Vec<DynamicCssVarIr>) -> SzAttributeIr {
