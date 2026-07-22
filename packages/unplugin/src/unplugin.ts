@@ -898,6 +898,39 @@ export function mangleEligibleClasses(
 }
 
 /**
+ * Allocate a short token per eligible class, skipping forbidden names.
+ *
+ * The forbidden set carries `mangleExclude`, every authored class, AND every
+ * owned class name. Reserving the owned names keeps the map's key space and
+ * token space disjoint, which is what lets a runtime consumer resolve a token
+ * with one map lookup: a string that is a map key is always an original class,
+ * never a token some other class was mangled to.
+ *
+ * @param eligibleClasses Classes to mangle, in stable sorted order.
+ * @param forbiddenTokens Names the allocator must never emit as a token.
+ * @returns The class → token map.
+ */
+export function allocateMangleTokens(
+    eligibleClasses: readonly string[],
+    forbiddenTokens: ReadonlySet<string>,
+): Record<string, string> {
+    const map: Record<string, string> = {};
+    // `tokenIndex` advances independently of the class index whenever a token
+    // is skipped.
+    let tokenIndex = 0;
+    for (const className of eligibleClasses) {
+        let token = encode(tokenIndex);
+        while (forbiddenTokens.has(token)) {
+            tokenIndex++;
+            token = encode(tokenIndex);
+        }
+        map[className] = token;
+        tokenIndex++;
+    }
+    return map;
+}
+
+/**
  * Whether a file is workspace-package source that csszyx skipped only because it
  * lives under `/packages/` and is not under any opted-in `compileSources`
  * directory. Used to surface the silent no-op (skipped `sz` produces no CSS).
@@ -3543,21 +3576,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Mangle only csszyx-owned classes with no raw author consumer. A shared
         // name can enter both sets, so ownership must be resolved explicitly
         // rather than inferred from its presence in ownedClasses.
-        const newMap: Record<string, string> = {};
-        // Walk the encoder sequence, skipping any token that equals a reserved
-        // (external) class name, so no mangled alias collides with one. `tokenIndex`
-        // advances independently of the class index whenever a token is skipped.
-        let tokenIndex = 0;
-        for (const className of mangleEligibleClasses(state.ownedClasses, state.authoredClasses)) {
-            let token = encode(tokenIndex);
-            while (mangleReserved.has(token) || state.authoredClasses.has(token)) {
-                tokenIndex++;
-                token = encode(tokenIndex);
-            }
-            newMap[className] = token;
-            tokenIndex++;
-        }
-        state.mangleMap = newMap;
+        //
+        // Forbid as tokens: reserved (external) class names so no mangled alias
+        // collides with one, plus every authored AND owned class name so the
+        // map's key and token spaces stay disjoint (see allocateMangleTokens).
+        const forbiddenTokens = new Set([
+            ...mangleReserved,
+            ...state.authoredClasses,
+            ...state.ownedClasses,
+        ]);
+        state.mangleMap = allocateMangleTokens(
+            mangleEligibleClasses(state.ownedClasses, state.authoredClasses),
+            forbiddenTokens,
+        );
         assertVarMangleMapSize(state.varMangleMap, varMangleMapMaxBytes);
         state.checksum = compute_mangle_checksum(
             createHydrationMangleMap(state.mangleMap, state.varMangleMap),

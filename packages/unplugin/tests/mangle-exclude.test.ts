@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { vitePlugin } from '../src/unplugin.js';
+import { allocateMangleTokens, vitePlugin } from '../src/unplugin.js';
 
 /**
  * `production.mangleExclude` lists class names the mangler must never produce as
@@ -82,6 +82,26 @@ describe('production.mangleExclude reserves class names from the mangler', () =>
         const tokens = Object.values(await mangleMapWith(allTier1));
         // No single-letter token may survive — allocation jumps to tier 2 (`z9`, …).
         expect(tokens.every(t => t.length >= 2)).toBe(true);
+        expect(new Set(tokens).size).toBe(tokens.length);
+    });
+
+    it('never emits a census class name as a token (key/token spaces disjoint)', () => {
+        // A large census eventually reaches multi-letter tokens that can spell
+        // a real class name ('flex'). If that name is itself censused, a map
+        // key would double as another class's token and a runtime map lookup
+        // could re-encode an already-mangled string. Reserving every census
+        // name keeps one-lookup resolution sound: key ⇒ original, always.
+        const eligible = ['flex', 'grow', 'p-4'];
+        const map = allocateMangleTokens(eligible, new Set(['z', 'y', ...eligible]));
+        expect(Object.keys(map).sort()).toEqual([...eligible].sort());
+        const tokens = Object.values(map);
+        expect(tokens).not.toContain('z');
+        expect(tokens).not.toContain('y');
+        for (const token of tokens) {
+            expect(eligible, `token ${token} must not collide with a census name`).not.toContain(
+                token,
+            );
+        }
         expect(new Set(tokens).size).toBe(tokens.length);
     });
 
