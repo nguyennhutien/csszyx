@@ -914,6 +914,44 @@ mod tests {
     }
 
     #[test]
+    fn component_szs_rewrite_survives_a_static_sz_sibling() {
+        // Field-reported: a component `szs` slot map next to a sibling element
+        // carrying a static `sz` object routed the file to the AST-free lane,
+        // which cannot perform the `szs` -> `szsc` rewrite — the raw `szs`
+        // prop survived into the output and the slot override was silently
+        // dropped. All three shapes must compile the rewrite; the sibling
+        // shape must take the parser path to get it.
+        let shapes = [
+            "const C = () => <Popup szs={{ body: { p: 0 } }}><Box>x</Box></Popup>;",
+            "const C = () => <Popup szs={{ body: { p: 0 } }}><Box sz={{ p: 4 }}>x</Box></Popup>;",
+            "const C = () => <Popup sz={{ p: 4 }} szs={{ body: { p: 0 } }}><Box>x</Box></Popup>;",
+        ];
+
+        for source in shapes {
+            let result = transform_file(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+
+            assert_eq!(
+                result.parser_path,
+                ParserPath::Static,
+                "expected the parser path for: {source}"
+            );
+            assert!(
+                result.code.contains("szsc={{ body:"),
+                "expected a compiled szsc slot prop for: {source}\ngot: {}",
+                result.code
+            );
+            assert!(
+                !result.code.contains("szs={{ body"),
+                "expected the raw szs prop to be rewritten for: {source}\ngot: {}",
+                result.code
+            );
+        }
+    }
+
+    #[test]
     fn static_engine_collects_existing_classes_without_rewriting_source() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),

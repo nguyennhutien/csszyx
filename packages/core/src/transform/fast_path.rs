@@ -74,6 +74,22 @@ pub fn triage_source(file: &TransformFile) -> FastPathTriage {
         });
     }
 
+    // A component `szs=` slot attribute is rewritten to a compiled `szsc=`
+    // prop by the parser lanes; the AST-free path only walks `sz={{ … }}`
+    // attributes and cannot perform that rewrite. The element-wise guard in
+    // `try_static_sz_ir` only inspects openings that contain `sz={{`, so an
+    // `szs` on a SIBLING element was invisible to it: the file fast-pathed on
+    // the sibling's `sz` alone and shipped the raw `szs` prop, silently
+    // dropping the slot override (field-reported — the parser lanes always
+    // rewrite it). Bail file-wide like the catalog markers above; the
+    // substring test does not match an already-compiled `szsc=` prop.
+    if file.source.contains("szs=") {
+        return FastPathTriage::NeedsParser(FastPathBailout {
+            filename: file.filename.clone(),
+            reason: FastPathBailoutReason::ContainsSzMarker,
+        });
+    }
+
     // An `sz=` occurrence inside a comment or string literal must never build
     // static IR: the textual scan below cannot tell it from a real attribute,
     // so `// <Box sz={{ mb: 10 }} />` used to ship the commented-out classes
@@ -212,9 +228,10 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
         let opening_start = file.source[..attribute_start].rfind('<')?;
         let opening_end = attribute_start + file.source[attribute_start..].find('>')? + 1;
         let opening = &file.source[opening_start..opening_end];
+        // No `szs=` check here: `triage_source` already bailed file-wide on
+        // that marker before this walk runs, so no opening can contain it.
         if opening.contains("class=")
             || opening.contains("className=")
-            || opening.contains("szs=")
             || opening.contains("szRecover")
             || opening.contains("data-sz-recovery-token")
             || opening.contains("{...")
@@ -523,6 +540,31 @@ mod tests {
                 "expected NeedsParser for: {source}"
             );
         }
+    }
+
+    #[test]
+    fn component_szs_alongside_static_sz_bails_to_parser() {
+        // The regression: a component `szs={{ … }}` slot map on one element
+        // next to a SIBLING element with a plain static `sz={{ … }}` must not
+        // fast-path. The AST-free walk only inspects openings that contain
+        // `sz={{`, so an `szs` on any other element is invisible to it and the
+        // `szs` -> `szsc` rewrite is silently skipped (field-reported: slot
+        // overrides dropped, component reads `szsc` as undefined). An `szs` on
+        // the SAME opening as the `sz` was already rejected; the sibling shape
+        // was the hole.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const C = () => <Popup szs={{ body: { p: 0 } }}><Box sz={{ p: 4 }}>x</Box></Popup>;"
+                .to_string(),
+        };
+
+        assert!(matches!(
+            triage_source(&file),
+            FastPathTriage::NeedsParser(super::FastPathBailout {
+                reason: FastPathBailoutReason::ContainsSzMarker,
+                ..
+            })
+        ));
     }
 
     #[test]
