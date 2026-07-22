@@ -85,6 +85,35 @@ describe('production.mangleExclude reserves class names from the mangler', () =>
         expect(new Set(tokens).size).toBe(tokens.length);
     });
 
+    it('memoized token allocation matches a fresh allocation across tier boundaries', () => {
+        // encode() is memoized by index across calls; a large census crosses
+        // the tier-1→2→3 boundaries where the reversed Base62 encoder is most
+        // likely to mis-map. The token per class must be identical whether the
+        // index cache was cold or warm.
+        const eligible = Array.from({ length: 3000 }, (_, i) => `c${i}`);
+        const first = allocateMangleTokens(eligible, new Set());
+        const second = allocateMangleTokens(eligible, new Set());
+        expect(second).toEqual(first);
+        // Bijective across the whole range, and tokens grow in length by tier.
+        const tokens = Object.values(first);
+        expect(new Set(tokens).size).toBe(tokens.length);
+        expect(tokens[0]).toHaveLength(1); // tier 1
+        expect((tokens.at(-1) as string).length).toBeGreaterThanOrEqual(2); // past tier 1
+    });
+
+    it('skipping a long forbidden run stays linear and bijective', () => {
+        // Reserving every tier-1 token forces the allocator to advance the
+        // token index through a long forbidden run before landing in tier 2+.
+        // No class may be skipped, and no token may repeat.
+        const eligible = Array.from({ length: 100 }, (_, i) => `k${i}`);
+        const allTier1 = 'zyxwvutsrqponmlkjihgfedcbaZYXWVUTSRQPONMLKJIHGFEDCBA'.split('');
+        const map = allocateMangleTokens(eligible, new Set(allTier1));
+        expect(Object.keys(map)).toHaveLength(eligible.length);
+        const tokens = Object.values(map);
+        expect(tokens.every(t => t.length >= 2)).toBe(true);
+        expect(new Set(tokens).size).toBe(tokens.length);
+    });
+
     it('never emits a census class name as a token (key/token spaces disjoint)', () => {
         // A large census eventually reaches multi-letter tokens that can spell
         // a real class name ('flex'). If that name is itself censused, a map

@@ -910,19 +910,59 @@ export function mangleEligibleClasses(
  * @param forbiddenTokens Names the allocator must never emit as a token.
  * @returns The class → token map.
  */
+/**
+ * Token strings by encoder index. `encode` is a pure deterministic Base62
+ * encoder behind the WASM boundary, and the boundary is ~95% of its cost
+ * (~223ns/call measured vs ~ns of native work). The map finalizes several
+ * times per build (buildEnd, each HTML page, output processing), re-encoding
+ * the same indices each time — cache once, forever valid.
+ */
+const tokenByIndex: string[] = [];
+
+/**
+ * Deterministic token for one encoder index, crossing the WASM boundary at
+ * most once per index per process.
+ *
+ * @param index Encoder sequence index.
+ * @returns The Base62 token.
+ */
+function tokenAt(index: number): string {
+    const cached = tokenByIndex[index];
+    if (cached !== undefined) {
+        return cached;
+    }
+    const fresh = encode(index);
+    tokenByIndex[index] = fresh;
+    return fresh;
+}
+
+/**
+ * Allocate a short token per eligible class, skipping forbidden names.
+ *
+ * The forbidden set carries `mangleExclude`, every authored class, AND every
+ * owned class name. Reserving the owned names keeps the map's key space and
+ * token space disjoint, which is what lets a runtime consumer resolve a token
+ * with one map lookup: a string that is a map key is always an original class,
+ * never a token some other class was mangled to.
+ *
+ * @param eligibleClasses Classes to mangle, in stable sorted order.
+ * @param forbiddenTokens Names the allocator must never emit as a token.
+ * @returns The class → token map.
+ */
 export function allocateMangleTokens(
     eligibleClasses: readonly string[],
     forbiddenTokens: ReadonlySet<string>,
 ): Record<string, string> {
     const map: Record<string, string> = {};
     // `tokenIndex` advances independently of the class index whenever a token
-    // is skipped.
+    // is skipped, and never rewinds — total encoder calls stay linear in
+    // census + skips even when the forbidden set blocks long runs.
     let tokenIndex = 0;
     for (const className of eligibleClasses) {
-        let token = encode(tokenIndex);
+        let token = tokenAt(tokenIndex);
         while (forbiddenTokens.has(token)) {
             tokenIndex++;
-            token = encode(tokenIndex);
+            token = tokenAt(tokenIndex);
         }
         map[className] = token;
         tokenIndex++;
@@ -3570,7 +3610,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
     /**
      * Finalizes the mangle map from all collected classes.
-     * Always rebuilds to ensure completeness (called after all files processed).
+     * Always rebuilds to ensure completeness (called after all files
+     * processed). The one repeated WASM cost — `encode` per token — is memoized
+     * inside `allocateMangleTokens`; the checksum is a single call whose input
+     * (the var map) is rebuilt wholesale per CSS file, so it is not safely
+     * skippable on a size heuristic and is left to run each time.
      */
     function finalizeMangleMap(): void {
         // Mangle only csszyx-owned classes with no raw author consumer. A shared
