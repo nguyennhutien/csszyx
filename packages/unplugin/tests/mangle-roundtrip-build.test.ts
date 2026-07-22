@@ -49,6 +49,10 @@ document.body.textContent = JSON.stringify(App({ wide: false }));
 // Runtime helper consumer: the build must deliver the mangle map to this
 // module through the bundle itself, not only through the HTML document.
 document.body.dataset.cls = szr({ mx: 0 });
+// A user eval CALL in the bundle must not trip the webpack-eval-devtool
+// escaping heuristic: the bundled map sits in identifier position, and
+// double-escaping it there is a syntax error in the emitted chunk.
+export const dyn = () => eval('0');
 `,
     // `p-4` is deliberately shared by sz and a mixed raw clsx string. It must
     // stay readable while sz-only utilities still take the optimized path.

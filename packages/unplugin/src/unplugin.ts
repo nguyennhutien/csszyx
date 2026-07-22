@@ -3705,23 +3705,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (result.includes(CHECKSUM_PLACEHOLDER)) {
             result = result.split(CHECKSUM_PLACEHOLDER).join(state.checksum);
         }
+        // Webpack's eval devtool wraps each module in eval("…"), so a
+        // placeholder there is parsed twice and needs its quotes escaped for
+        // the outer string. `eval(` ALONE is not that signal: any production
+        // chunk can carry a user eval call, and double-escaping a placeholder
+        // that sits in plain code (the bundled mangle-runtime module holds the
+        // map in identifier position) is a syntax error in the emitted chunk.
+        // The eval devtool always stamps `//# sourceURL=webpack…` inside its
+        // wrappers, so require both markers.
+        const isEvalWrapped = result.includes('eval(') && result.includes('sourceURL=webpack');
         if (result.includes(MANGLE_MAP_PLACEHOLDER)) {
             // Map keys are class names, and arbitrary-value classes can carry
             // backticks, ${ or </script — escape so the JSON cannot break out
             // of the template literal / script tag it gets pasted into.
             const jsonMap = escapeJsonForInlineScript(JSON.stringify(state.mangleMap));
-            // Webpack dev mode wraps each module in eval("..."), so the map is
-            // parsed twice — escape backslashes and quotes for that outer string.
-            const escapedMap = result.includes('eval(')
-                ? escapeForDoubleQuotedString(jsonMap)
-                : jsonMap;
+            const escapedMap = isEvalWrapped ? escapeForDoubleQuotedString(jsonMap) : jsonMap;
             result = result.split(MANGLE_MAP_PLACEHOLDER).join(escapedMap);
         }
         if (result.includes(VAR_MANGLE_MAP_PLACEHOLDER)) {
             const jsonMap = escapeJsonForInlineScript(JSON.stringify(state.varMangleMap));
-            const escapedMap = result.includes('eval(')
-                ? escapeForDoubleQuotedString(jsonMap)
-                : jsonMap;
+            const escapedMap = isEvalWrapped ? escapeForDoubleQuotedString(jsonMap) : jsonMap;
             result = result.split(VAR_MANGLE_MAP_PLACEHOLDER).join(escapedMap);
         }
         return result;
@@ -4292,6 +4295,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              * @param compiler - the Webpack compiler instance
              */
             webpack(compiler: WebpackCompiler) {
+                // Never mangle in a development-mode webpack build — the same
+                // reason as the `vite serve` guard: dev CSS is unmangled, so a
+                // delivered runtime map would encode classes to tokens no dev
+                // rule matches. Asset mangling was already mode-gated, but the
+                // bundled mangle-runtime module now DELIVERS the map through
+                // the JS bundle, which the HTML lane's absence in webpack dev
+                // used to prevent by accident.
+                if (compiler.options?.mode === 'development') {
+                    manglingEnabled = false;
+                }
                 compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
