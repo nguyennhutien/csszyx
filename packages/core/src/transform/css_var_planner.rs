@@ -749,11 +749,11 @@ mod tests {
         );
         assert!(extract_quoted_custom_property_keys("{'--unterminated").is_empty());
         assert_eq!(
-            extract_quoted_custom_property_keys(r#"{note: 'it\'s', '--reserved': 1}"#),
+            extract_quoted_custom_property_keys(r"{note: 'it\'s', '--reserved': 1}"),
             ["--reserved"]
         );
         assert!(has_redundant_outer_parens("(`)` + '(x)')"));
-        assert!(has_redundant_outer_parens(r#"('it\'s')"#));
+        assert!(has_redundant_outer_parens(r"('it\'s')"));
         assert!(has_redundant_outer_parens("((value))"));
         assert!(!has_redundant_outer_parens("(value) + other"));
         assert!(!has_redundant_outer_parens("(value)(other)"));

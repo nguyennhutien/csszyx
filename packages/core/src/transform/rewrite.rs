@@ -774,6 +774,9 @@ mod tests {
     }
 
     #[test]
+    // The fixtures are JSX sources whose `{p:2}` object literals read as
+    // formatting placeholders to the lint; they are never format strings.
+    #[allow(clippy::literal_string_with_formatting_args)]
     fn rewrites_typescript_wrapped_static_ternaries() {
         let cases = [
             "const A=({on})=><div sz={(on?{p:2}:{p:4}) as const}/>;",
