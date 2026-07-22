@@ -3941,11 +3941,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Rewritten source when the module needs the map, otherwise null.
      */
     function injectMangleRuntime(transformedCode: string, id: string): string | null {
+        // Guard order is cost order: flag, then the short id, and only then
+        // the two scans over module code (this runs for every module of a
+        // production build).
         if (
             !manglingEnabled ||
+            !shouldProcessSource(id) ||
             !MANGLE_RUNTIME_CONSUMER_RE.test(transformedCode) ||
-            transformedCode.includes(MANGLE_RUNTIME_VIRTUAL_ID) ||
-            !shouldProcessSource(id)
+            transformedCode.includes(MANGLE_RUNTIME_VIRTUAL_ID)
         ) {
             return null;
         }
