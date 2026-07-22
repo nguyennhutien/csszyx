@@ -258,6 +258,42 @@ describe('szcn — runtime encode (runtime-resolved strings on a mangled build)'
         withRuntime({ 'flex-col': 'm7' });
         expect(szcn('flex-col')).toBe('m7');
     });
+
+    it('passes prototype-chain tokens through instead of stringifying them', () => {
+        // A plain-object map inherits Object.prototype: map['constructor'] is
+        // a function, map['__proto__'] an object. Neither may leak into the
+        // output as "[object …]"/"function …" — the non-string guard keeps
+        // the token itself.
+        withRuntime({ 'gap-2': 'q3' });
+        expect(szcn('constructor')).toBe('constructor');
+        expect(szcn('__proto__ gap-2')).toBe('__proto__ q3');
+        expect(szcn('hasOwnProperty')).toBe('hasOwnProperty');
+    });
+
+    it('falls back to raw tokens when the encode map THROWS on access', () => {
+        // Same resilience contract as decode: an exotic host Proxy must never
+        // crash the leaf merge of every layered component.
+        (globalThis as { __csszyx?: unknown }).__csszyx = {
+            mangleMap: new Proxy(
+                {},
+                {
+                    get() {
+                        throw new Error('boom');
+                    },
+                },
+            ),
+        };
+        expect(szcn('gap-2', 'gap-8')).toBe('gap-8');
+        expect(_szcn('flex-col')).toBe('flex-col');
+    });
+
+    it('encodes through the unmemoized generated-code lane too', () => {
+        // Compiled sz={[...]} arrays route through _szcn (no memo); the encode
+        // path must be identical to the authored szcn lane.
+        withRuntime({ 'flex-col': 'm7', 'gap-2': 'q3', 'gap-8': 'q7' });
+        expect(_szcn('flex-col')).toBe('m7');
+        expect(_szcn('q3', 'gap-8')).toBe('q7');
+    });
 });
 
 describe('szDecode — public token introspection', () => {
