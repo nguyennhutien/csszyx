@@ -81,15 +81,21 @@ import {
     writeTransformCache,
 } from './transform-cache.js';
 import {
+    CHECKSUM_PLACEHOLDER,
     createChecksumModule,
     createMangleMapModule,
+    createMangleRuntimeModule,
     createThemeGroupsModule,
     isVirtualModule,
+    MANGLE_MAP_PLACEHOLDER,
+    MANGLE_RUNTIME_VIRTUAL_ID,
+    RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID,
     RESOLVED_THEME_GROUPS_VIRTUAL_ID,
     RESOLVED_VIRTUAL_CHECKSUM_ID,
     RESOLVED_VIRTUAL_MODULE_ID,
     resolveVirtualModule,
     THEME_GROUPS_VIRTUAL_ID,
+    VAR_MANGLE_MAP_PLACEHOLDER,
 } from './virtual-modules.js';
 
 /**
@@ -255,13 +261,9 @@ interface RustPrescanMiss {
     cacheKey: TransformCacheKey | null;
 }
 
-/**
- * Placeholders injected during transform, replaced in processAssets/generateBundle
- * with actual values once the complete mangle map is available.
- */
-const CHECKSUM_PLACEHOLDER = '___CSSZYX_CHECKSUM___';
-const MANGLE_MAP_PLACEHOLDER = '___CSSZYX_MANGLE_MAP___';
-const VAR_MANGLE_MAP_PLACEHOLDER = '___CSSZYX_VAR_MANGLE_MAP___';
+// Mangle placeholders (injected during transform, replaced in
+// processAssets/generateBundle) live in virtual-modules.ts so the
+// mangle-runtime virtual module can embed the same markers.
 const UNKNOWN_PACKAGE_VERSION = '0.0.0';
 const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
@@ -3889,6 +3891,39 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         return `import '${THEME_GROUPS_VIRTUAL_ID}';\n${transformedCode}`;
     }
 
+    /** Matches an import/re-export from a package whose runtime helpers read the mangle map. */
+    const MANGLE_RUNTIME_CONSUMER_RE = /from\s*['"](?:csszyx|@csszyx\/runtime)['"]/;
+
+    /**
+     * Inject the self-installing mangle map into modules that call runtime
+     * helpers. The map otherwise reaches the page only through the transformed
+     * HTML document — a delivery path embedded builds and inline-script CSP
+     * policies do not have — and without it `szr`/`szv` resolve classes to
+     * their original names while the CSS ships mangled (field-reported as
+     * silently dropped styles). Importing the module from every helper
+     * consumer keeps the map inside the JS bundle, ahead of first helper use
+     * in module order; the module itself is checksum-guarded so the HTML
+     * script and multiple importers cannot fight.
+     *
+     * @param transformedCode Current transformed source.
+     * @param id Bundler module identifier.
+     * @returns Rewritten source when the module needs the map, otherwise null.
+     */
+    function injectMangleRuntime(transformedCode: string, id: string): string | null {
+        if (
+            !manglingEnabled ||
+            !MANGLE_RUNTIME_CONSUMER_RE.test(transformedCode) ||
+            transformedCode.includes(MANGLE_RUNTIME_VIRTUAL_ID) ||
+            !shouldProcessSource(id)
+        ) {
+            return null;
+        }
+        // After any use directive, not prepended: an import ahead of
+        // `'use server'` would demote the directive to a plain string and the
+        // RSC boundary guard would misclassify the module.
+        return insertRuntimeImport(transformedCode, `import '${MANGLE_RUNTIME_VIRTUAL_ID}';\n`);
+    }
+
     /**
      * Register class candidates and decide whether the hook returns source.
      *
@@ -3949,7 +3984,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 return (
                     id === RESOLVED_VIRTUAL_MODULE_ID ||
                     id === RESOLVED_VIRTUAL_CHECKSUM_ID ||
-                    id === RESOLVED_THEME_GROUPS_VIRTUAL_ID
+                    id === RESOLVED_THEME_GROUPS_VIRTUAL_ID ||
+                    id === RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID
                 );
             },
 
@@ -3971,6 +4007,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (id === RESOLVED_VIRTUAL_CHECKSUM_ID) {
                     finalizeMangleMap();
                     return createChecksumModule(state.checksum);
+                }
+                if (id === RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID) {
+                    // No finalize here: the module carries placeholders that
+                    // output processing fills from the FINAL map, after the
+                    // mangle passes have run over the chunk.
+                    return createMangleRuntimeModule(globalVarAliasPrefix);
                 }
                 if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
                     const theme = state.parsedTheme;
@@ -4054,6 +4096,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 const themedCode = injectThemeGroups(code, output.code, id, output.usesSzcn);
                 if (themedCode !== null) {
                     output.code = themedCode;
+                    output.transformed = true;
+                }
+
+                const mangleRuntimeCode = injectMangleRuntime(output.code, id);
+                if (mangleRuntimeCode !== null) {
+                    output.code = mangleRuntimeCode;
                     output.transformed = true;
                 }
 
