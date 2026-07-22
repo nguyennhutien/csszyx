@@ -81,6 +81,38 @@ function decodeToken(token: string): string {
 }
 
 /**
+ * Encode one token through the runtime mangle map when present.
+ *
+ * A string that is a map KEY is always an original class name — the build
+ * reserves every census name from the token allocator, so a mangled token can
+ * never collide with a key — which makes this a single unambiguous, idempotent
+ * lookup: originals of mangled classes encode to their token; already-mangled
+ * tokens, authored classes, and external names pass through unchanged.
+ *
+ * This is what heals a class RESOLVED AT RUNTIME as a plain string (a
+ * component mapping a prop to a class name and merging it at its leaf): the
+ * CSS ships mangled, so the string must reach the DOM mangled too.
+ *
+ * @param token - A class token, possibly an original censused name.
+ * @returns The mangled token when the map covers it, otherwise the token.
+ */
+function encodeToken(token: string): string {
+    const map = (globalThis as { __csszyx?: { mangleMap?: Record<string, string> } }).__csszyx
+        ?.mangleMap;
+    if (!map) {
+        return token;
+    }
+    // Same fail-safe stance as decodeToken: an exotic host object must never
+    // break the merge.
+    try {
+        const encoded = map[token];
+        return typeof encoded === 'string' ? encoded : token;
+    } catch {
+        return token;
+    }
+}
+
+/**
  * Directional shorthand → longhand coverage. A shorthand appearing LATER
  * overrides earlier longhands it subsumes (CSS-cascade-correct): a later `p-8`
  * removes an earlier `pb-4` (p covers bottom), while a later `pb-8` keeps an
@@ -250,15 +282,17 @@ export function szcn(...inputs: ClassInput[]): string {
         }
     }
     const generation = getSzcnGroupsGeneration();
-    // Compare the decode FUNCTION IDENTITY, not mere presence: a swapped bridge
+    // Compare the runtime OBJECT IDENTITY, not mere presence: a swapped bridge
     // (tests, or an exotic host replacing the inline script's object) must not
-    // serve merges memoized under the previous map. In production the identity
-    // is stable for the page lifetime, so this never clears.
-    const decodeRef = (globalThis as { __csszyx?: { decode?: unknown } }).__csszyx?.decode;
-    if (generation !== memoGroupsGeneration || decodeRef !== memoDecodeRef) {
+    // serve merges memoized under the previous map. The object carries both
+    // the decode bridge and the encode map, so one identity check covers both
+    // lookups. In production it is installed once for the page lifetime, so
+    // this never clears.
+    const runtimeRef = (globalThis as { __csszyx?: unknown }).__csszyx;
+    if (generation !== memoGroupsGeneration || runtimeRef !== memoDecodeRef) {
         memo.clear();
         memoGroupsGeneration = generation;
-        memoDecodeRef = decodeRef;
+        memoDecodeRef = runtimeRef;
     }
     const cached = memo.get(key);
     if (cached !== undefined) {
@@ -335,6 +369,24 @@ function mergeClassToken(token: string, order: string[], byKey: Map<string, stri
         const index = order.indexOf(covered);
         if (index !== -1) order.splice(index, 1);
     }
-    byKey.set(key, token);
+    byKey.set(key, encodeToken(token));
     order.push(key);
+}
+
+/**
+ * Resolve a class token to its original (un-mangled) name.
+ *
+ * For class introspection on production-mangled builds: code that inspects a
+ * `className` for a utility by its original spelling (e.g. "does this element
+ * carry a `w-*` width?") receives mangled tokens there, so decode each token
+ * before matching. Identity on unmangled builds, in dev, and for any token the
+ * map does not cover — safe to call unconditionally.
+ *
+ * @param token - A single class token, possibly mangled.
+ * @returns The original class name, or the token itself when not mangled.
+ * @example
+ * className.split(/\s+/).some(t => szDecode(t).startsWith('w-'))
+ */
+export function szDecode(token: string): string {
+    return decodeToken(token);
 }
