@@ -178,16 +178,11 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             return;
         }
 
-        let before = self.ir.jsx_opening_elements.len();
+        let index = self.ir.jsx_opening_elements.len();
         self.visit_jsx_opening_element(&element.opening_element);
-        if self.ir.jsx_opening_elements.len() > before {
-            let index = self.ir.jsx_opening_elements.len() - 1;
-            self.element_stack.push(index);
-            self.visit_jsx_children(&element.children);
-            self.element_stack.pop();
-        } else {
-            self.visit_jsx_children(&element.children);
-        }
+        self.element_stack.push(index);
+        self.visit_jsx_children(&element.children);
+        self.element_stack.pop();
         if let Some(closing_element) = &element.closing_element {
             self.visit_jsx_closing_element(closing_element);
         }
@@ -221,10 +216,6 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
     }
 
     fn visit_jsx_opening_element(&mut self, element: &JSXOpeningElement<'a>) {
-        if self.ast_budget_exceeded {
-            return;
-        }
-
         let element_name = jsx_element_name(&element.name);
         let mut sz_attribute_indices = Vec::new();
         let mut class_attribute_index = None;
@@ -237,19 +228,18 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
         let mut last_attribute_end = None;
 
         for item in &element.attributes {
-            let JSXAttributeItem::Attribute(attr) = item else {
-                let spread = match item {
-                    JSXAttributeItem::SpreadAttribute(spread) => spread,
-                    JSXAttributeItem::Attribute(_) => unreachable!("attribute matched above"),
-                };
-                has_spread_attribute = true;
-                spread_count += 1;
-                safe_style_spread = if spread_count == 1 {
-                    safe_style_spread_from_attribute(spread)
-                } else {
-                    None
-                };
-                continue;
+            let attr = match item {
+                JSXAttributeItem::Attribute(attr) => attr,
+                JSXAttributeItem::SpreadAttribute(spread) => {
+                    has_spread_attribute = true;
+                    spread_count += 1;
+                    safe_style_spread = if spread_count == 1 {
+                        safe_style_spread_from_attribute(spread)
+                    } else {
+                        None
+                    };
+                    continue;
+                }
             };
             last_attribute_end = Some(attr.span.end);
             if let Some(name) = jsx_attribute_name(&attr.name) {
@@ -358,13 +348,6 @@ fn safe_style_spread_from_attribute(spread: &JSXSpreadAttribute<'_>) -> Option<S
 
 /// Capture one object-literal spread branch with at most one explicit style key.
 fn safe_style_spread_object(object: &ObjectExpression<'_>) -> Option<SafeStyleSpreadObjectIr> {
-    if object
-        .properties
-        .iter()
-        .any(|property| matches!(property, ObjectPropertyKind::SpreadProperty(_)))
-    {
-        return None;
-    }
     let mut style_value = None;
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(property) = property else {
@@ -438,7 +421,6 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             self.ir.szs_diagnostics.push(unsupported_message);
             return;
         };
-        let ctx = self.resolve_context();
         let mut entries = Vec::with_capacity(slot_map.properties.len());
         for property in &slot_map.properties {
             let ObjectPropertyKind::ObjectProperty(prop) = property else {
@@ -467,12 +449,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     });
                 }
                 Expression::ObjectExpression(object) => {
-                    if !is_pure_literal_szs_object(object) {
-                        self.ir.szs_diagnostics.push(unsupported_message);
-                        return;
-                    }
-                    let Some(static_object) = static_object_from_object_expression(object, ctx)
-                    else {
+                    let Some(static_object) = static_szs_object(object) else {
                         self.ir.szs_diagnostics.push(unsupported_message);
                         return;
                     };
@@ -506,6 +483,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             ternaries,
             array_parts,
             runtime_fallback,
+            runtime_fallback_spread,
             candidate_classes,
             dynamic_css_vars,
         ) = match &attr.value {
@@ -516,6 +494,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 true,
                 Vec::new(),
                 Vec::new(),
+                false,
                 false,
                 Vec::new(),
                 Vec::new(),
@@ -545,6 +524,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         vec![ternary],
                         Vec::new(),
                         false,
+                        false,
                         Vec::new(),
                         Vec::new(),
                     )
@@ -558,6 +538,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         rewrites_empty_class,
                         Vec::new(),
                         Vec::new(),
+                        false,
                         false,
                         Vec::new(),
                         Vec::new(),
@@ -573,6 +554,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         ternaries,
                         Vec::new(),
                         false,
+                        false,
                         Vec::new(),
                         dynamic_css_vars,
                     )
@@ -586,6 +568,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         Vec::new(),
                         array_parts,
+                        false,
                         false,
                         Vec::new(),
                         Vec::new(),
@@ -603,6 +586,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         Vec::new(),
                         Vec::new(),
                         true,
+                        jsx_expression_has_top_level_spread(&container.expression),
                         candidate_classes,
                         Vec::new(),
                     )
@@ -621,8 +605,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             ternaries,
             array_parts,
             runtime_fallback,
-            runtime_fallback_spread: runtime_fallback
-                && jsx_attribute_value_has_top_level_spread(attr.value.as_ref()),
+            runtime_fallback_spread,
             candidate_classes,
             dynamic_css_vars,
         });
@@ -919,9 +902,6 @@ fn lenient_catalog_objects<'a>(
     depth: usize,
     budget: &mut CatalogExtrasBudget,
 ) -> Vec<StaticSzObject> {
-    if depth > MAX_CATALOG_DEPTH {
-        return vec![StaticSzObject::empty()];
-    }
     let mut primary = StaticSzObject::empty();
     let mut extras: Vec<StaticSzObject> = Vec::new();
     for property in &object.properties {
@@ -956,10 +936,8 @@ fn lenient_catalog_objects<'a>(
                 if values.is_empty() {
                     continue;
                 }
-                let rest = values.split_off(1);
-                let Some(first) = values.pop() else {
-                    continue;
-                };
+                let first = values.remove(0);
+                let rest = values;
                 let span = text_span(prop.span);
                 merge_static_property(
                     &mut primary.properties,
@@ -1162,36 +1140,56 @@ fn jsx_attribute_name<'a>(name: &'a JSXAttributeName<'a>) -> Option<&'a str> {
     }
 }
 
-/// Whether a value is allowed inside an `szs` slot object: string / number /
+/// Convert a value allowed inside an `szs` slot object: string / number /
 /// boolean literals, a negated number, or a nested object of the same.
 /// Deliberately STRICTER than the sz path (no identifiers, spreads,
 /// conditionals, parens, or `as` casts) so all three engines can enforce the
 /// exact same contract without a scope resolver.
-fn is_pure_literal_szs_value(expression: &Expression<'_>) -> bool {
+fn static_szs_value(expression: &Expression<'_>) -> Option<StaticSzValue> {
     match expression {
-        Expression::StringLiteral(_)
-        | Expression::NumericLiteral(_)
-        | Expression::BooleanLiteral(_) => true,
+        Expression::StringLiteral(value) => Some(StaticSzValue::String(value.value.to_string())),
+        Expression::NumericLiteral(value) => Some(StaticSzValue::Number(value.value)),
+        Expression::BooleanLiteral(value) => Some(StaticSzValue::Boolean(value.value)),
         Expression::UnaryExpression(unary) => {
-            unary.operator == UnaryOperator::UnaryNegation
-                && matches!(unary.argument, Expression::NumericLiteral(_))
+            if unary.operator != UnaryOperator::UnaryNegation {
+                return None;
+            }
+            let Expression::NumericLiteral(value) = &unary.argument else {
+                return None;
+            };
+            Some(StaticSzValue::Number(-value.value))
         }
-        Expression::ObjectExpression(object) => is_pure_literal_szs_object(object),
-        _ => false,
+        Expression::ObjectExpression(object) => {
+            Some(StaticSzValue::Object(static_szs_object(object)?))
+        }
+        _ => None,
     }
 }
 
-/// Whether every property of an object is a non-computed identifier-keyed
-/// pure-literal value (see [`is_pure_literal_szs_value`]).
-fn is_pure_literal_szs_object(object: &ObjectExpression<'_>) -> bool {
-    object.properties.iter().all(|property| {
+/// Convert an object only when every property is a non-computed,
+/// identifier-keyed pure literal (see [`static_szs_value`]).
+fn static_szs_object(object: &ObjectExpression<'_>) -> Option<StaticSzObject> {
+    let mut properties = Vec::with_capacity(object.properties.len());
+    for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(prop) = property else {
-            return false;
+            return None;
         };
-        !prop.computed
-            && matches!(prop.key, PropertyKey::StaticIdentifier(_))
-            && is_pure_literal_szs_value(&prop.value)
-    })
+        if prop.computed {
+            return None;
+        }
+        let PropertyKey::StaticIdentifier(identifier) = &prop.key else {
+            return None;
+        };
+        merge_static_property(
+            &mut properties,
+            StaticSzProperty {
+                key: identifier.name.to_string(),
+                value: static_szs_value(&prop.value)?,
+                span: text_span(prop.span),
+            },
+        );
+    }
+    Some(StaticSzObject { properties })
 }
 
 /// Minimal JSON string-body escape (backslash, quote, control chars) so the
@@ -1268,6 +1266,18 @@ fn static_ternary_from_jsx_expression(
             )?;
             let (ternary, _) = static_ternary_from_expression(initializer, ctx)?;
             Some((ternary, text_span(identifier.span)))
+        }
+        JSXExpression::ParenthesizedExpression(value) => {
+            static_ternary_from_expression(&value.expression, ctx)
+        }
+        JSXExpression::TSAsExpression(value) => {
+            static_ternary_from_expression(&value.expression, ctx)
+        }
+        JSXExpression::TSSatisfiesExpression(value) => {
+            static_ternary_from_expression(&value.expression, ctx)
+        }
+        JSXExpression::TSNonNullExpression(value) => {
+            static_ternary_from_expression(&value.expression, ctx)
         }
         _ => None,
     }
@@ -1382,108 +1392,108 @@ fn static_array_parts_from_array_expression(
         }
         // A spread element keeps the whole array a runtime value.
         let expression = element.as_expression()?;
-        let unwrapped = unwrap_expression(expression);
-        if is_falsy_array_element(unwrapped) {
-            continue;
+        if let Some(part) = static_array_part_from_expression(expression, ctx) {
+            parts.push(part);
         }
-        if let Expression::StringLiteral(value) = unwrapped {
-            parts.push(StaticArrayPartIr {
-                condition_span: None,
-                classes: split_class_tokens(&value.value),
-                ternary: None,
-                dynamic_span: None,
-                candidates: Vec::new(),
-                dynamic_object_literal: false,
-            });
-            continue;
-        }
-        if let Expression::LogicalExpression(logical) = unwrapped {
-            if logical.operator.is_and() {
-                let right = unwrap_expression(&logical.right);
-                let classes = if let Expression::StringLiteral(value) = right {
-                    Some(split_class_tokens(&value.value))
-                } else {
-                    array_element_static_object(right, ctx)
-                        .map(|object| lower_static_sz_object(&object))
-                };
-                if let Some(classes) = classes {
-                    if !classes.is_empty() {
-                        parts.push(StaticArrayPartIr {
-                            condition_span: Some(text_span(logical.left.span())),
-                            classes,
-                            ternary: None,
-                            dynamic_span: None,
-                            candidates: Vec::new(),
-                            dynamic_object_literal: false,
-                        });
-                    }
-                    continue;
-                }
-                // Dynamic right side: the whole guarded element resolves at
-                // runtime through `_szPart`.
-                parts.push(StaticArrayPartIr {
-                    condition_span: None,
-                    classes: Vec::new(),
-                    ternary: None,
-                    dynamic_span: Some(text_span(expression.span())),
-                    candidates: candidate_classes_from_expression(expression, ctx),
-                    dynamic_object_literal: false,
-                });
-                continue;
-            }
-        }
-        if let Expression::ConditionalExpression(conditional) = unwrapped {
-            if let Some(ternary) = static_array_ternary_from_conditional(conditional, ctx) {
-                parts.push(StaticArrayPartIr {
-                    condition_span: None,
-                    classes: Vec::new(),
-                    ternary: Some(ternary),
-                    dynamic_span: None,
-                    candidates: Vec::new(),
-                    dynamic_object_literal: false,
-                });
-                continue;
-            }
-        }
-        if let Some(object) = array_element_static_object(unwrapped, ctx) {
-            parts.push(StaticArrayPartIr {
-                condition_span: None,
-                classes: lower_static_sz_object(&object),
-                ternary: None,
-                dynamic_span: None,
-                candidates: Vec::new(),
-                dynamic_object_literal: false,
-            });
-            continue;
-        }
-        if let Expression::ObjectExpression(object) = unwrapped {
-            if let Some(partial) = partial_object_from_object_expression(object, ctx, None, &[]) {
-                // Array parts keep the single-ternary contract of
-                // StaticArrayPartIr; multi-ternary parts stay on their
-                // existing lane.
-                if partial.dynamic_css_vars.is_empty() && partial.ternaries.len() == 1 {
-                    if let Some(ternary) = partial.ternaries.into_iter().next() {
-                        parts.push(StaticArrayPartIr {
-                            condition_span: None,
-                            classes: lower_static_sz_object(&partial.object),
-                            ternary: Some(ternary),
-                            dynamic_span: None,
-                            candidates: Vec::new(),
-                            dynamic_object_literal: false,
-                        });
-                        continue;
-                    }
-                }
-            }
-        }
-        // Safelist best-effort: static object literals reachable inside the
-        // dynamic expression (ternary branches, etc.) still get their CSS.
-        // An object literal that lands here carried a runtime value, so the
-        // whole element defers to `_szPart` — flagged for a build diagnostic.
-        parts.push(dynamic_array_part(expression, unwrapped, ctx));
     }
 
     Some(parts)
+}
+
+fn static_array_part_from_expression(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticArrayPartIr> {
+    let unwrapped = unwrap_expression(expression);
+    if is_falsy_array_element(unwrapped) {
+        return None;
+    }
+    if let Expression::StringLiteral(value) = unwrapped {
+        return Some(static_array_part(split_class_tokens(&value.value), None));
+    }
+    let logical = match unwrapped {
+        Expression::LogicalExpression(logical) if logical.operator.is_and() => Some(logical),
+        _ => None,
+    };
+    if let Some(logical) = logical {
+        let right = unwrap_expression(&logical.right);
+        let classes = if let Expression::StringLiteral(value) = right {
+            Some(split_class_tokens(&value.value))
+        } else {
+            array_element_static_object(right, ctx).map(|object| lower_static_sz_object(&object))
+        };
+        return match classes {
+            None => Some({
+                // Dynamic right side: the whole guarded element resolves at
+                // runtime through `_szPart`.
+                dynamic_array_part(expression, unwrapped, ctx)
+            }),
+            Some(classes) if classes.is_empty() => None,
+            Some(classes) => Some(static_array_part(
+                classes,
+                Some(text_span(logical.left.span())),
+            )),
+        };
+    }
+    let conditional_part = match unwrapped {
+        Expression::ConditionalExpression(conditional) => {
+            static_array_ternary_from_conditional(conditional, ctx)
+        }
+        _ => None,
+    }
+    .map(|ternary| StaticArrayPartIr {
+        condition_span: None,
+        classes: Vec::new(),
+        ternary: Some(ternary),
+        dynamic_span: None,
+        candidates: Vec::new(),
+        dynamic_object_literal: false,
+    });
+    if conditional_part.is_some() {
+        return conditional_part;
+    }
+    if let Some(object) = array_element_static_object(unwrapped, ctx) {
+        return Some(static_array_part(lower_static_sz_object(&object), None));
+    }
+    let partial = match unwrapped {
+        Expression::ObjectExpression(object) => {
+            partial_object_from_object_expression(object, ctx, None, &[])
+        }
+        _ => None,
+    };
+    if let Some(mut partial) = partial
+        .filter(|partial| partial.dynamic_css_vars.is_empty() && partial.ternaries.len() == 1)
+    {
+        // Array parts keep the single-ternary contract of StaticArrayPartIr;
+        // multi-ternary parts stay on their existing runtime lane.
+        return Some(StaticArrayPartIr {
+            condition_span: None,
+            classes: lower_static_sz_object(&partial.object),
+            ternary: Some(partial.ternaries.remove(0)),
+            dynamic_span: None,
+            candidates: Vec::new(),
+            dynamic_object_literal: false,
+        });
+    }
+    // Safelist best-effort: static object literals reachable inside the
+    // dynamic expression (ternary branches, etc.) still get their CSS.
+    // An object literal that lands here carried a runtime value, so the
+    // whole element defers to `_szPart` — flagged for a build diagnostic.
+    Some(dynamic_array_part(expression, unwrapped, ctx))
+}
+
+const fn static_array_part(
+    classes: Vec<String>,
+    condition_span: Option<TextSpan>,
+) -> StaticArrayPartIr {
+    StaticArrayPartIr {
+        condition_span,
+        classes,
+        ternary: None,
+        dynamic_span: None,
+        candidates: Vec::new(),
+        dynamic_object_literal: false,
+    }
 }
 
 /// Preserve one unresolved array element for runtime lowering and safelisting.
@@ -1579,20 +1589,11 @@ fn runtime_fallback_span_from_expression(expression: &Expression<'_>) -> Option<
     }
 }
 
-/// Returns true when the `sz` attribute value is an object literal carrying a
+/// Returns true when an `sz` expression is an object literal carrying a
 /// top-level spread (`sz={{ ...x }}`). This is the unresolvable-spread shape
 /// that forces a runtime fallback the static layer can't evaluate — flagged so
 /// a build-log diagnostic can surface it, distinct from other fallback shapes
 /// (e.g. a dynamic value-object sub-field) which must not warn.
-fn jsx_attribute_value_has_top_level_spread(value: Option<&JSXAttributeValue<'_>>) -> bool {
-    match value {
-        Some(JSXAttributeValue::ExpressionContainer(container)) => {
-            jsx_expression_has_top_level_spread(&container.expression)
-        }
-        _ => false,
-    }
-}
-
 fn jsx_expression_has_top_level_spread(expression: &JSXExpression<'_>) -> bool {
     match expression {
         JSXExpression::TSAsExpression(value) => expression_has_top_level_spread(&value.expression),
@@ -2133,9 +2134,6 @@ fn partial_object_from_jsx_expression(
     match expression {
         JSXExpression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
-            if partial.dynamic_css_vars.is_empty() && partial.ternaries.is_empty() {
-                return None;
-            }
             Some((
                 partial.object,
                 text_span(object.span),
@@ -2171,9 +2169,6 @@ fn partial_object_from_expression(
     match expression {
         Expression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
-            if partial.dynamic_css_vars.is_empty() && partial.ternaries.is_empty() {
-                return None;
-            }
             Some((
                 partial.object,
                 text_span(object.span),
@@ -3045,8 +3040,12 @@ fn string_value_span(span: Span, source: &str) -> TextSpan {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_source_shell, source_type_for_path};
+    use super::{
+        escape_json_string, parse_source_shell, parse_source_shell_with_budget,
+        source_type_for_path, string_value_span, MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
+    };
     use crate::transform::{lower::lower_source_ir_classes, TransformFile};
+    use oxc_span::Span;
 
     #[test]
     fn parser_shell_accepts_valid_tsx() {
@@ -3074,6 +3073,20 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_accepts_jsx_in_plain_javascript_files() {
+        let file = TransformFile {
+            filename: "/repo/src/App.js".to_string(),
+            source: "export const App = () => <div sz={{ p: 4 }} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(parsed.ir.sz_attributes.len(), 1);
+        assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["p-4"]);
+    }
+
+    #[test]
     fn parser_shell_collects_class_attributes() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -3096,8 +3109,9 @@ mod tests {
     fn parser_shell_collects_dynamic_class_attributes() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
-            source: "export const App = () => <div className={getClass()} sz={{ p: 4 }} />;"
-                .to_string(),
+            source:
+                "export const App = () => <div className={getClass()} sz={{ p: 4, truncate: true }} />;"
+                    .to_string(),
         };
 
         let parsed = parse_source_shell(&file);
@@ -3111,7 +3125,41 @@ mod tests {
         );
         let lowered = lower_source_ir_classes(&parsed.ir);
         assert!(lowered.raw_class_names.is_empty());
-        assert_eq!(lowered.classes, ["p-4"]);
+        assert_eq!(lowered.classes, ["p-4", "truncate"]);
+    }
+
+    #[test]
+    fn parser_shell_ignores_bare_class_and_tracks_literal_style_attributes() {
+        let source =
+            "const A=()=> <><span class style/><p className='kept' style='--brand: red'/></>;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(parsed.ir.class_attributes.len(), 1);
+        assert_eq!(parsed.ir.class_attributes[0].value, "kept");
+        assert_eq!(parsed.ir.style_attributes.len(), 2);
+        assert!(parsed
+            .ir
+            .style_attributes
+            .iter()
+            .all(|attribute| attribute.expression_span.is_none()));
+    }
+
+    #[test]
+    fn parser_shell_ignores_recovered_empty_jsx_attribute_expressions() {
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const App = () => <div className={/* empty */} style={/* empty */} sz={/* empty */} />;".to_string(),
+        });
+
+        assert!(!parsed.panicked);
+        assert!(!parsed.diagnostics.is_empty());
+        assert!(parsed.ir.class_attributes.is_empty());
+        assert!(parsed.ir.style_attributes.is_empty());
+        assert!(parsed.ir.sz_attributes.is_empty());
     }
 
     #[test]
@@ -3140,6 +3188,37 @@ mod tests {
 
         assert!(parsed.diagnostics.is_empty());
         assert_eq!(lowered.classes, ["w-7", "h-8", "rounded-sm"]);
+    }
+
+    #[test]
+    fn parser_shell_extracts_catalog_call_wrapper_matrix() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: r"
+                const BASE = { h: 5 } as const;
+                const a = dynamic(({ p: 1 }));
+                const b = dynamic(({ m: 2 } as const));
+                const c = dynamic(({ gap: 3 } satisfies object));
+                const d = dynamic(({ w: 4 })!);
+                const e = dynamic(BASE!);
+                const f = dynamic(BASE);
+                const g = dynamic({ minH: 6 } satisfies object);
+                const ignoredMember = tools.dynamic({ p: 99 });
+                const ignoredEmpty = dynamic();
+                const ignoredCall = dynamic(makeStyles());
+                const ignoredCallee = other({ p: 100 });
+            "
+            .to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(
+            lowered.classes,
+            ["p-1", "m-2", "gap-3", "w-4", "h-5", "h-5", "min-h-6"]
+        );
     }
 
     #[test]
@@ -3224,6 +3303,53 @@ mod tests {
     }
 
     #[test]
+    fn szv_catalog_caps_branch_expansion_and_nested_objects() {
+        use std::fmt::Write as _;
+
+        let mut source = String::from(
+            "import { szv } from '@csszyx/runtime'; declare const c: boolean; const styles = szv({ base: {",
+        );
+        for i in 0..=(MAX_CATALOG_BRANCH_EXTRAS + 4) {
+            let _ = write!(source, "p{i}: c ? {i} : {},", i + 1);
+        }
+        source.push_str("} });");
+
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/branch-cap.tsx".to_string(),
+            source,
+        });
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert_eq!(lowered.classes.len(), MAX_CATALOG_BRANCH_EXTRAS * 2 + 5);
+
+        let mut nested = "{ p: 4 }".to_string();
+        for _ in 0..=(MAX_CATALOG_DEPTH + 1) {
+            nested = format!("{{ hover: {nested} }}");
+        }
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/depth-cap.tsx".to_string(),
+            source: format!(
+                "import {{ szv }} from '@csszyx/runtime'; const DEEP = {nested}; const styles = szv({{ base: DEEP }});"
+            ),
+        });
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(lowered.classes.is_empty());
+
+        let mut extras = Vec::new();
+        let mut exhausted = super::CatalogExtrasBudget {
+            extras: 0,
+            explores: 0,
+            object_memo: std::collections::HashMap::new(),
+            value_memo: std::collections::HashMap::new(),
+        };
+        super::push_catalog_extra(&mut extras, super::StaticSzObject::empty(), &mut exhausted);
+        assert!(extras.is_empty());
+    }
+
+    #[test]
     fn szv_catalog_resolves_const_scalar_refs_and_skips_null_undefined() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -3247,6 +3373,30 @@ mod tests {
         let lowered = lower_source_ir_classes(&parsed.ir);
 
         assert_eq!(lowered.classes, ["hover:mx-0", "bg-red-500", "hover:mx-2"]);
+    }
+
+    #[test]
+    fn szv_catalog_resolves_conditional_object_candidates_with_memo_and_cycle_guards() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "import { szv } from '@csszyx/runtime'; declare const dense: boolean; const COMPACT = { p: 2 }; const RELAXED = { m: 4 }; const CHOICE = dense ? COMPACT : RELAXED; const LOOP = LOOP; const DIMENSION = { direct: CHOICE, memoized: CHOICE, spread: { ...CHOICE, bg: 'red-500' }, cyclic: LOOP }; const s = szv({ variants: { layout: DIMENSION } });".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(lowered.classes.contains(&"p-2".to_string()));
+        assert!(lowered.classes.contains(&"m-4".to_string()));
+        assert!(lowered.classes.contains(&"bg-red-500".to_string()));
+        assert_eq!(
+            lowered
+                .classes
+                .iter()
+                .filter(|class| class.as_str() == "p-2")
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -3279,6 +3429,94 @@ mod tests {
         // base (rounded-md) + base∪variant (rounded-md bg-success). compoundVariants ignored.
         assert!(lowered.classes.contains(&"rounded-md".to_string()));
         assert!(lowered.classes.contains(&"bg-success".to_string()));
+    }
+
+    #[test]
+    fn szv_catalog_skips_malformed_members_without_losing_static_siblings() {
+        let source = r"
+            const LOOP = LOOP;
+            const NUMBER = 1;
+            const ignoredLiteral = szv(1);
+            const ignoredNumberBinding = szv(NUMBER);
+            const ignoredRuntimeConfig = szv(runtimeConfig);
+            const ignoredDynamic = dynamic(runtimeValue);
+            const styles = szv({
+                ...runtimeConfig,
+                base: {
+                    p: dense ? 1 : 2,
+                    hidden: true,
+                    [dynamicKey]: 9,
+                    1n: { p: 77 },
+                    helper() {},
+                    m: runtimeValue,
+                    ...runtimeBase,
+                },
+                variants: {
+                    ...runtimeDimensions,
+                    [dynamicKey]: { on: { p: 99 } },
+                    invalid: runtimeDimension,
+                    cyclic: LOOP,
+                    called: makeDimension(),
+                    tone: {
+                        ...runtimeVariants,
+                        [dynamicKey]: { p: 88 },
+                        ok: { bg: 'red-500' },
+                        called: makeStyle(),
+                    },
+                },
+            });
+        ";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/catalog.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        for class_name in ["p-1", "p-2", "bg-red-500"] {
+            assert!(
+                lowered.classes.contains(&class_name.to_string()),
+                "missing {class_name}: {:?}",
+                lowered.classes
+            );
+        }
+        for ignored in ["p-99", "p-88", "p-77"] {
+            assert!(
+                !lowered.classes.contains(&ignored.to_string()),
+                "computed catalog key leaked {ignored}: {:?}",
+                lowered.classes
+            );
+        }
+    }
+
+    #[test]
+    fn parser_budget_stops_nested_jsx_without_corrupting_partial_ir() {
+        let file = TransformFile {
+            filename: "/repo/src/Budget.tsx".to_string(),
+            source: "export const App = () => <><main sz={{ p: 1 }}><section><span sz={{ m: 2 }} /></section></main><aside sz={{ w: 3 }} /></>;".to_string(),
+        };
+
+        let mut saw_partial_ir = false;
+        for budget in 0..64 {
+            let parsed = parse_source_shell_with_budget(&file, budget);
+
+            assert!(!parsed.panicked);
+            assert!(parsed.diagnostics.is_empty());
+            if parsed.ast_budget_exceeded && !parsed.ir.jsx_opening_elements.is_empty() {
+                saw_partial_ir = true;
+            }
+            for element in &parsed.ir.jsx_opening_elements {
+                if let Some(parent) = element.parent_element_index {
+                    assert!(parent < parsed.ir.jsx_opening_elements.len());
+                }
+                assert!(element
+                    .sz_attribute_indices
+                    .iter()
+                    .all(|index| *index < parsed.ir.sz_attributes.len()));
+            }
+        }
+
+        assert!(saw_partial_ir);
     }
 
     #[test]
@@ -3406,6 +3644,267 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_classifies_mixed_array_parts_through_typescript_wrappers() {
+        let source = "const STATIC={rounded:'md'}; const App=({active,styles,width})=><div sz={(['base  flex',active&&'m-2',active?{p:2}:'p-4',active&&styles,{w:width},STATIC] as const)}/>;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let parts = &parsed.ir.sz_attributes[0].array_parts;
+
+        assert_eq!(parts.len(), 6);
+        assert_eq!(parts[0].classes, ["base", "flex"]);
+        assert_eq!(parts[1].classes, ["m-2"]);
+        assert!(parts[1].condition_span.is_some());
+        let ternary = parts[2].ternary.as_ref().expect("static ternary");
+        assert_eq!(ternary.consequent_classes, ["p-2"]);
+        assert_eq!(ternary.alternate_classes, ["p-4"]);
+        assert!(parts[3].dynamic_span.is_some());
+        assert!(!parts[3].dynamic_object_literal);
+        assert!(parts[4].dynamic_span.is_some());
+        assert!(parts[4].dynamic_object_literal);
+        assert_eq!(parts[5].classes, ["rounded-md"]);
+    }
+
+    #[test]
+    fn parser_shell_classifies_array_control_flow_and_falsy_entries() {
+        let source = r"
+            const STATIC = { m: 2 } as const;
+            const App = ({ cond, other, styles, gap }) => <div sz={[
+                , false, null, undefined, 0, '',
+                'block hover:p-2',
+                cond && '', cond && 'focus:m-2',
+                cond && ({ p: 4 } as const),
+                cond && (other ? { p: 6 } : { p: 8 }),
+                cond ? 'text-sm' : 'text-lg',
+                cond ? { bg: 'red-500' } : { bg: 'blue-500' },
+                { m: 1, p: cond ? 2 : 4 },
+                { gap },
+                STATIC,
+                styles,
+            ]} />;
+        ";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(!attribute.runtime_fallback);
+        // `undefined` remains a runtime slot and an empty string remains an
+        // empty static slot so authored array positions retain szcn ordering.
+        assert_eq!(
+            attribute.array_parts.len(),
+            12,
+            "{:#?}",
+            attribute.array_parts
+        );
+        for class in [
+            "block",
+            "hover:p-2",
+            "focus:m-2",
+            "p-4",
+            "p-6",
+            "p-8",
+            "text-sm",
+            "text-lg",
+            "bg-red-500",
+            "bg-blue-500",
+            "m-1",
+            "p-2",
+            "m-2",
+        ] {
+            assert!(
+                lowered.classes.iter().any(|found| found == class),
+                "{class}"
+            );
+        }
+        assert!(attribute
+            .array_parts
+            .iter()
+            .any(|part| part.dynamic_object_literal));
+        assert!(attribute
+            .array_parts
+            .iter()
+            .any(|part| part.dynamic_span.is_some() && !part.candidates.is_empty()));
+    }
+
+    #[test]
+    fn parser_shell_safelists_static_array_candidates_before_runtime_spread() {
+        for source in [
+            "const BASE = { p: 4 }; const App = ({ active, items }) => <div sz={([BASE, { w: 3 }, active && ((((BASE as const) satisfies object)!)), active && { m: 2 }, ...items] satisfies unknown[])} />;",
+            "const App = ({ active, items }) => <div sz={[active && UNKNOWN, active && makeStyles(), { p: 4 }, { w: 3 }, { m: 2 }, ...items]} />;",
+            "const App = ({ items }) => <div sz={[{ p: 4 }, { w: 3 }, { m: 2 }, ...items]} />;",
+            "const STYLE = [...items, { p: 4 }, { w: 3 }, { m: 2 }]; const App = () => <div sz={STYLE} />;",
+            "const App = ({ active, items }) => <div sz={active ? [...items, { p: 4 }] : [...items, { w: 3 }, { m: 2 }]} />;",
+            "const App = ({ active, items }) => <div sz={active && [...items, { p: 4 }, { w: 3 }, { m: 2 }]} />;",
+            "const App = ({ items }) => <div sz={(([...items, { p: 4 }, { w: 3 }, { m: 2 }]!)!)} />;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
+
+            assert!(attribute.runtime_fallback, "{source}");
+            assert!(attribute.array_parts.is_empty(), "{source}");
+            assert!(
+                attribute.candidate_classes.contains(&"p-4".to_string()),
+                "{source}: {:?}",
+                attribute.candidate_classes
+            );
+            assert!(
+                attribute.candidate_classes.contains(&"w-3".to_string()),
+                "{source}: {:?}",
+                attribute.candidate_classes
+            );
+            assert!(
+                attribute.candidate_classes.contains(&"m-2".to_string()),
+                "{source}: {:?}",
+                attribute.candidate_classes
+            );
+        }
+    }
+
+    #[test]
+    fn parser_shell_preserves_wrapped_runtime_values_and_spread_diagnostics() {
+        for expression in [
+            "styles as unknown",
+            "styles satisfies unknown",
+            "(styles as unknown)",
+            "(styles satisfies unknown)",
+            "styles!",
+            "((styles))",
+        ] {
+            let source = format!("const App=({{styles}})=><div sz={{{expression}}}/>;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
+
+            assert!(attribute.runtime_fallback, "{expression}");
+            assert!(!attribute.runtime_fallback_spread, "{expression}");
+        }
+
+        for expression in [
+            "{ ...props } as const",
+            "{ ...props } satisfies Record<string, unknown>",
+            "({ ...props } as const)",
+            "({ ...props } satisfies Record<string, unknown>)",
+            "({ ...props })!",
+            "(({ ...props }))",
+        ] {
+            let source = format!("const App=({{props}})=><div sz={{{expression}}}/>;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
+
+            assert!(attribute.runtime_fallback, "{expression}");
+            assert!(attribute.runtime_fallback_spread, "{expression}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_resolves_partial_objects_through_ts_wrappers() {
+        for (expression, expected_class) in [
+            ("{ minW: value } as const", "min-w-(--_sz-min-w)"),
+            ("{ maxW: value } satisfies object", "max-w-(--_sz-max-w)"),
+            ("({ p: value } as const)", "p-(--_sz-p)"),
+            ("({ m: value } satisfies object)", "m-(--_sz-m)"),
+            ("({ w: value })!", "w-(--_sz-w)"),
+            ("(({ h: value }))", "h-(--_sz-h)"),
+        ] {
+            let source = format!("const App=({{value}})=><div sz={{{expression}}}/>;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
+            let lowered = lower_source_ir_classes(&parsed.ir);
+
+            assert!(parsed.diagnostics.is_empty(), "{expression}");
+            assert!(!attribute.runtime_fallback, "{expression}");
+            assert_eq!(attribute.dynamic_css_vars.len(), 1, "{expression}");
+            assert_eq!(lowered.classes, [expected_class], "{expression}");
+        }
+
+        let source = "const EMPTY={} as const; const App=()=> <div sz={EMPTY}/>;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(attribute.object.is_empty());
+        assert!(attribute.rewrites_empty_class);
+        assert!(!attribute.runtime_fallback);
+    }
+
+    #[test]
+    fn parser_shell_preserves_static_siblings_in_nested_partial_variants() {
+        let source = "const App=({value})=> <div sz={{ p: null, hover: { m: 2, w: value } }}/>;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(attribute.object.properties.len(), 1);
+        assert_eq!(attribute.dynamic_css_vars.len(), 1);
+        assert_eq!(attribute.dynamic_css_vars[0].key, "w");
+        assert_eq!(
+            attribute.dynamic_css_vars[0].variant_prefix.as_deref(),
+            Some("hover")
+        );
+        assert_eq!(lowered.classes, ["hover:m-2", "hover:w-(--_sz-hover-w)"]);
+
+        for source in [
+            "const App=({a,b})=> <div sz={{ ...(a ? { p: 2 } : { p: 4 }), ...(b ? { m: 1 } : { m: 3 }) }}/>;",
+            "const App=()=> <div sz={{ hover: { p: () => 2 } }}/>;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Fallback.tsx".to_string(),
+                source: source.to_string(),
+            });
+            assert!(parsed.ir.sz_attributes[0].runtime_fallback, "{source}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_records_composite_jsx_element_names() {
+        let source = "const App=()=> <><UI.Card szRecover='csr'/><UI.Layout.Panel szRecover='csr'/><this.View szRecover='csr'/><this szRecover='csr' data:marker='x'/><svg:path szRecover='csr'/></>;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let names = parsed
+            .ir
+            .jsx_opening_elements
+            .iter()
+            .map(|element| element.element_name.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            [
+                "<>",
+                "UI.Card",
+                "UI.Layout.Panel",
+                "this.View",
+                "this",
+                "svg:path"
+            ]
+        );
+    }
+
+    #[test]
     fn parser_shell_preserves_nested_static_sz_object() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -3515,6 +4014,22 @@ mod tests {
         );
         assert!(parsed.ir.jsx_opening_elements[0].has_recovery_token_attribute);
         assert_eq!(parsed.ir.jsx_opening_elements[0].element_name, "div");
+
+        let dev_only = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Dev.tsx".to_string(),
+            source: "const Dev = () => <Panel szRecover='dev-only' />;".to_string(),
+        });
+        assert_eq!(
+            dev_only.ir.recovery_attributes[0].mode,
+            super::RecoveryMode::DevOnly
+        );
+
+        let invalid = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Invalid.tsx".to_string(),
+            source: "const Invalid = () => <Panel szRecover='sometimes' />;".to_string(),
+        });
+        assert!(invalid.ir.recovery_attributes.is_empty());
+        assert_eq!(invalid.ir.unsupported_recovery_attribute_spans.len(), 1);
     }
 
     #[test]
@@ -3582,6 +4097,61 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_deep_merges_nested_static_array_objects() {
+        let source = "const App=()=> <div sz={[{ hover: { p: 2, m: 1 }, focus: { w: 2 } }, { hover: { p: 4, bg: 'red-500' }, focus: { h: 3 } }]} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty(), "{source}");
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(
+            lowered.classes,
+            [
+                "hover:p-4",
+                "hover:m-1",
+                "hover:bg-red-500",
+                "focus:w-2",
+                "focus:h-3",
+            ]
+        );
+    }
+
+    #[test]
+    fn parser_shell_preserves_static_wrappers_inside_objects_and_arrays() {
+        let source = "const SIZE=2; const CLASS='p-2'; const App=()=> <div sz={[CLASS, { ...({ p: 1 } satisfies object), ...({ m: 2 }!), w: SIZE!, h: undefined! }]} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+        let lowered = lower_source_ir_classes(&parsed.ir);
+
+        assert!(parsed.diagnostics.is_empty(), "{source}");
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(lowered.classes, ["p-1", "m-2", "w-2"]);
+    }
+
+    #[test]
+    fn parser_shell_keeps_unsupported_unary_values_runtime_bound() {
+        let source = "const App=({ value })=> <div sz={{ p: -value, m: ~2 }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(parsed.diagnostics.is_empty(), "{source}");
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(attribute.dynamic_css_vars.len(), 2);
+        assert_eq!(attribute.dynamic_css_vars[0].key, "p");
+        assert_eq!(attribute.dynamic_css_vars[1].key, "m");
+    }
+
+    #[test]
     fn parser_shell_collects_runtime_array_candidate_classes() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -3637,6 +4207,68 @@ mod tests {
     }
 
     #[test]
+    fn nested_keyed_candidates_match_each_static_runtime_branch() {
+        let fallback = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const App = ({ rest, active }) => <div sz={{ ...rest, bg: { palette: { tone: active ? 'red-500' : 'blue-500' } } }} />;".to_string(),
+        });
+        let candidates = &fallback.ir.sz_attributes[0].candidate_classes;
+
+        assert!(fallback.ir.sz_attributes[0].runtime_fallback);
+        for color in ["red-500", "blue-500"] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Static.tsx".to_string(),
+                source: format!(
+                    "const App = () => <div sz={{{{ bg: {{ palette: {{ tone: '{color}' }} }} }}}} />;"
+                ),
+            });
+            let expected = lower_source_ir_classes(&parsed.ir).classes;
+
+            assert!(!expected.is_empty(), "{color}");
+            assert!(
+                expected.iter().all(|class| candidates.contains(class)),
+                "missing {color} branch: expected {expected:?}, candidates {candidates:?}"
+            );
+        }
+        assert!(!candidates.iter().any(|class| class == "text-red-500"));
+        assert!(!candidates.iter().any(|class| class == "text-blue-500"));
+    }
+
+    #[test]
+    fn candidate_walk_preserves_variants_conditionals_and_static_spreads() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const STATIC = { m: 2 } as const; const App = ({ rest, cond, runtime }) => <div sz={{ ...rest, ...STATIC, ...(cond ? { p: 6 } : { p: 8 }), hover: { p: cond ? 2 : 4, bg: { color: cond ? 'red-500' : 'blue-500', op: 30 }, borderColor: runtime }, w: cond ? 10 : runtime, h: cond ? runtime : 'full' }} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(parsed.diagnostics.is_empty());
+        assert!(attribute.runtime_fallback);
+        for class in [
+            "m-2",
+            "p-6",
+            "p-8",
+            "hover:p-2",
+            "hover:p-4",
+            "hover:bg-red-500/30",
+            "hover:bg-blue-500/30",
+            "w-10",
+            "h-full",
+        ] {
+            assert!(
+                attribute
+                    .candidate_classes
+                    .iter()
+                    .any(|found| found == class),
+                "missing {class}: {:?}",
+                attribute.candidate_classes
+            );
+        }
+    }
+
+    #[test]
     fn parser_shell_keeps_empty_static_array_rewriteable() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -3665,6 +4297,18 @@ mod tests {
             (
                 "export const App = () => <div sz={([{ display: 'flex' }] as const)} />;",
                 vec!["flex"],
+            ),
+            (
+                "export const App = () => <div sz={['raw', { p: 2 }] as const} />;",
+                vec!["raw", "p-2"],
+            ),
+            (
+                "export const App = () => <div sz={['raw', { m: 3 }] satisfies unknown[]} />;",
+                vec!["raw", "m-3"],
+            ),
+            (
+                "export const App = () => <div sz={['raw', { gap: 4 }]!} />;",
+                vec!["raw", "gap-4"],
             ),
         ];
 
@@ -3864,6 +4508,57 @@ mod tests {
     }
 
     #[test]
+    fn parser_shell_enforces_szs_literal_shape_matrix() {
+        for source in [
+            "const X=()=> <Card szs />;",
+            "const X=()=> <Card szs='p-2' />;",
+            "const X=({slots})=> <Card szs={slots} />;",
+            "const X=({slots})=> <Card szs={{...slots}} />;",
+            "const X=({slots})=> <Card szs={{ header: { ...slots } }} />;",
+            "const X=({slot})=> <Card szs={{ [slot]: { p: 2 } }} />;",
+            "const X=()=> <Card szs={{ 'header': { p: 2 } }} />;",
+            "const X=({value})=> <Card szs={{ header: { p: value } }} />;",
+            "const X=()=> <Card szs={{ header: { p: +2 } }} />;",
+            "const X=({value})=> <Card szs={{ header: { p: -value } }} />;",
+            "const X=({key})=> <Card szs={{ header: { [key]: 2 } }} />;",
+            "const X=()=> <Card szs={{ header: { 'p': 2 } }} />;",
+            "const X=({header})=> <Card szs={{header}} />;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            assert!(parsed.ir.szs_attributes.is_empty(), "{source}");
+            assert_eq!(parsed.ir.szs_diagnostics.len(), 1, "{source}");
+            assert!(
+                parsed.ir.szs_diagnostics[0].contains("Attribute left unchanged"),
+                "{source}"
+            );
+        }
+
+        let source = r#"const X=()=> <Card szs={{ header: { m: -2, opacity: true, content: "a\\b", hover: { p: 1 }, css: { zIndex: 2 } } }} />;"#;
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let entry = &parsed.ir.szs_attributes[0].entries[0];
+
+        assert!(parsed.ir.szs_diagnostics.is_empty());
+        assert!(entry.class_name.contains("-m-2"));
+        assert!(entry.class_name.contains("hover:p-1"));
+        assert!(entry.class_name.contains("[z-index:2]"));
+        assert!(entry.emit_text.contains("\\\\"));
+        assert_eq!(
+            escape_json_string("quote=\" line\nreturn\rtab\t slash\\"),
+            "quote=\\\" line\\nreturn\\rtab\\t slash\\\\"
+        );
+        assert_eq!(
+            string_value_span(Span::new(0, 3), "raw"),
+            super::TextSpan { start: 0, end: 3 }
+        );
+    }
+
+    #[test]
     fn parser_shell_expands_conditional_under_attachment_variant() {
         // A finite conditional nested under the `group` attachment variant must
         // join the variants the way the static path does (`group-hover:`), not the
@@ -3900,6 +4595,87 @@ mod tests {
             .expect("nested conditional should record a ternary");
         assert_eq!(ternary.consequent_classes, ["has-[:checked]:bg-red-500"]);
         assert_eq!(ternary.alternate_classes, ["has-[:checked]:bg-blue-500"]);
+    }
+
+    #[test]
+    fn parser_shell_classifies_nullable_property_branches() {
+        let source = "const X=({ c, value }) => <div sz={{ p: c ? null : 4, m: c ? 2 : false, w: c ? undefined : value, h: c ? null : undefined }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(parsed.diagnostics.is_empty(), "{source}");
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(attribute.ternaries.len(), 4);
+        assert_eq!(
+            attribute.ternaries[0].consequent_classes,
+            Vec::<String>::new()
+        );
+        assert_eq!(attribute.ternaries[0].alternate_classes, ["p-4"]);
+        assert_eq!(attribute.ternaries[1].consequent_classes, ["m-2"]);
+        assert_eq!(
+            attribute.ternaries[1].alternate_classes,
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            attribute.ternaries[2].consequent_classes,
+            Vec::<String>::new()
+        );
+        assert_eq!(attribute.ternaries[2].alternate_classes, ["w-(--_sz-w)"]);
+        assert_eq!(
+            attribute.ternaries[3].consequent_classes,
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            attribute.ternaries[3].alternate_classes,
+            Vec::<String>::new()
+        );
+        assert_eq!(attribute.dynamic_css_vars.len(), 1);
+        assert!(attribute.dynamic_css_vars[0].skip_class);
+    }
+
+    #[test]
+    fn parser_shell_defers_nullable_container_values_to_runtime() {
+        for present in ["[]", "() => 1", "function () {}"] {
+            let source =
+                format!("const X=({{ c }}) => <div sz={{{{ p: c ? null : {present} }}}} />;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.clone(),
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
+
+            assert!(parsed.diagnostics.is_empty(), "{source}");
+            assert!(!attribute.runtime_fallback, "{source}");
+            assert!(attribute.ternaries.is_empty(), "{source}");
+            assert_eq!(attribute.dynamic_css_vars.len(), 1, "{source}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_rejects_non_color_opacity_object_shapes() {
+        for property in [
+            "bg: { ...rest }",
+            "bg: { [key]: value }",
+            "bg: { color: 123, op: value }",
+            "bg: { color: c ? 1 : 'red-500' }",
+            "bg: { color: c ? 'red-500' : 1 }",
+            "bg: { color: c ? 'red-500' : 'blue-500', op: c ? 20 : 40 }",
+        ] {
+            let source =
+                format!("const X=({{ c, key, rest, value }}) => <div sz={{{{ {property} }}}} />;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
+
+            assert!(attribute.runtime_fallback, "{property}");
+            assert!(attribute.dynamic_css_vars.is_empty(), "{property}");
+            assert!(attribute.ternaries.is_empty(), "{property}");
+        }
     }
 
     #[test]
@@ -4074,6 +4850,71 @@ mod tests {
         assert!(parsed.ir.sz_attributes[0].runtime_fallback);
         assert_eq!(parsed.ir.sz_attributes[0].value_span.len(), 6);
         assert!(parsed.ir.unsupported_sz_attribute_spans.is_empty());
+    }
+
+    #[test]
+    fn parser_shell_keeps_call_runtime_fallback_candidates_empty() {
+        for source in [
+            "const App = () => <div sz={makeStyles()} />;",
+            "const RUNTIME = makeStyles(); const App = () => <div sz={RUNTIME} />;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let attribute = &parsed.ir.sz_attributes[0];
+
+            assert!(parsed.diagnostics.is_empty(), "{source}");
+            assert!(attribute.runtime_fallback, "{source}");
+            assert!(attribute.candidate_classes.is_empty(), "{source}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_classifies_only_spreads_that_can_absorb_generated_style() {
+        for spread in [
+            "{...{}}",
+            "{...{id: 'x'}}",
+            "{...{style: {}}}",
+            "{...{style: { flex }}}",
+            "{...{style: base}}",
+            "{...(active ? {style: {flex}} : {})}",
+        ] {
+            let source = format!(
+                "const X = ({{ width, active, flex, base }}) => <div sz={{{{ w: width }}}} {spread} />;"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let element = &parsed.ir.jsx_opening_elements[0];
+
+            assert!(element.has_spread_attribute, "{spread}");
+            assert!(element.safe_style_spread.is_some(), "{spread}");
+        }
+
+        for attributes in [
+            "{...props}",
+            "{...(active ? props : {})}",
+            "{...(active ? {} : props)}",
+            "{...{...props}}",
+            "{...{[key]: value}}",
+            "{...{style: base, style: override}}",
+            "{...{}} {...props}",
+            "{...{}} style={base}",
+        ] {
+            let source = format!(
+                "const X = ({{ width, active, props, key, value, base, override }}) => <div sz={{{{ w: width }}}} {attributes} />;"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source,
+            });
+            let element = &parsed.ir.jsx_opening_elements[0];
+
+            assert!(element.has_spread_attribute, "{attributes}");
+            assert!(element.safe_style_spread.is_none(), "{attributes}");
+        }
     }
 
     #[test]

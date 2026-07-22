@@ -12,7 +12,7 @@ struct VariableEntry {
     /// Primary hash (first 6 hex chars of SHA-256)
     primary_hash: String,
     /// Secondary hash (next 6 hex chars, for collision resolution)
-    _secondary_hash: String,
+    secondary_hash: String,
     /// Original CSS value
     value: String,
 }
@@ -63,17 +63,22 @@ impl CollisionDetector {
         let (primary, secondary) = compute_dual_hash(value);
 
         if let Some(entries) = self.entries.get(&primary) {
-            for entry in entries {
+            for (index, entry) in entries.iter().enumerate() {
                 if entry.value == value {
                     let hash = &entry.primary_hash;
-                    return format!("--v-{hash}");
+                    return if index == 0 {
+                        format!("--v-{hash}")
+                    } else {
+                        let secondary = &entry.secondary_hash;
+                        format!("--v-{hash}-{secondary}")
+                    };
                 }
             }
 
             // Collision detected — use secondary hash
             let new_entry = VariableEntry {
                 primary_hash: primary.clone(),
-                _secondary_hash: secondary.clone(),
+                secondary_hash: secondary.clone(),
                 value: value.to_string(),
             };
 
@@ -86,7 +91,7 @@ impl CollisionDetector {
 
             let new_entry = VariableEntry {
                 primary_hash: primary.clone(),
-                _secondary_hash: secondary,
+                secondary_hash: secondary,
                 value: value.to_string(),
             };
 
@@ -259,22 +264,28 @@ mod tests {
 
     #[test]
     fn test_collision_resolution() {
-        let mut detector = CollisionDetector::new();
+        let mut detector = CollisionDetector::default();
 
-        // Force collision by finding two values with same primary hash
-        // (In practice this is rare, but we test the mechanism)
-        let value1 = "test-value-1";
-        let value2 = "test-value-2";
+        // Stable SHA-256 24-bit-prefix collision. Keeping the pair fixed makes
+        // the secondary-name and reuse paths deterministic and fast in CI.
+        let value1 = "css-value-5942";
+        let value2 = "css-value-7565";
+        assert_eq!(compute_dual_hash(value1).0, compute_dual_hash(value2).0);
 
         let var1 = detector.add(value1);
         let var2 = detector.add(value2);
 
-        // Both should be unique
         assert_ne!(var1, var2);
+        let (primary, _) = compute_dual_hash(value1);
+        let (_, secondary) = compute_dual_hash(value2);
+        assert_eq!(var1, format!("--v-{primary}"));
+        assert_eq!(var2, format!("--v-{primary}-{secondary}"));
+        assert!(detector.has_collision());
+        assert_eq!(detector.stats(), (2, 1, 0.5));
 
-        // Reusing same value should return same variable
-        let var1_again = detector.add(value1);
-        assert_eq!(var1, var1_again);
+        assert_eq!(detector.add(value1), var1);
+        assert_eq!(detector.add(value2), var2);
+        assert_eq!(detector.count(), 2);
     }
 
     #[test]
@@ -299,6 +310,8 @@ mod tests {
     fn test_stats() {
         let mut detector = CollisionDetector::new();
 
+        assert_eq!(detector.stats(), (0, 0, 0.0));
+
         detector.add("#ff0000");
         detector.add("#00ff00");
         detector.add("#0000ff");
@@ -306,5 +319,17 @@ mod tests {
         let (total, _collisions, rate) = detector.stats();
         assert_eq!(total, 3);
         assert!((0.0..=1.0).contains(&rate));
+    }
+
+    #[test]
+    fn test_wasm_facade_delegates_collision_state() {
+        let mut detector = WasmCollisionDetector::default();
+
+        assert_eq!(detector.count(), 0);
+        assert!(!detector.has_collision());
+        let first = detector.add("#ff0000");
+        assert_eq!(detector.add("#ff0000"), first);
+        assert_eq!(detector.count(), 1);
+        assert!(!detector.has_collision());
     }
 }

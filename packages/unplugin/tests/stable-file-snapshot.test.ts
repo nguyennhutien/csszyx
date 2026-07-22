@@ -19,6 +19,20 @@ function stats(version: bigint): BigIntStats {
 }
 
 describe('stable file snapshot', () => {
+    it.each([0, -1, 1.5])('rejects invalid maxAttempts %s before opening the file', maxAttempts => {
+        const fsApi: StableFileSnapshotFs = {
+            openSync: vi.fn(),
+            fstatSync: vi.fn(),
+            readFileSync: vi.fn(),
+            closeSync: vi.fn(),
+        };
+
+        expect(() => readStableTextFileSnapshotSync('/theme.css', maxAttempts, fsApi)).toThrow(
+            'maxAttempts must be a positive integer',
+        );
+        expect(fsApi.openSync).not.toHaveBeenCalled();
+    });
+
     it('returns content and metadata from one stable descriptor version', () => {
         const fsApi: StableFileSnapshotFs = {
             openSync: vi.fn(() => 1),

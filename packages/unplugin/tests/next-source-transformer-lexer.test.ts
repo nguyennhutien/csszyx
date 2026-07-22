@@ -53,6 +53,7 @@ describe('fail-closed lexer does not trip on non-sz constructs', () => {
         ['an escaped string quote', 'const s = "a\\" sz={{ p: 4 }} b";\n'],
         ['a leading regex', '/sz={{ p: 4 }}/.test(input);\n'],
         ['a regex ending at EOF', 'const r = /sz={{ p: 4 }}/'],
+        ['an unterminated regex', 'const r = /sz={{ p: 4 }}'],
     ])('ignores sz-like text inside %s', (_label, source) => {
         const result = transformNextSource(base({ source }));
         expect(result.result.transformed).toBe(false);

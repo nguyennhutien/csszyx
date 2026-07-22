@@ -269,16 +269,29 @@ describe('planGlobalVarAliases', () => {
 }
 `);
 
-        const plan = planGlobalVarAliases({
+        const prefixPlan = planGlobalVarAliases({
             scans: [scan],
             tokens: ['--brand-primary', '--app-gap'],
             reserved: ['--brand-*'],
         });
 
-        expect(plan.diagnostics).toEqual([
+        expect(prefixPlan.diagnostics).toEqual([
             expect.objectContaining({
                 code: 'tailwind-reserved',
                 name: '--brand-primary',
+            }),
+        ]);
+
+        const exactPlan = planGlobalVarAliases({
+            scans: [scan],
+            tokens: ['--brand-primary', '--app-gap'],
+            reserved: ['--app-gap'],
+        });
+
+        expect(exactPlan.diagnostics).toEqual([
+            expect.objectContaining({
+                code: 'tailwind-reserved',
+                name: '--app-gap',
             }),
         ]);
     });
@@ -614,6 +627,19 @@ describe('rewriteGlobalVarCssAliases', () => {
 
         expect(result.css).toContain('@media (width > var(--brand-breakpoint))');
         expect(result.css).toContain('width: var(---gz);');
+    });
+
+    it('leaves malformed var() calls without a variable name untouched', () => {
+        const css = ':root { --brand-primary: red; color: var(   ); }';
+        const plan = planGlobalVarAliases({
+            scans: [scanGlobalVarCss(css)],
+            tokens: ['--brand-primary'],
+        });
+
+        const result = rewriteGlobalVarCssAliases({ css, plan });
+
+        expect(result.css).toContain('color: var(   )');
+        expect(result.rewrittenReferences).toBe(0);
     });
 });
 

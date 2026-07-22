@@ -172,9 +172,6 @@ fn rewrite_array_sz_attribute(
         return Err(StaticRewriteUnsupported::EmptyClassList);
     }
     let attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
-    if attribute.array_parts.is_empty() {
-        return Err(StaticRewriteUnsupported::EmptyClassList);
-    }
 
     let mut arguments = Vec::with_capacity(
         attribute.array_parts.len() + usize::from(element.class_attribute_index.is_some()),
@@ -267,12 +264,11 @@ fn rewrite_static_sz_element(
         return Ok(());
     }
 
-    let Some((first_index, rest)) = element.sz_attribute_indices.split_first() else {
-        return Ok(());
-    };
-    let first_attribute = &ir.sz_attributes[*first_index];
+    // The caller dispatches here only for elements carrying at least one sz
+    // attribute; array, ternary, and runtime fallbacks take earlier lanes.
+    let first_attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
     overwrite_attribute(magic, first_attribute.attribute_span, &classes.join(" "));
-    for index in rest {
+    for index in element.sz_attribute_indices.iter().skip(1) {
         let attribute = &ir.sz_attributes[*index];
         magic.remove(
             whitespace_start(source, attribute.attribute_span.start as usize),
@@ -738,7 +734,8 @@ fn opening_attribute_insert_offset(source: &str, opening_end: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{
-        rewrite_static_sz_attributes, rewrite_static_sz_attributes_with_options, RewriteOptions,
+        opening_attribute_insert_offset, rewrite_static_sz_attributes,
+        rewrite_static_sz_attributes_with_options, whitespace_start, RewriteOptions,
         StaticRewriteUnsupported,
     };
     use crate::transform::{parser::parse_source_shell, TransformFile};
@@ -756,6 +753,15 @@ mod tests {
     }
 
     #[test]
+    fn attribute_offset_helpers_handle_spaced_and_non_self_closing_tags() {
+        assert_eq!(whitespace_start("<div   sz", 7), 4);
+        assert_eq!(opening_attribute_insert_offset("<div   >", 8), 4);
+        assert_eq!(opening_attribute_insert_offset("<div   />", 9), 7);
+        assert_eq!(opening_attribute_insert_offset("<div", 4), 4);
+        assert_eq!(opening_attribute_insert_offset("<div   ", 7), 4);
+    }
+
+    #[test]
     fn rewrites_single_static_sz_attribute() {
         let source =
             "export const App = () => <div sz={{ start: 4, hover: { bg: 'red-500' } }} />;";
@@ -765,6 +771,30 @@ mod tests {
             rewritten,
             "export const App = () => <div className=\"inset-s-4 hover:bg-red-500\" />;"
         );
+    }
+
+    #[test]
+    // The fixtures are JSX sources whose `{p:2}` object literals read as
+    // formatting placeholders to the lint; they are never format strings.
+    #[allow(clippy::literal_string_with_formatting_args)]
+    fn rewrites_typescript_wrapped_static_ternaries() {
+        let cases = [
+            "const A=({on})=><div sz={(on?{p:2}:{p:4}) as const}/>;",
+            "const A=({on})=><div sz={(on?{p:2}:{p:4}) satisfies object}/>;",
+            "const A=({on})=><div sz={(on?{p:2}:{p:4})!}/>;",
+            "const STYLE=(on?{p:2}:{p:4}) as const; const A=()=> <div sz={STYLE}/>;",
+            "const STYLE=((on?{p:2}:{p:4}) as const)!; const A=()=> <div sz={STYLE}/>;",
+        ];
+
+        for source in cases {
+            let rewritten = rewrite(source).expect("wrapped ternary should be rewritten");
+
+            assert!(
+                rewritten.contains("className={on ? \"p-2\" : \"p-4\"}"),
+                "{source}: {rewritten}"
+            );
+            assert!(!rewritten.contains(" sz="), "{source}: {rewritten}");
+        }
     }
 
     #[test]
@@ -824,6 +854,29 @@ mod tests {
     }
 
     #[test]
+    fn escapes_quotes_in_static_string_sz_attribute() {
+        let source = "export const App = () => <div sz='content-[\"x\"]' />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "export const App = () => <div className={\"content-[\\\"x\\\"]\"} />;"
+        );
+    }
+
+    #[test]
+    fn reports_static_ir_without_an_opening_element_group() {
+        let source = "export const App = () => <div sz={{ p: 4 }} />;";
+        let mut ir = parse(source);
+        ir.jsx_opening_elements.clear();
+
+        assert_eq!(
+            rewrite_static_sz_attributes(source, "/repo/src/App.tsx", &ir),
+            Err(StaticRewriteUnsupported::NoStaticOpeningElement)
+        );
+    }
+
+    #[test]
     fn rewrites_empty_static_object_sz_attribute() {
         let source = "export const App = () => <div sz={{}} />;";
         let rewritten = rewrite(source).expect("rewritten");
@@ -845,6 +898,37 @@ mod tests {
         assert_eq!(
             rewritten,
             "export const App = () => <div className=\"flex p-4\" />;"
+        );
+    }
+
+    #[test]
+    fn merges_existing_class_with_conditional_array_parts() {
+        let source = "const base = { p: 4 }; const App = ({ active }) => <div className=\"block\" sz={[base, active && { m: 2 }]} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const base = { p: 4 }; const App = ({ active }) => <div className={_szcn(\"block\", \"p-4\", active && \"m-2\")} />;"
+        );
+    }
+
+    #[test]
+    fn rejects_multiple_array_sz_attributes_on_one_element() {
+        let source = "const App = ({ active }) => <div sz={[active && { p: 2 }]} sz={[active && { m: 2 }]} />;";
+
+        assert_eq!(
+            rewrite(source),
+            Err(StaticRewriteUnsupported::EmptyClassList)
+        );
+    }
+
+    #[test]
+    fn rewrites_empty_slot_map_to_compiled_prop() {
+        let source = "const App = () => <Card szs={{}} />;";
+
+        assert_eq!(
+            rewrite(source).expect("rewritten"),
+            "const App = () => <Card szsc={{}} />;"
         );
     }
 
@@ -1030,6 +1114,69 @@ mod tests {
             rewritten,
             "const App = () => <div style={{...{ color: \"red\" }, \"--_sz-p\": __szSpacingVar(padVal, \"p\")}} className=\"p-(--_sz-p)\" />;"
         );
+    }
+
+    #[test]
+    fn merges_dynamic_style_vars_into_safe_object_spreads() {
+        let cases = [
+            (
+                "const A=({width})=><div sz={{w:width}} {...{}}/>;",
+                "const A=({width})=><div className=\"w-(--_sz-w)\" {...{style: {\"--_sz-w\": __szSpacingVar(width, \"w\")}}}/>;",
+            ),
+            (
+                "const A=({width})=><div sz={{w:width}} {...{id:'x'}}/>;",
+                "const A=({width})=><div className=\"w-(--_sz-w)\" {...{id:'x', style: {\"--_sz-w\": __szSpacingVar(width, \"w\")}}}/>;",
+            ),
+            (
+                "const A=({width,flex})=><div sz={{w:width}} {...{style:{flex,},}}/>;",
+                "const A=({width,flex})=><div className=\"w-(--_sz-w)\" {...{style:{flex, \"--_sz-w\": __szSpacingVar(width, \"w\")},}}/>;",
+            ),
+            (
+                "const A=({width,base})=><div sz={{w:width}} {...{style:base,id:'x'}}/>;",
+                "const A=({width,base})=><div className=\"w-(--_sz-w)\" {...{style:{...(base), \"--_sz-w\": __szSpacingVar(width, \"w\")},id:'x'}}/>;",
+            ),
+        ];
+
+        for (source, expected) in cases {
+            let rewritten = rewrite(source).expect("rewritten");
+            assert_eq!(rewritten, expected, "{source}");
+            assert!(!rewritten.contains(" style={{"), "{source}");
+        }
+    }
+
+    #[test]
+    fn falls_back_when_a_safe_spread_ir_no_longer_matches_source() {
+        let source = "const A=({width})=><div sz={{w:width}} {...{}}/>;";
+        let mut ir = parse(source);
+        let spread = ir.jsx_opening_elements[0]
+            .safe_style_spread
+            .as_mut()
+            .expect("safe spread");
+        let crate::transform::SafeStyleSpreadExpressionIr::Object(object) = &mut spread.expression
+        else {
+            panic!("object spread");
+        };
+        object.object_span.end -= 1;
+
+        let rewritten = rewrite_static_sz_attributes(source, "/repo/src/App.tsx", &ir)
+            .expect("fallback rewrite");
+
+        assert!(rewritten.contains(" style={{\"--_sz-w\":"));
+        assert!(rewritten.contains("{...{}}"));
+    }
+
+    #[test]
+    fn merges_dynamic_style_vars_into_each_conditional_spread_branch() {
+        let source =
+            "const A=({width,cond,flex})=><div sz={{w:width}} {...(cond?{style:{flex,},}:{})}/>;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A=({width,cond,flex})=><div className=\"w-(--_sz-w)\" {...(cond ? {style:{flex, \"--_sz-w\": __szSpacingVar(width, \"w\")},} : {style: {\"--_sz-w\": __szSpacingVar(width, \"w\")}})}/>;"
+        );
+        assert_eq!(rewritten.matches("__szSpacingVar").count(), 2);
+        assert!(!rewritten.contains(" style={{"));
     }
 
     #[test]
@@ -1368,6 +1515,44 @@ mod tests {
             rewritten,
             "const base = { p: 4 }; const App = ({ active }) => <div className={_szcn(\"p-4\", active && \"m-2\")} />;"
         );
+    }
+
+    #[test]
+    fn rewrites_array_ternary_to_one_merge_argument() {
+        let source =
+            "const App = ({ active }) => <div sz={[active ? { p: 2 } : { p: 4 }, { m: 1 }]} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = ({ active }) => <div className={_szcn(active ? \"p-2\" : \"p-4\", \"m-1\")} />;"
+        );
+    }
+
+    #[test]
+    fn rewrites_each_dynamic_css_var_category() {
+        let source = "const App = ({ color, angle, milliseconds, value }) => <div sz={{ bg: color, rotate: angle, duration: milliseconds, opacity: value }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert!(rewritten.contains("\"--_sz-bg\": __szColorVar(color)"));
+        assert!(rewritten.contains("\"--_sz-rotate\": __szUnitVar(angle, \"deg\", \"rotate\")"));
+        assert!(rewritten
+            .contains("\"--_sz-duration\": __szUnitVar(milliseconds, \"ms\", \"duration\")"));
+        assert!(rewritten.contains("\"--_sz-opacity\": value"));
+    }
+
+    #[test]
+    fn rejects_multiple_runtime_expression_attributes() {
+        for source in [
+            "const App=({ a, b }) => <div sz={a ? { p: 2 } : { p: 4 }} sz={b ? { m: 2 } : { m: 4 }} />;",
+            "const App=({ a, b }) => <div sz={a} sz={b} />;",
+        ] {
+            assert_eq!(
+                rewrite(source),
+                Err(StaticRewriteUnsupported::EmptyClassList),
+                "{source}"
+            );
+        }
     }
 
     #[test]

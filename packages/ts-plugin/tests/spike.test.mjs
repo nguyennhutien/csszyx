@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const ts = require('typescript');
 const { computeSzEntries } = require('../dist/core.js');
 
-function entriesAtMarker(source) {
+function entriesAtMarker(source, { forceUnresolvedSymbols = false, tsModule = ts } = {}) {
     const marker = source.indexOf('/*|*/');
     assert.ok(marker >= 0, 'source must contain the /*|*/ marker');
     const clean = source.replace('/*|*/', '');
@@ -33,9 +33,20 @@ function entriesAtMarker(source) {
         getDirectories: ts.sys.getDirectories,
     };
     const ls = ts.createLanguageService(host);
+    let service = ls;
+    if (forceUnresolvedSymbols) {
+        const program = ls.getProgram();
+        assert.ok(program, 'language service must expose its program');
+        const checker = Object.create(program.getTypeChecker());
+        checker.getSymbolAtLocation = () => undefined;
+        const programWithoutSymbols = Object.create(program);
+        programWithoutSymbols.getTypeChecker = () => checker;
+        service = Object.create(ls);
+        service.getProgram = () => programWithoutSymbols;
+    }
     return computeSzEntries(
-        ts,
-        ls,
+        tsModule,
+        service,
         fileName,
         marker,
         { enabled: true, values: true, maxEntries: 512, deadlineMs: 20, failureThreshold: 3 },
@@ -66,6 +77,21 @@ test('sz={{ }} JSX attribute offers sz keys', () => {
 test('a plain object literal is left untouched', () => {
     const names = namesAtMarker('const config = { /*|*/ };');
     assert.strictEqual(names.length, 0);
+});
+
+test('a cursor with no object ancestry is left untouched', () => {
+    assert.strictEqual(namesAtMarker('const value = 1 + /*|*/2;').length, 0);
+});
+
+test('unsupported scanner hosts fail open without whole-file fallback', () => {
+    const tsWithoutTokenScanner = Object.create(ts);
+    Object.defineProperty(tsWithoutTokenScanner, 'getTokenAtPosition', { value: undefined });
+    assert.strictEqual(
+        entriesAtMarker('const A = () => <div sz={{ /*|*/ }} />;', {
+            tsModule: tsWithoutTokenScanner,
+        }).length,
+        0,
+    );
 });
 
 // 4. Value position (after a colon) is not a key slot.
@@ -118,6 +144,32 @@ test('named import receivers cannot spoof namespace provenance', () => {
         "import { theme } from 'csszyx'; theme.szv({ base: { /*|*/ } });",
     );
     assert.strictEqual(names.length, 0);
+});
+
+test('incomplete checker falls back only to proven csszyx import spellings', () => {
+    const fallbackNames = source =>
+        entriesAtMarker(source, { forceUnresolvedSymbols: true }).map(entry => entry.name);
+
+    assert.ok(
+        fallbackNames(
+            "import { szv as variants } from 'csszyx'; variants({ base: { /*|*/ } });",
+        ).includes('bg'),
+    );
+    assert.ok(
+        fallbackNames(
+            "import * as runtime from '@csszyx/runtime'; runtime.szr({ hover: { /*|*/ } });",
+        ).includes('p'),
+    );
+    assert.strictEqual(
+        fallbackNames("import { szv } from 'unrelated'; szv({ base: { /*|*/ } });").length,
+        0,
+    );
+    assert.strictEqual(
+        fallbackNames(
+            "import csszyx from 'csszyx'; csszyx.szv({ base: { /*|*/ } });",
+        ).length,
+        0,
+    );
 });
 
 test('conditional JSX sz branches retain context', () => {
@@ -203,6 +255,28 @@ test('nested objects under non-form properties and css get no suggestions', () =
     assert.ok(
         namesAtMarker('const A = () => <div sz={{ customVariant: { /*|*/ } }} />;').includes('bg'),
     );
+});
+
+test('computed variant keys are not treated as static style ancestry', () => {
+    assert.strictEqual(
+        namesAtMarker("const key = 'hover'; const A = () => <div sz={{ [key]: { /*|*/ } }} />;")
+            .length,
+        0,
+    );
+});
+
+test('pathological call ancestry stops at the traversal bound', () => {
+    let nested = '{ /*|*/ }';
+    for (let depth = 0; depth < 40; depth += 1) nested = `{ level${depth}: ${nested} }`;
+    assert.strictEqual(
+        namesAtMarker(`import { szr } from 'csszyx'; szr(${nested});`).length,
+        0,
+    );
+});
+
+test('incomplete value slots tolerate bounded whitespace before the colon', () => {
+    const entries = entriesAtMarker('const A = () => <div sz={{ bg   : re/*|*/ }} />;');
+    assert.ok(entries.some(entry => entry.name === 'red-500'));
 });
 
 // A COLOR property's object value is the documented `{ color, op }` form — the

@@ -74,6 +74,22 @@ pub fn triage_source(file: &TransformFile) -> FastPathTriage {
         });
     }
 
+    // A component `szs=` slot attribute is rewritten to a compiled `szsc=`
+    // prop by the parser lanes; the AST-free path only walks `sz={{ … }}`
+    // attributes and cannot perform that rewrite. The element-wise guard in
+    // `try_static_sz_ir` only inspects openings that contain `sz={{`, so an
+    // `szs` on a SIBLING element was invisible to it: the file fast-pathed on
+    // the sibling's `sz` alone and shipped the raw `szs` prop, silently
+    // dropping the slot override (field-reported — the parser lanes always
+    // rewrite it). Bail file-wide like the catalog markers above; the
+    // substring test does not match an already-compiled `szsc=` prop.
+    if file.source.contains("szs=") {
+        return FastPathTriage::NeedsParser(FastPathBailout {
+            filename: file.filename.clone(),
+            reason: FastPathBailoutReason::ContainsSzMarker,
+        });
+    }
+
     // An `sz=` occurrence inside a comment or string literal must never build
     // static IR: the textual scan below cannot tell it from a real attribute,
     // so `// <Box sz={{ mb: 10 }} />` used to ship the commented-out classes
@@ -199,7 +215,6 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
     let mut ir = SourceIr::empty(file.filename.clone(), source_len);
     let mut search_from = 0;
     let mut found = false;
-    let mut element_spans = Vec::<TextSpan>::new();
     let sz_attribute_count = count_sz_attributes(&file.source);
 
     while let Some(relative_start) = file.source[search_from..].find("sz={{") {
@@ -213,9 +228,10 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
         let opening_start = file.source[..attribute_start].rfind('<')?;
         let opening_end = attribute_start + file.source[attribute_start..].find('>')? + 1;
         let opening = &file.source[opening_start..opening_end];
+        // No `szs=` check here: `triage_source` already bailed file-wide on
+        // that marker before this walk runs, so no opening can contain it.
         if opening.contains("class=")
             || opening.contains("className=")
-            || opening.contains("szs=")
             || opening.contains("szRecover")
             || opening.contains("data-sz-recovery-token")
             || opening.contains("{...")
@@ -228,9 +244,6 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
         let close_relative = file.source[inner_start..opening_end].find("}}")?;
         let inner_end = inner_start + close_relative;
         let attribute_end = inner_end + 2;
-        if attribute_end > opening_end {
-            return None;
-        }
 
         let object = parse_flat_static_object(&file.source[inner_start..inner_end], inner_start)?;
         if object.is_empty() {
@@ -238,10 +251,6 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
         }
 
         let opening_span = span(opening_start, opening_end)?;
-        if element_spans.contains(&opening_span) {
-            return None;
-        }
-        element_spans.push(opening_span);
 
         let attribute_index = ir.sz_attributes.len();
         ir.sz_attributes.push(SzAttributeIr {
@@ -400,7 +409,10 @@ fn span(start: usize, end: usize) -> Option<TextSpan> {
 
 #[cfg(test)]
 mod tests {
-    use super::{triage_source, FastPathBailoutReason, FastPathTriage};
+    use super::{
+        element_name, is_identifier_key, parse_simple_string, triage_source, FastPathBailoutReason,
+        FastPathTriage,
+    };
     use crate::transform::TransformFile;
 
     #[test]
@@ -437,6 +449,35 @@ mod tests {
         assert_eq!(ir.jsx_opening_elements.len(), 1);
         assert_eq!(ir.jsx_opening_elements[0].element_name, "div");
         assert_eq!(ir.sz_attributes[0].object.properties.len(), 3);
+    }
+
+    #[test]
+    fn lexical_helpers_reject_ambiguous_tokens() {
+        assert_eq!(
+            parse_simple_string("'safe-token'"),
+            Some("safe-token".to_string())
+        );
+        assert_eq!(parse_simple_string("'mismatched\""), None);
+        assert_eq!(parse_simple_string(r"'escaped\\value'"), None);
+
+        assert!(!is_identifier_key(""));
+        assert!(is_identifier_key("$token_2"));
+
+        assert_eq!(element_name("</div>"), None);
+        assert_eq!(element_name("<{dynamic} />"), None);
+    }
+
+    #[test]
+    fn boolean_values_remain_on_the_ast_free_path() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const App=()=> <div sz={{ truncate: true, flex: false }} />;".to_string(),
+        };
+
+        let FastPathTriage::StaticIr(ir) = triage_source(&file) else {
+            panic!("expected AST-free static IR");
+        };
+        assert_eq!(ir.sz_attributes[0].object.properties.len(), 2);
     }
 
     #[test]
@@ -499,6 +540,31 @@ mod tests {
                 "expected NeedsParser for: {source}"
             );
         }
+    }
+
+    #[test]
+    fn component_szs_alongside_static_sz_bails_to_parser() {
+        // The regression: a component `szs={{ … }}` slot map on one element
+        // next to a SIBLING element with a plain static `sz={{ … }}` must not
+        // fast-path. The AST-free walk only inspects openings that contain
+        // `sz={{`, so an `szs` on any other element is invisible to it and the
+        // `szs` -> `szsc` rewrite is silently skipped (field-reported: slot
+        // overrides dropped, component reads `szsc` as undefined). An `szs` on
+        // the SAME opening as the `sz` was already rejected; the sibling shape
+        // was the hole.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const C = () => <Popup szs={{ body: { p: 0 } }}><Box sz={{ p: 4 }}>x</Box></Popup>;"
+                .to_string(),
+        };
+
+        assert!(matches!(
+            triage_source(&file),
+            FastPathTriage::NeedsParser(super::FastPathBailout {
+                reason: FastPathBailoutReason::ContainsSzMarker,
+                ..
+            })
+        ));
     }
 
     #[test]

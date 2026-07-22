@@ -242,12 +242,14 @@ pub(crate) fn collect_dead_spacing_steps(
             }
             StaticSzValue::String(value) => {
                 let unsigned = value.strip_prefix('-').unwrap_or(value);
-                if is_unsigned_decimal(unsigned) {
-                    if let Ok(parsed) = value.parse::<f64>() {
-                        if is_dead_spacing_step(&property.key, parsed) {
-                            out.push((property.key.clone(), parsed, property.span.start));
-                        }
+                match value.parse::<f64>() {
+                    Ok(parsed)
+                        if is_unsigned_decimal(unsigned)
+                            && is_dead_spacing_step(&property.key, parsed) =>
+                    {
+                        out.push((property.key.clone(), parsed, property.span.start));
                     }
+                    _ => {}
                 }
             }
             StaticSzValue::Object(nested) => {
@@ -472,11 +474,6 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
                 next_prefix.push(':');
                 lower_object_into(nested, &next_prefix, classes);
             }
-            StaticSzValue::Boolean(false) => {
-                if let Some(class_name) = false_boolean_class(&property.key) {
-                    classes.push(format!("{prefix}{class_name}"));
-                }
-            }
             value => {
                 if let Some(class_name) = format_static_class(&property.key, value, prefix) {
                     classes.push(class_name);
@@ -567,18 +564,15 @@ fn lower_aria_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<S
 /// Lowers the `has` variant: `{ has: { checked: {...} } }` → `has-[:checked]:…`
 /// for states, `{ has: { img: {...} } }` → `has-[img]:…` for raw selectors.
 fn lower_has_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
-    for property in &object.properties {
-        if let StaticSzValue::Object(body) = &property.value {
-            let selector = property.key.as_str();
-            let next_prefix = if selector.starts_with(':') {
-                format!("{prefix}has-[{selector}]:")
-            } else if is_known_variant(selector) {
-                format!("{prefix}has-[:{selector}]:")
-            } else {
-                format!("{prefix}has-[{selector}]:")
-            };
-            lower_object_into(body, &next_prefix, classes);
-        }
+    for (selector, body) in object_children(object) {
+        let next_prefix = if selector.starts_with(':') {
+            format!("{prefix}has-[{selector}]:")
+        } else if is_known_variant(selector) {
+            format!("{prefix}has-[:{selector}]:")
+        } else {
+            format!("{prefix}has-[{selector}]:")
+        };
+        lower_object_into(body, &next_prefix, classes);
     }
 }
 
@@ -608,24 +602,20 @@ fn lower_group_peer_variant(
                 continue;
             }
             "data" => {
-                for attr in &nested.properties {
-                    if let StaticSzValue::Object(body) = &attr.value {
-                        let np = format!("{prefix}{scope}-data-[{}]:", attr.key);
-                        lower_object_into(body, &np, classes);
-                    }
+                for (attribute, body) in object_children(nested) {
+                    let np = format!("{prefix}{scope}-data-[{attribute}]:");
+                    lower_object_into(body, &np, classes);
                 }
                 continue;
             }
             "aria" => {
-                for attr in &nested.properties {
-                    if let StaticSzValue::Object(body) = &attr.value {
-                        let np = if is_aria_state(&attr.key) {
-                            format!("{prefix}{scope}-aria-{}:", attr.key)
-                        } else {
-                            format!("{prefix}{scope}-aria-[{}]:", attr.key)
-                        };
-                        lower_object_into(body, &np, classes);
-                    }
+                for (attribute, body) in object_children(nested) {
+                    let np = if is_aria_state(attribute) {
+                        format!("{prefix}{scope}-aria-{attribute}:")
+                    } else {
+                        format!("{prefix}{scope}-aria-[{attribute}]:")
+                    };
+                    lower_object_into(body, &np, classes);
                 }
                 continue;
             }
@@ -657,24 +647,20 @@ fn lower_group_peer_variant(
             };
             match state.key.as_str() {
                 "data" => {
-                    for attr in &state_body.properties {
-                        if let StaticSzValue::Object(body) = &attr.value {
-                            let np = format!("{prefix}{scope}-data-[{}]/{nested_key}:", attr.key);
-                            lower_object_into(body, &np, classes);
-                        }
+                    for (attribute, body) in object_children(state_body) {
+                        let np = format!("{prefix}{scope}-data-[{attribute}]/{nested_key}:");
+                        lower_object_into(body, &np, classes);
                     }
                 }
                 "aria" => {
-                    for attr in &state_body.properties {
-                        if let StaticSzValue::Object(body) = &attr.value {
-                            let aria_segment = if is_aria_state(&attr.key) {
-                                format!("aria-{}", attr.key)
-                            } else {
-                                format!("aria-[{}]", attr.key)
-                            };
-                            let np = format!("{prefix}{scope}-{aria_segment}/{nested_key}:");
-                            lower_object_into(body, &np, classes);
-                        }
+                    for (attribute, body) in object_children(state_body) {
+                        let aria_segment = if is_aria_state(attribute) {
+                            format!("aria-{attribute}")
+                        } else {
+                            format!("aria-[{attribute}]")
+                        };
+                        let np = format!("{prefix}{scope}-{aria_segment}/{nested_key}:");
+                        lower_object_into(body, &np, classes);
                     }
                 }
                 _ => {
@@ -687,11 +673,14 @@ fn lower_group_peer_variant(
     }
 }
 
-const fn false_boolean_class(_key: &str) -> Option<&'static str> {
-    // The italic/antialiased `false` aliases were removed along with the boolean
-    // sugar. Use the canonical key with a value instead ({ fontStyle: 'normal' },
-    // { fontSmoothing: 'subpixel' }). No key currently maps a `false` to a class.
-    None
+fn object_children(object: &StaticSzObject) -> impl Iterator<Item = (&str, &StaticSzObject)> {
+    object
+        .properties
+        .iter()
+        .filter_map(|property| match &property.value {
+            StaticSzValue::Object(body) => Some((property.key.as_str(), body)),
+            _ => None,
+        })
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1162,9 +1151,16 @@ fn format_bg_img_object(object: &StaticSzObject, prefix: &str) -> Option<String>
             },
             None => "bg-linear-to-r".to_string(),
         },
-        "radial" => match object_string_property(object, "dir") {
-            Some(value) if value.starts_with("--") => format!("bg-radial-({value})"),
-            Some(value) => format!("bg-radial-[{}]", normalize_arbitrary_value(value)),
+        "radial" => match object.properties.iter().find(|prop| prop.key == "dir") {
+            Some(prop) => match &prop.value {
+                StaticSzValue::String(value) if value.starts_with("--") => {
+                    format!("bg-radial-({value})")
+                }
+                StaticSzValue::String(value) => {
+                    format!("bg-radial-[{}]", normalize_arbitrary_value(value))
+                }
+                _ => return None,
+            },
             None => "bg-radial".to_string(),
         },
         "conic" => match object.properties.iter().find(|prop| prop.key == "dir") {
@@ -1588,8 +1584,9 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_unknown_sz_keys, has_slash_opacity, is_known_sz_key, is_tailwind_build_function,
-        lower_source_ir_classes, lower_static_sz_object, needs_brackets,
+        collect_unknown_sz_keys, format_color_opacity_object, has_slash_opacity, is_known_sz_key,
+        is_percent, is_tailwind_build_function, is_unsigned_decimal, lower_source_ir_classes,
+        lower_static_sz_object, needs_brackets,
     };
     use crate::transform::{
         ClassAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
@@ -1602,6 +1599,10 @@ mod tests {
             span: TextSpan { start: 0, end: 0 },
             value,
         }
+    }
+
+    fn object(properties: Vec<StaticSzProperty>) -> StaticSzValue {
+        StaticSzValue::Object(StaticSzObject { properties })
     }
 
     #[test]
@@ -1789,6 +1790,157 @@ mod tests {
     }
 
     #[test]
+    fn merges_text_size_and_leading_only_within_the_same_variant() {
+        let matching = StaticSzObject {
+            properties: vec![
+                property(
+                    "hover",
+                    object(vec![property("text", StaticSzValue::String("sm".into()))]),
+                ),
+                property(
+                    "hover",
+                    object(vec![property(
+                        "leading",
+                        StaticSzValue::String("tight".into()),
+                    )]),
+                ),
+            ],
+        };
+        assert_eq!(lower_static_sz_object(&matching), ["hover:text-sm/tight"]);
+
+        let mismatched = StaticSzObject {
+            properties: vec![
+                property(
+                    "hover",
+                    object(vec![property("text", StaticSzValue::String("sm".into()))]),
+                ),
+                property(
+                    "focus",
+                    object(vec![property(
+                        "leading",
+                        StaticSzValue::String("tight".into()),
+                    )]),
+                ),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&mismatched),
+            ["hover:text-sm", "focus:leading-tight"]
+        );
+    }
+
+    #[test]
+    fn lowers_not_and_aria_variant_matrix() {
+        let declaration = |key: &str, value: StaticSzValue| StaticSzObject {
+            properties: vec![property(key, value)],
+        };
+        let padding = || object(vec![property("p", StaticSzValue::Number(4.0))]);
+
+        assert_eq!(
+            lower_static_sz_object(&declaration(
+                "not",
+                object(vec![property(
+                    "supports",
+                    object(vec![property("display:grid", padding())]),
+                )]),
+            )),
+            ["not-supports-[display:grid]:p-4"]
+        );
+        assert_eq!(
+            lower_static_sz_object(&declaration(
+                "not",
+                object(vec![
+                    property("hover", padding()),
+                    property("ignored", StaticSzValue::Boolean(false)),
+                ]),
+            )),
+            ["not-hover:p-4"]
+        );
+        assert_eq!(
+            lower_static_sz_object(&declaration(
+                "not",
+                object(vec![property("focusVisible", padding())]),
+            )),
+            ["not-focus-visible:p-4"]
+        );
+        assert_eq!(
+            lower_static_sz_object(&declaration(
+                "aria",
+                object(vec![
+                    property("checked", padding()),
+                    property("busy=true", padding()),
+                    property("ignored", StaticSzValue::Boolean(false)),
+                ]),
+            )),
+            ["aria-checked:p-4", "aria-[busy=true]:p-4"]
+        );
+    }
+
+    #[test]
+    fn lowers_group_peer_parametric_and_named_scope_matrix() {
+        let padding = |value| object(vec![property("p", StaticSzValue::Number(value))]);
+        let margin = |value| object(vec![property("m", StaticSzValue::Number(value))]);
+        let object = StaticSzObject {
+            properties: vec![
+                property(
+                    "group",
+                    object(vec![
+                        property("ignored", StaticSzValue::Boolean(false)),
+                        property(
+                            "data",
+                            object(vec![
+                                property("active", padding(1.0)),
+                                property("ignored", StaticSzValue::Boolean(false)),
+                            ]),
+                        ),
+                        property(
+                            "aria",
+                            object(vec![
+                                property("checked", padding(2.0)),
+                                property("x=1", padding(3.0)),
+                            ]),
+                        ),
+                        property(
+                            "card",
+                            object(vec![
+                                property("data", object(vec![property("active", margin(1.0))])),
+                                property(
+                                    "aria",
+                                    object(vec![
+                                        property("checked", margin(2.0)),
+                                        property("x=1", margin(3.0)),
+                                    ]),
+                                ),
+                                property("ignored", StaticSzValue::Boolean(false)),
+                            ]),
+                        ),
+                    ]),
+                ),
+                property(
+                    "peer",
+                    object(vec![property(
+                        "has",
+                        object(vec![property("img", padding(4.0))]),
+                    )]),
+                ),
+            ],
+        };
+
+        assert_eq!(
+            lower_static_sz_object(&object),
+            [
+                "group-data-[active]:p-1",
+                "group-aria-checked:p-2",
+                "group-aria-[x=1]:p-3",
+                "group-data-[active]/card:m-1",
+                "group-aria-checked/card:m-2",
+                "group-aria-[x=1]/card:m-3",
+                "peer-has-[img]:p-4",
+            ]
+        );
+    }
+
+    #[test]
     fn lowers_responsive_breakpoints() {
         // Helpers to build nested variant objects compactly.
         fn obj(props: Vec<StaticSzProperty>) -> StaticSzValue {
@@ -1892,6 +2044,269 @@ mod tests {
         };
 
         assert_eq!(lower_static_sz_object(&object), ["bg-linear-to-br"]);
+    }
+
+    #[test]
+    fn lowers_background_image_gradient_matrix() {
+        let gradient = |kind: &str, dir: Option<StaticSzValue>, interpolation: Option<&str>| {
+            let mut properties = vec![property(
+                "gradient",
+                StaticSzValue::String(kind.to_string()),
+            )];
+            if let Some(dir) = dir {
+                properties.push(property("dir", dir));
+            }
+            if let Some(interpolation) = interpolation {
+                properties.push(property(
+                    "in",
+                    StaticSzValue::String(interpolation.to_string()),
+                ));
+            }
+            StaticSzObject {
+                properties: vec![property("bgImg", object(properties))],
+            }
+        };
+
+        for (input, expected) in [
+            (
+                gradient("linear", Some(StaticSzValue::Number(45.0)), None),
+                Some("bg-linear-45"),
+            ),
+            (
+                gradient("linear", Some(StaticSzValue::Number(-45.0)), None),
+                Some("-bg-linear-45"),
+            ),
+            (
+                gradient("linear", Some(StaticSzValue::String("--a".into())), None),
+                Some("bg-linear-(--a)"),
+            ),
+            (
+                gradient("linear", Some(StaticSzValue::Boolean(true)), None),
+                None,
+            ),
+            (
+                gradient(
+                    "linear",
+                    Some(StaticSzValue::String("45deg in oklab".into())),
+                    None,
+                ),
+                Some("bg-linear-[45deg_in_oklab]"),
+            ),
+            (
+                gradient("linear", None, Some("oklch")),
+                Some("bg-linear-to-r/oklch"),
+            ),
+            (gradient("radial", None, None), Some("bg-radial")),
+            (
+                gradient("radial", Some(StaticSzValue::String("--a".into())), None),
+                Some("bg-radial-(--a)"),
+            ),
+            (
+                gradient(
+                    "radial",
+                    Some(StaticSzValue::String("circle at top".into())),
+                    None,
+                ),
+                Some("bg-radial-[circle_at_top]"),
+            ),
+            (gradient("conic", None, None), Some("bg-conic")),
+            (
+                gradient("conic", Some(StaticSzValue::Number(45.0)), None),
+                Some("bg-conic-45"),
+            ),
+            (
+                gradient("conic", Some(StaticSzValue::Number(-45.0)), None),
+                Some("-bg-conic-45"),
+            ),
+            (
+                gradient("conic", Some(StaticSzValue::String("--a".into())), None),
+                Some("bg-conic-(--a)"),
+            ),
+            (
+                gradient(
+                    "conic",
+                    Some(StaticSzValue::String("from 45deg".into())),
+                    None,
+                ),
+                Some("bg-conic-[from_45deg]"),
+            ),
+            (
+                gradient("radial", Some(StaticSzValue::Number(5.0)), None),
+                None,
+            ),
+            (gradient("unknown", None, None), None),
+        ] {
+            let classes = lower_static_sz_object(&input);
+            assert_eq!(classes.first().map(String::as_str), expected);
+            assert_eq!(classes.len(), usize::from(expected.is_some()));
+        }
+
+        let missing_gradient = StaticSzObject {
+            properties: vec![property(
+                "bgImg",
+                object(vec![property("dir", StaticSzValue::String("to-r".into()))]),
+            )],
+        };
+        assert!(lower_static_sz_object(&missing_gradient).is_empty());
+    }
+
+    #[test]
+    fn lowers_font_stretch_value_shapes() {
+        let object = StaticSzObject {
+            properties: ["condensed", "--f", "50%", "50.5%", "wide"]
+                .into_iter()
+                .map(|value| property("fontStretch", StaticSzValue::String(value.into())))
+                .collect(),
+        };
+
+        assert_eq!(
+            lower_static_sz_object(&object),
+            [
+                "font-condensed",
+                "font-stretch-(--f)",
+                "font-stretch-50%",
+                "font-stretch-[50.5%]",
+                "font-stretch-[wide]",
+            ]
+        );
+    }
+
+    #[test]
+    fn lowers_tailwind_special_value_matrix() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("animationDelay", StaticSzValue::Number(150.0)),
+                property("animationDelay", StaticSzValue::String("2s".into())),
+                property("animationDelay", StaticSzValue::Boolean(true)),
+                property("fromPos", StaticSzValue::String("--stop".into())),
+                property("viaPos", StaticSzValue::String("50%".into())),
+                property("toPos", StaticSzValue::String("12.5%".into())),
+                property("bgImg", StaticSzValue::String("none".into())),
+                property("bgImg", StaticSzValue::String("linear-to-r".into())),
+                property("bgImg", StaticSzValue::String("-linear-45".into())),
+                property("bgImg", StaticSzValue::String("gradient-to-br".into())),
+                property(
+                    "bgImg",
+                    StaticSzValue::String("repeating-linear-gradient(red, blue)".into()),
+                ),
+                property("bgImg", StaticSzValue::String("--hero".into())),
+                property("bgImg", StaticSzValue::String("url(/hero.png)".into())),
+                property("bgImg", StaticSzValue::String("/fallback.png".into())),
+                property("content", StaticSzValue::String("none".into())),
+                property("content", StaticSzValue::String("--label".into())),
+                property("content", StaticSzValue::String("\"hello\"".into())),
+                property("decoration", StaticSzValue::String("none".into())),
+                property("fontFamily", StaticSzValue::String("--font".into())),
+                property("weight", StaticSzValue::String("--weight".into())),
+                property("text", StaticSzValue::String("--size".into())),
+                property("textTransform", StaticSzValue::String("invalid".into())),
+                property("fontStyle", StaticSzValue::String("invalid".into())),
+                property("fontSmoothing", StaticSzValue::String("invalid".into())),
+                property("decoration", StaticSzValue::String("invalid".into())),
+                property("snapAlign", StaticSzValue::String("invalid".into())),
+                property("snapStrictness", StaticSzValue::String("invalid".into())),
+                property("snapStop", StaticSzValue::String("invalid".into())),
+                property("snapType", StaticSzValue::String("invalid".into())),
+                property(
+                    "fontVariant",
+                    StaticSzValue::String("diagonal-fractions".into()),
+                ),
+                property(
+                    "fontVariant",
+                    StaticSzValue::String("stacked-fractions".into()),
+                ),
+                property(
+                    "bg",
+                    object(vec![
+                        property("color", StaticSzValue::String("red-500".into())),
+                        property("op", StaticSzValue::Boolean(true)),
+                    ]),
+                ),
+            ],
+        };
+
+        assert_eq!(
+            lower_static_sz_object(&object),
+            [
+                "[animation-delay:150ms]",
+                "[animation-delay:2s]",
+                "from-(--stop)",
+                "via-50%",
+                "to-[12.5%]",
+                "bg-none",
+                "bg-linear-to-r",
+                "-bg-linear-45",
+                "bg-linear-to-br",
+                "bg-[repeating-linear-gradient(red,_blue)]",
+                "bg-(image:--hero)",
+                "bg-[url(/hero.png)]",
+                "bg-[url(/fallback.png)]",
+                "content-none",
+                "content-(--label)",
+                "content-['hello']",
+                "no-underline",
+                "font-(family-name:--font)",
+                "font-(weight:--weight)",
+                "text-(length:--size)",
+                "diagonal-fractions",
+                "stacked-fractions",
+            ]
+        );
+    }
+
+    #[test]
+    fn special_lowering_helpers_fail_closed_on_invalid_shapes() {
+        let object = StaticSzObject {
+            properties: vec![
+                property(
+                    "css",
+                    object(vec![
+                        property("zIndex", StaticSzValue::Number(2.0)),
+                        property("inert", StaticSzValue::Boolean(true)),
+                        property("nested", object(vec![])),
+                    ]),
+                ),
+                property(
+                    "has",
+                    object(vec![
+                        property(
+                            ":focus",
+                            object(vec![property("p", StaticSzValue::Number(1.0))]),
+                        ),
+                        property(
+                            "hover",
+                            object(vec![property("p", StaticSzValue::Number(2.0))]),
+                        ),
+                    ]),
+                ),
+                property(
+                    "perspectiveOrigin",
+                    StaticSzValue::String("top-right".into()),
+                ),
+                property(
+                    "bgImg",
+                    object(vec![
+                        property("gradient", StaticSzValue::String("conic".into())),
+                        property("dir", StaticSzValue::Boolean(true)),
+                    ]),
+                ),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            [
+                "[z-index:2]",
+                "[inert:true]",
+                "has-[:focus]:p-1",
+                "has-[:hover]:p-2",
+                "perspective-origin-top-right",
+            ]
+        );
+
+        assert!(format_color_opacity_object("unknown", &StaticSzObject::empty(), "").is_none());
+        assert!(format_color_opacity_object("bg", &StaticSzObject::empty(), "").is_none());
+        assert!(!is_percent("1.2.3%"));
+        assert!(!is_unsigned_decimal("1.2.3"));
     }
 
     #[test]
@@ -2084,8 +2499,10 @@ mod tests {
                 property("p", StaticSzValue::Number(1.4)),
                 property("m", StaticSzValue::Number(1.5)),
                 property("gap", StaticSzValue::String("1.1".into())),
+                property("mx", StaticSzValue::String("1.5".into())),
                 property("w", StaticSzValue::String("1.4rem".into())),
                 property("leading", StaticSzValue::Number(1.4)),
+                property("hidden", StaticSzValue::Boolean(true)),
                 property(
                     "hover",
                     StaticSzValue::Object(StaticSzObject {

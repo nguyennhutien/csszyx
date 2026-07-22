@@ -126,6 +126,7 @@ mod tests {
 
     #[test]
     fn test_version() {
+        init();
         let ver = version();
         assert!(!ver.is_empty());
     }

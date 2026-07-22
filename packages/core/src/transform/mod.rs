@@ -108,9 +108,19 @@ pub fn transform_batch_with_options(
 
 #[cfg(test)]
 mod tests {
-    #[cfg(not(feature = "native-engine"))]
     use super::TransformError;
     use super::{transform_batch, TransformFile};
+
+    #[test]
+    fn transform_error_has_a_stable_public_message() {
+        let error = TransformError::NotImplemented;
+
+        assert_eq!(
+            error.to_string(),
+            "csszyx Rust transform core requires the native-engine feature"
+        );
+        assert!(std::error::Error::source(&error).is_none());
+    }
 
     #[cfg(not(feature = "native-engine"))]
     #[test]

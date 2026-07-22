@@ -39,12 +39,16 @@ pub enum PrimitiveValue {
 /// color-opacity, supports/data/not/aria/has, group/peer, every property — is
 /// handled in one place). The serde boundary, not the lowering, dominates the
 /// runtime cost, so the conversion allocation is negligible.
+// Native LLVM coverage cannot execute a JsValue boundary. This adapter is
+// exercised through pkg-node by the integration and runtime-parity suites.
+// coverage:wasm-only:start
 #[wasm_bindgen]
 pub fn transform_sz(val: JsValue) -> Result<String, JsValue> {
     let sz_prop: IndexMap<String, SzValue> = serde_wasm_bindgen::from_value(val)?;
     let object = convert_runtime_object(&sz_prop);
     Ok(lower_static_sz_object(&object).join(" "))
 }
+// coverage:wasm-only:end
 
 /// Converts the runtime sz object into the parser's [`StaticSzObject`] IR so the
 /// single lowering pipeline can produce the className. Spans are synthetic —

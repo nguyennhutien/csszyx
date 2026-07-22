@@ -12,6 +12,11 @@ describe('Next cache identity', () => {
         ).toBe(stableStringify({ a: { x: ['p-4', null], y: true }, b: 2 }));
     });
 
+    it('normalizes unsupported runtime values like JSON.stringify does in objects', () => {
+        expect(stableStringify(undefined as never)).toBe('null');
+        expect(stableStringify({ omitted: undefined, kept: null })).toBe('{"kept":null}');
+    });
+
     it('hashes only explicit env keys', () => {
         const base = {
             root: '/repo/apps/web',

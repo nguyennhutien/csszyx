@@ -234,4 +234,23 @@ describe('transform hook branch edges', () => {
         expect(result?.code).toContain('data-sz-checksum="___CSSZYX_CHECKSUM___"');
         expect(result?.code).not.toContain('window.__csszyx');
     });
+
+    it('does not scan past an unterminated layout html opening tag', async () => {
+        const { root, transform } = await boot();
+        const code = 'export default function Doc(){return <html';
+        const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {
+            code: string;
+        } | null;
+        expect(result?.code).toBe(code);
+    });
+
+    it('skips body-prefixed custom elements before the real body tag', async () => {
+        const { root, transform } = await boot();
+        const code =
+            'export default function Doc(){return <html><bodyguard /><body>x</body></html>;}';
+        const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {
+            code: string;
+        } | null;
+        expect(result?.code).toContain('<bodyguard /><body><script');
+    });
 });

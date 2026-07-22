@@ -5,7 +5,11 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-const control = vi.hoisted(() => ({ initThrows: true, transformThrows: true }));
+const control = vi.hoisted(() => ({
+    initThrows: true,
+    tokenThrows: true,
+    transformThrows: true,
+}));
 vi.mock('@csszyx/core', () => ({
     version: () => '0.0.0-mock',
     init: () => {
@@ -13,6 +17,10 @@ vi.mock('@csszyx/core', () => ({
     },
     transform_sz: () => {
         if (control.transformThrows) throw new Error('wasm transform boom');
+        return 'unused';
+    },
+    generate_token: () => {
+        if (control.tokenThrows) throw new Error('wasm token boom');
         return 'unused';
     },
 }));
@@ -81,6 +89,26 @@ describe('CsszyxCompiler when the WASM core fails', () => {
         expect(compiler.transform({ p: 4 })).toContain('p-4');
         expect(warn).toHaveBeenCalledWith(
             expect.stringContaining('WASM transformation failed'),
+            expect.anything(),
+        );
+        warn.mockRestore();
+    });
+
+    it('falls back to a deterministic JS token when the active core lacks token generation', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const compiler = CsszyxCompiler.getInstance();
+        const metadata = {
+            component: 'Card',
+            filePath: 'src/Card.tsx',
+            line: 3,
+            column: 7,
+            mode: 'dev-only' as const,
+            buildId: 'b1',
+        };
+
+        expect(compiler.generateRecoveryToken(metadata)).toBe('000004a68e6f');
+        expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining('WASM token generation failed'),
             expect.anything(),
         );
         warn.mockRestore();

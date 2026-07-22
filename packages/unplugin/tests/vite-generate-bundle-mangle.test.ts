@@ -69,8 +69,17 @@ describe('vite generateBundle mangle pass', () => {
         );
 
         const cssAsset = { type: 'asset', fileName: 'style.css', source: '.m-3{margin:0.75rem}' };
+        const secondCssAsset = {
+            type: 'asset',
+            fileName: 'print.css',
+            source: new TextEncoder().encode('.m-3{margin:0.75rem}'),
+        };
         const jsChunk = { type: 'chunk', fileName: 'app.js', code: 'var c={className:"m-3"};' };
-        const bundle = { 'style.css': cssAsset, 'app.js': jsChunk };
+        const bundle = {
+            'style.css': cssAsset,
+            'print.css': secondCssAsset,
+            'app.js': jsChunk,
+        };
 
         const emitted = await h.generateBundle(bundle);
 
@@ -85,6 +94,7 @@ describe('vite generateBundle mangle pass', () => {
         // CSS selector and JS string are both rewritten to the mangled token.
         expect(cssAsset.source).not.toContain('.m-3{');
         expect(cssAsset.source).toContain(`.${token}`);
+        expect(secondCssAsset.source.toString()).not.toContain('.m-3{');
         expect(jsChunk.code).toContain(`"${token}"`);
         expect(jsChunk.code).not.toContain('"m-3"');
     });

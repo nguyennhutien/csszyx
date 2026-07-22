@@ -134,9 +134,28 @@ fn push_variable_map(
 mod tests {
     use super::apply_global_var_aliases;
     use crate::transform::{
-        GlobalVarAliasEntry, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue,
-        SzAttributeIr, TextSpan,
+        parser::parse_source_shell, GlobalVarAliasEntry, SourceIr, StaticSzObject,
+        StaticSzProperty, StaticSzValue, SzAttributeIr, TextSpan, TransformFile,
     };
+
+    #[test]
+    fn returns_the_original_ir_when_no_valid_aliases_exist() {
+        let ir = SourceIr::empty("/repo/src/App.tsx".to_string(), 100);
+
+        let empty = apply_global_var_aliases(&ir, &[]);
+        assert_eq!(empty.ir, ir);
+        assert!(empty.variable_map.is_empty());
+
+        let invalid = apply_global_var_aliases(
+            &ir,
+            &[GlobalVarAliasEntry {
+                original: "brand-primary".to_string(),
+                alias: "g0".to_string(),
+            }],
+        );
+        assert_eq!(invalid.ir, ir);
+        assert!(invalid.variable_map.is_empty());
+    }
 
     #[test]
     fn rewrites_static_object_values_and_records_metadata() {
@@ -176,5 +195,145 @@ mod tests {
         assert_eq!(result.variable_map.len(), 1);
         assert_eq!(result.variable_map[0].original, "--brand-primary");
         assert_eq!(result.variable_map[0].mangled, "--g0");
+    }
+
+    #[test]
+    fn rewrites_nested_array_and_ternary_aliases_without_duplicate_metadata() {
+        let source = "const A=({on})=><div sz={[{bg:'--brand-primary'}, on ? {color:'--brand-primary'} : {borderColor:'--brand-secondary'}]}/>;";
+        let ir = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        })
+        .ir;
+
+        let result = apply_global_var_aliases(
+            &ir,
+            &[
+                GlobalVarAliasEntry {
+                    original: "--brand-primary".to_string(),
+                    alias: "--g0".to_string(),
+                },
+                GlobalVarAliasEntry {
+                    original: "--brand-secondary".to_string(),
+                    alias: "--g1".to_string(),
+                },
+            ],
+        );
+        let attribute = &result.ir.sz_attributes[0];
+        let classes = attribute
+            .array_parts
+            .iter()
+            .flat_map(|part| {
+                part.classes
+                    .iter()
+                    .chain(part.ternary.iter().flat_map(|ternary| {
+                        ternary
+                            .consequent_classes
+                            .iter()
+                            .chain(ternary.alternate_classes.iter())
+                    }))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert!(classes
+            .iter()
+            .all(|class_name| !class_name.contains("--brand-")));
+        assert!(classes.iter().any(|class_name| class_name.contains("--g0")));
+        assert!(classes.iter().any(|class_name| class_name.contains("--g1")));
+        assert_eq!(result.variable_map.len(), 2);
+    }
+
+    #[test]
+    fn rewrites_nested_objects_and_property_ternary_classes() {
+        let source = "const A=({on})=><div sz={{hover:{bg:'--brand-primary'},color:on?'--brand-primary':'--brand-secondary'}}/>;";
+        let ir = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        })
+        .ir;
+
+        let result = apply_global_var_aliases(
+            &ir,
+            &[
+                GlobalVarAliasEntry {
+                    original: "--brand-primary".to_string(),
+                    alias: "--g0".to_string(),
+                },
+                GlobalVarAliasEntry {
+                    original: "--brand-secondary".to_string(),
+                    alias: "--g1".to_string(),
+                },
+            ],
+        );
+        let attribute = &result.ir.sz_attributes[0];
+
+        let StaticSzValue::Object(nested) = &attribute.object.properties[0].value else {
+            panic!("hover should remain a nested static object");
+        };
+        assert_eq!(
+            nested.properties[0].value,
+            StaticSzValue::String("--g0".to_string())
+        );
+        assert!(attribute.ternaries.iter().all(|ternary| {
+            ternary
+                .consequent_classes
+                .iter()
+                .chain(&ternary.alternate_classes)
+                .all(|class_name| !class_name.contains("--brand-"))
+        }));
+        assert_eq!(result.variable_map.len(), 2);
+    }
+
+    #[test]
+    fn ignores_invalid_aliases_and_preserves_non_string_static_values() {
+        let mut ir = SourceIr::empty("/repo/src/App.tsx".to_string(), 100);
+        ir.sz_attributes.push(SzAttributeIr {
+            attribute_span: TextSpan { start: 1, end: 10 },
+            value_span: TextSpan { start: 4, end: 9 },
+            object: StaticSzObject {
+                properties: vec![
+                    StaticSzProperty {
+                        key: "p".to_string(),
+                        span: TextSpan { start: 5, end: 6 },
+                        value: StaticSzValue::Number(4.0),
+                    },
+                    StaticSzProperty {
+                        key: "truncate".to_string(),
+                        span: TextSpan { start: 7, end: 8 },
+                        value: StaticSzValue::Boolean(true),
+                    },
+                ],
+            },
+            literal_class_name: None,
+            rewrites_empty_class: false,
+            ternaries: Vec::new(),
+            array_parts: Vec::new(),
+            runtime_fallback: false,
+            runtime_fallback_spread: false,
+            candidate_classes: Vec::new(),
+            dynamic_css_vars: Vec::new(),
+        });
+
+        let result = apply_global_var_aliases(
+            &ir,
+            &[
+                GlobalVarAliasEntry {
+                    original: "brand-primary".to_string(),
+                    alias: "--g0".to_string(),
+                },
+                GlobalVarAliasEntry {
+                    original: "--brand-primary".to_string(),
+                    alias: "g0".to_string(),
+                },
+                GlobalVarAliasEntry {
+                    original: "--unused".to_string(),
+                    alias: "--g9".to_string(),
+                },
+            ],
+        );
+
+        assert_eq!(result.ir, ir);
+        assert!(result.variable_map.is_empty());
     }
 }

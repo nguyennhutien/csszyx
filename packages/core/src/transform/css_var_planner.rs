@@ -176,13 +176,9 @@ pub fn apply_scoped_css_variable_names(ir: &SourceIr) -> SourceIr {
         }
     }
 
-    for entry in plan_css_variable_names(&usages) {
-        let Ok(location_index) = entry.id.parse::<usize>() else {
-            continue;
-        };
-        let Some((attr_index, prop_index)) = locations.get(location_index).copied() else {
-            continue;
-        };
+    for ((attr_index, prop_index), entry) in
+        locations.into_iter().zip(plan_css_variable_names(&usages))
+    {
         if let Some(attribute) = next.sz_attributes.get_mut(attr_index) {
             rename_dynamic_prop(attribute, prop_index, entry.name);
         }
@@ -228,26 +224,26 @@ pub fn apply_css_variable_mangling(
         .iter()
         .enumerate()
         .map(|(index, element)| CssVariableHoistNode {
-            id: index.to_string(),
-            parent_id: element
-                .parent_element_index
-                .map(|parent| parent.to_string()),
+            id: index,
+            parent_id: element.parent_element_index,
             can_host: element.can_host_style,
         })
         .collect::<Vec<_>>();
     let hoist_usages = component_plan
         .iter()
-        .filter_map(|entry| {
-            let location_index = entry.id.parse::<usize>().ok()?;
-            let (element_index, attr_index, prop_index) = *locations.get(location_index)?;
-            let prop = &ir.sz_attributes[attr_index].dynamic_css_vars[prop_index];
-            Some(CssVariableHoistUsage {
-                id: entry.id.clone(),
-                element_id: element_index.to_string(),
-                name: entry.name.clone(),
-                value_key: dynamic_value_key(source, prop),
-            })
-        })
+        .zip(locations.iter().copied())
+        .enumerate()
+        .map(
+            |(location_index, (entry, (element_index, attr_index, prop_index)))| {
+                let prop = &ir.sz_attributes[attr_index].dynamic_css_vars[prop_index];
+                CssVariableHoistUsage {
+                    id: location_index,
+                    element_id: element_index,
+                    name: entry.name.clone(),
+                    value_key: dynamic_value_key(source, prop),
+                }
+            },
+        )
         .collect::<Vec<_>>();
     let hoist_analysis = plan_component_variable_hoists_with_diagnostics(
         &hoist_nodes,
@@ -260,47 +256,27 @@ pub fn apply_css_variable_mangling(
 
     let mut hoisted_location_ids = std::collections::HashSet::new();
     for plan in hoist_plans {
-        let Some(first_usage_id) = plan.usage_ids.first() else {
-            continue;
-        };
-        let Ok(first_location_index) = first_usage_id.parse::<usize>() else {
-            continue;
-        };
-        let Some((_, first_attr_index, first_prop_index)) =
-            locations.get(first_location_index).copied()
-        else {
-            continue;
-        };
+        let first_location_index = plan.usage_ids[0];
+        let (_, first_attr_index, first_prop_index) = locations[first_location_index];
         let mut hoisted_prop =
             next.sz_attributes[first_attr_index].dynamic_css_vars[first_prop_index].clone();
         hoisted_prop.var_name.clone_from(&plan.name);
         hoisted_prop.hoisted = false;
-        if let Some(target) = next.jsx_opening_elements.get_mut(
-            plan.target_element_id
-                .parse::<usize>()
-                .unwrap_or(usize::MAX),
-        ) {
-            target.hoisted_dynamic_css_vars.push(hoisted_prop);
-        }
+        next.jsx_opening_elements[plan.target_element_id]
+            .hoisted_dynamic_css_vars
+            .push(hoisted_prop);
 
-        for usage_id in plan.usage_ids {
-            let Ok(location_index) = usage_id.parse::<usize>() else {
-                continue;
-            };
-            let Some((_, attr_index, prop_index)) = locations.get(location_index).copied() else {
-                continue;
-            };
-            if let Some(attribute) = next.sz_attributes.get_mut(attr_index) {
-                let Some(prop) = attribute.dynamic_css_vars.get(prop_index) else {
-                    continue;
-                };
-                push_variable_map(&mut variable_map, &prop.var_name, &plan.name);
-                rename_dynamic_prop(attribute, prop_index, plan.name.clone());
-                if let Some(prop) = attribute.dynamic_css_vars.get_mut(prop_index) {
-                    prop.hoisted = true;
-                }
-                hoisted_location_ids.insert(location_index);
-            }
+        for location_index in plan.usage_ids {
+            let (_, attr_index, prop_index) = locations[location_index];
+            let attribute = &mut next.sz_attributes[attr_index];
+            push_variable_map(
+                &mut variable_map,
+                &attribute.dynamic_css_vars[prop_index].var_name,
+                &plan.name,
+            );
+            rename_dynamic_prop(attribute, prop_index, plan.name.clone());
+            attribute.dynamic_css_vars[prop_index].hoisted = true;
+            hoisted_location_ids.insert(location_index);
         }
     }
 
@@ -321,20 +297,23 @@ pub fn apply_css_variable_mangling(
             },
         )
         .collect::<Vec<_>>();
-    for entry in plan_css_variable_names_with_options(&scoped_usages, &plan_options) {
-        let Ok(location_index) = entry.id.parse::<usize>() else {
-            continue;
-        };
-        let Some((_, attr_index, prop_index)) = locations.get(location_index).copied() else {
-            continue;
-        };
-        if let Some(attribute) = next.sz_attributes.get_mut(attr_index) {
-            let Some(prop) = attribute.dynamic_css_vars.get(prop_index) else {
-                continue;
-            };
-            push_variable_map(&mut variable_map, &prop.var_name, &entry.name);
-            rename_dynamic_prop(attribute, prop_index, entry.name);
-        }
+    for ((_, attr_index, prop_index), entry) in locations
+        .iter()
+        .enumerate()
+        .filter(|(location_index, _)| !hoisted_location_ids.contains(location_index))
+        .map(|(_, location)| *location)
+        .zip(plan_css_variable_names_with_options(
+            &scoped_usages,
+            &plan_options,
+        ))
+    {
+        let attribute = &mut next.sz_attributes[attr_index];
+        push_variable_map(
+            &mut variable_map,
+            &attribute.dynamic_css_vars[prop_index].var_name,
+            &entry.name,
+        );
+        rename_dynamic_prop(attribute, prop_index, entry.name);
     }
 
     CssVariableMangling {
@@ -349,9 +328,7 @@ pub fn apply_css_variable_mangling(
 }
 
 fn rename_dynamic_prop(attribute: &mut super::SzAttributeIr, prop_index: usize, name: String) {
-    let Some(prop) = attribute.dynamic_css_vars.get_mut(prop_index) else {
-        return;
-    };
+    let prop = &mut attribute.dynamic_css_vars[prop_index];
     let old_class = prop.skip_class.then(|| dynamic_css_var_class(prop));
     prop.var_name = name;
     let new_class = prop.skip_class.then(|| dynamic_css_var_class(prop));
@@ -397,6 +374,10 @@ fn extract_quoted_custom_property_keys(expression: &str) -> Vec<String> {
         let start = index + 1;
         index = start;
         while index < bytes.len() && bytes[index] != quote {
+            if bytes[index] == b'\\' && index + 1 < bytes.len() {
+                index += 2;
+                continue;
+            }
             index += 1;
         }
         if index >= bytes.len() {
@@ -502,9 +483,6 @@ fn has_redundant_outer_parens(expression: &str) -> bool {
                 return false;
             }
         }
-        if depth < 0 {
-            return false;
-        }
     }
     depth == 0
 }
@@ -522,13 +500,15 @@ mod tests {
     use std::collections::HashSet;
 
     use super::{
-        apply_scoped_css_variable_names, normalize_dynamic_expression_key, plan_css_variable_names,
-        plan_css_variable_names_with_options, CssVariablePlanInput, CssVariablePlanOptions,
-        CssVariableTier,
+        apply_css_variable_mangling, apply_scoped_css_variable_names,
+        collect_static_style_custom_property_names, extract_quoted_custom_property_keys,
+        has_redundant_outer_parens, normalize_dynamic_expression_key, plan_css_variable_names,
+        plan_css_variable_names_with_options, push_variable_map, CssVariablePlanInput,
+        CssVariablePlanOptions, CssVariableTier,
     };
     use crate::transform::{
-        DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr, SourceIr, StaticSzObject,
-        SzAttributeIr, TextSpan,
+        parser::parse_source_shell, DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr,
+        SourceIr, StaticSzObject, StyleAttributeIr, SzAttributeIr, TextSpan, TransformFile,
     };
 
     fn usage(id: &str, tier: CssVariableTier, property_key: &str) -> CssVariablePlanInput {
@@ -670,6 +650,131 @@ mod tests {
             planned.sz_attributes[1].dynamic_css_vars[0].var_name,
             "--sz"
         );
+    }
+
+    #[test]
+    fn mangles_every_dynamic_value_category_and_respects_style_reservations() {
+        let source = "const A=({value})=><div style={{'--sz':1, \"--sy\":2}} sz={{w:value,bg:value,rotate:value,duration:value,opacity:value}}/>;";
+        let ir = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        })
+        .ir;
+
+        let result = apply_css_variable_mangling(&ir, source, None);
+        let vars = &result.ir.sz_attributes[0].dynamic_css_vars;
+
+        assert_eq!(vars.len(), 5);
+        assert_eq!(
+            vars.iter().map(|prop| prop.category).collect::<Vec<_>>(),
+            [
+                DynamicCssVarCategory::Spacing,
+                DynamicCssVarCategory::Color,
+                DynamicCssVarCategory::Angle,
+                DynamicCssVarCategory::Duration,
+                DynamicCssVarCategory::Passthrough,
+            ]
+        );
+        assert!(vars
+            .iter()
+            .all(|prop| prop.var_name != "--sz" && prop.var_name != "--sy"));
+        assert_eq!(result.variable_map.len(), 5);
+        assert!(result.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn reports_each_component_hoist_rejection_reason() {
+        let cases = [
+            (
+                "const A=({pad})=><><div sz={{p:pad}}/><span sz={{p:pad}}/></>;",
+                None,
+                "non-host-ancestor",
+            ),
+            (
+                "const A=({pad})=><div sz={{p:pad}}/>; const B=({pad})=><span sz={{p:pad}}/>;",
+                None,
+                "no-lca",
+            ),
+            (
+                "const A=({pad})=><section><div><span sz={{p:pad}}/><b sz={{p:pad}}/></div></section>;",
+                Some(0),
+                "max-depth (maxDepth 0)",
+            ),
+        ];
+
+        for (source, max_depth, marker) in cases {
+            let ir = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            })
+            .ir;
+            let result = apply_css_variable_mangling(&ir, source, max_depth);
+
+            assert_eq!(result.diagnostics.len(), 1, "{marker}");
+            assert!(result.diagnostics[0].contains(marker), "{marker}");
+            assert!(result
+                .ir
+                .sz_attributes
+                .iter()
+                .flat_map(|attribute| &attribute.dynamic_css_vars)
+                .all(|prop| !prop.hoisted));
+        }
+    }
+
+    #[test]
+    fn rewrites_conditional_dynamic_classes_when_scoped_names_change() {
+        let source = "const A=({active,flex})=><div sz={{flex:active?flex:undefined}}/>;";
+        let ir = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        })
+        .ir;
+        let original_class = ir.sz_attributes[0].ternaries[0].consequent_classes[0].clone();
+
+        let result = apply_css_variable_mangling(&ir, source, None);
+        let attribute = &result.ir.sz_attributes[0];
+
+        assert!(original_class.contains("--_sz-flex"));
+        assert!(attribute.ternaries[0].consequent_classes[0].contains("--sz"));
+        assert_eq!(attribute.dynamic_css_vars[0].var_name, "--sz");
+    }
+
+    #[test]
+    fn quoted_custom_property_scanner_and_paren_guard_fail_closed() {
+        assert_eq!(
+            extract_quoted_custom_property_keys(
+                "{'--first': 1, \"--second\" : 2, '--not-a-key', plain: '--value'}"
+            ),
+            ["--first", "--second"]
+        );
+        assert!(extract_quoted_custom_property_keys("{'--unterminated").is_empty());
+        assert_eq!(
+            extract_quoted_custom_property_keys(r"{note: 'it\'s', '--reserved': 1}"),
+            ["--reserved"]
+        );
+        assert!(has_redundant_outer_parens("(`)` + '(x)')"));
+        assert!(has_redundant_outer_parens(r"('it\'s')"));
+        assert!(has_redundant_outer_parens("((value))"));
+        assert!(!has_redundant_outer_parens("(value) + other"));
+        assert!(!has_redundant_outer_parens("(value)(other)"));
+        assert!(!has_redundant_outer_parens("value)"));
+
+        let ir = SourceIr {
+            filename: "style.tsx".to_string(),
+            source_span: TextSpan { start: 0, end: 0 },
+            style_attributes: vec![StyleAttributeIr {
+                attribute_span: TextSpan { start: 0, end: 0 },
+                expression_span: None,
+            }],
+            ..SourceIr::empty("style.tsx".to_string(), 0)
+        };
+        assert!(collect_static_style_custom_property_names(&ir, "").is_empty());
+
+        let mut map = Vec::new();
+        push_variable_map(&mut map, "--same", "--same");
+        push_variable_map(&mut map, "--old", "--new");
+        push_variable_map(&mut map, "--old", "--new");
+        assert_eq!(map.len(), 1);
     }
 
     fn sz_attribute(dynamic_css_vars: Vec<DynamicCssVarIr>) -> SzAttributeIr {

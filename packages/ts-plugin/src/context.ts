@@ -345,18 +345,42 @@ function jsxAttributeAnchor(
     return resolveChain(chain.slice(0, -1));
 }
 
-/** Append a static JSX property name while staying permissive for computed names.
+/** Append one required static property to a JSX ancestry chain.
  * @param tsMod - TypeScript instance injected by the host.
  * @param property - Property crossed by the ancestry walk.
  * @param chain - Mutable inner-to-outer property chain.
+ * @returns Whether the property has a usable static name.
  */
 function appendJsxProperty(
     tsMod: typeof ts,
     property: ts.PropertyAssignment,
     chain: string[],
-): void {
+): boolean {
     const name = propertyName(tsMod, property);
-    if (name !== undefined) chain.push(name);
+    if (name === undefined) return false;
+    chain.push(name);
+    return true;
+}
+
+/** One step of the JSX ancestry walk. */
+type AncestryStep = 'ascend' | 'ascend-nested' | 'invalid' | 'stop';
+
+/** Classify how the ancestry walk crosses one parent node.
+ * @param tsMod - TypeScript instance injected by the host.
+ * @param parent - Parent node the walk is about to cross.
+ * @param chain - Mutable inner-to-outer property chain.
+ * @returns Whether to ascend (marking nesting), reject, or end the walk.
+ */
+function classifyJsxAncestryStep(tsMod: typeof ts, parent: ts.Node, chain: string[]): AncestryStep {
+    if (tsMod.isPropertyAssignment(parent)) {
+        return appendJsxProperty(tsMod, parent, chain) ? 'ascend-nested' : 'invalid';
+    }
+    if (tsMod.isObjectLiteralExpression(parent)) return 'ascend';
+    if (tsMod.isArrayLiteralExpression(parent)) return 'ascend-nested';
+    if (tsMod.isParenthesizedExpression(parent) || tsMod.isConditionalExpression(parent)) {
+        return 'ascend';
+    }
+    return 'stop';
 }
 
 /** Classify JSX sz and slot-level szs ancestry.
@@ -376,27 +400,11 @@ function jsxAnchor(tsMod: typeof ts, object: ts.ObjectLiteralExpression): StyleR
         if (tsMod.isJsxExpression(parent) && tsMod.isJsxAttribute(parent.parent)) {
             return jsxAttributeAnchor(tsMod, parent.parent, chain, nested);
         }
-        if (tsMod.isPropertyAssignment(parent)) {
-            nested = true;
-            // Computed names cannot be validated; stay permissive.
-            appendJsxProperty(tsMod, parent, chain);
-            node = parent;
-            continue;
-        }
-        if (tsMod.isObjectLiteralExpression(parent)) {
-            node = parent;
-            continue;
-        }
-        if (tsMod.isArrayLiteralExpression(parent)) {
-            nested = true;
-            node = parent;
-            continue;
-        }
-        if (tsMod.isParenthesizedExpression(parent) || tsMod.isConditionalExpression(parent)) {
-            node = parent;
-            continue;
-        }
-        break;
+        const step = classifyJsxAncestryStep(tsMod, parent, chain);
+        if (step === 'invalid') return null;
+        if (step === 'stop') break;
+        if (step === 'ascend-nested') nested = true;
+        node = parent;
     }
     return null;
 }

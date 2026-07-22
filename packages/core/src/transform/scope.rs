@@ -282,7 +282,7 @@ fn span_of(expr: &Expression<'_>) -> TextSpan {
 mod tests {
     use oxc_allocator::Allocator;
     use oxc_parser::Parser;
-    use oxc_span::SourceType;
+    use oxc_span::{GetSpan, SourceType};
 
     use super::{DeclaratorScope, VariableDeclarationKind};
 
@@ -406,6 +406,32 @@ mod tests {
     }
 
     #[test]
+    fn resolve_before_respects_nested_block_boundaries() {
+        let source =
+            "const BASE = { p: 1 }; { const BASE = { p: 4 }; consume(BASE); } consume(BASE);";
+        let (scope, source) = build_scope(source);
+        let inner_reference = offset_of(&source, "BASE); }");
+        let outer_reference = u32::try_from(source.rfind("BASE);").expect("outer reference"))
+            .expect("test source offset fits u32");
+
+        let inner = scope
+            .resolve_before("BASE", inner_reference)
+            .expect("inner block binding");
+        let outer = scope
+            .resolve_before("BASE", outer_reference)
+            .expect("program binding");
+
+        assert_eq!(
+            span_text(&source, inner.initializer.start, inner.initializer.end),
+            "{ p: 4 }"
+        );
+        assert_eq!(
+            span_text(&source, outer.initializer.start, outer.initializer.end),
+            "{ p: 1 }"
+        );
+    }
+
+    #[test]
     fn resolve_before_rejects_later_binding() {
         let source = "const App = () => <div sz={BASE} />;\nconst BASE = { p: 4 };";
         let (scope, source) = build_scope(source);
@@ -469,5 +495,43 @@ mod tests {
     fn returns_none_for_unknown_names() {
         let (scope, _) = build_scope("const A = 1;");
         assert!(scope.resolve("missing").is_none());
+    }
+
+    #[test]
+    fn resolves_initializer_nodes_with_position_and_const_guards() {
+        let source =
+            "const BASE = { p: 4 };\nlet mutable = { m: 2 };\nconst App = () => <div sz={BASE} />;";
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
+        assert!(!parsed.panicked, "{:?}", parsed.diagnostics);
+        let scope = DeclaratorScope::from_program(&parsed.program);
+        let reference = offset_of(source, "BASE} />");
+
+        let direct = scope
+            .resolve_initializer("BASE", &parsed.program)
+            .expect("direct initializer");
+        assert_eq!(
+            span_text(source, direct.span().start, direct.span().end),
+            "{ p: 4 }"
+        );
+
+        let positioned = scope
+            .resolve_initializer_before("BASE", reference, &parsed.program)
+            .expect("positioned initializer");
+        assert_eq!(super::span_of(positioned), super::span_of(direct));
+        assert!(scope
+            .resolve_const_initializer_before("BASE", reference, &parsed.program)
+            .is_some());
+        assert!(scope
+            .resolve_const_initializer_before("mutable", reference, &parsed.program)
+            .is_none());
+        assert!(scope
+            .resolve_initializer_before("missing", reference, &parsed.program)
+            .is_none());
+
+        assert_eq!(
+            scope.entries().map(|(name, _)| name).collect::<Vec<_>>(),
+            ["BASE", "mutable", "App"]
+        );
     }
 }

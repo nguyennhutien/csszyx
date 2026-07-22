@@ -8,9 +8,9 @@ const DEFAULT_MAX_DEPTH: usize = 5;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CssVariableHoistNode {
     /// Stable element id.
-    pub id: String,
+    pub id: usize,
     /// Parent element id.
-    pub parent_id: Option<String>,
+    pub parent_id: Option<usize>,
     /// Whether this element can receive hoisted style props.
     pub can_host: bool,
 }
@@ -19,9 +19,9 @@ pub struct CssVariableHoistNode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CssVariableHoistUsage {
     /// Stable usage id returned in a plan.
-    pub id: String,
+    pub id: usize,
     /// Element that currently owns the variable.
-    pub element_id: String,
+    pub element_id: usize,
     /// CSS custom property name.
     pub name: String,
     /// Comparable runtime value identity.
@@ -36,9 +36,9 @@ pub struct CssVariableHoistPlan {
     /// Comparable value identity shared by this group.
     pub value_key: String,
     /// Lowest common ancestor that should receive the variable.
-    pub target_element_id: String,
+    pub target_element_id: usize,
     /// Usages that can remove their local declaration after hoisting.
-    pub usage_ids: Vec<String>,
+    pub usage_ids: Vec<usize>,
 }
 
 /// Stable reason a repeated component-tier group could not be hoisted.
@@ -108,7 +108,7 @@ pub fn plan_component_variable_hoists_with_diagnostics(
 ) -> CssVariableHoistAnalysis {
     let node_by_id = nodes
         .iter()
-        .map(|node| (node.id.as_str(), node))
+        .map(|node| (node.id, node))
         .collect::<HashMap<_, _>>();
     let mut group_index_by_key: HashMap<String, usize> = HashMap::new();
     let mut groups: Vec<Vec<&CssVariableHoistUsage>> = Vec::new();
@@ -131,17 +131,9 @@ pub fn plan_component_variable_hoists_with_diagnostics(
         }
         let element_ids = group
             .iter()
-            .map(|usage| usage.element_id.as_str())
+            .map(|usage| usage.element_id)
             .collect::<Vec<_>>();
-        let Some(target_element_id) = find_lowest_common_ancestor(&element_ids, &node_by_id) else {
-            diagnostics.push(build_hoist_diagnostic(
-                &group,
-                CssVariableHoistSkipReason::NoLca,
-                None,
-            ));
-            continue;
-        };
-        let Some(target) = node_by_id.get(target_element_id) else {
+        let Some(target) = find_lowest_common_ancestor(&element_ids, &node_by_id) else {
             diagnostics.push(build_hoist_diagnostic(
                 &group,
                 CssVariableHoistSkipReason::NoLca,
@@ -158,8 +150,7 @@ pub fn plan_component_variable_hoists_with_diagnostics(
             continue;
         }
         if group.iter().any(|usage| {
-            distance_to_ancestor(&usage.element_id, target_element_id, &node_by_id)
-                > options.max_depth
+            distance_to_ancestor(usage.element_id, target.id, &node_by_id) > options.max_depth
         }) {
             diagnostics.push(build_hoist_diagnostic(
                 &group,
@@ -171,8 +162,8 @@ pub fn plan_component_variable_hoists_with_diagnostics(
         plans.push(CssVariableHoistPlan {
             name: group[0].name.clone(),
             value_key: group[0].value_key.clone(),
-            target_element_id: target_element_id.to_string(),
-            usage_ids: group.iter().map(|usage| usage.id.clone()).collect(),
+            target_element_id: target.id,
+            usage_ids: group.iter().map(|usage| usage.id).collect(),
         });
     }
 
@@ -196,13 +187,13 @@ fn build_hoist_diagnostic(
 }
 
 fn find_lowest_common_ancestor<'a>(
-    element_ids: &[&'a str],
-    node_by_id: &HashMap<&'a str, &'a CssVariableHoistNode>,
-) -> Option<&'a str> {
+    element_ids: &[usize],
+    node_by_id: &'a HashMap<usize, &'a CssVariableHoistNode>,
+) -> Option<&'a CssVariableHoistNode> {
     let (first, rest) = element_ids.split_first()?;
-    let mut current_ancestors = ancestor_chain(first, node_by_id);
+    let mut current_ancestors = ancestor_chain(*first, node_by_id);
     for element_id in rest {
-        let next_ancestors = ancestor_chain(element_id, node_by_id)
+        let next_ancestors = ancestor_chain(*element_id, node_by_id)
             .into_iter()
             .collect::<HashSet<_>>();
         current_ancestors.retain(|id| next_ancestors.contains(id));
@@ -210,29 +201,29 @@ fn find_lowest_common_ancestor<'a>(
             return None;
         }
     }
-    current_ancestors.first().copied()
+    node_by_id.get(current_ancestors.first()?).copied()
 }
 
-fn ancestor_chain<'a>(
-    element_id: &'a str,
-    node_by_id: &HashMap<&'a str, &'a CssVariableHoistNode>,
-) -> Vec<&'a str> {
+fn ancestor_chain(
+    element_id: usize,
+    node_by_id: &HashMap<usize, &CssVariableHoistNode>,
+) -> Vec<usize> {
     let mut chain = Vec::new();
     let mut current = Some(element_id);
     while let Some(id) = current {
-        let Some(node) = node_by_id.get(id) else {
+        let Some(node) = node_by_id.get(&id) else {
             break;
         };
         chain.push(id);
-        current = node.parent_id.as_deref();
+        current = node.parent_id;
     }
     chain
 }
 
 fn distance_to_ancestor(
-    element_id: &str,
-    ancestor_id: &str,
-    node_by_id: &HashMap<&str, &CssVariableHoistNode>,
+    element_id: usize,
+    ancestor_id: usize,
+    node_by_id: &HashMap<usize, &CssVariableHoistNode>,
 ) -> usize {
     let mut distance = 0;
     let mut current = Some(element_id);
@@ -240,10 +231,10 @@ fn distance_to_ancestor(
         if id == ancestor_id {
             return distance;
         }
-        let Some(node) = node_by_id.get(id) else {
+        let Some(node) = node_by_id.get(&id) else {
             break;
         };
-        current = node.parent_id.as_deref();
+        current = node.parent_id;
         distance += 1;
     }
     usize::MAX
@@ -252,23 +243,25 @@ fn distance_to_ancestor(
 #[cfg(test)]
 mod tests {
     use super::{
-        plan_component_variable_hoists, plan_component_variable_hoists_with_diagnostics,
-        CssVariableHoistDiagnostic, CssVariableHoistNode, CssVariableHoistOptions,
-        CssVariableHoistPlan, CssVariableHoistSkipReason, CssVariableHoistUsage,
+        ancestor_chain, distance_to_ancestor, plan_component_variable_hoists,
+        plan_component_variable_hoists_with_diagnostics, CssVariableHoistDiagnostic,
+        CssVariableHoistNode, CssVariableHoistOptions, CssVariableHoistPlan,
+        CssVariableHoistSkipReason, CssVariableHoistUsage,
     };
+    use std::collections::HashMap;
 
     #[test]
     fn hoists_identical_component_tier_vars_to_lowest_common_ancestor() {
         let plan = plan_component_variable_hoists(
             &[
-                node("root", None),
-                node("card", Some("root")),
-                node("title", Some("card")),
-                node("body", Some("card")),
+                node(0, None),
+                node(1, Some(0)),
+                node(2, Some(1)),
+                node(3, Some(1)),
             ],
             &[
-                usage("a", "title", "--cz", "blue-500"),
-                usage("b", "body", "--cz", "blue-500"),
+                usage(0, 2, "--cz", "blue-500"),
+                usage(1, 3, "--cz", "blue-500"),
             ],
             CssVariableHoistOptions::default(),
         );
@@ -278,8 +271,8 @@ mod tests {
             [CssVariableHoistPlan {
                 name: "--cz".to_string(),
                 value_key: "blue-500".to_string(),
-                target_element_id: "card".to_string(),
-                usage_ids: vec!["a".to_string(), "b".to_string()],
+                target_element_id: 1,
+                usage_ids: vec![0, 1],
             }]
         );
     }
@@ -287,14 +280,10 @@ mod tests {
     #[test]
     fn does_not_hoist_different_values() {
         let plan = plan_component_variable_hoists(
+            &[node(0, None), node(1, Some(0)), node(2, Some(0))],
             &[
-                node("root", None),
-                node("a", Some("root")),
-                node("b", Some("root")),
-            ],
-            &[
-                usage("a1", "a", "--cz", "blue-500"),
-                usage("b1", "b", "--cz", "red-500"),
+                usage(0, 1, "--cz", "blue-500"),
+                usage(1, 2, "--cz", "red-500"),
             ],
             CssVariableHoistOptions::default(),
         );
@@ -305,18 +294,18 @@ mod tests {
     #[test]
     fn respects_max_depth_cap() {
         let nodes = [
-            node("root", None),
-            node("a", Some("root")),
-            node("b", Some("a")),
-            node("c", Some("b")),
-            node("d", Some("c")),
-            node("e", Some("d")),
-            node("f", Some("e")),
-            node("sibling", Some("root")),
+            node(0, None),
+            node(1, Some(0)),
+            node(2, Some(1)),
+            node(3, Some(2)),
+            node(4, Some(3)),
+            node(5, Some(4)),
+            node(6, Some(5)),
+            node(7, Some(0)),
         ];
         let usages = [
-            usage("deep", "f", "--cz", "blue-500"),
-            usage("wide", "sibling", "--cz", "blue-500"),
+            usage(0, 6, "--cz", "blue-500"),
+            usage(1, 7, "--cz", "blue-500"),
         ];
 
         assert!(plan_component_variable_hoists(
@@ -348,27 +337,27 @@ mod tests {
             [CssVariableHoistPlan {
                 name: "--cz".to_string(),
                 value_key: "blue-500".to_string(),
-                target_element_id: "root".to_string(),
-                usage_ids: vec!["deep".to_string(), "wide".to_string()],
+                target_element_id: 0,
+                usage_ids: vec![0, 1],
             }]
         );
     }
 
     #[test]
     fn skips_ancestors_that_cannot_host_style_props() {
-        let mut fragment = node("fragment", Some("root"));
+        let mut fragment = node(1, Some(0));
         fragment.can_host = false;
 
         let plan = plan_component_variable_hoists(
             &[
-                node("root", None),
+                node(0, None),
                 fragment.clone(),
-                node("a", Some("fragment")),
-                node("b", Some("fragment")),
+                node(2, Some(1)),
+                node(3, Some(1)),
             ],
             &[
-                usage("a1", "a", "--cz", "blue-500"),
-                usage("b1", "b", "--cz", "blue-500"),
+                usage(0, 2, "--cz", "blue-500"),
+                usage(1, 3, "--cz", "blue-500"),
             ],
             CssVariableHoistOptions::default(),
         );
@@ -376,15 +365,10 @@ mod tests {
         assert!(plan.is_empty());
         assert_eq!(
             plan_component_variable_hoists_with_diagnostics(
+                &[node(0, None), fragment, node(2, Some(1)), node(3, Some(1)),],
                 &[
-                    node("root", None),
-                    fragment,
-                    node("a", Some("fragment")),
-                    node("b", Some("fragment")),
-                ],
-                &[
-                    usage("a1", "a", "--cz", "blue-500"),
-                    usage("b1", "b", "--cz", "blue-500"),
+                    usage(0, 2, "--cz", "blue-500"),
+                    usage(1, 3, "--cz", "blue-500"),
                 ],
                 CssVariableHoistOptions::default(),
             )
@@ -401,10 +385,10 @@ mod tests {
     #[test]
     fn diagnoses_missing_common_ancestor() {
         let analysis = plan_component_variable_hoists_with_diagnostics(
-            &[node("a", None), node("b", None)],
+            &[node(0, None), node(1, None)],
             &[
-                usage("a1", "a", "--cz", "blue-500"),
-                usage("b1", "b", "--cz", "blue-500"),
+                usage(0, 0, "--cz", "blue-500"),
+                usage(1, 1, "--cz", "blue-500"),
             ],
             CssVariableHoistOptions::default(),
         );
@@ -421,18 +405,27 @@ mod tests {
         );
     }
 
-    fn node(id: &str, parent_id: Option<&str>) -> CssVariableHoistNode {
+    #[test]
+    fn unknown_nodes_fail_closed_during_ancestor_walks() {
+        let root = node(0, None);
+        let node_by_id = HashMap::from([(0, &root)]);
+
+        assert!(ancestor_chain(1, &node_by_id).is_empty());
+        assert_eq!(distance_to_ancestor(1, 0, &node_by_id), usize::MAX);
+    }
+
+    fn node(id: usize, parent_id: Option<usize>) -> CssVariableHoistNode {
         CssVariableHoistNode {
-            id: id.to_string(),
-            parent_id: parent_id.map(str::to_string),
+            id,
+            parent_id,
             can_host: true,
         }
     }
 
-    fn usage(id: &str, element_id: &str, name: &str, value_key: &str) -> CssVariableHoistUsage {
+    fn usage(id: usize, element_id: usize, name: &str, value_key: &str) -> CssVariableHoistUsage {
         CssVariableHoistUsage {
-            id: id.to_string(),
-            element_id: element_id.to_string(),
+            id,
+            element_id,
             name: name.to_string(),
             value_key: value_key.to_string(),
         }
