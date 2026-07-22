@@ -23,6 +23,9 @@ export default [
         ignores: [
             '**/node_modules/**',
             '**/.pnpm-store/**',
+            // Private AI-docs tree (gitignored): may hold third-party source
+            // samples that are not part of any tsconfig project.
+            '.agent/**',
             '**/dist/**',
             '**/build/**',
             '**/.next/**',
