@@ -10,7 +10,7 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { vitePlugin } from '../src/unplugin.js';
+import { unplugin as rawInstance, vitePlugin } from '../src/unplugin.js';
 import {
     CHECKSUM_PLACEHOLDER,
     createMangleRuntimeModule,
@@ -170,5 +170,43 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
         // processing, after the mangle passes.
         expect(loaded).toContain(MANGLE_MAP_PLACEHOLDER);
         expect(loaded).toContain(CHECKSUM_PLACEHOLDER);
+    });
+
+    it('a development-mode webpack build never receives the module', async () => {
+        // Webpack dev serves unmangled CSS, and no HTML lane runs there — the
+        // map used to simply never arrive. Delivering it through the bundle
+        // would have the runtime encode classes to tokens no dev rule matches,
+        // so the webpack hook must force mangling off in development mode
+        // (the same guard `vite serve` already has).
+        const plugin = rawInstance.raw({}, { framework: 'webpack' }) as unknown as {
+            vite: { configResolved: (config: unknown) => void };
+            webpack: (compiler: unknown) => void;
+            transform: (this: unknown, code: string, id: string) => Promise<unknown> | unknown;
+        };
+        const root = resolve(homedir(), '.cache/csszyx-tests/mangle-runtime-webpack-dev');
+        const ctx = { warn() {}, error() {} };
+        plugin.vite.configResolved({ root, command: 'build' });
+
+        // Production-mode webpack keeps the injection on…
+        const prodOut = (await plugin.transform.call(
+            ctx,
+            RUNTIME_CONSUMER,
+            `${root}/src/a.ts`,
+        )) as { code?: string } | null;
+        expect(prodOut?.code).toContain(MANGLE_RUNTIME_VIRTUAL_ID);
+
+        // …and a development-mode compiler turns it off.
+        plugin.webpack({
+            options: { mode: 'development' },
+            context: root,
+            hooks: {
+                beforeCompile: { tap: () => undefined },
+                thisCompilation: { tap: () => undefined },
+            },
+        });
+        const devOut = (await plugin.transform.call(ctx, RUNTIME_CONSUMER, `${root}/src/a.ts`)) as {
+            code?: string;
+        } | null;
+        expect(devOut?.code ?? RUNTIME_CONSUMER).not.toContain(MANGLE_RUNTIME_VIRTUAL_ID);
     });
 });
