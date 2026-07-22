@@ -362,6 +362,27 @@ function appendJsxProperty(
     return true;
 }
 
+/** One step of the JSX ancestry walk. */
+type AncestryStep = 'ascend' | 'ascend-nested' | 'invalid' | 'stop';
+
+/** Classify how the ancestry walk crosses one parent node.
+ * @param tsMod - TypeScript instance injected by the host.
+ * @param parent - Parent node the walk is about to cross.
+ * @param chain - Mutable inner-to-outer property chain.
+ * @returns Whether to ascend (marking nesting), reject, or end the walk.
+ */
+function classifyJsxAncestryStep(tsMod: typeof ts, parent: ts.Node, chain: string[]): AncestryStep {
+    if (tsMod.isPropertyAssignment(parent)) {
+        return appendJsxProperty(tsMod, parent, chain) ? 'ascend-nested' : 'invalid';
+    }
+    if (tsMod.isObjectLiteralExpression(parent)) return 'ascend';
+    if (tsMod.isArrayLiteralExpression(parent)) return 'ascend-nested';
+    if (tsMod.isParenthesizedExpression(parent) || tsMod.isConditionalExpression(parent)) {
+        return 'ascend';
+    }
+    return 'stop';
+}
+
 /** Classify JSX sz and slot-level szs ancestry.
  * @param tsMod - TypeScript instance injected by the host.
  * @param object - Candidate object literal.
@@ -379,26 +400,11 @@ function jsxAnchor(tsMod: typeof ts, object: ts.ObjectLiteralExpression): StyleR
         if (tsMod.isJsxExpression(parent) && tsMod.isJsxAttribute(parent.parent)) {
             return jsxAttributeAnchor(tsMod, parent.parent, chain, nested);
         }
-        if (tsMod.isPropertyAssignment(parent)) {
-            nested = true;
-            if (!appendJsxProperty(tsMod, parent, chain)) return null;
-            node = parent;
-            continue;
-        }
-        if (tsMod.isObjectLiteralExpression(parent)) {
-            node = parent;
-            continue;
-        }
-        if (tsMod.isArrayLiteralExpression(parent)) {
-            nested = true;
-            node = parent;
-            continue;
-        }
-        if (tsMod.isParenthesizedExpression(parent) || tsMod.isConditionalExpression(parent)) {
-            node = parent;
-            continue;
-        }
-        break;
+        const step = classifyJsxAncestryStep(tsMod, parent, chain);
+        if (step === 'invalid') return null;
+        if (step === 'stop') break;
+        if (step === 'ascend-nested') nested = true;
+        node = parent;
     }
     return null;
 }
