@@ -6,8 +6,11 @@
  * contract: install only when absent, mirror the HTML script's object shape,
  * and stay inert without a `window`.
  */
+import { homedir } from 'node:os';
+import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
+import { vitePlugin } from '../src/unplugin.js';
 import {
     CHECKSUM_PLACEHOLDER,
     createMangleRuntimeModule,
@@ -100,5 +103,72 @@ describe('createMangleRuntimeModule', () => {
         expect(resolveVirtualModule(MANGLE_RUNTIME_VIRTUAL_ID)).toBe(
             RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID,
         );
+    });
+});
+
+describe('mangle-runtime import injection (plugin hooks)', () => {
+    /**
+     * Drive the pre-plugin's hooks directly, mirroring the other hook-level
+     * suites.
+     *
+     * @returns Hook caller bound to a fresh plugin instance.
+     */
+    function pluginHarness() {
+        const plugins = vitePlugin({ production: { mangle: true } });
+        const ctx = { warn() {}, error() {}, emitFile() {}, addWatchFile() {} };
+        const call = async (hookName: string, ...args: unknown[]): Promise<unknown> => {
+            const plugin = plugins.find(p => p && hookName in (p as Record<string, unknown>));
+            if (!plugin) return undefined;
+            const hook = (plugin as Record<string, unknown>)[hookName];
+            const fn = (
+                typeof hook === 'function' ? hook : (hook as { handler?: unknown })?.handler
+            ) as ((...a: unknown[]) => unknown) | undefined;
+            return fn ? await fn.apply(ctx, args) : undefined;
+        };
+        const root = resolve(homedir(), '.cache/csszyx-tests/mangle-runtime-inject');
+        return { call, root };
+    }
+
+    const RUNTIME_CONSUMER = `import { szr } from '@csszyx/runtime';\nexport const c = szr({ p: 4 });\n`;
+
+    it('injects exactly once, and never twice on an already-injected module', async () => {
+        const { call, root } = pluginHarness();
+        await call('configResolved', { root, command: 'build' });
+
+        const first = (await call('transform', RUNTIME_CONSUMER, `${root}/src/a.ts`)) as {
+            code?: string;
+        } | null;
+        const occurrences = (code: string): number =>
+            code.split(MANGLE_RUNTIME_VIRTUAL_ID).length - 1;
+        expect(first?.code, 'consumer must receive the import').toBeDefined();
+        expect(occurrences(first?.code ?? '')).toBe(1);
+
+        // Feed the already-injected output back through: idempotent.
+        const second = (await call('transform', first?.code ?? '', `${root}/src/a.ts`)) as {
+            code?: string;
+        } | null;
+        expect(occurrences(second?.code ?? first?.code ?? '')).toBe(1);
+    });
+
+    it('does not inject in a dev server (mangling forced off)', async () => {
+        const { call, root } = pluginHarness();
+        await call('configResolved', { root, command: 'serve' });
+
+        const out = (await call('transform', RUNTIME_CONSUMER, `${root}/src/a.ts`)) as {
+            code?: string;
+        } | null;
+        expect(out?.code ?? RUNTIME_CONSUMER).not.toContain(MANGLE_RUNTIME_VIRTUAL_ID);
+    });
+
+    it('serves the placeholder module through the load hook', async () => {
+        const { call, root } = pluginHarness();
+        await call('configResolved', { root, command: 'build' });
+
+        const loaded = (await call('load', RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID)) as string;
+        expect(loaded).toContain('window.__csszyx');
+        // Placeholders, not live values: substitution happens at output
+        // processing, after the mangle passes.
+        expect(loaded).toContain(MANGLE_MAP_PLACEHOLDER);
+        expect(loaded).toContain(CHECKSUM_PLACEHOLDER);
     });
 });
