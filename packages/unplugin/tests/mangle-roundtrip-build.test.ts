@@ -33,6 +33,7 @@ import { compile } from '@tailwindcss/node';
 import { build, type Plugin } from 'vite';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { loadNativeBinding } from '../../core/native/index.js';
+import { escapeJsonForInlineScript } from '../src/inline-script-escape.js';
 import { vitePlugin } from '../src/unplugin.js';
 
 const FIXTURE_FILES: Record<string, string> = {
@@ -41,9 +42,17 @@ const FIXTURE_FILES: Record<string, string> = {
 `,
     'src/main.ts': `
 import './styles.css';
+import { szr } from '@csszyx/runtime';
 import { App } from './App.tsx';
 // Side effect so the component (and its class strings) survive tree-shaking.
 document.body.textContent = JSON.stringify(App({ wide: false }));
+// Runtime helper consumer: the build must deliver the mangle map to this
+// module through the bundle itself, not only through the HTML document.
+document.body.dataset.cls = szr({ mx: 0 });
+// A user eval CALL in the bundle must not trip the webpack-eval-devtool
+// escaping heuristic: the bundled map sits in identifier position, and
+// double-escaping it there is a syntax error in the emitted chunk.
+export const dyn = () => eval('0');
 `,
     // `p-4` is deliberately shared by sz and a mixed raw clsx string. It must
     // stay readable while sz-only utilities still take the optimized path.
@@ -214,11 +223,16 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
     });
 
     it('owned classes are mangled out of the JS bundle, tokens are in', () => {
+        // The self-installed runtime map legitimately carries every original
+        // name as a key; remove that one literal before asserting no other
+        // un-mangled occurrence survives in code.
+        const mapLiteral = escapeJsonForInlineScript(JSON.stringify(rust.map));
+        const jsSansMap = rust.js.split(mapLiteral).join('__BUNDLED_MAP__');
         for (const cls of OWNED_CLASSES) {
             const token = rust.map[cls];
             expect(token).toBeTruthy();
-            expect(rust.js, `${cls} must not ship un-mangled`).not.toContain(`"${cls}"`);
-            expect(rust.js, `token for ${cls} must be referenced`).toContain(token as string);
+            expect(jsSansMap, `${cls} must not ship un-mangled`).not.toContain(`"${cls}"`);
+            expect(jsSansMap, `token for ${cls} must be referenced`).toContain(token as string);
         }
     });
 
@@ -232,6 +246,24 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
         expect(rust.js, 'non-owned app class string must survive').toContain('dems-panel');
         expect(rust.css, 'shared selector must survive').toContain('.p-4');
         expect(rust.js, 'mixed clsx token must survive').toContain('p-4 dems-panel');
+    });
+
+    it('the bundle self-installs the runtime mangle map for pages without the HTML script', () => {
+        // Field-reported: an embedded build served by a host shell never loads
+        // the transformed index.html, so the inline map script is absent and
+        // runtime-resolved classes reach the DOM unmangled while the CSS ships
+        // mangled. The bundle itself must therefore carry the installer.
+        expect(rust.js, 'self-installer must be bundled').toMatch(/window\.__csszyx\s*=/);
+        expect(rust.js, 'installer must never clobber the HTML script').toMatch(
+            /typeof window\s*!==\s*["']undefined["']\s*&&\s*!window\.__csszyx/,
+        );
+        // The bundled map must be the FINAL map — the same literal the HTML
+        // script carries — substituted after the mangle passes, so its keys
+        // are original class names, not re-mangled tokens.
+        const mapLiteral = escapeJsonForInlineScript(JSON.stringify(rust.map));
+        expect(rust.js, 'bundled map must be the final HTML map').toContain(mapLiteral);
+        expect(rust.js, 'placeholders must be substituted').not.toContain('___CSSZYX_');
+        expect(oxc.js, 'installer must be parser-independent').toMatch(/window\.__csszyx\s*=/);
     });
 
     it('szcn dedupes mangled tokens through the decode bridge built from the map', () => {

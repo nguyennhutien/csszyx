@@ -173,10 +173,13 @@ describe('vite generateBundle mangle pass', () => {
             path.join(h.root, 'src/App.tsx'),
         );
 
+        // Realistic webpack eval-devtool shape: the wrapper always stamps a
+        // `//# sourceURL=webpack…` pragma inside the eval string. That pragma
+        // is what identifies the wrapping — see the raw-eval test below.
         const jsChunk = {
             type: 'chunk',
             fileName: 'app.js',
-            code: 'eval("var m=___CSSZYX_MANGLE_MAP___;var vm=___CSSZYX_VAR_MANGLE_MAP___;var c=___CSSZYX_CHECKSUM___;")',
+            code: 'eval("var m=___CSSZYX_MANGLE_MAP___;var vm=___CSSZYX_VAR_MANGLE_MAP___;var c=___CSSZYX_CHECKSUM___;\\n//# sourceURL=webpack://app/./src/App.tsx")',
         };
         await h.generateBundle({ 'app.js': jsChunk });
 
@@ -185,5 +188,34 @@ describe('vite generateBundle mangle pass', () => {
         // The eval branch escapes the JSON quotes for the outer double-quoted string.
         expect(jsChunk.code).toContain('eval(');
         expect(jsChunk.code).toContain('\\"');
+    });
+
+    it('keeps the map raw in a production chunk that merely CALLS eval', async () => {
+        const h = await boot({
+            production: { mangle: false },
+            build: { parser: 'oxc', cache: false },
+        });
+        await h.transform(
+            'export const App = () => <div sz={{ m: 3 }} />;',
+            path.join(h.root, 'src/App.tsx'),
+        );
+
+        // A user eval CALL in the same chunk as the bundled mangle-runtime
+        // module, whose map sits in identifier position (`const m = {…}`).
+        // Double-escaping here would emit `const m = {\"…\"}` — a syntax
+        // error that breaks the whole chunk at load.
+        const jsChunk = {
+            type: 'chunk',
+            fileName: 'app.js',
+            code: 'const dyn = () => eval("1");\nconst m = ___CSSZYX_MANGLE_MAP___;\nconst vm = ___CSSZYX_VAR_MANGLE_MAP___;\n',
+        };
+        await h.generateBundle({ 'app.js': jsChunk });
+
+        expect(jsChunk.code).not.toContain('___CSSZYX_MANGLE_MAP___');
+        expect(jsChunk.code).not.toContain('\\"');
+        // The inserted map must be directly parseable JS — extract and parse it.
+        const inserted = jsChunk.code.match(/const m = (\{[^;]*\});/)?.[1];
+        expect(inserted).toBeDefined();
+        expect(() => JSON.parse(inserted as string)).not.toThrow();
     });
 });

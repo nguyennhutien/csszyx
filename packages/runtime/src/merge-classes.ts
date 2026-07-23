@@ -61,9 +61,35 @@ const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
  * @param token - A class token, possibly mangled.
  * @returns The original class name.
  */
-function decodeToken(token: string): string {
-    const decode = (globalThis as { __csszyx?: { decode?: (c: string) => string | undefined } })
-        .__csszyx?.decode;
+/** The runtime mangle bridge an inline script or the bundled module installs. */
+interface MangleBridge {
+    decode?: (c: string) => string | undefined;
+    mangleMap?: Record<string, string>;
+}
+
+/**
+ * Read the installed runtime bridge ONCE per merge. `_szcn` runs unmemoized
+ * per element in list renders, so per-token global reads are the hot cost
+ * here — every token needs both the decode bridge (conflict classification)
+ * and the encode map (output form), and one read serves both.
+ *
+ * @returns The installed bridge object, or undefined.
+ */
+function mangleBridge(): MangleBridge | undefined {
+    return (globalThis as { __csszyx?: MangleBridge }).__csszyx;
+}
+
+/**
+ * Resolve a token to its original (un-mangled) name using the runtime reverse
+ * mangle map when present. No map (dev / unmangled build) → token is already
+ * original.
+ *
+ * @param token - A class token, possibly mangled.
+ * @param bridge - The runtime bridge read once by the caller.
+ * @returns The original class name.
+ */
+function decodeToken(token: string, bridge: MangleBridge | undefined): string {
+    const decode = bridge?.decode;
     if (typeof decode === 'function') {
         // The decode map is external (an inline script sets it). A buggy or
         // mid-update map that throws, or returns a non-string, must NEVER break
@@ -78,6 +104,43 @@ function decodeToken(token: string): string {
         }
     }
     return token;
+}
+
+/**
+ * Encode one token through the runtime mangle map when present.
+ *
+ * A string that is a map KEY is always an original class name — the build
+ * reserves every census name from the token allocator, so a mangled token can
+ * never collide with a key — which makes this a single unambiguous, idempotent
+ * lookup: originals of mangled classes encode to their token; already-mangled
+ * tokens, authored classes, and external names pass through unchanged.
+ *
+ * This is what heals a class RESOLVED AT RUNTIME as a plain string (a
+ * component mapping a prop to a class name and merging it at its leaf): the
+ * CSS ships mangled, so the string must reach the DOM mangled too.
+ *
+ * The `typeof` guard is not decorative: a plain-object map inherits
+ * `Object.prototype`, so a hostile or unlucky token (`constructor`,
+ * `hasOwnProperty`) resolves to a function up the prototype chain and must
+ * pass through as itself, never be stringified into the output.
+ *
+ * @param token - A class token, possibly an original censused name.
+ * @param bridge - The runtime bridge read once by the caller.
+ * @returns The mangled token when the map covers it, otherwise the token.
+ */
+function encodeToken(token: string, bridge: MangleBridge | undefined): string {
+    const map = bridge?.mangleMap;
+    if (!map) {
+        return token;
+    }
+    // Same fail-safe stance as decodeToken: an exotic host object must never
+    // break the merge.
+    try {
+        const encoded = map[token];
+        return typeof encoded === 'string' ? encoded : token;
+    } catch {
+        return token;
+    }
 }
 
 /**
@@ -250,15 +313,17 @@ export function szcn(...inputs: ClassInput[]): string {
         }
     }
     const generation = getSzcnGroupsGeneration();
-    // Compare the decode FUNCTION IDENTITY, not mere presence: a swapped bridge
+    // Compare the runtime OBJECT IDENTITY, not mere presence: a swapped bridge
     // (tests, or an exotic host replacing the inline script's object) must not
-    // serve merges memoized under the previous map. In production the identity
-    // is stable for the page lifetime, so this never clears.
-    const decodeRef = (globalThis as { __csszyx?: { decode?: unknown } }).__csszyx?.decode;
-    if (generation !== memoGroupsGeneration || decodeRef !== memoDecodeRef) {
+    // serve merges memoized under the previous map. The object carries both
+    // the decode bridge and the encode map, so one identity check covers both
+    // lookups. In production it is installed once for the page lifetime, so
+    // this never clears.
+    const runtimeRef = mangleBridge();
+    if (generation !== memoGroupsGeneration || runtimeRef !== memoDecodeRef) {
         memo.clear();
         memoGroupsGeneration = generation;
-        memoDecodeRef = decodeRef;
+        memoDecodeRef = runtimeRef;
     }
     const cached = memo.get(key);
     if (cached !== undefined) {
@@ -307,13 +372,14 @@ export function _szcn(...inputs: ClassInput[]): string {
 function mergeUncached(inputs: readonly ClassInput[]): string {
     const order: string[] = [];
     const byKey = new Map<string, string>();
+    const bridge = mangleBridge();
 
     for (const input of inputs) {
         if (!input || typeof input !== 'string') {
             continue;
         }
         for (const token of input.split(/\s+/)) {
-            if (token) mergeClassToken(token, order, byKey);
+            if (token) mergeClassToken(token, order, byKey, bridge);
         }
     }
 
@@ -325,9 +391,15 @@ function mergeUncached(inputs: readonly ClassInput[]): string {
  * @param token - Encoded class token.
  * @param order - Ordered survivor keys.
  * @param byKey - Survivor token lookup.
+ * @param bridge - The runtime bridge read once per merge.
  */
-function mergeClassToken(token: string, order: string[], byKey: Map<string, string>): void {
-    const original = decodeToken(token);
+function mergeClassToken(
+    token: string,
+    order: string[],
+    byKey: Map<string, string>,
+    bridge: MangleBridge | undefined,
+): void {
+    const original = decodeToken(token, bridge);
     const info = mergeClassify(original);
     const key = info ? info.key : original;
     for (const covered of info ? info.covers : [key]) {
@@ -335,6 +407,24 @@ function mergeClassToken(token: string, order: string[], byKey: Map<string, stri
         const index = order.indexOf(covered);
         if (index !== -1) order.splice(index, 1);
     }
-    byKey.set(key, token);
+    byKey.set(key, encodeToken(token, bridge));
     order.push(key);
+}
+
+/**
+ * Resolve a class token to its original (un-mangled) name.
+ *
+ * For class introspection on production-mangled builds: code that inspects a
+ * `className` for a utility by its original spelling (e.g. "does this element
+ * carry a `w-*` width?") receives mangled tokens there, so decode each token
+ * before matching. Identity on unmangled builds, in dev, and for any token the
+ * map does not cover — safe to call unconditionally.
+ *
+ * @param token - A single class token, possibly mangled.
+ * @returns The original class name, or the token itself when not mangled.
+ * @example
+ * className.split(/\s+/).some(t => szDecode(t).startsWith('w-'))
+ */
+export function szDecode(token: string): string {
+    return decodeToken(token, mangleBridge());
 }

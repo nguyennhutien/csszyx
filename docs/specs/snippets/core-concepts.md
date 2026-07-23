@@ -450,6 +450,18 @@ value-classified into property groups: same property → later wins
 is scanned (`build.scanCss`); classes written in plain CSS register via
 `registerSzcnGroups({ colors: [...], textSizes: [...] })` from `@csszyx/runtime`.
 
+On a production-mangled build, `szcn` also ENCODES its output: a class name a
+component resolves at runtime as a plain string (a prop mapped to `'flex-col'`,
+a template like `` `gap-${n}` ``) leaves the merge in mangled form, matching
+the mangled CSS. The lookup is single-pass and idempotent — already-mangled
+tokens, authored literals, and external (non-csszyx) class names pass through
+unchanged — and it is an identity in dev or on unmangled builds. Code that
+INSPECTS a className for a utility by its original spelling must decode first:
+`szDecode(token)` (from `@csszyx/runtime`) maps a mangled token back to its
+original name and is identity everywhere else, so
+`className.split(/\s+/).some(t => szDecode(t).startsWith('w-'))` is safe on
+every build shape.
+
 ## `szs` — slot map for a component's internal parts
 
 For parts a component renders ITSELF (no consumer content), `szs` maps slot names

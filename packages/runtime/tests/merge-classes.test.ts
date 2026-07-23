@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { _szMerge } from '../src/concatenate.js';
-import { _szcn, szcn } from '../src/merge-classes.js';
+import { _szcn, szcn, szDecode } from '../src/merge-classes.js';
 
 // szcn is the single resolution point for a layered design-system
 // component (Box < Flex < Row/Col): combine default classes with the forwarded
@@ -204,6 +204,121 @@ describe('szcn — mangle-aware (the reason this exists)', () => {
     it('falls back to the token itself when no decode map is present', () => {
         // production-without-map / dev: tokens are already original names
         expect(szcn('gap-2', 'gap-8')).toBe('gap-8');
+    });
+});
+
+describe('szcn — runtime encode (runtime-resolved strings on a mangled build)', () => {
+    afterEach(() => {
+        (globalThis as { __csszyx?: unknown }).__csszyx = undefined;
+    });
+
+    const withRuntime = (map: Record<string, string>) => {
+        const reverse = new Map(Object.entries(map).map(([orig, tok]) => [tok, orig]));
+        (globalThis as { __csszyx?: unknown }).__csszyx = {
+            mangleMap: map,
+            decode: (c: string) => reverse.get(c),
+        };
+    };
+
+    it('encodes a runtime-resolved original name to its mangled token', () => {
+        // Field-reported: a component resolving a prop to 'flex-col' at
+        // runtime shipped the ORIGINAL name to the DOM while the CSS only
+        // contained the mangled selector, silently dropping the style.
+        withRuntime({ 'flex-col': 'm7', 'gap-2': 'q3' });
+        expect(szcn('flex-col')).toBe('m7');
+        expect(szcn('flex-col gap-2')).toBe('m7 q3');
+    });
+
+    it('passes already-mangled tokens through unchanged (idempotent)', () => {
+        withRuntime({ 'gap-2': 'q3', 'gap-8': 'q7' });
+        expect(szcn('q3', 'q7')).toBe('q7');
+        expect(szcn(szcn('gap-2'))).toBe('q3');
+    });
+
+    it('merges a raw original against a mangled token of the same utility', () => {
+        // A compiled (mangled) default and a runtime-resolved raw override
+        // must recognize each other as the same utility AND both come out
+        // encoded.
+        withRuntime({ 'gap-2': 'q3', 'gap-8': 'q7' });
+        expect(szcn('q3', 'gap-8')).toBe('q7');
+        expect(szcn('gap-8', 'q3')).toBe('q3');
+    });
+
+    it('leaves authored and external names alone (not map keys)', () => {
+        withRuntime({ 'gap-2': 'q3' });
+        expect(szcn('dems-panel scrollbar-container', 'gap-2')).toBe(
+            'dems-panel scrollbar-container q3',
+        );
+    });
+
+    it('does not serve stale merges after the runtime object is installed', () => {
+        // First call memoizes without a map; installing the map must
+        // invalidate that entry, not replay it.
+        expect(szcn('flex-col')).toBe('flex-col');
+        withRuntime({ 'flex-col': 'm7' });
+        expect(szcn('flex-col')).toBe('m7');
+    });
+
+    it('passes prototype-chain tokens through instead of stringifying them', () => {
+        // A plain-object map inherits Object.prototype: map['constructor'] is
+        // a function, map['__proto__'] an object. Neither may leak into the
+        // output as "[object …]"/"function …" — the non-string guard keeps
+        // the token itself.
+        withRuntime({ 'gap-2': 'q3' });
+        expect(szcn('constructor')).toBe('constructor');
+        expect(szcn('__proto__ gap-2')).toBe('__proto__ q3');
+        expect(szcn('hasOwnProperty')).toBe('hasOwnProperty');
+    });
+
+    it('falls back to raw tokens when the encode map THROWS on access', () => {
+        // Same resilience contract as decode: an exotic host Proxy must never
+        // crash the leaf merge of every layered component.
+        (globalThis as { __csszyx?: unknown }).__csszyx = {
+            mangleMap: new Proxy(
+                {},
+                {
+                    get() {
+                        throw new Error('boom');
+                    },
+                },
+            ),
+        };
+        expect(szcn('gap-2', 'gap-8')).toBe('gap-8');
+        expect(_szcn('flex-col')).toBe('flex-col');
+    });
+
+    it('encodes through the unmemoized generated-code lane too', () => {
+        // Compiled sz={[...]} arrays route through _szcn (no memo); the encode
+        // path must be identical to the authored szcn lane.
+        withRuntime({ 'flex-col': 'm7', 'gap-2': 'q3', 'gap-8': 'q7' });
+        expect(_szcn('flex-col')).toBe('m7');
+        expect(_szcn('q3', 'gap-8')).toBe('q7');
+    });
+});
+
+describe('szDecode — public token introspection', () => {
+    afterEach(() => {
+        (globalThis as { __csszyx?: unknown }).__csszyx = undefined;
+    });
+
+    it('decodes a mangled token to its original name', () => {
+        (globalThis as { __csszyx?: unknown }).__csszyx = {
+            decode: (c: string) => ({ m7: 'flex-col' })[c],
+        };
+        expect(szDecode('m7')).toBe('flex-col');
+        // The introspection shape from the docs: match a utility by original
+        // spelling inside a mangled className.
+        expect('m7 other'.split(/\s+/).some(t => szDecode(t).startsWith('flex-'))).toBe(true);
+    });
+
+    it('is identity without a map, for unknown tokens, and on a broken bridge', () => {
+        expect(szDecode('w-4')).toBe('w-4');
+        (globalThis as { __csszyx?: unknown }).__csszyx = {
+            decode: () => {
+                throw new Error('boom');
+            },
+        };
+        expect(szDecode('w-4')).toBe('w-4');
     });
 });
 

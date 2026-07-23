@@ -970,9 +970,20 @@ In production, class names are mangled for maximum compression:
 
 Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injected automatically.
 
+If an `sz`-generated utility also appears as a static string or template quasi in a
+source-level `class` or `className` attribute/property (including a `clsx(...)`
+expression), csszyx keeps that class unmangled. This ensures raw and `sz` consumers
+continue to reference the same emitted rule. Use `mangleExclude` when the class is
+only visible through an imported constant, DOM selector/class API, ignored
+dependency, downstream macro, or another value unavailable to the source scan.
+
+Final-output class mangling is available in Vite, Webpack, and Rollup. The esbuild
+adapter keeps class names readable (and warns when `production.mangle: true` is
+explicit) because normal esbuild write-to-disk builds do not expose mutable final
+assets; source transforms and safelist generation still run.
+
 Set `production: { mangle: false }` to keep readable class names — the supported way to
-inspect the emitted CSS, and recommended for hybrid apps that also ship non-csszyx
-stylesheets keyed on the original class names. To check what a single `sz` object
+inspect the emitted CSS. To check what a single `sz` object
 compiles to without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
 
 ### AST budget guard

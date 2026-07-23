@@ -81,15 +81,21 @@ import {
     writeTransformCache,
 } from './transform-cache.js';
 import {
+    CHECKSUM_PLACEHOLDER,
     createChecksumModule,
     createMangleMapModule,
+    createMangleRuntimeModule,
     createThemeGroupsModule,
     isVirtualModule,
+    MANGLE_MAP_PLACEHOLDER,
+    MANGLE_RUNTIME_VIRTUAL_ID,
+    RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID,
     RESOLVED_THEME_GROUPS_VIRTUAL_ID,
     RESOLVED_VIRTUAL_CHECKSUM_ID,
     RESOLVED_VIRTUAL_MODULE_ID,
     resolveVirtualModule,
     THEME_GROUPS_VIRTUAL_ID,
+    VAR_MANGLE_MAP_PLACEHOLDER,
 } from './virtual-modules.js';
 
 /**
@@ -255,13 +261,9 @@ interface RustPrescanMiss {
     cacheKey: TransformCacheKey | null;
 }
 
-/**
- * Placeholders injected during transform, replaced in processAssets/generateBundle
- * with actual values once the complete mangle map is available.
- */
-const CHECKSUM_PLACEHOLDER = '___CSSZYX_CHECKSUM___';
-const MANGLE_MAP_PLACEHOLDER = '___CSSZYX_MANGLE_MAP___';
-const VAR_MANGLE_MAP_PLACEHOLDER = '___CSSZYX_VAR_MANGLE_MAP___';
+// Mangle placeholders (injected during transform, replaced in
+// processAssets/generateBundle) live in virtual-modules.ts so the
+// mangle-runtime virtual module can embed the same markers.
 const UNKNOWN_PACKAGE_VERSION = '0.0.0';
 const TRANSFORM_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const TRANSFORM_CACHE_MAX_ENTRIES = 10_000;
@@ -893,6 +895,79 @@ export function mangleEligibleClasses(
     authoredClasses: ReadonlySet<string>,
 ): string[] {
     return sortStrings([...ownedClasses].filter(className => !authoredClasses.has(className)));
+}
+
+/**
+ * Allocate a short token per eligible class, skipping forbidden names.
+ *
+ * The forbidden set carries `mangleExclude`, every authored class, AND every
+ * owned class name. Reserving the owned names keeps the map's key space and
+ * token space disjoint, which is what lets a runtime consumer resolve a token
+ * with one map lookup: a string that is a map key is always an original class,
+ * never a token some other class was mangled to.
+ *
+ * @param eligibleClasses Classes to mangle, in stable sorted order.
+ * @param forbiddenTokens Names the allocator must never emit as a token.
+ * @returns The class → token map.
+ */
+/**
+ * Token strings by encoder index. `encode` is a pure deterministic Base62
+ * encoder behind the WASM boundary, and the boundary is ~95% of its cost
+ * (~223ns/call measured vs ~ns of native work). The map finalizes several
+ * times per build (buildEnd, each HTML page, output processing), re-encoding
+ * the same indices each time — cache once, forever valid.
+ */
+const tokenByIndex: string[] = [];
+
+/**
+ * Deterministic token for one encoder index, crossing the WASM boundary at
+ * most once per index per process.
+ *
+ * @param index Encoder sequence index.
+ * @returns The Base62 token.
+ */
+function tokenAt(index: number): string {
+    const cached = tokenByIndex[index];
+    if (cached !== undefined) {
+        return cached;
+    }
+    const fresh = encode(index);
+    tokenByIndex[index] = fresh;
+    return fresh;
+}
+
+/**
+ * Allocate a short token per eligible class, skipping forbidden names.
+ *
+ * The forbidden set carries `mangleExclude`, every authored class, AND every
+ * owned class name. Reserving the owned names keeps the map's key space and
+ * token space disjoint, which is what lets a runtime consumer resolve a token
+ * with one map lookup: a string that is a map key is always an original class,
+ * never a token some other class was mangled to.
+ *
+ * @param eligibleClasses Classes to mangle, in stable sorted order.
+ * @param forbiddenTokens Names the allocator must never emit as a token.
+ * @returns The class → token map.
+ */
+export function allocateMangleTokens(
+    eligibleClasses: readonly string[],
+    forbiddenTokens: ReadonlySet<string>,
+): Record<string, string> {
+    const map: Record<string, string> = {};
+    // `tokenIndex` advances independently of the class index whenever a token
+    // is skipped, and never rewinds — total encoder calls stay linear in
+    // census + skips even when the forbidden set blocks long runs.
+    let tokenIndex = 0;
+    for (const className of eligibleClasses) {
+        let token = tokenAt(tokenIndex);
+        while (forbiddenTokens.has(token)) {
+            tokenIndex++;
+            token = tokenAt(tokenIndex);
+        }
+        map[className] = token;
+        tokenIndex++;
+    }
+    return map;
 }
 
 /**
@@ -3535,27 +3610,29 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
     /**
      * Finalizes the mangle map from all collected classes.
-     * Always rebuilds to ensure completeness (called after all files processed).
+     * Always rebuilds to ensure completeness (called after all files
+     * processed). The one repeated WASM cost — `encode` per token — is memoized
+     * inside `allocateMangleTokens`; the checksum is a single call whose input
+     * (the var map) is rebuilt wholesale per CSS file, so it is not safely
+     * skippable on a size heuristic and is left to run each time.
      */
     function finalizeMangleMap(): void {
         // Mangle only csszyx-owned classes with no raw author consumer. A shared
         // name can enter both sets, so ownership must be resolved explicitly
         // rather than inferred from its presence in ownedClasses.
-        const newMap: Record<string, string> = {};
-        // Walk the encoder sequence, skipping any token that equals a reserved
-        // (external) class name, so no mangled alias collides with one. `tokenIndex`
-        // advances independently of the class index whenever a token is skipped.
-        let tokenIndex = 0;
-        for (const className of mangleEligibleClasses(state.ownedClasses, state.authoredClasses)) {
-            let token = encode(tokenIndex);
-            while (mangleReserved.has(token) || state.authoredClasses.has(token)) {
-                tokenIndex++;
-                token = encode(tokenIndex);
-            }
-            newMap[className] = token;
-            tokenIndex++;
-        }
-        state.mangleMap = newMap;
+        //
+        // Forbid as tokens: reserved (external) class names so no mangled alias
+        // collides with one, plus every authored AND owned class name so the
+        // map's key and token spaces stay disjoint (see allocateMangleTokens).
+        const forbiddenTokens = new Set([
+            ...mangleReserved,
+            ...state.authoredClasses,
+            ...state.ownedClasses,
+        ]);
+        state.mangleMap = allocateMangleTokens(
+            mangleEligibleClasses(state.ownedClasses, state.authoredClasses),
+            forbiddenTokens,
+        );
         assertVarMangleMapSize(state.varMangleMap, varMangleMapMaxBytes);
         state.checksum = compute_mangle_checksum(
             createHydrationMangleMap(state.mangleMap, state.varMangleMap),
@@ -3628,23 +3705,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (result.includes(CHECKSUM_PLACEHOLDER)) {
             result = result.split(CHECKSUM_PLACEHOLDER).join(state.checksum);
         }
+        // Webpack's eval devtool wraps each module in eval("…"), so a
+        // placeholder there is parsed twice and needs its quotes escaped for
+        // the outer string. `eval(` ALONE is not that signal: any production
+        // chunk can carry a user eval call, and double-escaping a placeholder
+        // that sits in plain code (the bundled mangle-runtime module holds the
+        // map in identifier position) is a syntax error in the emitted chunk.
+        // The eval devtool always stamps `//# sourceURL=webpack…` inside its
+        // wrappers, so require both markers.
+        const isEvalWrapped = result.includes('eval(') && result.includes('sourceURL=webpack');
         if (result.includes(MANGLE_MAP_PLACEHOLDER)) {
             // Map keys are class names, and arbitrary-value classes can carry
             // backticks, ${ or </script — escape so the JSON cannot break out
             // of the template literal / script tag it gets pasted into.
             const jsonMap = escapeJsonForInlineScript(JSON.stringify(state.mangleMap));
-            // Webpack dev mode wraps each module in eval("..."), so the map is
-            // parsed twice — escape backslashes and quotes for that outer string.
-            const escapedMap = result.includes('eval(')
-                ? escapeForDoubleQuotedString(jsonMap)
-                : jsonMap;
+            const escapedMap = isEvalWrapped ? escapeForDoubleQuotedString(jsonMap) : jsonMap;
             result = result.split(MANGLE_MAP_PLACEHOLDER).join(escapedMap);
         }
         if (result.includes(VAR_MANGLE_MAP_PLACEHOLDER)) {
             const jsonMap = escapeJsonForInlineScript(JSON.stringify(state.varMangleMap));
-            const escapedMap = result.includes('eval(')
-                ? escapeForDoubleQuotedString(jsonMap)
-                : jsonMap;
+            const escapedMap = isEvalWrapped ? escapeForDoubleQuotedString(jsonMap) : jsonMap;
             result = result.split(VAR_MANGLE_MAP_PLACEHOLDER).join(escapedMap);
         }
         return result;
@@ -3889,6 +3969,58 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         return `import '${THEME_GROUPS_VIRTUAL_ID}';\n${transformedCode}`;
     }
 
+    /** Matches an import/re-export from a package whose runtime helpers read the mangle map. */
+    const MANGLE_RUNTIME_CONSUMER_RE = /from\s*['"](?:csszyx|@csszyx\/runtime)['"]/;
+
+    /**
+     * Bundler lane this instance is running under, recorded by each lane's
+     * entry hook. Gates the mangle-runtime injection: `virtual:`-prefixed
+     * imports resolve through rollup-convention hooks, but webpack parses the
+     * colon as a URI scheme and fails the build with an UnhandledSchemeError
+     * before any resolve plugin runs.
+     */
+    let activeFramework: 'vite' | 'rollup' | 'webpack' | undefined;
+
+    /**
+     * Inject the self-installing mangle map into modules that call runtime
+     * helpers. The map otherwise reaches the page only through the transformed
+     * HTML document — a delivery path embedded builds and inline-script CSP
+     * policies do not have — and without it `szr`/`szv` resolve classes to
+     * their original names while the CSS ships mangled (field-reported as
+     * silently dropped styles). Importing the module from every helper
+     * consumer keeps the map inside the JS bundle, ahead of first helper use
+     * in module order; the module itself is checksum-guarded so the HTML
+     * script and multiple importers cannot fight.
+     *
+     * @param transformedCode Current transformed source.
+     * @param id Bundler module identifier.
+     * @returns Rewritten source when the module needs the map, otherwise null.
+     */
+    function injectMangleRuntime(transformedCode: string, id: string): string | null {
+        // Bundle delivery is rollup-convention only: webpack rejects the
+        // `virtual:` specifier (see `activeFramework`), and its lane already
+        // delivers the map through the SSR document. esbuild never receives
+        // csszyx virtual imports today and is left out until exercised.
+        if (activeFramework !== 'vite' && activeFramework !== 'rollup') {
+            return null;
+        }
+        // Guard order is cost order: flag, then the short id, and only then
+        // the two scans over module code (this runs for every module of a
+        // production build).
+        if (
+            !manglingEnabled ||
+            !shouldProcessSource(id) ||
+            !MANGLE_RUNTIME_CONSUMER_RE.test(transformedCode) ||
+            transformedCode.includes(MANGLE_RUNTIME_VIRTUAL_ID)
+        ) {
+            return null;
+        }
+        // After any use directive, not prepended: an import ahead of
+        // `'use server'` would demote the directive to a plain string and the
+        // RSC boundary guard would misclassify the module.
+        return insertRuntimeImport(transformedCode, `import '${MANGLE_RUNTIME_VIRTUAL_ID}';\n`);
+    }
+
     /**
      * Register class candidates and decide whether the hook returns source.
      *
@@ -3949,7 +4081,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 return (
                     id === RESOLVED_VIRTUAL_MODULE_ID ||
                     id === RESOLVED_VIRTUAL_CHECKSUM_ID ||
-                    id === RESOLVED_THEME_GROUPS_VIRTUAL_ID
+                    id === RESOLVED_THEME_GROUPS_VIRTUAL_ID ||
+                    id === RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID
                 );
             },
 
@@ -3971,6 +4104,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (id === RESOLVED_VIRTUAL_CHECKSUM_ID) {
                     finalizeMangleMap();
                     return createChecksumModule(state.checksum);
+                }
+                if (id === RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID) {
+                    // No finalize here: the module carries placeholders that
+                    // output processing fills from the FINAL map, after the
+                    // mangle passes have run over the chunk.
+                    return createMangleRuntimeModule(globalVarAliasPrefix);
                 }
                 if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
                     const theme = state.parsedTheme;
@@ -4054,6 +4193,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 const themedCode = injectThemeGroups(code, output.code, id, output.usesSzcn);
                 if (themedCode !== null) {
                     output.code = themedCode;
+                    output.transformed = true;
+                }
+
+                const mangleRuntimeCode = injectMangleRuntime(output.code, id);
+                if (mangleRuntimeCode !== null) {
+                    output.code = mangleRuntimeCode;
                     output.transformed = true;
                 }
 
@@ -4166,6 +4311,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              * @param compiler - the Webpack compiler instance
              */
             webpack(compiler: WebpackCompiler) {
+                activeFramework = 'webpack';
+                // Never mangle in a development-mode webpack build — the same
+                // reason as the `vite serve` guard: dev CSS is unmangled, so a
+                // delivered runtime map would encode classes to tokens no dev
+                // rule matches. Asset mangling was already mode-gated, but the
+                // bundled mangle-runtime module now DELIVERS the map through
+                // the JS bundle, which the HTML lane's absence in webpack dev
+                // used to prevent by accident.
+                if (compiler.options?.mode === 'development') {
+                    manglingEnabled = false;
+                }
                 compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
@@ -4191,6 +4347,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
             },
 
+            rollup: {
+                /** Records the rollup lane for the mangle-runtime gate. */
+                buildStart() {
+                    activeFramework = 'rollup';
+                },
+            },
+
             vite: {
                 /**
                  * Vite hook: pre-scans source files when config is resolved.
@@ -4198,6 +4361,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                  * @param config - the resolved Vite configuration object
                  */
                 configResolved(config) {
+                    activeFramework = 'vite';
                     announceActiveParser();
                     const root = config.root || process.cwd();
                     state.rootDir = root;
