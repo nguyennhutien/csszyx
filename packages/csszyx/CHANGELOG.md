@@ -2,15 +2,32 @@
 
 ## [0.11.11](https://github.com/nguyennhutien/csszyx/compare/v0.11.10...v0.11.11) (2026-07-23)
 
-
 ### Features
 
-* deliver the runtime mangle map inside the bundle and encode runtime-resolved classes ([#180](https://github.com/nguyennhutien/csszyx/issues/180)) ([c0750ff](https://github.com/nguyennhutien/csszyx/commit/c0750ff3f6670c03253077ac5b70ea4f6cd920e3))
-
+* deliver the runtime mangle map inside the bundle and encode runtime-resolved classes ([#180](https://github.com/nguyennhutien/csszyx/issues/180))
+* **runtime:** encode runtime-resolved classes in szcn, expose szDecode ([#180](https://github.com/nguyennhutien/csszyx/issues/180))
 
 ### Bug Fixes
 
-* preserve szs slots, typed ternaries, and CSS var reservations in the native engine ([#178](https://github.com/nguyennhutien/csszyx/issues/178)) ([527f230](https://github.com/nguyennhutien/csszyx/commit/527f230e45bc6e1ed76b80c84f3bf15e807f5d56))
+* preserve szs slots, typed ternaries, and CSS var reservations in the native engine ([#178](https://github.com/nguyennhutien/csszyx/issues/178))
+* **core:** reject invalid radial gradient directions ([#178](https://github.com/nguyennhutien/csszyx/issues/178))
+* **core:** preserve secondary collision names ([#178](https://github.com/nguyennhutien/csszyx/issues/178))
+* **ts-plugin:** reject computed style ancestry ([#178](https://github.com/nguyennhutien/csszyx/issues/178))
+* **compiler:** keep recovery tokens ESM-safe ([#178](https://github.com/nguyennhutien/csszyx/issues/178))
+* **core:** retain CSS var reservations after escaped quotes ([#178](https://github.com/nguyennhutien/csszyx/issues/178))
+* **core:** unwrap typed static sz ternaries ([#178](https://github.com/nguyennhutien/csszyx/issues/178))
+* **core:** rewrite component szs slots behind the AST-free triage ([#178](https://github.com/nguyennhutien/csszyx/issues/178))
+* **unplugin:** deliver the runtime mangle map inside the bundle ([#180](https://github.com/nguyennhutien/csszyx/issues/180))
+* **unplugin:** reserve census class names from the mangle token space ([#180](https://github.com/nguyennhutien/csszyx/issues/180))
+* **unplugin:** require the eval-devtool pragma before double-escaping ([#180](https://github.com/nguyennhutien/csszyx/issues/180))
+* **unplugin:** keep the runtime mangle map out of webpack dev builds ([#180](https://github.com/nguyennhutien/csszyx/issues/180))
+* **unplugin:** restrict bundle map delivery to rollup-convention bundlers ([#180](https://github.com/nguyennhutien/csszyx/issues/180))
+
+### Performance
+
+* **runtime:** read the mangle bridge once per merge ([#180](https://github.com/nguyennhutien/csszyx/issues/180))
+* **unplugin:** order the injection guards by cost ([#180](https://github.com/nguyennhutien/csszyx/issues/180))
+* **unplugin:** memoize the Base62 token encoder across finalizes ([#180](https://github.com/nguyennhutien/csszyx/issues/180))
 
 ## [0.11.10](https://github.com/nguyennhutien/csszyx/compare/v0.11.9...v0.11.10) (2026-07-19)
 
