@@ -261,6 +261,10 @@ jobs:
         run: node --test .github/scripts/detect-pkg-code-changes.test.mjs
       - name: Test pnpm-lock.yaml content gate
         run: node --test .github/scripts/detect-lock-code-changes.test.mjs
+      - name: Reject broken or external tracked symlinks
+        run: |
+          node --test scripts/validate-tracked-symlinks.test.mjs
+          node scripts/validate-tracked-symlinks.mjs
       - name: Validate native package metadata
         run: node packages/core/scripts/validate-native-packages.mjs
 

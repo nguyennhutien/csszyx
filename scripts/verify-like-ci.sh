@@ -44,6 +44,9 @@ rm -f packages/core-linux-arm64-gnu/csszyx-core.linux-arm64-gnu.node \
       packages/core-darwin-arm64/csszyx-core.darwin-arm64.node \
       packages/core-darwin-x64/csszyx-core.darwin-x64.node
 
+echo "[verify-like-ci] Tracked symlink guard..."
+pnpm check:tracked-symlinks
+
 echo "[verify-like-ci] Biome preflight (strict — no auto-fix, no unsafe-skip)..."
 pnpm lint:fast
 
