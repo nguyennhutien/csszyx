@@ -43,6 +43,7 @@
     "gen:sz-allowlist": "node --import tsx/esm scripts/gen-sz-allowlist.mjs",
     "gen:sz-allowlist:check": "node --import tsx/esm scripts/gen-sz-allowlist.mjs --check",
     "check:key-corpus": "node scripts/check-key-corpus-consistency.mjs",
+    "check:tracked-symlinks": "node --test scripts/validate-tracked-symlinks.test.mjs && node scripts/validate-tracked-symlinks.mjs",
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run dev --parallel",
     "test": "turbo run test",
