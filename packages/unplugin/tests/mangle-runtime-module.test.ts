@@ -186,8 +186,20 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
         };
         const root = resolve(homedir(), '.cache/csszyx-tests/mangle-runtime-webpack-dev');
         const ctx = { warn() {}, error() {} };
+        // configResolved only prepares the root here; the webpack hook below
+        // then records the lane, exactly as a real webpack build would before
+        // any module transforms.
         plugin.vite.configResolved({ root, command: 'build' });
+        const webpackCompiler = (mode: string) => ({
+            options: { mode },
+            context: root,
+            hooks: {
+                beforeCompile: { tap: () => undefined },
+                thisCompilation: { tap: () => undefined },
+            },
+        });
 
+        plugin.webpack(webpackCompiler('production'));
         const prodOut = (await plugin.transform.call(
             ctx,
             RUNTIME_CONSUMER,
@@ -195,14 +207,7 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
         )) as { code?: string } | null;
         expect(prodOut?.code ?? RUNTIME_CONSUMER).not.toContain(MANGLE_RUNTIME_VIRTUAL_ID);
 
-        plugin.webpack({
-            options: { mode: 'development' },
-            context: root,
-            hooks: {
-                beforeCompile: { tap: () => undefined },
-                thisCompilation: { tap: () => undefined },
-            },
-        });
+        plugin.webpack(webpackCompiler('development'));
         const devOut = (await plugin.transform.call(ctx, RUNTIME_CONSUMER, `${root}/src/a.ts`)) as {
             code?: string;
         } | null;
