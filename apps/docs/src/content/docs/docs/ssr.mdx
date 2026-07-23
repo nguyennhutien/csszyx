@@ -51,8 +51,17 @@ hydration. If the expected checksum doesn't match the checksum embedded on
 
 When `production.mangleVars` or `production.mangleGlobalVars` emits CSS
 variable aliases, the same checksum map also includes CSS-variable entries such
-as `var:--_sz-p:--cz` or `var:--brand-primary`. The debug helper keeps a
+as `var:--_sz-p:--cz` or `var:--brand-primary`. The runtime object keeps a
 separate `window.__csszyx.varMangleMap` for inspection.
+
+:::note[Pages the build does not own]
+The inline `<script>` above only exists in HTML the build emitted. When the
+bundle runs on a page csszyx never transformed — embedded in a host
+application's shell, or behind a CSP that strips inline scripts — a generated
+module inside the bundle installs the same `window.__csszyx` object itself
+(vite/rollup lanes), only when the HTML script has not already. The runtime
+helpers work identically either way.
+:::
 
 ## Abort Protocol
 

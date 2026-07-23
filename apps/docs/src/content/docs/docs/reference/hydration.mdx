@@ -230,14 +230,19 @@ interface SSRContext {
 }
 ```
 
-## Debug Helper
+## The `window.__csszyx` Runtime Object
 
-Production builds with debug helper injection expose `window.__csszyx` for
-inspection. `mangleMap` stays class-only, while `varMangleMap` contains CSS
-variable mappings when `production.mangleVars` is enabled.
+Every production-mangled build installs `window.__csszyx`, carrying the mangle
+map and its lookup helpers. It is delivered twice, first-wins: an inline script
+in the build-emitted HTML, and a generated module inside the JS bundle itself
+(vite/rollup lanes) that installs only when the HTML script has not already —
+so pages the build does not own, such as a bundle embedded in a host shell or
+served under a CSP that strips inline scripts, still receive the map.
+`mangleMap` stays class-only, while `varMangleMap` contains CSS variable
+mappings when `production.mangleVars` is enabled.
 
 ```ts
-interface CsszyxDebugHelper {
+interface CsszyxRuntimeObject {
   mangleMap: Record<string, string>;
   varMangleMap: Record<string, string | string[]>;
   checksum: string;
@@ -245,8 +250,15 @@ interface CsszyxDebugHelper {
   decode(mangledClass: string): string | undefined;
   encodeVar(originalVar: string): string | string[] | undefined;
   decodeVar(mangledVar: string): string[];
+  decodeGlobalVar(mangledVar: string): string | undefined;
+  decodeAll(el: { className: string }): string[];
 }
 ```
+
+The runtime helpers (`szr`, `szcn`, `szDecode`) read this object for their
+mangle-aware paths; when it is absent they fall back to identity behavior. For
+application code, prefer the typed wrappers from `@csszyx/runtime` over
+touching `window.__csszyx` directly.
 
 ## Example: Manual Hydration Guard
 

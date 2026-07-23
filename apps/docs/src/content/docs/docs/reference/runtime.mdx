@@ -1,6 +1,6 @@
 ---
 title: Runtime Helpers
-description: szr (sz-resolve), _szMerge, szv() composition and variant helpers, plus splitBox, classify/has/pick/omit, stripSzProps, and verifyMangleChecksumAsync.
+description: szr (sz-resolve), szcn merge, szDecode, _szMerge, szv() composition and variant helpers, plus splitBox, classify/has/pick/omit, stripSzProps, and verifyMangleChecksumAsync.
 ---
 
 import { Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
@@ -11,7 +11,7 @@ produces plain strings at build time.
 
 <CardGrid>
   <Card title="Runtime helpers" icon="puzzle">
-    `szr` · `szcn` · `splitBox` + class toolkit · SSR hydration validator
+    `szr` · `szcn` · `szDecode` · `splitBox` + class toolkit · SSR hydration validator
   </Card>
   <Card title="~0B Runtime Cost" icon="rocket">
     Static sz props — zero overhead. Helpers only ship when you use them.
@@ -155,6 +155,25 @@ wiring, updated on HMR. For utility-shaped classes written in plain CSS outside
 `@theme`, register them once with [`registerSzcnGroups`](#registerszcngroupsgroups).
 :::
 
+### Production encode of runtime-resolved classes
+
+On a production-mangled build, `szcn` also **encodes** its output. A class name
+your component resolves at runtime as a plain string — a prop mapped to
+`'flex-col'`, a template like `` `gap-${n}` `` — never went through the
+compiler, so without encoding it would reach the DOM in its original spelling
+while the shipped CSS only contains the mangled selector. `szcn` closes that
+gap: every surviving token is looked up in the runtime mangle map and leaves
+the merge in mangled form.
+
+The lookup is single-pass and idempotent. Already-mangled tokens, authored
+literals reserved via `production.mangleExclude`, and external (non-csszyx)
+class names pass through unchanged — token allocation guarantees a mangled
+token can never spell a censused class name, so one map lookup is unambiguous.
+In dev, or on a build without mangling, the encode step is an identity.
+
+Code that **inspects** a className for a utility by its original spelling must
+decode first — see [`szDecode`](#szdecodetoken).
+
 ## `registerSzcnGroups(groups)`
 
 Registers custom token names so `szcn` can classify classes built from them.
@@ -189,6 +208,32 @@ wrong merge:
   size — `text-huge` becomes unclassifiable) is dropped from both, and the drop
   is remembered: later registrations of either side are rejected too, so
   registration order can never resurrect an ambiguous name into one category.
+
+## `szDecode(token)`
+
+Maps a mangled class token back to its original name. On any build shape where
+the token is not mangled — dev, `mangle: false`, an authored literal, an
+external class — it returns the input unchanged, so it is always safe to call.
+
+```ts
+function szDecode(token: string): string
+```
+
+Reach for it whenever code inspects a `className` for a utility by its
+original spelling. String checks like `startsWith('w-')` silently stop
+matching on a mangled build (the DOM carries `q3`, not `w-full`); decoding
+first keeps the check correct on every build:
+
+```ts
+import { szDecode } from '@csszyx/runtime';
+
+const hasWidthClass = (className: string) =>
+  className.split(/\s+/).some(t => szDecode(t).startsWith('w-'));
+```
+
+Variant prefixes decode with the token (`szDecode('x7')` can return
+`'md:hover:w-full'`), so strip the prefix before comparing the bare utility if
+your check targets the base class.
 
 ## `szsc` — reading compiled `szs` slots
 
