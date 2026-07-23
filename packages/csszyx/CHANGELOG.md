@@ -1,5 +1,17 @@
 # csszyx
 
+## [0.11.11](https://github.com/nguyennhutien/csszyx/compare/v0.11.10...v0.11.11) (2026-07-23)
+
+
+### Features
+
+* deliver the runtime mangle map inside the bundle and encode runtime-resolved classes ([#180](https://github.com/nguyennhutien/csszyx/issues/180)) ([c0750ff](https://github.com/nguyennhutien/csszyx/commit/c0750ff3f6670c03253077ac5b70ea4f6cd920e3))
+
+
+### Bug Fixes
+
+* preserve szs slots, typed ternaries, and CSS var reservations in the native engine ([#178](https://github.com/nguyennhutien/csszyx/issues/178)) ([527f230](https://github.com/nguyennhutien/csszyx/commit/527f230e45bc6e1ed76b80c84f3bf15e807f5d56))
+
 ## [0.11.10](https://github.com/nguyennhutien/csszyx/compare/v0.11.9...v0.11.10) (2026-07-19)
 
 ### Features
