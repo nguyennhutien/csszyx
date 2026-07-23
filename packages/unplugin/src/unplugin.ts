@@ -32,7 +32,12 @@ import {
 import { type VueAdapterOptions, preprocess as vuePreprocess } from '@csszyx/vue-adapter';
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
-import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
+import {
+    createUnplugin,
+    type UnpluginContextMeta,
+    type UnpluginInstance,
+    type WebpackPluginInstance,
+} from 'unplugin';
 import type { PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
@@ -3972,6 +3977,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     /** Matches an import/re-export from a package whose runtime helpers read the mangle map. */
     const MANGLE_RUNTIME_CONSUMER_RE = /from\s*['"](?:csszyx|@csszyx\/runtime)['"]/;
 
+    /** Bundler this plugin instance serves, recorded when the factory runs. */
+    let activeFramework: UnpluginContextMeta['framework'] | undefined;
+
     /**
      * Inject the self-installing mangle map into modules that call runtime
      * helpers. The map otherwise reaches the page only through the transformed
@@ -3988,6 +3996,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Rewritten source when the module needs the map, otherwise null.
      */
     function injectMangleRuntime(transformedCode: string, id: string): string | null {
+        // Bundle delivery is rollup-convention only: webpack parses the
+        // `virtual:` specifier's colon as a URI scheme and fails the build
+        // with an UnhandledSchemeError before any resolve plugin runs (and
+        // the webpack lane has its own map delivery). esbuild never receives
+        // csszyx virtual imports today and is left out until exercised.
+        if (activeFramework !== 'vite' && activeFramework !== 'rollup') {
+            return null;
+        }
         // Guard order is cost order: flag, then the short id, and only then
         // the two scans over module code (this runs for every module of a
         // production build).
@@ -4033,493 +4049,511 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     const prePlugin = createUnplugin<PartialCsszyxConfig, boolean>(
-        (_pluginOptions: PartialCsszyxConfig) => ({
-            name: 'csszyx:pre',
-            enforce: 'pre',
+        (_pluginOptions: PartialCsszyxConfig, meta: UnpluginContextMeta) => {
+            // Recorded at construction so every hook sees it. The
+            // mangle-runtime injection is gated on the framework:
+            // `virtual:`-prefixed imports resolve through rollup-convention
+            // hooks, but webpack parses the colon as a URI scheme and rejects
+            // the specifier with an UnhandledSchemeError before any resolve
+            // plugin runs.
+            activeFramework = meta.framework;
+            return {
+                name: 'csszyx:pre',
+                enforce: 'pre',
 
-            /**
-             * Resolves virtual module IDs for csszyx mangle-map and checksum modules.
-             * @param id - the module ID to resolve
-             * @returns resolved ID if virtual, null otherwise
-             */
-            resolveId(id) {
-                if (isVirtualModule(id)) {
-                    return resolveVirtualModule(id);
-                }
-                return null;
-            },
-
-            /**
-             * Restricts the load hook to csszyx's own virtual modules.
-             *
-             * Without this, unplugin's webpack adapter registers its load
-             * loader with `type: 'javascript/auto'` for every module (its
-             * include defaults to all ids when no loadInclude exists). That
-             * corrupts binary asset modules (images, fonts) in webpack apps —
-             * Next.js builds fail with "not a valid image file" / "Module
-             * parse failed" on assets that build fine without csszyx.
-             * @param id - the module ID webpack is about to load
-             * @returns true only for csszyx virtual modules
-             */
-            loadInclude(id) {
-                return (
-                    id === RESOLVED_VIRTUAL_MODULE_ID ||
-                    id === RESOLVED_VIRTUAL_CHECKSUM_ID ||
-                    id === RESOLVED_THEME_GROUPS_VIRTUAL_ID ||
-                    id === RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID
-                );
-            },
-
-            /**
-             * Loads virtual module content — generates mangle map or checksum module code.
-             * @param id - the resolved module ID to load
-             * @returns generated module source if virtual, null otherwise
-             */
-            load(id) {
-                if (id === RESOLVED_VIRTUAL_MODULE_ID) {
-                    finalizeMangleMap();
-                    return createMangleMapModule(
-                        state.mangleMap,
-                        state.checksum,
-                        state.varMangleMap,
-                        state.cssVarMetrics,
-                    );
-                }
-                if (id === RESOLVED_VIRTUAL_CHECKSUM_ID) {
-                    finalizeMangleMap();
-                    return createChecksumModule(state.checksum);
-                }
-                if (id === RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID) {
-                    // No finalize here: the module carries placeholders that
-                    // output processing fills from the FINAL map, after the
-                    // mangle passes have run over the chunk.
-                    return createMangleRuntimeModule(globalVarAliasPrefix);
-                }
-                if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
-                    const theme = state.parsedTheme;
-                    return createThemeGroupsModule({
-                        colors: theme?.colors ?? [],
-                        textSizes: theme?.textSizes ?? [],
-                        fontFamilies: theme?.fonts ?? [],
-                        fontWeights: theme?.fontWeights ?? [],
-                    });
-                }
-                return null;
-            },
-
-            /**
-             * Filters files for the pre-transform phase — source files plus CSS files.
-             * CSS files need special handling to append an @source directive for Tailwind class discovery.
-             * @param id - the file path to check for inclusion
-             * @returns true if the file should be transformed, false otherwise
-             */
-            transformInclude(id) {
-                // Handle CSS files to point Tailwind at the discovered-class safelist via @source
-                if (shouldProcessCss(id)) {
-                    return true;
-                }
-                // Only handle source files in PRE phase
-                return shouldProcessSource(id);
-            },
-
-            /**
-             * Core transform: detects sz prop, compiles to className, injects runtime, collects classes.
-             * For CSS files: appends an @source directive so Tailwind generates CSS for sz-derived classes.
-             * @param code - the source code to transform
-             * @param id - the file path of the module being transformed
-             * @returns transformed code with source map, or null if no changes were made
-             */
-            transform(code, id) {
-                // Bundlers without the vite/webpack lifecycle hooks (rollup,
-                // esbuild) still announce on the first real transform.
-                announceActiveParser();
-                if (!shouldProcessCss(id) && !shouldProcessSource(id)) {
+                /**
+                 * Resolves virtual module IDs for csszyx mangle-map and checksum modules.
+                 * @param id - the module ID to resolve
+                 * @returns resolved ID if virtual, null otherwise
+                 */
+                resolveId(id) {
+                    if (isVirtualModule(id)) {
+                        return resolveVirtualModule(id);
+                    }
                     return null;
-                }
-                if (shouldProcessSource(id)) {
-                    trackGlobalVarSourceFile(id, code);
-                    recordAuthoredClasses(code);
-                }
+                },
 
-                if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
-                    assertNoRSCBoundaryViolation(code, id);
-                }
+                /**
+                 * Restricts the load hook to csszyx's own virtual modules.
+                 *
+                 * Without this, unplugin's webpack adapter registers its load
+                 * loader with `type: 'javascript/auto'` for every module (its
+                 * include defaults to all ids when no loadInclude exists). That
+                 * corrupts binary asset modules (images, fonts) in webpack apps —
+                 * Next.js builds fail with "not a valid image file" / "Module
+                 * parse failed" on assets that build fine without csszyx.
+                 * @param id - the module ID webpack is about to load
+                 * @returns true only for csszyx virtual modules
+                 */
+                loadInclude(id) {
+                    return (
+                        id === RESOLVED_VIRTUAL_MODULE_ID ||
+                        id === RESOLVED_VIRTUAL_CHECKSUM_ID ||
+                        id === RESOLVED_THEME_GROUPS_VIRTUAL_ID ||
+                        id === RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID
+                    );
+                },
 
-                if (matchesScriptExtension(id, ['.css'])) {
-                    return transformTailwindCssEntry(code, id);
-                }
+                /**
+                 * Loads virtual module content — generates mangle map or checksum module code.
+                 * @param id - the resolved module ID to load
+                 * @returns generated module source if virtual, null otherwise
+                 */
+                load(id) {
+                    if (id === RESOLVED_VIRTUAL_MODULE_ID) {
+                        finalizeMangleMap();
+                        return createMangleMapModule(
+                            state.mangleMap,
+                            state.checksum,
+                            state.varMangleMap,
+                            state.cssVarMetrics,
+                        );
+                    }
+                    if (id === RESOLVED_VIRTUAL_CHECKSUM_ID) {
+                        finalizeMangleMap();
+                        return createChecksumModule(state.checksum);
+                    }
+                    if (id === RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID) {
+                        // No finalize here: the module carries placeholders that
+                        // output processing fills from the FINAL map, after the
+                        // mangle passes have run over the chunk.
+                        return createMangleRuntimeModule(globalVarAliasPrefix);
+                    }
+                    if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
+                        const theme = state.parsedTheme;
+                        return createThemeGroupsModule({
+                            colors: theme?.colors ?? [],
+                            textSizes: theme?.textSizes ?? [],
+                            fontFamilies: theme?.fonts ?? [],
+                            fontWeights: theme?.fontWeights ?? [],
+                        });
+                    }
+                    return null;
+                },
 
-                const hasSzProp =
-                    code.includes('sz=') ||
-                    code.includes('szs=') ||
-                    /\bsz\s*:\s*["'{]/.test(code) ||
-                    code.includes('sz: "');
-                const output = hasSzProp
-                    ? transformSzSource(code, id, message => this.warn(message))
-                    : unchangedPreTransform(code);
-                if (!hasSzProp && shouldProcessSource(id)) {
-                    recordFileVarMangleEntries(state, id, []);
-                    recordFileCSSVariableMetrics(state, id, null);
-                }
+                /**
+                 * Filters files for the pre-transform phase — source files plus CSS files.
+                 * CSS files need special handling to append an @source directive for Tailwind class discovery.
+                 * @param id - the file path to check for inclusion
+                 * @returns true if the file should be transformed, false otherwise
+                 */
+                transformInclude(id) {
+                    // Handle CSS files to point Tailwind at the discovered-class safelist via @source
+                    if (shouldProcessCss(id)) {
+                        return true;
+                    }
+                    // Only handle source files in PRE phase
+                    return shouldProcessSource(id);
+                },
 
-                const layoutCode = injectLayoutHydration(output.code, id);
-                if (layoutCode !== null) {
-                    output.code = layoutCode;
-                    output.transformed = true;
-                }
+                /**
+                 * Core transform: detects sz prop, compiles to className, injects runtime, collects classes.
+                 * For CSS files: appends an @source directive so Tailwind generates CSS for sz-derived classes.
+                 * @param code - the source code to transform
+                 * @param id - the file path of the module being transformed
+                 * @returns transformed code with source map, or null if no changes were made
+                 */
+                transform(code, id) {
+                    // Bundlers without the vite/webpack lifecycle hooks (rollup,
+                    // esbuild) still announce on the first real transform.
+                    announceActiveParser();
+                    if (!shouldProcessCss(id) && !shouldProcessSource(id)) {
+                        return null;
+                    }
+                    if (shouldProcessSource(id)) {
+                        trackGlobalVarSourceFile(id, code);
+                        recordAuthoredClasses(code);
+                    }
 
-                const runtimeCode = injectRuntimeHelpers(output.code, output);
-                if (runtimeCode !== null) {
-                    output.code = runtimeCode;
-                    output.transformed = true;
-                }
+                    if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
+                        assertNoRSCBoundaryViolation(code, id);
+                    }
 
-                const themedCode = injectThemeGroups(code, output.code, id, output.usesSzcn);
-                if (themedCode !== null) {
-                    output.code = themedCode;
-                    output.transformed = true;
-                }
+                    if (matchesScriptExtension(id, ['.css'])) {
+                        return transformTailwindCssEntry(code, id);
+                    }
 
-                const mangleRuntimeCode = injectMangleRuntime(output.code, id);
-                if (mangleRuntimeCode !== null) {
-                    output.code = mangleRuntimeCode;
-                    output.transformed = true;
-                }
+                    const hasSzProp =
+                        code.includes('sz=') ||
+                        code.includes('szs=') ||
+                        /\bsz\s*:\s*["'{]/.test(code) ||
+                        code.includes('sz: "');
+                    const output = hasSzProp
+                        ? transformSzSource(code, id, message => this.warn(message))
+                        : unchangedPreTransform(code);
+                    if (!hasSzProp && shouldProcessSource(id)) {
+                        recordFileVarMangleEntries(state, id, []);
+                        recordFileCSSVariableMetrics(state, id, null);
+                    }
 
-                if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
-                    assertNoRSCBoundaryViolation(output.code, id);
-                    const record = createRSCModuleRecord(output.code, id);
-                    state.rscModules.set(record.id, record);
-                }
-                return collectPreTransformClasses(output);
-            },
+                    const layoutCode = injectLayoutHydration(output.code, id);
+                    if (layoutCode !== null) {
+                        output.code = layoutCode;
+                        output.transformed = true;
+                    }
 
-            /** Finalizes the mangle map after all source modules have been processed. */
-            buildEnd() {
-                finalizeMangleMap();
-                assertNoRSCGraphViolation(state.rscModules);
-                // csszyx rewrites sz props into Tailwind class names, but Tailwind
-                // only emits CSS for classes a source/@source covers. The generated
-                // classes live in csszyx-classes.html, which nothing imports — so
-                // without a CSS entry importing "tailwindcss" (where csszyx injects
-                // the @source), the rewritten classes silently resolve to no styles.
-                if (
-                    !state.tailwindWarningEmitted &&
-                    shouldWarnMissingTailwindEntry(
-                        state.ownedClasses.size,
-                        state.sawTailwindEntry,
-                        state.sawAnyCss,
-                    )
-                ) {
-                    state.tailwindWarningEmitted = true;
-                    emitWarning(missingTailwindEntryMessage(state.ownedClasses.size));
-                }
-                // A Tailwind entry exists but does not scope content detection.
-                // In a monorepo that silently scans the whole repo (docs included)
-                // and can emit phantom/broken url() classes — warn once with the
-                // exact fix. The monorepo stat-walk runs only after the cheap
-                // conditions pass, and is memoized.
-                if (
-                    !state.contentScopeWarningEmitted &&
-                    options.contentScopeCheck !== false &&
-                    state.sawTailwindEntry &&
-                    !state.tailwindEntryScoped
-                ) {
-                    state.inMonorepo ??= isMonorepoPackage(state.rootDir);
+                    const runtimeCode = injectRuntimeHelpers(output.code, output);
+                    if (runtimeCode !== null) {
+                        output.code = runtimeCode;
+                        output.transformed = true;
+                    }
+
+                    const themedCode = injectThemeGroups(code, output.code, id, output.usesSzcn);
+                    if (themedCode !== null) {
+                        output.code = themedCode;
+                        output.transformed = true;
+                    }
+
+                    const mangleRuntimeCode = injectMangleRuntime(output.code, id);
+                    if (mangleRuntimeCode !== null) {
+                        output.code = mangleRuntimeCode;
+                        output.transformed = true;
+                    }
+
+                    if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
+                        assertNoRSCBoundaryViolation(output.code, id);
+                        const record = createRSCModuleRecord(output.code, id);
+                        state.rscModules.set(record.id, record);
+                    }
+                    return collectPreTransformClasses(output);
+                },
+
+                /** Finalizes the mangle map after all source modules have been processed. */
+                buildEnd() {
+                    finalizeMangleMap();
+                    assertNoRSCGraphViolation(state.rscModules);
+                    // csszyx rewrites sz props into Tailwind class names, but Tailwind
+                    // only emits CSS for classes a source/@source covers. The generated
+                    // classes live in csszyx-classes.html, which nothing imports — so
+                    // without a CSS entry importing "tailwindcss" (where csszyx injects
+                    // the @source), the rewritten classes silently resolve to no styles.
                     if (
-                        shouldWarnUnscopedMonorepo(
+                        !state.tailwindWarningEmitted &&
+                        shouldWarnMissingTailwindEntry(
+                            state.ownedClasses.size,
                             state.sawTailwindEntry,
-                            state.tailwindEntryScoped,
-                            state.inMonorepo,
+                            state.sawAnyCss,
                         )
                     ) {
-                        state.contentScopeWarningEmitted = true;
-                        emitWarning(unscopedMonorepoMessage());
+                        state.tailwindWarningEmitted = true;
+                        emitWarning(missingTailwindEntryMessage(state.ownedClasses.size));
                     }
-                }
-                // Workspace-package source under /packages/ is hard-ignored, so its
-                // sz silently produces no CSS unless its dir is in compileSources.
-                // Surface the skipped files once so the no-op is visible.
-                if (!state.skipWarningEmitted && state.skippedSzFiles.size > 0) {
-                    state.skipWarningEmitted = true;
-                    // A usage nudge (add the package dir to compileSources), not a
-                    // csszyx-output defect — dev-only so it never noises a host
-                    // app's production build.
-                    emitWarning(skippedSzFilesMessage(sortStrings(state.skippedSzFiles)), {
-                        devOnly: true,
-                    });
-                }
-                // The safelist hit its hard cap; extra classes were dropped. This
-                // only happens on pathological/hostile class cardinality — surface
-                // it so the (otherwise silent) truncation is visible.
-                if (state.classesCapped) {
-                    emitWarning(
-                        `[csszyx] safelist exceeded ${MAX_SAFELIST_CLASSES} classes; ` +
-                            'additional classes were dropped. This usually means an ' +
-                            'unbounded set of arbitrary values reached an sz prop.',
-                    );
-                }
-                // Surface unresolvable-spread warnings to the build log in every
-                // mode (collected during transform). The build log is not the
-                // shipped bundle, so this never leaks paths to end users.
-                for (const warning of state.spreadWarnings) {
-                    emitWarning(`[csszyx] ${warning}`);
-                }
-                state.spreadWarnings.clear();
-                // Drop prescan results the bundler never asked to transform
-                // (unimported files) — each retains a full transformed-code
-                // string, and the handoff's job ended with this build.
-                prescanResultHandoff.clear();
-                // Expose the mangle map as a Node.js global so that dynamic() SSR calls
-                // (which run in the same process during Astro/Next.js SSG) can resolve
-                // original class names to their mangled equivalents. Without this, dynamic()
-                // in SSR returns unmangled names (e.g. "p-4") while the built CSS only has
-                // mangled selectors (e.g. ".q0"), causing styles to silently not apply.
-                if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
-                    (globalThis as Record<string, unknown>).__csszyx_ssr_mangle_map =
-                        state.mangleMap;
-                }
-            },
-
-            watchChange(id, change) {
-                if (change.event === 'delete') {
-                    deleteRSCModuleRecord(state.rscModules, id);
-                    recordGlobalVarSourceFile(state, id, null);
-                    recordFileVarMangleEntries(state, id, []);
-                    recordFileCSSVariableMetrics(state, id, null);
-                }
-            },
-
-            /**
-             * Webpack hook: pre-scans source files before compilation for Tailwind class discovery.
-             * @param compiler - the Webpack compiler instance
-             */
-            webpack(compiler: WebpackCompiler) {
-                // Never mangle in a development-mode webpack build — the same
-                // reason as the `vite serve` guard: dev CSS is unmangled, so a
-                // delivered runtime map would encode classes to tokens no dev
-                // rule matches. Asset mangling was already mode-gated, but the
-                // bundled mangle-runtime module now DELIVERS the map through
-                // the JS bundle, which the HTML lane's absence in webpack dev
-                // used to prevent by accident.
-                if (compiler.options?.mode === 'development') {
-                    manglingEnabled = false;
-                }
-                compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
-                    announceActiveParser();
-                    const root = compiler.context || process.cwd();
-                    state.rootDir = root;
-                    evictTransformCacheOnce();
-                    if (state.classes.size === 0) {
-                        prescanAndWriteClasses();
-                    }
-                    // Generate theme type augmentation from @theme CSS blocks
-                    state.parsedTheme =
-                        runThemeScan(root, options.build?.scanCss) ?? state.parsedTheme;
-                    // Zero-config fallback: no scanCss → discover @theme CSS automatically.
-                    runAutoThemeScan(root);
-                });
-                // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes
-                if (options.build?.scanCss) {
-                    compiler.hooks.thisCompilation.tap('csszyx:theme-deps', compilation => {
-                        const root = compiler.context || process.cwd();
-                        for (const file of expandFilePatterns(root, options.build?.scanCss ?? [])) {
-                            compilation.fileDependencies.add(file);
+                    // A Tailwind entry exists but does not scope content detection.
+                    // In a monorepo that silently scans the whole repo (docs included)
+                    // and can emit phantom/broken url() classes — warn once with the
+                    // exact fix. The monorepo stat-walk runs only after the cheap
+                    // conditions pass, and is memoized.
+                    if (
+                        !state.contentScopeWarningEmitted &&
+                        options.contentScopeCheck !== false &&
+                        state.sawTailwindEntry &&
+                        !state.tailwindEntryScoped
+                    ) {
+                        state.inMonorepo ??= isMonorepoPackage(state.rootDir);
+                        if (
+                            shouldWarnUnscopedMonorepo(
+                                state.sawTailwindEntry,
+                                state.tailwindEntryScoped,
+                                state.inMonorepo,
+                            )
+                        ) {
+                            state.contentScopeWarningEmitted = true;
+                            emitWarning(unscopedMonorepoMessage());
                         }
-                    });
-                }
-            },
+                    }
+                    // Workspace-package source under /packages/ is hard-ignored, so its
+                    // sz silently produces no CSS unless its dir is in compileSources.
+                    // Surface the skipped files once so the no-op is visible.
+                    if (!state.skipWarningEmitted && state.skippedSzFiles.size > 0) {
+                        state.skipWarningEmitted = true;
+                        // A usage nudge (add the package dir to compileSources), not a
+                        // csszyx-output defect — dev-only so it never noises a host
+                        // app's production build.
+                        emitWarning(skippedSzFilesMessage(sortStrings(state.skippedSzFiles)), {
+                            devOnly: true,
+                        });
+                    }
+                    // The safelist hit its hard cap; extra classes were dropped. This
+                    // only happens on pathological/hostile class cardinality — surface
+                    // it so the (otherwise silent) truncation is visible.
+                    if (state.classesCapped) {
+                        emitWarning(
+                            `[csszyx] safelist exceeded ${MAX_SAFELIST_CLASSES} classes; ` +
+                                'additional classes were dropped. This usually means an ' +
+                                'unbounded set of arbitrary values reached an sz prop.',
+                        );
+                    }
+                    // Surface unresolvable-spread warnings to the build log in every
+                    // mode (collected during transform). The build log is not the
+                    // shipped bundle, so this never leaks paths to end users.
+                    for (const warning of state.spreadWarnings) {
+                        emitWarning(`[csszyx] ${warning}`);
+                    }
+                    state.spreadWarnings.clear();
+                    // Drop prescan results the bundler never asked to transform
+                    // (unimported files) — each retains a full transformed-code
+                    // string, and the handoff's job ended with this build.
+                    prescanResultHandoff.clear();
+                    // Expose the mangle map as a Node.js global so that dynamic() SSR calls
+                    // (which run in the same process during Astro/Next.js SSG) can resolve
+                    // original class names to their mangled equivalents. Without this, dynamic()
+                    // in SSR returns unmangled names (e.g. "p-4") while the built CSS only has
+                    // mangled selectors (e.g. ".q0"), causing styles to silently not apply.
+                    if (manglingEnabled && Object.keys(state.mangleMap).length > 0) {
+                        (globalThis as Record<string, unknown>).__csszyx_ssr_mangle_map =
+                            state.mangleMap;
+                    }
+                },
 
-            vite: {
+                watchChange(id, change) {
+                    if (change.event === 'delete') {
+                        deleteRSCModuleRecord(state.rscModules, id);
+                        recordGlobalVarSourceFile(state, id, null);
+                        recordFileVarMangleEntries(state, id, []);
+                        recordFileCSSVariableMetrics(state, id, null);
+                    }
+                },
+
                 /**
-                 * Vite hook: pre-scans source files when config is resolved.
-                 * Also runs theme scan to generate .csszyx/theme.d.ts if scanCss is configured.
-                 * @param config - the resolved Vite configuration object
+                 * Webpack hook: pre-scans source files before compilation for Tailwind class discovery.
+                 * @param compiler - the Webpack compiler instance
                  */
-                configResolved(config) {
-                    announceActiveParser();
-                    const root = config.root || process.cwd();
-                    state.rootDir = root;
-                    // Never mangle in a dev server — the runtime mangle map would
-                    // not match the un-mangled dev CSS. See `manglingEnabled` above.
-                    if (config.command === 'serve') {
+                webpack(compiler: WebpackCompiler) {
+                    // Never mangle in a development-mode webpack build — the same
+                    // reason as the `vite serve` guard: dev CSS is unmangled, so a
+                    // delivered runtime map would encode classes to tokens no dev
+                    // rule matches. Asset mangling was already mode-gated, but the
+                    // bundled mangle-runtime module now DELIVERS the map through
+                    // the JS bundle, which the HTML lane's absence in webpack dev
+                    // used to prevent by accident.
+                    if (compiler.options?.mode === 'development') {
                         manglingEnabled = false;
                     }
-                    evictTransformCacheOnce();
-                    // Pre-scan source files so Tailwind can discover classes
-                    prescanAndWriteClasses();
-                    // Generate theme type augmentation from @theme CSS blocks
-                    state.parsedTheme =
-                        runThemeScan(root, options.build?.scanCss) ?? state.parsedTheme;
-                    // Zero-config fallback: no scanCss → discover @theme CSS automatically.
-                    runAutoThemeScan(root);
+                    compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
+                        announceActiveParser();
+                        const root = compiler.context || process.cwd();
+                        state.rootDir = root;
+                        evictTransformCacheOnce();
+                        if (state.classes.size === 0) {
+                            prescanAndWriteClasses();
+                        }
+                        // Generate theme type augmentation from @theme CSS blocks
+                        state.parsedTheme =
+                            runThemeScan(root, options.build?.scanCss) ?? state.parsedTheme;
+                        // Zero-config fallback: no scanCss → discover @theme CSS automatically.
+                        runAutoThemeScan(root);
+                    });
+                    // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes
+                    if (options.build?.scanCss) {
+                        compiler.hooks.thisCompilation.tap('csszyx:theme-deps', compilation => {
+                            const root = compiler.context || process.cwd();
+                            for (const file of expandFilePatterns(
+                                root,
+                                options.build?.scanCss ?? [],
+                            )) {
+                                compilation.fileDependencies.add(file);
+                            }
+                        });
+                    }
                 },
 
-                /**
-                 * Vite HMR hook: re-runs theme scan when a watched CSS file changes,
-                 * and incrementally updates csszyx-classes.html when a source file gains new sz classes.
-                 * @param ctx - HMR context containing the changed file
-                 */
-                handleHotUpdate(ctx) {
-                    // First edit = the initial module-load wave is over; any
-                    // handoff entries left belong to files the dev server
-                    // never imported, and each retains a transformed-code
-                    // string for nothing.
-                    prescanResultHandoff.clear();
-                    // Theme scan for @theme CSS blocks
-                    const scanCss = options.build?.scanCss;
+                vite: {
                     /**
-                     * Reloads the generated registration module: adding or
-                     * removing theme tokens changes the szcn merge groups, so
-                     * a dev server must pick them up without a restart.
+                     * Vite hook: pre-scans source files when config is resolved.
+                     * Also runs theme scan to generate .csszyx/theme.d.ts if scanCss is configured.
+                     * @param config - the resolved Vite configuration object
                      */
-                    const reloadThemeGroupsModule = (): void => {
-                        const themeGroupsModule = ctx.server.moduleGraph.getModuleById(
-                            RESOLVED_THEME_GROUPS_VIRTUAL_ID,
-                        );
-                        if (themeGroupsModule) {
-                            ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
+                    configResolved(config) {
+                        announceActiveParser();
+                        const root = config.root || process.cwd();
+                        state.rootDir = root;
+                        // Never mangle in a dev server — the runtime mangle map would
+                        // not match the un-mangled dev CSS. See `manglingEnabled` above.
+                        if (config.command === 'serve') {
+                            manglingEnabled = false;
                         }
-                    };
-                    if (scanCss) {
-                        const root = ctx.server.config.root || process.cwd();
-                        if (matchesAnyPattern(ctx.file, scanCss, root)) {
-                            state.parsedTheme = runThemeScan(root, scanCss) ?? state.parsedTheme;
+                        evictTransformCacheOnce();
+                        // Pre-scan source files so Tailwind can discover classes
+                        prescanAndWriteClasses();
+                        // Generate theme type augmentation from @theme CSS blocks
+                        state.parsedTheme =
+                            runThemeScan(root, options.build?.scanCss) ?? state.parsedTheme;
+                        // Zero-config fallback: no scanCss → discover @theme CSS automatically.
+                        runAutoThemeScan(root);
+                    },
+
+                    /**
+                     * Vite HMR hook: re-runs theme scan when a watched CSS file changes,
+                     * and incrementally updates csszyx-classes.html when a source file gains new sz classes.
+                     * @param ctx - HMR context containing the changed file
+                     */
+                    handleHotUpdate(ctx) {
+                        // First edit = the initial module-load wave is over; any
+                        // handoff entries left belong to files the dev server
+                        // never imported, and each retains a transformed-code
+                        // string for nothing.
+                        prescanResultHandoff.clear();
+                        // Theme scan for @theme CSS blocks
+                        const scanCss = options.build?.scanCss;
+                        /**
+                         * Reloads the generated registration module: adding or
+                         * removing theme tokens changes the szcn merge groups, so
+                         * a dev server must pick them up without a restart.
+                         */
+                        const reloadThemeGroupsModule = (): void => {
+                            const themeGroupsModule = ctx.server.moduleGraph.getModuleById(
+                                RESOLVED_THEME_GROUPS_VIRTUAL_ID,
+                            );
+                            if (themeGroupsModule) {
+                                ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
+                            }
+                        };
+                        if (scanCss) {
+                            const root = ctx.server.config.root || process.cwd();
+                            if (matchesAnyPattern(ctx.file, scanCss, root)) {
+                                state.parsedTheme =
+                                    runThemeScan(root, scanCss) ?? state.parsedTheme;
+                                reloadThemeGroupsModule();
+                            }
+                        } else if (ctx.file.endsWith('.css')) {
+                            // Zero-config mode: any CSS edit may add or remove @theme
+                            // tokens (including in a file the auto-scan has not seen
+                            // yet), so re-discover and reload the registration.
+                            runAutoThemeScan(ctx.server.config.root || process.cwd());
                             reloadThemeGroupsModule();
                         }
-                    } else if (ctx.file.endsWith('.css')) {
-                        // Zero-config mode: any CSS edit may add or remove @theme
-                        // tokens (including in a file the auto-scan has not seen
-                        // yet), so re-discover and reload the registration.
-                        runAutoThemeScan(ctx.server.config.root || process.cwd());
-                        reloadThemeGroupsModule();
-                    }
 
-                    // Incremental sz class discovery: when a source file changes, scan it
-                    // immediately and update csszyx-classes.html if new classes are found.
-                    // This ensures Tailwind generates CSS for new sz props without a dev restart.
-                    // handleHotUpdate fires before the module is re-transformed, so we must
-                    // read and transform the file ourselves to discover any new classes.
-                    if (!shouldProcessSource(ctx.file)) {
-                        return;
-                    }
+                        // Incremental sz class discovery: when a source file changes, scan it
+                        // immediately and update csszyx-classes.html if new classes are found.
+                        // This ensures Tailwind generates CSS for new sz props without a dev restart.
+                        // handleHotUpdate fires before the module is re-transformed, so we must
+                        // read and transform the file ourselves to discover any new classes.
+                        if (!shouldProcessSource(ctx.file)) {
+                            return;
+                        }
 
-                    let fileContent: string, result: SourceTransformResult;
-                    try {
-                        fileContent = fs.readFileSync(ctx.file, 'utf-8');
-                    } catch {
-                        return;
-                    }
+                        let fileContent: string, result: SourceTransformResult;
+                        try {
+                            fileContent = fs.readFileSync(ctx.file, 'utf-8');
+                        } catch {
+                            return;
+                        }
 
-                    if (
-                        !fileContent.includes('sz=') &&
-                        !fileContent.includes('szs=') &&
-                        !/\bsz\s*:\s*["'{]/.test(fileContent)
-                    ) {
+                        if (
+                            !fileContent.includes('sz=') &&
+                            !fileContent.includes('szs=') &&
+                            !/\bsz\s*:\s*["'{]/.test(fileContent)
+                        ) {
+                            trackGlobalVarSourceFile(ctx.file, fileContent);
+                            recordFileVarMangleEntries(state, ctx.file, []);
+                            recordFileCSSVariableMetrics(state, ctx.file, null);
+                            return;
+                        }
+
+                        try {
+                            const hmrTransformStarted = performance.now();
+                            result = transformConfiguredSource(fileContent, ctx.file);
+                            traceBenchTiming(
+                                'handle-hot-update',
+                                ctx.file,
+                                performance.now() - hmrTransformStarted,
+                            );
+                        } catch {
+                            trackGlobalVarSourceFile(ctx.file, fileContent);
+                            recordFileVarMangleEntries(state, ctx.file, []);
+                            recordFileCSSVariableMetrics(state, ctx.file, null);
+                            return;
+                        }
+
+                        if (!result.transformed) {
+                            trackGlobalVarSourceFile(ctx.file, fileContent);
+                            recordFileVarMangleEntries(state, ctx.file, []);
+                            recordFileCSSVariableMetrics(state, ctx.file, null);
+                            return;
+                        }
+
+                        const sizeBefore = state.classes.size;
                         trackGlobalVarSourceFile(ctx.file, fileContent);
-                        recordFileVarMangleEntries(state, ctx.file, []);
-                        recordFileCSSVariableMetrics(state, ctx.file, null);
-                        return;
-                    }
+                        for (const cls of result.classes) {
+                            addSafelistClass(cls);
+                            state.ownedClasses.add(cls);
+                        }
+                        recordFileVarMangleEntries(state, ctx.file, cssVariableEntries(result));
+                        recordFileCSSVariableMetrics(state, ctx.file, result.code);
+                        for (const [token, data] of result.recoveryTokens) {
+                            state.recoveryTokens.set(token, data);
+                        }
 
-                    try {
-                        const hmrTransformStarted = performance.now();
-                        result = transformConfiguredSource(fileContent, ctx.file);
-                        traceBenchTiming(
-                            'handle-hot-update',
-                            ctx.file,
-                            performance.now() - hmrTransformStarted,
-                        );
-                    } catch {
-                        trackGlobalVarSourceFile(ctx.file, fileContent);
-                        recordFileVarMangleEntries(state, ctx.file, []);
-                        recordFileCSSVariableMetrics(state, ctx.file, null);
-                        return;
-                    }
-
-                    if (!result.transformed) {
-                        trackGlobalVarSourceFile(ctx.file, fileContent);
-                        recordFileVarMangleEntries(state, ctx.file, []);
-                        recordFileCSSVariableMetrics(state, ctx.file, null);
-                        return;
-                    }
-
-                    const sizeBefore = state.classes.size;
-                    trackGlobalVarSourceFile(ctx.file, fileContent);
-                    for (const cls of result.classes) {
-                        addSafelistClass(cls);
-                        state.ownedClasses.add(cls);
-                    }
-                    recordFileVarMangleEntries(state, ctx.file, cssVariableEntries(result));
-                    recordFileCSSVariableMetrics(state, ctx.file, result.code);
-                    for (const [token, data] of result.recoveryTokens) {
-                        state.recoveryTokens.set(token, data);
-                    }
-
-                    if (state.classes.size > sizeBefore) {
-                        // New classes found — update manifest so Tailwind regenerates CSS
-                        writeSafelistFile(state.classes);
-                        // Emit a synthetic watcher event on the manifest file so Tailwind's
-                        // internal file scanner (which listens on ctx.server.watcher) picks up
-                        // the change immediately, even if the OS fs event arrives with a delay.
-                        const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME);
-                        ctx.server.watcher.emit('change', safelistPath);
-                    }
-                },
-                transformIndexHtml: {
-                    order: 'pre',
-                    /**
-                     * Injects hydration data (mangle map + checksum) into the HTML document.
-                     * Also mangles class attributes in SSR-rendered HTML so they match mangled CSS selectors.
-                     * @param html - the raw HTML string to transform
-                     * @returns transformed HTML with injected hydration data
-                     */
-                    handler(html) {
-                        finalizeMangleMap();
-                        // Empty the CLASS mangle map when mangling is off (explicitly,
-                        // or forced off in a dev server) so `szr`/`decode` are identity
-                        // and the runtime class names match the un-mangled Tailwind CSS.
-                        // The CSS-VARIABLE mangle map is left intact: csszyx owns both
-                        // the runtime var name and the CSS it emits for it (Tailwind
-                        // never touches `--_sz-*`), so it is self-consistent in dev and
-                        // needs no fallback.
-                        const injectedMangleMap = manglingEnabled ? state.mangleMap : {};
-                        let result = injectHydrationData(html, injectedMangleMap, state.checksum, {
-                            // Always 'script'; the checksum itself is injected by
-                            // injectHydrationData regardless of this mode.
-                            mode: 'script',
-                            minify: process.env.NODE_ENV === 'production',
-                            varMangleMap: state.varMangleMap,
-                            globalVarAliasPrefix,
-                        });
-                        // Recovery manifest is a no-op when zero szRecover tokens were
-                        // emitted across the build, so pages without recovery sites get
-                        // no extra script tag. In production, dev-only tokens are stripped
-                        // and a single rolled-up warning lists the affected paths.
-                        if (state.recoveryTokens.size > 0) {
-                            const isProduction = process.env.NODE_ENV === 'production';
-                            const { manifest, strippedDevOnlyPaths } = buildRecoveryManifest(
-                                state.recoveryTokens,
+                        if (state.classes.size > sizeBefore) {
+                            // New classes found — update manifest so Tailwind regenerates CSS
+                            writeSafelistFile(state.classes);
+                            // Emit a synthetic watcher event on the manifest file so Tailwind's
+                            // internal file scanner (which listens on ctx.server.watcher) picks up
+                            // the change immediately, even if the OS fs event arrives with a delay.
+                            const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME);
+                            ctx.server.watcher.emit('change', safelistPath);
+                        }
+                    },
+                    transformIndexHtml: {
+                        order: 'pre',
+                        /**
+                         * Injects hydration data (mangle map + checksum) into the HTML document.
+                         * Also mangles class attributes in SSR-rendered HTML so they match mangled CSS selectors.
+                         * @param html - the raw HTML string to transform
+                         * @returns transformed HTML with injected hydration data
+                         */
+                        handler(html) {
+                            finalizeMangleMap();
+                            // Empty the CLASS mangle map when mangling is off (explicitly,
+                            // or forced off in a dev server) so `szr`/`decode` are identity
+                            // and the runtime class names match the un-mangled Tailwind CSS.
+                            // The CSS-VARIABLE mangle map is left intact: csszyx owns both
+                            // the runtime var name and the CSS it emits for it (Tailwind
+                            // never touches `--_sz-*`), so it is self-consistent in dev and
+                            // needs no fallback.
+                            const injectedMangleMap = manglingEnabled ? state.mangleMap : {};
+                            let result = injectHydrationData(
+                                html,
+                                injectedMangleMap,
+                                state.checksum,
                                 {
-                                    production: isProduction,
-                                    mangleChecksum: state.checksum,
+                                    // Always 'script'; the checksum itself is injected by
+                                    // injectHydrationData regardless of this mode.
+                                    mode: 'script',
+                                    minify: process.env.NODE_ENV === 'production',
+                                    varMangleMap: state.varMangleMap,
+                                    globalVarAliasPrefix,
                                 },
                             );
-                            if (strippedDevOnlyPaths.length > 0) {
-                                console.warn(
-                                    `[csszyx] Stripped ${strippedDevOnlyPaths.length} ` +
-                                        'szRecover="dev-only" token(s) from the production manifest. ' +
-                                        'Recovery for these elements is disabled in production by design. ' +
-                                        `Sites: ${strippedDevOnlyPaths.join(', ')}`,
+                            // Recovery manifest is a no-op when zero szRecover tokens were
+                            // emitted across the build, so pages without recovery sites get
+                            // no extra script tag. In production, dev-only tokens are stripped
+                            // and a single rolled-up warning lists the affected paths.
+                            if (state.recoveryTokens.size > 0) {
+                                const isProduction = process.env.NODE_ENV === 'production';
+                                const { manifest, strippedDevOnlyPaths } = buildRecoveryManifest(
+                                    state.recoveryTokens,
+                                    {
+                                        production: isProduction,
+                                        mangleChecksum: state.checksum,
+                                    },
                                 );
+                                if (strippedDevOnlyPaths.length > 0) {
+                                    console.warn(
+                                        `[csszyx] Stripped ${strippedDevOnlyPaths.length} ` +
+                                            'szRecover="dev-only" token(s) from the production manifest. ' +
+                                            'Recovery for these elements is disabled in production by design. ' +
+                                            `Sites: ${strippedDevOnlyPaths.join(', ')}`,
+                                    );
+                                }
+                                result = injectRecoveryManifest(result, manifest);
                             }
-                            result = injectRecoveryManifest(result, manifest);
-                        }
-                        return result;
+                            return result;
+                        },
                     },
                 },
-            },
-        }),
+            };
+        },
     );
 
     /**

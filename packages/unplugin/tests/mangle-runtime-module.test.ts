@@ -172,12 +172,13 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
         expect(loaded).toContain(CHECKSUM_PLACEHOLDER);
     });
 
-    it('a development-mode webpack build never receives the module', async () => {
-        // Webpack dev serves unmangled CSS, and no HTML lane runs there — the
-        // map used to simply never arrive. Delivering it through the bundle
-        // would have the runtime encode classes to tokens no dev rule matches,
-        // so the webpack hook must force mangling off in development mode
-        // (the same guard `vite serve` already has).
+    it('a webpack build never receives the module, in any mode', async () => {
+        // Webpack parses the `virtual:` specifier's colon as a URI scheme and
+        // fails the build with an UnhandledSchemeError before any resolve
+        // plugin runs (field-caught by the Next playground build), so bundle
+        // delivery is rollup-convention only — the webpack lane keeps its own
+        // map delivery. The dev-mode mangling guard stays as well: dev CSS is
+        // unmangled, so no lane may deliver a real map in development.
         const plugin = rawInstance.raw({}, { framework: 'webpack' }) as unknown as {
             vite: { configResolved: (config: unknown) => void };
             webpack: (compiler: unknown) => void;
@@ -187,15 +188,13 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
         const ctx = { warn() {}, error() {} };
         plugin.vite.configResolved({ root, command: 'build' });
 
-        // Production-mode webpack keeps the injection on…
         const prodOut = (await plugin.transform.call(
             ctx,
             RUNTIME_CONSUMER,
             `${root}/src/a.ts`,
         )) as { code?: string } | null;
-        expect(prodOut?.code).toContain(MANGLE_RUNTIME_VIRTUAL_ID);
+        expect(prodOut?.code ?? RUNTIME_CONSUMER).not.toContain(MANGLE_RUNTIME_VIRTUAL_ID);
 
-        // …and a development-mode compiler turns it off.
         plugin.webpack({
             options: { mode: 'development' },
             context: root,
