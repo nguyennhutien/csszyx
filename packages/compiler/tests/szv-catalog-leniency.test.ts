@@ -219,13 +219,17 @@ const P = P;`,
         );
     });
 
-    it('a const-doubling DAG stays linear (exponential-walk guard)', () => {
+    it('a const-doubling DAG stays linear (exponential-walk guard)', { timeout: 30_000 }, () => {
         // Each shape re-resolves the SAME const from two positions per level —
         // through a conditional, a double spread, and sibling keys. Without
         // the initializer memo + paid alternate exploration, the walk ran 2^n
         // recursive calls (measured: ~10s at n=22, unfinishable at n=40) from
         // a ~40-line file. n=40 completing at all is the regression signal; a
-        // wall-clock assertion would be flaky on CI.
+        // wall-clock assertion would be flaky on CI — including vitest's
+        // implicit 5s default, which a slow shared runner has breached
+        // (~5.2s) on code that passes in ~0.2s locally. The explicit 30s
+        // budget keeps the guard meaningful: an exponential walk at n=40
+        // never finishes, so it still fails, while runner variance cannot.
         const lines = ['declare const c: boolean;', "const x0 = c ? 'red-500' : 'blue-500';"];
         for (let i = 1; i <= 40; i++) {
             lines.push(`const x${i} = c ? x${i - 1} : x${i - 1};`);
