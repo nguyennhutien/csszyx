@@ -2317,6 +2317,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // site (buildEnd / transformIndexHtml / generateBundle / processAssets) — the
     // reason a config exclude-list is consistent where a bundle-CSS scan would not.
     const mangleReserved = new Set(options.production?.mangleExclude ?? []);
+    // Which delivery channels carry the runtime mangle map. Both channels ship
+    // the whole census, so a build that needs only one was paying for the map
+    // twice across HTML and JS. Defaults to 'both': dropping a channel is only
+    // safe against a known deployment shape, and guessing wrong leaves runtime
+    // helpers mapless while the CSS ships mangled.
+    const mangleMapDelivery = options.production?.mangleMapDelivery ?? 'both';
+    const deliverMapInHtml = mangleMapDelivery !== 'bundle';
+    const deliverMapInBundle = mangleMapDelivery !== 'html';
     // User can raise/lower the AST node budget per build via the existing
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
@@ -4009,6 +4017,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // production build).
         if (
             !manglingEnabled ||
+            !deliverMapInBundle ||
             !shouldProcessSource(id) ||
             !MANGLE_RUNTIME_CONSUMER_RE.test(transformedCode) ||
             transformedCode.includes(MANGLE_RUNTIME_VIRTUAL_ID)
@@ -4516,6 +4525,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             minify: process.env.NODE_ENV === 'production',
                             varMangleMap: state.varMangleMap,
                             globalVarAliasPrefix,
+                            installRuntimeObject: deliverMapInHtml,
                         });
                         // Recovery manifest is a no-op when zero szRecover tokens were
                         // emitted across the build, so pages without recovery sites get

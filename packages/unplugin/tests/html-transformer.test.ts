@@ -85,6 +85,69 @@ describe('html-transformer', () => {
             expect(result).toContain('>{}</script>');
         });
 
+        it('should ship the class map once on class-only builds', () => {
+            const result = injectMangleMapScript(sampleHtml, sampleMap);
+            const mapJson = JSON.stringify(sampleMap);
+
+            // The checksum <script> keeps the payload; the installer re-reads it
+            // rather than embedding a second copy of every censused name.
+            expect(result.split(mapJson)).toHaveLength(2);
+            expect(result).toContain('getElementById("__CSSZYX_MANGLE_MAP__")');
+        });
+
+        it('should install helpers from the checksum payload on class-only builds', () => {
+            const result = injectMangleMapScript(sampleHtml, sampleMap);
+            const debugScript = result.match(/<script>(\(function\(\).*?)<\/script>/)?.[1];
+            const payload = result.match(
+                /id="__CSSZYX_MANGLE_MAP__" type="application\/json">([^<]*)</,
+            )?.[1];
+            expect(debugScript).toBeDefined();
+
+            const win = {} as {
+                __csszyx?: {
+                    encode(original: string): string | undefined;
+                    decode(mangled: string): string | undefined;
+                    mangleMap: Record<string, string>;
+                };
+            };
+            const doc = {
+                documentElement: { getAttribute: () => sampleChecksum },
+                getElementById: (id: string) =>
+                    id === '__CSSZYX_MANGLE_MAP__' ? { textContent: payload } : null,
+            };
+            runGeneratedCode(debugScript ?? '', { window: win, document: doc });
+
+            expect(win.__csszyx?.mangleMap).toEqual(sampleMap);
+            expect(win.__csszyx?.encode('p-4')).toBe('z');
+            expect(win.__csszyx?.decode('z')).toBe('p-4');
+        });
+
+        it('should install an empty map when the checksum payload is stripped', () => {
+            const result = injectMangleMapScript(sampleHtml, sampleMap);
+            const debugScript = result.match(/<script>(\(function\(\).*?)<\/script>/)?.[1];
+
+            const win = {} as { __csszyx?: { encode(original: string): string | undefined } };
+            const doc = {
+                documentElement: { getAttribute: () => sampleChecksum },
+                getElementById: () => null,
+            };
+            runGeneratedCode(debugScript ?? '', { window: win, document: doc });
+
+            expect(win.__csszyx?.encode('p-4')).toBeUndefined();
+        });
+
+        it('should keep the checksum payload when the bundle owns the runtime object', () => {
+            const result = injectMangleMapScript(sampleHtml, sampleMap, {
+                installRuntimeObject: false,
+            });
+
+            // Hydration verification still reads the payload from the DOM…
+            expect(result).toContain('<script id="__CSSZYX_MANGLE_MAP__" type="application/json">');
+            expect(result).toContain(JSON.stringify(sampleMap));
+            // …but the page no longer carries the installer.
+            expect(result).not.toContain('window.__csszyx=');
+        });
+
         it('should include CSS variable map in checksum payload and debug helpers', () => {
             const result = injectMangleMapScript(sampleHtml, sampleMap, {
                 varMangleMap: sampleVarMap,

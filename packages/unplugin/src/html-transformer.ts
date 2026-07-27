@@ -82,6 +82,17 @@ export interface HtmlInjectionOptions {
      * Prefix used for generated global CSS custom-property aliases.
      */
     globalVarAliasPrefix?: string;
+
+    /**
+     * Whether the HTML also installs `window.__csszyx`.
+     *
+     * The checksum payload ships either way — hydration verification reads it
+     * from the DOM. Disable when the JS bundle owns the runtime object, so the
+     * census is not serialized into both the page and the bundle.
+     *
+     * @default true
+     */
+    installRuntimeObject?: boolean;
 }
 
 /**
@@ -173,19 +184,31 @@ export function injectMangleMapScript(
         prettyPrint = false,
         varMangleMap = {},
         globalVarAliasPrefix = CSSZYX_GLOBAL_ALIAS_PREFIX,
+        installRuntimeObject = true,
     } = options;
     const checksumMap = createHydrationMangleMap(mangleMap, varMangleMap);
 
     const jsonContent = safeJsonForScriptTag(checksumMap, prettyPrint);
-    const classMapContent = safeJsonForScriptTag(mangleMap);
     const varMapContent = safeJsonForScriptTag(varMangleMap);
+
+    // Class-only builds make the checksum payload byte-identical to the class
+    // map, so the installer re-reads the JSON the document already carries
+    // instead of shipping a second literal of every censused name. Variable
+    // mangling namespaces the payload (`class:` / `var:`), which no longer
+    // reconstructs into the two separate maps, so those builds keep the
+    // literal. Falls back to an empty map if the tag is ever stripped, which
+    // matches the no-map behaviour the runtime helpers already tolerate.
+    const reuseChecksumPayload = Object.keys(varMangleMap).length === 0;
+    const classMapExpr = reuseChecksumPayload
+        ? '(function(){var e=document.getElementById("__CSSZYX_MANGLE_MAP__");return e?JSON.parse(e.textContent):{}})()'
+        : safeJsonForScriptTag(mangleMap);
 
     const scriptTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">${jsonContent}</script>`;
     const prefixContent = safeJsonForScriptTag(globalVarAliasPrefix);
-    const debugScript = `<script>(function(){var m=${classMapContent};var vm=${varMapContent};var gp=${prefixContent};var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}var cs=document.documentElement.getAttribute("data-sz-checksum")||"";window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:cs,decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()</script>`;
+    const debugScript = `<script>(function(){var m=${classMapExpr};var vm=${varMapContent};var gp=${prefixContent};var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}var cs=document.documentElement.getAttribute("data-sz-checksum")||"";window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:cs,decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()</script>`;
 
     // Inject before </head> or before </html> if no head
-    const combined = `${scriptTag}\n${debugScript}`;
+    const combined = installRuntimeObject ? `${scriptTag}\n${debugScript}` : scriptTag;
     if (html.includes('</head>')) {
         return html.replace('</head>', `${combined}\n</head>`);
     } else if (html.includes('</html>')) {

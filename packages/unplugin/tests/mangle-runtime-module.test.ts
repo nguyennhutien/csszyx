@@ -111,10 +111,11 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
      * Drive the pre-plugin's hooks directly, mirroring the other hook-level
      * suites.
      *
+     * @param production - Extra production options merged over `mangle: true`.
      * @returns Hook caller bound to a fresh plugin instance.
      */
-    function pluginHarness() {
-        const plugins = vitePlugin({ production: { mangle: true } });
+    function pluginHarness(production: Record<string, unknown> = {}) {
+        const plugins = vitePlugin({ production: { mangle: true, ...production } });
         const ctx = { warn() {}, error() {}, emitFile() {}, addWatchFile() {} };
         const call = async (hookName: string, ...args: unknown[]): Promise<unknown> => {
             const plugin = plugins.find(p => p && hookName in (p as Record<string, unknown>));
@@ -148,6 +149,26 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
             code?: string;
         } | null;
         expect(occurrences(second?.code ?? first?.code ?? '')).toBe(1);
+    });
+
+    it('skips bundle delivery when the map is delivered by the HTML only', async () => {
+        const { call, root } = pluginHarness({ mangleMapDelivery: 'html' });
+        await call('configResolved', { root, command: 'build' });
+
+        const out = (await call('transform', RUNTIME_CONSUMER, `${root}/src/a.ts`)) as {
+            code?: string;
+        } | null;
+        expect(out?.code ?? RUNTIME_CONSUMER).not.toContain(MANGLE_RUNTIME_VIRTUAL_ID);
+    });
+
+    it('keeps bundle delivery when the HTML no longer installs the object', async () => {
+        const { call, root } = pluginHarness({ mangleMapDelivery: 'bundle' });
+        await call('configResolved', { root, command: 'build' });
+
+        const out = (await call('transform', RUNTIME_CONSUMER, `${root}/src/a.ts`)) as {
+            code?: string;
+        } | null;
+        expect(out?.code ?? '').toContain(MANGLE_RUNTIME_VIRTUAL_ID);
     });
 
     it('does not inject in a dev server (mangling forced off)', async () => {

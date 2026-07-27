@@ -81,6 +81,34 @@ export interface ProductionConfig {
     mangleExclude?: string[];
 
     /**
+     * Where the runtime mangle map is delivered to the browser.
+     *
+     * The map is what lets runtime helpers (`szr`, `szv`, `szcn`, `szDecode`)
+     * speak the same class names as the mangled CSS. It travels two ways: an
+     * inline script in build-emitted HTML, and a module inside the JS bundle
+     * for pages the build does not own (a bundle embedded in a host shell, or
+     * a CSP that strips inline scripts).
+     *
+     * Both deliveries carry the full census, so a build that ships both pays
+     * for the map twice across HTML and JS. Narrow this when the app knows
+     * which delivery it actually needs:
+     *
+     * - `'both'` — inline script plus bundle module. Always correct.
+     * - `'html'` — inline script only. For apps that serve their own
+     *   csszyx-built HTML and allow inline scripts.
+     * - `'bundle'` — bundle module only. For embedded builds and CSP setups
+     *   that strip inline scripts.
+     *
+     * The hydration checksum payload is unaffected — it ships in every mode.
+     * Choosing a delivery the page does not receive leaves runtime helpers
+     * without a map, which passes original class names through while the CSS
+     * ships mangled, so narrow this only against a known deployment shape.
+     *
+     * @default 'both'
+     */
+    mangleMapDelivery?: MangleMapDelivery;
+
+    /**
      * Alias stable app-owned global CSS custom properties.
      *
      * This is the opt-in gate for the `g` tier. Phase H v1 is alias-only:
@@ -121,6 +149,11 @@ export interface ProductionConfig {
      */
     minify: boolean;
 }
+
+/**
+ * Delivery channels for the runtime mangle map.
+ */
+export type MangleMapDelivery = 'both' | 'html' | 'bundle';
 
 /**
  * Supported global custom-property optimization mode.
