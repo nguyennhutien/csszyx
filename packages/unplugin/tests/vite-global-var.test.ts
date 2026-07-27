@@ -216,6 +216,7 @@ async function runVite(root: string, options: { sourcemap?: boolean } = {}): Pro
             ...(vitePlugin({
                 build: { cache: false, parser: 'oxc' },
                 production: {
+                    mangle: true,
                     mangleGlobalVars: {
                         enabled: true,
                         tokens: ['--brand-primary', '--brand-secondary'],

@@ -35,10 +35,20 @@ export interface DevelopmentConfig {
  */
 export interface ProductionConfig {
     /**
-     * Enable global class name mangling.
-     * Minifies class names to single characters (a, b, c, etc.).
+     * Rewrite csszyx-owned class names to short aliases (`z`, `y`, `x`, …).
      *
-     * @default true
+     * This is a **name-obfuscation** feature, not a compression one. Over a
+     * gzip- or brotli-served response it is flat to slightly negative: utility
+     * class names share long prefixes and repeat, which is exactly what the
+     * compressor exploits, so shortening them trades highly compressible bytes
+     * for the poorly compressible mangle map the runtime needs. Measured on the
+     * `vite-react` playground, mangling costs about 2 KB gzipped and its
+     * absolute ceiling — with a hypothetically free map — is a 0.26% saving.
+     *
+     * Enable it when the original class names should not be readable in the
+     * shipped bundle. Do not enable it expecting a smaller payload.
+     *
+     * @default false
      */
     mangle: boolean;
 

@@ -127,7 +127,7 @@ Controls production build behavior.
 
 ```ts
 interface ProductionConfig {
-  mangle: boolean; // Minify class names (z, y, x, ...)
+  mangle: boolean; // Obfuscate class names (z, y, x, ...) — opt-in, default false
   mangleVars: boolean; // Opt into dynamic sz CSS variable mangling and hoisting
   mangleVarHoistMaxDepth: number; // Max cascade depth for mangleVars hoisting
   mangleGlobalVars?: GlobalVarMangleConfig; // Explicit global token alias tier
@@ -141,9 +141,9 @@ interface ProductionConfig {
 
 :::tip[Inspecting CSS / hybrid apps]
 Mangling rewrites every eligible csszyx-owned class name to a short alias (`z`, `y`, …), so
-the production bundle no longer contains the original utility names. Set
-`production: { mangle: false }` to keep readable class names — the supported way to
-verify the CSS a build emits. Classes that also appear as static strings or template
+the production bundle no longer contains the original utility names. It is **off by
+default**, so a build keeps readable class names — the supported way to verify the CSS a
+build emits — until you set `production: { mangle: true }`. Classes that also appear as static strings or template
 quasis in source-level `class`/`className` attributes or properties (including
 `clsx(...)` expressions) automatically retain their original names, so raw and `sz`
 consumers keep matching the same CSS rule. To check a single `sz` object without a build, run

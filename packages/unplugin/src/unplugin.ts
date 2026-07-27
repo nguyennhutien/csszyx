@@ -57,6 +57,13 @@ import {
     injectRecoveryManifest,
 } from './html-transformer.js';
 import { escapeForDoubleQuotedString, escapeJsonForInlineScript } from './inline-script-escape.js';
+import {
+    computeMangleSizeVerdict,
+    createMangleSizeAccount,
+    type MangleSizeAccount,
+    mangleSizeMessage,
+    recordCssPair,
+} from './mangle-size-report.js';
 import { resolveParserMode } from './parser-mode.js';
 import { normalizePathSeparators } from './path-normalization.js';
 import {
@@ -2303,14 +2310,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 } {
     assertGlobalVarMangleConfig(options);
 
-    // Mangling is a production bundle-size optimization with no value in a dev
-    // server: the dev CSS pipeline (e.g. a separate @tailwindcss/vite) serves
-    // UN-mangled class names, so applying a mangle map at runtime via `szr` would
-    // emit class names that have no matching CSS — silently collapsing szv-driven
-    // layouts in `vite serve` only. Forced off for `command === 'serve'` below
+    // Mangling is opt-IN: it obfuscates class names and, over a compressed
+    // response, costs bytes rather than saving them (utility names compress far
+    // better than the map that has to ship alongside them), so a build only pays
+    // for it when it asks. It also has no value in a dev server: the dev CSS
+    // pipeline (e.g. a separate @tailwindcss/vite) serves UN-mangled class names,
+    // so applying a mangle map at runtime via `szr` would emit class names that
+    // have no matching CSS — silently collapsing szv-driven layouts in
+    // `vite serve` only. Forced off for `command === 'serve'` below
     // (configResolved), so dev always uses readable class names that match the
     // dev CSS. `let` because the command is only known at configResolved.
-    let manglingEnabled = options.production?.mangle !== false;
+    let manglingEnabled = options.production?.mangle === true;
     // Class names the mangler must never produce as a token, so a short alias
     // can't collide with a literal class in non-csszyx CSS (hybrid builds). Comes
     // from config, so it is available identically at every finalizeMangleMap call
@@ -2325,6 +2335,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const mangleMapDelivery = options.production?.mangleMapDelivery ?? 'both';
     const deliverMapInHtml = mangleMapDelivery !== 'bundle';
     const deliverMapInBundle = mangleMapDelivery !== 'html';
+    // Weighs the map against the CSS it bought. Counts channels that actually
+    // shipped rather than the configured ones: a webpack build never takes the
+    // bundle module, and a library build emits no HTML, so charging for a
+    // channel the build did not use would overstate the cost.
+    const sizeAccount: MangleSizeAccount = createMangleSizeAccount();
     // User can raise/lower the AST node budget per build via the existing
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
@@ -4118,6 +4133,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // No finalize here: the module carries placeholders that
                     // output processing fills from the FINAL map, after the
                     // mangle passes have run over the chunk.
+                    sizeAccount.channels.add('bundle');
                     return createMangleRuntimeModule(globalVarAliasPrefix);
                 }
                 if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
@@ -4527,6 +4543,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             globalVarAliasPrefix,
                             installRuntimeObject: deliverMapInHtml,
                         });
+                        if (deliverMapInHtml && manglingEnabled) {
+                            sizeAccount.channels.add('html');
+                        }
                         // Recovery manifest is a no-op when zero szRecover tokens were
                         // emitted across the build, so pages without recovery sites get
                         // no extra script tag. In production, dev-only tokens are stripped
@@ -4606,7 +4625,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         mangledSources: Set<string>,
         externalClasses: Set<string>,
     ): string {
-        let css = rewriteCssWithValidatedGlobalVarPlan(
+        const css = rewriteCssWithValidatedGlobalVarPlan(
             source,
             file,
             state.globalVarValidationResult,
@@ -4619,8 +4638,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             });
             for (const className of result.mangledClasses) mangledSources.add(className);
             for (const className of result.unmangledClasses) externalClasses.add(className);
-            if (result.transformedCount > 0) css = result.css;
-            return css;
+            const mangled = result.transformedCount > 0 ? result.css : css;
+            recordCssPair(sizeAccount, css, mangled);
+            return mangled;
         } catch (error) {
             if (isCssSyntaxError(error)) return css;
             throw error;
@@ -4643,6 +4663,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const message = mangleHybridHazardMessage(
             collectMangleHybridHazards(state.mangleMap, mangledSources, externalClasses),
         );
+        if (message) console.warn(message);
+        reportMangleSize();
+    }
+
+    /**
+     * Tell the build what mangling actually cost, once every CSS asset has been
+     * weighed. Silent unless the map came out more expensive than the CSS it
+     * bought, so a build that got what it paid for stays quiet.
+     */
+    function reportMangleSize(): void {
+        const verdict = computeMangleSizeVerdict(
+            sizeAccount,
+            JSON.stringify(createHydrationMangleMap(state.mangleMap, state.varMangleMap)),
+        );
+        const message = mangleSizeMessage(verdict);
         if (message) console.warn(message);
     }
 
