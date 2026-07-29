@@ -11,6 +11,11 @@ import {
 } from './property-types.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
 import {
+    describeSzFallback,
+    SZ_FALLBACK_UNKNOWN_CALLEE,
+    type SzFallbackDescription,
+} from './sz-fallback-matrix.js';
+import {
     deepMergeSzObjects,
     formatSzWarnLocation,
     getVariantPrefix,
@@ -667,13 +672,13 @@ function resolveStaticSzExpression(
 }
 
 /** Runtime fallback reason and its actionable replacement guidance. */
-interface RuntimeFallbackDescription {
-    reason: string;
-    suggestion: string;
-}
+type RuntimeFallbackDescription = SzFallbackDescription;
 
 /**
  * Describes why one sz expression requires runtime evaluation.
+ *
+ * Classifies the Babel node, then defers the wording to the shared matrix so
+ * the oxc and Rust lanes cannot drift from it.
  *
  * @param expression Unresolved sz expression.
  * @returns Runtime fallback reason and suggestion.
@@ -681,36 +686,20 @@ interface RuntimeFallbackDescription {
 function describeRuntimeFallback(expression: t.Expression): RuntimeFallbackDescription {
     if (t.isCallExpression(expression)) {
         const callee = expression.callee;
-        let name = '?';
+        let name: string = SZ_FALLBACK_UNKNOWN_CALLEE;
         if (t.isIdentifier(callee)) name = callee.name;
         else if (t.isMemberExpression(callee) && t.isIdentifier(callee.property)) {
             name = callee.property.name;
         }
-        return {
-            reason: `function call \`${name}()\` result is unknown at build time`,
-            suggestion:
-                'If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().',
-        };
+        return describeSzFallback('call', name);
     }
     if (t.isIdentifier(expression)) {
-        return {
-            reason: `identifier \`${expression.name}\` could not be resolved to a static value`,
-            suggestion:
-                "Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().",
-        };
+        return describeSzFallback('identifier', expression.name);
     }
     if (t.isMemberExpression(expression)) {
-        return {
-            reason: 'member expression is not statically resolvable',
-            suggestion:
-                'Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().',
-        };
+        return describeSzFallback('member');
     }
-    return {
-        reason: `expression of type \`${expression.type}\` is not statically analyzable`,
-        suggestion:
-            'Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().',
-    };
+    return describeSzFallback('other', expression.type);
 }
 
 /**

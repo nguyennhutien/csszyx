@@ -42,6 +42,7 @@ import {
     PropertyCategory,
 } from './property-types.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
+import { describeSzFallback, SZ_FALLBACK_UNKNOWN_CALLEE } from './sz-fallback-matrix.js';
 import type {
     CssVariableMangleValue,
     SourceTransformResult,
@@ -1813,11 +1814,14 @@ function buildSzPartElementDiagnostic(node: OxcNode, source: string): string {
 function buildRuntimeFallbackDiagnostic(expression: OxcNode, source: string): string {
     const { line, column } = offsetToLineColumn(source, expression.start);
     const lineCol = `${line}:${column + 1}`;
+    // Classify the oxc node, then defer the wording to the shared matrix — the
+    // Babel and Rust lanes read the same entries, so a build that switches
+    // `build.parser` cannot see the text change.
     let reason: string;
     let suggestion: string;
     if (expression.type === 'CallExpression') {
         const callee = (expression as CallExpressionNode).callee;
-        let name = '?';
+        let name: string = SZ_FALLBACK_UNKNOWN_CALLEE;
         if (callee.type === 'Identifier') {
             name = (callee as IdentifierNode).name;
         } else if (
@@ -1828,21 +1832,16 @@ function buildRuntimeFallbackDiagnostic(expression: OxcNode, source: string): st
                 ((callee as unknown as { property: OxcNode }).property as IdentifierNode).name,
             );
         }
-        reason = `function call \`${name}()\` result is unknown at build time`;
-        suggestion =
-            'If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().';
+        ({ reason, suggestion } = describeSzFallback('call', name));
     } else if (expression.type === 'Identifier') {
-        reason = `identifier \`${(expression as IdentifierNode).name}\` could not be resolved to a static value`;
-        suggestion =
-            "Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().";
+        ({ reason, suggestion } = describeSzFallback(
+            'identifier',
+            (expression as IdentifierNode).name,
+        ));
     } else if (expression.type === 'MemberExpression') {
-        reason = 'member expression is not statically resolvable';
-        suggestion =
-            'Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().';
+        ({ reason, suggestion } = describeSzFallback('member'));
     } else {
-        reason = `expression of type \`${expression.type}\` is not statically analyzable`;
-        suggestion =
-            'Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().';
+        ({ reason, suggestion } = describeSzFallback('other', expression.type));
     }
     return `sz fallback at ${lineCol}: ${reason}.\n  Suggestion: ${suggestion}`;
 }

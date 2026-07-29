@@ -466,6 +466,13 @@ jobs:
       - name: Check runtime box-role map is current
         run: pnpm gen:box-role:check
 
+      # The three engines must print identical sz runtime-fallback wording — a
+      # build can switch between them with `build.parser`, and text that changes
+      # on a parser flip reads as a behaviour change. TypeScript imports the
+      # matrix; Rust gets a generated copy. Fail if the copy is stale.
+      - name: Check sz fallback matrix is current
+        run: pnpm gen:sz-fallback-matrix:check
+
       # The sz-key allowlist (purifySz's authoritative set for untrusted input)
       # is generated from the compiler's PROPERTY_MAP / BOOLEAN_SHORTHANDS. Fail
       # if regenerating would change it, so a new sz prop can't be silently

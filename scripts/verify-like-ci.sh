@@ -56,6 +56,7 @@ echo "[verify-like-ci] Generated-artefact staleness gates (sz-key fixture, parit
 pnpm gen:key-tests:check
 pnpm gen:parity-corpus:check
 pnpm gen:rust-tables:check
+pnpm gen:sz-fallback-matrix:check
 pnpm check:key-corpus
 
 echo "[verify-like-ci] Building host native engine (matches CI step)..."
