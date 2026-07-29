@@ -9,7 +9,7 @@ use super::{
     global_var_aliases::apply_global_var_aliases,
     lower::{collect_unknown_sz_keys, lower_source_ir_classes},
     parser::{parse_source_shell_with_budget, AST_BUDGET},
-    recovery::{generate_inline_recovery_token, offset_to_line_column},
+    recovery::{generate_inline_recovery_token, offset_to_line_column, LineIndex},
     rewrite::rewrite_static_sz_attributes,
     DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile, TransformMetadata,
     TransformOptions, TransformProducer, TransformResult, TransformTimings,
@@ -505,11 +505,17 @@ fn unknown_property_diagnostics(
     let mut unknown = Vec::new();
     let mut dead_steps = Vec::new();
     let mut property_objects = Vec::new();
+    // Built on the first position lookup, not up front: a file whose `sz` props
+    // are all clean reaches none of the branches below, and must not pay a pass
+    // over its own source for a table nobody reads.
+    let mut lines: Option<LineIndex> = None;
     for attr in &ir.sz_attributes {
         unknown.clear();
         collect_unknown_sz_keys(&attr.object, &mut unknown);
         for (key, offset) in &unknown {
-            let (line, _) = offset_to_line_column(&file.source, *offset);
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, *offset);
             // A numeric key is almost never a typo — it means an array or a spread
             // reached `sz`. Match the JS engines' wording so a `build.parser` flip
             // does not change the diagnostic text.
@@ -526,7 +532,9 @@ fn unknown_property_diagnostics(
         dead_steps.clear();
         super::lower::collect_dead_spacing_steps(&attr.object, &mut dead_steps);
         for (key, value, offset) in &dead_steps {
-            let (line, _) = offset_to_line_column(&file.source, *offset);
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, *offset);
             // Wording matches the JS engines' warnDeadSpacingStep so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
@@ -536,7 +544,9 @@ fn unknown_property_diagnostics(
         property_objects.clear();
         super::lower::collect_property_object_values(&attr.object, &mut property_objects);
         for (key, nested, offset) in &property_objects {
-            let (line, _) = offset_to_line_column(&file.source, *offset);
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, *offset);
             // Wording matches the JS engines' warnPropertyObjectValue so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(

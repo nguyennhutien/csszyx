@@ -1738,19 +1738,51 @@ function whitespaceStart(source: string, attrStart: number): number {
  * @param offset Zero-based byte offset.
  * @returns 1-based line, 0-based column.
  */
+/**
+ * Byte offsets where each line of {@link lineStartsSource} begins.
+ *
+ * One entry, rebuilt when a different source arrives. A file emits its
+ * positions in a batch — several diagnostics per `sz` attribute — and rescanning
+ * the prefix for each one made position lookup quadratic in file length. The
+ * cache is filled on the FIRST lookup, never up front, so a file that reports
+ * nothing pays nothing. Mirrors `LineIndex` in the Rust engine.
+ */
+let lineStarts: number[] | undefined;
+/** Source the cached line starts were built from. */
+let lineStartsSource: string | undefined;
+
+/**
+ * Convert a byte offset into 1-based line and 0-based column.
+ *
+ * @param source - Full source text the offset refers to.
+ * @param offset - Offset to resolve.
+ * @returns Line and column for the offset.
+ */
 function offsetToLineColumn(source: string, offset: number): { line: number; column: number } {
-    let line = 1;
-    let column = 0;
-    const limit = Math.min(offset, source.length);
-    for (let i = 0; i < limit; i++) {
-        if (source.codePointAt(i) === 10) {
-            line++;
-            column = 0;
+    if (lineStartsSource !== source || lineStarts === undefined) {
+        const starts = [0];
+        for (let i = 0; i < source.length; i++) {
+            if (source.codePointAt(i) === 10) {
+                starts.push(i + 1);
+            }
+        }
+        lineStarts = starts;
+        lineStartsSource = source;
+    }
+    const limit = Math.min(Math.max(offset, 0), source.length);
+    // Highest line start at or before the offset. `lineStarts` always holds a
+    // leading 0, so the search cannot fall below index 0.
+    let low = 0;
+    let high = lineStarts.length - 1;
+    while (low < high) {
+        const mid = (low + high + 1) >> 1;
+        if ((lineStarts[mid] ?? 0) <= limit) {
+            low = mid;
         } else {
-            column++;
+            high = mid - 1;
         }
     }
-    return { line, column };
+    return { line: low + 1, column: limit - (lineStarts[low] ?? 0) };
 }
 
 /**
