@@ -26,6 +26,9 @@ pub struct TransformOptions {
     /// under one engine only — the override must reach the native parser too.
     #[serde(default)]
     pub ast_budget: Option<usize>,
+    /// Cross-module szv registry payload, ordered-pair JSON from the bundler.
+    #[serde(default)]
+    pub cross_module_statics_json: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.

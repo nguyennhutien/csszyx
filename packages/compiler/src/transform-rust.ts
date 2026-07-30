@@ -143,6 +143,7 @@ export function transformRustBatch(
                 // the default cap under rust only — and the user's raised
                 // `build.astBudgetLimit` has to apply to whichever engine trips.
                 astBudget: options?.astBudget,
+                crossModuleStaticsJson: encodeCrossModuleStatics(options?.crossModuleStatics),
             },
         ).map(fromNativeResult);
     } catch (err) {
@@ -238,4 +239,49 @@ function aggregateCssVariableMap(
         }
     }
     return map;
+}
+
+/** One value in the ordered transport: scalar or nested ordered pairs. */
+type OrderedTransportValue = string | number | boolean | Array<[string, OrderedTransportValue]>;
+
+/**
+ * Serialize the cross-module registry as ordered `[key, value]` pairs.
+ *
+ * Arrays survive every JSON library with order intact, where a map would be
+ * re-sorted — and table/dimension order fixes emitted class order, so the
+ * native engine must see EXACTLY the iteration order the JS lanes consumed.
+ * `Object.entries` supplies that order (integer-like keys first, ascending).
+ *
+ * @param statics - The per-file registry entries, or undefined.
+ * @returns JSON payload, or undefined when there is nothing to pass.
+ */
+function encodeCrossModuleStatics(
+    statics: Readonly<Record<string, Readonly<Record<string, unknown>>>> | undefined,
+): string | undefined {
+    if (statics === undefined || Object.keys(statics).length === 0) {
+        return undefined;
+    }
+    const payload = Object.entries(statics).map(([specifier, entries]) => [
+        specifier,
+        Object.entries(entries).map(([name, config]) => [name, encodeOrderedValue(config)]),
+    ]);
+    return JSON.stringify(payload);
+}
+
+/**
+ * Encode one config value as ordered pairs.
+ *
+ * @param value - Plain config value.
+ * @returns The ordered transport form; non-object scalars pass through, and
+ * anything outside the literal contract (null, arrays) passes as-is so the
+ * native decoder rejects that entry rather than this side guessing.
+ */
+function encodeOrderedValue(value: unknown): unknown {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        return Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+            key,
+            encodeOrderedValue(entry),
+        ]);
+    }
+    return value as OrderedTransportValue;
 }

@@ -429,6 +429,76 @@ const fn is_identifier_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'$'
 }
 
+/// One decoded cross-module registry: specifier → (exported name → config).
+pub(crate) type CrossModuleStatics = Vec<(String, Vec<(String, StaticSzObject)>)>;
+
+/// Decode the ordered cross-module payload the bundler serialized.
+///
+/// The transport is generic ordered pairs — arrays survive every JSON library
+/// with order intact, where a map would be re-sorted. Anything malformed
+/// decodes to nothing: a missing registry entry only costs the optimization.
+pub(crate) fn decode_cross_module_statics(json: &str) -> CrossModuleStatics {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else {
+        return Vec::new();
+    };
+    let Some(specifiers) = value.as_array() else {
+        return Vec::new();
+    };
+    let mut out: CrossModuleStatics = Vec::new();
+    for specifier_entry in specifiers {
+        let Some([specifier, names]) = specifier_entry.as_array().map(Vec::as_slice) else {
+            continue;
+        };
+        let (Some(specifier), Some(names)) = (specifier.as_str(), names.as_array()) else {
+            continue;
+        };
+        let mut decoded_names: Vec<(String, StaticSzObject)> = Vec::new();
+        for name_entry in names {
+            let Some([name, config]) = name_entry.as_array().map(Vec::as_slice) else {
+                continue;
+            };
+            let (Some(name), Some(config)) = (name.as_str(), decode_ordered_object(config)) else {
+                continue;
+            };
+            decoded_names.push((name.to_string(), config));
+        }
+        if !decoded_names.is_empty() {
+            out.push((specifier.to_string(), decoded_names));
+        }
+    }
+    out
+}
+
+/// Decode one ordered object: an array of `[key, value]` pairs.
+fn decode_ordered_object(value: &serde_json::Value) -> Option<StaticSzObject> {
+    let pairs = value.as_array()?;
+    let mut properties = Vec::with_capacity(pairs.len());
+    for pair in pairs {
+        let Some([key, entry_value]) = pair.as_array().map(Vec::as_slice) else {
+            return None;
+        };
+        let key = key.as_str()?;
+        let decoded = decode_ordered_value(entry_value)?;
+        properties.push(super::ir::StaticSzProperty {
+            key: key.to_string(),
+            value: decoded,
+            span: super::TextSpan { start: 0, end: 0 },
+        });
+    }
+    Some(StaticSzObject { properties })
+}
+
+/// Decode one ordered value: scalar, or a nested ordered object.
+fn decode_ordered_value(value: &serde_json::Value) -> Option<StaticSzValue> {
+    match value {
+        serde_json::Value::String(text) => Some(StaticSzValue::String(text.clone())),
+        serde_json::Value::Bool(flag) => Some(StaticSzValue::Boolean(*flag)),
+        serde_json::Value::Number(number) => number.as_f64().map(StaticSzValue::Number),
+        serde_json::Value::Array(_) => decode_ordered_object(value).map(StaticSzValue::Object),
+        _ => None,
+    }
+}
+
 /// Name of the emitted table constant, mirroring `szvTableIdentifier`.
 pub(crate) fn szv_table_identifier(factory_name: &str) -> String {
     format!("__szvT_{factory_name}")

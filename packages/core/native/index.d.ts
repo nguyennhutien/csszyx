@@ -34,6 +34,8 @@ export interface NativeTransformOptions {
     rootDir?: string;
     /** Per-file AST node cap override (`build.astBudgetLimit`). */
     astBudget?: number;
+    /** Cross-module szv registry payload (ordered-pair JSON). */
+    crossModuleStaticsJson?: string;
 }
 
 /** Native transform output shape returned per source file. */

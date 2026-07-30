@@ -89,6 +89,8 @@ export interface TransformCacheKeyInput {
     mangleVarHoistMaxDepth?: number;
     /** Exact global custom-property alias table used by compiler rewrites. */
     globalVarAliases?: ReadonlyArray<readonly [string, string]>;
+    /** Serialized cross-module registry entries fed to this file, if any. */
+    crossModuleStatics?: string;
     /** Source filename; recovery tokens depend on it. */
     filename: string;
     /** Source file contents. */
@@ -134,6 +136,7 @@ export function createTransformCacheKey(input: TransformCacheKeyInput): Transfor
         `mangleVars=${input.mangleVars === true}`,
         `mangleVarHoistMaxDepth=${input.mangleVarHoistMaxDepth ?? 'default'}`,
         `globalVarAliases=${JSON.stringify(globalVarAliases)}`,
+        `crossModuleStatics=${input.crossModuleStatics ?? 'none'}`,
         `filename=${input.filename}`,
         `source=${inputSha256}`,
     ].join('\n');

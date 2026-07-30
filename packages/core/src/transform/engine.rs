@@ -8,7 +8,7 @@ use super::{
     fast_path::{triage_source, FastPathTriage},
     global_var_aliases::apply_global_var_aliases,
     lower::{collect_unknown_sz_keys, lower_source_ir_classes},
-    parser::{parse_source_shell_with_budget, AST_BUDGET},
+    parser::{parse_source_shell_with_budget_and_statics, AST_BUDGET},
     recovery::{generate_inline_recovery_token, offset_to_line_column, LineIndex},
     rewrite::rewrite_static_sz_attributes,
     DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile, TransformMetadata,
@@ -206,7 +206,16 @@ fn transform_static_classes_with_options(
     total_start: Instant,
     options: TransformOptions,
 ) -> TransformResult {
-    let parsed = parse_source_shell_with_budget(file, options.ast_budget.unwrap_or(AST_BUDGET));
+    let cross_module = options
+        .cross_module_statics_json
+        .as_deref()
+        .map(super::szv_precompile::decode_cross_module_statics)
+        .unwrap_or_default();
+    let parsed = parse_source_shell_with_budget_and_statics(
+        file,
+        options.ast_budget.unwrap_or(AST_BUDGET),
+        &cross_module,
+    );
     let global_var_aliases = (!options.global_var_aliases.is_empty())
         .then(|| apply_global_var_aliases(&parsed.ir, &options.global_var_aliases));
     let alias_ir = global_var_aliases

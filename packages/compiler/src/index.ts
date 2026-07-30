@@ -76,7 +76,9 @@ export {
     SUGGESTION_MAP,
 } from './transform-core.js';
 export {
+    extractSzvRegistryEntries,
     OxcNotImplementedError,
+    type SzvRegistryEntry,
     type TransformOxcResult,
     transformOxc,
 } from './transform-oxc.js';

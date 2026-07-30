@@ -34,6 +34,8 @@ pub struct NativeTransformOptions {
     pub root_dir: Option<String>,
     /// Per-file AST node cap override (`build.astBudgetLimit`).
     pub ast_budget: Option<u32>,
+    /// Cross-module szv registry payload (ordered-pair JSON).
+    pub cross_module_statics_json: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -187,6 +189,7 @@ pub fn transform_batch_native(
                 .collect(),
             root_dir: options.root_dir,
             ast_budget: options.ast_budget.map(|budget| budget as usize),
+            cross_module_statics_json: options.cross_module_statics_json,
         },
     )
     .map(|results| {

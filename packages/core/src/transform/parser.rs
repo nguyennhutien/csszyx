@@ -60,6 +60,16 @@ pub fn parse_source_shell_with_budget(
     file: &TransformFile,
     ast_budget: usize,
 ) -> ParsedSourceShell {
+    parse_source_shell_with_budget_and_statics(file, ast_budget, &Vec::new())
+}
+
+/// [`parse_source_shell_with_budget`] with the bundler's cross-module szv
+/// registry, decoded to native IR objects.
+pub fn parse_source_shell_with_budget_and_statics(
+    file: &TransformFile,
+    ast_budget: usize,
+    cross_module: &super::szv_precompile::CrossModuleStatics,
+) -> ParsedSourceShell {
     let allocator = Allocator::default();
     let source_type = source_type_for_path(&file.filename);
     let parse_start = Instant::now();
@@ -91,7 +101,8 @@ pub fn parse_source_shell_with_budget(
             szr_call_args: Vec::new(),
             szv_candidates: Vec::new(),
             szv_call_sites: Vec::new(),
-            szv_gate: file.source.contains("szv("),
+            szv_gate: file.source.contains("szv(") || !cross_module.is_empty(),
+            cross_module,
         };
         let ir_start = Instant::now();
         visitor.visit_program(&parsed.program);
@@ -188,6 +199,8 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     /// call there is nothing to precompile, and every parsed file would
     /// otherwise pay the call-site vector for nothing.
     szv_gate: bool,
+    /// Bundler-resolved imported factories: specifier → (name → config).
+    cross_module: &'p super::szv_precompile::CrossModuleStatics,
 }
 
 /// One qualifying szr import clause, recorded for the deferred rewrite.
@@ -401,6 +414,7 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
         }
 
         self.record_szr_import_candidate(declaration);
+        self.record_cross_module_szv_factories(declaration);
         walk::walk_import_declaration(self, declaration);
     }
 
@@ -913,6 +927,59 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             }
             self.szv_candidates.push(SzvFactoryRecord {
                 name: name.to_string(),
+                statement_end: declaration.span.end,
+                table: super::szv_precompile::compile_szv_table(&config),
+            });
+        }
+    }
+
+    /// Record factory candidates that arrive through imports, resolved by the
+    /// bundler's cross-module registry. The LOCAL binding name becomes the
+    /// factory name; qualification and table compilation run the same code the
+    /// local candidates use, so a `build.parser` flip cannot differ.
+    fn record_cross_module_szv_factories(&mut self, declaration: &ImportDeclaration<'_>) {
+        if declaration.import_kind.is_type() || self.cross_module.is_empty() {
+            return;
+        }
+        let source_value = declaration.source.value.as_str();
+        let Some((_, entries)) = self
+            .cross_module
+            .iter()
+            .find(|(specifier, _)| specifier == source_value)
+        else {
+            return;
+        };
+        let Some(specifiers) = &declaration.specifiers else {
+            return;
+        };
+        for entry in specifiers {
+            let ImportDeclarationSpecifier::ImportSpecifier(specifier) = entry else {
+                continue;
+            };
+            if specifier.import_kind.is_type() {
+                continue;
+            }
+            let imported = specifier.imported.name();
+            let Some((_, config_object)) =
+                entries.iter().find(|(name, _)| name.as_str() == imported)
+            else {
+                continue;
+            };
+            let local = specifier.local.name.as_str();
+            if SZV_RESERVED_FACTORY_NAMES.contains(&local)
+                || self.szv_candidates.iter().any(|c| c.name == local)
+            {
+                continue;
+            }
+            let Some(config) = super::szv_precompile::static_szv_config_from_object(config_object)
+            else {
+                continue;
+            };
+            if !super::szv_precompile::szv_config_free_of_overlap(&config) {
+                continue;
+            }
+            self.szv_candidates.push(SzvFactoryRecord {
+                name: local.to_string(),
                 statement_end: declaration.span.end,
                 table: super::szv_precompile::compile_szv_table(&config),
             });

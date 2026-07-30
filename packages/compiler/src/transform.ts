@@ -775,10 +775,10 @@ interface SzrRewriteState {
 
 /** One file-local `const F = szv(<config>)` factory candidate. */
 interface SzvFactoryCandidate {
-    /** Factory binding name. */
+    /** Factory binding name (the LOCAL name for an imported factory). */
     name: string;
-    /** Declarator path, for inserting the table after its statement. */
-    declaratorPath: babel.NodePath<t.VariableDeclarator>;
+    /** Statement path the table constant is inserted after. */
+    statementPath: babel.NodePath;
     /** Statically resolved config, or null when extraction failed. */
     config: StaticSzvConfig | null;
 }
@@ -787,6 +787,8 @@ interface SzvFactoryCandidate {
 interface SzvPrecompileState {
     /** Whether the file can contain an szv factory at all. */
     enabled: boolean;
+    /** Imported-factory configs by specifier, from the bundler's registry. */
+    crossModuleStatics?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
     /** Factory candidates by binding name. */
     candidates: Map<string, SzvFactoryCandidate>;
     /** Every direct identifier-callee call, by callee name. */
@@ -892,7 +894,44 @@ function recordSzvFactoryCandidate(
     const config = t.isObjectExpression(argument)
         ? (evaluateStaticObject(argument) as StaticSzvConfig | null)
         : null;
-    state.candidates.set(name, { name, declaratorPath: path, config });
+    const statementPath = path.parentPath;
+    if (!statementPath) return;
+    state.candidates.set(name, { name, statementPath, config });
+}
+
+/**
+ * Record factory candidates that arrive through imports, resolved by the
+ * bundler's cross-module registry.
+ *
+ * The LOCAL binding name becomes the factory name (aliases welcome — the
+ * registry lookup is by exported name), and the whole local machinery —
+ * accounting, call classification, table insertion after the import — then
+ * runs unchanged.
+ *
+ * @param path - The import declaration path.
+ * @param state - szv precompile accumulator.
+ */
+function recordCrossModuleSzvFactories(
+    path: babel.NodePath<t.ImportDeclaration>,
+    state: SzvPrecompileState,
+): void {
+    const entries = state.crossModuleStatics?.[path.node.source.value];
+    if (entries === undefined || path.node.importKind === 'type') return;
+    for (const specifier of path.node.specifiers) {
+        if (!t.isImportSpecifier(specifier) || specifier.importKind === 'type') continue;
+        const imported = specifier.imported;
+        const importedName = t.isIdentifier(imported) ? imported.name : imported.value;
+        const config = entries[importedName];
+        if (config === undefined) continue;
+        const localName = specifier.local.name;
+        if (SZV_RESERVED_FACTORY_NAMES.has(localName)) continue;
+        if (state.candidates.has(localName)) continue;
+        state.candidates.set(localName, {
+            name: localName,
+            statementPath: path,
+            config: config as StaticSzvConfig,
+        });
+    }
 }
 
 /**
@@ -1220,7 +1259,7 @@ function insertSzvTableDeclaration(
     candidate: SzvFactoryCandidate,
     table: SzvPrecompiledTable,
 ): void {
-    const statement = candidate.declaratorPath.parentPath;
+    const statement = candidate.statementPath;
     const payload = JSON.parse(serializeSzvTable(table)) as Record<string, unknown>;
     statement.insertAfter(
         t.variableDeclaration('const', [
@@ -1751,6 +1790,16 @@ export interface TransformSourceCodeOptions {
     astBudget?: number;
 
     /**
+     * Statically resolved szv factories imported from OTHER modules, keyed by
+     * the import specifier exactly as this file writes it, then by exported
+     * name. Built once by the bundler plugin from its prescan registry and fed
+     * to every engine identically, so cross-module knowledge can never differ
+     * per parser. Value shape is the same literal-only config contract the
+     * local precompile enforces.
+     */
+    crossModuleStatics?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+
+    /**
      * Opt into tiered CSS custom property names for parser paths that support
      * the CSS variable system. Unsupported parser paths must preserve existing
      * `--_sz-*` output until they explicitly port this option.
@@ -1861,10 +1910,15 @@ export function transformSourceCode(
         szrSpecifier: null,
         szrCalls: [],
     };
+    const crossModuleStatics = options?.crossModuleStatics;
     const szvPrecompile: SzvPrecompileState = {
         // Every transformed file would otherwise pay the identifier-call map
-        // for nothing; without an szv call there is nothing to precompile.
-        enabled: source.includes('szv('),
+        // for nothing; without an szv call — or a cross-module entry that can
+        // introduce an imported factory — there is nothing to precompile.
+        enabled:
+            source.includes('szv(') ||
+            (crossModuleStatics !== undefined && Object.keys(crossModuleStatics).length > 0),
+        crossModuleStatics,
         candidates: new Map(),
         identifierCalls: new Map(),
         usedPick: false,
@@ -2081,6 +2135,7 @@ export function transformSourceCode(
                         // ── szr import rewrite (slim core entry) ─────────────────────────
                         ImportDeclaration(path: babel.NodePath<t.ImportDeclaration>) {
                             recordSzrImportCandidate(path, szrRewrite);
+                            recordCrossModuleSzvFactories(path, szvPrecompile);
                         },
                         Program: {
                             exit() {

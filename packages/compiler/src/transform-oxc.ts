@@ -184,10 +184,15 @@ export function transformOxc(
         otherSpecifierSpans: [],
         szrCalls: [],
     };
+    const crossModuleStatics = options?.crossModuleStatics;
     const szvPrecompile: OxcSzvPrecompileState = {
         // Every transformed file would otherwise pay the identifier-call map
-        // for nothing; without an szv call there is nothing to precompile.
-        enabled: source.includes('szv('),
+        // for nothing; without an szv call — or a cross-module entry that can
+        // introduce an imported factory — there is nothing to precompile.
+        enabled:
+            source.includes('szv(') ||
+            (crossModuleStatics !== undefined && Object.keys(crossModuleStatics).length > 0),
+        crossModuleStatics,
         candidates: new Map(),
         identifierCalls: new Map(),
         replacedCalls: new Set(),
@@ -231,6 +236,7 @@ export function transformOxc(
     walk(parsed.program, node => {
         if (node.type === 'ImportDeclaration') {
             recordSzrImportCandidateOxc(node, szrRewrite);
+            recordCrossModuleSzvFactoriesOxc(node, szvPrecompile);
             return;
         }
         if (node.type === 'VariableDeclaration') {
@@ -1890,6 +1896,8 @@ interface OxcSzvFactoryCandidate {
 interface OxcSzvPrecompileState {
     /** Whether the file can contain an szv factory at all. */
     enabled: boolean;
+    /** Imported-factory configs by specifier, from the bundler's registry. */
+    crossModuleStatics?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
     /** Factory candidates by binding name. */
     candidates: Map<string, OxcSzvFactoryCandidate>;
     /** Every direct identifier-callee call, by callee name. */
@@ -2017,6 +2025,38 @@ function recordSzvFactoryCandidatesOxc(node: OxcNode, state: OxcSzvPrecompileSta
         const config =
             argument.type === 'ObjectExpression' ? evaluateStaticObjectOxc(argument) : null;
         state.candidates.set(name, { name, statementEnd: declaration.end, config });
+    }
+}
+
+/**
+ * Record factory candidates that arrive through imports, resolved by the
+ * bundler's cross-module registry (oxc lane).
+ *
+ * @param node - The import declaration node.
+ * @param state - szv precompile accumulator.
+ */
+function recordCrossModuleSzvFactoriesOxc(node: OxcNode, state: OxcSzvPrecompileState): void {
+    const declaration = node as unknown as ImportDeclarationNode;
+    if (declaration.importKind === 'type') return;
+    const sourceValue = declaration.source?.value;
+    if (typeof sourceValue !== 'string') return;
+    const entries = state.crossModuleStatics?.[sourceValue];
+    if (entries === undefined) return;
+    const statement = node as unknown as { end: number };
+    for (const specifier of declaration.specifiers ?? []) {
+        if (specifier.type !== 'ImportSpecifier' || specifier.importKind === 'type') continue;
+        const importedName = specifier.imported?.name ?? specifier.imported?.value;
+        if (typeof importedName !== 'string') continue;
+        const config = entries[importedName];
+        if (config === undefined) continue;
+        const localName = specifier.local?.name;
+        if (localName === undefined || OXC_SZV_RESERVED_FACTORY_NAMES.has(localName)) continue;
+        if (state.candidates.has(localName)) continue;
+        state.candidates.set(localName, {
+            name: localName,
+            statementEnd: statement.end,
+            config,
+        });
     }
 }
 
@@ -6476,4 +6516,66 @@ function walk(node: unknown, visit: (node: OxcNode) => void): void {
             walk(child, visit);
         }
     }
+}
+
+/** One exported szv factory found by the registry extractor. */
+export interface SzvRegistryEntry {
+    /** The exported binding name. */
+    exportName: string;
+    /** Statically evaluated, qualification-passing config. */
+    config: Record<string, unknown>;
+}
+
+/**
+ * Extract every `export const X = szv(<literal config>)` from one module, for
+ * the bundler's cross-module registry.
+ *
+ * ONE implementation on purpose: the registry is built once by the bundler and
+ * fed to every engine identically, so parity holds by construction — each
+ * engine then re-validates and compiles its own table through the same code
+ * its local candidates use. Only configs that already pass qualification are
+ * recorded, so the registry never carries junk across the boundary.
+ *
+ * @param source - Module source text.
+ * @param filename - Module filename, for parser dialect detection.
+ * @returns The exported factories, declaration order preserved.
+ */
+export function extractSzvRegistryEntries(source: string, filename: string): SzvRegistryEntry[] {
+    if (!source.includes('szv(') || !source.includes('export')) {
+        return [];
+    }
+    let program: { body?: OxcNode[] };
+    try {
+        program = parseSync(filename, source, { lang: 'tsx' }).program as unknown as {
+            body?: OxcNode[];
+        };
+    } catch {
+        return [];
+    }
+    const out: SzvRegistryEntry[] = [];
+    for (const statement of program.body ?? []) {
+        if (statement.type !== 'ExportNamedDeclaration') continue;
+        const declaration = (statement as unknown as { declaration?: OxcNode }).declaration;
+        if (!declaration || declaration.type !== 'VariableDeclaration') continue;
+        for (const declarator of (declaration as unknown as VariableDeclarationNode).declarations ??
+            []) {
+            if (declarator.id?.type !== 'Identifier' || !declarator.init) continue;
+            const exportName = declarator.id.name;
+            if (exportName === undefined || OXC_SZV_RESERVED_FACTORY_NAMES.has(exportName)) {
+                continue;
+            }
+            const init = unwrapExpression(declarator.init);
+            if (init.type !== 'CallExpression') continue;
+            const call = init as CallExpressionNode;
+            if (call.callee.type !== 'Identifier') continue;
+            if ((call.callee as IdentifierNode).name !== 'szv') continue;
+            if (call.arguments.length !== 1) continue;
+            const argument = unwrapExpression(call.arguments[0] as OxcNode);
+            if (argument.type !== 'ObjectExpression') continue;
+            const config = evaluateStaticObjectOxc(argument);
+            if (config === null || qualifyStaticSzvConfig(config) === null) continue;
+            out.push({ exportName, config });
+        }
+    }
+    return out;
 }
