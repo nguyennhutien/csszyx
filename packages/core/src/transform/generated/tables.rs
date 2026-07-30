@@ -613,3 +613,12 @@ pub(crate) fn is_aria_state(key: &str) -> bool {
             | "modal"
     )
 }
+
+/// Returns true when a key is a parametric/scope variant stem (group, peer,
+/// has, not, data, aria, supports) that combines with dash/bracket syntax.
+pub(crate) fn is_special_variant(key: &str) -> bool {
+    matches!(
+        key,
+        "group" | "peer" | "has" | "not" | "data" | "aria" | "supports"
+    )
+}

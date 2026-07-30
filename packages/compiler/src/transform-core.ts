@@ -1645,6 +1645,62 @@ function isArbitraryGroupPeerKey(key: string): boolean {
     return key.startsWith('.') || key.startsWith('#') || key.startsWith('[') || key.startsWith(':');
 }
 
+/**
+ * Resolves a key to the variant prefix a STRING value chains onto with `:`.
+ *
+ * A string value under a variant key is a ready-made utility to prefix
+ * (`{ hover: 'translate-x-full' }` → `hover:translate-x-full`) — the contract
+ * users infer from the known-variant form. This predicate is the single
+ * decision point for which keys get that treatment; anything it rejects falls
+ * through to property handling. It deliberately mirrors what the OBJECT-value
+ * path accepts, so the two value forms cannot disagree about whether a key is
+ * a variant (field-reported: `data-[ending-style]` joined with `-` for a
+ * string but `:` for an object, emitting dead classes only for strings).
+ *
+ * Kept a positive list rather than "anything unknown": a typo'd property key
+ * with a string value must keep reaching the unknown-property warning instead
+ * of silently minting a variant.
+ *
+ * The Rust engine reimplements this in `lower.rs` (`variant_string_prefix`);
+ * the two must stay in lockstep — parity-tested per shape.
+ *
+ * @param key - the sz key holding a string value.
+ * @returns the variant prefix to place before `:`, or null when the key is
+ * not a variant.
+ */
+export function variantStringPrefix(key: string): string | null {
+    if (KNOWN_VARIANTS.has(key)) return getVariantPrefix(key);
+    if (isArbitraryVariant(key)) return normalizeArbitraryVariant(key);
+    const bracketAt = key.indexOf('-[');
+    if (bracketAt > 0 && key.endsWith(']')) {
+        const stem = key.slice(0, bracketAt);
+        return SPECIAL_VARIANTS.has(stem) ||
+            KNOWN_VARIANTS.has(stem) ||
+            stem === 'min' ||
+            stem === 'max'
+            ? key
+            : null;
+    }
+    const dashAt = key.indexOf('-');
+    if (dashAt > 0) {
+        const stem = key.slice(0, dashAt);
+        const rest = key.slice(dashAt + 1);
+        // group-hover / peer-checked / not-hover: scope variants compound with
+        // a KNOWN variant state. Gating on the rest excludes utilities that
+        // merely start with the same stem (not-italic is font-style, not a
+        // variant chain).
+        if ((stem === 'group' || stem === 'peer' || stem === 'not') && KNOWN_VARIANTS.has(rest)) {
+            return key;
+        }
+        // aria-checked and friends are Tailwind's built-in aria set; anything
+        // outside it needs the bracket form and must not silently variant.
+        if (stem === 'aria' && ARIA_STATES.has(rest)) return key;
+        // Tailwind v4 accepts any bare data-* variant (attribute presence).
+        if (stem === 'data' && rest.length > 0) return key;
+    }
+    return null;
+}
+
 /** Returns whether a key names a supported variant. */
 function isKnownVariantKey(key: string): boolean {
     return KNOWN_VARIANTS.has(key) || KNOWN_VARIANTS.has(getVariantPrefix(key));
@@ -2821,6 +2877,7 @@ function isKnownSzPropertyKey(key: string): boolean {
             key.startsWith('@') ||
             KNOWN_VARIANTS.has(key) ||
             SPECIAL_VARIANTS.has(key) ||
+            variantStringPrefix(key) !== null ||
             key === 'min' ||
             key === 'max',
     );
@@ -2855,9 +2912,14 @@ function buildGenericStringClass(
 ): string {
     const importantValue = handleImportant(value);
     const finalValue = normalizeGenericStringValue(rawKey, key, importantValue.value);
+    // The minus belongs on the UTILITY, after any variant prefix:
+    // hover:-translate-x-full, never -hover:translate-x-full. The Rust engine
+    // always placed it correctly; putting it before `prefix` here emitted a
+    // selector Tailwind never generates (field-reported as silently dead
+    // drawer transitions).
     const className =
         finalValue.startsWith('-') && NEGATIVE_ALLOWED.has(key)
-            ? `-${prefix}${key}-${finalValue.substring(1)}`
+            ? `${prefix}-${key}-${finalValue.substring(1)}`
             : `${prefix}${key}-${finalValue}`;
     return importantValue.important ? `${className}!` : className;
 }
@@ -3166,8 +3228,9 @@ function collectUnresolvedStringProperty(
         classes.push(`${prefix}${snapClass}`);
         return true;
     }
-    if (KNOWN_VARIANTS.has(rawKey)) {
-        classes.push(`${prefix}${getVariantPrefix(rawKey)}:${value}`);
+    const variantForString = variantStringPrefix(rawKey);
+    if (variantForString !== null) {
+        classes.push(`${prefix}${variantForString}:${value}`);
         return true;
     }
     return false;

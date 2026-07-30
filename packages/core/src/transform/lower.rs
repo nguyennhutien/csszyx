@@ -8,8 +8,8 @@ use std::borrow::Cow;
 
 use super::{
     generated::tables::{
-        boolean_class, is_aria_state, is_known_variant, is_removed_boolean_sugar, property_prefix,
-        variant_prefix,
+        boolean_class, is_aria_state, is_known_variant, is_removed_boolean_sugar,
+        is_special_variant, property_prefix, variant_prefix,
     },
     SourceIr, StaticSzObject, StaticSzValue,
 };
@@ -150,6 +150,7 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
         || is_removed_boolean_sugar(key)
         || is_known_variant(key)
         || is_aria_state(key)
+        || variant_string_prefix(key).is_some()
         || variant_prefix(key).is_some()
         || is_special_cased_property(key)
         || key.starts_with("--")
@@ -539,6 +540,56 @@ fn lower_not_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
     }
 }
 
+/// Resolves a key to the variant prefix a STRING value chains onto with `:`.
+///
+/// A string value under a variant key is a ready-made utility to prefix
+/// (`{ hover: 'translate-x-full' }` → `hover:translate-x-full`). Mirrors
+/// `variantStringPrefix` in `transform-core.ts` decision for decision — the
+/// two must stay in lockstep, parity-tested per shape. A positive list on
+/// purpose: a typo'd property key with a string value must keep reaching the
+/// unknown-property path instead of silently minting a variant.
+fn variant_string_prefix(key: &str) -> Option<Cow<'_, str>> {
+    if is_known_variant(key) {
+        return Some(get_variant_prefix(key));
+    }
+    if key.starts_with('[') && key.ends_with(']') {
+        // "[& > li]" → "[&>li]", matching the JS normalizeArbitraryVariant.
+        return Some(Cow::Owned(
+            key.chars().filter(|c| !c.is_whitespace()).collect(),
+        ));
+    }
+    if let Some(bracket_at) = key.find("-[") {
+        if bracket_at > 0 && key.ends_with(']') {
+            let stem = &key[..bracket_at];
+            if is_special_variant(stem) || is_known_variant(stem) || stem == "min" || stem == "max"
+            {
+                return Some(Cow::Borrowed(key));
+            }
+        }
+        return None;
+    }
+    if let Some(dash_at) = key.find('-') {
+        let stem = &key[..dash_at];
+        let rest = &key[dash_at + 1..];
+        // group-hover / peer-checked / not-hover: scope variants compound with
+        // a KNOWN variant state. Gating on the rest excludes utilities that
+        // merely start with the same stem (not-italic is font-style).
+        if (stem == "group" || stem == "peer" || stem == "not") && is_known_variant(rest) {
+            return Some(Cow::Borrowed(key));
+        }
+        // aria-checked and friends are Tailwind's built-in aria set; anything
+        // outside it needs the bracket form and must not silently variant.
+        if stem == "aria" && is_aria_state(rest) {
+            return Some(Cow::Borrowed(key));
+        }
+        // Tailwind v4 accepts any bare data-* variant (attribute presence).
+        if stem == "data" && !rest.is_empty() {
+            return Some(Cow::Borrowed(key));
+        }
+    }
+    None
+}
+
 /// Resolves a variant key to its emitted prefix (VARIANT_MAP entry or
 /// kebab-case fallback), mirroring the oxc `getVariantPrefix`.
 fn get_variant_prefix(key: &str) -> Cow<'static, str> {
@@ -732,6 +783,15 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             Some(format_number_class(class_key.as_ref(), *value, prefix))
         }
         StaticSzValue::String(value) => {
+            // A string under a variant key is a ready-made utility to prefix.
+            // Property keys and variant keys are disjoint (locked by test), so
+            // checking first cannot shadow a property lowering. The JS lanes
+            // previously owned this branch alone, which left the default
+            // engine emitting `hover-translate-x-full` — a dash-joined class
+            // Tailwind never generates (field-reported as silent dead styles).
+            if let Some(variant) = variant_string_prefix(key) {
+                return Some(format!("{prefix}{variant}:{value}"));
+            }
             // leading numeric STRINGS are the unitless line-height ratio and
             // auto-bracket (leading: '1.5' → leading-[1.5]); bare numbers ride
             // the spacing scale. Mirrors the oxc lane.
@@ -1586,7 +1646,7 @@ mod tests {
     use super::{
         collect_unknown_sz_keys, format_color_opacity_object, has_slash_opacity, is_known_sz_key,
         is_percent, is_tailwind_build_function, is_unsigned_decimal, lower_source_ir_classes,
-        lower_static_sz_object, needs_brackets,
+        lower_static_sz_object, needs_brackets, variant_string_prefix,
     };
     use crate::transform::{
         ClassAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
@@ -2619,6 +2679,73 @@ mod tests {
         assert_eq!(
             lower_static_sz_object(&object),
             ["grid-cols-[280px_minmax(0,1fr)]"]
+        );
+    }
+
+    #[test]
+    fn variant_string_prefix_mirrors_the_typescript_predicate() {
+        // Shape-for-shape with `variantStringPrefix` in transform-core.ts —
+        // the pinned contract is that a build.parser flip cannot change which
+        // keys colon-join a string value.
+        assert_eq!(variant_string_prefix("hover").as_deref(), Some("hover"));
+        assert_eq!(
+            variant_string_prefix("[& > li]").as_deref(),
+            Some("[&>li]"),
+            "arbitrary variants collapse whitespace"
+        );
+        assert_eq!(
+            variant_string_prefix("data-[open]").as_deref(),
+            Some("data-[open]")
+        );
+        assert_eq!(
+            variant_string_prefix("min-[900px]").as_deref(),
+            Some("min-[900px]")
+        );
+        assert_eq!(
+            variant_string_prefix("group-hover").as_deref(),
+            Some("group-hover")
+        );
+        assert_eq!(
+            variant_string_prefix("aria-checked").as_deref(),
+            Some("aria-checked")
+        );
+        assert_eq!(
+            variant_string_prefix("data-open").as_deref(),
+            Some("data-open")
+        );
+    }
+
+    #[test]
+    fn variant_string_prefix_rejects_non_variants() {
+        // A typo'd key must keep reaching the unknown-property path; silently
+        // minting a variant would hide the typo forever.
+        assert_eq!(variant_string_prefix("foo-[bar]"), None);
+        assert_eq!(
+            variant_string_prefix("not-italic"),
+            None,
+            "not-italic is the font-style utility, not a variant chain"
+        );
+        assert_eq!(
+            variant_string_prefix("aria-foo"),
+            None,
+            "unknown aria attributes need the bracket form"
+        );
+        for key in ["translateX", "p", "bg", "foo", "50"] {
+            assert_eq!(variant_string_prefix(key), None, "{key}");
+        }
+    }
+
+    #[test]
+    fn string_value_under_a_variant_key_colon_joins() {
+        let object = StaticSzObject {
+            properties: vec![property(
+                "data-[ending-style]",
+                StaticSzValue::String("translate-x-full".to_string()),
+            )],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            vec!["data-[ending-style]:translate-x-full".to_string()]
         );
     }
 
