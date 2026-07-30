@@ -6556,7 +6556,7 @@ export function extractSzvRegistryEntries(source: string, filename: string): Szv
     for (const statement of program.body ?? []) {
         if (statement.type !== 'ExportNamedDeclaration') continue;
         const declaration = (statement as unknown as { declaration?: OxcNode }).declaration;
-        if (!declaration || declaration.type !== 'VariableDeclaration') continue;
+        if (declaration?.type !== 'VariableDeclaration') continue;
         for (const declarator of (declaration as unknown as VariableDeclarationNode).declarations ??
             []) {
             if (declarator.id?.type !== 'Identifier' || !declarator.init) continue;
