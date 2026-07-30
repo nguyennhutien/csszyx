@@ -100,6 +100,13 @@ const MATRIX: ReadonlyArray<readonly [string, string, 'static' | 'dynamic' | 'ba
         'static',
     ],
     [
+        'integer-like keys follow JS iteration order on every engine',
+        // JS iterates '2' before 'pad' regardless of declaration order; the
+        // Rust mirror must agree or the emitted class order flips per parser.
+        "const f = szv({ variants: { pad: { sm: { p: 2 } }, '2': { on: { m: 4 } } } });\nexport const c = szr(f({ pad: 'sm', '2': 'on' }));",
+        'static',
+    ],
+    [
         'overlapping canonical keys bail',
         "const cardSz = szv({ base: { p: 4 }, variants: { pad: { lg: { p: 8 } } } });\nexport const cls = szr(cardSz({ pad: 'lg' }));",
         'bail',

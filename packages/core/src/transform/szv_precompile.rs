@@ -33,6 +33,42 @@ pub(crate) struct StaticSzvConfig {
     pub defaults: Option<Vec<(String, String)>>,
 }
 
+/// True for a canonical array-index key: the exact decimal form of a uint32
+/// below 2^32 − 1. JavaScript iterates these FIRST and in ascending order on
+/// any object, regardless of declaration order.
+fn is_array_index_like(key: &str) -> bool {
+    if key.is_empty() || (key.len() > 1 && key.starts_with('0')) {
+        return false;
+    }
+    if !key.bytes().all(|byte| byte.is_ascii_digit()) {
+        return false;
+    }
+    key.parse::<u64>().is_ok_and(|value| value < 4_294_967_295)
+}
+
+/// Reorder entries the way JavaScript iterates object keys: array-index-like
+/// keys ascending first, then the rest in insertion order.
+///
+/// The JS lanes build their tables from plain objects, so `Object.keys` has
+/// already applied this rule before any table exists — a config declaring
+/// `{ pad: …, '2': … }` iterates as `['2', 'pad']` there. Without this mirror
+/// the native engine kept source order and emitted the same classes in a
+/// different sequence, which a `build.parser` flip must never do.
+fn js_object_key_order<T>(entries: Vec<(String, T)>) -> Vec<(String, T)> {
+    let mut indexed: Vec<(String, T)> = Vec::new();
+    let mut rest: Vec<(String, T)> = Vec::new();
+    for entry in entries {
+        if is_array_index_like(&entry.0) {
+            indexed.push(entry);
+        } else {
+            rest.push(entry);
+        }
+    }
+    indexed.sort_by_key(|(key, _)| key.parse::<u64>().unwrap_or(u64::MAX));
+    indexed.extend(rest);
+    indexed
+}
+
 /// Extract and validate a config from the szv argument's static object.
 ///
 /// Mirrors `qualifyStaticSzvConfig` shape rules: only
@@ -83,8 +119,13 @@ pub(crate) fn static_szv_config_from_object(object: &StaticSzObject) -> Option<S
     }
     Some(StaticSzvConfig {
         base,
-        variants,
-        defaults,
+        variants: js_object_key_order(
+            variants
+                .into_iter()
+                .map(|(dimension, leaves)| (dimension, js_object_key_order(leaves)))
+                .collect(),
+        ),
+        defaults: defaults.map(js_object_key_order),
     })
 }
 
