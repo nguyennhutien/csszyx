@@ -189,6 +189,9 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
     return {
         code: result.code,
         transformed: result.metadata.transformed,
+        // Not yet surfaced by the native metadata; the rust szv precompile
+        // lane wires this through when it lands.
+        usesSzvPick: (result.metadata as { usesSzvPick?: boolean }).usesSzvPick ?? false,
         usesRuntime: result.metadata.usesRuntime,
         usesMerge: result.metadata.usesMerge,
         usesSzcn: result.metadata.usesSzcn,

@@ -4,11 +4,11 @@ import * as path from 'node:path';
 
 import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@csszyx/compiler';
 
-// 10: transform results carry `usesSpacingVar`/`usesUnitVar` — a schema-9
-// entry deserialized into the new shape would resurrect those flags as
-// `undefined`, silently skipping `__szSpacingVar`/`__szUnitVar` import
-// injection for code that calls them.
-const CACHE_SCHEMA_VERSION = 10;
+// 11: transform results carry `usesSzvPick` (the szv per-key precompile) —
+// a schema-10 entry deserialized into the new shape would resurrect the flag
+// as `undefined`, silently skipping the `__szvPick` import injection for a
+// module whose factory calls were rewritten to table picks.
+const CACHE_SCHEMA_VERSION = 11;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';
@@ -24,6 +24,7 @@ interface SerializedTransformResult {
     usesMerge: boolean;
     usesSzcn: boolean;
     usesSzPart: boolean;
+    usesSzvPick: boolean;
     usesColorVar: boolean;
     usesSpacingVar: boolean;
     usesUnitVar: boolean;
@@ -317,6 +318,7 @@ function serializeResult(result: CacheableTransformResult): SerializedTransformR
         usesMerge: result.usesMerge,
         usesSzcn: result.usesSzcn,
         usesSzPart: result.usesSzPart,
+        usesSzvPick: result.usesSzvPick,
         usesColorVar: result.usesColorVar,
         usesSpacingVar: result.usesSpacingVar,
         usesUnitVar: result.usesUnitVar,
@@ -342,6 +344,7 @@ function deserializeResult(result: SerializedTransformResult): CacheableTransfor
         usesMerge: result.usesMerge,
         usesSzcn: result.usesSzcn,
         usesSzPart: result.usesSzPart,
+        usesSzvPick: result.usesSzvPick,
         usesColorVar: result.usesColorVar,
         usesSpacingVar: result.usesSpacingVar,
         usesUnitVar: result.usesUnitVar,

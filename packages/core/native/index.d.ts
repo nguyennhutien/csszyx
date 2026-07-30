@@ -78,6 +78,8 @@ export interface NativeTransformResult {
         usesSzcn: boolean;
         /** Whether the result imports the runtime _szPart helper (dynamic array elements). */
         usesSzPart: boolean;
+        /** Whether the result imports the runtime __szvPick helper. */
+        usesSzvPick: boolean;
         /** Whether the result imports the runtime color-var helper. */
         usesColorVar: boolean;
         /** Whether the emitted code calls the __szSpacingVar runtime helper. */

@@ -6,7 +6,7 @@ use oxc_ast::{
         JSXAttributeName, JSXAttributeValue, JSXElement, JSXElementName, JSXExpression,
         JSXFragment, JSXMemberExpression, JSXMemberExpressionObject, JSXOpeningElement,
         JSXSpreadAttribute, ObjectExpression, ObjectProperty, ObjectPropertyKind, PropertyKey,
-        UnaryOperator,
+        UnaryOperator, VariableDeclaration,
     },
     AstKind,
 };
@@ -88,12 +88,14 @@ pub fn parse_source_shell_with_budget(
             program: &parsed.program,
             element_stack: Vec::new(),
             szr_import: None,
-            szr_proven_calls: 0,
-            szr_saw_unsafe_call: false,
+            szr_call_args: Vec::new(),
+            szv_candidates: Vec::new(),
+            szv_call_sites: Vec::new(),
         };
         let ir_start = Instant::now();
         visitor.visit_program(&parsed.program);
-        visitor.finalize_szr_import_rewrite();
+        let replaced_spans = visitor.finalize_szv_precompile();
+        visitor.finalize_szr_import_rewrite(&replaced_spans);
         timings.ir_ns = elapsed_ns(ir_start);
         visitor.ast_budget_exceeded
     };
@@ -171,10 +173,57 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     /// Qualifying `import { szr }` clause: source-literal span (quotes
     /// included) plus its specifier value.
     szr_import: Option<(super::TextSpan, String)>,
-    /// Direct `szr(...)` calls whose every argument passed the safety check.
-    szr_proven_calls: usize,
-    /// Whether any direct `szr(...)` call had an argument that failed it.
-    szr_saw_unsafe_call: bool,
+    /// Direct `szr(...)` calls as per-argument classifications; the proof is
+    /// deferred to finalize, where the szv precompile decides which factory
+    /// calls become strings.
+    szr_call_args: Vec<Vec<SzrArgClass>>,
+    /// File-local `const F = szv(<literal config>)` candidates that passed the
+    /// shape and overlap checks (reference accounting is deferred).
+    szv_candidates: Vec<SzvFactoryRecord>,
+    /// Every direct identifier-callee call that could be a factory call site.
+    szv_call_sites: Vec<SzvCallSite>,
+}
+
+/// Classification of one szr argument, resolved at finalize.
+enum SzrArgClass {
+    /// Provably a string or falsy at runtime.
+    Safe,
+    /// Anything unprovable.
+    Unsafe,
+    /// A direct call of a potential szv factory, keyed by its span.
+    FactoryCall(super::TextSpan),
+}
+
+/// One qualified-so-far szv factory.
+struct SzvFactoryRecord {
+    /// Factory binding name.
+    name: String,
+    /// End offset of the declaration statement, for the table insertion.
+    statement_end: u32,
+    /// Compiled table (shape and overlap already validated).
+    table: super::szv_precompile::SzvTable,
+}
+
+/// One direct identifier-callee call.
+struct SzvCallSite {
+    /// Callee name.
+    callee: String,
+    /// Span of the whole call.
+    span: super::TextSpan,
+    /// Classified argument shape.
+    argument: SzvCallArg,
+}
+
+/// Argument shape of one potential factory call.
+enum SzvCallArg {
+    /// `F()` — resolved from defaults alone.
+    None,
+    /// Fully static selection, values pre-stringified.
+    Static(super::szv_precompile::StaticSelection),
+    /// Anything else with exactly one argument: spliced into `__szvPick`.
+    Dynamic(super::TextSpan),
+    /// More than one argument (dropping extras would drop their evaluation).
+    Disqualifying,
 }
 
 impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
@@ -335,6 +384,15 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
 
         self.record_szr_import_candidate(declaration);
         walk::walk_import_declaration(self, declaration);
+    }
+
+    fn visit_variable_declaration(&mut self, declaration: &VariableDeclaration<'a>) {
+        if self.ast_budget_exceeded {
+            return;
+        }
+
+        self.record_szv_factory_candidates(declaration);
+        walk::walk_variable_declaration(self, declaration);
     }
 }
 
@@ -756,25 +814,160 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         self.szr_import = Some((text_span(declaration.source.span), source_value.to_string()));
     }
 
-    /// Record one call expression's contribution to the szr proof.
+    /// Record one direct identifier-callee call for the deferred proofs.
     fn record_szr_call_proof(&mut self, call: &CallExpression<'_>) {
         let Expression::Identifier(callee) = &call.callee else {
             return;
         };
-        if callee.name != "szr" {
+        if callee.name == "szr" {
+            let classes = call
+                .arguments
+                .iter()
+                .map(|argument| classify_szr_argument(argument))
+                .collect();
+            self.szr_call_args.push(classes);
             return;
         }
-        let all_safe = call.arguments.iter().all(|argument| match argument {
-            Argument::SpreadElement(_) => false,
-            other => other
-                .as_expression()
-                .is_some_and(is_provably_non_object_argument),
-        });
-        if all_safe {
-            self.szr_proven_calls += 1;
-        } else {
-            self.szr_saw_unsafe_call = true;
+        if SZV_RESERVED_FACTORY_NAMES.contains(&callee.name.as_str()) {
+            return;
         }
+        let argument = classify_szv_call_argument(call);
+        self.szv_call_sites.push(SzvCallSite {
+            callee: callee.name.to_string(),
+            span: text_span(call.span()),
+            argument,
+        });
+    }
+
+    /// Record every `const F = szv(<literal config>)` declarator, compiling
+    /// the table when the config passes the shape and overlap checks.
+    fn record_szv_factory_candidates(&mut self, declaration: &VariableDeclaration<'_>) {
+        for declarator in &declaration.declarations {
+            let Some(name) = declarator.id.get_identifier_name() else {
+                continue;
+            };
+            if SZV_RESERVED_FACTORY_NAMES.contains(&name.as_str()) {
+                continue;
+            }
+            let Some(init) = &declarator.init else {
+                continue;
+            };
+            let Expression::CallExpression(call) = unwrap_expression(init) else {
+                continue;
+            };
+            let Expression::Identifier(callee) = &call.callee else {
+                continue;
+            };
+            if callee.name != "szv" || call.arguments.len() != 1 {
+                continue;
+            }
+            let Some(argument) = call.arguments[0].as_expression() else {
+                continue;
+            };
+            let Expression::ObjectExpression(object) = unwrap_expression(argument) else {
+                continue;
+            };
+            let Some(config_object) = strict_literal_object(object) else {
+                continue;
+            };
+            let Some(config) = super::szv_precompile::static_szv_config_from_object(&config_object)
+            else {
+                continue;
+            };
+            if !super::szv_precompile::szv_config_free_of_overlap(&config) {
+                continue;
+            }
+            self.szv_candidates.push(SzvFactoryRecord {
+                name: name.to_string(),
+                statement_end: declaration.span.end,
+                table: super::szv_precompile::compile_szv_table(&config),
+            });
+        }
+    }
+
+    /// Decide the szv precompile after the whole file was walked, writing the
+    /// splices into the IR. Returns the spans of replaced factory calls so the
+    /// szr proof can treat them as strings.
+    fn finalize_szv_precompile(&mut self) -> Vec<super::TextSpan> {
+        let mut replaced: Vec<super::TextSpan> = Vec::new();
+        if self.szv_candidates.is_empty() {
+            return replaced;
+        }
+        let szr_factory_spans: Vec<super::TextSpan> = self
+            .szr_call_args
+            .iter()
+            .flatten()
+            .filter_map(|class| match class {
+                SzrArgClass::FactoryCall(span) => Some(*span),
+                _ => None,
+            })
+            .collect();
+        let candidates = std::mem::take(&mut self.szv_candidates);
+        for candidate in &candidates {
+            let calls: Vec<&SzvCallSite> = self
+                .szv_call_sites
+                .iter()
+                .filter(|site| site.callee == candidate.name)
+                .collect();
+            if calls.is_empty() {
+                continue;
+            }
+            let accounted = calls.iter().all(|site| {
+                szr_factory_spans.contains(&site.span)
+                    && !matches!(site.argument, SzvCallArg::Disqualifying)
+            });
+            if !accounted {
+                continue;
+            }
+            let occurrences =
+                super::szv_precompile::count_word_occurrences(self.source, &candidate.name);
+            if occurrences != 1 + calls.len() {
+                continue;
+            }
+            let table_ident = super::szv_precompile::szv_table_identifier(&candidate.name);
+            if super::szv_precompile::count_word_occurrences(self.source, &table_ident) != 0 {
+                continue;
+            }
+            let mut table_needed = false;
+            for site in calls {
+                let replacement = match &site.argument {
+                    SzvCallArg::None => super::szv_precompile::json_string_literal(
+                        &super::szv_precompile::compute_static_szv_pick(&candidate.table, None),
+                    ),
+                    SzvCallArg::Static(selection) => super::szv_precompile::json_string_literal(
+                        &super::szv_precompile::compute_static_szv_pick(
+                            &candidate.table,
+                            Some(selection),
+                        ),
+                    ),
+                    SzvCallArg::Dynamic(argument_span) => {
+                        table_needed = true;
+                        let text =
+                            &self.source[argument_span.start as usize..argument_span.end as usize];
+                        format!("__szvPick({table_ident}, {text})")
+                    }
+                    SzvCallArg::Disqualifying => continue,
+                };
+                self.ir.szv_replacements.push(super::SzvReplacementIr {
+                    span: site.span,
+                    replacement,
+                });
+                replaced.push(site.span);
+            }
+            if table_needed {
+                self.ir
+                    .szv_table_insertions
+                    .push(super::SzvTableInsertionIr {
+                        offset: candidate.statement_end,
+                        text: format!(
+                            "\nconst {table_ident} = {};",
+                            super::szv_precompile::serialize_szv_table(&candidate.table)
+                        ),
+                    });
+                self.ir.uses_szv_pick = true;
+            }
+        }
+        replaced
     }
 
     /// Decide the szr import rewrite after the whole file was walked.
@@ -783,15 +976,24 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     /// word count of `szr` equals one import specifier plus the proven calls.
     /// A `build.parser` flip must not change the emitted import, so the three
     /// verdicts are locked together by the cross-engine suite.
-    fn finalize_szr_import_rewrite(&mut self) {
-        if self.szr_saw_unsafe_call {
-            return;
-        }
+    fn finalize_szr_import_rewrite(&mut self, replaced_spans: &[super::TextSpan]) {
         let Some((span, source_value)) = self.szr_import.take() else {
             return;
         };
+        let mut proven_calls = 0;
+        for call in &self.szr_call_args {
+            let all_safe = call.iter().all(|class| match class {
+                SzrArgClass::Safe => true,
+                SzrArgClass::Unsafe => false,
+                SzrArgClass::FactoryCall(factory_span) => replaced_spans.contains(factory_span),
+            });
+            if !all_safe {
+                return;
+            }
+            proven_calls += 1;
+        }
         let occurrences = count_szr_word_occurrences(self.source);
-        if occurrences != 1 + self.szr_proven_calls {
+        if occurrences != 1 + proven_calls {
             return;
         }
         let Some(target) = szr_rewrite_target(&source_value) else {
@@ -1707,6 +1909,136 @@ fn classify_runtime_fallback(
 
     let (kind, detail) = classify_expression_fallback(expression.as_expression()?);
     Some(RuntimeFallbackDiagnosticIr { kind, detail })
+}
+
+/// Names that can never be szv factory bindings for the precompile.
+const SZV_RESERVED_FACTORY_NAMES: [&str; 4] = ["szr", "szv", "dynamic", "__szvPick"];
+
+/// Classify one szr argument for the deferred proof: parentheses unwrap, a
+/// direct call of a non-reserved identifier becomes a factory-call candidate,
+/// everything else goes through the safety check.
+fn classify_szr_argument(argument: &Argument<'_>) -> SzrArgClass {
+    let Some(expression) = argument.as_expression() else {
+        return SzrArgClass::Unsafe;
+    };
+    let mut expression = expression;
+    while let Expression::ParenthesizedExpression(inner) = expression {
+        expression = &inner.expression;
+    }
+    if let Expression::CallExpression(call) = expression {
+        if let Expression::Identifier(callee) = &call.callee {
+            if !SZV_RESERVED_FACTORY_NAMES.contains(&callee.name.as_str()) {
+                return SzrArgClass::FactoryCall(text_span(call.span()));
+            }
+        }
+    }
+    if is_provably_non_object_argument(expression) {
+        SzrArgClass::Safe
+    } else {
+        SzrArgClass::Unsafe
+    }
+}
+
+/// Classify one potential factory call's argument shape.
+///
+/// Static selections carry only string/boolean/safe-integer literal values
+/// (the tri-lane contract); everything else with exactly one argument splices
+/// into `__szvPick`, and extra arguments disqualify (dropping them would drop
+/// their evaluation).
+fn classify_szv_call_argument(call: &CallExpression<'_>) -> SzvCallArg {
+    match call.arguments.len() {
+        0 => SzvCallArg::None,
+        1 => {
+            let Some(expression) = call.arguments[0].as_expression() else {
+                return SzvCallArg::Disqualifying;
+            };
+            let unwrapped = unwrap_expression(expression);
+            if let Expression::ObjectExpression(object) = unwrapped {
+                if let Some(selection) = strict_static_selection(object) {
+                    return SzvCallArg::Static(selection);
+                }
+            }
+            SzvCallArg::Dynamic(text_span(unwrapped.span()))
+        }
+        _ => SzvCallArg::Disqualifying,
+    }
+}
+
+/// Evaluate a selection object literal under the tri-lane static contract.
+fn strict_static_selection(
+    object: &ObjectExpression<'_>,
+) -> Option<super::szv_precompile::StaticSelection> {
+    let mut selection: super::szv_precompile::StaticSelection = Vec::new();
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(entry) = property else {
+            return None;
+        };
+        if entry.computed {
+            return None;
+        }
+        let key = static_property_key(&entry.key)?;
+        let value = match unwrap_expression(&entry.value) {
+            Expression::StringLiteral(literal) => literal.value.to_string(),
+            Expression::BooleanLiteral(literal) => literal.value.to_string(),
+            Expression::NumericLiteral(literal) => {
+                super::szv_precompile::parity_safe_scalar_string(&super::StaticSzValue::Number(
+                    literal.value,
+                ))?
+            }
+            _ => return None,
+        };
+        selection.push((key, value));
+    }
+    Some(selection)
+}
+
+/// Evaluate an object expression under the Babel lane's literal-only
+/// vocabulary — string/number/boolean literals, a negated number, nested
+/// objects; TS wrappers and parentheses unwrap. Deliberately NOT the
+/// identifier-resolving extractor: a broader evaluator here would let this
+/// engine qualify a config the JS lanes bail on.
+fn strict_literal_object(object: &ObjectExpression<'_>) -> Option<StaticSzObject> {
+    let mut properties = Vec::new();
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(entry) = property else {
+            return None;
+        };
+        if entry.computed {
+            return None;
+        }
+        let key = static_property_key(&entry.key)?;
+        let value = strict_literal_value(&entry.value)?;
+        properties.push(super::StaticSzProperty {
+            key,
+            value,
+            span: text_span(entry.span),
+        });
+    }
+    Some(StaticSzObject { properties })
+}
+
+/// One literal value for `strict_literal_object`.
+fn strict_literal_value(expression: &Expression<'_>) -> Option<StaticSzValue> {
+    match unwrap_expression(expression) {
+        Expression::StringLiteral(literal) => {
+            Some(StaticSzValue::String(literal.value.to_string()))
+        }
+        Expression::NumericLiteral(literal) => Some(StaticSzValue::Number(literal.value)),
+        Expression::BooleanLiteral(literal) => Some(StaticSzValue::Boolean(literal.value)),
+        Expression::UnaryExpression(unary) => {
+            if unary.operator != UnaryOperator::UnaryNegation {
+                return None;
+            }
+            match unwrap_expression(&unary.argument) {
+                Expression::NumericLiteral(literal) => Some(StaticSzValue::Number(-literal.value)),
+                _ => None,
+            }
+        }
+        Expression::ObjectExpression(nested) => {
+            strict_literal_object(nested).map(StaticSzValue::Object)
+        }
+        _ => None,
+    }
 }
 
 /// Slim-entry target for a rewritable szr import source.

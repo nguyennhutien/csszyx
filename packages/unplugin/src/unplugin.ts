@@ -3761,6 +3761,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         usesMerge: boolean;
         usesSzcn: boolean;
         usesSzPart: boolean;
+        usesSzvPick: boolean;
         usesColorVar: boolean;
         usesSpacingVar: boolean;
         usesUnitVar: boolean;
@@ -3781,6 +3782,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesMerge: false,
             usesSzcn: false,
             usesSzPart: false,
+            usesSzvPick: false,
             usesColorVar: false,
             usesSpacingVar: false,
             usesUnitVar: false,
@@ -3856,6 +3858,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesMerge: result.usesMerge,
             usesSzcn: result.usesSzcn,
             usesSzPart: result.usesSzPart,
+            usesSzvPick: result.usesSzvPick,
             usesColorVar: result.usesColorVar,
             usesSpacingVar: result.usesSpacingVar,
             usesUnitVar: result.usesUnitVar,
@@ -3935,6 +3938,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (output.usesMerge) helpers.push('_szMerge');
         if (output.usesSzcn) helpers.push('_szcn');
         if (output.usesSzPart) helpers.push('_szPart');
+        if (output.usesSzvPick) helpers.push('__szvPick');
         if (output.usesColorVar) helpers.push('__szColorVar');
         if (output.usesSpacingVar) helpers.push('__szSpacingVar');
         if (output.usesUnitVar) helpers.push('__szUnitVar');

@@ -9,6 +9,7 @@ export type NextRuntimeHelper =
     | '_szMerge'
     | '_szcn'
     | '_szPart'
+    | '__szvPick'
     | '__szColorVar'
     | '__szSpacingVar'
     | '__szUnitVar';
@@ -19,6 +20,7 @@ export interface NextRuntimeImportUsage {
     usesMerge?: boolean;
     usesSzcn?: boolean;
     usesSzPart?: boolean;
+    usesSzvPick?: boolean;
     usesColorVar?: boolean;
     usesSpacingVar?: boolean;
     usesUnitVar?: boolean;
@@ -80,6 +82,9 @@ function runtimeHelpersFromUsage(usage: NextRuntimeImportUsage): NextRuntimeHelp
     }
     if (usage.usesSzPart) {
         helpers.push('_szPart');
+    }
+    if (usage.usesSzvPick) {
+        helpers.push('__szvPick');
     }
     if (usage.usesColorVar) {
         helpers.push('__szColorVar');

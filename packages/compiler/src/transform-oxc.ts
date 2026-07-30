@@ -55,6 +55,15 @@ import {
     SZR_IMPORT_REWRITE_TARGETS,
     szrRewriteApproved,
 } from './szr-import-rewrite.js';
+import {
+    computeStaticSzvPick,
+    countWordOccurrences,
+    isParitySafeNumber,
+    qualifyStaticSzvConfig,
+    type SzvPrecompiledTable,
+    serializeSzvTable,
+    szvTableIdentifier,
+} from './szv-precompile.js';
 import type {
     CssVariableMangleValue,
     SourceTransformResult,
@@ -131,6 +140,7 @@ export function transformOxc(
         return {
             code: source,
             transformed: false,
+            usesSzvPick: false,
             usesRuntime: false,
             usesMerge: false,
             usesSzcn: false,
@@ -170,8 +180,13 @@ export function transformOxc(
     const szrRewrite: OxcSzrRewriteState = {
         sourceSpan: null,
         sourceValue: '',
-        provenCalls: 0,
-        sawUnsafeCall: false,
+        szrCalls: [],
+    };
+    const szvPrecompile: OxcSzvPrecompileState = {
+        candidates: new Map(),
+        identifierCalls: new Map(),
+        replacedCalls: new Set(),
+        usedPick: false,
     };
     const objectBindings = collectObjectBindings(parsed.program as unknown as OxcNode);
     // szv config resolution follows ONLY `const` bindings (a reassigned `let`
@@ -213,8 +228,11 @@ export function transformOxc(
             recordSzrImportCandidateOxc(node, szrRewrite);
             return;
         }
+        if (node.type === 'VariableDeclaration') {
+            recordSzvFactoryCandidatesOxc(node, szvPrecompile);
+        }
         if (node.type === 'CallExpression') {
-            recordSzrCallProofOxc(node as CallExpressionNode, szrRewrite);
+            recordIdentifierCallOxc(node as CallExpressionNode, szrRewrite, szvPrecompile);
             collectDynamicCallClasses(
                 node as CallExpressionNode,
                 effectiveFilename,
@@ -389,13 +407,17 @@ export function transformOxc(
         classes.add(c);
     }
 
-    if (applySzrImportRewriteOxc(szrRewrite, source, edits)) {
+    if (applySzvPrecompileOxc(szvPrecompile, szrRewrite, source, edits)) {
+        transformed = true;
+    }
+    if (applySzrImportRewriteOxc(szrRewrite, szvPrecompile, source, edits)) {
         transformed = true;
     }
 
     return {
         code: transformed ? edits.toString() : source,
         transformed,
+        usesSzvPick: szvPrecompile.usedPick,
         usesRuntime,
         usesMerge,
         usesSzcn,
@@ -1841,11 +1863,34 @@ interface OxcSzrRewriteState {
     sourceSpan: { start: number; end: number } | null;
     /** The qualifying import's source value. */
     sourceValue: string;
-    /** Direct `szr(...)` calls whose every argument passed the safety check. */
-    provenCalls: number;
-    /** Whether any direct `szr(...)` call had an argument that failed it. */
-    sawUnsafeCall: boolean;
+    /** Direct `szr(...)` calls; the proof is deferred to the apply phase. */
+    szrCalls: CallExpressionNode[];
 }
+
+/** One file-local `const F = szv(<config>)` factory candidate (oxc lane). */
+interface OxcSzvFactoryCandidate {
+    /** Factory binding name. */
+    name: string;
+    /** End offset of the declaration statement, for the table insertion. */
+    statementEnd: number;
+    /** Statically evaluated config, or null when extraction failed. */
+    config: unknown;
+}
+
+/** Whole-file accumulator for the szv per-key precompile (oxc lane). */
+interface OxcSzvPrecompileState {
+    /** Factory candidates by binding name. */
+    candidates: Map<string, OxcSzvFactoryCandidate>;
+    /** Every direct identifier-callee call, by callee name. */
+    identifierCalls: Map<string, CallExpressionNode[]>;
+    /** Factory call nodes whose spans were spliced (string on all paths). */
+    replacedCalls: Set<CallExpressionNode>;
+    /** Whether any rewrite emitted a `__szvPick` call. */
+    usedPick: boolean;
+}
+
+/** Names that can never be szv factory bindings for the precompile. */
+const OXC_SZV_RESERVED_FACTORY_NAMES = new Set(['szr', 'szv', 'dynamic', '__szvPick']);
 
 /** Minimal import-declaration shape the proof reads. */
 interface ImportDeclarationNode {
@@ -1885,22 +1930,287 @@ function recordSzrImportCandidateOxc(node: OxcNode, state: OxcSzrRewriteState): 
 }
 
 /**
- * Record one call expression's contribution to the szr proof.
+ * Record one direct identifier-callee call for the deferred proofs.
  *
  * @param node - The call expression node.
- * @param state - Whole-file proof accumulator.
+ * @param szrState - szr import-rewrite accumulator.
+ * @param szvState - szv precompile accumulator.
  */
-function recordSzrCallProofOxc(node: CallExpressionNode, state: OxcSzrRewriteState): void {
+function recordIdentifierCallOxc(
+    node: CallExpressionNode,
+    szrState: OxcSzrRewriteState,
+    szvState: OxcSzvPrecompileState,
+): void {
     if (node.callee.type !== 'Identifier') return;
-    if ((node.callee as IdentifierNode).name !== 'szr') return;
-    const allSafe = node.arguments.every(argument =>
-        isProvablyNonObjectArgumentOxc(argument as OxcNode),
-    );
-    if (allSafe) {
-        state.provenCalls += 1;
-    } else {
-        state.sawUnsafeCall = true;
+    const name = (node.callee as IdentifierNode).name;
+    if (name === 'szr') {
+        szrState.szrCalls.push(node);
+        return;
     }
+    const existing = szvState.identifierCalls.get(name);
+    if (existing) {
+        existing.push(node);
+    } else {
+        szvState.identifierCalls.set(name, [node]);
+    }
+}
+
+/** Minimal variable-declaration shape the factory scan reads. */
+interface VariableDeclarationNode {
+    end: number;
+    declarations?: Array<{
+        id?: { type: string; name?: string };
+        init?: OxcNode | null;
+    }>;
+}
+
+/**
+ * Record every `const F = szv(<object literal>)` declarator in one statement.
+ *
+ * @param node - The variable declaration node.
+ * @param state - szv precompile accumulator.
+ */
+function recordSzvFactoryCandidatesOxc(node: OxcNode, state: OxcSzvPrecompileState): void {
+    const declaration = node as unknown as VariableDeclarationNode;
+    for (const declarator of declaration.declarations ?? []) {
+        if (declarator.id?.type !== 'Identifier' || !declarator.init) continue;
+        const name = declarator.id.name;
+        if (name === undefined || OXC_SZV_RESERVED_FACTORY_NAMES.has(name)) continue;
+        if (state.candidates.has(name)) continue;
+        const init = unwrapExpression(declarator.init);
+        if (init.type !== 'CallExpression') continue;
+        const call = init as CallExpressionNode;
+        if (call.callee.type !== 'Identifier') continue;
+        if ((call.callee as IdentifierNode).name !== 'szv') continue;
+        if (call.arguments.length !== 1) continue;
+        const argument = unwrapExpression(call.arguments[0] as OxcNode);
+        const config =
+            argument.type === 'ObjectExpression' ? evaluateStaticObjectOxc(argument) : null;
+        state.candidates.set(name, { name, statementEnd: declaration.end, config });
+    }
+}
+
+/**
+ * See through parentheses, which Babel's parser drops.
+ *
+ * @param node - Any expression node.
+ * @returns The innermost non-parenthesized expression.
+ */
+function unwrapParenthesizedOxc(node: OxcNode): OxcNode {
+    let current = node;
+    while (current.type === 'ParenthesizedExpression') {
+        current = (current as unknown as { expression: OxcNode }).expression;
+    }
+    return current;
+}
+
+/**
+ * Evaluate a fully literal object expression to a plain object.
+ *
+ * Strict on purpose: identifier/string keys only, no spread, no computed
+ * keys, values limited to literals, `undefined`, negated numbers, arrays and
+ * nested objects of the same. Anything else returns null and disqualifies.
+ *
+ * @param node - The object expression node.
+ * @returns The plain object, or null when any part is not a literal.
+ */
+function evaluateStaticObjectOxc(node: OxcNode): Record<string, unknown> | null {
+    const result: Record<string, unknown> = {};
+    const properties = (node as unknown as { properties: OxcNode[] }).properties ?? [];
+    for (const property of properties) {
+        if (property.type !== 'Property') return null;
+        const shaped = property as unknown as {
+            computed?: boolean;
+            key: { type: string; name?: string; value?: unknown };
+            value: OxcNode;
+        };
+        if (shaped.computed) return null;
+        let key: string | null = null;
+        if (shaped.key.type === 'Identifier') {
+            key = shaped.key.name ?? null;
+        } else if (shaped.key.type === 'Literal' && typeof shaped.key.value === 'string') {
+            key = shaped.key.value;
+        } else if (shaped.key.type === 'Literal' && typeof shaped.key.value === 'number') {
+            // Numeric keys stringify, matching the Babel and Rust extractors.
+            key = String(shaped.key.value);
+        }
+        if (key === null) return null;
+        const value = evaluateStaticValueOxc(shaped.value);
+        if (value === STATIC_EVAL_FAILED) return null;
+        result[key] = value;
+    }
+    return result;
+}
+
+/** Sentinel distinguishing "not static" from a legitimate undefined value. */
+const STATIC_EVAL_FAILED: unique symbol = Symbol('static-eval-failed');
+
+/**
+ * Evaluate one fully literal value expression.
+ *
+ * EXACTLY the Babel lane's `evaluateStaticValue` vocabulary — string, number
+ * and boolean literals, a negated number, and nested objects of the same. No
+ * templates, identifiers or arrays: a broader evaluator here would let this
+ * lane qualify a config Babel bails on, and a `build.parser` flip would then
+ * change the emitted code.
+ *
+ * @param rawNode - The value node.
+ * @returns The evaluated value, or the failure sentinel.
+ */
+function evaluateStaticValueOxc(rawNode: OxcNode): unknown {
+    // TS wrappers unwrap here (Babel's evaluateStaticValue sees through them);
+    // the szr ARGUMENT safety check deliberately does not.
+    const node = unwrapExpression(rawNode);
+    if (node.type === 'Literal') {
+        const value = (node as unknown as { value: unknown }).value;
+        return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+            ? value
+            : STATIC_EVAL_FAILED;
+    }
+    if (node.type === 'UnaryExpression') {
+        const unary = node as unknown as { operator: string; argument: OxcNode };
+        if (unary.operator !== '-') return STATIC_EVAL_FAILED;
+        const inner = unwrapExpression(unary.argument);
+        if (inner.type !== 'Literal') return STATIC_EVAL_FAILED;
+        const value = (inner as unknown as { value: unknown }).value;
+        return typeof value === 'number' ? -value : STATIC_EVAL_FAILED;
+    }
+    if (node.type === 'ObjectExpression') {
+        return evaluateStaticObjectOxc(node) ?? STATIC_EVAL_FAILED;
+    }
+    return STATIC_EVAL_FAILED;
+}
+
+/**
+ * Plan and apply the szv per-key precompile for one file (oxc lane).
+ *
+ * Same decision procedure as the Babel lane; the mechanics are span splices
+ * instead of node mutation, so replaced call nodes are tracked by identity for
+ * the szr proof that runs after.
+ *
+ * @param state - szv precompile accumulator.
+ * @param szrState - szr accumulator (for argument-position checks).
+ * @param source - Original file text.
+ * @param edits - MagicString over the source.
+ * @returns Whether any rewrite was applied.
+ */
+function applySzvPrecompileOxc(
+    state: OxcSzvPrecompileState,
+    szrState: OxcSzrRewriteState,
+    source: string,
+    edits: MagicString,
+): boolean {
+    if (state.candidates.size === 0) return false;
+    const szrArgumentNodes = new Set<unknown>();
+    for (const call of szrState.szrCalls) {
+        for (const argument of call.arguments) {
+            szrArgumentNodes.add(argument);
+        }
+    }
+
+    let rewrote = false;
+    for (const candidate of state.candidates.values()) {
+        const table = candidate.config === null ? null : qualifyStaticSzvConfig(candidate.config);
+        if (table === null) continue;
+        const calls = state.identifierCalls.get(candidate.name) ?? [];
+        if (calls.length === 0) continue;
+        let accounted = true;
+        for (const call of calls) {
+            if (!szrArgumentNodes.has(call) || call.arguments.length > 1) {
+                accounted = false;
+                break;
+            }
+        }
+        if (!accounted) continue;
+        if (countWordOccurrences(source, candidate.name) !== 1 + calls.length) continue;
+        if (countWordOccurrences(source, szvTableIdentifier(candidate.name)) !== 0) continue;
+
+        let tableNeeded = false;
+        for (const call of calls) {
+            const shaped = call as unknown as { start: number; end: number };
+            const replacement = planSzvCallReplacementOxc(call, table, source);
+            if (replacement.kind === 'static') {
+                edits.overwrite(shaped.start, shaped.end, JSON.stringify(replacement.value));
+            } else {
+                tableNeeded = true;
+                edits.overwrite(
+                    shaped.start,
+                    shaped.end,
+                    `__szvPick(${szvTableIdentifier(candidate.name)}, ${replacement.selectionText})`,
+                );
+            }
+            state.replacedCalls.add(call);
+            rewrote = true;
+        }
+        if (tableNeeded) {
+            edits.appendRight(
+                candidate.statementEnd,
+                `\nconst ${szvTableIdentifier(candidate.name)} = ${serializeSzvTable(table)};`,
+            );
+            state.usedPick = true;
+        }
+    }
+    return rewrote;
+}
+
+/** Planned replacement for one factory call site (oxc lane). */
+type OxcSzvCallReplacement =
+    | { kind: 'static'; value: string }
+    | { kind: 'dynamic'; selectionText: string };
+
+/**
+ * Decide how one factory call collapses (oxc lane).
+ *
+ * @param call - The `F(selection?)` call.
+ * @param table - The factory's compiled table.
+ * @param source - Original file text, for the dynamic selection splice.
+ * @returns A build-time string, or a dynamic pick over the original text.
+ */
+function planSzvCallReplacementOxc(
+    call: CallExpressionNode,
+    table: SzvPrecompiledTable,
+    source: string,
+): OxcSzvCallReplacement {
+    if (call.arguments.length === 0) {
+        return { kind: 'static', value: computeStaticSzvPick(table, undefined) };
+    }
+    const argument = unwrapParenthesizedOxc(call.arguments[0] as OxcNode);
+    if (argument.type === 'ObjectExpression') {
+        const selection = evaluateStaticSzvSelectionOxc(argument);
+        if (selection !== null) {
+            return { kind: 'static', value: computeStaticSzvPick(table, selection) };
+        }
+    }
+    const shaped = argument as unknown as { start: number; end: number };
+    return { kind: 'dynamic', selectionText: source.slice(shaped.start, shaped.end) };
+}
+
+/**
+ * Evaluate a selection object literal when it is fully static and primitive.
+ *
+ * @param node - The selection object expression.
+ * @returns The plain selection, or null when any part is not a literal.
+ */
+function evaluateStaticSzvSelectionOxc(
+    node: OxcNode,
+): Record<string, string | number | boolean | null> | null {
+    const evaluated = evaluateStaticObjectOxc(node);
+    if (evaluated === null) return null;
+    const selection: Record<string, string | number | boolean | null> = {};
+    for (const key of Object.keys(evaluated)) {
+        const value = evaluated[key];
+        // Tri-lane static contract: string/boolean/safe-integer only; null and
+        // undefined stay dynamic so the runtime picker owns their semantics.
+        if (typeof value === 'number') {
+            if (!isParitySafeNumber(value)) return null;
+            selection[key] = value;
+        } else if (typeof value === 'string' || typeof value === 'boolean') {
+            selection[key] = value;
+        } else {
+            return null;
+        }
+    }
+    return selection;
 }
 
 /**
@@ -1961,18 +2271,30 @@ function isProvablyNonObjectArgumentOxc(rawExpression: OxcNode): boolean {
  * Apply the rewrite when the whole-file proof holds.
  *
  * @param state - Whole-file proof accumulator.
+ * @param szvState - szv precompile accumulator (replaced calls are strings).
  * @param source - Original file text, for reference accounting.
  * @param edits - MagicString over the source.
  * @returns Whether the specifier was overwritten.
  */
 function applySzrImportRewriteOxc(
     state: OxcSzrRewriteState,
+    szvState: OxcSzvPrecompileState,
     source: string,
     edits: MagicString,
 ): boolean {
-    if (state.sourceSpan === null || state.sawUnsafeCall) return false;
+    if (state.sourceSpan === null) return false;
+    let provenCalls = 0;
+    for (const call of state.szrCalls) {
+        const allSafe = call.arguments.every(
+            argument =>
+                szvState.replacedCalls.has(argument as CallExpressionNode) ||
+                isProvablyNonObjectArgumentOxc(argument as OxcNode),
+        );
+        if (!allSafe) return false;
+        provenCalls += 1;
+    }
     const occurrences = countSzrWordOccurrences(source);
-    if (!szrRewriteApproved(occurrences, state.provenCalls, state.sawUnsafeCall)) return false;
+    if (!szrRewriteApproved(occurrences, provenCalls, false)) return false;
     const target = SZR_IMPORT_REWRITE_TARGETS[state.sourceValue];
     // Preserve the author's quote character — the span covers it.
     const quote = source[state.sourceSpan.start] === '"' ? '"' : "'";

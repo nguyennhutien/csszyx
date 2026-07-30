@@ -50,7 +50,11 @@ export function __szvPick(table: SzvCompiledTable, selection?: SzvPickSelection)
         warnUnknownPickSelection(table, selection);
     }
     let result = table.base;
-    for (const dimension of Object.keys(table.d)) {
+    // for-in, not Object.keys: the keys array would be allocated on EVERY
+    // call, and this is the per-render hot path the rewrite exists to serve.
+    // The table is an emitted object literal, so its own enumerable keys are
+    // exactly the dimensions and nothing inherited is enumerable.
+    for (const dimension in table.d) {
         // Own properties only: `Object.keys(selection)` drove the original
         // resolution, so an inherited `selection.pad` never activated a variant.
         const selected =

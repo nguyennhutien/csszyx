@@ -85,6 +85,9 @@ pub struct TransformMetadata {
     /// Whether the result imports the runtime _szPart helper (dynamic array elements).
     #[serde(default)]
     pub uses_sz_part: bool,
+    /// Whether the result imports the runtime __szvPick helper (precompiled szv tables).
+    #[serde(default)]
+    pub uses_szv_pick: bool,
     /// Whether the result imports the runtime color-var helper.
     pub uses_color_var: bool,
     /// Whether the result imports the runtime spacing-var helper.

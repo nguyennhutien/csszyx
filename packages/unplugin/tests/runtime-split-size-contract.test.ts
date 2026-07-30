@@ -160,6 +160,30 @@ describe('szr import rewrite, end to end', () => {
     });
 });
 
+describe('szv precompile, end to end', () => {
+    it('a precompiled szv+szr module bundles without the compiler', async () => {
+        // The composed prize: variant leaves become build-time strings, the
+        // dynamic path becomes a table pick, every szr argument is therefore a
+        // string, the szr import moves to /core - and the transform chunk
+        // never ships. The picker injection is the unplugin's job, so this
+        // probe appends the import the plugin would inject.
+        const { transformSourceCode } = require('@csszyx/compiler');
+        const source =
+            "import { szr } from '@csszyx/runtime';\n" +
+            "import { szv } from '@csszyx/runtime';\n" +
+            "const cardSz = szv({ base: { rounded: 'lg' }, variants: { pad: { sm: { p: 2 }, lg: { p: 8 } } } });\n" +
+            'export const C = (sel) => szr(cardSz(sel), cardSz({ pad: "sm" }));\n';
+        const result = transformSourceCode(source, '/app/Card.tsx');
+        expect(result.usesSzvPick).toBe(true);
+        const compiled = `import { __szvPick } from '@csszyx/runtime/core';\n${result.code as string}`;
+        expect(compiled).toContain('@csszyx/runtime/core');
+        expect(compiled).toContain('__szvT_cardSz');
+        const probe = await bundleProbe(compiled);
+        expect(probe.hasCompiler).toBe(false);
+        expect(probe.gzipBytes).toBeLessThan(5_000);
+    });
+});
+
 describe('runtime split functional contract (built dist)', () => {
     it('registration from the /lowering entry reaches the /core entry', async () => {
         // Cross-entry: rollup must keep the slot in ONE shared chunk. Two

@@ -85,6 +85,8 @@ pub struct NativeTransformMetadata {
     pub uses_szcn: bool,
     /// Whether the result imports the runtime _szPart helper (dynamic array elements).
     pub uses_sz_part: bool,
+    /// Whether the result imports the runtime __szvPick helper.
+    pub uses_szv_pick: bool,
     /// Whether the result imports the runtime color-var helper.
     pub uses_color_var: bool,
     /// Whether the result imports the runtime spacing-var helper.
@@ -228,6 +230,7 @@ impl From<TransformResult> for NativeTransformResult {
                 uses_merge: result.metadata.uses_merge,
                 uses_szcn: result.metadata.uses_szcn,
                 uses_sz_part: result.metadata.uses_sz_part,
+                uses_szv_pick: result.metadata.uses_szv_pick,
                 uses_color_var: result.metadata.uses_color_var,
                 uses_spacing_var: result.metadata.uses_spacing_var,
                 uses_unit_var: result.metadata.uses_unit_var,

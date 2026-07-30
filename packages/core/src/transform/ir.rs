@@ -57,6 +57,15 @@ pub struct SourceIr {
     /// Proven-safe szr import retarget, when the whole-file proof held.
     #[serde(default)]
     pub szr_import_rewrite: Option<SzrImportRewriteIr>,
+    /// szv precompile call-site splices.
+    #[serde(default)]
+    pub szv_replacements: Vec<SzvReplacementIr>,
+    /// szv precompile table-constant insertions.
+    #[serde(default)]
+    pub szv_table_insertions: Vec<SzvTableInsertionIr>,
+    /// Whether any splice emitted a `__szvPick` call.
+    #[serde(default)]
+    pub uses_szv_pick: bool,
     /// Style attributes found in source order.
     pub style_attributes: Vec<StyleAttributeIr>,
     /// Static `szRecover` attributes found in source order.
@@ -116,6 +125,9 @@ impl SourceIr {
             extracted_classes: Vec::new(),
             site_fallbacks: Vec::new(),
             szr_import_rewrite: None,
+            szv_replacements: Vec::new(),
+            szv_table_insertions: Vec::new(),
+            uses_szv_pick: false,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
@@ -218,6 +230,25 @@ pub enum SafeStyleSpreadValueIr {
     },
     /// Any other expression, preserved behind an object spread.
     Expression(TextSpan),
+}
+
+/// One szv precompile splice: a factory call span and its replacement text
+/// (a JSON string literal for a static pick, or a `__szvPick(...)` call).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SzvReplacementIr {
+    /// Span of the `F(selection?)` call being replaced.
+    pub span: TextSpan,
+    /// Replacement expression text.
+    pub replacement: String,
+}
+
+/// One emitted table constant, appended after its factory's declaration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SzvTableInsertionIr {
+    /// End offset of the factory's declaration statement.
+    pub offset: u32,
+    /// Full `const __szvT_F = {...};` statement text (leading newline included).
+    pub text: String,
 }
 
 /// A proven-safe szr import to retarget at the slim core entry.
@@ -612,6 +643,9 @@ mod tests {
             extracted_classes: Vec::new(),
             site_fallbacks: Vec::new(),
             szr_import_rewrite: None,
+            szv_replacements: Vec::new(),
+            szv_table_insertions: Vec::new(),
+            uses_szv_pick: false,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
