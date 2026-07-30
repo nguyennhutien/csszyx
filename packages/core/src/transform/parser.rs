@@ -6,7 +6,7 @@ use oxc_ast::{
         JSXAttributeName, JSXAttributeValue, JSXElement, JSXElementName, JSXExpression,
         JSXFragment, JSXMemberExpression, JSXMemberExpressionObject, JSXOpeningElement,
         JSXSpreadAttribute, ObjectExpression, ObjectProperty, ObjectPropertyKind, PropertyKey,
-        UnaryOperator, VariableDeclaration,
+        TSTypeQuery, TSTypeQueryExprName, UnaryOperator, VariableDeclaration,
     },
     AstKind,
 };
@@ -99,14 +99,17 @@ pub fn parse_source_shell_with_budget_and_statics(
             element_stack: Vec::new(),
             szr_import: None,
             szr_call_args: Vec::new(),
+            pending_szr_fallbacks: Vec::new(),
             szv_candidates: Vec::new(),
             szv_call_sites: Vec::new(),
+            szv_type_query_counts: Vec::new(),
             szv_gate: file.source.contains("szv(") || !cross_module.is_empty(),
             cross_module,
         };
         let ir_start = Instant::now();
         visitor.visit_program(&parsed.program);
         let replaced_spans = visitor.finalize_szv_precompile();
+        visitor.emit_pending_szr_fallbacks(&replaced_spans);
         visitor.finalize_szr_import_rewrite(&replaced_spans);
         timings.ir_ns = elapsed_ns(ir_start);
         visitor.ast_budget_exceeded
@@ -186,15 +189,22 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     /// specifier value, whole-statement span, and the OTHER named specifiers'
     /// spans (non-empty means the clause splits).
     szr_import: Option<SzrImportRecord>,
-    /// Direct `szr(...)` calls as per-argument classifications; the proof is
+    /// Direct `szr(...)` calls as per-argument analyses; the proof is
     /// deferred to finalize, where the szv precompile decides which factory
     /// calls become strings.
-    szr_call_args: Vec<Vec<SzrArgClass>>,
+    szr_call_args: Vec<SzrCallRecord>,
+    /// szr calls whose first argument was unresolvable during the walk;
+    /// whether that is a real fallback is decided at finalize, after the szv
+    /// precompile has proven (or failed to prove) the argument.
+    pending_szr_fallbacks: Vec<PendingSzrFallback>,
     /// File-local `const F = szv(<literal config>)` candidates that passed the
     /// shape and overlap checks (reference accounting is deferred).
     szv_candidates: Vec<SzvFactoryRecord>,
     /// Every direct identifier-callee call that could be a factory call site.
     szv_call_sites: Vec<SzvCallSite>,
+    /// `typeof X` type-query references by name — erased at runtime, so the
+    /// reference accounting must not charge them against the factory.
+    szv_type_query_counts: Vec<(String, usize)>,
     /// Whether the file can contain an szv factory at all — without an szv
     /// call there is nothing to precompile, and every parsed file would
     /// otherwise pay the call-site vector for nothing.
@@ -215,14 +225,29 @@ struct SzrImportRecord {
     other_specifier_spans: Vec<super::TextSpan>,
 }
 
-/// Classification of one szr argument, resolved at finalize.
-enum SzrArgClass {
-    /// Provably a string or falsy at runtime.
-    Safe,
-    /// Anything unprovable.
-    Unsafe,
-    /// A direct call of a potential szv factory, keyed by its span.
-    FactoryCall(super::TextSpan),
+/// One direct `szr(...)` call with its per-argument analyses.
+struct SzrCallRecord {
+    /// Span of the whole call, linking deferred fallbacks back to it.
+    span: super::TextSpan,
+    /// Per-argument analyses, in argument order.
+    args: Vec<SzrArgAnalysis>,
+}
+
+/// Verdict for one szr argument: shape plus the factory calls inside it.
+struct SzrArgAnalysis {
+    /// Whether every non-factory leaf is provably a string or falsy.
+    shape_ok: bool,
+    /// Spans of identifier-callee calls that must collapse for the proof.
+    factory_spans: Vec<super::TextSpan>,
+}
+
+/// One deferred szr fallback: the classified diagnostic, held back until the
+/// szv precompile decides whether the argument collapsed to a string.
+struct PendingSzrFallback {
+    /// Span of the enclosing szr call.
+    call_span: super::TextSpan,
+    /// Pre-classified fallback payload.
+    fallback: super::SiteFallbackIr,
 }
 
 /// One qualified-so-far szv factory.
@@ -425,6 +450,24 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
 
         self.record_szv_factory_candidates(declaration);
         walk::walk_variable_declaration(self, declaration);
+    }
+
+    fn visit_ts_type_query(&mut self, query: &TSTypeQuery<'a>) {
+        if !self.ast_budget_exceeded && self.szv_gate {
+            if let TSTypeQueryExprName::IdentifierReference(identifier) = &query.expr_name {
+                let name = identifier.name.as_str();
+                if let Some(entry) = self
+                    .szv_type_query_counts
+                    .iter_mut()
+                    .find(|(existing, _)| existing == name)
+                {
+                    entry.1 += 1;
+                } else {
+                    self.szv_type_query_counts.push((name.to_string(), 1));
+                }
+            }
+        }
+        walk::walk_ts_type_query(self, query);
     }
 }
 
@@ -790,9 +833,23 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     // the safelist; an argument it cannot read means those
                     // classes are never collected and the CSS is simply absent.
                     // `dynamic()` is exempt — it injects its own rules at
-                    // runtime, which is the whole point of it.
+                    // runtime, which is the whole point of it. The diagnostic
+                    // itself is DEFERRED: whether this argument is a real
+                    // fallback depends on the szv precompile, decided at
+                    // finalize.
                     if callee.name == "szr" {
-                        self.record_site_fallback(super::SzFallbackSiteIr::Szr, argument);
+                        if let Some(expression) = argument.as_expression() {
+                            let (kind, detail) = classify_expression_fallback(expression);
+                            self.pending_szr_fallbacks.push(PendingSzrFallback {
+                                call_span: text_span(call.span()),
+                                fallback: super::SiteFallbackIr {
+                                    site: super::SzFallbackSiteIr::Szr,
+                                    kind,
+                                    detail,
+                                    offset: expression.span().start,
+                                },
+                            });
+                        }
                     }
                     return;
                 };
@@ -865,12 +922,15 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             return;
         };
         if callee.name == "szr" {
-            let classes = call
+            let args = call
                 .arguments
                 .iter()
-                .map(|argument| classify_szr_argument(argument))
+                .map(|argument| analyze_szr_call_argument(argument))
                 .collect();
-            self.szr_call_args.push(classes);
+            self.szr_call_args.push(SzrCallRecord {
+                span: text_span(call.span()),
+                args,
+            });
             return;
         }
         if !self.szv_gate || SZV_RESERVED_FACTORY_NAMES.contains(&callee.name.as_str()) {
@@ -997,11 +1057,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         let szr_factory_spans: Vec<super::TextSpan> = self
             .szr_call_args
             .iter()
-            .flatten()
-            .filter_map(|class| match class {
-                SzrArgClass::FactoryCall(span) => Some(*span),
-                _ => None,
-            })
+            .flat_map(|record| &record.args)
+            .flat_map(|analysis| analysis.factory_spans.iter().copied())
             .collect();
         let candidates = std::mem::take(&mut self.szv_candidates);
         for candidate in &candidates {
@@ -1020,13 +1077,28 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             if !accounted {
                 continue;
             }
-            let occurrences =
-                super::szv_precompile::count_word_occurrences(self.source, &candidate.name);
-            if occurrences != 1 + calls.len() {
+            let type_queries = self
+                .szv_type_query_counts
+                .iter()
+                .find(|(name, _)| name == &candidate.name)
+                .map_or(0, |(_, count)| *count);
+            let occurrences = subtract_comment_occurrences(
+                super::szv_precompile::count_word_occurrences(self.source, &candidate.name),
+                self.source,
+                &self.program.comments,
+                |slice| super::szv_precompile::count_word_occurrences(slice, &candidate.name),
+            );
+            if occurrences != 1 + calls.len() + type_queries {
                 continue;
             }
             let table_ident = super::szv_precompile::szv_table_identifier(&candidate.name);
-            if super::szv_precompile::count_word_occurrences(self.source, &table_ident) != 0 {
+            let table_occurrences = subtract_comment_occurrences(
+                super::szv_precompile::count_word_occurrences(self.source, &table_ident),
+                self.source,
+                &self.program.comments,
+                |slice| super::szv_precompile::count_word_occurrences(slice, &table_ident),
+            );
+            if table_occurrences != 0 {
                 continue;
             }
             let mut table_needed = false;
@@ -1071,6 +1143,24 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         replaced
     }
 
+    /// Emit the deferred szr fallback diagnostics for arguments that stayed
+    /// unproven after the szv precompile, in their recorded (source) order.
+    fn emit_pending_szr_fallbacks(&mut self, replaced_spans: &[super::TextSpan]) {
+        let pending = std::mem::take(&mut self.pending_szr_fallbacks);
+        for record in pending {
+            let proven = self
+                .szr_call_args
+                .iter()
+                .find(|call| call.span == record.call_span)
+                .and_then(|call| call.args.first())
+                .is_some_and(|analysis| szr_argument_proven(analysis, replaced_spans));
+            if proven {
+                continue;
+            }
+            self.ir.site_fallbacks.push(record.fallback);
+        }
+    }
+
     /// Decide the szr import rewrite after the whole file was walked.
     ///
     /// Mirrors the JS lanes' `szrRewriteApproved`: no unsafe call, and the raw
@@ -1082,18 +1172,22 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             return;
         };
         let mut proven_calls = 0;
-        for call in &self.szr_call_args {
-            let all_safe = call.iter().all(|class| match class {
-                SzrArgClass::Safe => true,
-                SzrArgClass::Unsafe => false,
-                SzrArgClass::FactoryCall(factory_span) => replaced_spans.contains(factory_span),
-            });
+        for record in &self.szr_call_args {
+            let all_safe = record
+                .args
+                .iter()
+                .all(|analysis| szr_argument_proven(analysis, replaced_spans));
             if !all_safe {
                 return;
             }
             proven_calls += 1;
         }
-        let occurrences = count_szr_word_occurrences(self.source);
+        let occurrences = subtract_comment_occurrences(
+            count_szr_word_occurrences(self.source),
+            self.source,
+            &self.program.comments,
+            count_szr_word_occurrences,
+        );
         if occurrences != 1 + proven_calls {
             return;
         }
@@ -2046,29 +2140,76 @@ fn classify_runtime_fallback(
 /// Names that can never be szv factory bindings for the precompile.
 const SZV_RESERVED_FACTORY_NAMES: [&str; 4] = ["szr", "szv", "dynamic", "__szvPick"];
 
-/// Classify one szr argument for the deferred proof: parentheses unwrap, a
-/// direct call of a non-reserved identifier becomes a factory-call candidate,
-/// everything else goes through the safety check.
-fn classify_szr_argument(argument: &Argument<'_>) -> SzrArgClass {
+/// Analyze one szr argument for the deferred proof.
+fn analyze_szr_call_argument(argument: &Argument<'_>) -> SzrArgAnalysis {
     let Some(expression) = argument.as_expression() else {
-        return SzrArgClass::Unsafe;
+        return SzrArgAnalysis {
+            shape_ok: false,
+            factory_spans: Vec::new(),
+        };
     };
+    let mut factory_spans = Vec::new();
+    let shape_ok = analyze_szr_argument(expression, &mut factory_spans);
+    SzrArgAnalysis {
+        shape_ok,
+        factory_spans,
+    }
+}
+
+/// Analyze one szr argument expression: provably string-or-falsy, allowing
+/// identifier factory calls as leaves.
+///
+/// Mirror of the JS lanes' walk. The collected factory spans are candidates
+/// only — the argument is proven when the shape holds AND every collected
+/// call was rewritten by the szv precompile.
+fn analyze_szr_argument(expression: &Expression<'_>, factories: &mut Vec<super::TextSpan>) -> bool {
     let mut expression = expression;
     while let Expression::ParenthesizedExpression(inner) = expression {
         expression = &inner.expression;
     }
-    if let Expression::CallExpression(call) = expression {
-        if let Expression::Identifier(callee) = &call.callee {
-            if !SZV_RESERVED_FACTORY_NAMES.contains(&callee.name.as_str()) {
-                return SzrArgClass::FactoryCall(text_span(call.span()));
+    match expression {
+        Expression::CallExpression(call) => {
+            if let Expression::Identifier(callee) = &call.callee {
+                if !SZV_RESERVED_FACTORY_NAMES.contains(&callee.name.as_str()) {
+                    factories.push(text_span(call.span()));
+                    return true;
+                }
             }
+            false
         }
+        Expression::StringLiteral(_)
+        | Expression::TemplateLiteral(_)
+        | Expression::NullLiteral(_) => true,
+        Expression::BooleanLiteral(literal) => !literal.value,
+        Expression::Identifier(identifier) => identifier.name == "undefined",
+        Expression::LogicalExpression(logical) => match logical.operator {
+            oxc_ast::ast::LogicalOperator::And => analyze_szr_argument(&logical.right, factories),
+            _ => {
+                analyze_szr_argument(&logical.left, factories)
+                    && analyze_szr_argument(&logical.right, factories)
+            }
+        },
+        Expression::ConditionalExpression(conditional) => {
+            analyze_szr_argument(&conditional.consequent, factories)
+                && analyze_szr_argument(&conditional.alternate, factories)
+        }
+        Expression::ArrayExpression(array) => array.elements.iter().all(|element| {
+            element
+                .as_expression()
+                .is_some_and(|expression| analyze_szr_argument(expression, factories))
+        }),
+        _ => false,
     }
-    if is_provably_non_object_argument(expression) {
-        SzrArgClass::Safe
-    } else {
-        SzrArgClass::Unsafe
-    }
+}
+
+/// Whether one analyzed szr argument is fully proven: the shape held and
+/// every factory candidate inside it was rewritten to a string.
+fn szr_argument_proven(analysis: &SzrArgAnalysis, replaced_spans: &[super::TextSpan]) -> bool {
+    analysis.shape_ok
+        && analysis
+            .factory_spans
+            .iter()
+            .all(|span| replaced_spans.contains(span))
 }
 
 /// Classify one potential factory call's argument shape.
@@ -2203,6 +2344,28 @@ fn szr_rewrite_target(source: &str) -> Option<&'static str> {
 /// True when the byte continues an identifier around `szr`.
 const fn is_identifier_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'$'
+}
+
+/// Subtract in-comment occurrences from a raw word count.
+///
+/// Mirrors `countWordOccurrencesOutsideComments` in the TypeScript lanes:
+/// comments are erased at runtime, so a doc comment mentioning a factory (or
+/// `szr`) must not fail the reference accounting. The spans come from the
+/// parser, delimiters included; subtraction per span is exact because comment
+/// delimiters are non-identifier characters, so no word straddles a span
+/// edge.
+fn subtract_comment_occurrences<F: Fn(&str) -> usize>(
+    count: usize,
+    source: &str,
+    comments: &oxc_allocator::Vec<'_, oxc_ast::ast::Comment>,
+    counter: F,
+) -> usize {
+    let mut count = count;
+    for comment in comments {
+        let slice = &source[comment.span.start as usize..comment.span.end as usize];
+        count = count.saturating_sub(counter(slice));
+    }
+    count
 }
 
 /// Count word-boundary occurrences of `szr` in the raw source.

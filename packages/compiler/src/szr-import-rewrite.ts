@@ -22,11 +22,13 @@
  * 2. **Reference accounting** (text-level, engine-independent): the word `szr`
  *    must occur in the source exactly `1 + proven calls` times — once for the
  *    import specifier, once per call. Any other occurrence (a member access, a
- *    shadowing declaration, szr passed as a value, an alias, a comment, a
- *    string, `eval`) inflates the count and fails the proof. Overcounting can
- *    only suppress a rewrite, never cause one, which is why plain text is
- *    sufficient — and it makes the cross-engine contract trivial, since all
- *    three lanes count the same bytes.
+ *    shadowing declaration, szr passed as a value, an alias, a string, `eval`)
+ *    inflates the count and fails the proof. Comments are excluded via the
+ *    engine's own parser spans — they are erased at runtime, and real code
+ *    documents `szr` by name. Overcounting can only suppress a rewrite, never
+ *    cause one, which is why plain text is sufficient — and it makes the
+ *    cross-engine contract trivial, since all three lanes count the same
+ *    bytes.
  *
  * @module szr-import-rewrite
  */
@@ -81,6 +83,28 @@ export function countSzrWordOccurrences(source: string): number {
         }
         from = at + 3;
     }
+}
+
+/**
+ * Count word-boundary occurrences of `szr` outside comments.
+ *
+ * Same subtraction contract as `countWordOccurrencesOutsideComments` in the
+ * szv precompile spec: parser-derived spans, exact because comment delimiters
+ * are non-identifier characters.
+ *
+ * @param source - Original file text.
+ * @param comments - Comment spans from the engine's parser.
+ * @returns Number of standalone `szr` words outside comments.
+ */
+export function countSzrWordOccurrencesOutsideComments(
+    source: string,
+    comments: ReadonlyArray<{ start: number; end: number }>,
+): number {
+    let count = countSzrWordOccurrences(source);
+    for (const comment of comments) {
+        count -= countSzrWordOccurrences(source.slice(comment.start, comment.end));
+    }
+    return count;
 }
 
 /**

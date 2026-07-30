@@ -169,9 +169,46 @@ const MATRIX: ReadonlyArray<readonly [string, string, 'static' | 'dynamic' | 'ba
         'bail',
     ],
     [
-        'a comment naming the factory bails',
+        // Comments are parser-classified and erased at runtime; a doc mention
+        // must not veto the precompile — design systems document factories.
+        'a comment naming the factory does not bail',
         `${FACTORY}// cardSz resolves below\nexport const cls = szr(cardSz({ pad: 'lg' }));`,
+        'static',
+    ],
+    [
+        'a STRING naming the factory still bails',
+        `${FACTORY}export const cls = szr(cardSz({ pad: 'lg' }));\nexport const doc = 'cardSz';`,
         'bail',
+    ],
+    // Nested-argument shapes: the analysis walks &&/ternary/array around the
+    // factory call, so guard patterns keep the precompile (vui's Flex shape).
+    [
+        'factory under a && guard becomes a pick',
+        `${FACTORY}export const C = ({ on, sel }) => szr(on && cardSz(sel));`,
+        'dynamic',
+    ],
+    [
+        'factory with a dynamic selection VALUE under a guard picks',
+        `${FACTORY}export const C = ({ pad }) => szr((pad === 0 || pad) && cardSz({ pad }));`,
+        'dynamic',
+    ],
+    [
+        'factories in both ternary branches pick',
+        `${FACTORY}export const C = ({ on, a, b }) => szr(on ? cardSz(a) : cardSz(b));`,
+        'dynamic',
+    ],
+    [
+        // The spread breaks the ARGUMENT proof (import keeps the barrel), but
+        // replacing the factory call is behavior-preserving regardless — the
+        // pick still lands.
+        'factory beside a spread element still picks',
+        `${FACTORY}export const C = ({ sel }) => szr([cardSz(sel), ...rest]);`,
+        'dynamic',
+    ],
+    [
+        'factory under a truthy-boolean guard picks',
+        `${FACTORY}export const C = ({ sel }) => szr(true && cardSz(sel));`,
+        'dynamic',
     ],
 ];
 
@@ -244,6 +281,42 @@ describe('composition with the szr import rewrite', () => {
         for (const [lane, engine] of LANES) {
             const code = engine(source, '/p/t.tsx').code ?? source;
             expect(code, lane).toContain('@csszyx/runtime/core');
+        }
+    });
+
+    it('guarded factory arguments still move the szr import to the core entry', () => {
+        // vui's Flex shape: every factory call sits under a && guard with a
+        // dynamic selection. Proven guards + rewritten factories = core entry.
+        const source =
+            `${IMPORTS}${FACTORY}export const C = ({ d, j }) =>\n` +
+            '    szr(d && cardSz({ pad: d }), j && cardSz({ tone: j }));';
+        for (const [lane, engine] of LANES) {
+            const code = engine(source, '/p/t.tsx').code ?? source;
+            expect(code, lane).toContain('@csszyx/runtime/core');
+            expect(code, lane).toContain('__szvPick(');
+            expect(code, lane).not.toContain('cardSz(');
+        }
+    });
+
+    it('an unproven factory call keeps the barrel and warns once', () => {
+        // mk() is analyzable as a factory candidate but never qualifies, so
+        // the argument stays unproven: no rewrite, one deferred fallback.
+        const source = `${IMPORTS}export const C = () => szr(mk());`;
+        for (const [lane, engine] of LANES) {
+            const result = engine(source, '/p/t.tsx') as {
+                code?: string;
+                diagnostics?: string[];
+            };
+            expect(result.code ?? source, lane).not.toContain('@csszyx/runtime/core');
+            expect((result.diagnostics ?? []).length, lane).toBe(1);
+        }
+    });
+
+    it('a proven string argument stays silent', () => {
+        const source = `${IMPORTS}export const cls = szr('p-4');`;
+        for (const [lane, engine] of LANES) {
+            const result = engine(source, '/p/t.tsx') as { diagnostics?: string[] };
+            expect(result.diagnostics ?? [], lane).toEqual([]);
         }
     });
 

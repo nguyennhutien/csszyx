@@ -18,7 +18,10 @@
  *    uncertain shape must therefore KEEP.
  */
 import { describe, expect, it } from 'vitest';
-import { countSzrWordOccurrences } from '../src/szr-import-rewrite.js';
+import {
+    countSzrWordOccurrences,
+    countSzrWordOccurrencesOutsideComments,
+} from '../src/szr-import-rewrite.js';
 import { transformSourceCode } from '../src/transform.js';
 import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
@@ -66,6 +69,13 @@ const REWRITE_CASES: ReadonlyArray<readonly [string, string]> = [
     ['multiple proven calls', `${RUNTIME}const x = szr('a'); export const b = szr('b', \`c\`);`],
     ['parenthesized string argument', `${RUNTIME}export const a = szr(('p-4'));`],
     ['inside JSX', `${RUNTIME}export const A = () => <div className={szr('p-4')} />;`],
+    // Comments are parser-classified and erased at runtime, so a doc mention
+    // must not veto the rewrite — real design systems document szr by name.
+    ['line comment mentions szr', `${RUNTIME}// szr is called below\nexport const a = szr('p-4');`],
+    [
+        'block comment mentions szr twice',
+        `${RUNTIME}/* szr wraps szr-safe strings */\nexport const a = szr('p-4');`,
+    ],
     // Clause SPLITS: szr moves to the core entry, the rest stays on the barrel.
     [
         'multi-specifier clause splits',
@@ -98,7 +108,6 @@ const KEEP_CASES: ReadonlyArray<readonly [string, string]> = [
         'shadowing declaration',
         `${RUNTIME}function f(szr) { return szr('x'); }\nexport const a = szr('p-4');`,
     ],
-    ['comment mentions szr', `${RUNTIME}// szr is called below\nexport const a = szr('p-4');`],
     [
         'string mentions szr',
         `${RUNTIME}export const a = szr('p-4'); export const doc = 'call szr here';`,
@@ -149,6 +158,22 @@ describe('three-engine decision parity', () => {
     it.each(all)('every engine agrees on: %s', (_name, source) => {
         const verdicts = LANES.map(([, engine]) => rewrites(engine, source));
         expect(new Set(verdicts).size).toBe(1);
+    });
+});
+
+describe('countSzrWordOccurrencesOutsideComments', () => {
+    it('subtracts occurrences inside the given comment spans', () => {
+        const source = "// szr docs\nszr('a');";
+        expect(countSzrWordOccurrencesOutsideComments(source, [{ start: 0, end: 11 }])).toBe(1);
+    });
+
+    it('handles a word flush against the span edges', () => {
+        const source = '/*szr*/szr();';
+        expect(countSzrWordOccurrencesOutsideComments(source, [{ start: 0, end: 7 }])).toBe(1);
+    });
+
+    it('is the raw count with no comments', () => {
+        expect(countSzrWordOccurrencesOutsideComments("szr('a')", [])).toBe(1);
     });
 });
 

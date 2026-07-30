@@ -51,13 +51,14 @@ import {
     szsUnsupportedDiagnostic,
 } from './sz-fallback-matrix.js';
 import {
-    countSzrWordOccurrences,
+    countSzrWordOccurrencesOutsideComments,
     SZR_IMPORT_REWRITE_TARGETS,
     szrRewriteApproved,
 } from './szr-import-rewrite.js';
 import {
+    type CommentSpan,
     computeStaticSzvPick,
-    countWordOccurrences,
+    countWordOccurrencesOutsideComments,
     isParitySafeNumber,
     qualifyStaticSzvConfig,
     type SzvPrecompiledTable,
@@ -180,6 +181,7 @@ export function transformOxc(
     const edits = new MagicString(source);
     oxcSzPartArgsProvable = true;
     const szrRewrite: OxcSzrRewriteState = {
+        pendingFallbacks: [],
         sourceSpan: null,
         sourceValue: '',
         statementSpan: null,
@@ -195,9 +197,15 @@ export function transformOxc(
             source.includes('szv(') ||
             (crossModuleStatics !== undefined && Object.keys(crossModuleStatics).length > 0),
         crossModuleStatics,
+        typeQueryCounts: new Map(),
         candidates: new Map(),
         identifierCalls: new Map(),
         replacedCalls: new Set(),
+        szrArgumentAnalyses: new Map(),
+        commentSpans: (
+            (parsed as unknown as { comments?: Array<{ start: number; end: number }> }).comments ??
+            []
+        ).map(comment => ({ start: comment.start, end: comment.end })),
         usedPick: false,
     };
     const objectBindings = collectObjectBindings(parsed.program as unknown as OxcNode);
@@ -244,6 +252,9 @@ export function transformOxc(
         if (node.type === 'VariableDeclaration') {
             recordSzvFactoryCandidatesOxc(node, szvPrecompile);
         }
+        if (node.type === 'TSTypeQuery') {
+            recordSzvTypeQueryOxc(node, szvPrecompile);
+        }
         if (node.type === 'CallExpression') {
             recordIdentifierCallOxc(node as CallExpressionNode, szrRewrite, szvPrecompile);
             collectDynamicCallClasses(
@@ -251,8 +262,7 @@ export function transformOxc(
                 effectiveFilename,
                 objectBindings,
                 classes,
-                source,
-                diagnostics,
+                szrRewrite,
             );
             collectSzvCallClasses(
                 node as CallExpressionNode,
@@ -423,6 +433,7 @@ export function transformOxc(
     if (applySzvPrecompileOxc(szvPrecompile, szrRewrite, source, edits)) {
         transformed = true;
     }
+    emitPendingSzrFallbacksOxc(szrRewrite, szvPrecompile, source, diagnostics);
     if (applySzrImportRewriteOxc(szrRewrite, szvPrecompile, source, edits)) {
         transformed = true;
     }
@@ -1892,6 +1903,17 @@ interface OxcSzrRewriteState {
     otherSpecifierSpans: Array<{ start: number; end: number }>;
     /** Direct `szr(...)` calls; the proof is deferred to the apply phase. */
     szrCalls: CallExpressionNode[];
+    /** szr calls whose first argument was unresolvable during collection;
+     * whether that is a real fallback is decided after the szv precompile. */
+    pendingFallbacks: Array<{ call: CallExpressionNode; expression: OxcNode }>;
+}
+
+/** Verdict for one szr argument: shape plus the factory calls inside it. */
+interface OxcSzrArgumentAnalysis {
+    /** Whether every non-factory leaf is provably a string or falsy. */
+    shapeOk: boolean;
+    /** Identifier-callee calls that must collapse for the proof to hold. */
+    factories: CallExpressionNode[];
 }
 
 /** One file-local `const F = szv(<config>)` factory candidate (oxc lane). */
@@ -1908,6 +1930,8 @@ interface OxcSzvFactoryCandidate {
 interface OxcSzvPrecompileState {
     /** Whether the file can contain an szv factory at all. */
     enabled: boolean;
+    /** `typeof X` type-query references by name (erased at runtime). */
+    typeQueryCounts: Map<string, number>;
     /** Imported-factory configs by specifier, from the bundler's registry. */
     crossModuleStatics?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
     /** Factory candidates by binding name. */
@@ -1916,6 +1940,10 @@ interface OxcSzvPrecompileState {
     identifierCalls: Map<string, CallExpressionNode[]>;
     /** Factory call nodes whose spans were spliced (string on all paths). */
     replacedCalls: Set<CallExpressionNode>;
+    /** Per-szr-call argument analyses, computed once in the apply phase. */
+    szrArgumentAnalyses: Map<CallExpressionNode, OxcSzrArgumentAnalysis[]>;
+    /** Comment spans from the parse, for comment-excluded accounting. */
+    commentSpans: CommentSpan[];
     /** Whether any rewrite emitted a `__szvPick` call. */
     usedPick: boolean;
 }
@@ -2002,6 +2030,20 @@ function recordIdentifierCallOxc(
     } else {
         szvState.identifierCalls.set(name, [node]);
     }
+}
+
+/**
+ * Record one `typeof X` type-query reference — erased at runtime, so it must
+ * not fail the factory's reference accounting.
+ *
+ * @param node - The type-query node.
+ * @param state - szv precompile accumulator.
+ */
+function recordSzvTypeQueryOxc(node: OxcNode, state: OxcSzvPrecompileState): void {
+    if (!state.enabled) return;
+    const exprName = (node as unknown as { exprName?: { type: string; name?: string } }).exprName;
+    if (exprName?.type !== 'Identifier' || exprName.name === undefined) return;
+    state.typeQueryCounts.set(exprName.name, (state.typeQueryCounts.get(exprName.name) ?? 0) + 1);
 }
 
 /** Minimal variable-declaration shape the factory scan reads. */
@@ -2182,11 +2224,23 @@ function applySzvPrecompileOxc(
     source: string,
     edits: MagicString,
 ): boolean {
+    // Analyze every szr argument ONCE — the analyses drive factory accounting,
+    // the szr proof, and the deferred fallbacks.
+    for (const call of szrState.szrCalls) {
+        const analyses: OxcSzrArgumentAnalysis[] = call.arguments.map(argument => {
+            const factories: CallExpressionNode[] = [];
+            const shapeOk = analyzeSzrArgumentOxc(argument as OxcNode, factories);
+            return { shapeOk, factories };
+        });
+        state.szrArgumentAnalyses.set(call, analyses);
+    }
     if (state.candidates.size === 0) return false;
     const szrArgumentNodes = new Set<unknown>();
-    for (const call of szrState.szrCalls) {
-        for (const argument of call.arguments) {
-            szrArgumentNodes.add(argument);
+    for (const analyses of state.szrArgumentAnalyses.values()) {
+        for (const analysis of analyses) {
+            for (const factory of analysis.factories) {
+                szrArgumentNodes.add(factory);
+            }
         }
     }
 
@@ -2204,8 +2258,21 @@ function applySzvPrecompileOxc(
             }
         }
         if (!accounted) continue;
-        if (countWordOccurrences(source, candidate.name) !== 1 + calls.length) continue;
-        if (countWordOccurrences(source, szvTableIdentifier(candidate.name)) !== 0) continue;
+        const typeQueries = state.typeQueryCounts.get(candidate.name) ?? 0;
+        const occurrences = countWordOccurrencesOutsideComments(
+            source,
+            candidate.name,
+            state.commentSpans,
+        );
+        if (occurrences !== 1 + calls.length + typeQueries) {
+            continue;
+        }
+        const tableOccurrences = countWordOccurrencesOutsideComments(
+            source,
+            szvTableIdentifier(candidate.name),
+            state.commentSpans,
+        );
+        if (tableOccurrences !== 0) continue;
 
         let tableNeeded = false;
         for (const call of calls) {
@@ -2350,6 +2417,113 @@ function isProvablyNonObjectArgumentOxc(rawExpression: OxcNode): boolean {
 }
 
 /**
+ * Analyze one szr argument: provably string-or-falsy, allowing identifier
+ * factory calls as leaves.
+ *
+ * Mirror of the Babel lane's walk over oxc node shapes. The collected factory
+ * calls are candidates only — the argument is proven when the shape holds AND
+ * every collected call was rewritten by the szv precompile.
+ *
+ * @param rawExpression - Argument expression.
+ * @param factories - Sink for identifier-callee calls found at leaves.
+ * @returns Whether the non-factory shape is provably string-or-falsy.
+ */
+function analyzeSzrArgumentOxc(rawExpression: OxcNode, factories: CallExpressionNode[]): boolean {
+    let expression = rawExpression;
+    while (expression.type === 'ParenthesizedExpression') {
+        expression = (expression as unknown as { expression: OxcNode }).expression;
+    }
+    if (expression.type === 'CallExpression') {
+        const call = expression as CallExpressionNode;
+        if (
+            call.callee.type === 'Identifier' &&
+            !OXC_SZV_RESERVED_FACTORY_NAMES.has((call.callee as IdentifierNode).name)
+        ) {
+            factories.push(call);
+            return true;
+        }
+        return false;
+    }
+    if (expression.type === 'Literal') {
+        const value = (expression as unknown as { value: unknown }).value;
+        return typeof value === 'string' || value === false || value === null;
+    }
+    if (expression.type === 'TemplateLiteral') return true;
+    if (expression.type === 'Identifier') {
+        return (expression as IdentifierNode).name === 'undefined';
+    }
+    if (expression.type === 'LogicalExpression') {
+        const logical = expression as unknown as {
+            operator: string;
+            left: OxcNode;
+            right: OxcNode;
+        };
+        if (logical.operator === '&&') return analyzeSzrArgumentOxc(logical.right, factories);
+        return (
+            analyzeSzrArgumentOxc(logical.left, factories) &&
+            analyzeSzrArgumentOxc(logical.right, factories)
+        );
+    }
+    if (expression.type === 'ConditionalExpression') {
+        const conditional = expression as unknown as { consequent: OxcNode; alternate: OxcNode };
+        return (
+            analyzeSzrArgumentOxc(conditional.consequent, factories) &&
+            analyzeSzrArgumentOxc(conditional.alternate, factories)
+        );
+    }
+    if (expression.type === 'ArrayExpression') {
+        const elements = (expression as unknown as { elements: Array<OxcNode | null> }).elements;
+        return elements.every(
+            element =>
+                element !== null &&
+                element.type !== 'SpreadElement' &&
+                analyzeSzrArgumentOxc(element, factories),
+        );
+    }
+    return false;
+}
+
+/**
+ * Whether one analyzed szr argument is fully proven: the shape held and every
+ * factory candidate inside it was rewritten to a string.
+ *
+ * @param analysis - The argument's analysis.
+ * @param replaced - Node-identity set of rewritten factory calls.
+ * @returns True for a proven-string argument.
+ */
+function szrArgumentProvenOxc(
+    analysis: OxcSzrArgumentAnalysis,
+    replaced: ReadonlySet<CallExpressionNode>,
+): boolean {
+    return analysis.shapeOk && analysis.factories.every(factory => replaced.has(factory));
+}
+
+/**
+ * Emit the deferred szr fallback diagnostics for arguments that stayed
+ * unproven after the precompile.
+ *
+ * @param szrState - szr accumulator with the pending records.
+ * @param szvState - szv accumulator with analyses and replacements.
+ * @param source - Original file text, for position resolution.
+ * @param diagnostics - Compiler diagnostics sink.
+ */
+function emitPendingSzrFallbacksOxc(
+    szrState: OxcSzrRewriteState,
+    szvState: OxcSzvPrecompileState,
+    source: string,
+    diagnostics: string[],
+): void {
+    for (const pending of szrState.pendingFallbacks) {
+        const analyses = szvState.szrArgumentAnalyses.get(pending.call);
+        const first = analyses?.[0];
+        if (first !== undefined && szrArgumentProvenOxc(first, szvState.replacedCalls)) {
+            continue;
+        }
+        pushSiteFallbackDiagnostic(diagnostics, 'szr', pending.expression, source);
+    }
+}
+
+/**
  * Apply the rewrite when the whole-file proof holds.
  *
  * @param state - Whole-file proof accumulator.
@@ -2367,15 +2541,15 @@ function applySzrImportRewriteOxc(
     if (state.sourceSpan === null) return false;
     let provenCalls = 0;
     for (const call of state.szrCalls) {
-        const allSafe = call.arguments.every(
-            argument =>
-                szvState.replacedCalls.has(argument as CallExpressionNode) ||
-                isProvablyNonObjectArgumentOxc(argument as OxcNode),
+        const analyses = szvState.szrArgumentAnalyses.get(call) ?? [];
+        if (call.arguments.length !== analyses.length) return false;
+        const allSafe = analyses.every(analysis =>
+            szrArgumentProvenOxc(analysis, szvState.replacedCalls),
         );
         if (!allSafe) return false;
         provenCalls += 1;
     }
-    const occurrences = countSzrWordOccurrences(source);
+    const occurrences = countSzrWordOccurrencesOutsideComments(source, szvState.commentSpans);
     if (!szrRewriteApproved(occurrences, provenCalls, false)) return false;
     const target = SZR_IMPORT_REWRITE_TARGETS[state.sourceValue];
     // Preserve the author's quote character — the span covers it.
@@ -3767,16 +3941,14 @@ function assertAstBudget(root: OxcNode, filename: string, astBudget: number): vo
  * @param filename Filename for diagnostics.
  * @param bindings Local object-literal bindings.
  * @param classes Class set to populate.
- * @param source Original source, for position resolution.
- * @param diagnostics Compiler diagnostics sink.
+ * @param szrState szr accumulator for deferred fallback records.
  */
 function collectDynamicCallClasses(
     node: CallExpressionNode,
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     classes: Set<string>,
-    source: string,
-    diagnostics: string[],
+    szrState: OxcSzrRewriteState,
 ): void {
     if (node.callee.type !== 'Identifier') {
         return;
@@ -3797,8 +3969,10 @@ function collectDynamicCallClasses(
         // safelist; an argument it cannot read means those classes are never
         // collected and the CSS is simply absent. `dynamic()` is exempt — it
         // injects its own rules at runtime, which is the whole point of it.
+        // The diagnostic itself is DEFERRED: whether this argument is a real
+        // fallback depends on the szv precompile, decided in the apply phase.
         if (calleeName === 'szr') {
-            pushSiteFallbackDiagnostic(diagnostics, 'szr', firstArg as OxcNode, source);
+            szrState.pendingFallbacks.push({ call: node, expression: firstArg as OxcNode });
         }
         return;
     }

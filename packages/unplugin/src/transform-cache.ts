@@ -8,7 +8,7 @@ import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@
 // resurrect it as `undefined`, and the injection would then route a file's
 // merge helpers through the wrong entry (heavy instead of slim, or worse,
 // slim for a file whose parts were never proven).
-const CACHE_SCHEMA_VERSION = 12;
+const CACHE_SCHEMA_VERSION = 13;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';

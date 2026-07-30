@@ -149,13 +149,14 @@ pub(crate) fn parity_safe_scalar_string(value: &StaticSzValue) -> Option<String>
 }
 
 /// Canonical name for one sz key — fusion families collapse to a shared
-/// token (the lowering fuses `text` and `leading` into one composite class),
-/// everything else goes through the property table or stands for itself.
+/// token, everything else stands for its own NAME: deep merge collapses by
+/// key name, so a prefix-based canon would only manufacture false conflicts
+/// (`flexDir` and `flexWrap` both emit `flex-*` yet never collapse).
 /// Mirrors `canonicalSzKey`.
 fn canonical_sz_key(key: &str) -> &str {
     match key {
         "text" | "leading" | "lineHeight" => "text\u{0}leading",
-        _ => property_prefix(key).unwrap_or(key),
+        _ => key,
     }
 }
 
@@ -204,6 +205,11 @@ fn leaf_paths_conflict(a: &[String], b: &[String]) -> bool {
 /// a known variant. Mirrors `branchKeysCanonicalizable`: anything else (a
 /// special-cased property like `lineHeight`, a flag utility, a custom theme
 /// variant) could alias another key's target invisibly, so its config bails.
+/// Special-cased property keys outside the property map, verified
+/// fusion-free. Mirrors `SPECIAL_ALLOWED_SZ_KEYS`.
+const SPECIAL_ALLOWED_SZ_KEYS: [&str; 4] =
+    ["alignContent", "snapType", "snapAlign", "snapStrictness"];
+
 fn branch_keys_canonicalizable(branch: &StaticSzObject) -> bool {
     for property in &branch.properties {
         // `op` fuses into whichever color-bearing key it meets at lowering;
@@ -211,7 +217,25 @@ fn branch_keys_canonicalizable(branch: &StaticSzObject) -> bool {
         if property.key == "op" {
             return false;
         }
-        if property_prefix(&property.key).is_none() && !is_known_variant(&property.key) {
+        // The `css` escape hatch is a NAMESPACE: each child is an arbitrary
+        // CSS property emitting its own class. One level only. Mirrors the
+        // TypeScript walk.
+        if property.key == "css" {
+            if let StaticSzValue::Object(declarations) = &property.value {
+                if declarations
+                    .properties
+                    .iter()
+                    .any(|declaration| matches!(declaration.value, StaticSzValue::Object(_)))
+                {
+                    return false;
+                }
+                continue;
+            }
+        }
+        if property_prefix(&property.key).is_none()
+            && !is_known_variant(&property.key)
+            && !SPECIAL_ALLOWED_SZ_KEYS.contains(&property.key.as_str())
+        {
             return false;
         }
         if let StaticSzValue::Object(nested) = &property.value {
