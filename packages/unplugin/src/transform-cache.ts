@@ -84,12 +84,6 @@ export interface TransformCacheKeyInput {
     astBudget?: number;
     /** Whether dynamic CSS variable names are mangled by the compiler. */
     mangleVars?: boolean;
-    /**
-     * Whether advisory diagnostics were enabled (`build.warn`). Cached results
-     * carry their diagnostics, so an entry produced with warnings off must not
-     * be served to a build that expects them — and vice versa.
-     */
-    warn?: boolean;
     /** Maximum cascade depth for component-tier CSS variable hoisting. */
     mangleVarHoistMaxDepth?: number;
     /** Exact global custom-property alias table used by compiler rewrites. */
@@ -137,7 +131,6 @@ export function createTransformCacheKey(input: TransformCacheKeyInput): Transfor
         `producer=${input.producer}`,
         `astBudget=${input.astBudget ?? 'default'}`,
         `mangleVars=${input.mangleVars === true}`,
-        `warn=${input.warn !== false}`,
         `mangleVarHoistMaxDepth=${input.mangleVarHoistMaxDepth ?? 'default'}`,
         `globalVarAliases=${JSON.stringify(globalVarAliases)}`,
         `filename=${input.filename}`,

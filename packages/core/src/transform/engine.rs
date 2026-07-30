@@ -156,15 +156,9 @@ fn transform_fast_static_ir_with_options(
         classes: lowered.classes,
         raw_class_names: lowered.raw_class_names,
         diagnostics: {
-            // Advisory only — see the parser-path assembly for the contract.
-            let mut diagnostics = if options.warn {
-                unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref())
-            } else {
-                Vec::new()
-            };
-            if options.warn {
-                diagnostics.extend(lower_ir.szs_diagnostics.iter().cloned());
-            }
+            let mut diagnostics =
+                unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref());
+            diagnostics.extend(lower_ir.szs_diagnostics.iter().cloned());
             diagnostics
         },
         recovery_tokens: Vec::new(),
@@ -238,25 +232,20 @@ fn transform_static_classes_with_options(
     // valid ones flowing through className/recovery-token emission.
     let has_parser_errors = !diagnostics.is_empty();
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
-    // Advisory diagnostics only — `build.warn: false` runs the single-pass
-    // mode with none of this machinery. `unsupported_sz_diagnostics` above and
-    // the AST-budget notice below are NOT advisory: they report output that
-    // was withheld, and silencing those is the silently-dropped-output class
-    // this codebase has been bitten by before.
-    if options.warn {
-        let mut lines: Option<LineIndex> = None;
-        diagnostics.extend(runtime_fallback_diagnostics(file, &parsed.ir, &mut lines));
-        diagnostics.extend(site_fallback_diagnostics(file, &parsed.ir, &mut lines));
-        diagnostics.extend(style_spread_collision_diagnostics(file, &parsed.ir));
-        diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
-        diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
-        diagnostics.extend(unknown_property_diagnostics(
-            file,
-            &parsed.ir,
-            options.root_dir.as_deref(),
-        ));
-        diagnostics.extend(parsed.ir.szs_diagnostics.iter().cloned());
-    }
+    // One line table per file, built lazily on the first position lookup: a
+    // file that reports nothing must not pay a pass over its own source.
+    let mut lines: Option<LineIndex> = None;
+    diagnostics.extend(runtime_fallback_diagnostics(file, &parsed.ir, &mut lines));
+    diagnostics.extend(site_fallback_diagnostics(file, &parsed.ir, &mut lines));
+    diagnostics.extend(style_spread_collision_diagnostics(file, &parsed.ir));
+    diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
+    diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
+    diagnostics.extend(unknown_property_diagnostics(
+        file,
+        &parsed.ir,
+        options.root_dir.as_deref(),
+    ));
+    diagnostics.extend(parsed.ir.szs_diagnostics.iter().cloned());
     if parsed.ast_budget_exceeded {
         diagnostics.push(format!(
             "[csszyx] AST budget exceeded in {}: the IR walk stopped mid-file, so the file was \

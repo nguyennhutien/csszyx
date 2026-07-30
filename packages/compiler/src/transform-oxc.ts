@@ -34,11 +34,6 @@ import {
     planComponentVariableHoistsWithDiagnostics,
 } from './css-var-hoist-planner.js';
 import { planCSSVariableNames } from './css-var-planner.js';
-import {
-    pushAdvisoryDiagnostic,
-    setSzAdvisoryDiagnostics,
-    szAdvisoryDiagnosticsEnabled,
-} from './diagnostics-gate.js';
 import type { TokenData } from './manifest.js';
 import {
     COLOR_PROPERTIES,
@@ -109,46 +104,7 @@ export class OxcNotImplementedError extends Error {
  * @returns Transform result matching {@link TransformOxcResult}.
  * @throws {OxcNotImplementedError} when a fixture needs a later slice.
  */
-/**
- * Transform one source file on the oxc lane.
- *
- * Thin wrapper that arms the advisory-diagnostics gate (`build.warn`) for the
- * duration of the call; the `finally` reset keeps the module-level switch from
- * leaking into a later call that did not pass `warn`.
- *
- * @param source Source file contents.
- * @param filename Source filename for diagnostics.
- * @param options Transform options.
- * @returns The transform result.
- */
 export function transformOxc(
-    source: string,
-    filename?: string,
-    options?: TransformSourceCodeOptions,
-): TransformOxcResult {
-    setSzAdvisoryDiagnostics(options?.warn !== false);
-    try {
-        return transformOxcImpl(source, filename, options);
-    } finally {
-        setSzAdvisoryDiagnostics(true);
-    }
-}
-
-/**
- *
- * @param source Original source, for position resolution.
- * @param filename
- * @param options
- */
-/**
- * The oxc transform body, run with the advisory gate already armed.
- *
- * @param source Source file contents.
- * @param filename Source filename for diagnostics.
- * @param options Transform options.
- * @returns The transform result.
- */
-function transformOxcImpl(
     source: string,
     filename?: string,
     options?: TransformSourceCodeOptions,
@@ -229,7 +185,7 @@ function transformOxcImpl(
               reservedCSSVariableNames,
           )
         : null;
-    if (componentHoists && szAdvisoryDiagnosticsEnabled()) {
+    if (componentHoists) {
         diagnostics.push(...componentHoists.diagnostics);
     }
     let transformed = false;
@@ -1207,22 +1163,18 @@ function transformOxcRuntimeFallback(params: OxcRuntimeFallbackParams): boolean 
     } = params;
     if (!expression || !attribute) return false;
     if (expression.type !== 'ArrayExpression') {
-        pushAdvisoryDiagnostic(diagnostics, () =>
-            buildRuntimeFallbackDiagnostic(expression, source),
-        );
+        diagnostics.push(buildRuntimeFallbackDiagnostic(expression, source));
     }
     if (
         expression.type === 'ObjectExpression' &&
         hasOxcTopLevelSpread(expression as ObjectExpressionNode)
     ) {
-        pushAdvisoryDiagnostic(diagnostics, () => {
-            const { line, column } = offsetToLineColumn(source, expression.start);
-            return (
-                `[csszyx] unresolvable sz spread at ${line}:${column + 1}: ` +
+        const { line, column } = offsetToLineColumn(source, expression.start);
+        diagnostics.push(
+            `[csszyx] unresolvable sz spread at ${line}:${column + 1}: ` +
                 'sz={{ ...x }} cannot be resolved at build time and falls back to runtime; ' +
-                'it may render no styles in production. Use array form: sz={[x, { ... }]}.'
-            );
-        });
+                'it may render no styles in production. Use array form: sz={[x, { ... }]}.',
+        );
     }
     collectCandidateClassesFromExpression(expression, filename, bindings, classes, '');
     const expressionSource = source.slice(expression.start, expression.end);
@@ -1454,7 +1406,7 @@ function warnOxcStyleSpreadCollision(
     diagnostics: string[],
 ): void {
     if (styleProperties.length === 0 || !hasSpread) return;
-    pushAdvisoryDiagnostic(diagnostics, () => styleSpreadCollisionDiagnostic(filename));
+    diagnostics.push(styleSpreadCollisionDiagnostic(filename));
 }
 
 /**
@@ -1515,20 +1467,16 @@ function transformOxcRecoveryAttribute(params: OxcRecoveryAttributeParams): bool
     if (!attribute || alreadyTagged) return false;
     const recoveryValue = stringLiteralValue(attribute.value);
     if (recoveryValue === null) {
-        pushAdvisoryDiagnostic(
-            diagnostics,
-            () =>
-                `[csszyx] szRecover at ${filename}: ` +
+        diagnostics.push(
+            `[csszyx] szRecover at ${filename}: ` +
                 'only string-literal values ("csr" | "dev-only") are supported. ' +
                 'Dynamic values disable token emission for this element.',
         );
         return false;
     }
     if (!isValidInlineRecoveryMode(recoveryValue)) {
-        pushAdvisoryDiagnostic(
-            diagnostics,
-            () =>
-                `[csszyx] szRecover at ${filename}: ` +
+        diagnostics.push(
+            `[csszyx] szRecover at ${filename}: ` +
                 `unknown mode "${recoveryValue}" — expected "csr" or "dev-only". ` +
                 'Token emission skipped.',
         );
@@ -1661,10 +1609,8 @@ function transformOxcSzsAttribute(params: OxcSzsAttributeParams): boolean {
         cssVariableMap,
     } = params;
     if (isHostOpeningElementName(openingNode.name as unknown as OxcNode)) {
-        pushAdvisoryDiagnostic(
-            diagnostics,
-            () =>
-                `[csszyx] szs at ${filename}: ` +
+        diagnostics.push(
+            `[csszyx] szs at ${filename}: ` +
                 'szs has no effect on a host element — it maps slot names of a ' +
                 'custom component. Attribute left unchanged.',
         );
@@ -1676,12 +1622,12 @@ function transformOxcSzsAttribute(params: OxcSzsAttributeParams): boolean {
             ? (value as unknown as { expression: OxcNode }).expression
             : null;
     if (expression?.type !== 'ObjectExpression') {
-        pushAdvisoryDiagnostic(diagnostics, () => szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedMessage(filename));
         return false;
     }
     const slotMap = expression as ObjectExpressionNode;
     if (!isValidSzsSlotMap(slotMap)) {
-        pushAdvisoryDiagnostic(diagnostics, () => szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedMessage(filename));
         return false;
     }
 
@@ -1697,7 +1643,7 @@ function transformOxcSzsAttribute(params: OxcSzsAttributeParams): boolean {
     );
     setSzWarnLocation(undefined);
     if (!entries) {
-        pushAdvisoryDiagnostic(diagnostics, () => szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedMessage(filename));
         return false;
     }
 
@@ -1884,11 +1830,9 @@ function pushSiteFallbackDiagnostic(
     source: string,
 ): void {
     if (!expression) return;
-    pushAdvisoryDiagnostic(diagnostics, () => {
-        const { line, column } = offsetToLineColumn(source, expression.start);
-        const { kind, detail } = classifyFallbackExpression(expression);
-        return formatSzFallbackDiagnostic(site, `${line}:${column + 1}`, kind, detail);
-    });
+    const { line, column } = offsetToLineColumn(source, expression.start);
+    const { kind, detail } = classifyFallbackExpression(expression);
+    diagnostics.push(formatSzFallbackDiagnostic(site, `${line}:${column + 1}`, kind, detail));
 }
 
 /**
@@ -2721,9 +2665,7 @@ function appendRuntimeArrayPart(
         '',
     );
     if (unwrapExpression(part.node).type === 'ObjectExpression') {
-        pushAdvisoryDiagnostic(context.diagnostics, () =>
-            buildSzPartElementDiagnostic(part.node, context.source),
-        );
+        context.diagnostics.push(buildSzPartElementDiagnostic(part.node, context.source));
     }
     args.push(`_szPart(${part.src})`);
     return true;

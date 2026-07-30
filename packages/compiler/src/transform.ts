@@ -2,11 +2,6 @@ import * as babel from '@babel/core';
 import * as t from '@babel/types';
 
 import { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
-import {
-    pushAdvisoryDiagnostic,
-    setSzAdvisoryDiagnostics,
-    szAdvisoryDiagnosticsEnabled,
-} from './diagnostics-gate.js';
 import type { TokenData } from './manifest.js';
 import {
     COLOR_PROPERTIES,
@@ -84,20 +79,16 @@ function transformRecoveryAttribute(
 ): boolean {
     const recoverValue = path.node.value;
     if (!t.isStringLiteral(recoverValue)) {
-        pushAdvisoryDiagnostic(
-            diagnostics,
-            () =>
-                `[csszyx] szRecover at ${filename ?? '<anonymous>'}: ` +
+        diagnostics.push(
+            `[csszyx] szRecover at ${filename ?? '<anonymous>'}: ` +
                 'only string-literal values ("csr" | "dev-only") are supported. ' +
                 'Dynamic values disable token emission for this element.',
         );
         return false;
     }
     if (!isValidInlineRecoveryMode(recoverValue.value)) {
-        pushAdvisoryDiagnostic(
-            diagnostics,
-            () =>
-                `[csszyx] szRecover at ${filename ?? '<anonymous>'}: ` +
+        diagnostics.push(
+            `[csszyx] szRecover at ${filename ?? '<anonymous>'}: ` +
                 `unknown mode "${recoverValue.value}" — expected "csr" or "dev-only". ` +
                 'Token emission skipped.',
         );
@@ -174,10 +165,8 @@ function transformSzsAttribute(
 ): boolean {
     const opening = path.parentPath?.isJSXOpeningElement() ? path.parentPath.node : null;
     if (opening && isHostElementName(opening.name)) {
-        pushAdvisoryDiagnostic(
-            diagnostics,
-            () =>
-                `[csszyx] szs at ${filename ?? '<anonymous>'}: ` +
+        diagnostics.push(
+            `[csszyx] szs at ${filename ?? '<anonymous>'}: ` +
                 'szs has no effect on a host element — it maps slot names of a ' +
                 'custom component. Attribute left unchanged.',
         );
@@ -185,12 +174,12 @@ function transformSzsAttribute(
     }
     const container = path.node.value;
     if (!t.isJSXExpressionContainer(container) || !t.isObjectExpression(container.expression)) {
-        pushAdvisoryDiagnostic(diagnostics, () => szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedMessage(filename));
         return false;
     }
     const slotMap = container.expression;
     if (!isValidSzsSlotMap(slotMap)) {
-        pushAdvisoryDiagnostic(diagnostics, () => szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedMessage(filename));
         return false;
     }
     setSzWarnLocation(
@@ -198,7 +187,7 @@ function transformSzsAttribute(
     );
     const compiledSlots = compileSzsSlots(slotMap);
     if (!compiledSlots) {
-        pushAdvisoryDiagnostic(diagnostics, () => szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedMessage(filename));
         return false;
     }
     applyCompiledSzsSlots(compiledSlots, pendingClasses);
@@ -747,10 +736,8 @@ function warnStyleSpreadCollision(
         t.isJSXSpreadAttribute(attribute),
     );
     if (!hasSpread) return;
-    pushAdvisoryDiagnostic(
-        diagnostics,
-        () =>
-            `[csszyx] possible style override at ${filename}: ` +
+    diagnostics.push(
+        `[csszyx] possible style override at ${filename}: ` +
             'this element spreads props that may contain style, while sz emits an explicit style attribute. ' +
             'Move the spread style to an explicit style prop so csszyx can merge both values.',
     );
@@ -772,13 +759,11 @@ function pushSiteFallbackDiagnostic(
     expression: t.Expression | undefined,
 ): void {
     if (!expression) return;
-    pushAdvisoryDiagnostic(diagnostics, () => {
-        const position = expression.loc
-            ? `${expression.loc.start.line}:${expression.loc.start.column + 1}`
-            : '?';
-        const { kind, detail } = classifyFallbackExpression(expression);
-        return formatSzFallbackDiagnostic(site, position, kind, detail);
-    });
+    const position = expression.loc
+        ? `${expression.loc.start.line}:${expression.loc.start.column + 1}`
+        : '?';
+    const { kind, detail } = classifyFallbackExpression(expression);
+    diagnostics.push(formatSzFallbackDiagnostic(site, position, kind, detail));
 }
 
 /**
@@ -823,21 +808,19 @@ function transformRuntimeSzFallback(
     classes: Set<string>,
     diagnostics: string[],
 ): void {
-    if (szAdvisoryDiagnosticsEnabled()) {
-        const lineColumn = expression.loc
-            ? `${expression.loc.start.line}:${expression.loc.start.column + 1}`
-            : '?';
-        const description = describeRuntimeFallback(expression);
+    const lineColumn = expression.loc
+        ? `${expression.loc.start.line}:${expression.loc.start.column + 1}`
+        : '?';
+    const description = describeRuntimeFallback(expression);
+    diagnostics.push(
+        `sz fallback at ${lineColumn}: ${description.reason}.\n  Suggestion: ${description.suggestion}`,
+    );
+    if (t.isObjectExpression(expression) && hasTopLevelSpread(expression)) {
         diagnostics.push(
-            `sz fallback at ${lineColumn}: ${description.reason}.\n  Suggestion: ${description.suggestion}`,
+            `[csszyx] unresolvable sz spread at ${lineColumn}: ` +
+                'sz={{ ...x }} cannot be resolved at build time and falls back to runtime; ' +
+                'it may render no styles in production. Use array form: sz={[x, { ... }]}.',
         );
-        if (t.isObjectExpression(expression) && hasTopLevelSpread(expression)) {
-            diagnostics.push(
-                `[csszyx] unresolvable sz spread at ${lineColumn}: ` +
-                    'sz={{ ...x }} cannot be resolved at build time and falls back to runtime; ' +
-                    'it may render no styles in production. Use array form: sz={[x, { ... }]}.',
-            );
-        }
     }
 
     path.node.name.name = 'className';
@@ -1136,7 +1119,7 @@ function appendSzArrayArgument(
     collectDynamicElementCandidates(dynamicPart.node, getBinding, classes);
     const unwrapped = unwrapTsExpression(dynamicPart.node);
     if (unwrapped && t.isObjectExpression(unwrapped)) {
-        pushAdvisoryDiagnostic(diagnostics, () => buildSzPartElementDiagnostic(dynamicPart.node));
+        diagnostics.push(buildSzPartElementDiagnostic(dynamicPart.node));
     }
     args.push(t.callExpression(t.identifier('_szPart'), [dynamicPart.node]));
     return true;
@@ -1279,18 +1262,6 @@ export interface TransformSourceCodeOptions {
     astBudget?: number;
 
     /**
-     * Emit build ADVISORY diagnostics (`build.warn`). On by default. When
-     * false the engines run a single pass with no advisory machinery — no sz
-     * runtime-fallback matrix, no unresolvable-spread/szs/szRecover shape
-     * notices, no style-spread-collision checks. Hard failures where output
-     * was withheld (AST budget, unsupported files) are not advisory and are
-     * emitted regardless.
-     *
-     * @default true
-     */
-    warn?: boolean;
-
-    /**
      * Opt into tiered CSS custom property names for parser paths that support
      * the CSS variable system. Unsupported parser paths must preserve existing
      * `--_sz-*` output until they explicitly port this option.
@@ -1381,46 +1352,7 @@ export interface SourceTransformResult {
  * @throws {ASTBudgetExceededError} when the file's AST exceeds the
  *   effective budget (`options.astBudget` or {@link AST_BUDGET}).
  */
-/**
- * Transform one source file on the Babel lane.
- *
- * Thin wrapper that arms the advisory-diagnostics gate (`build.warn`) for the
- * duration of the call; the `finally` reset keeps the module-level switch from
- * leaking into a later call that did not pass `warn`.
- *
- * @param source Source file contents.
- * @param filename Source filename for diagnostics.
- * @param options Transform options.
- * @returns The transform result.
- */
 export function transformSourceCode(
-    source: string,
-    filename?: string,
-    options?: TransformSourceCodeOptions,
-): SourceTransformResult {
-    setSzAdvisoryDiagnostics(options?.warn !== false);
-    try {
-        return transformSourceCodeImpl(source, filename, options);
-    } finally {
-        setSzAdvisoryDiagnostics(true);
-    }
-}
-
-/**
- *
- * @param source Original source, for position resolution.
- * @param filename
- * @param options
- */
-/**
- * The Babel transform body, run with the advisory gate already armed.
- *
- * @param source Source file contents.
- * @param filename Source filename for diagnostics.
- * @param options Transform options.
- * @returns The transform result.
- */
-function transformSourceCodeImpl(
     source: string,
     filename?: string,
     options?: TransformSourceCodeOptions,

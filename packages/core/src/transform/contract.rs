@@ -9,13 +9,8 @@ pub struct TransformFile {
     pub source: String,
 }
 
-/// True — the serde and `Default` default for {@link TransformOptions::warn}.
-const fn default_warn() -> bool {
-    true
-}
-
 /// Options passed to the Rust transform core.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TransformOptions {
     /// Whether dynamic CSS custom properties should use tiered short names.
     pub mangle_vars: bool,
@@ -31,29 +26,6 @@ pub struct TransformOptions {
     /// under one engine only — the override must reach the native parser too.
     #[serde(default)]
     pub ast_budget: Option<usize>,
-    /// Emit build ADVISORY diagnostics (`build.warn`). On by default. When
-    /// false the engine runs a single pass with no advisory machinery — no sz
-    /// runtime-fallback matrix, no unresolvable-spread/szs/szRecover shape
-    /// notices, no unknown-key/dead-step scans. Hard failures where output was
-    /// withheld (parser errors, AST budget, unsupported files) are not
-    /// advisory and are emitted regardless.
-    #[serde(default = "default_warn")]
-    pub warn: bool,
-}
-
-impl Default for TransformOptions {
-    fn default() -> Self {
-        Self {
-            mangle_vars: false,
-            mangle_var_hoist_max_depth: None,
-            global_var_aliases: Vec::new(),
-            root_dir: None,
-            ast_budget: None,
-            // Derived `Default` would pick `false` here and silently invert
-            // the opt-OUT contract, so the impl is written out by hand.
-            warn: true,
-        }
-    }
 }
 
 /// One exact app-owned global custom-property alias.

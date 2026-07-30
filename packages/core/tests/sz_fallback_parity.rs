@@ -10,9 +10,7 @@
 // Babel-captured JSX sources legitimately contain `{...}` sequences.
 #![allow(clippy::literal_string_with_formatting_args)]
 
-use csszyx_core::transform::{
-    transform_batch, transform_batch_with_options, TransformFile, TransformOptions,
-};
+use csszyx_core::transform::{transform_batch, TransformFile};
 
 fn run(source: &str) -> csszyx_core::transform::TransformResult {
     let file = TransformFile {
@@ -20,16 +18,6 @@ fn run(source: &str) -> csszyx_core::transform::TransformResult {
         source: source.to_string(),
     };
     transform_batch(std::slice::from_ref(&file))
-        .expect("transform_batch failed")
-        .remove(0)
-}
-
-fn run_with(source: &str, options: TransformOptions) -> csszyx_core::transform::TransformResult {
-    let file = TransformFile {
-        filename: "/repo/src/App.tsx".to_string(),
-        source: source.to_string(),
-    };
-    transform_batch_with_options(std::slice::from_ref(&file), options)
         .expect("transform_batch failed")
         .remove(0)
 }
@@ -149,50 +137,6 @@ fn babel_parity_cond_spread_silent() {
         run("const B={p:8}; export const A = ({big}) => <div sz={{ ...(big ? B : {}), m: 2 }} />;");
     let expected: Vec<String> = Vec::<String>::new();
     assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
-}
-
-#[test]
-fn warn_off_runs_the_single_pass_with_identical_output() {
-    let source = "export const A = ({o}) => <div sz={{ ...o, p: 4 }} />;";
-    let with_warn = run(source);
-    let without = run_with(
-        source,
-        TransformOptions {
-            warn: false,
-            ..TransformOptions::default()
-        },
-    );
-
-    // Same transform, byte for byte — the switch removes diagnostics, never
-    // behaviour.
-    assert_eq!(without.code, with_warn.code);
-    assert_eq!(without.classes, with_warn.classes);
-    assert_eq!(without.metadata.transformed, with_warn.metadata.transformed);
-    // Advisory diagnostics gone entirely.
-    assert!(!with_warn.diagnostics.is_empty());
-    assert_eq!(without.diagnostics, Vec::<String>::new());
-}
-
-#[test]
-fn warn_off_keeps_integrity_notices() {
-    // 70 levels of nesting trips the parser-safety bail: the file is left
-    // unchanged, which is NOT advisory and must survive `warn: false`.
-    let source = format!("const x = {}1{};", "[".repeat(70), "]".repeat(70));
-    let result = run_with(
-        &source,
-        TransformOptions {
-            warn: false,
-            ..TransformOptions::default()
-        },
-    );
-    assert!(
-        result
-            .diagnostics
-            .iter()
-            .any(|d| d.contains("source nesting exceeded")),
-        "{:?}",
-        result.diagnostics
-    );
 }
 
 #[test]

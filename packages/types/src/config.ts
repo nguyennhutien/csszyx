@@ -458,28 +458,6 @@ export interface BuildConfig {
     astBudgetLimit?: number;
 
     /**
-     * Emit build ADVISORY diagnostics.
-     *
-     * Advisory diagnostics tell the author something was left to the runtime,
-     * skipped, or suspicious while the build still produced output: the sz
-     * runtime-fallback matrix (why an `sz` expression could not be compiled,
-     * and whether `szv()` or `dynamic()` is the way out), unresolvable
-     * spreads, `szs`/`szRecover` shape notices, style-spread collisions, and
-     * the unknown-key/dead-value scans. Identical wording on every parser
-     * engine, so flipping `build.parser` never changes the build log.
-     *
-     * Set `false` to run the transform as a single pass with none of that
-     * machinery — the escape hatch while the cost of a warning-clean build is
-     * still being measured (ADR 0011: if a clean build with warnings on
-     * benches identical to warnings off, this option is removed as useless).
-     * Hard failures where output was withheld — parser errors, the AST-budget
-     * bail, unsupported files — are not advisory and are reported regardless.
-     *
-     * @default true
-     */
-    warn?: boolean;
-
-    /**
      * Source parser used for JSX/TSX sz transforms.
      *
      * `rust` is the default parser. The Rust engine ships through the
