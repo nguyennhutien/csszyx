@@ -8,7 +8,6 @@ import {
     ASTBudgetExceededError,
     type CssVariableMangleValue,
     ensureRustTransformAvailable,
-    extractSzvRegistryEntries,
     isRustTransformAvailable,
     type SourceTransformResult,
     sortStrings,
@@ -76,6 +75,11 @@ import {
 } from './rsc-boundary.js';
 import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
+import {
+    recordSzvRegistryFile,
+    resolveCrossModuleStaticsFor,
+    type SzvCrossModuleRegistry,
+} from './szv-registry.js';
 import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
@@ -2329,7 +2333,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // Forced off for `command === 'serve'` below, like mangling.
     let crossModuleRegistryEnabled = process.env.NODE_ENV !== 'development';
     /** absPath (separator-normalized) → exported factory configs. */
-    const szvCrossModuleRegistry = new Map<string, Record<string, Record<string, unknown>>>();
+    const szvCrossModuleRegistry: SzvCrossModuleRegistry = new Map();
     // Class names the mangler must never produce as a token, so a short alias
     // can't collide with a literal class in non-csszyx CSS (hybrid builds). Comes
     // from config, so it is available identically at every finalizeMangleMap call
@@ -2738,48 +2742,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Resolve the registry entries visible to one file's relative imports.
-     *
-     * Relative specifiers only (v1): resolved against the importing file's
-     * directory and probed with the usual extension set against registry keys
-     * — no filesystem access, the prescan already walked it.
-     *
-     * @param filename Importing file path.
-     * @param source Importing file text.
-     * @returns Specifier-keyed entries, or undefined when nothing resolves.
-     */
-    function resolveCrossModuleStaticsFor(
-        filename: string,
-        source: string,
-    ): Record<string, Record<string, Record<string, unknown>>> | undefined {
-        if (szvCrossModuleRegistry.size === 0 || !source.includes('from')) return undefined;
-        const directory = path.dirname(filename);
-        let resolved: Record<string, Record<string, Record<string, unknown>>> | undefined;
-        for (const match of source.matchAll(/from\s*['"](\.[^'"]*)['"]/g)) {
-            const specifier = match[1];
-            if (resolved?.[specifier] !== undefined) continue;
-            const base = normalizePathSeparators(path.resolve(directory, specifier));
-            for (const candidate of [
-                base,
-                `${base}.ts`,
-                `${base}.tsx`,
-                `${base}.js`,
-                `${base}.jsx`,
-                `${base}/index.ts`,
-                `${base}/index.tsx`,
-            ]) {
-                const entries = szvCrossModuleRegistry.get(candidate);
-                if (entries !== undefined) {
-                    resolved ??= {};
-                    resolved[specifier] = entries;
-                    break;
-                }
-            }
-        }
-        return resolved;
-    }
-
-    /**
      * Runs the configured source transform. Rust is the default parser after
      * the Phase E max-speed pass and routes through the native engine. Oxc is
      * the documented JavaScript fallback for native-unavailable platforms, and
@@ -2800,7 +2762,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     ): SourceTransformResult {
         const compilerOptions = createCompilerOptions(astBudget);
         const effectiveFilename = normalizeSourceFilename(filename);
-        const crossModuleStatics = resolveCrossModuleStaticsFor(filename, source);
+        const crossModuleStatics = resolveCrossModuleStaticsFor(
+            szvCrossModuleRegistry,
+            filename,
+            source,
+        );
         if (crossModuleStatics !== undefined) {
             compilerOptions.crossModuleStatics = crossModuleStatics;
         }
@@ -3430,14 +3396,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          */
         function recordSzvRegistryEntries(filePath: string, content: string): void {
             if (!crossModuleRegistryEnabled) return;
-            if (!content.includes('szv(') || !content.includes('export')) return;
-            const entries = extractSzvRegistryEntries(content, filePath);
-            if (entries.length === 0) return;
-            const byName: Record<string, Record<string, unknown>> = {};
-            for (const entry of entries) {
-                byName[entry.exportName] = entry.config;
-            }
-            szvCrossModuleRegistry.set(normalizePathSeparators(filePath), byName);
+            recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content);
         }
 
         /**
