@@ -629,6 +629,7 @@ mod tests {
             class_attributes: Vec::new(),
             extracted_classes: Vec::new(),
             site_fallbacks: Vec::new(),
+            szr_import_rewrite: None,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),

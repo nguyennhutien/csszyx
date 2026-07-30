@@ -20,6 +20,11 @@ import {
     szsUnsupportedDiagnostic,
 } from './sz-fallback-matrix.js';
 import {
+    countSzrWordOccurrences,
+    SZR_IMPORT_REWRITE_TARGETS,
+    szrRewriteApproved,
+} from './szr-import-rewrite.js';
+import {
     deepMergeSzObjects,
     formatSzWarnLocation,
     getVariantPrefix,
@@ -743,6 +748,117 @@ function warnStyleSpreadCollision(
     );
 }
 
+/** Whole-file accumulator for the szr import-rewrite proof. */
+interface SzrRewriteState {
+    /** The single qualifying `import { szr } from <target>` declaration. */
+    importDeclaration: t.ImportDeclaration | null;
+    /** Direct `szr(...)` calls whose every argument passed the safety check. */
+    provenCalls: number;
+    /** Whether any direct `szr(...)` call had an argument that failed it. */
+    sawUnsafeCall: boolean;
+}
+
+/**
+ * Record an import declaration when it is the rewritable szr clause.
+ *
+ * Qualifying shape: exactly one specifier, a value (not type) named import of
+ * `szr` with no alias, from a source the rewrite map covers. Anything else is
+ * simply not recorded — the reference accounting then fails the proof, since
+ * the word `szr` appears without a matching proven call.
+ *
+ * @param declaration - The import declaration node.
+ * @param state - Whole-file proof accumulator.
+ */
+function recordSzrImportCandidate(declaration: t.ImportDeclaration, state: SzrRewriteState): void {
+    if (declaration.importKind === 'type') return;
+    if (SZR_IMPORT_REWRITE_TARGETS[declaration.source.value] === undefined) return;
+    if (declaration.specifiers.length !== 1) return;
+    const [specifier] = declaration.specifiers;
+    if (!t.isImportSpecifier(specifier) || specifier.importKind === 'type') return;
+    const imported = specifier.imported;
+    const importedName = t.isIdentifier(imported) ? imported.name : imported.value;
+    if (importedName !== 'szr' || specifier.local.name !== 'szr') return;
+    state.importDeclaration = declaration;
+}
+
+/**
+ * Record one call expression's contribution to the szr proof.
+ *
+ * @param call - The call expression node.
+ * @param state - Whole-file proof accumulator.
+ */
+function recordSzrCallProof(call: t.CallExpression, state: SzrRewriteState): void {
+    if (!t.isIdentifier(call.callee) || call.callee.name !== 'szr') return;
+    const allSafe = call.arguments.every(
+        argument => t.isExpression(argument) && isProvablyNonObjectArgument(argument),
+    );
+    if (allSafe) {
+        state.provenCalls += 1;
+    } else {
+        state.sawUnsafeCall = true;
+    }
+}
+
+/**
+ * Whether an expression can never evaluate to a truthy non-string.
+ *
+ * The runtime skips falsy values and passes strings through, so "safe" means
+ * every reachable result is a string or falsy. Anything unrecognised is
+ * unsafe — the proof only ever errs toward keeping today's import.
+ *
+ * @param expression - Argument expression.
+ * @returns True when the value provably needs no object lowering.
+ */
+function isProvablyNonObjectArgument(expression: t.Expression): boolean {
+    if (t.isStringLiteral(expression) || t.isTemplateLiteral(expression)) return true;
+    if (t.isBooleanLiteral(expression)) return expression.value === false;
+    if (t.isNullLiteral(expression)) return true;
+    if (t.isIdentifier(expression)) return expression.name === 'undefined';
+    if (t.isLogicalExpression(expression)) {
+        // `a && b`: a truthy left yields b; a falsy left yields the falsy left,
+        // which the runtime skips — so only the right side needs proving.
+        if (expression.operator === '&&') return isProvablyNonObjectArgument(expression.right);
+        // `a || b` / `a ?? b`: a truthy (or non-nullish) left IS the result.
+        return (
+            isProvablyNonObjectArgument(expression.left) &&
+            isProvablyNonObjectArgument(expression.right)
+        );
+    }
+    if (t.isConditionalExpression(expression)) {
+        return (
+            isProvablyNonObjectArgument(expression.consequent) &&
+            isProvablyNonObjectArgument(expression.alternate)
+        );
+    }
+    if (t.isArrayExpression(expression)) {
+        return expression.elements.every(
+            element =>
+                element !== null &&
+                !t.isSpreadElement(element) &&
+                isProvablyNonObjectArgument(element),
+        );
+    }
+    return false;
+}
+
+/**
+ * Apply the rewrite when the whole-file proof holds.
+ *
+ * @param state - Whole-file proof accumulator.
+ * @param source - Original file text, for reference accounting.
+ * @returns Whether the import declaration was mutated.
+ */
+function applySzrImportRewrite(state: SzrRewriteState, source: string): boolean {
+    if (state.importDeclaration === null || state.sawUnsafeCall) return false;
+    const occurrences = countSzrWordOccurrences(source);
+    if (!szrRewriteApproved(occurrences, state.provenCalls, state.sawUnsafeCall)) return false;
+    const target = SZR_IMPORT_REWRITE_TARGETS[state.importDeclaration.source.value];
+    // A fresh node: mutating `.value` alone leaves `extra.raw` pointing at the
+    // old text, and the generator prefers the raw form.
+    state.importDeclaration.source = t.stringLiteral(target);
+    return true;
+}
+
 /**
  * Record a build-time-unresolvable construct through the shared matrix.
  *
@@ -1365,6 +1481,11 @@ export function transformSourceCode(
     let usesSpacingVar = false;
     let usesUnitVar = false;
     let transformed = false;
+    const szrRewrite: SzrRewriteState = {
+        importDeclaration: null,
+        provenCalls: 0,
+        sawUnsafeCall: false,
+    };
     const collectedClasses = new Set<string>();
     // Classes discovered from `szs` slot values. Kept OUT of collectedClasses
     // until after the traversal so the discovery order is deterministic across
@@ -1569,6 +1690,19 @@ export function transformSourceCode(
                                 filename,
                                 options?.rootDir,
                             );
+                            recordSzrCallProof(path.node, szrRewrite);
+                        },
+
+                        // ── szr import rewrite (slim core entry) ─────────────────────────
+                        ImportDeclaration(path: babel.NodePath<t.ImportDeclaration>) {
+                            recordSzrImportCandidate(path.node, szrRewrite);
+                        },
+                        Program: {
+                            exit() {
+                                if (applySzrImportRewrite(szrRewrite, source)) {
+                                    transformed = true;
+                                }
+                            },
                         },
                     },
                 }),

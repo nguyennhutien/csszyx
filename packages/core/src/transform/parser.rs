@@ -2,10 +2,11 @@ use oxc_allocator::Allocator;
 use oxc_ast::{
     ast::{
         Argument, ArrayExpression, ArrayExpressionElement, CallExpression, ConditionalExpression,
-        Expression, JSXAttribute, JSXAttributeItem, JSXAttributeName, JSXAttributeValue,
-        JSXElement, JSXElementName, JSXExpression, JSXFragment, JSXMemberExpression,
-        JSXMemberExpressionObject, JSXOpeningElement, JSXSpreadAttribute, ObjectExpression,
-        ObjectProperty, ObjectPropertyKind, PropertyKey, UnaryOperator,
+        Expression, ImportDeclaration, ImportDeclarationSpecifier, JSXAttribute, JSXAttributeItem,
+        JSXAttributeName, JSXAttributeValue, JSXElement, JSXElementName, JSXExpression,
+        JSXFragment, JSXMemberExpression, JSXMemberExpressionObject, JSXOpeningElement,
+        JSXSpreadAttribute, ObjectExpression, ObjectProperty, ObjectPropertyKind, PropertyKey,
+        UnaryOperator,
     },
     AstKind,
 };
@@ -86,9 +87,13 @@ pub fn parse_source_shell_with_budget(
             scope: &scope,
             program: &parsed.program,
             element_stack: Vec::new(),
+            szr_import: None,
+            szr_proven_calls: 0,
+            szr_saw_unsafe_call: false,
         };
         let ir_start = Instant::now();
         visitor.visit_program(&parsed.program);
+        visitor.finalize_szr_import_rewrite();
         timings.ir_ns = elapsed_ns(ir_start);
         visitor.ast_budget_exceeded
     };
@@ -163,6 +168,13 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     program: &'p oxc_ast::ast::Program<'p>,
     /// JSX element/fragment index stack for parent-tree lowering.
     element_stack: Vec<usize>,
+    /// Qualifying `import { szr }` clause: source-literal span (quotes
+    /// included) plus its specifier value.
+    szr_import: Option<(super::TextSpan, String)>,
+    /// Direct `szr(...)` calls whose every argument passed the safety check.
+    szr_proven_calls: usize,
+    /// Whether any direct `szr(...)` call had an argument that failed it.
+    szr_saw_unsafe_call: bool,
 }
 
 impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
@@ -312,7 +324,17 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
         }
 
         self.collect_catalog_call_classes(call);
+        self.record_szr_call_proof(call);
         walk::walk_call_expression(self, call);
+    }
+
+    fn visit_import_declaration(&mut self, declaration: &ImportDeclaration<'a>) {
+        if self.ast_budget_exceeded {
+            return;
+        }
+
+        self.record_szr_import_candidate(declaration);
+        walk::walk_import_declaration(self, declaration);
     }
 }
 
@@ -701,6 +723,90 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             }
             _ => {}
         }
+    }
+
+    /// Record an import declaration when it is the rewritable szr clause.
+    ///
+    /// Same qualifying shape as the JS lanes: one value import of `szr`, no
+    /// alias, from a mapped source. Anything else is simply not recorded — the
+    /// reference accounting then fails the proof.
+    fn record_szr_import_candidate(&mut self, declaration: &ImportDeclaration<'_>) {
+        if declaration.import_kind.is_type() {
+            return;
+        }
+        let source_value = declaration.source.value.as_str();
+        if szr_rewrite_target(source_value).is_none() {
+            return;
+        }
+        let Some(specifiers) = &declaration.specifiers else {
+            return;
+        };
+        if specifiers.len() != 1 {
+            return;
+        }
+        let ImportDeclarationSpecifier::ImportSpecifier(specifier) = &specifiers[0] else {
+            return;
+        };
+        if specifier.import_kind.is_type() {
+            return;
+        }
+        if specifier.imported.name() != "szr" || specifier.local.name != "szr" {
+            return;
+        }
+        self.szr_import = Some((text_span(declaration.source.span), source_value.to_string()));
+    }
+
+    /// Record one call expression's contribution to the szr proof.
+    fn record_szr_call_proof(&mut self, call: &CallExpression<'_>) {
+        let Expression::Identifier(callee) = &call.callee else {
+            return;
+        };
+        if callee.name != "szr" {
+            return;
+        }
+        let all_safe = call.arguments.iter().all(|argument| match argument {
+            Argument::SpreadElement(_) => false,
+            other => other
+                .as_expression()
+                .is_some_and(is_provably_non_object_argument),
+        });
+        if all_safe {
+            self.szr_proven_calls += 1;
+        } else {
+            self.szr_saw_unsafe_call = true;
+        }
+    }
+
+    /// Decide the szr import rewrite after the whole file was walked.
+    ///
+    /// Mirrors the JS lanes' `szrRewriteApproved`: no unsafe call, and the raw
+    /// word count of `szr` equals one import specifier plus the proven calls.
+    /// A `build.parser` flip must not change the emitted import, so the three
+    /// verdicts are locked together by the cross-engine suite.
+    fn finalize_szr_import_rewrite(&mut self) {
+        if self.szr_saw_unsafe_call {
+            return;
+        }
+        let Some((span, source_value)) = self.szr_import.take() else {
+            return;
+        };
+        let occurrences = count_szr_word_occurrences(self.source);
+        if occurrences != 1 + self.szr_proven_calls {
+            return;
+        }
+        let Some(target) = szr_rewrite_target(&source_value) else {
+            return;
+        };
+        // Preserve the author's quote character — the span covers it.
+        let quote = if self.source.as_bytes().get(span.start as usize) == Some(&b'"') {
+            '"'
+        } else {
+            '\''
+        };
+        self.ir.szr_import_rewrite = Some(super::SzrImportRewriteIr {
+            span,
+            replacement: format!("{quote}{target}{quote}"),
+        });
     }
 
     /// Record a `szr`/`szv` argument the parser could not read, classified for
@@ -1601,6 +1707,87 @@ fn classify_runtime_fallback(
 
     let (kind, detail) = classify_expression_fallback(expression.as_expression()?);
     Some(RuntimeFallbackDiagnosticIr { kind, detail })
+}
+
+/// Slim-entry target for a rewritable szr import source.
+///
+/// Same-package subpaths only, mirroring `SZR_IMPORT_REWRITE_TARGETS` in the
+/// TypeScript lanes: an app importing from `csszyx` may not resolve
+/// `@csszyx/runtime` under strict node_modules layouts.
+fn szr_rewrite_target(source: &str) -> Option<&'static str> {
+    match source {
+        "@csszyx/runtime" => Some("@csszyx/runtime/core"),
+        "csszyx" => Some("csszyx/core"),
+        _ => None,
+    }
+}
+
+/// True when the byte continues an identifier around `szr`.
+const fn is_identifier_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'$'
+}
+
+/// Count word-boundary occurrences of `szr` in the raw source.
+///
+/// Mirrors `countSzrWordOccurrences` in the TypeScript lanes byte for byte: a
+/// boundary is "not an ASCII identifier character", so a non-ASCII identifier
+/// continuation still counts — an overcount, which can only fail the proof.
+fn count_szr_word_occurrences(source: &str) -> usize {
+    let bytes = source.as_bytes();
+    let mut count = 0;
+    let mut at = 0;
+    while at + 3 <= bytes.len() {
+        if &bytes[at..at + 3] == b"szr" {
+            let before_ok = at == 0 || !is_identifier_byte(bytes[at - 1]);
+            let after_ok = at + 3 == bytes.len() || !is_identifier_byte(bytes[at + 3]);
+            if before_ok && after_ok {
+                count += 1;
+            }
+            at += 3;
+        } else {
+            at += 1;
+        }
+    }
+    count
+}
+
+/// Whether an expression can never evaluate to a truthy non-string.
+///
+/// Mirror of the JS lanes' check: string/template literals, `false`, `null`,
+/// `undefined`, `&&` with a safe right side (a falsy left short-circuits to a
+/// skipped falsy), `||`/`??`/ternary with all reachable results safe, arrays
+/// of safe elements. Parentheses are seen through (Babel's AST has no node for
+/// them); anything else — TS wrappers included — is unsafe, so the proof only
+/// errs toward keeping today's import.
+fn is_provably_non_object_argument(expression: &Expression<'_>) -> bool {
+    let mut expression = expression;
+    while let Expression::ParenthesizedExpression(inner) = expression {
+        expression = &inner.expression;
+    }
+    match expression {
+        Expression::StringLiteral(_)
+        | Expression::TemplateLiteral(_)
+        | Expression::NullLiteral(_) => true,
+        Expression::BooleanLiteral(literal) => !literal.value,
+        Expression::Identifier(identifier) => identifier.name == "undefined",
+        Expression::LogicalExpression(logical) => match logical.operator {
+            oxc_ast::ast::LogicalOperator::And => is_provably_non_object_argument(&logical.right),
+            _ => {
+                is_provably_non_object_argument(&logical.left)
+                    && is_provably_non_object_argument(&logical.right)
+            }
+        },
+        Expression::ConditionalExpression(conditional) => {
+            is_provably_non_object_argument(&conditional.consequent)
+                && is_provably_non_object_argument(&conditional.alternate)
+        }
+        Expression::ArrayExpression(array) => array.elements.iter().all(|element| {
+            element
+                .as_expression()
+                .is_some_and(is_provably_non_object_argument)
+        }),
+        _ => false,
+    }
 }
 
 /// Classify an expression into the shared matrix vocabulary.

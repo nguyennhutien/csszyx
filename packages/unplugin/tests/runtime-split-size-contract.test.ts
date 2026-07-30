@@ -134,6 +134,32 @@ describe('runtime split size contract', () => {
     });
 });
 
+describe('szr import rewrite, end to end', () => {
+    it('a compiled szr-strings module bundles without the compiler', async () => {
+        // The whole point of the split: compiler proves strings-only, rewrites
+        // the import, and the resulting bundle drops ~13 KB gz of transform.
+        const { transformSourceCode } = require('@csszyx/compiler');
+        const source =
+            "import { szr } from '@csszyx/runtime';\n" +
+            "export const cls = szr('p-4', true && 'm-2');\n";
+        const compiled = transformSourceCode(source, '/app/Button.tsx').code as string;
+        expect(compiled).toContain('@csszyx/runtime/core');
+        const probe = await bundleProbe(compiled);
+        expect(probe.hasCompiler).toBe(false);
+        expect(probe.gzipBytes).toBeLessThan(5_000);
+    });
+
+    it('an szr-objects module keeps the barrel and stays object-capable', async () => {
+        const { transformSourceCode } = require('@csszyx/compiler');
+        const source =
+            "import { szr } from '@csszyx/runtime';\n" + 'export const cls = (cfg) => szr(cfg);\n';
+        const compiled = transformSourceCode(source, '/app/Card.tsx').code ?? source;
+        expect(compiled).not.toContain('@csszyx/runtime/core');
+        const probe = await bundleProbe(compiled);
+        expect(probe.hasCompiler).toBe(true);
+    });
+});
+
 describe('runtime split functional contract (built dist)', () => {
     it('registration from the /lowering entry reaches the /core entry', async () => {
         // Cross-entry: rollup must keep the slot in ONE shared chunk. Two

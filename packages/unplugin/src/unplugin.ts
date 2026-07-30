@@ -4194,7 +4194,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     code.includes('sz=') ||
                     code.includes('szs=') ||
                     /\bsz\s*:\s*["'{]/.test(code) ||
-                    code.includes('sz: "');
+                    code.includes('sz: "') ||
+                    // szr-only modules (no sz attribute) historically skipped the
+                    // compiler entirely — which also skipped the szr import
+                    // rewrite AND the szr fallback diagnostics. The substring is
+                    // deliberately loose; a false positive only costs one file
+                    // the compiler pass, which then changes nothing.
+                    code.includes('szr(');
                 const output = hasSzProp
                     ? transformSzSource(code, id, message => this.warn(message))
                     : unchangedPreTransform(code);

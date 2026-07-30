@@ -50,6 +50,11 @@ import {
     type SzFallbackSite,
     szsUnsupportedDiagnostic,
 } from './sz-fallback-matrix.js';
+import {
+    countSzrWordOccurrences,
+    SZR_IMPORT_REWRITE_TARGETS,
+    szrRewriteApproved,
+} from './szr-import-rewrite.js';
 import type {
     CssVariableMangleValue,
     SourceTransformResult,
@@ -162,6 +167,12 @@ export function transformOxc(
     assertAstBudget(parsed.program as unknown as OxcNode, effectiveFilename, astBudget);
 
     const edits = new MagicString(source);
+    const szrRewrite: OxcSzrRewriteState = {
+        sourceSpan: null,
+        sourceValue: '',
+        provenCalls: 0,
+        sawUnsafeCall: false,
+    };
     const objectBindings = collectObjectBindings(parsed.program as unknown as OxcNode);
     // szv config resolution follows ONLY `const` bindings (a reassigned `let`
     // would be unsound), so it uses a const-only map distinct from the general
@@ -198,7 +209,12 @@ export function transformOxc(
     let usesUnitVar = false;
 
     walk(parsed.program, node => {
+        if (node.type === 'ImportDeclaration') {
+            recordSzrImportCandidateOxc(node, szrRewrite);
+            return;
+        }
         if (node.type === 'CallExpression') {
+            recordSzrCallProofOxc(node as CallExpressionNode, szrRewrite);
             collectDynamicCallClasses(
                 node as CallExpressionNode,
                 effectiveFilename,
@@ -371,6 +387,10 @@ export function transformOxc(
     // (which fixes production mangle IDs) matches the other engines.
     for (const c of szsPendingClasses) {
         classes.add(c);
+    }
+
+    if (applySzrImportRewriteOxc(szrRewrite, source, edits)) {
+        transformed = true;
     }
 
     return {
@@ -1813,6 +1833,151 @@ function buildSzPartElementDiagnostic(node: OxcNode, source: string): string {
         'still safelisted best-effort).\n  Suggestion: use finite literal ternary branches ' +
         'when possible, or move truly runtime values to dynamic().'
     );
+}
+
+/** Whole-file accumulator for the szr import-rewrite proof (oxc lane). */
+interface OxcSzrRewriteState {
+    /** Span of the qualifying import's source literal, quotes included. */
+    sourceSpan: { start: number; end: number } | null;
+    /** The qualifying import's source value. */
+    sourceValue: string;
+    /** Direct `szr(...)` calls whose every argument passed the safety check. */
+    provenCalls: number;
+    /** Whether any direct `szr(...)` call had an argument that failed it. */
+    sawUnsafeCall: boolean;
+}
+
+/** Minimal import-declaration shape the proof reads. */
+interface ImportDeclarationNode {
+    importKind?: string;
+    source: { value?: unknown; start: number; end: number };
+    specifiers?: Array<{
+        type: string;
+        importKind?: string;
+        imported?: { name?: string; value?: unknown };
+        local?: { name?: string };
+    }>;
+}
+
+/**
+ * Record an import declaration when it is the rewritable szr clause.
+ *
+ * Same qualifying shape as the Babel lane: one value import of `szr`, no
+ * alias, from a mapped source.
+ *
+ * @param node - The import declaration node.
+ * @param state - Whole-file proof accumulator.
+ */
+function recordSzrImportCandidateOxc(node: OxcNode, state: OxcSzrRewriteState): void {
+    const declaration = node as unknown as ImportDeclarationNode;
+    if (declaration.importKind === 'type') return;
+    const sourceValue = declaration.source?.value;
+    if (typeof sourceValue !== 'string') return;
+    if (SZR_IMPORT_REWRITE_TARGETS[sourceValue] === undefined) return;
+    const specifiers = declaration.specifiers ?? [];
+    if (specifiers.length !== 1) return;
+    const [specifier] = specifiers;
+    if (specifier.type !== 'ImportSpecifier' || specifier.importKind === 'type') return;
+    const importedName = specifier.imported?.name ?? specifier.imported?.value;
+    if (importedName !== 'szr' || specifier.local?.name !== 'szr') return;
+    state.sourceSpan = { start: declaration.source.start, end: declaration.source.end };
+    state.sourceValue = sourceValue;
+}
+
+/**
+ * Record one call expression's contribution to the szr proof.
+ *
+ * @param node - The call expression node.
+ * @param state - Whole-file proof accumulator.
+ */
+function recordSzrCallProofOxc(node: CallExpressionNode, state: OxcSzrRewriteState): void {
+    if (node.callee.type !== 'Identifier') return;
+    if ((node.callee as IdentifierNode).name !== 'szr') return;
+    const allSafe = node.arguments.every(argument =>
+        isProvablyNonObjectArgumentOxc(argument as OxcNode),
+    );
+    if (allSafe) {
+        state.provenCalls += 1;
+    } else {
+        state.sawUnsafeCall = true;
+    }
+}
+
+/**
+ * Whether an expression can never evaluate to a truthy non-string.
+ *
+ * Mirror of the Babel lane's check over oxc node shapes. Parentheses are
+ * unwrapped because Babel's parser drops them — the two lanes must reach the
+ * same verdict or a `build.parser` flip would change the emitted import.
+ *
+ * @param rawExpression - Argument expression.
+ * @returns True when the value provably needs no object lowering.
+ */
+function isProvablyNonObjectArgumentOxc(rawExpression: OxcNode): boolean {
+    let expression = rawExpression;
+    while (expression.type === 'ParenthesizedExpression') {
+        expression = (expression as unknown as { expression: OxcNode }).expression;
+    }
+    if (expression.type === 'Literal') {
+        const value = (expression as unknown as { value: unknown }).value;
+        return typeof value === 'string' || value === false || value === null;
+    }
+    if (expression.type === 'TemplateLiteral') return true;
+    if (expression.type === 'Identifier') {
+        return (expression as IdentifierNode).name === 'undefined';
+    }
+    if (expression.type === 'LogicalExpression') {
+        const logical = expression as unknown as {
+            operator: string;
+            left: OxcNode;
+            right: OxcNode;
+        };
+        if (logical.operator === '&&') return isProvablyNonObjectArgumentOxc(logical.right);
+        return (
+            isProvablyNonObjectArgumentOxc(logical.left) &&
+            isProvablyNonObjectArgumentOxc(logical.right)
+        );
+    }
+    if (expression.type === 'ConditionalExpression') {
+        const conditional = expression as unknown as { consequent: OxcNode; alternate: OxcNode };
+        return (
+            isProvablyNonObjectArgumentOxc(conditional.consequent) &&
+            isProvablyNonObjectArgumentOxc(conditional.alternate)
+        );
+    }
+    if (expression.type === 'ArrayExpression') {
+        const elements = (expression as unknown as { elements: Array<OxcNode | null> }).elements;
+        return elements.every(
+            element =>
+                element !== null &&
+                element.type !== 'SpreadElement' &&
+                isProvablyNonObjectArgumentOxc(element),
+        );
+    }
+    return false;
+}
+
+/**
+ * Apply the rewrite when the whole-file proof holds.
+ *
+ * @param state - Whole-file proof accumulator.
+ * @param source - Original file text, for reference accounting.
+ * @param edits - MagicString over the source.
+ * @returns Whether the specifier was overwritten.
+ */
+function applySzrImportRewriteOxc(
+    state: OxcSzrRewriteState,
+    source: string,
+    edits: MagicString,
+): boolean {
+    if (state.sourceSpan === null || state.sawUnsafeCall) return false;
+    const occurrences = countSzrWordOccurrences(source);
+    if (!szrRewriteApproved(occurrences, state.provenCalls, state.sawUnsafeCall)) return false;
+    const target = SZR_IMPORT_REWRITE_TARGETS[state.sourceValue];
+    // Preserve the author's quote character — the span covers it.
+    const quote = source[state.sourceSpan.start] === '"' ? '"' : "'";
+    edits.overwrite(state.sourceSpan.start, state.sourceSpan.end, `${quote}${target}${quote}`);
+    return true;
 }
 
 /**

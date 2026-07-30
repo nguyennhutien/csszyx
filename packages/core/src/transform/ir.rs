@@ -54,6 +54,9 @@ pub struct SourceIr {
     /// `szr`/`szv` calls whose argument could not be read at build time.
     #[serde(default)]
     pub site_fallbacks: Vec<SiteFallbackIr>,
+    /// Proven-safe szr import retarget, when the whole-file proof held.
+    #[serde(default)]
+    pub szr_import_rewrite: Option<SzrImportRewriteIr>,
     /// Style attributes found in source order.
     pub style_attributes: Vec<StyleAttributeIr>,
     /// Static `szRecover` attributes found in source order.
@@ -112,6 +115,7 @@ impl SourceIr {
             class_attributes: Vec::new(),
             extracted_classes: Vec::new(),
             site_fallbacks: Vec::new(),
+            szr_import_rewrite: None,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
@@ -214,6 +218,21 @@ pub enum SafeStyleSpreadValueIr {
     },
     /// Any other expression, preserved behind an object spread.
     Expression(TextSpan),
+}
+
+/// A proven-safe szr import to retarget at the slim core entry.
+///
+/// Present only when the whole-file proof held: the single unaliased
+/// `import { szr }` clause, every direct `szr(...)` argument provably a
+/// string or falsy, and the raw-text reference accounting exact. The
+/// replacement is pre-quoted with the author's quote character so the
+/// rewriter splices it verbatim.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SzrImportRewriteIr {
+    /// Span of the import source literal, quotes included.
+    pub span: TextSpan,
+    /// Quoted replacement specifier.
+    pub replacement: String,
 }
 
 /// A construct that could not be resolved at build time.
@@ -592,6 +611,7 @@ mod tests {
             }],
             extracted_classes: Vec::new(),
             site_fallbacks: Vec::new(),
+            szr_import_rewrite: None,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),

@@ -45,7 +45,7 @@ pub use ir::{
     SafeStyleSpreadExpressionIr, SafeStyleSpreadIr, SafeStyleSpreadObjectIr,
     SafeStyleSpreadValueIr, SiteFallbackIr, SourceIr, StaticArrayPartIr, StaticSzObject,
     StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr,
-    SzFallbackSiteIr, SzsAttributeIr, SzsSlotEntryIr, TextSpan,
+    SzFallbackSiteIr, SzrImportRewriteIr, SzsAttributeIr, SzsSlotEntryIr, TextSpan,
 };
 
 /// Error returned when the Rust transform engine cannot run in this build.
