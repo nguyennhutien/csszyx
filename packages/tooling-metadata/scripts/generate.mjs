@@ -6,6 +6,7 @@ import ts from 'typescript';
 import {
     BOOLEAN_SHORTHANDS,
     KNOWN_VARIANTS,
+    NEGATIVE_ALLOWED,
     PROPERTY_MAP,
     SUGGESTION_MAP,
 } from '../../compiler/src/transform-core.ts';
@@ -58,6 +59,14 @@ export const PROPERTY_MAP = ${serialize(PROPERTY_MAP)} as const;
 export const BOOLEAN_SHORTHANDS = ${serialize([...BOOLEAN_SHORTHANDS].sort())} as const;
 export const KNOWN_VARIANTS = ${serialize([...KNOWN_VARIANTS].sort())} as const;
 export const SUGGESTION_MAP = ${serialize(SUGGESTION_MAP)} as const;
+/** sz keys whose utility accepts a negative value (\`{ mt: '-4' }\` → \`-mt-4\`).
+ * Derived from the compiler's NEGATIVE_ALLOWED, which is keyed by Tailwind
+ * prefix; editors need the sz-key view to offer negative value completions. */
+export const NEGATIVE_VALUE_KEYS = ${serialize(
+    Object.keys(PROPERTY_MAP)
+        .filter(key => NEGATIVE_ALLOWED.has(PROPERTY_MAP[key]))
+        .sort(),
+)} as const;
 export { VALUE_SUGGESTIONS } from './value-suggestions';
 `;
 

@@ -5,7 +5,7 @@ import {
     type ObjectFormMember,
     type ObjectValueForm,
     PROPERTY_MAP,
-    VALUE_SUGGESTIONS,
+    valueSuggestionsFor,
 } from '@csszyx/tooling-metadata';
 import type ts from 'typescript/lib/tsserverlibrary';
 
@@ -205,8 +205,9 @@ export function buildSzValueEntries(
     shouldStop: () => boolean = () => false,
 ): ts.CompletionEntry[] {
     if (METADATA_SCHEMA_VERSION !== 1) return [];
-    const values =
-        (VALUE_SUGGESTIONS as Readonly<Record<string, readonly string[]>>)[property] ?? [];
+    // Positives first, then their negative counterparts — the `limit` slice
+    // below must never drop a positive to make room for `-4`.
+    const values = valueSuggestionsFor(property);
     const result: ts.CompletionEntry[] = [];
     for (const name of values.slice(0, limit)) {
         if (result.length % 32 === 0 && shouldStop()) break;

@@ -1040,7 +1040,7 @@ const SNAP_DIRECT_MAP: Record<string, Record<string, string>> = {
 // ============================================================================
 // NEGATIVE_ALLOWED: Properties that support negative values
 // ============================================================================
-const NEGATIVE_ALLOWED = new Set([
+export const NEGATIVE_ALLOWED: Set<string> = new Set([
     'm',
     'mt',
     'mr',
