@@ -112,6 +112,28 @@ const MATRIX: ReadonlyArray<readonly [string, string, 'static' | 'dynamic' | 'ba
         'bail',
     ],
     [
+        'cross-branch text and leading fuse at lowering — bails',
+        // Merged objects lower to the text-lg/7 COMPOSITE; separate branch
+        // strings cannot. The runtime oracle is the byte proof.
+        "const f = szv({ base: { text: 'lg' }, variants: { l: { a: { leading: 7 } } } });\nexport const c = szr(f({ l: 'a' }));",
+        'bail',
+    ],
+    [
+        'same-leaf text and leading fuse inside ONE branch — fine',
+        "const f = szv({ variants: { s: { a: { text: 'lg', leading: 7 } } } });\nexport const c = szr(f({ s: 'a' }));",
+        'static',
+    ],
+    [
+        'cross-branch color-opacity nesting bails',
+        "const f = szv({ base: { bg: { color: 'red-500' } }, variants: { o: { dim: { bg: { op: 50 } } } } });\nexport const c = szr(f({ o: 'dim' }));",
+        'bail',
+    ],
+    [
+        'an op modifier leaf bails outright',
+        "const f = szv({ variants: { o: { dim: { op: 50 } } } });\nexport const c = szr(f({ o: 'dim' }));",
+        'bail',
+    ],
+    [
         'alias overlap bails too',
         "const cardSz = szv({ base: { lineHeight: 5 }, variants: { t: { a: { leading: 7 } } } });\nexport const cls = szr(cardSz({ t: 'a' }));",
         'bail',

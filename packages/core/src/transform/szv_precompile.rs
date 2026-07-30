@@ -148,10 +148,15 @@ pub(crate) fn parity_safe_scalar_string(value: &StaticSzValue) -> Option<String>
     }
 }
 
-/// Canonical name for one sz key — aliases collapse through the property
-/// table, everything else stands for itself. Mirrors `canonicalSzKey`.
+/// Canonical name for one sz key — fusion families collapse to a shared
+/// token (the lowering fuses `text` and `leading` into one composite class),
+/// everything else goes through the property table or stands for itself.
+/// Mirrors `canonicalSzKey`.
 fn canonical_sz_key(key: &str) -> &str {
-    property_prefix(key).unwrap_or(key)
+    match key {
+        "text" | "leading" | "lineHeight" => "text\u{0}leading",
+        _ => property_prefix(key).unwrap_or(key),
+    }
 }
 
 /// Collect every canonical LEAF path of one branch, `' '`-joined.
@@ -164,7 +169,16 @@ fn collect_canonical_leaf_paths(branch: &StaticSzObject, prefix: &str, out: &mut
             format!("{prefix}\u{0}{canon}")
         };
         match &property.value {
-            StaticSzValue::Object(nested) => collect_canonical_leaf_paths(nested, &path, out),
+            // A nested object under a PROPERTY key is a fusion unit (the
+            // color-opacity form lowers to ONE composite class): fold the
+            // subtree to the parent path. Variant keys keep composing.
+            StaticSzValue::Object(nested) => {
+                if property_prefix(&property.key).is_some() {
+                    out.push(path);
+                } else {
+                    collect_canonical_leaf_paths(nested, &path, out);
+                }
+            }
             _ => out.push(path),
         }
     }
@@ -192,6 +206,11 @@ fn leaf_paths_conflict(a: &[String], b: &[String]) -> bool {
 /// variant) could alias another key's target invisibly, so its config bails.
 fn branch_keys_canonicalizable(branch: &StaticSzObject) -> bool {
     for property in &branch.properties {
+        // `op` fuses into whichever color-bearing key it meets at lowering;
+        // per-key compilation cannot represent that.
+        if property.key == "op" {
+            return false;
+        }
         if property_prefix(&property.key).is_none() && !is_known_variant(&property.key) {
             return false;
         }
