@@ -403,6 +403,11 @@ pub struct StaticArrayPartIr {
     /// Source span of a dynamic item's expression; absent for static items.
     #[serde(default)]
     pub dynamic_span: Option<TextSpan>,
+    /// Whether the dynamic expression is provably a string or falsy at
+    /// runtime (szr-proof vocabulary). Serde default false — a stale IR can
+    /// only lose the optimization, never claim safety it did not prove.
+    #[serde(default)]
+    pub dynamic_provable: bool,
     /// Safelist candidates statically visible inside a dynamic item (ternary
     /// branches, guarded objects). Kept per part so class discovery order
     /// stays element order — mangle IDs are assigned in discovery order.

@@ -63,6 +63,16 @@
         "types": "./dist/lowering.d.cts",
         "default": "./dist/lowering.cjs"
       }
+    },
+    "./merge": {
+      "import": {
+        "types": "./dist/merge.d.mts",
+        "default": "./dist/merge.mjs"
+      },
+      "require": {
+        "types": "./dist/merge.d.cts",
+        "default": "./dist/merge.cjs"
+      }
     }
   },
   "files": [

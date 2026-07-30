@@ -12,10 +12,11 @@ export {
     _sz,
     _sz2,
     _sz3,
-    _szMerge,
-    _szPart,
     type SzInput,
     type SzvCompiledTable,
     type SzvPickSelection,
     szr,
 } from '@csszyx/runtime/core';
+// The merge family lives on its own runtime entry so an szr-only bundle never
+// carries the group-merge tables; this mirror keeps csszyx/core one-stop.
+export { _szcn, _szMerge, _szPart } from '@csszyx/runtime/merge';

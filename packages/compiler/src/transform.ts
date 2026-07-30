@@ -504,6 +504,8 @@ interface SzArrayTransformResult {
     transformed: boolean;
     usesSzcn: boolean;
     usesSzPart: boolean;
+    /** False when any emitted `_szPart` argument could be an object. */
+    szPartArgsProvable?: boolean;
 }
 
 /** Result of compiling an sz object expression. */
@@ -1370,6 +1372,8 @@ interface SzValueTransformResult {
     usesUnitVar: boolean;
     usesSzcn: boolean;
     usesSzPart: boolean;
+    /** False when any emitted `_szPart` argument could be an object. */
+    szPartArgsProvable?: boolean;
 }
 
 /**
@@ -1741,9 +1745,18 @@ function transformSzArrayExpression(
 
     const args: t.Expression[] = [];
     let usesSzPart = false;
+    let szPartArgsProvable = true;
     for (const part of parts) {
         const partUsesSzPart = appendSzArrayArgument(part, args, getBinding, classes, diagnostics);
         usesSzPart ||= partUsesSzPart;
+        if (partUsesSzPart) {
+            // Same safety vocabulary as the szr proof: a provably string-or-
+            // falsy element never needs the object lowering at runtime, so the
+            // bundler can import the merge helpers from the compiler-free entry.
+            szPartArgsProvable &&= isProvablyNonObjectArgument(
+                (part as Extract<SzArrayPart, { kind: 'dyn' }>).node,
+            );
+        }
     }
     if (existing.classExpression) {
         args.unshift(existing.classExpression);
@@ -1757,7 +1770,7 @@ function transformSzArrayExpression(
     }
     path.node.name.name = 'className';
     path.node.value = t.jsxExpressionContainer(t.callExpression(t.identifier('_szcn'), args));
-    return { transformed: true, usesSzcn: true, usesSzPart };
+    return { transformed: true, usesSzcn: true, usesSzPart, szPartArgsProvable };
 }
 
 /**
@@ -1864,6 +1877,12 @@ export interface SourceTransformResult {
     usesSzPart: boolean;
     /** Whether the source needs the __szvPick runtime helper (precompiled szv tables). */
     usesSzvPick: boolean;
+    /**
+     * True when every emitted `_szPart` argument is provably a string or
+     * falsy (vacuously true with none). Lets the bundler import the merge
+     * helpers from the compiler-free entry.
+     */
+    szPartArgsProvable: boolean;
     /** Whether the source needs the color-var runtime helper. */
     usesColorVar: boolean;
     usesSpacingVar: boolean;
@@ -1901,6 +1920,7 @@ export function transformSourceCode(
     const classMergeUsage: ClassMergeUsage = { runtime: false, merge: false };
     let usesSzcn = false;
     let usesSzPart = false;
+    let szPartArgsProvable = true;
     let usesColorVar = false;
     let usesSpacingVar = false;
     let usesUnitVar = false;
@@ -1948,6 +1968,7 @@ export function transformSourceCode(
             usesRuntime: false,
             usesMerge: false,
             usesSzvPick: false,
+            szPartArgsProvable: true,
             usesSzcn: false,
             usesSzPart: false,
             usesColorVar: false,
@@ -2092,6 +2113,7 @@ export function transformSourceCode(
                             usesUnitVar ||= valueResult.usesUnitVar;
                             usesSzcn ||= valueResult.usesSzcn;
                             usesSzPart ||= valueResult.usesSzPart;
+                            szPartArgsProvable &&= valueResult.szPartArgsProvable !== false;
                         },
 
                         // ── szv catalog extraction ────────────────────────────────────────
@@ -2166,6 +2188,7 @@ export function transformSourceCode(
             usesSzcn: usesSzcn,
             usesSzPart: usesSzPart,
             usesSzvPick: szvPrecompile.usedPick,
+            szPartArgsProvable,
             usesColorVar: usesColorVar,
             usesSpacingVar: usesSpacingVar,
             usesUnitVar: usesUnitVar,
@@ -2191,6 +2214,7 @@ export function transformSourceCode(
             usesSzcn: false,
             usesSzPart: false,
             usesSzvPick: false,
+            szPartArgsProvable: true,
             usesColorVar: false,
             usesSpacingVar: false,
             usesUnitVar: false,

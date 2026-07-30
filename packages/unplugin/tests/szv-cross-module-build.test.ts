@@ -98,6 +98,73 @@ async function buildFixture(parser: 'rust' | 'oxc' | 'babel'): Promise<string> {
     return js;
 }
 
+const SLIM_FIXTURE_FILES: Record<string, string> = {
+    'index.html': FIXTURE_FILES['index.html'],
+    'src/main.ts': `
+import { App } from './App.tsx';
+document.body.textContent = JSON.stringify(App({ n: 3 }));
+`,
+    // The provable-array shape: the dynamic element is a template literal, so
+    // _szPart can never receive an object and the merge helpers come from the
+    // compiler-free entry.
+    'src/App.tsx': `
+export const App = ({ n }) => <div sz={[{ p: 4 }, \`col-\${n}\`]} />;
+`,
+};
+
+/**
+ * Build the provable-array fixture and return the joined JS output.
+ *
+ * @param parser - Engine under test.
+ * @returns Emitted JS bundle text.
+ */
+async function buildSlimFixture(parser: 'rust' | 'oxc' | 'babel'): Promise<string> {
+    const root = mkdtempSync(join(realpathSync(tmpdir()), `csszyx-szpart-slim-${parser}-`));
+    tempDirs.push(root);
+    mkdirSync(join(root, 'src'), { recursive: true });
+    for (const [file, source] of Object.entries(SLIM_FIXTURE_FILES)) {
+        writeFileSync(join(root, file), source, 'utf8');
+    }
+    await build({
+        root,
+        logLevel: 'silent',
+        plugins: [vitePlugin({ build: { parser, cache: false } })],
+        esbuild: {
+            jsx: 'transform',
+            jsxFactory: 'h',
+            jsxFragment: 'Fragment',
+            jsxInject: 'const h = (t, p, ...c) => ({ t, p, c }); const Fragment = "f";',
+        },
+        build: {
+            minify: false,
+            rollupOptions: {
+                external: ['@csszyx/runtime', '@csszyx/runtime/merge'],
+            },
+        },
+    });
+    const assetsDir = join(root, 'dist', 'assets');
+    const js = readdirSync(assetsDir)
+        .filter(file => file.endsWith('.js'))
+        .map(file => readFileSync(join(assetsDir, file), 'utf8'))
+        .join('\n');
+    expect(js.length).toBeGreaterThan(0);
+    return js;
+}
+
+describe.each(['rust', 'oxc', 'babel'] as const)('%s slim injection build', parser => {
+    it('routes provable merge helpers through the compiler-free entry', async () => {
+        const js = await buildSlimFixture(parser);
+        // The merge helpers import the /merge entry, not the self-registering
+        // barrel. Other features may still import light symbols from the
+        // barrel (theme-group registration does), so the assertion targets the
+        // helper bindings themselves.
+        expect(js).toMatch(/import \{[^}]*_szPart[^}]*\} from ['"]@csszyx\/runtime\/merge['"]/);
+        expect(js).not.toMatch(/import \{[^}]*_szPart[^}]*\} from ['"]@csszyx\/runtime['"]/);
+        expect(js).not.toMatch(/import \{[^}]*_sz[,}]/);
+        expect(js).toContain('_szPart(');
+    }, 120_000);
+});
+
 describe.each(['rust', 'oxc', 'babel'] as const)('%s build', parser => {
     it('rewrites the imported factory end to end', { timeout: 120_000 }, async () => {
         const js = await buildFixture(parser);

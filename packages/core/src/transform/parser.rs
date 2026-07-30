@@ -1910,6 +1910,7 @@ fn static_array_part_from_expression(
         classes: Vec::new(),
         ternary: Some(ternary),
         dynamic_span: None,
+        dynamic_provable: false,
         candidates: Vec::new(),
         dynamic_object_literal: false,
     });
@@ -1935,6 +1936,7 @@ fn static_array_part_from_expression(
             classes: lower_static_sz_object(&partial.object),
             ternary: Some(partial.ternaries.remove(0)),
             dynamic_span: None,
+            dynamic_provable: false,
             candidates: Vec::new(),
             dynamic_object_literal: false,
         });
@@ -1955,6 +1957,7 @@ const fn static_array_part(
         classes,
         ternary: None,
         dynamic_span: None,
+        dynamic_provable: false,
         candidates: Vec::new(),
         dynamic_object_literal: false,
     }
@@ -1971,6 +1974,9 @@ fn dynamic_array_part(
         classes: Vec::new(),
         ternary: None,
         dynamic_span: Some(text_span(expression.span())),
+        // Same safety vocabulary as the szr proof: a provably string-or-falsy
+        // element never needs the object lowering at runtime.
+        dynamic_provable: is_provably_non_object_argument(expression),
         candidates: candidate_classes_from_expression(expression, ctx),
         dynamic_object_literal: matches!(unwrapped, Expression::ObjectExpression(_)),
     }

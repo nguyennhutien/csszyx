@@ -117,10 +117,20 @@ describe('runtime split size contract', () => {
             "import { szr } from '@csszyx/runtime/core'; console.log(szr);",
         );
         expect(probe.hasCompiler).toBe(false);
-        // 13.1 KB before the split; the chunk graph currently retains ~3 KB
-        // (merge/box-role neighbours). The bound has headroom so it fails on a
-        // compiler re-entry, not on chunk-layout noise.
-        expect(probe.gzipBytes).toBeLessThan(5_000);
+        // 13.1 KB before the split, ~3 KB while core still carried the merge
+        // family, 603 B once /merge became its own entry. Headroom for chunk
+        // noise, tight enough to catch the merge tables sneaking back in.
+        expect(probe.gzipBytes).toBeLessThan(1_500);
+    });
+
+    it('the merge entry carries the group tables but no compiler', async () => {
+        const probe = await bundleProbe(
+            "import { _szPart, _szcn } from '@csszyx/runtime/merge'; console.log(_szPart, _szcn);",
+        );
+        expect(probe.hasCompiler).toBe(false);
+        // The box-role tables are the merge family's data — ~5 KB is its
+        // honest cost. The barrel _szPart was 17 KB WITH the compiler.
+        expect(probe.gzipBytes).toBeLessThan(7_000);
     });
 
     it('the bare /lowering import survives bundling and restores the compiler', async () => {

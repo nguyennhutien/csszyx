@@ -82,6 +82,8 @@ export interface NativeTransformResult {
         usesSzPart: boolean;
         /** Whether the result imports the runtime __szvPick helper. */
         usesSzvPick: boolean;
+        /** True when every emitted _szPart argument is provably string/falsy. */
+        szPartArgsProvable: boolean;
         /** Whether the result imports the runtime color-var helper. */
         usesColorVar: boolean;
         /** Whether the emitted code calls the __szSpacingVar runtime helper. */

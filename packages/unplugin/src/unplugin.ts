@@ -3803,6 +3803,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         usesSzcn: boolean;
         usesSzPart: boolean;
         usesSzvPick: boolean;
+        szPartArgsProvable: boolean;
         usesColorVar: boolean;
         usesSpacingVar: boolean;
         usesUnitVar: boolean;
@@ -3824,6 +3825,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesSzcn: false,
             usesSzPart: false,
             usesSzvPick: false,
+            szPartArgsProvable: true,
             usesColorVar: false,
             usesSpacingVar: false,
             usesUnitVar: false,
@@ -3900,6 +3902,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesSzcn: result.usesSzcn,
             usesSzPart: result.usesSzPart,
             usesSzvPick: result.usesSzvPick,
+            szPartArgsProvable: result.szPartArgsProvable,
             usesColorVar: result.usesColorVar,
             usesSpacingVar: result.usesSpacingVar,
             usesUnitVar: result.usesUnitVar,
@@ -3973,17 +3976,31 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param output Pre-transform helper usage.
      * @returns Runtime export names in stable import order.
      */
-    function requiredRuntimeHelpers(output: PreTransformOutput): string[] {
-        const helpers: string[] = [];
-        if (output.usesRuntime) helpers.push('_sz');
-        if (output.usesMerge) helpers.push('_szMerge');
-        if (output.usesSzcn) helpers.push('_szcn');
-        if (output.usesSzPart) helpers.push('_szPart');
-        if (output.usesSzvPick) helpers.push('__szvPick');
-        if (output.usesColorVar) helpers.push('__szColorVar');
-        if (output.usesSpacingVar) helpers.push('__szSpacingVar');
-        if (output.usesUnitVar) helpers.push('__szUnitVar');
-        return helpers;
+    function requiredRuntimeHelpers(output: PreTransformOutput): {
+        barrel: string[];
+        merge: string[];
+    } {
+        // A file whose only object-capable emissions are _szPart calls with
+        // provably string-or-falsy arguments never lowers at runtime: its
+        // merge helpers come from the compiler-free entry, saving the whole
+        // browser transform. Any _sz or _szMerge emission keeps the barrel,
+        // whose helpers self-register the lowerer.
+        const slim =
+            output.usesSzPart &&
+            output.szPartArgsProvable &&
+            !output.usesRuntime &&
+            !output.usesMerge;
+        const barrel: string[] = [];
+        const merge: string[] = [];
+        if (output.usesRuntime) barrel.push('_sz');
+        if (output.usesMerge) barrel.push('_szMerge');
+        if (output.usesSzcn) (slim ? merge : barrel).push('_szcn');
+        if (output.usesSzPart) (slim ? merge : barrel).push('_szPart');
+        if (output.usesSzvPick) barrel.push('__szvPick');
+        if (output.usesColorVar) barrel.push('__szColorVar');
+        if (output.usesSpacingVar) barrel.push('__szSpacingVar');
+        if (output.usesUnitVar) barrel.push('__szUnitVar');
+        return { barrel, merge };
     }
 
     /**
@@ -3994,22 +4011,32 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Rewritten source when imports were added, otherwise null.
      */
     function injectRuntimeHelpers(code: string, output: PreTransformOutput): string | null {
-        const imports = requiredRuntimeHelpers(output);
-        const hasRuntimeImport = imports.length > 0 && code.includes('@csszyx/runtime');
+        const groups = requiredRuntimeHelpers(output);
+        let result: string | null = null;
+        let current = code;
+        if (groups.merge.length > 0 && !current.includes('@csszyx/runtime/merge')) {
+            current = insertRuntimeImport(
+                current,
+                `import { ${groups.merge.join(', ')} } from '@csszyx/runtime/merge';\n`,
+            );
+            result = current;
+        }
+        const imports = groups.barrel;
+        const hasRuntimeImport = imports.length > 0 && current.includes('@csszyx/runtime');
         const needed = hasRuntimeImport
-            ? imports.filter(name => !importsRuntimeHelper(code, name))
+            ? imports.filter(name => !importsRuntimeHelper(current, name))
             : imports;
-        if (needed.length === 0) return null;
+        if (needed.length === 0) return result;
 
-        const existingImport = findRuntimeImportClause(code);
+        const existingImport = findRuntimeImportClause(current);
         if (existingImport) {
-            return code.replace(
+            return current.replace(
                 existingImport.statement,
                 `${existingImport.prefixWithBody}, ${needed.join(', ')} } from '@csszyx/runtime'`,
             );
         }
         const importStatement = `import { ${needed.join(', ')} } from '@csszyx/runtime';\n`;
-        return insertRuntimeImport(code, importStatement);
+        return insertRuntimeImport(current, importStatement);
     }
 
     /**

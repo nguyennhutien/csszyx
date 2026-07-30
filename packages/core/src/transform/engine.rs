@@ -172,6 +172,7 @@ fn transform_fast_static_ir_with_options(
             uses_szcn: false,
             uses_sz_part: false,
             uses_szv_pick: false,
+            sz_part_args_provable: true,
             uses_color_var: false,
             uses_spacing_var: false,
             uses_unit_var: false,
@@ -299,6 +300,13 @@ fn transform_static_classes_with_options(
                 .iter()
                 .any(|part| part.dynamic_span.is_some())
         });
+    // Vacuously true with no dynamic parts; false as soon as one part could
+    // be an object at runtime.
+    let sz_part_args_provable = parsed.ir.sz_attributes.iter().all(|attr| {
+        attr.array_parts
+            .iter()
+            .all(|part| part.dynamic_span.is_none() || part.dynamic_provable)
+    });
     let uses_merge = transformed
         && parsed.ir.jsx_opening_elements.iter().any(|element| {
             let Some(class_index) = element.class_attribute_index else {
@@ -374,6 +382,7 @@ fn transform_static_classes_with_options(
             uses_merge,
             uses_szcn,
             uses_sz_part,
+            sz_part_args_provable,
             uses_szv_pick: parsed.ir.uses_szv_pick,
             uses_color_var,
             uses_spacing_var,
@@ -713,6 +722,7 @@ fn noop_result(file: &TransformFile) -> TransformResult {
             uses_szcn: false,
             uses_sz_part: false,
             uses_szv_pick: false,
+            sz_part_args_provable: true,
             uses_color_var: false,
             uses_spacing_var: false,
             uses_unit_var: false,

@@ -21,9 +21,10 @@
  * @module @csszyx/runtime/concatenate
  */
 
-import { _sz as coreSz, _szMerge as coreSzMerge, type SzInput } from './core.js';
+import { _sz as coreSz, type SzInput } from './core.js';
 import { lowerSz } from './lowering.js';
 import { getSzLowering, setSzLowering } from './lowering-slot.js';
+import { _szMerge as coreSzMerge } from './merge.js';
 
 export type { SzInput } from './core.js';
 export { _sz2, _sz3 } from './core.js';

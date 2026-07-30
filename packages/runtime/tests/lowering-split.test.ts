@@ -20,9 +20,10 @@ import {
     _szPart as barrelSzPart,
     szr as barrelSzr,
 } from '../src/concatenate.js';
-import { _sz, _sz2, _sz3, _szMerge, _szPart, szr } from '../src/core.js';
+import { _sz, _sz2, _sz3, szr } from '../src/core.js';
 import { lowerSz, registerSzLowering } from '../src/lowering.js';
 import { getSzLowering, setSzLowering } from '../src/lowering-slot.js';
+import { _szMerge, _szPart } from '../src/merge.js';
 
 /** globalThis carriers the assertions poke: fallback slot + mangle map. */
 interface SzLoweringGlobals {

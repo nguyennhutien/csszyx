@@ -21,6 +21,7 @@ export interface NextRuntimeImportUsage {
     usesSzcn?: boolean;
     usesSzPart?: boolean;
     usesSzvPick?: boolean;
+    szPartArgsProvable?: boolean;
     usesColorVar?: boolean;
     usesSpacingVar?: boolean;
     usesUnitVar?: boolean;
@@ -43,6 +44,13 @@ export function injectNextRuntimeImports(
     code: string,
     usage: NextRuntimeImportUsage,
 ): NextRuntimeImportInjectionResult {
+    // Same slim rule as the vite/webpack hook: provably string-only _szPart
+    // arguments route the merge helpers through the compiler-free entry.
+    const slim =
+        usage.usesSzPart === true &&
+        usage.szPartArgsProvable === true &&
+        usage.usesRuntime !== true &&
+        usage.usesMerge !== true;
     const helpers = runtimeHelpersFromUsage(usage);
     if (helpers.length === 0) {
         return { code, injected: [] };
@@ -54,6 +62,25 @@ export function injectNextRuntimeImports(
         : helpers;
     if (missing.length === 0) {
         return { code, injected: [] };
+    }
+
+    if (slim) {
+        const mergeHelpers = missing.filter(helper => helper === '_szcn' || helper === '_szPart');
+        const barrelHelpers = missing.filter(helper => helper !== '_szcn' && helper !== '_szPart');
+        let next = code;
+        if (mergeHelpers.length > 0) {
+            next = insertRuntimeImport(
+                next,
+                `import { ${mergeHelpers.join(', ')} } from '@csszyx/runtime/merge';\n`,
+            );
+        }
+        if (barrelHelpers.length > 0) {
+            next = insertRuntimeImport(
+                next,
+                `import { ${barrelHelpers.join(', ')} } from '@csszyx/runtime';\n`,
+            );
+        }
+        return { code: next, injected: missing };
     }
 
     return {

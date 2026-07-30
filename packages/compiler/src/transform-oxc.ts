@@ -141,6 +141,7 @@ export function transformOxc(
             code: source,
             transformed: false,
             usesSzvPick: false,
+            szPartArgsProvable: true,
             usesRuntime: false,
             usesMerge: false,
             usesSzcn: false,
@@ -177,6 +178,7 @@ export function transformOxc(
     assertAstBudget(parsed.program as unknown as OxcNode, effectiveFilename, astBudget);
 
     const edits = new MagicString(source);
+    oxcSzPartArgsProvable = true;
     const szrRewrite: OxcSzrRewriteState = {
         sourceSpan: null,
         sourceValue: '',
@@ -429,6 +431,7 @@ export function transformOxc(
         code: transformed ? edits.toString() : source,
         transformed,
         usesSzvPick: szvPrecompile.usedPick,
+        szPartArgsProvable: oxcSzPartArgsProvable,
         usesRuntime,
         usesMerge,
         usesSzcn,
@@ -475,6 +478,15 @@ type OxcSzAttributeResult =
     | { kind: 'continue' }
     | { kind: 'fallback'; expression: OxcNode }
     | ({ kind: 'complete' } & OxcSzUsageFlags);
+
+/**
+ * Per-call provability accumulator for emitted `_szPart` arguments.
+ *
+ * Module state on the `szWarnLocation` precedent: the emission site sits
+ * several layers below the entry, and a reset at each `transformOxc` call
+ * keeps it sound in the single-threaded transform.
+ */
+let oxcSzPartArgsProvable = true;
 
 /** Runtime/helper flags emitted by one completed sz rewrite. */
 interface OxcSzUsageFlags {
@@ -3241,6 +3253,9 @@ function appendRuntimeArrayPart(
     if (unwrapExpression(part.node).type === 'ObjectExpression') {
         context.diagnostics.push(buildSzPartElementDiagnostic(part.node, context.source));
     }
+    // Same safety vocabulary as the szr proof: a provably string-or-falsy
+    // element never needs the object lowering at runtime.
+    oxcSzPartArgsProvable &&= isProvablyNonObjectArgumentOxc(part.node);
     args.push(`_szPart(${part.src})`);
     return true;
 }

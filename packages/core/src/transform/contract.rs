@@ -91,6 +91,10 @@ pub struct TransformMetadata {
     /// Whether the result imports the runtime __szvPick helper (precompiled szv tables).
     #[serde(default)]
     pub uses_szv_pick: bool,
+    /// True when every emitted `_szPart` argument is provably a string or
+    /// falsy (vacuously true with none).
+    #[serde(default)]
+    pub sz_part_args_provable: bool,
     /// Whether the result imports the runtime color-var helper.
     pub uses_color_var: bool,
     /// Whether the result imports the runtime spacing-var helper.

@@ -4,11 +4,11 @@ import * as path from 'node:path';
 
 import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@csszyx/compiler';
 
-// 11: transform results carry `usesSzvPick` (the szv per-key precompile) —
-// a schema-10 entry deserialized into the new shape would resurrect the flag
-// as `undefined`, silently skipping the `__szvPick` import injection for a
-// module whose factory calls were rewritten to table picks.
-const CACHE_SCHEMA_VERSION = 11;
+// 12: transform results carry `szPartArgsProvable` — a schema-11 entry would
+// resurrect it as `undefined`, and the injection would then route a file's
+// merge helpers through the wrong entry (heavy instead of slim, or worse,
+// slim for a file whose parts were never proven).
+const CACHE_SCHEMA_VERSION = 12;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';
@@ -25,6 +25,7 @@ interface SerializedTransformResult {
     usesSzcn: boolean;
     usesSzPart: boolean;
     usesSzvPick: boolean;
+    szPartArgsProvable: boolean;
     usesColorVar: boolean;
     usesSpacingVar: boolean;
     usesUnitVar: boolean;
@@ -322,6 +323,7 @@ function serializeResult(result: CacheableTransformResult): SerializedTransformR
         usesSzcn: result.usesSzcn,
         usesSzPart: result.usesSzPart,
         usesSzvPick: result.usesSzvPick,
+        szPartArgsProvable: result.szPartArgsProvable,
         usesColorVar: result.usesColorVar,
         usesSpacingVar: result.usesSpacingVar,
         usesUnitVar: result.usesUnitVar,
@@ -348,6 +350,7 @@ function deserializeResult(result: SerializedTransformResult): CacheableTransfor
         usesSzcn: result.usesSzcn,
         usesSzPart: result.usesSzPart,
         usesSzvPick: result.usesSzvPick,
+        szPartArgsProvable: result.szPartArgsProvable,
         usesColorVar: result.usesColorVar,
         usesSpacingVar: result.usesSpacingVar,
         usesUnitVar: result.usesUnitVar,
