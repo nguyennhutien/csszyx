@@ -8,11 +8,14 @@
  * `'@csszyx/runtime'` → `'@csszyx/runtime/core'`, never across packages.
  */
 export {
+    __szvPick,
     _sz,
     _sz2,
     _sz3,
     _szMerge,
     _szPart,
     type SzInput,
+    type SzvCompiledTable,
+    type SzvPickSelection,
     szr,
 } from '@csszyx/runtime/core';
