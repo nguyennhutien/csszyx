@@ -27,6 +27,14 @@ const FALLBACK_SOURCES: ReadonlyArray<readonly [string, string]> = [
     ['call without a readable name', 'export const A = ({ c }) => <div sz={(c ? f : g)()} />;'],
     ['identifier', 'export const A = ({ v }) => <div sz={v} />;'],
     ['member', 'export const A = () => <div sz={cfg.card} />;'],
+    // Babel's AST has no parenthesized nodes; the oxc lane unwraps them to
+    // match. Diverged before that fix: other/ParenthesizedExpression at 1:33
+    // versus member at 1:34.
+    ['member behind parentheses', 'export const A = () => <div sz={(cfg.card)} />;'],
+    [
+        'member + TS as (classified as other)',
+        'export const A = () => <div sz={cfg.card as object} />;',
+    ],
     ['other (conditional)', 'export const A = ({ c }) => <div sz={c ? p : q} />;'],
     ['other (await)', 'export const A = async ({ p }) => <div sz={await p} />;'],
     ['other (template)', 'export const A = ({ v }) => <div sz={`${v}`} />;'],

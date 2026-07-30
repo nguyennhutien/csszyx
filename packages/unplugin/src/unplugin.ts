@@ -2920,6 +2920,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 earlyGlobalVarAliasEntries.length > 0 ? earlyGlobalVarAliasEntries : undefined,
             // Render dev-mode unknown-property warnings relative to the project root.
             rootDir: state.rootDir,
+            warn: options.build?.warn !== false,
         };
     }
 
@@ -2947,6 +2948,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // smaller budget could not have produced them (and vice versa).
             astBudget: compilerOptions.astBudget,
             mangleVars: compilerOptions.mangleVars,
+            warn: compilerOptions.warn !== false,
             mangleVarHoistMaxDepth: compilerOptions.mangleVarHoistMaxDepth,
             globalVarAliases: normalizeGlobalVarAliasesForCache(compilerOptions.globalVarAliases),
             filename: effectiveFilename,

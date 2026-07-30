@@ -475,6 +475,9 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     #[allow(clippy::too_many_lines)]
     fn collect_sz_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
         let ctx = self.resolve_context();
+        // Set only by the runtime-fallback branch below; every statically
+        // handled shape leaves it `None` so the engine emits nothing for it.
+        let mut runtime_fallback_diagnostic = None;
         let (
             object,
             value_span,
@@ -578,6 +581,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         runtime_fallback_span_from_jsx_expression(&container.expression)?;
                     let candidate_classes =
                         candidate_classes_from_jsx_expression(&container.expression, ctx);
+                    runtime_fallback_diagnostic = classify_runtime_fallback(&container.expression);
                     (
                         StaticSzObject::empty(),
                         value_span,
@@ -607,6 +611,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             runtime_fallback,
             runtime_fallback_spread,
             candidate_classes,
+            runtime_fallback_diagnostic,
             dynamic_css_vars,
         });
         Some(index)
@@ -1552,6 +1557,103 @@ fn split_class_tokens(value: &str) -> Vec<String> {
 /// Returns the source span of the inner expression — what the rewriter
 /// will splice inside `_sz(…)` — so the emitted call preserves the
 /// user's exact text.
+/// Classify a runtime-fallback sz expression for the diagnostic matrix.
+///
+/// Mirrors the Babel lane's `describeRuntimeFallback` byte for byte, because a
+/// `build.parser` flip must not change the build log:
+///
+/// - Parentheses are seen through (Babel's AST has no parenthesized nodes).
+/// - TS wrappers are NOT seen through — Babel classifies `x as T` as
+///   `other`/`TSAsExpression`, so this lane must too, even though the span
+///   helpers below unwrap them for position purposes.
+/// - A computed member callee reports the index identifier (`table[key]()` →
+///   `` `key()` ``): Babel reads `callee.property` without checking
+///   `computed`, and that shared quirk is pinned by the parity suite.
+fn classify_runtime_fallback(
+    expression: &JSXExpression<'_>,
+) -> Option<super::RuntimeFallbackDiagnosticIr> {
+    use super::{RuntimeFallbackDiagnosticIr, RuntimeFallbackKindIr};
+
+    let mut expression = expression.as_expression()?;
+    while let Expression::ParenthesizedExpression(inner) = expression {
+        expression = &inner.expression;
+    }
+
+    let (kind, detail) = match expression {
+        Expression::CallExpression(call) => {
+            let callee_name = match &call.callee {
+                Expression::Identifier(identifier) => identifier.name.as_str(),
+                Expression::StaticMemberExpression(member) => member.property.name.as_str(),
+                Expression::ComputedMemberExpression(member) => match &member.expression {
+                    Expression::Identifier(identifier) => identifier.name.as_str(),
+                    _ => super::generated::sz_fallback_matrix::SZ_FALLBACK_UNKNOWN_CALLEE,
+                },
+                _ => super::generated::sz_fallback_matrix::SZ_FALLBACK_UNKNOWN_CALLEE,
+            };
+            (RuntimeFallbackKindIr::Call, callee_name.to_string())
+        }
+        Expression::Identifier(identifier) => (
+            RuntimeFallbackKindIr::Identifier,
+            identifier.name.to_string(),
+        ),
+        Expression::StaticMemberExpression(_)
+        | Expression::ComputedMemberExpression(_)
+        | Expression::PrivateFieldExpression(_) => (RuntimeFallbackKindIr::Member, String::new()),
+        other => (
+            RuntimeFallbackKindIr::Other,
+            estree_expression_type_name(other).to_string(),
+        ),
+    };
+    Some(RuntimeFallbackDiagnosticIr { kind, detail })
+}
+
+/// Babel-compatible node type name for the `other` matrix arm.
+///
+/// Curated to the shapes a real sz attribute can carry; the audited ones
+/// (TSAsExpression, TSNonNullExpression, ObjectExpression, NewExpression,
+/// LogicalExpression, ConditionalExpression, TemplateLiteral, AwaitExpression)
+/// are pinned against Babel by tests. Anything exotic falls back to a generic
+/// name rather than leaking oxc's internal variant vocabulary.
+const fn estree_expression_type_name(expression: &Expression<'_>) -> &'static str {
+    match expression {
+        Expression::ObjectExpression(_) => "ObjectExpression",
+        Expression::ArrayExpression(_) => "ArrayExpression",
+        Expression::TemplateLiteral(_) => "TemplateLiteral",
+        Expression::ConditionalExpression(_) => "ConditionalExpression",
+        Expression::LogicalExpression(_) => "LogicalExpression",
+        Expression::AwaitExpression(_) => "AwaitExpression",
+        Expression::NewExpression(_) => "NewExpression",
+        Expression::BinaryExpression(_) => "BinaryExpression",
+        Expression::UnaryExpression(_) => "UnaryExpression",
+        Expression::UpdateExpression(_) => "UpdateExpression",
+        Expression::AssignmentExpression(_) => "AssignmentExpression",
+        Expression::SequenceExpression(_) => "SequenceExpression",
+        Expression::TaggedTemplateExpression(_) => "TaggedTemplateExpression",
+        Expression::ArrowFunctionExpression(_) => "ArrowFunctionExpression",
+        Expression::FunctionExpression(_) => "FunctionExpression",
+        Expression::ClassExpression(_) => "ClassExpression",
+        Expression::ThisExpression(_) => "ThisExpression",
+        Expression::ChainExpression(_) => "ChainExpression",
+        Expression::YieldExpression(_) => "YieldExpression",
+        Expression::MetaProperty(_) => "MetaProperty",
+        Expression::TSAsExpression(_) => "TSAsExpression",
+        Expression::TSSatisfiesExpression(_) => "TSSatisfiesExpression",
+        Expression::TSNonNullExpression(_) => "TSNonNullExpression",
+        Expression::TSTypeAssertion(_) => "TSTypeAssertion",
+        Expression::TSInstantiationExpression(_) => "TSInstantiationExpression",
+        Expression::BooleanLiteral(_) => "BooleanLiteral",
+        Expression::NumericLiteral(_) => "NumericLiteral",
+        Expression::StringLiteral(_) => "StringLiteral",
+        Expression::NullLiteral(_) => "NullLiteral",
+        Expression::BigIntLiteral(_) => "BigIntLiteral",
+        Expression::RegExpLiteral(_) => "RegExpLiteral",
+        Expression::JSXElement(_) => "JSXElement",
+        Expression::JSXFragment(_) => "JSXFragment",
+        Expression::Super(_) => "Super",
+        _ => "Expression",
+    }
+}
+
 fn runtime_fallback_span_from_jsx_expression(expression: &JSXExpression<'_>) -> Option<TextSpan> {
     match expression {
         JSXExpression::EmptyExpression(_) => None,

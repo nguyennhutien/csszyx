@@ -34,6 +34,8 @@ pub struct NativeTransformOptions {
     pub root_dir: Option<String>,
     /// Per-file AST node cap override (`build.astBudgetLimit`).
     pub ast_budget: Option<u32>,
+    /// Emit build advisory diagnostics (`build.warn`). Omitted = on.
+    pub warn: Option<bool>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -185,6 +187,7 @@ pub fn transform_batch_native(
                 .collect(),
             root_dir: options.root_dir,
             ast_budget: options.ast_budget.map(|budget| budget as usize),
+            warn: options.warn.unwrap_or(true),
         },
     )
     .map(|results| {

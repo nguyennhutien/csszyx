@@ -212,6 +212,32 @@ pub enum SafeStyleSpreadValueIr {
     Expression(TextSpan),
 }
 
+/// Matrix classification of a runtime-fallback sz expression (ADR 0011).
+///
+/// Mirrors the shared `SzFallbackKind` vocabulary. Recorded by the parser —
+/// the only layer that still holds the AST — so the engine can render the
+/// diagnostic later without re-parsing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RuntimeFallbackKindIr {
+    /// A call expression; `detail` carries the callee name.
+    Call,
+    /// A bare identifier; `detail` carries its name.
+    Identifier,
+    /// A member expression; `detail` is unused.
+    Member,
+    /// Anything else; `detail` carries the Babel-compatible node type name.
+    Other,
+}
+
+/// Why an sz expression was left to the runtime, for the fallback matrix.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeFallbackDiagnosticIr {
+    /// Shape classification driving the matrix entry.
+    pub kind: RuntimeFallbackKindIr,
+    /// Kind-specific detail (callee name, identifier name, or node type).
+    pub detail: String,
+}
+
 /// JSX `sz` attribute and its parser-normalized static object.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SzAttributeIr {
@@ -256,6 +282,10 @@ pub struct SzAttributeIr {
     pub runtime_fallback_spread: bool,
     /// Static classes visible inside runtime-fallback shapes.
     pub candidate_classes: Vec<String>,
+    /// Matrix classification for a runtime-fallback attribute, or `None` for
+    /// statically handled attributes (and IR that predates the field).
+    #[serde(default)]
+    pub runtime_fallback_diagnostic: Option<RuntimeFallbackDiagnosticIr>,
     /// Dynamic object properties emitted through CSS custom properties.
     pub dynamic_css_vars: Vec<DynamicCssVarIr>,
 }
@@ -520,6 +550,7 @@ mod tests {
                 runtime_fallback: false,
                 runtime_fallback_spread: false,
                 candidate_classes: Vec::new(),
+                runtime_fallback_diagnostic: None,
                 dynamic_css_vars: Vec::new(),
             }],
             unsupported_sz_attribute_spans: Vec::new(),

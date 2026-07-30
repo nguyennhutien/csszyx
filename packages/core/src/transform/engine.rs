@@ -156,9 +156,15 @@ fn transform_fast_static_ir_with_options(
         classes: lowered.classes,
         raw_class_names: lowered.raw_class_names,
         diagnostics: {
-            let mut diagnostics =
-                unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref());
-            diagnostics.extend(lower_ir.szs_diagnostics.iter().cloned());
+            // Advisory only — see the parser-path assembly for the contract.
+            let mut diagnostics = if options.warn {
+                unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref())
+            } else {
+                Vec::new()
+            };
+            if options.warn {
+                diagnostics.extend(lower_ir.szs_diagnostics.iter().cloned());
+            }
             diagnostics
         },
         recovery_tokens: Vec::new(),
@@ -232,16 +238,24 @@ fn transform_static_classes_with_options(
     // valid ones flowing through className/recovery-token emission.
     let has_parser_errors = !diagnostics.is_empty();
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
-    diagnostics.extend(runtime_fallback_spread_diagnostics(file, &parsed.ir));
-    diagnostics.extend(style_spread_collision_diagnostics(file, &parsed.ir));
-    diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
-    diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
-    diagnostics.extend(unknown_property_diagnostics(
-        file,
-        &parsed.ir,
-        options.root_dir.as_deref(),
-    ));
-    diagnostics.extend(parsed.ir.szs_diagnostics.iter().cloned());
+    // Advisory diagnostics only — `build.warn: false` runs the single-pass
+    // mode with none of this machinery. `unsupported_sz_diagnostics` above and
+    // the AST-budget notice below are NOT advisory: they report output that
+    // was withheld, and silencing those is the silently-dropped-output class
+    // this codebase has been bitten by before.
+    if options.warn {
+        let mut lines: Option<LineIndex> = None;
+        diagnostics.extend(runtime_fallback_diagnostics(file, &parsed.ir, &mut lines));
+        diagnostics.extend(style_spread_collision_diagnostics(file, &parsed.ir));
+        diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
+        diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
+        diagnostics.extend(unknown_property_diagnostics(
+            file,
+            &parsed.ir,
+            options.root_dir.as_deref(),
+        ));
+        diagnostics.extend(parsed.ir.szs_diagnostics.iter().cloned());
+    }
     if parsed.ast_budget_exceeded {
         diagnostics.push(format!(
             "[csszyx] AST budget exceeded in {}: the IR walk stopped mid-file, so the file was \
@@ -434,23 +448,63 @@ fn unsupported_sz_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec
         .collect()
 }
 
-/// Build-log diagnostic for an `sz` prop forced to a runtime fallback by a
-/// top-level object spread (`sz={{ ...x }}`). The file still transforms (the
-/// `_sz` helper handles it), but the spread can't be statically resolved, so
-/// it may produce no styles in production — this surfaces it instead of failing
-/// silently. The `unresolvable sz spread` phrase is the marker the bundler
-/// plugin matches to promote these to a build-log warning in every mode.
-fn runtime_fallback_spread_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
-    ir.sz_attributes
-        .iter()
-        .filter(|attr| attr.runtime_fallback_spread)
-        .map(|attr| {
-            format!(
-                "[csszyx] unresolvable sz spread at {}:{}: sz={{{{ ...x }}}} can't be resolved at build time and falls back to runtime (it may produce no styles in production). Use array form: sz={{[x, {{ … }}]}}.",
-                file.filename, attr.value_span.start
-            )
-        })
-        .collect()
+/// Resolve a byte offset to Babel-compatible `line:column` — 1-based line,
+/// 1-based column counted in UTF-16 code units, because that is what
+/// `expression.loc.start.column + 1` produces on the JS lanes and the three
+/// engines must print identical positions.
+fn babel_line_column(source: &str, lines: &mut Option<LineIndex>, offset: u32) -> (u32, usize) {
+    let (line, byte_column) = lines
+        .get_or_insert_with(|| LineIndex::new(source))
+        .line_column(source, offset);
+    let end = offset.min(u32::try_from(source.len()).unwrap_or(u32::MAX)) as usize;
+    let start = end - byte_column as usize;
+    (line, source[start..end].encode_utf16().count() + 1)
+}
+
+/// Build-log diagnostics for `sz` props left to the runtime `_sz(...)` helper.
+///
+/// Emits the shared fallback matrix entry (why, and what to do instead) and —
+/// for an object literal with a top-level spread — the unresolvable-spread
+/// notice, in the same per-attribute order and with the same wording and
+/// `line:column` positions as the Babel and oxc lanes, so a `build.parser`
+/// flip cannot change the build log. The `unresolvable sz spread` phrase is
+/// the marker the bundler plugin matches to promote those to a build-log
+/// warning in every mode.
+fn runtime_fallback_diagnostics(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    lines: &mut Option<LineIndex>,
+) -> Vec<String> {
+    use super::generated::sz_fallback_matrix::{
+        sz_fallback_reason, sz_fallback_suggestion, SzFallbackKind,
+    };
+    use super::RuntimeFallbackKindIr;
+
+    let mut out = Vec::new();
+    for attr in &ir.sz_attributes {
+        let Some(diagnostic) = &attr.runtime_fallback_diagnostic else {
+            continue;
+        };
+        let (line, column) = babel_line_column(&file.source, lines, attr.value_span.start);
+        let kind = match diagnostic.kind {
+            RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
+            RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
+            RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
+            RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
+        };
+        let reason = sz_fallback_reason(kind, &diagnostic.detail);
+        let suggestion = sz_fallback_suggestion(kind);
+        out.push(format!(
+            "sz fallback at {line}:{column}: {reason}.
+  Suggestion: {suggestion}"
+        ));
+        if attr.runtime_fallback_spread {
+            out.push(format!(
+                "[csszyx] unresolvable sz spread at {line}:{column}: sz={{{{ ...x }}}} cannot be resolved at build time and falls back to runtime; it may render no styles in production. Use array form: sz={{[x, {{ ... }}]}}."
+            ));
+        }
+    }
+    out
 }
 
 /// Warn when generated style custom properties share an element with a prop
@@ -1010,7 +1064,12 @@ mod tests {
         assert!(result.metadata.transformed);
         assert!(result.metadata.uses_runtime);
         assert!(result.classes.is_empty());
-        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "sz fallback at 1:45: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+            )]
+        );
     }
 
     #[test]
@@ -1031,7 +1090,12 @@ mod tests {
         assert!(result.metadata.transformed);
         assert!(result.metadata.uses_runtime);
         assert_eq!(result.classes, ["p-4"]);
-        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "sz fallback at 1:69: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+            )]
+        );
     }
 
     #[test]
@@ -1159,7 +1223,14 @@ mod tests {
         assert!(result.metadata.transformed);
         assert!(result.metadata.uses_runtime);
         assert!(result.classes.is_empty());
-        assert!(result.diagnostics.is_empty());
+        // Byte-identical to the Babel lane's diagnostic for this source — the
+        // fallback matrix is a three-engine parity surface (ADR 0011).
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "sz fallback at 1:36: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+            )]
+        );
     }
 
     #[test]
@@ -1181,7 +1252,12 @@ mod tests {
         assert!(result.metadata.uses_merge);
         assert!(result.classes.is_empty());
         assert_eq!(result.raw_class_names, ["existing"]);
-        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "sz fallback at 1:57: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+            )]
+        );
     }
 
     #[test]
@@ -1203,7 +1279,12 @@ mod tests {
         assert!(result.metadata.uses_merge);
         assert!(result.classes.is_empty());
         assert!(result.raw_class_names.is_empty());
-        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "sz fallback at 1:59: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+            )]
+        );
     }
 
     #[test]

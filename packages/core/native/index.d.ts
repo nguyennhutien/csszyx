@@ -34,6 +34,8 @@ export interface NativeTransformOptions {
     rootDir?: string;
     /** Per-file AST node cap override (`build.astBudgetLimit`). */
     astBudget?: number;
+    /** Emit build advisory diagnostics (`build.warn`). Omitted = on. */
+    warn?: boolean;
 }
 
 /** Native transform output shape returned per source file. */

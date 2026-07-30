@@ -143,6 +143,7 @@ export function transformRustBatch(
                 // the default cap under rust only — and the user's raised
                 // `build.astBudgetLimit` has to apply to whichever engine trips.
                 astBudget: options?.astBudget,
+                warn: options?.warn,
             },
         ).map(fromNativeResult);
     } catch (err) {
