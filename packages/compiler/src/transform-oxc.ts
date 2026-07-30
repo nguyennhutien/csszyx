@@ -185,6 +185,9 @@ export function transformOxc(
         szrCalls: [],
     };
     const szvPrecompile: OxcSzvPrecompileState = {
+        // Every transformed file would otherwise pay the identifier-call map
+        // for nothing; without an szv call there is nothing to precompile.
+        enabled: source.includes('szv('),
         candidates: new Map(),
         identifierCalls: new Map(),
         replacedCalls: new Set(),
@@ -1885,6 +1888,8 @@ interface OxcSzvFactoryCandidate {
 
 /** Whole-file accumulator for the szv per-key precompile (oxc lane). */
 interface OxcSzvPrecompileState {
+    /** Whether the file can contain an szv factory at all. */
+    enabled: boolean;
     /** Factory candidates by binding name. */
     candidates: Map<string, OxcSzvFactoryCandidate>;
     /** Every direct identifier-callee call, by callee name. */
@@ -1970,6 +1975,7 @@ function recordIdentifierCallOxc(
         szrState.szrCalls.push(node);
         return;
     }
+    if (!szvState.enabled) return;
     const existing = szvState.identifierCalls.get(name);
     if (existing) {
         existing.push(node);
@@ -1994,6 +2000,7 @@ interface VariableDeclarationNode {
  * @param state - szv precompile accumulator.
  */
 function recordSzvFactoryCandidatesOxc(node: OxcNode, state: OxcSzvPrecompileState): void {
+    if (!state.enabled) return;
     const declaration = node as unknown as VariableDeclarationNode;
     for (const declarator of declaration.declarations ?? []) {
         if (declarator.id?.type !== 'Identifier' || !declarator.init) continue;

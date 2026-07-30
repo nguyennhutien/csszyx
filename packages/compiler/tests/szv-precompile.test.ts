@@ -95,6 +95,11 @@ const MATRIX: ReadonlyArray<readonly [string, string, 'static' | 'dynamic' | 'ba
         'dynamic',
     ],
     [
+        'negated safe-integer selection is static',
+        "const f = szv({ variants: { ind: { '-1': { ml: 4 } } } });\nexport const c = szr(f({ ind: -1 }));",
+        'static',
+    ],
+    [
         'overlapping canonical keys bail',
         "const cardSz = szv({ base: { p: 4 }, variants: { pad: { lg: { p: 8 } } } });\nexport const cls = szr(cardSz({ pad: 'lg' }));",
         'bail',
@@ -186,6 +191,19 @@ describe('the runtime oracle', () => {
             const shape = outputShape(engine, source);
             expect(shape.statics).toEqual([JSON.stringify(szr(factory({ pad: 'lg' } as never)))]);
         }
+    });
+});
+
+describe('idempotency', () => {
+    it.each(LANES)('re-transforming the output changes nothing (%s)', (_lane, engine) => {
+        // Some loader chains apply a transform twice; the second pass must
+        // recognize its own output — rewritten imports are off the target map,
+        // replaced calls leave no factory references, and the catalog guard
+        // refuses to stack a second copy.
+        const source = `${IMPORTS}${FACTORY}export const C = ({ s }) => szr(cardSz({ pad: 'sm' }), cardSz(s));`;
+        const once = engine(source, '/p/t.tsx').code ?? source;
+        const twice = engine(once, '/p/t.tsx').code ?? once;
+        expect(twice).toBe(once);
     });
 });
 

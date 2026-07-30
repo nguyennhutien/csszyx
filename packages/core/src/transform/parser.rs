@@ -91,6 +91,7 @@ pub fn parse_source_shell_with_budget(
             szr_call_args: Vec::new(),
             szv_candidates: Vec::new(),
             szv_call_sites: Vec::new(),
+            szv_gate: file.source.contains("szv("),
         };
         let ir_start = Instant::now();
         visitor.visit_program(&parsed.program);
@@ -183,6 +184,10 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     szv_candidates: Vec<SzvFactoryRecord>,
     /// Every direct identifier-callee call that could be a factory call site.
     szv_call_sites: Vec<SzvCallSite>,
+    /// Whether the file can contain an szv factory at all — without an szv
+    /// call there is nothing to precompile, and every parsed file would
+    /// otherwise pay the call-site vector for nothing.
+    szv_gate: bool,
 }
 
 /// One qualifying szr import clause, recorded for the deferred rewrite.
@@ -854,7 +859,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             self.szr_call_args.push(classes);
             return;
         }
-        if SZV_RESERVED_FACTORY_NAMES.contains(&callee.name.as_str()) {
+        if !self.szv_gate || SZV_RESERVED_FACTORY_NAMES.contains(&callee.name.as_str()) {
             return;
         }
         let argument = classify_szv_call_argument(call);
@@ -868,6 +873,9 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     /// Record every `const F = szv(<literal config>)` declarator, compiling
     /// the table when the config passes the shape and overlap checks.
     fn record_szv_factory_candidates(&mut self, declaration: &VariableDeclaration<'_>) {
+        if !self.szv_gate {
+            return;
+        }
         for declarator in &declaration.declarations {
             let Some(name) = declarator.id.get_identifier_name() else {
                 continue;
@@ -2035,6 +2043,20 @@ fn strict_static_selection(
                 super::szv_precompile::parity_safe_scalar_string(&super::StaticSzValue::Number(
                     literal.value,
                 ))?
+            }
+            Expression::UnaryExpression(unary) => {
+                // Negated safe integers are part of the tri-lane contract.
+                if unary.operator != UnaryOperator::UnaryNegation {
+                    return None;
+                }
+                match unwrap_expression(&unary.argument) {
+                    Expression::NumericLiteral(literal) => {
+                        super::szv_precompile::parity_safe_scalar_string(
+                            &super::StaticSzValue::Number(-literal.value),
+                        )?
+                    }
+                    _ => return None,
+                }
             }
             _ => return None,
         };

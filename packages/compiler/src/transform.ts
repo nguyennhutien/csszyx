@@ -785,6 +785,8 @@ interface SzvFactoryCandidate {
 
 /** Whole-file accumulator for the szv per-key precompile. */
 interface SzvPrecompileState {
+    /** Whether the file can contain an szv factory at all. */
+    enabled: boolean;
     /** Factory candidates by binding name. */
     candidates: Map<string, SzvFactoryCandidate>;
     /** Every direct identifier-callee call, by callee name. */
@@ -851,6 +853,7 @@ function recordIdentifierCall(
         szrState.szrCalls.push(call);
         return;
     }
+    if (!szvState.enabled) return;
     const existing = szvState.identifierCalls.get(name);
     if (existing) {
         existing.push(call);
@@ -873,6 +876,7 @@ function recordSzvFactoryCandidate(
     path: babel.NodePath<t.VariableDeclarator>,
     state: SzvPrecompileState,
 ): void {
+    if (!state.enabled) return;
     const node = path.node;
     if (!t.isIdentifier(node.id) || !node.init) return;
     const init = unwrapTsExpression(node.init);
@@ -1161,12 +1165,20 @@ function evaluateStaticSzvSelection(
         // TS wrappers unwrap, matching the oxc lane's evaluator.
         const value = unwrapTsExpression(property.value);
         // The tri-lane static contract: string, boolean, or safe-integer
-        // literal values only. Everything else — null and undefined included —
-        // takes the dynamic path, where the runtime picker applies the exact
-        // JS semantics without three engines re-implementing them.
+        // literal values (negated included) only. Everything else — null and
+        // undefined included — takes the dynamic path, where the runtime
+        // picker applies the exact JS semantics without three engines
+        // re-implementing them.
         if (t.isNumericLiteral(value)) {
             if (!isParitySafeNumber(value.value)) return null;
             selection[key] = value.value;
+        } else if (
+            t.isUnaryExpression(value) &&
+            value.operator === '-' &&
+            t.isNumericLiteral(value.argument)
+        ) {
+            if (!isParitySafeNumber(-value.argument.value)) return null;
+            selection[key] = -value.argument.value;
         } else if (t.isStringLiteral(value) || t.isBooleanLiteral(value)) {
             selection[key] = value.value;
         } else {
@@ -1850,6 +1862,9 @@ export function transformSourceCode(
         szrCalls: [],
     };
     const szvPrecompile: SzvPrecompileState = {
+        // Every transformed file would otherwise pay the identifier-call map
+        // for nothing; without an szv call there is nothing to precompile.
+        enabled: source.includes('szv('),
         candidates: new Map(),
         identifierCalls: new Map(),
         usedPick: false,
@@ -2306,6 +2321,9 @@ function insertSzvCatalogDeclaration(
     classStrings: string[],
 ): boolean {
     if (!t.isIdentifier(path.node.id) || !path.parentPath?.isVariableDeclaration()) return false;
+    // Idempotency: a pipeline that applies the transform twice (some loader
+    // chains do) must not stack a second catalog on top of the first.
+    if (path.scope.hasBinding(`_szv_catalog_${path.node.id.name}`)) return false;
     const catalog = t.variableDeclaration('const', [
         t.variableDeclarator(
             t.identifier(`_szv_catalog_${path.node.id.name}`),
