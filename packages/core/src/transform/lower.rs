@@ -204,7 +204,20 @@ fn is_special_cased_property(key: &str) -> bool {
 pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
     for property in &object.properties {
         if !is_known_sz_key(&property.key) {
-            out.push((property.key.clone(), property.span.start));
+            // An OBJECT value means variant nesting, and variant names are
+            // open-ended: a `--breakpoint-*` token from the app's `@theme`
+            // (`{ tablet: { p: 4 } }`) or an arbitrary selector cannot appear in
+            // any static table here. The lowering treats the key as a variant
+            // and emits `tablet:p-4` correctly, so flagging it read as
+            // "Unknown property … This will be ignored" for a class that WAS
+            // emitted — a warning that lies, and only on this engine (the JS
+            // lanes warn from their scalar-value path alone). Descend so the
+            // nested keys are still checked.
+            if let StaticSzValue::Object(nested) = &property.value {
+                collect_unknown_sz_keys(nested, out);
+            } else {
+                out.push((property.key.clone(), property.span.start));
+            }
             continue;
         }
         if let StaticSzValue::Object(nested) = &property.value {
