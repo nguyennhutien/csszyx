@@ -53,3 +53,50 @@ pub(crate) const fn sz_fallback_suggestion(kind: SzFallbackKind) -> &'static str
         SzFallbackKind::Other => "Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().",
     }
 }
+
+/// Construct that produced a build-time-unresolvable diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SzFallbackSite {
+    Szr,
+    Szv,
+}
+
+/// The `szs` slot-map diagnostic, matching the TypeScript lanes byte for byte.
+///
+/// # Arguments
+/// * `filename` - Source file, as the engine names it.
+pub(crate) fn szs_unsupported_diagnostic(filename: &str) -> String {
+    format!("[csszyx] szs at {filename}: a slot value could not be read at build time, so no slot classes were compiled. Attribute left unchanged.
+  Suggestion: Every slot must be an identifier key with a static object literal (or class string) value. For a value only known at runtime, use dynamic() and pass the resulting class string.")
+}
+
+/// Render one complete diagnostic line, matching the TypeScript lanes byte for
+/// byte (site label, reason, consequence and advice all come from the shared
+/// matrix).
+///
+/// # Arguments
+/// * `site` - Which construct hit the failure.
+/// * `position` - `line:column`, 1-based.
+/// * `kind` - Classified shape of the expression.
+/// * `detail` - Callee name, identifier name, or node type.
+pub(crate) fn format_sz_fallback_diagnostic(
+    site: SzFallbackSite,
+    position: &str,
+    kind: SzFallbackKind,
+    detail: &str,
+) -> String {
+    let reason = sz_fallback_reason(kind, detail);
+    match site {
+        SzFallbackSite::Szr => {
+            let suggestion = sz_fallback_suggestion(kind);
+            format!(
+                "szr fallback at {position}: {reason}.
+  Suggestion: {suggestion}"
+            )
+        }
+        SzFallbackSite::Szv => {
+            format!("szv catalog at {position}: {reason}.
+  Suggestion: Pass the config inline, or as a module-level const object literal. A computed or spread config cannot be read at build time, so none of its variant classes are safelisted and they generate no CSS.")
+        }
+    }
+}

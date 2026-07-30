@@ -51,6 +51,9 @@ pub struct SourceIr {
     pub class_attributes: Vec<ClassAttributeIr>,
     /// Classes extracted from static `dynamic({...})` calls.
     pub extracted_classes: Vec<String>,
+    /// `szr`/`szv` calls whose argument could not be read at build time.
+    #[serde(default)]
+    pub site_fallbacks: Vec<SiteFallbackIr>,
     /// Style attributes found in source order.
     pub style_attributes: Vec<StyleAttributeIr>,
     /// Static `szRecover` attributes found in source order.
@@ -108,6 +111,7 @@ impl SourceIr {
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: Vec::new(),
             extracted_classes: Vec::new(),
+            site_fallbacks: Vec::new(),
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
@@ -210,6 +214,32 @@ pub enum SafeStyleSpreadValueIr {
     },
     /// Any other expression, preserved behind an object spread.
     Expression(TextSpan),
+}
+
+/// A construct that could not be resolved at build time.
+///
+/// Carries the site because `szr(expr)` and `szv(config)` fail the same way
+/// `sz={expr}` does, but the consequence and the advice differ, so the renderer
+/// needs to know which one it was.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SiteFallbackIr {
+    /// Which construct hit the failure (`szr` or `szv`).
+    pub site: SzFallbackSiteIr,
+    /// Shape classification driving the matrix entry.
+    pub kind: RuntimeFallbackKindIr,
+    /// Kind-specific detail (callee name, identifier name, or node type).
+    pub detail: String,
+    /// Byte offset of the unresolved expression, for `line:column`.
+    pub offset: u32,
+}
+
+/// Construct that produced a build-time-unresolvable diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SzFallbackSiteIr {
+    /// `szr(<expr>)` — the literal argument could not be read.
+    Szr,
+    /// `szv(<config>)` — the variant config could not be read.
+    Szv,
 }
 
 /// Matrix classification of a runtime-fallback sz expression (ADR 0011).
@@ -561,6 +591,7 @@ mod tests {
                 expression_span: None,
             }],
             extracted_classes: Vec::new(),
+            site_fallbacks: Vec::new(),
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),

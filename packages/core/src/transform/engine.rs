@@ -246,6 +246,7 @@ fn transform_static_classes_with_options(
     if options.warn {
         let mut lines: Option<LineIndex> = None;
         diagnostics.extend(runtime_fallback_diagnostics(file, &parsed.ir, &mut lines));
+        diagnostics.extend(site_fallback_diagnostics(file, &parsed.ir, &mut lines));
         diagnostics.extend(style_spread_collision_diagnostics(file, &parsed.ir));
         diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
         diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
@@ -459,6 +460,41 @@ fn babel_line_column(source: &str, lines: &mut Option<LineIndex>, offset: u32) -
     let end = offset.min(u32::try_from(source.len()).unwrap_or(u32::MAX)) as usize;
     let start = end - byte_column as usize;
     (line, source[start..end].encode_utf16().count() + 1)
+}
+
+/// Build-log diagnostics for `szr`/`szv` calls whose argument the parser could
+/// not read.
+///
+/// Same wording, order and `line:column` semantics as the JS lanes — the site
+/// label and the advice come from the shared matrix, so a `build.parser` flip
+/// cannot change the text.
+fn site_fallback_diagnostics(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    lines: &mut Option<LineIndex>,
+) -> Vec<String> {
+    use super::generated::sz_fallback_matrix::{
+        format_sz_fallback_diagnostic, SzFallbackKind, SzFallbackSite,
+    };
+    use super::{RuntimeFallbackKindIr, SzFallbackSiteIr};
+
+    ir.site_fallbacks
+        .iter()
+        .map(|fallback| {
+            let (line, column) = babel_line_column(&file.source, lines, fallback.offset);
+            let kind = match fallback.kind {
+                RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
+                RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
+                RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
+                RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
+            };
+            let site = match fallback.site {
+                SzFallbackSiteIr::Szr => SzFallbackSite::Szr,
+                SzFallbackSiteIr::Szv => SzFallbackSite::Szv,
+            };
+            format_sz_fallback_diagnostic(site, &format!("{line}:{column}"), kind, &fallback.detail)
+        })
+        .collect()
 }
 
 /// Build-log diagnostics for `sz` props left to the runtime `_sz(...)` helper.

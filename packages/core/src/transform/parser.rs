@@ -409,10 +409,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             self.ir.szs_diagnostics.push(message);
             return;
         }
-        let unsupported_message = format!(
-            "[csszyx] szs at {}: every slot must be an identifier key with a static object literal (or class string) value. Attribute left unchanged.",
-            self.ir.filename
-        );
+        let unsupported_message =
+            super::generated::sz_fallback_matrix::szs_unsupported_diagnostic(&self.ir.filename);
         let Some(JSXAttributeValue::ExpressionContainer(container)) = &attr.value else {
             self.ir.szs_diagnostics.push(unsupported_message);
             return;
@@ -676,6 +674,14 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             "dynamic" | "szr" => {
                 let Some(object) = static_object_from_argument(argument, self.resolve_context())
                 else {
+                    // `szr` compiles its literal argument so the classes reach
+                    // the safelist; an argument it cannot read means those
+                    // classes are never collected and the CSS is simply absent.
+                    // `dynamic()` is exempt — it injects its own rules at
+                    // runtime, which is the whole point of it.
+                    if callee.name == "szr" {
+                        self.record_site_fallback(super::SzFallbackSiteIr::Szr, argument);
+                    }
                     return;
                 };
                 self.ir
@@ -685,12 +691,31 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             "szv" => {
                 let Some(classes) = collect_szv_catalog_classes(argument, self.resolve_context())
                 else {
+                    // No catalogue is emitted, so none of the variant classes
+                    // are safelisted — under Tailwind `source(none)` that is
+                    // silently missing CSS for every variant it can produce.
+                    self.record_site_fallback(super::SzFallbackSiteIr::Szv, argument);
                     return;
                 };
                 self.ir.extracted_classes.extend(classes);
             }
             _ => {}
         }
+    }
+
+    /// Record a `szr`/`szv` argument the parser could not read, classified for
+    /// the shared fallback matrix.
+    fn record_site_fallback(&mut self, site: super::SzFallbackSiteIr, argument: &Argument<'_>) {
+        let Some(expression) = argument.as_expression() else {
+            return;
+        };
+        let (kind, detail) = classify_expression_fallback(expression);
+        self.ir.site_fallbacks.push(super::SiteFallbackIr {
+            site,
+            kind,
+            detail,
+            offset: expression.span().start,
+        });
     }
 
     fn collect_recovery_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
@@ -1572,9 +1597,22 @@ fn split_class_tokens(value: &str) -> Vec<String> {
 fn classify_runtime_fallback(
     expression: &JSXExpression<'_>,
 ) -> Option<super::RuntimeFallbackDiagnosticIr> {
-    use super::{RuntimeFallbackDiagnosticIr, RuntimeFallbackKindIr};
+    use super::RuntimeFallbackDiagnosticIr;
 
-    let mut expression = expression.as_expression()?;
+    let (kind, detail) = classify_expression_fallback(expression.as_expression()?);
+    Some(RuntimeFallbackDiagnosticIr { kind, detail })
+}
+
+/// Classify an expression into the shared matrix vocabulary.
+///
+/// Parentheses are seen through (Babel's AST has no node for them); TS wrappers
+/// are NOT, because Babel classifies those as `other`.
+fn classify_expression_fallback(
+    expression: &Expression<'_>,
+) -> (super::RuntimeFallbackKindIr, String) {
+    use super::RuntimeFallbackKindIr;
+
+    let mut expression = expression;
     while let Expression::ParenthesizedExpression(inner) = expression {
         expression = &inner.expression;
     }
@@ -1604,7 +1642,7 @@ fn classify_runtime_fallback(
             estree_expression_type_name(other).to_string(),
         ),
     };
-    Some(RuntimeFallbackDiagnosticIr { kind, detail })
+    (kind, detail)
 }
 
 /// Babel-compatible node type name for the `other` matrix arm.

@@ -21,11 +21,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
+    describeSzFallback,
+    formatSzFallbackDiagnostic,
     SZ_FALLBACK_DETAIL_PLACEHOLDER,
     SZ_FALLBACK_KINDS,
     SZ_FALLBACK_MATRIX,
     SZ_FALLBACK_UNKNOWN_CALLEE,
+    szsUnsupportedDiagnostic,
 } from '../packages/compiler/src/sz-fallback-matrix.js';
+
+/** Sites the Rust engine can report. `sz` renders through its own call site. */
+const RUST_SITES = ['szr', 'szv'];
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const outPath = path.join(repoRoot, 'packages/core/src/transform/generated/sz_fallback_matrix.rs');
@@ -87,6 +93,62 @@ export function renderReasonArm(kind) {
 }
 
 /**
+ * Render one site's match arm by taking specimens from the TypeScript formatter
+ * and splitting them around the parts that vary.
+ *
+ * Whether the advice depends on the expression kind is DERIVED, not assumed:
+ * two specimens with different kinds are compared, and the arm interpolates
+ * `sz_fallback_suggestion(kind)` only when they actually differ. Baking in one
+ * kind's advice would have shipped the `member` wording for every `szr` kind.
+ *
+ * @param {string} site - Site name from RUST_SITES.
+ * @returns {string} Rust match arm.
+ */
+export function renderSiteArm(site) {
+    const POS = '\u0001POS\u0001';
+    const split = kind => {
+        const specimen = formatSzFallbackDiagnostic(site, POS, kind);
+        const reasonText = describeSzFallback(kind, '').reason;
+        const [head, tail] = specimen.split(reasonText);
+        if (tail === undefined) {
+            throw new Error(`[gen-sz-fallback-matrix] site "${site}" specimen lost its reason`);
+        }
+        const [before, after] = head.split(POS);
+        return { before, after, tail };
+    };
+    // `member` and `other` carry different matrix suggestions, so a site that
+    // forwards the matrix advice shows a different tail for the two.
+    const a = split('member');
+    const b = split('other');
+    if (a.before !== b.before || a.after !== b.after) {
+        throw new Error(
+            `[gen-sz-fallback-matrix] site "${site}" varies its prefix by kind; the Rust arm renders one template.`,
+        );
+    }
+    const kindDependent = a.tail !== b.tail;
+    const tail = kindDependent
+        ? a.tail.replace(SZ_FALLBACK_MATRIX.member.suggestion, '\u0002SUG\u0002')
+        : a.tail;
+    if (kindDependent && !tail.includes('\u0002SUG\u0002')) {
+        throw new Error(
+            `[gen-sz-fallback-matrix] site "${site}" advice varies by kind but does not contain the matrix suggestion verbatim.`,
+        );
+    }
+    const body =
+        escapeRustFormat(a.before) +
+        '{position}' +
+        escapeRustFormat(a.after) +
+        '{reason}' +
+        escapeRustFormat(tail).replace('\u0002SUG\u0002', '{suggestion}');
+    const prelude = kindDependent
+        ? '\n            let suggestion = sz_fallback_suggestion(kind);'
+        : '';
+    return `        SzFallbackSite::${variantName(site)} => {${prelude}
+            format!("${body}")
+        }`;
+}
+
+/**
  * Render the whole Rust module.
  *
  * @returns {string} Unformatted Rust source.
@@ -143,6 +205,41 @@ ${reasonArms}
 pub(crate) const fn sz_fallback_suggestion(kind: SzFallbackKind) -> &'static str {
     match kind {
 ${suggestionArms}
+    }
+}
+
+/// Construct that produced a build-time-unresolvable diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SzFallbackSite {
+${RUST_SITES.map(site => `    ${variantName(site)},`).join('\n')}
+}
+
+/// The \`szs\` slot-map diagnostic, matching the TypeScript lanes byte for byte.
+///
+/// # Arguments
+/// * \`filename\` - Source file, as the engine names it.
+pub(crate) fn szs_unsupported_diagnostic(filename: &str) -> String {
+    format!("${escapeRustFormat(szsUnsupportedDiagnostic('\u0001F\u0001')).replace('\u0001F\u0001', '{filename}')}")
+}
+
+/// Render one complete diagnostic line, matching the TypeScript lanes byte for
+/// byte (site label, reason, consequence and advice all come from the shared
+/// matrix).
+///
+/// # Arguments
+/// * \`site\` - Which construct hit the failure.
+/// * \`position\` - \`line:column\`, 1-based.
+/// * \`kind\` - Classified shape of the expression.
+/// * \`detail\` - Callee name, identifier name, or node type.
+pub(crate) fn format_sz_fallback_diagnostic(
+    site: SzFallbackSite,
+    position: &str,
+    kind: SzFallbackKind,
+    detail: &str,
+) -> String {
+    let reason = sz_fallback_reason(kind, detail);
+    match site {
+${RUST_SITES.map(site => renderSiteArm(site)).join('\n')}
     }
 }
 `;

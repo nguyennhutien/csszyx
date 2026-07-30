@@ -628,6 +628,7 @@ mod tests {
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: Vec::new(),
             extracted_classes: Vec::new(),
+            site_fallbacks: Vec::new(),
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),

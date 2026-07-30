@@ -47,7 +47,14 @@ import {
     PropertyCategory,
 } from './property-types.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
-import { describeSzFallback, SZ_FALLBACK_UNKNOWN_CALLEE } from './sz-fallback-matrix.js';
+import {
+    describeSzFallback,
+    formatSzFallbackDiagnostic,
+    SZ_FALLBACK_UNKNOWN_CALLEE,
+    type SzFallbackKind,
+    type SzFallbackSite,
+    szsUnsupportedDiagnostic,
+} from './sz-fallback-matrix.js';
 import type {
     CssVariableMangleValue,
     SourceTransformResult,
@@ -129,7 +136,7 @@ export function transformOxc(
 
 /**
  *
- * @param source
+ * @param source Original source, for position resolution.
  * @param filename
  * @param options
  */
@@ -241,12 +248,16 @@ function transformOxcImpl(
                 effectiveFilename,
                 objectBindings,
                 classes,
+                source,
+                diagnostics,
             );
             collectSzvCallClasses(
                 node as CallExpressionNode,
                 constObjectBindings,
                 constInitializers,
                 classes,
+                source,
+                diagnostics,
             );
             return;
         }
@@ -1859,6 +1870,67 @@ function buildSzPartElementDiagnostic(node: OxcNode, source: string): string {
 }
 
 /**
+ * Record a build-time-unresolvable construct through the shared matrix.
+ *
+ * @param diagnostics Compiler diagnostics sink.
+ * @param site Which construct hit the failure.
+ * @param expression The expression that could not be read.
+ * @param source Original source, for position resolution.
+ */
+function pushSiteFallbackDiagnostic(
+    diagnostics: string[],
+    site: SzFallbackSite,
+    expression: OxcNode | undefined,
+    source: string,
+): void {
+    if (!expression) return;
+    pushAdvisoryDiagnostic(diagnostics, () => {
+        const { line, column } = offsetToLineColumn(source, expression.start);
+        const { kind, detail } = classifyFallbackExpression(expression);
+        return formatSzFallbackDiagnostic(site, `${line}:${column + 1}`, kind, detail);
+    });
+}
+
+/**
+ * Classify an oxc expression into the shared matrix vocabulary.
+ *
+ * Parentheses are unwrapped because Babel's AST has no node for them; TS
+ * wrappers are NOT, because Babel classifies those as `other`.
+ *
+ * @param rawExpression Unresolved expression.
+ * @returns Matrix kind plus its interpolated detail.
+ */
+function classifyFallbackExpression(rawExpression: OxcNode): {
+    kind: SzFallbackKind;
+    detail: string;
+} {
+    let expression = rawExpression;
+    while (expression.type === 'ParenthesizedExpression') {
+        expression = (expression as unknown as { expression: OxcNode }).expression;
+    }
+    if (expression.type === 'CallExpression') {
+        const callee = (expression as CallExpressionNode).callee;
+        let name: string = SZ_FALLBACK_UNKNOWN_CALLEE;
+        if (callee.type === 'Identifier') {
+            name = (callee as IdentifierNode).name;
+        } else if (
+            callee.type === 'MemberExpression' &&
+            ((callee as unknown as { property?: OxcNode }).property?.type ?? '') === 'Identifier'
+        ) {
+            name = String(
+                ((callee as unknown as { property: OxcNode }).property as IdentifierNode).name,
+            );
+        }
+        return { kind: 'call', detail: name };
+    }
+    if (expression.type === 'Identifier') {
+        return { kind: 'identifier', detail: (expression as IdentifierNode).name };
+    }
+    if (expression.type === 'MemberExpression') return { kind: 'member', detail: '' };
+    return { kind: 'other', detail: expression.type };
+}
+
+/**
  * Build the same dev diagnostic Babel emits when sz falls back to runtime.
  *
  * @param rawExpression Runtime fallback expression, parentheses included.
@@ -1941,11 +2013,7 @@ function isHostOpeningElementName(nameNode: OxcNode): boolean {
  * @returns The diagnostic message.
  */
 function szsUnsupportedMessage(filename: string): string {
-    return (
-        `[csszyx] szs at ${filename}: ` +
-        'every slot must be an identifier key with a static object literal ' +
-        '(or class string) value. Attribute left unchanged.'
-    );
+    return szsUnsupportedDiagnostic(filename);
 }
 
 /**
@@ -3168,12 +3236,16 @@ function assertAstBudget(root: OxcNode, filename: string, astBudget: number): vo
  * @param filename Filename for diagnostics.
  * @param bindings Local object-literal bindings.
  * @param classes Class set to populate.
+ * @param source Original source, for position resolution.
+ * @param diagnostics Compiler diagnostics sink.
  */
 function collectDynamicCallClasses(
     node: CallExpressionNode,
     filename: string,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     classes: Set<string>,
+    source: string,
+    diagnostics: string[],
 ): void {
     if (node.callee.type !== 'Identifier') {
         return;
@@ -3190,6 +3262,13 @@ function collectDynamicCallClasses(
     }
     const objectNode = resolveObjectExpression(firstArg, bindings);
     if (!objectNode) {
+        // `szr` compiles its literal argument so the classes reach the
+        // safelist; an argument it cannot read means those classes are never
+        // collected and the CSS is simply absent. `dynamic()` is exempt — it
+        // injects its own rules at runtime, which is the whole point of it.
+        if (calleeName === 'szr') {
+            pushSiteFallbackDiagnostic(diagnostics, 'szr', firstArg as OxcNode, source);
+        }
         return;
     }
     let result: ReturnType<typeof compileSzObject>;
@@ -3215,12 +3294,16 @@ function collectDynamicCallClasses(
  * @param bindings Local object-literal bindings.
  * @param constInits Const-only initializer map for per-key leaf resolution.
  * @param classes Class set to populate.
+ * @param source Original source, for position resolution.
+ * @param diagnostics Compiler diagnostics sink.
  */
 function collectSzvCallClasses(
     node: CallExpressionNode,
     bindings: ReadonlyMap<string, ObjectExpressionNode>,
     constInits: ReadonlyMap<string, OxcNode>,
     classes: Set<string>,
+    source: string,
+    diagnostics: string[],
 ): void {
     if (node.callee.type !== 'Identifier' || (node.callee as IdentifierNode).name !== 'szv') {
         return;
@@ -3231,6 +3314,10 @@ function collectSzvCallClasses(
     }
     const configNode = resolveObjectExpression(firstArg, bindings);
     if (!configNode) {
+        // No catalogue is emitted, so none of the variant classes are
+        // safelisted — under Tailwind `source(none)` that is silently missing
+        // CSS for every variant the factory can produce.
+        pushSiteFallbackDiagnostic(diagnostics, 'szv', firstArg as OxcNode, source);
         return;
     }
 

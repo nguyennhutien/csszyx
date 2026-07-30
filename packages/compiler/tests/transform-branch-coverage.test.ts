@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { szsUnsupportedDiagnostic } from '../src/sz-fallback-matrix.js';
 import { ASTBudgetExceededError, transform, transformSourceCode } from '../src/transform.js';
 
 /**
@@ -110,17 +111,13 @@ describe('szs slot maps', () => {
     it('warns when szs value is not an object expression container', () => {
         const jsx = 'const A = () => <Comp szs="not-an-object" />;';
         const r = run(jsx);
-        expect(r.diagnostics.some(d => d.includes('every slot must be an identifier key'))).toBe(
-            true,
-        );
+        expect(r.diagnostics).toContain(szsUnsupportedDiagnostic('file.tsx'));
     });
 
     it('warns when a slot value violates the v1 contract', () => {
         const jsx = 'const A = ({ x }) => <Comp szs={{ root: x }} />;';
         const r = run(jsx);
-        expect(r.diagnostics.some(d => d.includes('every slot must be an identifier key'))).toBe(
-            true,
-        );
+        expect(r.diagnostics).toContain(szsUnsupportedDiagnostic('file.tsx'));
     });
 
     it('compiles object slot values and renames szs → szsc', () => {
@@ -1177,7 +1174,7 @@ describe('anonymous filename (<anonymous>) diagnostics', () => {
 
     it('uses <anonymous> in the unsupported-szs diagnostic when no filename is given', () => {
         const r = transformSourceCode('const A = () => <Comp szs="bad" />;');
-        expect(r.diagnostics.some(d => d.includes('szs at <anonymous>: every slot'))).toBe(true);
+        expect(r.diagnostics).toContain(szsUnsupportedDiagnostic('<anonymous>'));
     });
 });
 

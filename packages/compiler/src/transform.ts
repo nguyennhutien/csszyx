@@ -17,8 +17,12 @@ import {
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
 import {
     describeSzFallback,
+    formatSzFallbackDiagnostic,
     SZ_FALLBACK_UNKNOWN_CALLEE,
     type SzFallbackDescription,
+    type SzFallbackKind,
+    type SzFallbackSite,
+    szsUnsupportedDiagnostic,
 } from './sz-fallback-matrix.js';
 import {
     deepMergeSzObjects,
@@ -753,6 +757,55 @@ function warnStyleSpreadCollision(
 }
 
 /**
+ * Record a build-time-unresolvable construct through the shared matrix.
+ *
+ * Classifies the Babel node, then defers wording and position formatting to the
+ * matrix so the oxc and Rust lanes stay byte-identical.
+ *
+ * @param diagnostics Compiler diagnostics sink.
+ * @param site Which construct hit the failure.
+ * @param expression The expression that could not be read.
+ */
+function pushSiteFallbackDiagnostic(
+    diagnostics: string[],
+    site: SzFallbackSite,
+    expression: t.Expression | undefined,
+): void {
+    if (!expression) return;
+    pushAdvisoryDiagnostic(diagnostics, () => {
+        const position = expression.loc
+            ? `${expression.loc.start.line}:${expression.loc.start.column + 1}`
+            : '?';
+        const { kind, detail } = classifyFallbackExpression(expression);
+        return formatSzFallbackDiagnostic(site, position, kind, detail);
+    });
+}
+
+/**
+ * Classify a Babel expression into the shared matrix vocabulary.
+ *
+ * @param expression Unresolved expression.
+ * @returns Matrix kind plus its interpolated detail.
+ */
+function classifyFallbackExpression(expression: t.Expression): {
+    kind: SzFallbackKind;
+    detail: string;
+} {
+    if (t.isCallExpression(expression)) {
+        const callee = expression.callee;
+        let name: string = SZ_FALLBACK_UNKNOWN_CALLEE;
+        if (t.isIdentifier(callee)) name = callee.name;
+        else if (t.isMemberExpression(callee) && t.isIdentifier(callee.property)) {
+            name = callee.property.name;
+        }
+        return { kind: 'call', detail: name };
+    }
+    if (t.isIdentifier(expression)) return { kind: 'identifier', detail: expression.name };
+    if (t.isMemberExpression(expression)) return { kind: 'member', detail: '' };
+    return { kind: 'other', detail: expression.type };
+}
+
+/**
  * Emits diagnostics and wraps one unresolved sz expression with the runtime helper.
  *
  * @param path sz attribute path.
@@ -1355,7 +1408,7 @@ export function transformSourceCode(
 
 /**
  *
- * @param source
+ * @param source Original source, for position resolution.
  * @param filename
  * @param options
  */
@@ -1559,6 +1612,7 @@ function transformSourceCodeImpl(
                                 extractSzvCatalog(
                                     path,
                                     collectedClasses,
+                                    diagnostics,
                                     filename,
                                     options?.rootDir,
                                 )
@@ -1579,6 +1633,7 @@ function transformSourceCodeImpl(
                             collectRuntimeLiteralClasses(
                                 path,
                                 collectedClasses,
+                                diagnostics,
                                 filename,
                                 options?.rootDir,
                             );
@@ -1642,6 +1697,7 @@ function transformSourceCodeImpl(
  *
  * @param path Variable declarator path.
  * @param collectedClasses Shared class collection.
+ * @param diagnostics Compiler diagnostics sink.
  * @param filename Source filename for diagnostics.
  * @param rootDir Project root for relative diagnostics.
  * @returns Whether a catalog declaration was inserted.
@@ -1649,13 +1705,20 @@ function transformSourceCodeImpl(
 function extractSzvCatalog(
     path: babel.NodePath<t.VariableDeclarator>,
     collectedClasses: Set<string>,
+    diagnostics: string[],
     filename?: string,
     rootDir?: string,
 ): boolean {
     const init = path.node.init;
     if (!isStaticSzvDeclaration(path.node, init)) return false;
     const config = resolveToConstObjectExpression(init.arguments[0], path.scope);
-    if (!config) return false;
+    if (!config) {
+        // No catalogue is emitted, so none of the variant classes are
+        // safelisted — under Tailwind `source(none)` that is silently missing
+        // CSS for every variant the factory can produce.
+        pushSiteFallbackDiagnostic(diagnostics, 'szv', init.arguments[0] as t.Expression);
+        return false;
+    }
 
     const classStrings = collectSzvCatalogClasses(config, path.scope, init, filename, rootDir);
     if (classStrings.length === 0) return false;
@@ -1817,19 +1880,30 @@ function insertSzvCatalogDeclaration(
  *
  * @param path Call-expression path.
  * @param collectedClasses Shared class collection.
+ * @param diagnostics Compiler diagnostics sink.
  * @param filename Source filename for diagnostics.
  * @param rootDir Project root for relative diagnostics.
  */
 function collectRuntimeLiteralClasses(
     path: babel.NodePath<t.CallExpression>,
     collectedClasses: Set<string>,
+    diagnostics: string[],
     filename?: string,
     rootDir?: string,
 ): void {
     const callee = path.node.callee;
     if (!isRuntimeLiteralCall(callee) || path.node.arguments.length === 0) return;
     const object = resolveRuntimeLiteralObject(path.node.arguments[0], path.scope);
-    if (!object) return;
+    if (!object) {
+        // `szr` compiles its literal argument so the classes reach the
+        // safelist; an argument it cannot read means those classes are never
+        // collected and the CSS is simply absent. `dynamic()` is exempt — it
+        // injects its own rules at runtime, which is the whole point of it.
+        if (callee.name === 'szr') {
+            pushSiteFallbackDiagnostic(diagnostics, 'szr', path.node.arguments[0] as t.Expression);
+        }
+        return;
+    }
 
     const warningLocation =
         callee.name === 'szr'
@@ -1933,11 +2007,7 @@ function isHostElementName(name: t.Node): boolean {
  * @returns the diagnostic message.
  */
 function szsUnsupportedMessage(filename: string | undefined): string {
-    return (
-        `[csszyx] szs at ${filename ?? '<anonymous>'}: ` +
-        'every slot must be an identifier key with a static object literal ' +
-        '(or class string) value. Attribute left unchanged.'
-    );
+    return szsUnsupportedDiagnostic(filename ?? '<anonymous>');
 }
 
 /**
