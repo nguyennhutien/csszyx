@@ -1,0 +1,147 @@
+/**
+ * Size contract of the runtime split (`@csszyx/runtime/core` + `/lowering`).
+ *
+ * `import { szr }` from the main entry ships the ~12.6 KB gz browser transform
+ * because the object branch must work standalone — that is the entry's
+ * contract and it must NOT quietly change. The split adds two entries: `/core`
+ * (string-first helpers, no compiler) and `/lowering` (bare side-effect import
+ * that registers object support). This suite bundles each shape with esbuild —
+ * the same measurement that motivated the split — so a regression in either
+ * direction fails CI:
+ *
+ * - a static compiler reference sneaking back into `/core` (the win evaporates
+ *   silently), or
+ * - a module-level side effect landing in the barrel graph (tree shaking dies
+ *   and `szv`'s 781 B jumps to 13 KB for every consumer), or
+ * - `sideEffects` misconfiguration dropping the bare `/lowering` import (objects
+ *   start throwing in production).
+ */
+import { createRequire } from 'node:module';
+import { gzipSync } from 'node:zlib';
+import { build } from 'esbuild';
+import { describe, expect, it } from 'vitest';
+
+const require = createRequire(import.meta.url);
+
+/**
+ * A string constant that exists only in the compiler's transform chunk — a
+ * dev-warning message, kept verbatim by minification. Present in a bundle
+ * exactly when the browser transform shipped.
+ */
+const COMPILER_MARKER = 'received a numeric key';
+
+/** One bundled entry probe. */
+interface BundleProbe {
+    gzipBytes: number;
+    hasCompiler: boolean;
+    code: string;
+}
+
+/**
+ * Bundle a snippet against the workspace packages, production-shaped.
+ *
+ * @param source - Entry module source.
+ * @returns Gzip size and compiler presence.
+ */
+async function bundleProbe(source: string): Promise<BundleProbe> {
+    const result = await build({
+        stdin: {
+            contents: source,
+            // Resolve from this package so `@csszyx/runtime` follows the same
+            // workspace linking an app would use.
+            resolveDir: __dirname,
+            loader: 'js',
+        },
+        bundle: true,
+        minify: true,
+        write: false,
+        format: 'esm',
+        define: { 'process.env.NODE_ENV': '"production"' },
+        logLevel: 'silent',
+    });
+    const [output] = result.outputFiles;
+    return {
+        gzipBytes: gzipSync(output.contents, { level: 6 }).length,
+        hasCompiler: output.text.includes(COMPILER_MARKER),
+        code: output.text,
+    };
+}
+
+describe('runtime split size contract', () => {
+    it('the marker string still identifies the compiler chunk', () => {
+        // If a compiler refactor ever renames this warning, every assertion
+        // below would silently test nothing — pin the marker itself first.
+        // The entry re-exports from a shared chunk (ESM `from './shared/…'`,
+        // CJS `require('./shared/…')`), so scan the entry plus every sibling
+        // chunk rather than parsing either syntax.
+        const fs = require('node:fs');
+        const path = require('node:path');
+        const browserEntry = require.resolve('@csszyx/compiler/browser');
+        const sharedDir = path.join(path.dirname(browserEntry), 'shared');
+        const candidates = [browserEntry];
+        if (fs.existsSync(sharedDir)) {
+            for (const name of fs.readdirSync(sharedDir)) {
+                candidates.push(path.join(sharedDir, name));
+            }
+        }
+        const found = candidates.some(file =>
+            String(fs.readFileSync(file)).includes(COMPILER_MARKER),
+        );
+        expect(found).toBe(true);
+    });
+
+    it('barrel szr keeps its standalone contract: compiler included', async () => {
+        const probe = await bundleProbe("import { szr } from '@csszyx/runtime'; console.log(szr);");
+        expect(probe.hasCompiler).toBe(true);
+    });
+
+    it('barrel szv stays light — the anti-poisoning guard', async () => {
+        // The one regression this architecture could cause: a top-level impure
+        // statement anywhere in the barrel graph would be retained for every
+        // consumer and weld the compiler onto szv/szcn/szDecode imports.
+        const probe = await bundleProbe("import { szv } from '@csszyx/runtime'; console.log(szv);");
+        expect(probe.hasCompiler).toBe(false);
+        expect(probe.gzipBytes).toBeLessThan(2_000);
+    });
+
+    it('barrel szDecode stays tiny', async () => {
+        const probe = await bundleProbe(
+            "import { szDecode } from '@csszyx/runtime'; console.log(szDecode);",
+        );
+        expect(probe.hasCompiler).toBe(false);
+        expect(probe.gzipBytes).toBeLessThan(1_000);
+    });
+
+    it('core szr ships no compiler', async () => {
+        const probe = await bundleProbe(
+            "import { szr } from '@csszyx/runtime/core'; console.log(szr);",
+        );
+        expect(probe.hasCompiler).toBe(false);
+        // 13.1 KB before the split; the chunk graph currently retains ~3 KB
+        // (merge/box-role neighbours). The bound has headroom so it fails on a
+        // compiler re-entry, not on chunk-layout noise.
+        expect(probe.gzipBytes).toBeLessThan(5_000);
+    });
+
+    it('the bare /lowering import survives bundling and restores the compiler', async () => {
+        // sideEffects misconfiguration would drop the import silently — the
+        // bundle would be small, objects would throw in production.
+        const probe = await bundleProbe(
+            "import '@csszyx/runtime/lowering';\n" +
+                "import { szr } from '@csszyx/runtime/core'; console.log(szr);",
+        );
+        expect(probe.hasCompiler).toBe(true);
+    });
+});
+
+describe('runtime split functional contract (built dist)', () => {
+    it('registration from the /lowering entry reaches the /core entry', async () => {
+        // Cross-entry: rollup must keep the slot in ONE shared chunk. Two
+        // copies would mean registering into instance A while helpers read B.
+        const lowering = require.resolve('@csszyx/runtime/lowering');
+        const core = require.resolve('@csszyx/runtime/core');
+        await import(lowering);
+        const { szr } = await import(core);
+        expect(szr({ p: 4, bg: 'red-500' })).toBe('p-4 bg-red-500');
+    });
+});

@@ -1,88 +1,44 @@
 /**
- * Zero-allocation className concatenation helper.
+ * Back-compat className helpers for the main `@csszyx/runtime` entry.
  *
- * This module provides the runtime helper for composing dynamic className
- * strings with minimal overhead. The _sz() function is designed for
- * performance-critical scenarios where className composition happens
- * frequently.
+ * The implementations live in `core.ts`, which resolves sz OBJECTS through the
+ * lowering slot instead of a static compiler import. These wrappers restore
+ * the historical contract of this entry — `szr({ p: 4 })` works standalone,
+ * no plugin, no extra import — by registering the lowerer on first call. The
+ * static `lowerSz` reference below is what makes that guarantee hold, and it
+ * is also the price: importing an object-capable helper from THIS entry ships
+ * the compiler transform, exactly as it always has.
+ *
+ * Files processed by the bundler plugin get the slim path instead: helpers
+ * from `@csszyx/runtime/core` plus an injected
+ * `import '@csszyx/runtime/lowering'` only where an object can actually flow.
+ *
+ * The registration is deliberately lazy (first call), not module-level: this
+ * file is inlined into the flat barrel bundle, and a top-level impure call
+ * here would be retained for every barrel consumer — welding the compiler
+ * onto `szv`/`szcn`/`szDecode` imports that never touch it.
  *
  * @module @csszyx/runtime/concatenate
  */
 
-import {
-    MAX_SZ_DEPTH,
-    transform as rawTransform,
-    SzDepthError,
-    type SzObject,
-} from '@csszyx/compiler/browser';
+import { _sz as coreSz, _szMerge as coreSzMerge, type SzInput } from './core.js';
+import { lowerSz } from './lowering.js';
+import { getSzLowering, setSzLowering } from './lowering-slot.js';
 
-import { _szcn } from './merge-classes.js';
-
-/** Result of a runtime sz transform. */
-interface TransformResult {
-    className: string;
-}
-
-/** A frozen map of original class names to their mangled SSR equivalents. */
-type RuntimeMangleMap = Readonly<Record<string, string>>;
-
-/** Global slots that may expose the SSR/runtime mangle map. */
-interface CsszyxMangleGlobals {
-    __csszyx_ssr_mangle_map?: RuntimeMangleMap;
-    __csszyx?: {
-        mangleMap?: RuntimeMangleMap;
-    };
-}
+export type { SzInput } from './core.js';
+export { _sz2, _sz3 } from './core.js';
 
 /**
- * Wraps rawTransform to apply runtime class-name mangling when a mangle map is
- * present on the global (SSR) or window object.
- * @param szProp - The sz object to transform into a className.
- * @returns The transform result, with class names mangled when a map is active.
- */
-function transform(szProp: object): TransformResult {
-    // `szProp` is typed `object` (not `SzObject`) so the public `SzInput` can stay
-    // broad enough to accept a precise `SzProps`/`SzPropValue` forwarded from the
-    // JSX boundary — a named type with specific keys is assignable to `object` but
-    // not to `SzObject`'s `{ [k]: SzValue }` index signature. The runtime lowers
-    // recognized keys and ignores the rest, so the cast is sound.
-    const res = rawTransform(szProp as SzObject);
-    const className = res.className;
-    if (!className) {
-        return res;
-    }
-
-    const globals = globalThis as typeof globalThis & CsszyxMangleGlobals;
-    const ssrMangleMap = globals.__csszyx_ssr_mangle_map || globals.__csszyx?.mangleMap;
-    const browserMangleMap =
-        typeof window !== 'undefined'
-            ? (window as Window & CsszyxMangleGlobals).__csszyx?.mangleMap
-            : undefined;
-    const activeMangleMap = ssrMangleMap || browserMangleMap;
-
-    if (activeMangleMap) {
-        const mangled = className
-            .split(/\s+/)
-            .filter(Boolean)
-            .map((c: string) => activeMangleMap[c] || c)
-            .join(' ');
-        return { className: mangled };
-    }
-    return res;
-}
-
-/**
- * Type for sz input — a pre-compiled class string, an sz object, a recursive
- * array of those, or a falsy guard (skipped).
+ * Install the lowerer unless one is already registered.
  *
- * The object member is the broad `object` rather than `SzObject` so that a
- * precise `SzProps` / `SzPropValue` value (the type the JSX augmentation gives
- * `sz` on a host element) forwards into the runtime helpers without a cast: a
- * named type with specific keys is assignable to `object`, but not to
- * `SzObject`'s `{ [k: string]: SzValue }` index signature. The runtime lowers the
- * keys it recognizes and ignores the rest, so the looser input type is sound.
+ * One null check on the hot path; the JIT inlines it. Never overwrites an
+ * existing registration (it would be the same function anyway).
  */
-export type SzInput = string | object | SzInput[] | null | undefined | false;
+function ensureLowering(): void {
+    if (getSzLowering() === null) {
+        setSzLowering(lowerSz);
+    }
+}
 
 /**
  * Zero-overhead className passthrough/concatenation helper.
@@ -111,7 +67,8 @@ export type SzInput = string | object | SzInput[] | null | undefined | false;
  * ```
  */
 export function _sz(...classes: SzInput[]): string {
-    return szJoin(classes, 0);
+    ensureLowering();
+    return coreSz(...classes);
 }
 
 /**
@@ -140,73 +97,6 @@ export function _sz(...classes: SzInput[]): string {
 export const szr: (...classes: SzInput[]) => string = _sz;
 
 /**
- * Depth-tracked worker for {@link _sz}. Nested arrays recurse with an incremented
- * depth so a deeply nested array (`[[[[…]]]]`, e.g. from untrusted data) is
- * bounded by {@link MAX_SZ_DEPTH} instead of overflowing the call stack.
- *
- * @param classes - the class inputs to join.
- * @param depth - the current recursion depth.
- * @returns the joined className string.
- */
-function szJoin(classes: SzInput[], depth: number): string {
-    assertSzDepth(depth);
-
-    // Fast path: single string argument (most common case after compilation)
-    if (classes.length === 1) {
-        return resolveJoinedInput(classes[0], depth);
-    }
-
-    let result = '';
-    for (const cls of classes) {
-        result = appendClassName(result, resolveJoinedInput(cls, depth));
-    }
-
-    return result;
-}
-
-/**
- * Rejects nested sz input before it can exhaust the JavaScript call stack.
- * @param depth - The current recursion depth.
- */
-function assertSzDepth(depth: number): void {
-    if (depth >= MAX_SZ_DEPTH) {
-        throw new SzDepthError();
-    }
-}
-
-/**
- * Resolves one input using the concatenating semantics of {@link szJoin}.
- * @param input - The class input to resolve.
- * @param depth - The current recursion depth.
- * @returns The resolved class string, or an empty string for a falsy input.
- */
-function resolveJoinedInput(input: SzInput, depth: number): string {
-    if (!input) {
-        return '';
-    }
-    if (typeof input === 'string') {
-        return input;
-    }
-    if (Array.isArray(input)) {
-        return szJoin(input, depth + 1);
-    }
-    return transform(input).className;
-}
-
-/**
- * Appends a non-empty class string with exactly one separating space.
- * @param current - The class string accumulated so far.
- * @param next - The next resolved class string.
- * @returns The combined class string.
- */
-function appendClassName(current: string, next: string): string {
-    if (!next) {
-        return current;
-    }
-    return current ? `${current} ${next}` : next;
-}
-
-/**
  * Merges className strings with mangle-aware, utility-group last-wins semantics.
  *
  * Useful when combining multiple className sources that may overlap.
@@ -224,7 +114,8 @@ function appendClassName(current: string, next: string): string {
  * ```
  */
 export function _szMerge(...classes: SzInput[]): string {
-    return _szcn(szJoin(classes, 0));
+    ensureLowering();
+    return coreSzMerge(...classes);
 }
 
 /**
@@ -251,63 +142,4 @@ export function _szMerge(...classes: SzInput[]): string {
  */
 export function _szPart(value: unknown): string {
     return typeof value === 'string' ? value : _szMerge(value as SzInput);
-}
-
-/**
- * Performance-optimized variant of _sz() for exactly 2 arguments.
- *
- * Faster than the variadic version when the number of classes is known
- * at compile time. Use for hot paths.
- *
- * @param {string} a - First className
- * @param {string} b - Second className
- * @returns {string} Combined className string
- *
- * @example
- * ```typescript
- * _sz2('a', 'b')
- * // Returns: "a b"
- * ```
- */
-export function _sz2(a: string, b: string): string {
-    if (!a) {
-        return b || '';
-    }
-    if (!b) {
-        return a;
-    }
-    return `${a} ${b}`;
-}
-
-/**
- * Performance-optimized variant for exactly 3 arguments.
- *
- * @param {string} a - First className
- * @param {string} b - Second className
- * @param {string} c - Third className
- * @returns {string} Combined className string
- */
-export function _sz3(a: string, b: string, c: string): string {
-    let result = '';
-    let needsSpace = false;
-
-    if (a) {
-        result = a;
-        needsSpace = true;
-    }
-    if (b) {
-        if (needsSpace) {
-            result += ' ';
-        }
-        result += b;
-        needsSpace = true;
-    }
-    if (c) {
-        if (needsSpace) {
-            result += ' ';
-        }
-        result += c;
-    }
-
-    return result;
 }
