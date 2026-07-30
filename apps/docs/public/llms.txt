@@ -263,7 +263,8 @@ compile error, so typos and legacy CSS-property names are caught by `tsc` (run
 ```
 
 Arbitrary variants are allowed by pattern: `{ '@container': {…} }`, `{ 'min-[320px]': {…} }`,
-`{ '[&>span]': {…} }`. **Custom breakpoints are typed from your CSS** — define one once in
+`{ '[&>span]': {…} }`. A STRING value under any variant key is a ready-made utility the
+variant prefixes with `:` — `{ 'data-[open]': 'sr-only' }` → `data-[open]:sr-only`. **Custom breakpoints are typed from your CSS** — define one once in
 Tailwind `@theme` and csszyx auto-generates the type:
 
 ```css

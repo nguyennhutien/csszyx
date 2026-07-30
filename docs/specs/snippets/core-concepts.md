@@ -239,6 +239,34 @@ Data and state attributes.
 | **Open**            | `open:bg-white`         | `{ open: { bg: 'white' } }`             |      |
 | **Inert**           | `inert:opacity-50`      | `{ inert: { opacity: 50 } }`            |      |
 
+## Variant String Shorthand
+
+A **string value under a variant key** is a ready-made Tailwind utility to
+prefix — the variant chains onto it with `:`. Use it when the utility has no
+sz key spelling (e.g. `sr-only`) or when you already have the exact class.
+Works for every variant form, not just the simple names.
+
+| Concept                    | Tailwind v4 Class                      | `sz` Prop (Object Syntax)                       | Note                                             |
+| :------------------------- | :------------------------------------- | :---------------------------------------------- | :----------------------------------------------- |
+| **Known variant**          | `hover:translate-x-full`               | `{ hover: 'translate-x-full' }`                 |                                                  |
+| **Arbitrary data variant** | `data-[ending-style]:translate-x-full` | `{ 'data-[ending-style]': 'translate-x-full' }` |                                                  |
+| **Bare data variant**      | `data-open:sr-only`                    | `{ 'data-open': 'sr-only' }`                    | Attribute presence (Tailwind v4).                |
+| **Bare ARIA state**        | `aria-checked:opacity-50`              | `{ 'aria-checked': 'opacity-50' }`              | Built-in ARIA set only; others use `[...]`.      |
+| **Scope compound**         | `group-hover:translate-x-full`         | `{ 'group-hover': 'translate-x-full' }`         | Also `peer-*`, `not-*` with a known state.       |
+| **Arbitrary selector**     | `[&>li]:translate-x-full`              | `{ '[&>li]': 'translate-x-full' }`              |                                                  |
+| **Arbitrary breakpoint**   | `min-[900px]:flex`                     | `{ 'min-[900px]': 'flex' }`                     | Also `max-[...]`, `supports-[...]`, `has-[...]`. |
+
+The string is emitted verbatim after the variant — csszyx does not validate it
+against Tailwind's utility set, so prefer sz keys where one exists. A key that
+is not a variant keeps its property meaning: `{ 'not-italic': true }` is still
+the font-style utility.
+
+Negative utility keywords under a variant place the minus on the utility:
+`{ hover: { translateX: '-full' } }` → `hover:-translate-x-full`. Arbitrary
+negative values keep the sign inside the bracket:
+`{ 'data-[starting-style]': { translateX: '-100%' } }` →
+`data-[starting-style]:translate-x-[-100%]`.
+
 ## Helper Variants (Child/Descendants)
 
 Mapping for common descendant patterns.
