@@ -168,9 +168,10 @@ describe('szv precompile, end to end', () => {
         // never ships. The picker injection is the unplugin's job, so this
         // probe appends the import the plugin would inject.
         const { transformSourceCode } = require('@csszyx/compiler');
+        // The single-clause import is the shape people actually write; the
+        // compiler splits it, moving szr to the core entry on its own line.
         const source =
-            "import { szr } from '@csszyx/runtime';\n" +
-            "import { szv } from '@csszyx/runtime';\n" +
+            "import { szr, szv } from '@csszyx/runtime';\n" +
             "const cardSz = szv({ base: { rounded: 'lg' }, variants: { pad: { sm: { p: 2 }, lg: { p: 8 } } } });\n" +
             'export const C = (sel) => szr(cardSz(sel), cardSz({ pad: "sm" }));\n';
         const result = transformSourceCode(source, '/app/Card.tsx');

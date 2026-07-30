@@ -66,6 +66,15 @@ const REWRITE_CASES: ReadonlyArray<readonly [string, string]> = [
     ['multiple proven calls', `${RUNTIME}const x = szr('a'); export const b = szr('b', \`c\`);`],
     ['parenthesized string argument', `${RUNTIME}export const a = szr(('p-4'));`],
     ['inside JSX', `${RUNTIME}export const A = () => <div className={szr('p-4')} />;`],
+    // Clause SPLITS: szr moves to the core entry, the rest stays on the barrel.
+    [
+        'multi-specifier clause splits',
+        "import { szr, szv } from '@csszyx/runtime';\nexport const a = szr('p-4');",
+    ],
+    [
+        'type specifier rides along in a split',
+        "import { szr, type SzInput } from '@csszyx/runtime';\nexport const a = szr('p-4');",
+    ],
 ];
 
 /** Sources that must keep the barrel import. */
@@ -96,8 +105,12 @@ const KEEP_CASES: ReadonlyArray<readonly [string, string]> = [
     ],
     ['aliased import', "import { szr as r } from '@csszyx/runtime';\nexport const a = r('p-4');"],
     [
-        'multi-specifier clause',
-        "import { szr, szv } from '@csszyx/runtime';\nexport const a = szr('p-4');",
+        'aliased szr inside a multi clause',
+        "import { szr as r, szv } from '@csszyx/runtime';\nexport const a = r('p-4');",
+    ],
+    [
+        'default import alongside szr',
+        "import def, { szr } from 'csszyx';\nexport const a = szr('p-4');",
     ],
     ['unmapped source package', "import { szr } from 'other-lib';\nexport const a = szr('p-4');"],
     ['one proven and one unsafe call', `${RUNTIME}const x = szr('a'); export const b = szr(cfg);`],
@@ -119,6 +132,15 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
         expect(code).not.toMatch(/from ['"]@csszyx\/runtime['"]/);
         expect(code).toContain("szr('p-4')");
         expect(code).toContain('42');
+    });
+
+    it('splits a mixed clause into barrel and core lines', () => {
+        const source = "import { szr, szv } from '@csszyx/runtime';\nexport const a = szr('p-4');";
+        const code = engine(source, '/p/t.tsx').code ?? source;
+        // szv keeps the barrel; szr moves to the core entry; both lines exist.
+        expect(code).toMatch(/szv[^\n]*from ['"]@csszyx\/runtime['"]/);
+        expect(code).toMatch(/szr[^\n]*from ['"]@csszyx\/runtime\/core['"]/);
+        expect(code).not.toMatch(/szr[^\n]*from ['"]@csszyx\/runtime['"]/);
     });
 });
 

@@ -760,8 +760,10 @@ function warnStyleSpreadCollision(
 
 /** Whole-file accumulator for the szr import-rewrite proof. */
 interface SzrRewriteState {
-    /** The single qualifying `import { szr } from <target>` declaration. */
-    importDeclaration: t.ImportDeclaration | null;
+    /** The qualifying import declaration carrying the szr specifier. */
+    importDeclaration: babel.NodePath<t.ImportDeclaration> | null;
+    /** The unaliased value specifier for szr inside that clause. */
+    szrSpecifier: t.ImportSpecifier | null;
     /**
      * Direct `szr(...)` calls, proof deferred to Program exit: whether an
      * argument is safe can depend on the szv precompile (a rewritten factory
@@ -795,26 +797,40 @@ interface SzvPrecompileState {
 const SZV_RESERVED_FACTORY_NAMES = new Set(['szr', 'szv', 'dynamic', '__szvPick']);
 
 /**
- * Record an import declaration when it is the rewritable szr clause.
+ * Record an import declaration when it carries the rewritable szr specifier.
  *
- * Qualifying shape: exactly one specifier, a value (not type) named import of
- * `szr` with no alias, from a source the rewrite map covers. Anything else is
- * simply not recorded — the reference accounting then fails the proof, since
- * the word `szr` appears without a matching proven call.
+ * Qualifying shape: a named-specifier clause (no default or namespace import)
+ * from a mapped source, containing a value (not type) import of `szr` with no
+ * alias. The clause may carry OTHER named specifiers — the rewrite then SPLITS
+ * it, moving only szr to the core entry and leaving the rest on the original
+ * source. Anything else is simply not recorded — the reference accounting then
+ * fails the proof, since the word `szr` appears without a matching proven call.
  *
- * @param declaration - The import declaration node.
+ * @param path - The import declaration path.
  * @param state - Whole-file proof accumulator.
  */
-function recordSzrImportCandidate(declaration: t.ImportDeclaration, state: SzrRewriteState): void {
+function recordSzrImportCandidate(
+    path: babel.NodePath<t.ImportDeclaration>,
+    state: SzrRewriteState,
+): void {
+    const declaration = path.node;
     if (declaration.importKind === 'type') return;
     if (SZR_IMPORT_REWRITE_TARGETS[declaration.source.value] === undefined) return;
-    if (declaration.specifiers.length !== 1) return;
-    const [specifier] = declaration.specifiers;
-    if (!t.isImportSpecifier(specifier) || specifier.importKind === 'type') return;
-    const imported = specifier.imported;
-    const importedName = t.isIdentifier(imported) ? imported.name : imported.value;
-    if (importedName !== 'szr' || specifier.local.name !== 'szr') return;
-    state.importDeclaration = declaration;
+    let szrSpecifier: t.ImportSpecifier | null = null;
+    for (const specifier of declaration.specifiers) {
+        // A default or namespace specifier makes the clause shape one this
+        // rewrite does not rebuild — leave the whole declaration alone.
+        if (!t.isImportSpecifier(specifier)) return;
+        if (specifier.importKind === 'type') continue;
+        const imported = specifier.imported;
+        const importedName = t.isIdentifier(imported) ? imported.name : imported.value;
+        if (importedName === 'szr' && specifier.local.name === 'szr') {
+            szrSpecifier = specifier;
+        }
+    }
+    if (szrSpecifier === null) return;
+    state.importDeclaration = path;
+    state.szrSpecifier = szrSpecifier;
 }
 
 /**
@@ -946,10 +962,24 @@ function applySzrImportRewrite(
     }
     const occurrences = countSzrWordOccurrences(source);
     if (!szrRewriteApproved(occurrences, provenCalls, false)) return false;
-    const target = SZR_IMPORT_REWRITE_TARGETS[state.importDeclaration.source.value];
-    // A fresh node: mutating `.value` alone leaves `extra.raw` pointing at the
-    // old text, and the generator prefers the raw form.
-    state.importDeclaration.source = t.stringLiteral(target);
+    const declaration = state.importDeclaration.node;
+    const target = SZR_IMPORT_REWRITE_TARGETS[declaration.source.value];
+    const others = declaration.specifiers.filter(specifier => specifier !== state.szrSpecifier);
+    if (others.length === 0) {
+        // A fresh node: mutating `.value` alone leaves `extra.raw` pointing at
+        // the old text, and the generator prefers the raw form.
+        declaration.source = t.stringLiteral(target);
+        return true;
+    }
+    // Split the clause: the other specifiers keep the original source, szr
+    // moves to its own core-entry declaration right after.
+    declaration.specifiers = others;
+    state.importDeclaration.insertAfter(
+        t.importDeclaration(
+            [t.importSpecifier(t.identifier('szr'), t.identifier('szr'))],
+            t.stringLiteral(target),
+        ),
+    );
     return true;
 }
 
@@ -1816,6 +1846,7 @@ export function transformSourceCode(
     let transformed = false;
     const szrRewrite: SzrRewriteState = {
         importDeclaration: null,
+        szrSpecifier: null,
         szrCalls: [],
     };
     const szvPrecompile: SzvPrecompileState = {
@@ -2034,7 +2065,7 @@ export function transformSourceCode(
 
                         // ── szr import rewrite (slim core entry) ─────────────────────────
                         ImportDeclaration(path: babel.NodePath<t.ImportDeclaration>) {
-                            recordSzrImportCandidate(path.node, szrRewrite);
+                            recordSzrImportCandidate(path, szrRewrite);
                         },
                         Program: {
                             exit() {

@@ -180,6 +180,8 @@ export function transformOxc(
     const szrRewrite: OxcSzrRewriteState = {
         sourceSpan: null,
         sourceValue: '',
+        statementSpan: null,
+        otherSpecifierSpans: [],
         szrCalls: [],
     };
     const szvPrecompile: OxcSzvPrecompileState = {
@@ -1863,6 +1865,10 @@ interface OxcSzrRewriteState {
     sourceSpan: { start: number; end: number } | null;
     /** The qualifying import's source value. */
     sourceValue: string;
+    /** Span of the whole import declaration, for the clause split. */
+    statementSpan: { start: number; end: number } | null;
+    /** Spans of the OTHER named specifiers staying on the original source. */
+    otherSpecifierSpans: Array<{ start: number; end: number }>;
     /** Direct `szr(...)` calls; the proof is deferred to the apply phase. */
     szrCalls: CallExpressionNode[];
 }
@@ -1920,13 +1926,30 @@ function recordSzrImportCandidateOxc(node: OxcNode, state: OxcSzrRewriteState): 
     if (typeof sourceValue !== 'string') return;
     if (SZR_IMPORT_REWRITE_TARGETS[sourceValue] === undefined) return;
     const specifiers = declaration.specifiers ?? [];
-    if (specifiers.length !== 1) return;
-    const [specifier] = specifiers;
-    if (specifier.type !== 'ImportSpecifier' || specifier.importKind === 'type') return;
-    const importedName = specifier.imported?.name ?? specifier.imported?.value;
-    if (importedName !== 'szr' || specifier.local?.name !== 'szr') return;
+    let sawSzr = false;
+    const others: Array<{ start: number; end: number }> = [];
+    for (const specifier of specifiers) {
+        // A default or namespace specifier makes the clause shape one this
+        // rewrite does not rebuild — leave the whole declaration alone.
+        if (specifier.type !== 'ImportSpecifier') return;
+        const shaped = specifier as unknown as { start: number; end: number };
+        const importedName = specifier.imported?.name ?? specifier.imported?.value;
+        if (
+            specifier.importKind !== 'type' &&
+            importedName === 'szr' &&
+            specifier.local?.name === 'szr'
+        ) {
+            sawSzr = true;
+        } else {
+            others.push({ start: shaped.start, end: shaped.end });
+        }
+    }
+    if (!sawSzr) return;
+    const statement = node as unknown as { start: number; end: number };
     state.sourceSpan = { start: declaration.source.start, end: declaration.source.end };
     state.sourceValue = sourceValue;
+    state.statementSpan = { start: statement.start, end: statement.end };
+    state.otherSpecifierSpans = others;
 }
 
 /**
@@ -2298,7 +2321,24 @@ function applySzrImportRewriteOxc(
     const target = SZR_IMPORT_REWRITE_TARGETS[state.sourceValue];
     // Preserve the author's quote character — the span covers it.
     const quote = source[state.sourceSpan.start] === '"' ? '"' : "'";
-    edits.overwrite(state.sourceSpan.start, state.sourceSpan.end, `${quote}${target}${quote}`);
+    if (state.otherSpecifierSpans.length === 0) {
+        edits.overwrite(state.sourceSpan.start, state.sourceSpan.end, `${quote}${target}${quote}`);
+        return true;
+    }
+    // Split the clause: rebuild the statement as the other specifiers on the
+    // original source, then szr alone on the core entry. Rebuilding from the
+    // specifier spans drops comments inside the clause; a comment mentioning
+    // szr already failed the reference accounting above.
+    if (state.statementSpan === null) return false;
+    const others = state.otherSpecifierSpans
+        .map(span => source.slice(span.start, span.end))
+        .join(', ');
+    edits.overwrite(
+        state.statementSpan.start,
+        state.statementSpan.end,
+        `import { ${others} } from ${quote}${state.sourceValue}${quote};\n` +
+            `import { szr } from ${quote}${target}${quote};`,
+    );
     return true;
 }
 

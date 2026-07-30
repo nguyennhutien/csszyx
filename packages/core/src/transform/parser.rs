@@ -170,9 +170,10 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     program: &'p oxc_ast::ast::Program<'p>,
     /// JSX element/fragment index stack for parent-tree lowering.
     element_stack: Vec<usize>,
-    /// Qualifying `import { szr }` clause: source-literal span (quotes
-    /// included) plus its specifier value.
-    szr_import: Option<(super::TextSpan, String)>,
+    /// Qualifying szr import clause: source-literal span (quotes included),
+    /// specifier value, whole-statement span, and the OTHER named specifiers'
+    /// spans (non-empty means the clause splits).
+    szr_import: Option<SzrImportRecord>,
     /// Direct `szr(...)` calls as per-argument classifications; the proof is
     /// deferred to finalize, where the szv precompile decides which factory
     /// calls become strings.
@@ -182,6 +183,18 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     szv_candidates: Vec<SzvFactoryRecord>,
     /// Every direct identifier-callee call that could be a factory call site.
     szv_call_sites: Vec<SzvCallSite>,
+}
+
+/// One qualifying szr import clause, recorded for the deferred rewrite.
+struct SzrImportRecord {
+    /// Span of the import source literal, quotes included.
+    source_span: super::TextSpan,
+    /// The import source value.
+    source_value: String,
+    /// Span of the whole import declaration.
+    statement_span: super::TextSpan,
+    /// Spans of the other named specifiers staying on the original source.
+    other_specifier_spans: Vec<super::TextSpan>,
 }
 
 /// Classification of one szr argument, resolved at finalize.
@@ -799,19 +812,32 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         let Some(specifiers) = &declaration.specifiers else {
             return;
         };
-        if specifiers.len() != 1 {
+        let mut saw_szr = false;
+        let mut other_specifier_spans: Vec<super::TextSpan> = Vec::new();
+        for entry in specifiers {
+            // A default or namespace specifier makes the clause shape one this
+            // rewrite does not rebuild — leave the whole declaration alone.
+            let ImportDeclarationSpecifier::ImportSpecifier(specifier) = entry else {
+                return;
+            };
+            if !specifier.import_kind.is_type()
+                && specifier.imported.name() == "szr"
+                && specifier.local.name == "szr"
+            {
+                saw_szr = true;
+            } else {
+                other_specifier_spans.push(text_span(specifier.span));
+            }
+        }
+        if !saw_szr {
             return;
         }
-        let ImportDeclarationSpecifier::ImportSpecifier(specifier) = &specifiers[0] else {
-            return;
-        };
-        if specifier.import_kind.is_type() {
-            return;
-        }
-        if specifier.imported.name() != "szr" || specifier.local.name != "szr" {
-            return;
-        }
-        self.szr_import = Some((text_span(declaration.source.span), source_value.to_string()));
+        self.szr_import = Some(SzrImportRecord {
+            source_span: text_span(declaration.source.span),
+            source_value: source_value.to_string(),
+            statement_span: text_span(declaration.span),
+            other_specifier_spans,
+        });
     }
 
     /// Record one direct identifier-callee call for the deferred proofs.
@@ -977,7 +1003,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     /// A `build.parser` flip must not change the emitted import, so the three
     /// verdicts are locked together by the cross-engine suite.
     fn finalize_szr_import_rewrite(&mut self, replaced_spans: &[super::TextSpan]) {
-        let Some((span, source_value)) = self.szr_import.take() else {
+        let Some(record) = self.szr_import.take() else {
             return;
         };
         let mut proven_calls = 0;
@@ -996,18 +1022,43 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         if occurrences != 1 + proven_calls {
             return;
         }
-        let Some(target) = szr_rewrite_target(&source_value) else {
+        let Some(target) = szr_rewrite_target(&record.source_value) else {
             return;
         };
         // Preserve the author's quote character — the span covers it.
-        let quote = if self.source.as_bytes().get(span.start as usize) == Some(&b'"') {
+        let quote = if self
+            .source
+            .as_bytes()
+            .get(record.source_span.start as usize)
+            == Some(&b'"')
+        {
             '"'
         } else {
             '\''
         };
+        if record.other_specifier_spans.is_empty() {
+            self.ir.szr_import_rewrite = Some(super::SzrImportRewriteIr {
+                span: record.source_span,
+                replacement: format!("{quote}{target}{quote}"),
+            });
+            return;
+        }
+        // Split the clause: rebuild the statement as the other specifiers on
+        // the original source, then szr alone on the core entry. Rebuilding
+        // from the specifier spans drops comments inside the clause; a comment
+        // mentioning szr already failed the reference accounting above.
+        let others = record
+            .other_specifier_spans
+            .iter()
+            .map(|span| &self.source[span.start as usize..span.end as usize])
+            .collect::<Vec<_>>()
+            .join(", ");
+        let source_value = &record.source_value;
         self.ir.szr_import_rewrite = Some(super::SzrImportRewriteIr {
-            span,
-            replacement: format!("{quote}{target}{quote}"),
+            span: record.statement_span,
+            replacement: format!(
+                "import {{ {others} }} from {quote}{source_value}{quote};\nimport {{ szr }} from {quote}{target}{quote};"
+            ),
         });
     }
 
