@@ -209,7 +209,7 @@ pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(St
             // (`{ tablet: { p: 4 } }`) or an arbitrary selector cannot appear in
             // any static table here. The lowering treats the key as a variant
             // and emits `tablet:p-4` correctly, so flagging it read as
-            // "Unknown property … This will be ignored" for a class that WAS
+            // "Unknown property …" for a class that WAS
             // emitted — a warning that lies, and only on this engine (the JS
             // lanes warn from their scalar-value path alone). Descend so the
             // nested keys are still checked.

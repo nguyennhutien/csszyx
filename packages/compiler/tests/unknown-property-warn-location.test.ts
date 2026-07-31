@@ -65,7 +65,9 @@ describe('unknown-property warning — source location', () => {
         const msg = warn.mock.calls.map(c => String(c[0])).find(m => m.includes('xyzzy'));
         expect(msg).toBeDefined();
         expect(msg).toContain('Unknown property "xyzzy" in sz prop.');
-        expect(msg).toContain('This will be ignored. Check for typos.');
+        expect(msg).toContain(
+            'The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos.',
+        );
         // No `at <file>:<line>` build location on the runtime path.
         expect(msg).not.toMatch(/ at \S+:\d+/);
     });

@@ -625,8 +625,12 @@ fn unknown_property_diagnostics(
                     "[csszyx] sz received a numeric key \"{key}\" at {location}:{line}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored."
                 ));
             } else {
+                // Wording mirrors the JS lanes byte for byte. Deliberately NOT
+                // "this will be ignored": the key is lowered as a literal class
+                // exactly like a known one, so the old text sent people looking
+                // for a missing class instead of a dead one.
                 out.push(format!(
-                    "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. This will be ignored. Check for typos."
+                    "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos."
                 ));
             }
         }

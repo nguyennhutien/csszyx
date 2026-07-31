@@ -5,7 +5,7 @@
  * (`{ tablet: { p: 4 } }`), and the lowering handles it: variant names are
  * open-ended, so any key carrying an OBJECT value is treated as a variant.
  * Field report (0.11.11): the native engine — the default parser — warned
- * "Unknown property … This will be ignored" for every such key while emitting
+ * "Unknown property …" for every such key while emitting
  * the class anyway. A warning that contradicts what the compiler did is worse
  * than silence, and it fired only on that one engine.
  *

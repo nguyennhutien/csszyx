@@ -2897,9 +2897,16 @@ function unknownSzPropertyMessage(key: string): string {
             'keys was expected. The value is ignored.'
         );
     }
+    // Deliberately NOT "this will be ignored": the key is not dropped, it is
+    // lowered as a literal class exactly like a known one. Saying otherwise
+    // sent people looking for a missing class instead of a dead one. The key
+    // is also not blocked — a project can serve it with `@utility`, and
+    // refusing to emit would make csszyx the thing standing between the author
+    // and a fix they can already make themselves.
     return (
         `[csszyx] Unknown property "${key}" in sz prop${at}. ` +
-        'This will be ignored. Check for typos.'
+        'The class is still emitted, so it styles nothing unless Tailwind ' +
+        'serves that utility. Check for typos.'
     );
 }
 
