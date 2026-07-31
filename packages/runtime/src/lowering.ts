@@ -15,7 +15,11 @@
  * @module @csszyx/runtime/lowering
  */
 
-import { transform as rawTransform, type SzObject } from '@csszyx/compiler/browser';
+import {
+    deepMergeSzObjects,
+    transform as rawTransform,
+    type SzObject,
+} from '@csszyx/compiler/browser';
 
 import { setSzLowering } from './lowering-slot.js';
 
@@ -37,13 +41,22 @@ interface CsszyxMangleGlobals {
  * @param szProp - The sz object to transform into a className.
  * @returns The className, mangled when a map is active.
  */
-export function lowerSz(szProp: object): string {
+export function lowerSz(szProp: object | readonly object[]): string {
     // `szProp` is typed `object` (not `SzObject`) so the public `SzInput` can stay
     // broad enough to accept a precise `SzProps`/`SzPropValue` forwarded from the
     // JSX boundary — a named type with specific keys is assignable to `object` but
     // not to `SzObject`'s `{ [k]: SzValue }` index signature. The runtime lowers
     // recognized keys and ignores the rest, so the cast is sound.
-    const className = rawTransform(szProp as SzObject).className;
+    // A run of adjacent objects from one composition site deep-merges FIRST, so
+    // a later element holding only part of a fused value (`{ bg: { op: 80 } }`)
+    // overrides that part instead of lowering on its own into a dead class.
+    // This mirrors how the compiler folds a static `sz={[a, b]}` array.
+    const merged = Array.isArray(szProp)
+        ? (szProp as readonly object[]).reduce((a, b) =>
+              deepMergeSzObjects(a as SzObject, b as SzObject),
+          )
+        : szProp;
+    const className = rawTransform(merged as SzObject).className;
     if (!className) {
         return className;
     }

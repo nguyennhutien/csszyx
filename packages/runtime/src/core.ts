@@ -116,9 +116,42 @@ function szJoin(classes: SzInput[], depth: number): string {
         return resolveJoinedInput(classes[0], depth);
     }
 
+    // A RUN of adjacent sz objects goes to the lowerer together so it can deep
+    // merge them the way the compiler folds a static `sz={[a, b]}` array.
+    // `deepMergeSzObjects` exists to keep "the static and runtime lanes of
+    // array composition agree", and lowering each element on its own broke
+    // that: a later element carrying only PART of a fused value
+    // (`{ bg: { op: 80 } }` overriding an earlier `{ bg: { color, op } }`) means
+    // nothing alone, so it lowered to the dead `bg:op-80` instead of
+    // re-opacifying the colour. Strings are opaque class lists with nothing to
+    // merge INTO, so they flush the run and concatenate.
+    //
+    // The merge itself lives in the lowering module, not here: it is only ever
+    // needed when an object is present, and an object already requires that
+    // module — folding it into this entry would grow the compiler-free `/core`
+    // bundle for callers that never pass one.
     let result = '';
+    let pending: object[] | null = null;
+
     for (const cls of classes) {
+        if (!cls) {
+            continue;
+        }
+        if (typeof cls !== 'string' && !Array.isArray(cls)) {
+            if (pending === null) {
+                pending = [];
+            }
+            pending.push(cls);
+            continue;
+        }
+        if (pending !== null) {
+            result = appendClassName(result, lowerObject(pending));
+            pending = null;
+        }
         result = appendClassName(result, resolveJoinedInput(cls, depth));
+    }
+    if (pending !== null) {
+        result = appendClassName(result, lowerObject(pending));
     }
 
     return result;
@@ -154,15 +187,16 @@ function resolveJoinedInput(input: SzInput, depth: number): string {
 }
 
 /**
- * Lower one sz object through the registered lowerer.
+ * Lower one sz object, or a run of adjacent ones, through the registered
+ * lowerer. A run is deep-merged there before it is transformed.
  *
- * @param input - The sz object.
+ * @param input - The sz object, or a run of adjacent objects to merge.
  * @returns The lowered className.
  * @throws When no lowering module is loaded — a silent empty string here would
  * be invisibly dropped styling, the one failure mode this package never
  * accepts.
  */
-function lowerObject(input: object): string {
+function lowerObject(input: object | readonly object[]): string {
     const lower = getSzLowering();
     if (lower === null) {
         throw new Error(

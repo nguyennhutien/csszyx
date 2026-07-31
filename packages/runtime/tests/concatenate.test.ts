@@ -120,7 +120,12 @@ describe('_szMerge', () => {
     });
 
     it('should apply utility-aware merging after resolving sz objects', () => {
-        expect(_szMerge({ p: 4, gap: 2 }, { p: 8 })).toBe('gap-2 p-8');
+        // Adjacent objects deep-merge before they lower, so the surviving `p`
+        // keeps its ORIGINAL position instead of being appended after `gap`.
+        // This is the order the compiler produces for the same static array,
+        // and class order fixes production mangle ids — the two lanes have to
+        // agree or the same source yields different tokens per build path.
+        expect(_szMerge({ p: 4, gap: 2 }, { p: 8 })).toBe('p-8 gap-2');
     });
 
     it('should handle multiple spaces', () => {

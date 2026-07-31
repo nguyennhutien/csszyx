@@ -20,8 +20,14 @@
  * @module @csszyx/runtime/lowering-slot
  */
 
-/** Lowers one sz object to its className string (mangle-aware). */
-export type SzLowering = (szProp: object) => string;
+/**
+ * Lowers sz input to its className string (mangle-aware).
+ *
+ * An ARRAY is a run of adjacent objects from one composition site; the
+ * lowerer deep-merges them before transforming, so a later element holding
+ * only part of a fused value overrides that part instead of lowering alone.
+ */
+export type SzLowering = (szProp: object | readonly object[]) => string;
 
 /** The registered lowerer, or null while no object-capable module is loaded. */
 let current: SzLowering | null = null;
