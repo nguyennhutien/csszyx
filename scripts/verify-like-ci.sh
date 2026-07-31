@@ -99,6 +99,12 @@ pnpm type-check
 echo "[verify-like-ci] Corpus round-trip (fails on broken mappings, like CI)..."
 pnpm corpus:check --require-no-broken
 
+# Ask the installed Tailwind whether every class the mapping emits actually
+# produces CSS. A mapping that emits a name Tailwind no longer serves styles
+# nothing, silently — the failure csszyx exists to prevent.
+echo "[verify-like-ci] Emitted-class oracle (dead classes vs real Tailwind)..."
+pnpm check:emitted-classes
+
 echo "[verify-like-ci] Workspace build (every playground, every package)..."
 pnpm build
 

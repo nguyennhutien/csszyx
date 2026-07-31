@@ -519,6 +519,14 @@ jobs:
       - name: Check corpus round-trip has no broken mappings
         run: pnpm corpus:check --require-no-broken
 
+      # The round-trip above proves sz -> class -> sz is stable, but not that the
+      # class Tailwind is asked for still EXISTS: the vocabulary moves between
+      # minors (break-* became wrap-* in v4.1) and a stale name styles nothing,
+      # silently. This asks the installed Tailwind to compile every emitted class
+      # and fails on any that produces no CSS and is not baselined.
+      - name: Check emitted classes still produce CSS
+        run: pnpm check:emitted-classes
+
       # Build the host native addon before unit tests so the Rust parser
       # option suite exercises the same optional package-name resolution path
       # users get after install. The build artefact is gitignored and remains
