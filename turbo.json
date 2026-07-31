@@ -17,6 +17,17 @@
       "outputs": ["coverage/**"],
       "inputs": ["src/**", "tests/**", "test/**", "*.config.js", "*.config.ts"]
     },
+    // The compiler's szv oracle test imports @csszyx/runtime to compare emitted
+    // strings against the real factory path, but runtime is NOT a dependency of
+    // compiler, so the generic ^build above never builds it. Declaring it in
+    // package.json is impossible: runtime already depends on compiler, and the
+    // devDependency would make compiler#build depend on runtime#build depend on
+    // compiler#build, which turbo rejects as a cycle. So the edge lives here.
+    //
+    // KEEP outputs AND inputs IN SYNC WITH `test` ABOVE. A package-specific task
+    // config REPLACES the generic one rather than merging into it: drop them and
+    // this task silently loses output caching and takes the WHOLE package as its
+    // input, including README.md and tsconfig.json.
     "@csszyx/compiler#test": {
       "dependsOn": ["^build", "@csszyx/runtime#build"],
       "outputs": ["coverage/**"],
