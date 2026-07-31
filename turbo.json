@@ -17,6 +17,11 @@
       "outputs": ["coverage/**"],
       "inputs": ["src/**", "tests/**", "test/**", "*.config.js", "*.config.ts"]
     },
+    "@csszyx/compiler#test": {
+      "dependsOn": ["^build", "@csszyx/runtime#build"],
+      "outputs": ["coverage/**"],
+      "inputs": ["src/**", "tests/**", "test/**", "*.config.js", "*.config.ts"]
+    },
     "test:watch": {
       "cache": false,
       "persistent": true
