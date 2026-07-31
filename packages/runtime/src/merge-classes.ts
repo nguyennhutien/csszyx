@@ -280,15 +280,40 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
 }
 
 /**
- * Memo for repeated merges. Layered components call szcn with IDENTICAL inputs
- * every render (component defaults are constants), so a small LRU turns the
- * per-render cost into one Map lookup. The cache self-invalidates when either
- * classification input changes: the custom-group registration generation, or
- * the identity of the runtime decode bridge (both normally settle at startup,
- * before render loops, so steady-state renders never clear).
+ * One memoized argument position. The memo is a TRIE over the input strings,
+ * not a map keyed by their concatenation: building `${a} ${b}` produces a fresh
+ * V8 cons-string on every call, and a cons-string carries no cached hash, so
+ * each `Map` operation on it re-flattens and re-hashes the whole key —
+ * measured at ~115 ns, an order of magnitude more than the merge lookup it was
+ * meant to save. Walking one `Map.get` per argument instead hashes nothing: the
+ * arguments are the caller's own string constants, already internalized with
+ * their hash cached (measured ~7 ns for the two-argument layered-component
+ * shape).
  */
-const MEMO_MAX_ENTRIES = 500;
-const memo = new Map<string, string>();
+interface MergeMemoNode {
+    /** Merged output for the exact input path ending at this node. */
+    result?: string;
+    /** Children keyed by the next non-empty string input. */
+    next?: Map<string, MergeMemoNode>;
+}
+
+/**
+ * Memo for repeated merges. Layered components call szcn with IDENTICAL inputs
+ * every render (component defaults are constants), so the trie turns the
+ * per-render cost into one Map lookup per argument. The cache self-invalidates
+ * when either classification input changes: the custom-group registration
+ * generation, or the identity of the runtime decode bridge (both normally
+ * settle at startup, before render loops, so steady-state renders never clear).
+ *
+ * Over the cap the whole trie is dropped rather than evicted one entry at a
+ * time — the same policy `splitBox`'s token memo uses. Per-entry LRU recency
+ * needs a `delete` + `set` on every HIT (measured ~11% of the hit cost), which
+ * is a poor trade for a cache whose working set is bounded by the app's
+ * component count and only overflows on adversarial dynamic input.
+ */
+const MEMO_MAX_NODES = 500;
+const memoRoot: MergeMemoNode = {};
+let memoNodes = 0;
 let memoGroupsGeneration = -1;
 let memoDecodeRef: unknown;
 
@@ -306,12 +331,6 @@ let memoDecodeRef: unknown;
  * @example szcn('gap-2 p-4', 'gap-8') // → 'p-4 gap-8'  (gap-8 overrides gap-2)
  */
 export function szcn(...inputs: ClassInput[]): string {
-    let key = '';
-    for (const input of inputs) {
-        if (input && typeof input === 'string') {
-            key = key === '' ? input : `${key} ${input}`;
-        }
-    }
     const generation = getSzcnGroupsGeneration();
     // Compare the runtime OBJECT IDENTITY, not mere presence: a swapped bridge
     // (tests, or an exotic host replacing the inline script's object) must not
@@ -320,25 +339,39 @@ export function szcn(...inputs: ClassInput[]): string {
     // lookups. In production it is installed once for the page lifetime, so
     // this never clears.
     const runtimeRef = mangleBridge();
-    if (generation !== memoGroupsGeneration || runtimeRef !== memoDecodeRef) {
-        memo.clear();
+    if (
+        generation !== memoGroupsGeneration ||
+        runtimeRef !== memoDecodeRef ||
+        memoNodes >= MEMO_MAX_NODES
+    ) {
+        memoRoot.result = undefined;
+        memoRoot.next = undefined;
+        memoNodes = 0;
         memoGroupsGeneration = generation;
         memoDecodeRef = runtimeRef;
     }
-    const cached = memo.get(key);
-    if (cached !== undefined) {
-        // Refresh recency so hot merges never age out.
-        memo.delete(key);
-        memo.set(key, cached);
-        return cached;
-    }
-    const merged = mergeUncached(inputs);
-    memo.set(key, merged);
-    if (memo.size > MEMO_MAX_ENTRIES) {
-        const oldest = memo.keys().next().value;
-        if (oldest !== undefined) {
-            memo.delete(oldest);
+    // Falsy inputs are skipped here exactly as `mergeUncached` skips them, so
+    // `szcn('a', false, 'b')` and `szcn('a', 'b')` share one trie path.
+    let node = memoRoot;
+    for (const input of inputs) {
+        if (!input || typeof input !== 'string') {
+            continue;
         }
+        let child = node.next?.get(input);
+        if (child === undefined) {
+            child = {};
+            if (node.next === undefined) {
+                node.next = new Map();
+            }
+            node.next.set(input, child);
+            memoNodes++;
+        }
+        node = child;
+    }
+    let merged = node.result;
+    if (merged === undefined) {
+        merged = mergeUncached(inputs, runtimeRef);
+        node.result = merged;
     }
     return merged;
 }
@@ -360,19 +393,19 @@ export function szcn(...inputs: ClassInput[]): string {
  * @returns The merged className string.
  */
 export function _szcn(...inputs: ClassInput[]): string {
-    return mergeUncached(inputs);
+    return mergeUncached(inputs, mangleBridge());
 }
 
 /**
  * The uncached merge — see {@link szcn} for the contract.
  *
  * @param inputs - Class strings; falsy inputs are skipped.
+ * @param bridge - The runtime bridge, read once by the caller.
  * @returns The merged className string.
  */
-function mergeUncached(inputs: readonly ClassInput[]): string {
+function mergeUncached(inputs: readonly ClassInput[], bridge: MangleBridge | undefined): string {
     const order: string[] = [];
     const byKey = new Map<string, string>();
-    const bridge = mangleBridge();
 
     for (const input of inputs) {
         if (!input || typeof input !== 'string') {

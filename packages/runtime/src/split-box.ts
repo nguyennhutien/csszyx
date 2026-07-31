@@ -243,6 +243,36 @@ function tokenize(className: string): string[] {
 }
 
 /**
+ * Whole-partition memo for the default-options `splitBox`, which is what a
+ * layered component calls per render on a className that does not change
+ * between renders. Without it every render re-runs the regex tokenize (measured
+ * at 35% of the call), the per-token classification, and both bucket joins.
+ *
+ * Only the default-options call is cached: an override list is an array of
+ * selectors with no cheap identity, and the components that pass one are not
+ * the per-render leaf this exists to serve.
+ *
+ * Safe to cache indefinitely for the same reason `inspectMemo` is — the
+ * partition is a pure function of the static generated tables. `splitBox` never
+ * reads the mangle bridge (a mangled token simply classifies as unowned and
+ * takes the fallback), so a bridge installed later cannot change a result.
+ */
+const SPLIT_MEMO_MAX = 512;
+const splitMemo = new Map<string, { readonly outer: string; readonly inner: string }>();
+
+/**
+ * Whether any option would change the partition away from the memoized default.
+ *
+ * @param options - The caller's split options.
+ * @returns `true` when the call must not read or write the result memo.
+ */
+function hasSplitOverrides(options: SplitBoxOptions): boolean {
+    return (
+        options.inner !== undefined || options.outer !== undefined || options.fallback !== undefined
+    );
+}
+
+/**
  * Partition a className string into `{ outer, inner }` at the CSS box-model
  * border line. Every token lands in exactly one bucket (no loss, no duplication)
  * and keeps its variant prefix. Overrides in `options.inner` / `options.outer`
@@ -254,6 +284,32 @@ function tokenize(className: string): string[] {
  * @example splitBox('m-4 px-2 md:flex') // → { outer: 'm-4', inner: 'px-2 md:flex' }
  */
 export function splitBox(className: string, options: SplitBoxOptions = {}): SplitBoxResult {
+    if (hasSplitOverrides(options)) {
+        return splitBoxUncached(className, options);
+    }
+    let cached = splitMemo.get(className);
+    if (cached === undefined) {
+        cached = splitBoxUncached(className, options);
+        if (splitMemo.size >= SPLIT_MEMO_MAX) {
+            splitMemo.clear();
+        }
+        splitMemo.set(className, cached);
+    }
+    // A FRESH result object per call, never the cached one: `SplitBoxResult`'s
+    // fields are mutable and callers have always received an object they own.
+    // Handing out the shared instance would let one caller's write corrupt
+    // every later render.
+    return { outer: cached.outer, inner: cached.inner };
+}
+
+/**
+ * The uncached partition — see {@link splitBox} for the contract.
+ *
+ * @param className - The flat className string to partition.
+ * @param options - Overrides for forcing tokens onto a node and the fallback role.
+ * @returns The `{ outer, inner }` class buckets.
+ */
+function splitBoxUncached(className: string, options: SplitBoxOptions): SplitBoxResult {
     const forceInner = options.inner ?? [];
     const forceOuter = options.outer ?? [];
     const fallback: BoxRole = options.fallback ?? 'outer';

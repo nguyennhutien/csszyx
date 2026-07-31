@@ -667,3 +667,50 @@ describe('_szMerge — utility-aware parity with szcn', () => {
         }
     });
 });
+
+describe('szcn — the argument trie memo', () => {
+    afterEach(() => {
+        (globalThis as { __csszyx?: unknown }).__csszyx = undefined;
+    });
+
+    it('keys by ARGUMENT, so a repeated shape stays correct', () => {
+        expect(szcn('gap-2 p-4', 'gap-8')).toBe('p-4 gap-8');
+        expect(szcn('gap-2 p-4', 'gap-8')).toBe('p-4 gap-8');
+        // A different second argument is a different path, not a stale hit.
+        expect(szcn('gap-2 p-4', 'gap-1')).toBe('p-4 gap-1');
+        expect(szcn('gap-2 p-4', 'gap-8')).toBe('p-4 gap-8');
+    });
+
+    it('splits the same tokens the same way however they are grouped', () => {
+        // The old concatenated key made these one entry; the trie makes them
+        // two. Both must still produce the identical merge.
+        expect(szcn('gap-2 p-4 gap-8')).toBe('p-4 gap-8');
+        expect(szcn('gap-2', 'p-4 gap-8')).toBe('p-4 gap-8');
+        expect(szcn('gap-2 p-4', 'gap-8')).toBe('p-4 gap-8');
+    });
+
+    it('walks past falsy inputs instead of branching on them', () => {
+        expect(szcn('gap-2', false, 'gap-8')).toBe('gap-8');
+        expect(szcn('gap-2', 'gap-8')).toBe('gap-8');
+        expect(szcn(null, 'gap-2', undefined, 'gap-8', '')).toBe('gap-8');
+        expect(szcn()).toBe('');
+    });
+
+    it('keeps answering correctly after the cap drops the cache', () => {
+        expect(szcn('gap-2', 'gap-8')).toBe('gap-8');
+        // Well past MEMO_MAX_NODES, so the hot entry above is dropped.
+        for (let i = 0; i < 900; i++) {
+            expect(szcn(`p-${i}`, 'm-1')).toBe(`p-${i} m-1`);
+        }
+        expect(szcn('gap-2', 'gap-8')).toBe('gap-8');
+    });
+
+    it('does not serve a memoized merge across a bridge swap mid-path', () => {
+        expect(szcn('flex-col', 'gap-2')).toBe('flex-col gap-2');
+        (globalThis as { __csszyx?: unknown }).__csszyx = {
+            mangleMap: { 'flex-col': 'm7', 'gap-2': 'q3' },
+            decode: (c: string) => ({ m7: 'flex-col', q3: 'gap-2' })[c] ?? c,
+        };
+        expect(szcn('flex-col', 'gap-2')).toBe('m7 q3');
+    });
+});
