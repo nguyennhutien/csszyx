@@ -24,7 +24,12 @@ import { MAX_SZ_DEPTH, SzDepthError } from '@csszyx/compiler/browser';
 
 import { getSzLowering } from './lowering-slot.js';
 
-export { __szvPick, type SzvCompiledTable, type SzvPickSelection } from './szv-pick.js';
+export {
+    __szvPick,
+    __szvPick1,
+    type SzvCompiledTable,
+    type SzvPickSelection,
+} from './szv-pick.js';
 
 /**
  * Type for sz input — a pre-compiled class string, an sz object, a recursive

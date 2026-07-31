@@ -3803,6 +3803,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         usesSzcn: boolean;
         usesSzPart: boolean;
         usesSzvPick: boolean;
+        usesSzvPick1: boolean;
         szPartArgsProvable: boolean;
         usesColorVar: boolean;
         usesSpacingVar: boolean;
@@ -3825,6 +3826,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesSzcn: false,
             usesSzPart: false,
             usesSzvPick: false,
+            usesSzvPick1: false,
             szPartArgsProvable: true,
             usesColorVar: false,
             usesSpacingVar: false,
@@ -3902,6 +3904,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesSzcn: result.usesSzcn,
             usesSzPart: result.usesSzPart,
             usesSzvPick: result.usesSzvPick,
+            usesSzvPick1: result.usesSzvPick1,
             szPartArgsProvable: result.szPartArgsProvable,
             usesColorVar: result.usesColorVar,
             usesSpacingVar: result.usesSpacingVar,
@@ -3997,6 +4000,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (output.usesSzcn) (slim ? merge : barrel).push('_szcn');
         if (output.usesSzPart) (slim ? merge : barrel).push('_szPart');
         if (output.usesSzvPick) barrel.push('__szvPick');
+        if (output.usesSzvPick1) barrel.push('__szvPick1');
         if (output.usesColorVar) barrel.push('__szColorVar');
         if (output.usesSpacingVar) barrel.push('__szSpacingVar');
         if (output.usesUnitVar) barrel.push('__szUnitVar');

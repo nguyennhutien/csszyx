@@ -89,6 +89,8 @@ pub struct NativeTransformMetadata {
     pub uses_sz_part: bool,
     /// Whether the result imports the runtime __szvPick helper.
     pub uses_szv_pick: bool,
+    /// Whether the result imports the runtime __szvPick1 helper.
+    pub uses_szv_pick1: bool,
     /// True when every emitted `_szPart` argument is provably string/falsy.
     pub sz_part_args_provable: bool,
     /// Whether the result imports the runtime color-var helper.
@@ -236,6 +238,7 @@ impl From<TransformResult> for NativeTransformResult {
                 uses_szcn: result.metadata.uses_szcn,
                 uses_sz_part: result.metadata.uses_sz_part,
                 uses_szv_pick: result.metadata.uses_szv_pick,
+                uses_szv_pick1: result.metadata.uses_szv_pick1,
                 sz_part_args_provable: result.metadata.sz_part_args_provable,
                 uses_color_var: result.metadata.uses_color_var,
                 uses_spacing_var: result.metadata.uses_spacing_var,

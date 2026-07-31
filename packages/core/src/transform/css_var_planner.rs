@@ -633,6 +633,7 @@ mod tests {
             szv_replacements: Vec::new(),
             szv_table_insertions: Vec::new(),
             uses_szv_pick: false,
+            uses_szv_pick1: false,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),

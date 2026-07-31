@@ -191,6 +191,7 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
         code: result.code,
         transformed: result.metadata.transformed,
         usesSzvPick: (result.metadata as { usesSzvPick?: boolean }).usesSzvPick ?? false,
+        usesSzvPick1: (result.metadata as { usesSzvPick1?: boolean }).usesSzvPick1 ?? false,
         szPartArgsProvable:
             (result.metadata as { szPartArgsProvable?: boolean }).szPartArgsProvable ?? false,
         usesRuntime: result.metadata.usesRuntime,

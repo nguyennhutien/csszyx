@@ -277,9 +277,24 @@ enum SzvCallArg {
     /// Fully static selection, values pre-stringified.
     Static(super::szv_precompile::StaticSelection),
     /// Anything else with exactly one argument: spliced into `__szvPick`.
-    Dynamic(super::TextSpan),
+    Dynamic {
+        /// Span of the whole selection argument.
+        span: super::TextSpan,
+        /// Set when the selection literal names exactly one static key, which
+        /// the splice may collapse to `__szvPick1` once the table confirms the
+        /// key is a real dimension.
+        single: Option<SzvSingleDimension>,
+    },
     /// More than one argument (dropping extras would drop their evaluation).
     Disqualifying,
+}
+
+/// A selection literal of exactly one statically named dimension.
+struct SzvSingleDimension {
+    /// The selected dimension name.
+    dimension: String,
+    /// Span of the value expression, spliced as the picker's third argument.
+    value_span: super::TextSpan,
 }
 
 impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
@@ -1046,6 +1061,18 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         }
     }
 
+    /// Standalone occurrences of one identifier in the source, comments
+    /// excluded — the reference accounting shared by a factory binding and its
+    /// emitted table constant.
+    fn word_occurrences_outside_comments(&self, word: &str) -> usize {
+        subtract_comment_occurrences(
+            super::szv_precompile::count_word_occurrences(self.source, word),
+            self.source,
+            &self.program.comments,
+            |slice| super::szv_precompile::count_word_occurrences(slice, word),
+        )
+    }
+
     /// Decide the szv precompile after the whole file was walked, writing the
     /// splices into the IR. Returns the spans of replaced factory calls so the
     /// szr proof can treat them as strings.
@@ -1082,26 +1109,17 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 .iter()
                 .find(|(name, _)| name == &candidate.name)
                 .map_or(0, |(_, count)| *count);
-            let occurrences = subtract_comment_occurrences(
-                super::szv_precompile::count_word_occurrences(self.source, &candidate.name),
-                self.source,
-                &self.program.comments,
-                |slice| super::szv_precompile::count_word_occurrences(slice, &candidate.name),
-            );
-            if occurrences != 1 + calls.len() + type_queries {
+            if self.word_occurrences_outside_comments(&candidate.name)
+                != 1 + calls.len() + type_queries
+            {
                 continue;
             }
             let table_ident = super::szv_precompile::szv_table_identifier(&candidate.name);
-            let table_occurrences = subtract_comment_occurrences(
-                super::szv_precompile::count_word_occurrences(self.source, &table_ident),
-                self.source,
-                &self.program.comments,
-                |slice| super::szv_precompile::count_word_occurrences(slice, &table_ident),
-            );
-            if table_occurrences != 0 {
+            if self.word_occurrences_outside_comments(&table_ident) != 0 {
                 continue;
             }
-            let mut table_needed = false;
+            let mut needs_full_pick = false;
+            let mut needs_single_pick = false;
             for site in calls {
                 let replacement = match &site.argument {
                     SzvCallArg::None => super::szv_precompile::json_string_literal(
@@ -1113,11 +1131,20 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                             Some(selection),
                         ),
                     ),
-                    SzvCallArg::Dynamic(argument_span) => {
-                        table_needed = true;
-                        let text =
-                            &self.source[argument_span.start as usize..argument_span.end as usize];
-                        format!("__szvPick({table_ident}, {text})")
+                    SzvCallArg::Dynamic { span, single } => {
+                        let (text, used_single) = dynamic_szv_replacement(
+                            self.source,
+                            &table_ident,
+                            &candidate.table,
+                            *span,
+                            single.as_ref(),
+                        );
+                        if used_single {
+                            needs_single_pick = true;
+                        } else {
+                            needs_full_pick = true;
+                        }
+                        text
                     }
                     SzvCallArg::Disqualifying => continue,
                 };
@@ -1127,7 +1154,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 });
                 replaced.push(site.span);
             }
-            if table_needed {
+            if needs_full_pick || needs_single_pick {
                 self.ir
                     .szv_table_insertions
                     .push(super::SzvTableInsertionIr {
@@ -1137,7 +1164,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                             super::szv_precompile::serialize_szv_table(&candidate.table)
                         ),
                     });
-                self.ir.uses_szv_pick = true;
+                self.ir.uses_szv_pick |= needs_full_pick;
+                self.ir.uses_szv_pick1 |= needs_single_pick;
             }
         }
         replaced
@@ -2138,7 +2166,7 @@ fn classify_runtime_fallback(
 }
 
 /// Names that can never be szv factory bindings for the precompile.
-const SZV_RESERVED_FACTORY_NAMES: [&str; 4] = ["szr", "szv", "dynamic", "__szvPick"];
+const SZV_RESERVED_FACTORY_NAMES: [&str; 5] = ["szr", "szv", "dynamic", "__szvPick", "__szvPick1"];
 
 /// Analyze one szr argument for the deferred proof.
 fn analyze_szr_call_argument(argument: &Argument<'_>) -> SzrArgAnalysis {
@@ -2226,15 +2254,92 @@ fn classify_szv_call_argument(call: &CallExpression<'_>) -> SzvCallArg {
                 return SzvCallArg::Disqualifying;
             };
             let unwrapped = unwrap_expression(expression);
-            if let Expression::ObjectExpression(object) = unwrapped {
+            let single = if let Expression::ObjectExpression(object) = unwrapped {
                 if let Some(selection) = strict_static_selection(object) {
                     return SzvCallArg::Static(selection);
                 }
+                single_dimension_selection(object)
+            } else {
+                None
+            };
+            SzvCallArg::Dynamic {
+                span: text_span(unwrapped.span()),
+                single,
             }
-            SzvCallArg::Dynamic(text_span(unwrapped.span()))
         }
         _ => SzvCallArg::Disqualifying,
     }
+}
+
+/// Read a selection literal that names exactly one static dimension, e.g.
+/// `F({ direction: dir })` — mirror of the JS lanes' `planSingleDimensionPick`
+/// shape check. Whether the named key is a real dimension is decided later,
+/// where the compiled table is in hand.
+fn single_dimension_selection(object: &ObjectExpression<'_>) -> Option<SzvSingleDimension> {
+    let [property] = object.properties.as_slice() else {
+        return None;
+    };
+    let ObjectPropertyKind::ObjectProperty(entry) = property else {
+        return None;
+    };
+    if entry.computed {
+        return None;
+    }
+    // Identifier and string keys only. `static_property_key` also accepts a
+    // NUMERIC key, which the JS lanes reject here — using it would let this
+    // engine collapse a call the other two leave alone.
+    let dimension = match &entry.key {
+        PropertyKey::StaticIdentifier(identifier) => identifier.name.to_string(),
+        PropertyKey::StringLiteral(string) => string.value.to_string(),
+        _ => return None,
+    };
+    // `{ __proto__: v }` in a literal sets the PROTOTYPE instead of creating an
+    // own property, so the full picker's own-property probe selects nothing.
+    if dimension == "__proto__" {
+        return None;
+    }
+    Some(SzvSingleDimension {
+        dimension,
+        value_span: text_span(entry.value.span()),
+    })
+}
+
+/// Build the replacement text for one DYNAMIC factory call, preferring the
+/// single-dimension picker whenever it reproduces the full one. Returns the
+/// text and whether the single-dimension helper was the one emitted.
+fn dynamic_szv_replacement(
+    source: &str,
+    table_ident: &str,
+    table: &super::szv_precompile::SzvTable,
+    span: super::TextSpan,
+    single: Option<&SzvSingleDimension>,
+) -> (String, bool) {
+    if let Some(it) = single.filter(|it| single_dimension_pick_applies(table, &it.dimension)) {
+        let value = &source[it.value_span.start as usize..it.value_span.end as usize];
+        let dimension = super::szv_precompile::json_string_literal(&it.dimension);
+        return (
+            format!("__szvPick1({table_ident}, {dimension}, {value})"),
+            true,
+        );
+    }
+    let text = &source[span.start as usize..span.end as usize];
+    (format!("__szvPick({table_ident}, {text})"), false)
+}
+
+/// Whether the single-dimension picker reproduces the full picker for one
+/// table and dimension: no defaults (which make the OMITTED dimensions
+/// contribute classes the single-dimension picker never visits), and the key is
+/// a real dimension (so the unknown-variant dev warning keeps running through
+/// the full picker).
+fn single_dimension_pick_applies(table: &super::szv_precompile::SzvTable, dimension: &str) -> bool {
+    if table
+        .defaults
+        .as_ref()
+        .is_some_and(|pairs| !pairs.is_empty())
+    {
+        return false;
+    }
+    table.dimensions.iter().any(|(name, _)| name == dimension)
 }
 
 /// Evaluate a selection object literal under the tri-lane static contract.

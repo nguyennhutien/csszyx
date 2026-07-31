@@ -77,7 +77,7 @@ must be able to lower anything. The build removes that cost automatically
 whenever it can PROVE objects never flow:
 
 - **`@csszyx/runtime/core`** — the concat family (`szr`, `_sz`, `_sz2`, `_sz3`,
-  `__szvPick`), string-first, no compiler (~0.6&nbsp;KB gz). When every `szr(...)`
+  `__szvPick`, `__szvPick1`), string-first, no compiler (~0.6&nbsp;KB gz). When every `szr(...)`
   argument in a file is provably a string or falsy — string/template literals,
   `false`/`null`/`undefined`, `&&`/ternaries whose reachable results are all
   safe — the compiler retargets the import here on its own, splitting a mixed
@@ -97,9 +97,15 @@ factory with a fully literal config compiles per key — a static selection
 becomes the final class string at build time, a dynamic one becomes a
 `__szvPick(table, selection)` lookup (~40× faster per render than the object
 path) — as long as no two co-occurring branches touch the same property, since
-object merge keeps one class where concatenation keeps both. The cross-module
-half runs in production builds only and resolves RELATIVE import specifiers;
-dev keeps the unoptimized behavior so nothing can go stale under HMR.
+object merge keeps one class where concatenation keeps both. A call that
+selects exactly ONE dimension by a literal name, `F({ direction: dir })`,
+narrows further to `__szvPick1(table, "direction", dir)`, which skips both the
+per-render selection object and the walk over every other dimension (measured
+~4× faster again on a five-dimension table). That narrowing needs the table to
+carry no `defaultVariants`, since a default makes the omitted dimensions
+contribute classes too. The cross-module half runs in production builds only
+and resolves RELATIVE import specifiers; dev keeps the unoptimized behavior so
+nothing can go stale under HMR.
 
 All of it is conservative by construction: every uncertain shape keeps the
 current code, so the worst case is byte-for-byte today's output. Mirrors of

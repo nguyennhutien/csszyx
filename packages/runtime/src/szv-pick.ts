@@ -81,6 +81,43 @@ export function __szvPick(table: SzvCompiledTable, selection?: SzvPickSelection)
 }
 
 /**
+ * Select and join the compiled classes for a selection of ONE dimension.
+ *
+ * The single-dimension form of {@link __szvPick}, emitted when the call site
+ * selects exactly one variant with a statically known name — the shape a design
+ * system writes constantly (`F({ direction: dir })`). It is equivalent to
+ * `__szvPick(table, { [dimension]: value })` but skips the per-call selection
+ * object AND the walk over every OTHER dimension of the table, which for a
+ * five-dimension factory is four `hasOwnProperty` probes that can only miss.
+ *
+ * The compiler emits this only for a table with NO `defaultVariants` — a
+ * default makes the dimensions the selection omits contribute classes too, so
+ * skipping them would change the output — and only after checking the
+ * dimension against the table it emits alongside, so `table.d[dimension]` is
+ * always present here.
+ *
+ * @param table - Build-emitted table for one szv factory.
+ * @param dimension - The single variant dimension being selected.
+ * @param value - Runtime value for that dimension.
+ * @returns The joined className string.
+ */
+export function __szvPick1(table: SzvCompiledTable, dimension: string, value: unknown): string {
+    if (process.env.NODE_ENV !== 'production') {
+        warnUnknownPickValue(table, dimension, value);
+    }
+    // null/undefined selects nothing: with no defaults to fall back to, that is
+    // the base alone — exactly what the full picker's `continue` leaves.
+    if (value === null || value === undefined) {
+        return table.base;
+    }
+    const classes = table.d[dimension][value as string];
+    if (!classes) {
+        return table.base;
+    }
+    return table.base ? `${table.base} ${classes}` : classes;
+}
+
+/**
  * Dev-only mirror of `szv()`'s invalid-selection warnings, byte for byte.
  *
  * @param table - Build-emitted table for one szv factory.
@@ -91,20 +128,28 @@ function warnUnknownPickSelection(table: SzvCompiledTable, selection: SzvPickSel
         return;
     }
     for (const key of Object.keys(selection)) {
-        const value = selection[key];
-        if (!(key in table.d)) {
-            devWarn(
-                `szv()(selection): unknown variant "${key}" — not declared in config.variants.`,
-            );
-            continue;
-        }
-        if (value === null || value === undefined) continue;
-        const valueKey = pickSelectionValueKey(value);
-        if (valueKey === null || !(valueKey in table.d[key])) {
-            devWarn(
-                `szv()(selection): "${valueKey ?? describePickValue(value)}" is not a value of variant "${key}" — it has no styles.`,
-            );
-        }
+        warnUnknownPickValue(table, key, selection[key]);
+    }
+}
+
+/**
+ * Dev-only mirror of `szv()`'s warnings for ONE selected dimension.
+ *
+ * @param table - Build-emitted table for one szv factory.
+ * @param key - The selected variant dimension.
+ * @param value - The value selected for it.
+ */
+function warnUnknownPickValue(table: SzvCompiledTable, key: string, value: unknown): void {
+    if (!(key in table.d)) {
+        devWarn(`szv()(selection): unknown variant "${key}" — not declared in config.variants.`);
+        return;
+    }
+    if (value === null || value === undefined) return;
+    const valueKey = pickSelectionValueKey(value);
+    if (valueKey === null || !(valueKey in table.d[key])) {
+        devWarn(
+            `szv()(selection): "${valueKey ?? describePickValue(value)}" is not a value of variant "${key}" — it has no styles.`,
+        );
     }
 }
 

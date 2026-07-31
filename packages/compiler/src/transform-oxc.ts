@@ -142,6 +142,7 @@ export function transformOxc(
             code: source,
             transformed: false,
             usesSzvPick: false,
+            usesSzvPick1: false,
             szPartArgsProvable: true,
             usesRuntime: false,
             usesMerge: false,
@@ -207,6 +208,7 @@ export function transformOxc(
             []
         ).map(comment => ({ start: comment.start, end: comment.end })),
         usedPick: false,
+        usedPick1: false,
     };
     const objectBindings = collectObjectBindings(parsed.program as unknown as OxcNode);
     // szv config resolution follows ONLY `const` bindings (a reassigned `let`
@@ -442,6 +444,7 @@ export function transformOxc(
         code: transformed ? edits.toString() : source,
         transformed,
         usesSzvPick: szvPrecompile.usedPick,
+        usesSzvPick1: szvPrecompile.usedPick1,
         szPartArgsProvable: oxcSzPartArgsProvable,
         usesRuntime,
         usesMerge,
@@ -1946,10 +1949,18 @@ interface OxcSzvPrecompileState {
     commentSpans: CommentSpan[];
     /** Whether any rewrite emitted a `__szvPick` call. */
     usedPick: boolean;
+    /** Whether any rewrite emitted a `__szvPick1` single-dimension call. */
+    usedPick1: boolean;
 }
 
 /** Names that can never be szv factory bindings for the precompile. */
-const OXC_SZV_RESERVED_FACTORY_NAMES = new Set(['szr', 'szv', 'dynamic', '__szvPick']);
+const OXC_SZV_RESERVED_FACTORY_NAMES = new Set([
+    'szr',
+    'szv',
+    'dynamic',
+    '__szvPick',
+    '__szvPick1',
+]);
 
 /** Minimal import-declaration shape the proof reads. */
 interface ImportDeclarationNode {
@@ -2274,14 +2285,22 @@ function applySzvPrecompileOxc(
         );
         if (tableOccurrences !== 0) continue;
 
-        let tableNeeded = false;
+        let pickNeeded = false;
+        let pick1Needed = false;
         for (const call of calls) {
             const shaped = call as unknown as { start: number; end: number };
             const replacement = planSzvCallReplacementOxc(call, table, source);
             if (replacement.kind === 'static') {
                 edits.overwrite(shaped.start, shaped.end, JSON.stringify(replacement.value));
+            } else if (replacement.kind === 'dynamic1') {
+                pick1Needed = true;
+                edits.overwrite(
+                    shaped.start,
+                    shaped.end,
+                    `__szvPick1(${szvTableIdentifier(candidate.name)}, ${JSON.stringify(replacement.dimension)}, ${replacement.valueText})`,
+                );
             } else {
-                tableNeeded = true;
+                pickNeeded = true;
                 edits.overwrite(
                     shaped.start,
                     shaped.end,
@@ -2291,12 +2310,13 @@ function applySzvPrecompileOxc(
             state.replacedCalls.add(call);
             rewrote = true;
         }
-        if (tableNeeded) {
+        if (pickNeeded || pick1Needed) {
             edits.appendRight(
                 candidate.statementEnd,
                 `\nconst ${szvTableIdentifier(candidate.name)} = ${serializeSzvTable(table)};`,
             );
-            state.usedPick = true;
+            if (pickNeeded) state.usedPick = true;
+            if (pick1Needed) state.usedPick1 = true;
         }
     }
     return rewrote;
@@ -2305,6 +2325,7 @@ function applySzvPrecompileOxc(
 /** Planned replacement for one factory call site (oxc lane). */
 type OxcSzvCallReplacement =
     | { kind: 'static'; value: string }
+    | { kind: 'dynamic1'; dimension: string; valueText: string }
     | { kind: 'dynamic'; selectionText: string };
 
 /**
@@ -2329,9 +2350,62 @@ function planSzvCallReplacementOxc(
         if (selection !== null) {
             return { kind: 'static', value: computeStaticSzvPick(table, selection) };
         }
+        const single = planSingleDimensionPickOxc(argument, table, source);
+        if (single !== null) {
+            return single;
+        }
     }
     const shaped = argument as unknown as { start: number; end: number };
     return { kind: 'dynamic', selectionText: source.slice(shaped.start, shaped.end) };
+}
+
+/**
+ * Plan the single-dimension pick for a selection literal naming exactly one
+ * known variant (oxc lane) — mirror of the Babel lane's `planSingleDimensionPick`.
+ *
+ * @param node - The selection object expression.
+ * @param table - The factory's compiled table.
+ * @param source - Original file text, for the value splice.
+ * @returns The planned single-dimension pick, or null when it does not apply.
+ */
+function planSingleDimensionPickOxc(
+    node: OxcNode,
+    table: SzvPrecompiledTable,
+    source: string,
+): { kind: 'dynamic1'; dimension: string; valueText: string } | null {
+    // A default makes the dimensions the selection OMITS contribute classes,
+    // and the single-dimension picker never visits them.
+    if (table.defaults !== undefined && Object.keys(table.defaults).length > 0) {
+        return null;
+    }
+    const properties = (node as unknown as { properties: OxcNode[] }).properties ?? [];
+    if (properties.length !== 1) return null;
+    const property = properties[0];
+    if (property.type !== 'Property') return null;
+    const shaped = property as unknown as {
+        computed?: boolean;
+        key: { type: string; name?: string; value?: unknown };
+        value: OxcNode;
+    };
+    if (shaped.computed) return null;
+    // Identifier and string keys only, matching the Babel lane — a numeric key
+    // bails on both, so the two lanes cannot reach different verdicts.
+    const key =
+        shaped.key.type === 'Identifier'
+            ? (shaped.key.name ?? null)
+            : shaped.key.type === 'Literal' && typeof shaped.key.value === 'string'
+              ? shaped.key.value
+              : null;
+    if (key === null) return null;
+    // `{ __proto__: v }` in a literal sets the PROTOTYPE instead of creating an
+    // own property, so the full picker's own-property probe selects nothing.
+    if (key === '__proto__') return null;
+    // Own dimensions only, so the runtime never indexes an inherited member and
+    // the unknown-variant dev warning keeps running through the full picker.
+    // biome-ignore lint/suspicious/noPrototypeBuiltins: the auto-fix is Object.hasOwn, which is ES2022; this package's lib is ES2021.
+    if (!Object.prototype.hasOwnProperty.call(table.d, key)) return null;
+    const value = shaped.value as unknown as { start: number; end: number };
+    return { kind: 'dynamic1', dimension: key, valueText: source.slice(value.start, value.end) };
 }
 
 /**

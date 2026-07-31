@@ -91,6 +91,8 @@ pub struct TransformMetadata {
     /// Whether the result imports the runtime __szvPick helper (precompiled szv tables).
     #[serde(default)]
     pub uses_szv_pick: bool,
+    /// Whether the result imports the runtime __szvPick1 single-dimension helper.
+    pub uses_szv_pick1: bool,
     /// True when every emitted `_szPart` argument is provably a string or
     /// falsy (vacuously true with none).
     #[serde(default)]

@@ -19,7 +19,7 @@ import { type SzObject, transform } from '@csszyx/compiler/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { szr } from '../src/concatenate.js';
 import { setSzLowering } from '../src/lowering-slot.js';
-import { __szvPick, type SzvCompiledTable } from '../src/szv-pick.js';
+import { __szvPick, __szvPick1, type SzvCompiledTable } from '../src/szv-pick.js';
 import { szv } from '../src/variants.js';
 
 afterEach(() => {
@@ -236,5 +236,81 @@ describe('picker hardening', () => {
         });
         expect(__szvPick(table, { pad: null })).toBe('p-8');
         expect(__szvPick(table, { pad: undefined })).toBe('p-8');
+    });
+});
+
+describe('__szvPick1 equivalence (exhaustive)', () => {
+    /**
+     * The single-dimension picker must be indistinguishable from the full one
+     * called with a one-key selection — that equality is the whole licence for
+     * the compiler to emit it. Enumerated per dimension over every declared
+     * value plus `undefined`, `null` and an unknown value.
+     *
+     * Only defaults-free configs appear here: a `defaultVariants` entry makes
+     * the OMITTED dimensions contribute classes the single-dimension picker
+     * never walks, which is exactly why the compiler refuses those tables.
+     */
+    const CONFIGS: ReadonlyArray<readonly [string, TestConfig]> = [
+        [
+            'base + two dimensions',
+            {
+                base: { rounded: 'lg', shadow: 'md' },
+                variants: {
+                    pad: { sm: { p: 2 }, lg: { p: 8 } },
+                    tone: { red: { bg: 'red-500' }, blue: { bg: 'blue-500', color: 'white' } },
+                },
+            },
+        ],
+        ['no base', { variants: { dir: { row: { flexDir: 'row' }, col: { flexDir: 'col' } } } }],
+        [
+            'five dimensions (the shape the fast path exists for)',
+            {
+                base: { flex: true },
+                variants: {
+                    a: { on: { p: 1 } },
+                    b: { on: { m: 2 } },
+                    c: { on: { gap: 3 } },
+                    d: { on: { w: 4 } },
+                    e: { on: { h: 5 } },
+                },
+            },
+        ],
+    ];
+
+    it.each(CONFIGS)('%s', (_name, config) => {
+        const table = compileTable(config);
+        for (const dimension of Object.keys(config.variants ?? {})) {
+            const values: unknown[] = [
+                ...Object.keys(config.variants?.[dimension] ?? {}),
+                undefined,
+                null,
+                'no-such-value',
+                true,
+                7,
+            ];
+            for (const value of values) {
+                expect(__szvPick1(table, dimension, value), `${dimension}=${String(value)}`).toBe(
+                    __szvPick(table, { [dimension]: value }),
+                );
+            }
+        }
+    });
+
+    it('warns exactly like the full picker for an unknown value', () => {
+        const seen: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+            seen.push(args.map(String).join(' '));
+        });
+        const table = compileTable({ variants: { pad: { sm: { p: 2 } } } });
+
+        __szvPick1(table, 'pad', 'nopeSingle');
+        const fromSingle = seen.splice(0);
+        __szvPick(table, { pad: 'nopeFull' });
+        const fromFull = seen.splice(0);
+
+        expect(fromSingle.join('\n')).toContain('"nopeSingle" is not a value of variant "pad"');
+        const normalize = (messages: string[]): string[] =>
+            messages.map(m => m.replace(/"[^"]*"/g, '"·"'));
+        expect(normalize(fromSingle)).toEqual(normalize(fromFull));
     });
 });

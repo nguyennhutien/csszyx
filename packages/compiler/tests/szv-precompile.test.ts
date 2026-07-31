@@ -368,3 +368,134 @@ describe('shared spec units', () => {
         expect(countWordOccurrences('x', '')).toBe(0);
     });
 });
+
+describe('the single-dimension picker', () => {
+    /**
+     * `F({ dim: value })` — one statically named dimension, dynamic value — is
+     * the shape a design system writes constantly, and the one where the full
+     * picker's walk over every OTHER dimension can only miss. It collapses to
+     * `__szvPick1(TABLE, "dim", value)`, which skips both the selection object
+     * and that walk.
+     *
+     * The rewrite is legal only when omitting the other dimensions cannot
+     * change the output — i.e. the table carries no `defaultVariants` — and
+     * when the named key is a real dimension, so an unknown one keeps flowing
+     * through the full picker that warns about it.
+     */
+    const PLAIN =
+        "const plainSz = szv({ base: { rounded: 'lg' }, variants: { pad: { sm: { p: 2 }, lg: { p: 8 } }, tone: { red: { bg: 'red-500' } } } });\n";
+
+    /**
+     * Which picker a module emitted, plus its normalized argument text.
+     *
+     * @param engine - Engine entry under test.
+     * @param source - Full module source.
+     * @returns The emitted helper, its arguments, and the usage flags.
+     */
+    function pickShape(engine: Engine, source: string) {
+        const result = engine(source, '/p/t.tsx') as {
+            code?: string;
+            usesSzvPick?: boolean;
+            usesSzvPick1?: boolean;
+        };
+        const code = result.code ?? source;
+        const single = /__szvPick1\(([^)]*)\)/.exec(code);
+        const full = /__szvPick\(([^)]*)\)/.exec(code);
+        return {
+            helper: single ? 'pick1' : full ? 'pick' : 'none',
+            args: ((single ?? full)?.[1] ?? '').replace(/\s+/g, ''),
+            usesSzvPick: result.usesSzvPick === true,
+            usesSzvPick1: result.usesSzvPick1 === true,
+        };
+    }
+
+    const CASES: ReadonlyArray<readonly [string, string, 'pick1' | 'pick']> = [
+        [
+            'one dynamic value under a known dimension',
+            `${PLAIN}export const C = ({ p }) => szr(plainSz({ pad: p }));`,
+            'pick1',
+        ],
+        [
+            'shorthand property',
+            `${PLAIN}export const C = ({ pad }) => szr(plainSz({ pad }));`,
+            'pick1',
+        ],
+        [
+            'string-literal key',
+            `${PLAIN}export const C = ({ p }) => szr(plainSz({ 'pad': p }));`,
+            'pick1',
+        ],
+        [
+            'member-expression value',
+            `${PLAIN}export const C = props => szr(plainSz({ tone: props.tone }));`,
+            'pick1',
+        ],
+        [
+            'under a guard, like the layered-component shape',
+            `${PLAIN}export const C = ({ on, p }) => szr(on && plainSz({ pad: p }));`,
+            'pick1',
+        ],
+        // Everything below must keep the FULL picker.
+        [
+            'two dimensions selected at once',
+            `${PLAIN}export const C = ({ p, t }) => szr(plainSz({ pad: p, tone: t }));`,
+            'pick',
+        ],
+        [
+            'a selection that is not an object literal',
+            `${PLAIN}export const C = ({ sel }) => szr(plainSz(sel));`,
+            'pick',
+        ],
+        [
+            'a computed key',
+            `${PLAIN}export const C = ({ k, v }) => szr(plainSz({ [k]: v }));`,
+            'pick',
+        ],
+        [
+            'a spread selection',
+            `${PLAIN}export const C = ({ rest }) => szr(plainSz({ ...rest }));`,
+            'pick',
+        ],
+        [
+            'a key that is not a declared dimension',
+            `${PLAIN}export const C = ({ v }) => szr(plainSz({ nope: v }));`,
+            'pick',
+        ],
+        [
+            // `{ __proto__: v }` sets the PROTOTYPE, so the full picker's
+            // own-property probe selects nothing; indexing the table by it
+            // would not.
+            'a __proto__ key',
+            `${PLAIN}export const C = ({ v }) => szr(plainSz({ __proto__: v }));`,
+            'pick',
+        ],
+        [
+            // A default makes the OMITTED dimensions contribute classes.
+            'a table carrying defaultVariants',
+            `${FACTORY}export const C = ({ p }) => szr(cardSz({ pad: p }));`,
+            'pick',
+        ],
+    ];
+
+    describe.each(LANES)('%s lane', (_lane, engine) => {
+        it.each(CASES)('%s', (_name, body, expected) => {
+            const shape = pickShape(engine, IMPORTS + body);
+            expect(shape.helper).toBe(expected);
+            expect(shape.usesSzvPick1).toBe(expected === 'pick1');
+            expect(shape.usesSzvPick).toBe(expected === 'pick');
+        });
+    });
+
+    it.each(CASES)('three engines agree on: %s', (_name, body) => {
+        const shapes = LANES.map(([, engine]) => JSON.stringify(pickShape(engine, IMPORTS + body)));
+        expect(new Set(shapes).size).toBe(1);
+    });
+
+    it('emits the dimension as a literal and the value verbatim', () => {
+        const source = `${IMPORTS}${PLAIN}export const C = ({ p }) => szr(plainSz({ pad: p }));`;
+        for (const [lane, engine] of LANES) {
+            const shape = pickShape(engine, source);
+            expect(shape.args, lane).toBe('__szvT_plainSz,"pad",p');
+        }
+    });
+});

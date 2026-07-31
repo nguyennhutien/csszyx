@@ -812,10 +812,12 @@ interface SzvPrecompileState {
     identifierCalls: Map<string, t.CallExpression[]>;
     /** Whether any rewrite emitted a `__szvPick` call. */
     usedPick: boolean;
+    /** Whether any rewrite emitted a `__szvPick1` single-dimension call. */
+    usedPick1: boolean;
 }
 
 /** Names that can never be szv factory bindings for the precompile. */
-const SZV_RESERVED_FACTORY_NAMES = new Set(['szr', 'szv', 'dynamic', '__szvPick']);
+const SZV_RESERVED_FACTORY_NAMES = new Set(['szr', 'szv', 'dynamic', '__szvPick', '__szvPick1']);
 
 /**
  * Record an import declaration when it carries the rewritable szr specifier.
@@ -1224,14 +1226,25 @@ function applySzvPrecompile(
         const calls = state.identifierCalls.get(candidate.name) ?? [];
         if (!szvFactoryAccountingHolds(candidate, calls, szrArgumentNodes, source, state)) continue;
 
-        let tableNeeded = false;
+        let pickNeeded = false;
+        let pick1Needed = false;
         const replacements = new Map<t.Node, t.Expression>();
         for (const call of calls) {
             const replacement = planSzvCallReplacement(call, candidate.name, table);
             if (replacement.kind === 'static') {
                 replacements.set(call, t.stringLiteral(replacement.value));
+            } else if (replacement.kind === 'dynamic1') {
+                pick1Needed = true;
+                replacements.set(
+                    call,
+                    t.callExpression(t.identifier('__szvPick1'), [
+                        t.identifier(szvTableIdentifier(candidate.name)),
+                        t.stringLiteral(replacement.dimension),
+                        replacement.value,
+                    ]),
+                );
             } else {
-                tableNeeded = true;
+                pickNeeded = true;
                 replacements.set(
                     call,
                     t.callExpression(t.identifier('__szvPick'), [
@@ -1254,9 +1267,10 @@ function applySzvPrecompile(
         for (const replaced of replacements.keys()) {
             state.replacedCalls.add(replaced);
         }
-        if (tableNeeded) {
+        if (pickNeeded || pick1Needed) {
             insertSzvTableDeclaration(candidate, table);
-            state.usedPick = true;
+            if (pickNeeded) state.usedPick = true;
+            if (pick1Needed) state.usedPick1 = true;
         }
         if (replacements.size > 0) {
             rewrote = true;
@@ -1357,6 +1371,7 @@ function szvFactoryAccountingHolds(
 /** Planned replacement for one factory call site. */
 type SzvCallReplacement =
     | { kind: 'static'; value: string }
+    | { kind: 'dynamic1'; dimension: string; value: t.Expression }
     | { kind: 'dynamic'; selection: t.Expression };
 
 /**
@@ -1381,8 +1396,54 @@ function planSzvCallReplacement(
         if (selection !== null) {
             return { kind: 'static', value: computeStaticSzvPick(table, selection) };
         }
+        const single = planSingleDimensionPick(argument, table);
+        if (single !== null) {
+            return single;
+        }
     }
     return { kind: 'dynamic', selection: argument as t.Expression };
+}
+
+/**
+ * Plan the single-dimension pick for a selection literal that names exactly one
+ * known variant, e.g. `F({ direction: dir })` — the shape a design system
+ * writes constantly, and the one where the full picker's walk over every OTHER
+ * dimension can only miss.
+ *
+ * @param expression - The selection object expression.
+ * @param table - The factory's compiled table.
+ * @returns The planned single-dimension pick, or null when it does not apply.
+ */
+function planSingleDimensionPick(
+    expression: t.ObjectExpression,
+    table: SzvPrecompiledTable,
+): { kind: 'dynamic1'; dimension: string; value: t.Expression } | null {
+    // A default makes the dimensions the selection OMITS contribute classes,
+    // and the single-dimension picker never visits them.
+    if (table.defaults !== undefined && Object.keys(table.defaults).length > 0) {
+        return null;
+    }
+    if (expression.properties.length !== 1) return null;
+    const property = expression.properties[0];
+    if (!t.isObjectProperty(property) || property.computed) return null;
+    const key = t.isIdentifier(property.key)
+        ? property.key.name
+        : t.isStringLiteral(property.key)
+          ? property.key.value
+          : null;
+    if (key === null) return null;
+    // `{ __proto__: v }` in a literal sets the PROTOTYPE instead of creating an
+    // own property, so the full picker's own-property probe reads undefined and
+    // selects nothing. Indexing the table by it would not — leave it alone.
+    if (key === '__proto__') return null;
+    // Own dimensions only, so the runtime never indexes an inherited member
+    // (`constructor`, `toString`) and the unknown-variant dev warning keeps
+    // running through the full picker.
+    // biome-ignore lint/suspicious/noPrototypeBuiltins: the auto-fix is Object.hasOwn, which is ES2022; this package's lib is ES2021.
+    if (!Object.prototype.hasOwnProperty.call(table.d, key)) return null;
+    const value = unwrapTsExpression(property.value);
+    if (!t.isExpression(value)) return null;
+    return { kind: 'dynamic1', dimension: key, value };
 }
 
 /**
@@ -2055,6 +2116,8 @@ export interface SourceTransformResult {
     usesSzPart: boolean;
     /** Whether the source needs the __szvPick runtime helper (precompiled szv tables). */
     usesSzvPick: boolean;
+    /** Whether the source needs the __szvPick1 single-dimension runtime helper. */
+    usesSzvPick1: boolean;
     /**
      * True when every emitted `_szPart` argument is provably a string or
      * falsy (vacuously true with none). Lets the bundler import the merge
@@ -2125,6 +2188,7 @@ export function transformSourceCode(
         candidates: new Map(),
         identifierCalls: new Map(),
         usedPick: false,
+        usedPick1: false,
     };
     const collectedClasses = new Set<string>();
     // Classes discovered from `szs` slot values. Kept OUT of collectedClasses
@@ -2151,6 +2215,7 @@ export function transformSourceCode(
             usesRuntime: false,
             usesMerge: false,
             usesSzvPick: false,
+            usesSzvPick1: false,
             szPartArgsProvable: true,
             usesSzcn: false,
             usesSzPart: false,
@@ -2387,6 +2452,7 @@ export function transformSourceCode(
             usesSzcn: usesSzcn,
             usesSzPart: usesSzPart,
             usesSzvPick: szvPrecompile.usedPick,
+            usesSzvPick1: szvPrecompile.usedPick1,
             szPartArgsProvable,
             usesColorVar: usesColorVar,
             usesSpacingVar: usesSpacingVar,
@@ -2413,6 +2479,7 @@ export function transformSourceCode(
             usesSzcn: false,
             usesSzPart: false,
             usesSzvPick: false,
+            usesSzvPick1: false,
             szPartArgsProvable: true,
             usesColorVar: false,
             usesSpacingVar: false,
