@@ -430,6 +430,16 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
                     continue;
                 }
 
+                if matches!(
+                    property.key.as_str(),
+                    "maskLinear" | "maskRadial" | "maskConic"
+                ) {
+                    for utility in build_mask_slot_classes(&property.key, nested) {
+                        classes.push(format!("{prefix}{utility}"));
+                    }
+                    continue;
+                }
+
                 // Color-with-opacity object — { bg: { color: 'blue-500', op: 20 } }
                 // → bg-blue-500/20. Distinguished from variant nesting by a
                 // `color` member on a key that maps to a color utility, matching
@@ -902,21 +912,44 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             if key == "alignContent" {
                 return Some(format!("{prefix}content-{value}"));
             }
-            // mask-* sub-properties collapse the sub-axis: maskPos: 'center' is
-            // mask-center, not mask-position-center.
-            if matches!(
-                key,
-                "maskPos" | "maskSize" | "maskShape" | "maskComposite" | "maskMode"
-            ) {
+            // Only these two mask keys take the value as the suffix verbatim.
+            // The rest need a formatter: Tailwind renames some keywords and
+            // moves arbitrary values under a longer prefix, so a blanket
+            // `mask-{value}` emitted names it does not serve.
+            if matches!(key, "maskShape" | "maskComposite") {
                 return Some(format!("{prefix}mask-{value}"));
             }
             if key == "maskType" {
                 return Some(format!("{prefix}mask-type-{value}"));
             }
+            if key == "maskSize" {
+                return Some(format!("{prefix}{}", format_mask_size(value)));
+            }
+            if key == "maskPos" {
+                return Some(format!("{prefix}{}", format_mask_position(value)));
+            }
+            if key == "maskMode" {
+                // Tailwind shortens `match-source` to `mask-match`.
+                return Some(if value == "match-source" {
+                    format!("{prefix}mask-match")
+                } else {
+                    format!("{prefix}mask-{value}")
+                });
+            }
+            if key == "maskClip" {
+                // Every box keyword takes `mask-clip-` EXCEPT `no-clip`.
+                return Some(if value == "no-clip" {
+                    format!("{prefix}mask-no-clip")
+                } else {
+                    format!("{prefix}mask-clip-{value}")
+                });
+            }
             if key == "maskRepeat" {
                 return Some(match value.as_str() {
                     "repeat" => format!("{prefix}mask-repeat"),
                     "no-repeat" => format!("{prefix}mask-no-repeat"),
+                    // space/round keep the `mask-repeat-` prefix.
+                    "space" | "round" => format!("{prefix}mask-repeat-{value}"),
                     _ => format!("{prefix}mask-{value}"),
                 });
             }
@@ -1200,6 +1233,188 @@ fn css_var_type_hint(key: &str) -> Option<&'static str> {
         "shadowColor" | "insetShadowColor" | "textShadowColor" | "dropShadowColor" => Some("color"),
         _ => None,
     }
+}
+
+/// Sides of the linear mask slot; each writes its own `--tw-mask-<side>`.
+const MASK_SIDES: [&str; 6] = ["t", "r", "b", "l", "x", "y"];
+
+/// Render one gradient stop. Position and colour live in DIFFERENT custom
+/// properties, so a stop carrying both emits two utilities. A bare CSS variable
+/// reads as a POSITION; a variable meant as a colour needs the `(color:--x)`
+/// hint. Mirrors the TypeScript `buildMaskStopClasses`.
+fn build_mask_stop_classes(base: &str, value: Option<&StaticSzValue>) -> Vec<String> {
+    let Some(value) = value else {
+        return Vec::new();
+    };
+    match value {
+        StaticSzValue::Number(number) => vec![format!("{base}-{}", format_abs_number(*number))],
+        StaticSzValue::String(text) if text.starts_with("--") => vec![format!("{base}-({text})")],
+        StaticSzValue::String(text) => vec![format!("{base}-{text}")],
+        StaticSzValue::Object(object) => {
+            let mut out = Vec::new();
+            if let Some(at) = object.properties.iter().find(|prop| prop.key == "at") {
+                let rendered = match &at.value {
+                    StaticSzValue::Number(number) => {
+                        format!("{base}-{}", format_abs_number(*number))
+                    }
+                    StaticSzValue::String(text) if text.starts_with("--") => {
+                        format!("{base}-({text})")
+                    }
+                    StaticSzValue::String(text) => format!("{base}-{text}"),
+                    StaticSzValue::Boolean(_) | StaticSzValue::Object(_) => String::new(),
+                };
+                if !rendered.is_empty() {
+                    out.push(rendered);
+                }
+            }
+            if let Some(colour) = object_string_property(object, "color") {
+                let rendered = if colour.starts_with("--") {
+                    format!("(color:{colour})")
+                } else {
+                    colour.to_string()
+                };
+                let opacity = object
+                    .properties
+                    .iter()
+                    .find(|prop| prop.key == "op")
+                    .map_or_else(String::new, |prop| match &prop.value {
+                        StaticSzValue::Number(number) => format!("/{}", format_abs_number(*number)),
+                        StaticSzValue::String(text) => format!("/{text}"),
+                        StaticSzValue::Boolean(_) | StaticSzValue::Object(_) => String::new(),
+                    });
+                out.push(format!("{base}-{rendered}{opacity}"));
+            }
+            out
+        }
+        StaticSzValue::Boolean(_) => Vec::new(),
+    }
+}
+
+/// Build the radial slot. `at`, `size` and `shape` each write their own
+/// `--tw-mask-radial-*` variable, so they compose with the stops.
+fn build_mask_radial_classes(object: &StaticSzObject) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(at) = object_string_property(object, "at") {
+        out.push(format!("mask-radial-at-{at}"));
+    }
+    if let Some(size) = object_string_property(object, "size") {
+        out.push(format!("mask-radial-{size}"));
+    }
+    if let Some(shape) = object_string_property(object, "shape") {
+        if matches!(shape, "circle" | "ellipse") {
+            out.push(format!("mask-{shape}"));
+        }
+    }
+    let find = |name: &str| {
+        object
+            .properties
+            .iter()
+            .find(|p| p.key == name)
+            .map(|p| &p.value)
+    };
+    out.extend(build_mask_stop_classes("mask-radial-from", find("from")));
+    out.extend(build_mask_stop_classes("mask-radial-to", find("to")));
+    out
+}
+
+/// Build every utility for one mask slot. Mirrors `buildMaskSlotClasses`.
+fn build_mask_slot_classes(slot_key: &str, object: &StaticSzObject) -> Vec<String> {
+    if slot_key == "maskRadial" {
+        return build_mask_radial_classes(object);
+    }
+    let family = if slot_key == "maskConic" {
+        "conic"
+    } else {
+        "linear"
+    };
+    let mut out = Vec::new();
+    if let Some(angle) = object.properties.iter().find(|prop| prop.key == "angle") {
+        match &angle.value {
+            StaticSzValue::Number(number) if *number < 0.0 => {
+                out.push(format!("-mask-{family}-{}", format_abs_number(*number)));
+            }
+            StaticSzValue::Number(number) => {
+                out.push(format!("mask-{family}-{}", format_abs_number(*number)));
+            }
+            StaticSzValue::String(text) if text.starts_with("--") => {
+                out.push(format!("mask-{family}-({text})"));
+            }
+            StaticSzValue::String(text) => out.push(format!("mask-{family}-{text}")),
+            _ => {}
+        }
+    }
+    let find = |name: &str| {
+        object
+            .properties
+            .iter()
+            .find(|p| p.key == name)
+            .map(|p| &p.value)
+    };
+    out.extend(build_mask_stop_classes(
+        &format!("mask-{family}-from"),
+        find("from"),
+    ));
+    out.extend(build_mask_stop_classes(
+        &format!("mask-{family}-to"),
+        find("to"),
+    ));
+    if family == "linear" {
+        for side in MASK_SIDES {
+            let Some(StaticSzValue::Object(edge)) = find(side) else {
+                continue;
+            };
+            let edge_find = |name: &str| {
+                edge.properties
+                    .iter()
+                    .find(|p| p.key == name)
+                    .map(|p| &p.value)
+            };
+            out.extend(build_mask_stop_classes(
+                &format!("mask-{side}-from"),
+                edge_find("from"),
+            ));
+            out.extend(build_mask_stop_classes(
+                &format!("mask-{side}-to"),
+                edge_find("to"),
+            ));
+        }
+    }
+    out
+}
+
+/// Bare `mask-<keyword>` positions; anything else is an arbitrary position.
+const MASK_POSITION_KEYWORDS: [&str; 9] = [
+    "center",
+    "top",
+    "bottom",
+    "left",
+    "right",
+    "top-left",
+    "top-right",
+    "bottom-left",
+    "bottom-right",
+];
+
+/// Formats a mask-size value, mirroring the TypeScript `formatMaskSize`.
+fn format_mask_size(value: &str) -> String {
+    if matches!(value, "auto" | "cover" | "contain") {
+        return format!("mask-{value}");
+    }
+    if value.starts_with("--") {
+        return format!("mask-size-({value})");
+    }
+    format!("mask-size-[{}]", normalize_arbitrary_value(value))
+}
+
+/// Formats a mask-position value, mirroring `formatMaskPosition`.
+fn format_mask_position(value: &str) -> String {
+    if MASK_POSITION_KEYWORDS.contains(&value) {
+        return format!("mask-{value}");
+    }
+    if value.starts_with("--") {
+        return format!("mask-position-({value})");
+    }
+    format!("mask-position-[{}]", normalize_arbitrary_value(value))
 }
 
 fn format_bg_img_object(object: &StaticSzObject, prefix: &str) -> Option<String> {
