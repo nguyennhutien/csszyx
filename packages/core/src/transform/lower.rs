@@ -183,7 +183,10 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
 fn is_special_cased_property(key: &str) -> bool {
     matches!(
         key,
-        "alignContent"
+        "maskLinear"
+            | "maskRadial"
+            | "maskConic"
+            | "alignContent"
             | "backgroundRepeat"
             | "listStyle"
             | "maskComposite"
@@ -916,11 +919,17 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             // The rest need a formatter: Tailwind renames some keywords and
             // moves arbitrary values under a longer prefix, so a blanket
             // `mask-{value}` emitted names it does not serve.
-            if matches!(key, "maskShape" | "maskComposite") {
+            if key == "maskComposite" {
                 return Some(format!("{prefix}mask-{value}"));
             }
             if key == "maskType" {
                 return Some(format!("{prefix}mask-type-{value}"));
+            }
+            // The gradient LAYERS moved to maskLinear/maskRadial/maskConic, which
+            // own the `--tw-mask-<layer>` variables. `mask` now carries only a
+            // direct mask-image, so a layer value emits nothing here.
+            if key == "mask" && is_mask_layer_value(value) {
+                return None;
             }
             if key == "maskSize" {
                 return Some(format!("{prefix}{}", format_mask_size(value)));
@@ -1380,6 +1389,18 @@ fn build_mask_slot_classes(slot_key: &str, object: &StaticSzObject) -> Vec<Strin
         }
     }
     out
+}
+
+/// Whether a `mask` value names a gradient LAYER rather than an image. Mirrors
+/// the TypeScript `isMaskLayerValue`.
+fn is_mask_layer_value(value: &str) -> bool {
+    let bare = value.strip_prefix('-').unwrap_or(value);
+    for family in ["linear", "radial", "conic"] {
+        if bare == family || bare.starts_with(&format!("{family}-")) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Bare `mask-<keyword>` positions; anything else is an arbitrary position.

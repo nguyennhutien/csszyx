@@ -253,7 +253,6 @@ export const PROPERTY_MAP = {
     "maskSize": "mask-size",
     "maskPos": "mask-position",
     "maskRepeat": "mask-repeat",
-    "maskShape": "mask",
     "maskClip": "mask-clip",
     "maskOrigin": "mask-origin",
     "cursor": "cursor",
@@ -309,10 +308,7 @@ export const PROPERTY_MAP = {
     "scrollbarTrack": "scrollbar-track",
     "scrollbarGutter": "scrollbar-gutter",
     "zoom": "zoom",
-    "tabSize": "tab",
-    "maskFrom": "mask-from",
-    "maskVia": "mask-via",
-    "maskTo": "mask-to"
+    "tabSize": "tab"
 } as const;
 export const BOOLEAN_SHORTHANDS = [
     "backdropBlur",
@@ -457,6 +453,10 @@ export const KNOWN_VARIANTS = [
     "xl"
 ] as const;
 export const SUGGESTION_MAP = {
+    "maskFrom": "maskLinear / maskRadial / maskConic with { from }",
+    "maskTo": "maskLinear / maskRadial / maskConic with { to }",
+    "maskVia": "maskLinear / maskRadial / maskConic { from, to } — Tailwind has no via stop for masks",
+    "maskShape": "maskRadial with { shape }",
     "backgroundColor": "bg",
     "backgroundImage": "bgImg",
     "backgroundSize": "bgSize",
@@ -577,7 +577,6 @@ export const NEGATIVE_VALUE_KEYS = [
     "left",
     "m",
     "mask",
-    "maskShape",
     "mb",
     "mbe",
     "mbs",

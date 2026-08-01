@@ -393,7 +393,7 @@ describe('string property handler chain', () => {
     it('mask family passthrough and border-*Color longhands', () => {
         expect(cls({ maskPos: 'center' })).toBe('mask-center');
         expect(cls({ maskSize: 'cover' })).toBe('mask-cover');
-        expect(cls({ maskShape: 'circle' })).toBe('mask-circle');
+        expect(cls({ maskRadial: { shape: 'circle' } })).toBe('mask-circle');
         expect(cls({ maskComposite: 'add' })).toBe('mask-add');
         expect(cls({ borderXColor: 'red-500' })).toBe('border-x-red-500');
         expect(cls({ borderYColor: 'blue-500' })).toBe('border-y-blue-500');

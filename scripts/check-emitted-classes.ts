@@ -100,30 +100,6 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
             reason: "{ fontFeatures: 'normal' } — Tailwind has no font-features-* utility",
         },
     ],
-    ...(['b', 'bl', 'br', 'l', 'r', 't', 'tl', 'tr'].map(
-        d =>
-            [
-                `mask-linear-to-${d}`,
-                {
-                    kind: 'known-dead',
-                    reason: `{ mask: 'linear-to-${d}' } — Tailwind's linear mask takes an ANGLE, e.g. mask-linear-45`,
-                },
-            ] as const,
-    ) as ReadonlyArray<readonly [string, Baseline]>),
-    [
-        'mask-radial',
-        {
-            kind: 'known-dead',
-            reason: "{ mask: 'radial' } — Tailwind needs a position or stop, e.g. mask-radial-at-top",
-        },
-    ],
-    [
-        'mask-from-(--c)',
-        {
-            kind: 'known-dead',
-            reason: '{ maskFrom } — Tailwind mask stops are side-scoped, e.g. mask-b-from-20%',
-        },
-    ],
 
     // ── known-dead: unknown sz key that still emits ─────────────────────────
     ...(['break-word', 'pointer-none'].map(

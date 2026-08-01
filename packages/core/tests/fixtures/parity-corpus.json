@@ -16575,25 +16575,6 @@
     "oxc": "m-px"
   },
   {
-    "sz": "{\"mask\":\"-linear-45\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "mask",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "-linear-45"
-          }
-        }
-      ]
-    },
-    "oxc": "-mask-linear-45"
-  },
-  {
     "sz": "{\"mask\":\"--my-mask\"}",
     "ir": {
       "properties": [
@@ -16613,196 +16594,6 @@
     "oxc": "mask-(--my-mask)"
   },
   {
-    "sz": "{\"mask\":\"conic-90\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "mask",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "conic-90"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-conic-90"
-  },
-  {
-    "sz": "{\"mask\":\"linear-45\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "mask",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "linear-45"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-linear-45"
-  },
-  {
-    "sz": "{\"mask\":\"linear-to-b\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "mask",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "linear-to-b"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-linear-to-b"
-  },
-  {
-    "sz": "{\"mask\":\"linear-to-bl\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "mask",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "linear-to-bl"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-linear-to-bl"
-  },
-  {
-    "sz": "{\"mask\":\"linear-to-br\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "mask",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "linear-to-br"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-linear-to-br"
-  },
-  {
-    "sz": "{\"mask\":\"linear-to-l\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "mask",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "linear-to-l"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-linear-to-l"
-  },
-  {
-    "sz": "{\"mask\":\"linear-to-r\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "mask",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "linear-to-r"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-linear-to-r"
-  },
-  {
-    "sz": "{\"mask\":\"linear-to-t\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "mask",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "linear-to-t"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-linear-to-t"
-  },
-  {
-    "sz": "{\"mask\":\"linear-to-tl\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "mask",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "linear-to-tl"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-linear-to-tl"
-  },
-  {
-    "sz": "{\"mask\":\"linear-to-tr\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "mask",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "linear-to-tr"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-linear-to-tr"
-  },
-  {
     "sz": "{\"mask\":\"none\"}",
     "ir": {
       "properties": [
@@ -16820,25 +16611,6 @@
       ]
     },
     "oxc": "mask-none"
-  },
-  {
-    "sz": "{\"mask\":\"radial\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "mask",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "radial"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-radial"
   },
   {
     "sz": "{\"maskClip\":\"border\"}",
@@ -16955,6 +16727,25 @@
     "oxc": "mask-clip-view"
   },
   {
+    "sz": "{\"maskClip\":\"no-clip\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskClip",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "no-clip"
+          }
+        }
+      ]
+    },
+    "oxc": "mask-no-clip"
+  },
+  {
     "sz": "{\"maskComposite\":\"add\"}",
     "ir": {
       "properties": [
@@ -17031,23 +16822,136 @@
     "oxc": "mask-subtract"
   },
   {
-    "sz": "{\"maskFrom\":\"--c\"}",
+    "sz": "{\"maskConic\":{\"angle\":90}}",
     "ir": {
       "properties": [
         {
-          "key": "maskFrom",
+          "key": "maskConic",
           "span": {
             "start": 0,
             "end": 0
           },
           "value": {
-            "kind": "string",
-            "value": "--c"
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "angle",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 90
+                  }
+                }
+              ]
+            }
           }
         }
       ]
     },
-    "oxc": "mask-from-(--c)"
+    "oxc": "mask-conic-90"
+  },
+  {
+    "sz": "{\"maskLinear\":{\"angle\":-45}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskLinear",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "angle",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": -45
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "-mask-linear-45"
+  },
+  {
+    "sz": "{\"maskLinear\":{\"angle\":45}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskLinear",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "angle",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 45
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "mask-linear-45"
+  },
+  {
+    "sz": "{\"maskLinear\":{\"from\":\"20%\"}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskLinear",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "from",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "20%"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "mask-linear-from-20%"
   },
   {
     "sz": "{\"maskMode\":\"alpha\"}",
@@ -17086,6 +16990,25 @@
       ]
     },
     "oxc": "mask-luminance"
+  },
+  {
+    "sz": "{\"maskMode\":\"match-source\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskMode",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "match-source"
+          }
+        }
+      ]
+    },
+    "oxc": "mask-match"
   },
   {
     "sz": "{\"maskOrigin\":\"border\"}",
@@ -17297,6 +17220,25 @@
     "oxc": "mask-left"
   },
   {
+    "sz": "{\"maskPos\":\"center_top_1rem\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskPos",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "center_top_1rem"
+          }
+        }
+      ]
+    },
+    "oxc": "mask-position-[center_top_1rem]"
+  },
+  {
     "sz": "{\"maskPos\":\"right\"}",
     "ir": {
       "properties": [
@@ -17373,6 +17315,105 @@
     "oxc": "mask-top-right"
   },
   {
+    "sz": "{\"maskRadial\":{\"shape\":\"circle\"}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskRadial",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "shape",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "circle"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "mask-circle"
+  },
+  {
+    "sz": "{\"maskRadial\":{\"shape\":\"ellipse\"}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskRadial",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "shape",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "ellipse"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "mask-ellipse"
+  },
+  {
+    "sz": "{\"maskRadial\":{\"at\":\"center\"}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskRadial",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "at",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "center"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "mask-radial-at-center"
+  },
+  {
     "sz": "{\"maskRepeat\":\"no-repeat\"}",
     "ir": {
       "properties": [
@@ -17411,6 +17452,44 @@
     "oxc": "mask-repeat"
   },
   {
+    "sz": "{\"maskRepeat\":\"round\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskRepeat",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "round"
+          }
+        }
+      ]
+    },
+    "oxc": "mask-repeat-round"
+  },
+  {
+    "sz": "{\"maskRepeat\":\"space\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskRepeat",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "space"
+          }
+        }
+      ]
+    },
+    "oxc": "mask-repeat-space"
+  },
+  {
     "sz": "{\"maskRepeat\":\"repeat-x\"}",
     "ir": {
       "properties": [
@@ -17447,44 +17526,6 @@
       ]
     },
     "oxc": "mask-repeat-y"
-  },
-  {
-    "sz": "{\"maskShape\":\"circle\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "maskShape",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "circle"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-circle"
-  },
-  {
-    "sz": "{\"maskShape\":\"ellipse\"}",
-    "ir": {
-      "properties": [
-        {
-          "key": "maskShape",
-          "span": {
-            "start": 0,
-            "end": 0
-          },
-          "value": {
-            "kind": "string",
-            "value": "ellipse"
-          }
-        }
-      ]
-    },
-    "oxc": "mask-ellipse"
   },
   {
     "sz": "{\"maskSize\":\"auto\"}",
@@ -17542,6 +17583,44 @@
       ]
     },
     "oxc": "mask-cover"
+  },
+  {
+    "sz": "{\"maskSize\":\"--s\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskSize",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "--s"
+          }
+        }
+      ]
+    },
+    "oxc": "mask-size-(--s)"
+  },
+  {
+    "sz": "{\"maskSize\":\"50%\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "maskSize",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "50%"
+          }
+        }
+      ]
+    },
+    "oxc": "mask-size-[50%]"
   },
   {
     "sz": "{\"maskType\":\"alpha\"}",

@@ -47,15 +47,68 @@ export function deepMergeSzObjects(target: SzObject, source: SzObject): SzObject
     const result: SzObject = { ...target };
     for (const [key, value] of Object.entries(source)) {
         const existing = result[key];
-        result[key] =
+        const merged =
             existing !== null &&
             typeof existing === 'object' &&
             value !== null &&
             typeof value === 'object'
                 ? deepMergeSzObjects(existing, value)
                 : value;
+        result[key] = dropDisplacedSubKeys(key, merged, value);
     }
     return result;
+}
+
+/**
+ * Sub-keys of one property that write the SAME CSS custom property, so only one
+ * group can be live at a time. Deep merge alone would keep both groups, which
+ * the cascade then resolves silently by stylesheet order rather than by the
+ * author's later declaration.
+ *
+ * `maskLinear` is the case: the angle utilities and the per-side utilities both
+ * write `--tw-mask-linear`, with different values.
+ */
+const EXCLUSIVE_SUB_KEY_GROUPS: Readonly<Record<string, readonly (readonly string[])[]>> = {
+    maskLinear: [
+        ['angle', 'from', 'to'],
+        ['t', 'r', 'b', 'l', 'x', 'y'],
+    ],
+};
+
+/**
+ * Drop the sub-keys the incoming object displaced. When two groups compete for
+ * one CSS property, the group the LATER object declares wins outright and the
+ * other is cleared, so "last write wins" holds for the property rather than for
+ * each field independently.
+ *
+ * @param key - The property key being merged.
+ * @param merged - The deep-merged value.
+ * @param incoming - The later object's value for this key.
+ * @returns The merged value with displaced groups removed.
+ */
+function dropDisplacedSubKeys(key: string, merged: SzValue, incoming: SzValue): SzValue {
+    const groups = EXCLUSIVE_SUB_KEY_GROUPS[key];
+    if (
+        groups === undefined ||
+        merged === null ||
+        typeof merged !== 'object' ||
+        Array.isArray(merged) ||
+        incoming === null ||
+        typeof incoming !== 'object' ||
+        Array.isArray(incoming)
+    ) {
+        return merged;
+    }
+    const claimed = groups.find(group => group.some(field => field in incoming));
+    if (claimed === undefined) {
+        return merged;
+    }
+    const kept: SzObject = { ...(merged as SzObject) };
+    for (const group of groups) {
+        if (group === claimed) continue;
+        for (const field of group) delete kept[field];
+    }
+    return kept;
 }
 
 /**
@@ -374,7 +427,6 @@ export const PROPERTY_MAP: Record<string, string> = {
     maskSize: 'mask-size',
     maskPos: 'mask-position',
     maskRepeat: 'mask-repeat',
-    maskShape: 'mask',
     maskClip: 'mask-clip',
     maskOrigin: 'mask-origin',
 
@@ -445,11 +497,6 @@ export const PROPERTY_MAP: Record<string, string> = {
 
     // Tab Size (v4.3)
     tabSize: 'tab',
-
-    // Mask gradient color stops (v4.1)
-    maskFrom: 'mask-from',
-    maskVia: 'mask-via',
-    maskTo: 'mask-to',
 };
 
 // ============================================================================
@@ -467,6 +514,13 @@ const CSS_VAR_TYPE_HINTS: Record<string, string> = {
 // This is exported for the MCP server so AI can guide users accurately.
 // ============================================================================
 export const SUGGESTION_MAP: Record<string, string> = {
+    // Mask gradient stops moved onto the layer that owns them: Tailwind has no
+    // bare `mask-from-*`, only `mask-<layer>-from-*` and `mask-<side>-from-*`.
+    maskFrom: 'maskLinear / maskRadial / maskConic with { from }',
+    maskTo: 'maskLinear / maskRadial / maskConic with { to }',
+    maskVia:
+        'maskLinear / maskRadial / maskConic { from, to } — Tailwind has no via stop for masks',
+    maskShape: 'maskRadial with { shape }',
     // Background
     backgroundColor: 'bg',
     backgroundImage: 'bgImg',
@@ -817,7 +871,10 @@ const ARIA_STATES = new Set([
 // ============================================================================
 // Object-valued keys lowered by dedicated branches rather than PROPERTY_MAP.
 // This table also feeds native known-key generation so diagnostics cannot drift.
-const KNOWN_SPECIAL_PROPERTIES = new Set(['css']);
+// `css` plus the three mask layers, which are lowered by a dedicated object
+// branch rather than a PROPERTY_MAP prefix, so they need naming here to be
+// recognised as valid keys.
+const KNOWN_SPECIAL_PROPERTIES = new Set(['css', 'maskLinear', 'maskRadial', 'maskConic']);
 
 // Boolean shorthands kept on purpose. A key stays boolean only when it is NOT a
 // value-alias of a single mutually-exclusive CSS property: composite utilities
@@ -2705,7 +2762,7 @@ function isBackgroundGradientString(value: string): boolean {
  * or moves an arbitrary value under a longer prefix (`mask-size-[50%]`), and a
  * blanket `mask-${value}` emitted a class Tailwind does not serve.
  */
-const SIMPLE_MASK_KEYS = new Set(['maskShape', 'maskComposite']);
+const SIMPLE_MASK_KEYS = new Set(['maskComposite']);
 
 /** Bare `mask-<keyword>` positions; anything else is an arbitrary position. */
 const MASK_POSITION_KEYWORDS: ReadonlySet<string> = new Set([
@@ -2732,6 +2789,9 @@ function collectBackgroundMaskProperty(
     else if (key === 'bgSize') utility = formatBackgroundSize(value);
     else if (key === 'bgRepeat' || key === 'backgroundRepeat') {
         utility = formatBackgroundRepeat(value);
+    } else if (key === 'mask' && isMaskLayerValue(value)) {
+        warnMaskLayerValue(value);
+        return true;
     } else if (key === 'maskRepeat') utility = formatMaskRepeat(value);
     else if (key === 'maskType') utility = `mask-type-${value}`;
     else if (key === 'maskSize') utility = formatMaskSize(value);
@@ -2900,6 +2960,46 @@ function buildMaskRadialClasses(value: Record<string, unknown>): string[] {
     out.push(...buildMaskStopClasses('mask-radial-from', value.from));
     out.push(...buildMaskStopClasses('mask-radial-to', value.to));
     return out;
+}
+
+/**
+ * Whether a `mask` value names one of the gradient LAYERS rather than an image.
+ *
+ * The layers moved to `maskLinear` / `maskRadial` / `maskConic`, which own the
+ * `--tw-mask-<layer>` variables. `mask` now carries only a direct mask-image:
+ * `none`, a `url(…)`, a CSS variable, or an arbitrary value.
+ *
+ * @param value - The raw `mask` value.
+ * @returns True when the value belongs to a layer key.
+ */
+function isMaskLayerValue(value: string): boolean {
+    const bare = value.startsWith('-') ? value.slice(1) : value;
+    return /^(linear|radial|conic)(-|$)/.test(bare);
+}
+
+/** Layer value → the key that now owns it. */
+const MASK_LAYER_KEY_BY_FAMILY: Readonly<Record<string, string>> = {
+    linear: 'maskLinear',
+    radial: 'maskRadial',
+    conic: 'maskConic',
+};
+
+/**
+ * Warn that a `mask` layer value moved, naming the key that replaced it.
+ *
+ * @param value - The raw `mask` value.
+ */
+function warnMaskLayerValue(value: string): void {
+    if (!szDevWarningsEnabled()) return;
+    const bare = value.startsWith('-') ? value.slice(1) : value;
+    const family = /^(linear|radial|conic)/.exec(bare)?.[1] ?? 'linear';
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] mask: '${value}'${at} — gradient layers moved to ` +
+            `"${MASK_LAYER_KEY_BY_FAMILY[family]}". Tailwind composites mask-image from ` +
+            'one variable per layer, so each layer is its own key. `mask` now takes a ' +
+            'direct mask-image only: none, a url(), or a CSS variable.',
+    );
 }
 
 /**

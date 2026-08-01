@@ -270,12 +270,11 @@ const BOX_ROLE_RULES = [
             'maskSize',
             'maskPos',
             'maskRepeat',
-            'maskShape',
+            'maskLinear',
+            'maskRadial',
+            'maskConic',
             'maskClip',
             'maskOrigin',
-            'maskFrom',
-            'maskVia',
-            'maskTo',
         ],
     },
     { role: 'outer', category: 'color-scheme', keys: ['scheme', 'forcedColorAdjust'] },
@@ -484,7 +483,11 @@ function buildPropertyKeyRoles() {
             `[gen-box-role-map] ${missing.length} PROPERTY_MAP key(s) have no box role — add them to BOX_ROLE_RULES: ${missing.join(', ')}`,
         );
     }
-    const extra = [...keyRole.keys()].filter(k => !(k in PROPERTY_MAP));
+    // Keys lowered by a dedicated object branch have no PROPERTY_MAP prefix but
+    // are still valid sz keys that splitBoxSz has to route, so they are allowed
+    // here by name. Anything else not in PROPERTY_MAP is a stale rule.
+    const OBJECT_ONLY_KEYS = new Set(['maskLinear', 'maskRadial', 'maskConic']);
+    const extra = [...keyRole.keys()].filter(k => !(k in PROPERTY_MAP) && !OBJECT_ONLY_KEYS.has(k));
     if (extra.length > 0) {
         throw new Error(
             `[gen-box-role-map] BOX_ROLE_RULES has key(s) not in PROPERTY_MAP (stale): ${extra.join(', ')}`,
