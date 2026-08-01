@@ -135,3 +135,62 @@ describe('mask layers — three-engine parity', () => {
         expectParity("{ mask: '--m' }", 'mask-(--m)');
     });
 });
+
+describe('mask layer merge — the later group claims the CSS property', () => {
+    /**
+     * Assert the merged output of a static array on every engine.
+     *
+     * @param elements - The array elements, as written in JSX.
+     * @param expected - The className every engine must emit.
+     */
+    function expectMergeParity(elements: string, expected: string): void {
+        const source = `export const A = () => <div sz={${elements}} />;`;
+        for (const [name, transform] of ENGINES) {
+            const code = transform(source, 'mask-merge.tsx').code ?? '';
+            const emitted = /className="([^"]*)"/.exec(code)?.[1] ?? '';
+            expect(emitted, `${name} — ${elements}`).toBe(expected);
+        }
+    }
+
+    // The angle fields and the side fields both write --tw-mask-linear, so a
+    // deep merge that kept both would leave the stylesheet to pick a winner by
+    // source order instead of by the author's later declaration.
+    it('a later side declaration clears the angle mode', () => {
+        expectMergeParity(
+            "[{ maskLinear: { angle: 45, from: '20%' } }, { maskLinear: { b: { from: '0%' } } }]",
+            'mask-b-from-0%',
+        );
+    });
+
+    it('a later angle declaration clears the sides', () => {
+        expectMergeParity(
+            "[{ maskLinear: { b: { from: '0%', to: '100%' } } }, { maskLinear: { angle: 45 } }]",
+            'mask-linear-45',
+        );
+    });
+
+    it('within one mode, only the declared field is replaced', () => {
+        expectMergeParity(
+            "[{ maskLinear: { angle: 45, from: '20%' } }, { maskLinear: { from: '40%' } }]",
+            'mask-linear-45 mask-linear-from-40%',
+        );
+        expectMergeParity(
+            "[{ maskLinear: { b: { from: '20%', to: '80%' } } }, { maskLinear: { b: { from: '40%' } } }]",
+            'mask-b-from-40% mask-b-to-80%',
+        );
+    });
+
+    it('sides that do not collide still compose across elements', () => {
+        expectMergeParity(
+            "[{ maskLinear: { t: { from: '0%' } } }, { maskLinear: { b: { from: '60%' } } }]",
+            'mask-t-from-0% mask-b-from-60%',
+        );
+    });
+
+    it('a different layer is untouched — it owns another variable', () => {
+        expectMergeParity(
+            "[{ maskLinear: { angle: 45 } }, { maskRadial: { from: '0%' } }]",
+            'mask-linear-45 mask-radial-from-0%',
+        );
+    });
+});

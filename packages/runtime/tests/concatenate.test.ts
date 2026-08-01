@@ -262,3 +262,32 @@ describe('_szPart — dynamic sz array element normalizer', () => {
         expect(_szPart([{ p: 4 }, 'card', false])).toBe('p-4 card');
     });
 });
+
+describe('szr — mask layer modes are exclusive when arrays merge', () => {
+    // Runtime has to reach the same verdict as the compiler: the angle fields
+    // and the side fields compete for --tw-mask-linear, so whichever group the
+    // later element declares clears the other rather than both surviving.
+    it('a later side declaration clears the angle mode', () => {
+        expect(
+            szr([
+                { maskLinear: { angle: 45, from: '20%' } },
+                { maskLinear: { b: { from: '0%' } } },
+            ]),
+        ).toBe('mask-b-from-0%');
+    });
+
+    it('a later angle declaration clears the sides', () => {
+        expect(
+            szr([{ maskLinear: { b: { from: '0%', to: '100%' } } }, { maskLinear: { angle: 45 } }]),
+        ).toBe('mask-linear-45');
+    });
+
+    it('within one mode only the declared field is replaced', () => {
+        expect(
+            szr([
+                { maskLinear: { b: { from: '20%', to: '80%' } } },
+                { maskLinear: { b: { from: '40%' } } },
+            ]),
+        ).toBe('mask-b-from-40% mask-b-to-80%');
+    });
+});

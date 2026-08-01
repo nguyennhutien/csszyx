@@ -3886,8 +3886,10 @@ fn merge_static_property_deep(properties: &mut Vec<StaticSzProperty>, incoming: 
         .iter_mut()
         .find(|property| property.key == incoming.key)
     {
+        let key = existing.key.clone();
         match (&mut existing.value, incoming.value) {
             (StaticSzValue::Object(existing_object), StaticSzValue::Object(incoming_object)) => {
+                drop_displaced_sub_keys(&key, existing_object, &incoming_object);
                 merge_static_properties_deep(
                     &mut existing_object.properties,
                     incoming_object.properties,
@@ -3897,6 +3899,43 @@ fn merge_static_property_deep(properties: &mut Vec<StaticSzProperty>, incoming: 
         }
     } else {
         properties.push(incoming);
+    }
+}
+
+/// Sub-keys of one property that write the SAME CSS custom property, so only
+/// one group can be live at a time. Mirrors the TypeScript
+/// `EXCLUSIVE_SUB_KEY_GROUPS`: inside `maskLinear` the angle fields and the
+/// side fields both write `--tw-mask-linear`.
+const EXCLUSIVE_SUB_KEY_GROUPS: [(&str, [&[&str]; 2]); 1] = [(
+    "maskLinear",
+    [&["angle", "from", "to"], &["t", "r", "b", "l", "x", "y"]],
+)];
+
+/// Clear the group the incoming object displaced, so "last write wins" holds
+/// for the CSS property rather than for each field independently.
+fn drop_displaced_sub_keys(key: &str, existing: &mut StaticSzObject, incoming: &StaticSzObject) {
+    let Some((_, groups)) = EXCLUSIVE_SUB_KEY_GROUPS
+        .iter()
+        .find(|(name, _)| *name == key)
+    else {
+        return;
+    };
+    let claimed = groups.iter().find(|group| {
+        incoming
+            .properties
+            .iter()
+            .any(|property| group.contains(&property.key.as_str()))
+    });
+    let Some(claimed) = claimed else {
+        return;
+    };
+    for group in groups {
+        if std::ptr::eq(*group, *claimed) {
+            continue;
+        }
+        existing
+            .properties
+            .retain(|property| !group.contains(&property.key.as_str()));
     }
 }
 
