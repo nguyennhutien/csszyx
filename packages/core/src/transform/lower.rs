@@ -1585,6 +1585,14 @@ fn format_bg_img_string(value: &str, prefix: &str) -> String {
     if normalized.starts_with("repeating-") {
         return format!("{prefix}bg-[{}]", normalize_arbitrary_value(value));
     }
+    // Any CSS function other than url() is an arbitrary image value, so it goes
+    // in brackets verbatim. Gradient functions open with the same
+    // `linear-`/`radial`/`conic` the KEYWORDS do; reading one as a keyword
+    // produced `bg-linear-gradient(…)`, which Tailwind does not serve, and
+    // letting it fall to the url() default wrapped it into a broken URL.
+    if normalized.contains('(') && !normalized.starts_with("url(") {
+        return format!("{prefix}bg-[{}]", normalize_arbitrary_value(value));
+    }
     if normalized.starts_with("linear-")
         || normalized.starts_with("radial")
         || normalized.starts_with("conic")

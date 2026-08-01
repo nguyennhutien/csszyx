@@ -2740,7 +2740,13 @@ function formatBackgroundImage(rawValue: string): string {
     const value = rawValue.trim();
     if (value === 'none') return 'bg-none';
     const normalized = value.startsWith('-') ? value.slice(1) : value;
-    if (normalized.startsWith('repeating-')) {
+    // Any CSS function other than url() is an arbitrary image value, so it goes
+    // in brackets verbatim. This covers every gradient function — they open
+    // with the same `linear-`/`radial`/`conic` the KEYWORDS do, and reading one
+    // as a keyword produced `bg-linear-gradient(…)`, which Tailwind does not
+    // serve, while letting it fall to the url() default wrapped it into
+    // `url(linear-gradient(…))`, which is a broken URL rather than a gradient.
+    if (normalized.includes('(') && !normalized.startsWith('url(')) {
         return `bg-[${normalizeArbitraryValue(value)}]`;
     }
     if (isBackgroundGradientString(normalized)) {
