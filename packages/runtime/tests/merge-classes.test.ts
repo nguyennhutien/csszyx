@@ -714,3 +714,48 @@ describe('szcn — the argument trie memo', () => {
         expect(szcn('flex-col', 'gap-2')).toBe('m7 q3');
     });
 });
+
+describe('szcn — mask utilities key by the CSS variable they write', () => {
+    // Tailwind composites mask-image from three layer variables, and inside the
+    // linear layer every side owns another. Keying all `mask-*` together — which
+    // the shared prefix table does — dropped declarations that compose.
+    it('keeps sides that compose, because each owns its own variable', () => {
+        expect(szcn('mask-t-from-0%', 'mask-b-from-20%')).toBe('mask-t-from-0% mask-b-from-20%');
+        expect(szcn('mask-l-from-0%', 'mask-r-from-0%')).toBe('mask-l-from-0% mask-r-from-0%');
+    });
+
+    it('keeps from and to apart — they are different custom properties', () => {
+        expect(szcn('mask-b-from-0%', 'mask-b-to-100%')).toBe('mask-b-from-0% mask-b-to-100%');
+        expect(szcn('mask-linear-from-20%', 'mask-linear-to-80%')).toBe(
+            'mask-linear-from-20% mask-linear-to-80%',
+        );
+    });
+
+    it('overrides the same side and stop', () => {
+        expect(szcn('mask-b-from-0%', 'mask-b-from-40%')).toBe('mask-b-from-40%');
+    });
+
+    it('treats x and y as shorthands over their sides, like px over pl', () => {
+        // A later shorthand subsumes the sides it writes; a later side only
+        // refines one of them, so the shorthand survives for the other.
+        expect(szcn('mask-l-from-50%', 'mask-x-from-0%')).toBe('mask-x-from-0%');
+        expect(szcn('mask-x-from-0%', 'mask-l-from-50%')).toBe('mask-x-from-0% mask-l-from-50%');
+    });
+
+    it('never merges across layers', () => {
+        expect(szcn('mask-linear-45', 'mask-radial-at-top')).toBe(
+            'mask-linear-45 mask-radial-at-top',
+        );
+    });
+
+    it('still collapses the mutually exclusive radial modifiers', () => {
+        expect(szcn('mask-circle', 'mask-ellipse')).toBe('mask-ellipse');
+        expect(szcn('mask-radial-closest-side', 'mask-radial-farthest-corner')).toBe(
+            'mask-radial-farthest-corner',
+        );
+    });
+
+    it('leaves the non-gradient mask keys merging as before', () => {
+        expect(szcn('mask-cover', 'mask-contain')).toBe('mask-contain');
+    });
+});

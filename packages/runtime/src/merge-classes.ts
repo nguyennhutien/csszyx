@@ -220,6 +220,78 @@ function classifyMatchedPrefix(
 }
 
 /**
+ * Mask utilities key by the `--tw-mask-*` custom property they write, not by
+ * the `mask` prefix they share. Tailwind composites mask-image from three
+ * layer variables, and inside the linear layer every side owns another, so
+ * `mask-t-from-0%` and `mask-b-from-60%` are different declarations that must
+ * BOTH survive — keying them together dropped one silently.
+ */
+const MASK_SIDES: ReadonlySet<string> = new Set(['t', 'r', 'b', 'l', 'x', 'y']);
+
+/** Layers of `mask-image`; each owns its own variable and never conflicts. */
+const MASK_LAYERS: ReadonlySet<string> = new Set(['linear', 'radial', 'conic']);
+
+/** Radial extent keywords, which share `--tw-mask-radial-size`. */
+const MASK_RADIAL_SIZES: ReadonlySet<string> = new Set([
+    'closest-side',
+    'closest-corner',
+    'farthest-side',
+    'farthest-corner',
+]);
+
+/** `x` and `y` write two sides each, so they cover those sides' keys. */
+const MASK_SIDE_COVERAGE: Readonly<Record<string, readonly string[]>> = {
+    x: ['x', 'l', 'r'],
+    y: ['y', 't', 'b'],
+};
+
+/**
+ * Classify a `mask-*` token by the custom property it writes.
+ *
+ * @param norm - Normalized token, `mask-` prefix included.
+ * @param variant - Variant prefix removed from the token.
+ * @returns `{ key, covers }`, or null to fall through to the shared tables.
+ */
+function classifyMaskToken(
+    norm: string,
+    variant: string,
+): { key: string; covers: string[] } | null {
+    if (norm === 'mask-circle' || norm === 'mask-ellipse') {
+        const key = `${variant} mask-radial-shape`;
+        return { key, covers: [key] };
+    }
+    const rest = norm.slice('mask-'.length);
+    const [head, second] = rest.split('-', 2);
+    if (head === undefined) return null;
+
+    if (MASK_SIDES.has(head) && (second === 'from' || second === 'to')) {
+        const sides = MASK_SIDE_COVERAGE[head] ?? [head];
+        return {
+            key: `${variant} mask-${head}-${second}`,
+            covers: sides.map(side => `${variant} mask-${side}-${second}`),
+        };
+    }
+    if (!MASK_LAYERS.has(head)) return null;
+    if (second === 'from' || second === 'to') {
+        const key = `${variant} mask-${head}-${second}`;
+        return { key, covers: [key] };
+    }
+    if (head === 'radial') {
+        if (second === 'at') {
+            const key = `${variant} mask-radial-position`;
+            return { key, covers: [key] };
+        }
+        if (MASK_RADIAL_SIZES.has(rest.slice('radial-'.length))) {
+            const key = `${variant} mask-radial-size`;
+            return { key, covers: [key] };
+        }
+    }
+    // Bare `mask-linear-45` / `mask-conic-90`: the layer's own gradient.
+    const key = `${variant} mask-${head}`;
+    return { key, covers: [key] };
+}
+
+/**
  * Classify a token for merging: its conflict `key` plus the `covers` keys it
  * removes when it appears (the key itself, and — for a spacing shorthand — the
  * longhand keys it subsumes). Returns `null` when the token can't be confidently
@@ -237,6 +309,10 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
         return null;
     }
     const firstSegment = norm.split('-', 1)[0] as string;
+    if (firstSegment === 'mask' && norm.length > 'mask-'.length) {
+        const masked = classifyMaskToken(norm, variant);
+        if (masked !== null) return masked;
+    }
     // A token that belongs to an ambiguous prefix AND classifies to a concrete
     // value group (e.g. `text-ellipsis`/`text-clip` → `text:overflow`, or a
     // data-type-hinted variable like `text-(color:--x)` → `text:color`) is a
