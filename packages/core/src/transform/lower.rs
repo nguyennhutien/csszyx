@@ -1394,6 +1394,12 @@ fn build_mask_slot_classes(slot_key: &str, object: &StaticSzObject) -> Vec<Strin
 /// Whether a `mask` value names a gradient LAYER rather than an image. Mirrors
 /// the TypeScript `isMaskLayerValue`.
 fn is_mask_layer_value(value: &str) -> bool {
+    // A CSS function is an arbitrary mask-image, not a layer name:
+    // `linear-gradient(…)` shares the `linear-` opening but compiles to
+    // `mask-[linear-gradient(…)]` and must keep working.
+    if value.contains('(') {
+        return false;
+    }
     let bare = value.strip_prefix('-').unwrap_or(value);
     for family in ["linear", "radial", "conic"] {
         if bare == family || bare.starts_with(&format!("{family}-")) {
@@ -1804,6 +1810,12 @@ fn needs_brackets(value: &str) -> bool {
         || value.contains("clamp(")
         || value.contains("min(")
         || value.contains("max(")
+        // Gradient functions need brackets like every other CSS function;
+        // without them the class is `mask-linear-gradient(…)`, which Tailwind
+        // does not serve. Repeating variants are covered by the base names.
+        || value.contains("linear-gradient(")
+        || value.contains("radial-gradient(")
+        || value.contains("conic-gradient(")
         || value.contains(' ')
     {
         return true;

@@ -1396,6 +1396,15 @@ function needsArbitraryBrackets(value: string): boolean {
         v.includes('clamp(') || // Clamp
         v.includes('min(') || // Min
         v.includes('max(') || // Max
+        // Gradient functions. A mask or background taking one as a raw value
+        // needs brackets like every other CSS function; without them the class
+        // is `mask-linear-gradient(…)`, which Tailwind does not serve.
+        v.includes('linear-gradient(') ||
+        v.includes('radial-gradient(') ||
+        v.includes('conic-gradient(') ||
+        v.includes('repeating-linear-gradient(') ||
+        v.includes('repeating-radial-gradient(') ||
+        v.includes('repeating-conic-gradient(') ||
         v.includes(' ') // Values with spaces need brackets
     );
 }
@@ -2973,6 +2982,10 @@ function buildMaskRadialClasses(value: Record<string, unknown>): string[] {
  * @returns True when the value belongs to a layer key.
  */
 function isMaskLayerValue(value: string): boolean {
+    // A CSS function is an arbitrary mask-image, not a layer name:
+    // `linear-gradient(…)` shares the `linear-` opening but compiles to
+    // `mask-[linear-gradient(…)]` and must keep working.
+    if (value.includes('(')) return false;
     const bare = value.startsWith('-') ? value.slice(1) : value;
     return /^(linear|radial|conic)(-|$)/.test(bare);
 }

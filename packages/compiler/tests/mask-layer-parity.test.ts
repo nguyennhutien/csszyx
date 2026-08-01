@@ -133,6 +133,26 @@ describe('mask layers — three-engine parity', () => {
     it('keeps the direct mask-image forms on `mask`', () => {
         expectParity("{ mask: 'none' }", 'mask-none');
         expectParity("{ mask: '--m' }", 'mask-(--m)');
+        expectParity('{ mask: "url(\'/i.png\')" }', "mask-[url('/i.png')]");
+    });
+
+    it('brackets a gradient FUNCTION instead of reading it as a layer name', () => {
+        // `linear-gradient(…)` shares the `linear-` opening with the layer
+        // keywords, so the layer check has to exclude CSS functions — and the
+        // bracket predicate has to cover them, or the class is
+        // `mask-linear-gradient(…)`, which Tailwind does not serve.
+        expectParity(
+            "{ mask: 'linear-gradient(to_right,black,transparent)' }",
+            'mask-[linear-gradient(to_right,black,transparent)]',
+        );
+        expectParity(
+            "{ mask: 'radial-gradient(circle,black)' }",
+            'mask-[radial-gradient(circle,black)]',
+        );
+        expectParity(
+            "{ mask: 'conic-gradient(from_90deg,black)' }",
+            'mask-[conic-gradient(from_90deg,black)]',
+        );
     });
 });
 
