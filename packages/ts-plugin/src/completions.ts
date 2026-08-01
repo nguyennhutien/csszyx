@@ -2,6 +2,7 @@ import {
     BOOLEAN_SHORTHANDS,
     KNOWN_VARIANTS,
     METADATA_SCHEMA_VERSION,
+    OBJECT_ONLY_PROPERTY_KEYS,
     type ObjectFormMember,
     type ObjectValueForm,
     PROPERTY_MAP,
@@ -62,9 +63,12 @@ function isIdentifier(name: string): boolean {
 }
 
 const KEY_NAMES = Object.freeze(
-    [...Object.keys(PROPERTY_MAP), ...BOOLEAN_SHORTHANDS, ...KNOWN_VARIANTS].filter(
-        (name, index, names) => isIdentifier(name) && names.indexOf(name) === index,
-    ),
+    [
+        ...Object.keys(PROPERTY_MAP),
+        ...OBJECT_ONLY_PROPERTY_KEYS,
+        ...BOOLEAN_SHORTHANDS,
+        ...KNOWN_VARIANTS,
+    ].filter((name, index, names) => isIdentifier(name) && names.indexOf(name) === index),
 );
 
 /** Build one namespaced completion entry.

@@ -52,6 +52,17 @@ export interface ObjectFormMember {
     readonly detail: string;
     /** Curated value suggestions for the member. */
     readonly values: readonly string[];
+    /**
+     * The form this member's own object value takes, when it holds one.
+     *
+     * Most structured values are one level deep — `bg: { color, op }` and
+     * `bgImg: { gradient, dir, in }` carry only scalars. The mask layers are
+     * not: `maskLinear: { b: { from: { at, color, op } } }` is three, because
+     * Tailwind scopes a stop by side and then splits its position from its
+     * colour. Assistance that stopped at the first level would go quiet exactly
+     * where the shape is least guessable.
+     */
+    readonly form?: ObjectValueForm;
 }
 
 /** A structured object value a property accepts instead of a style object. */
@@ -96,14 +107,135 @@ const BG_IMG_FORM: ObjectValueForm = {
     ],
 };
 
+/** One mask gradient stop: `{ at, color, op }` → `mask-b-from-20%` + `…-red-500/30`. */
+const MASK_STOP_FORM: ObjectValueForm = {
+    members: [
+        {
+            name: 'at',
+            detail: 'gradient position',
+            values: ['0%', '20%', '50%', '80%', '100%'],
+        },
+        { name: 'color', detail: 'stop colour', values: VALUE_SUGGESTIONS.color ?? [] },
+        { name: 'op', detail: 'colour opacity', values: VALUE_SUGGESTIONS.opacity ?? [] },
+    ],
+};
+
+/** One side of the linear mask layer: `{ from, to }`. */
+const MASK_EDGE_FORM: ObjectValueForm = {
+    members: [
+        { name: 'from', detail: 'start stop', values: [], form: MASK_STOP_FORM },
+        { name: 'to', detail: 'end stop', values: [], form: MASK_STOP_FORM },
+    ],
+};
+
+/** Sides of the linear layer, each owning its own `--tw-mask-<side>`. */
+const MASK_SIDE_MEMBERS: readonly ObjectFormMember[] = (
+    [
+        ['t', 'top edge'],
+        ['r', 'right edge'],
+        ['b', 'bottom edge'],
+        ['l', 'left edge'],
+        ['x', 'left and right edges'],
+        ['y', 'top and bottom edges'],
+    ] as const
+).map(([name, detail]) => ({ name, detail, values: [], form: MASK_EDGE_FORM }));
+
+/**
+ * `maskLinear: { angle, from, to }` OR `{ <side>: { from, to } }` — the angle
+ * fields and the side fields both write `--tw-mask-linear`, so they are
+ * alternative modes; both are offered because either is valid on its own.
+ */
+const MASK_LINEAR_FORM: ObjectValueForm = {
+    members: [
+        { name: 'angle', detail: 'gradient angle', values: ['0', '45', '90', '180', '-45'] },
+        { name: 'from', detail: 'start stop', values: [], form: MASK_STOP_FORM },
+        { name: 'to', detail: 'end stop', values: [], form: MASK_STOP_FORM },
+        ...MASK_SIDE_MEMBERS,
+    ],
+};
+
+/** `maskRadial: { at, size, shape, from, to }`. */
+const MASK_RADIAL_FORM: ObjectValueForm = {
+    members: [
+        {
+            name: 'at',
+            detail: 'focal position',
+            values: [
+                'center',
+                'top',
+                'bottom',
+                'left',
+                'right',
+                'top-left',
+                'top-right',
+                'bottom-left',
+                'bottom-right',
+            ],
+        },
+        {
+            name: 'size',
+            detail: 'gradient extent',
+            values: ['closest-side', 'closest-corner', 'farthest-side', 'farthest-corner'],
+        },
+        { name: 'shape', detail: 'radial shape', values: ['circle', 'ellipse'] },
+        { name: 'from', detail: 'start stop', values: [], form: MASK_STOP_FORM },
+        { name: 'to', detail: 'end stop', values: [], form: MASK_STOP_FORM },
+    ],
+};
+
+/** `maskConic: { angle, from, to }`. */
+const MASK_CONIC_FORM: ObjectValueForm = {
+    members: [
+        { name: 'angle', detail: 'starting angle', values: ['0', '45', '90', '180'] },
+        { name: 'from', detail: 'start stop', values: [], form: MASK_STOP_FORM },
+        { name: 'to', detail: 'end stop', values: [], form: MASK_STOP_FORM },
+    ],
+};
+
+/**
+ * Keys whose value is ALWAYS a structured object, so they carry no
+ * `PROPERTY_MAP` prefix and would otherwise be missing from the key list every
+ * completion source builds from that map.
+ */
+export const OBJECT_ONLY_PROPERTY_KEYS: ReadonlySet<string> = new Set([
+    'maskLinear',
+    'maskRadial',
+    'maskConic',
+]);
+
 /** Resolve the structured object form a property's value accepts, if any.
  * @param name - Property key owning a nested object.
  * @returns The form, or null when the property takes no object value.
  */
 export function objectValueForm(name: string): ObjectValueForm | null {
     if (name === 'bgImg') return BG_IMG_FORM;
+    if (name === 'maskLinear') return MASK_LINEAR_FORM;
+    if (name === 'maskRadial') return MASK_RADIAL_FORM;
+    if (name === 'maskConic') return MASK_CONIC_FORM;
     if (COLOR_OBJECT_PROPS.has(name)) return COLOR_FORM;
     return null;
+}
+
+/**
+ * Walk a form tree along a root-to-leaf property chain.
+ *
+ * @param root - Form owned by the outermost property.
+ * @param path - Member names from that property inward.
+ * @returns The form owning the innermost object, or null when the path leaves
+ * the structured shape.
+ */
+export function descendObjectForm(
+    root: ObjectValueForm | null,
+    path: readonly string[],
+): ObjectValueForm | null {
+    let current = root;
+    for (const name of path) {
+        if (current === null) return null;
+        const member = current.members.find(candidate => candidate.name === name);
+        if (member === undefined) return null;
+        current = member.form ?? null;
+    }
+    return current;
 }
 
 /** Keys whose object value has OPEN membership (arbitrary CSS properties) —
@@ -122,9 +254,22 @@ export type StyleChainKind = 'style' | 'object-form' | 'opaque' | 'invalid';
 function classifyStyleOwner(name: string, index: number): StyleChainKind | null {
     if (!name) return null;
     if (OPAQUE_OBJECT_KEYS.has(name)) return index === 0 ? 'opaque' : 'invalid';
+    if (objectValueForm(name) !== null) return index === 0 ? 'object-form' : 'invalid';
     if (!PROPERTY_KEYS.has(name)) return null;
-    if (index === 0 && objectValueForm(name) !== null) return 'object-form';
     return 'invalid';
+}
+
+/**
+ * Index of the outermost name that opens a structured form.
+ *
+ * @param namesInnerFirst - Owner-name chain, innermost first.
+ * @returns The index, or -1 when no name opens one.
+ */
+function findLastFormOwner(namesInnerFirst: readonly string[]): number {
+    for (let index = namesInnerFirst.length - 1; index >= 0; index -= 1) {
+        if (objectValueForm(namesInnerFirst[index] ?? '') !== null) return index;
+    }
+    return -1;
 }
 
 /**
@@ -141,6 +286,25 @@ function classifyStyleOwner(name: string, index: number): StyleChainKind | null 
  * 'object-form'.
  */
 export function classifyStyleChain(namesInnerFirst: readonly string[]): StyleChainKind {
+    // A structured form may nest, so the owner that opens one is not always the
+    // innermost name: `maskLinear: { b: { from: { … } } }` puts `from` and `b`
+    // BELOW the owner. Find the outermost owner that opens a form and check the
+    // names inside it against that form's tree rather than against sz keys.
+    // Search from the OUTERMOST name inward. A member of a form can share a
+    // name with a top-level property that owns its own form — `color` is both a
+    // member of `bg`'s form and a colour prop — so scanning inward first would
+    // treat `bg: { color: { … } }` as a fresh form instead of the invalid
+    // nesting it is.
+    const formOwner = findLastFormOwner(namesInnerFirst);
+    if (formOwner >= 0) {
+        const inside = namesInnerFirst.slice(0, formOwner).reverse();
+        const resolved = descendObjectForm(
+            objectValueForm(namesInnerFirst[formOwner] ?? ''),
+            inside,
+        );
+        if (resolved === null && inside.length > 0) return 'invalid';
+        return 'object-form';
+    }
     let kind: StyleChainKind = 'style';
     for (let index = 0; index < namesInnerFirst.length; index += 1) {
         const name = namesInnerFirst[index] ?? '';

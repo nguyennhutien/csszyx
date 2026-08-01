@@ -410,3 +410,57 @@ test('szv option values complete behind a quote', () => {
         'red-500',
     );
 });
+
+// Mask layers are the first structured value that nests more than one level:
+// a layer holds sides, a side holds stops, a stop splits position from colour.
+// Assistance that stopped at the first level would go quiet exactly where the
+// shape is least guessable.
+test('mask layer keys offer their own members, not sz keys', () => {
+    const names = namesAtMarker('const A = () => <div sz={{ maskLinear: { /*|*/ } }} />;');
+    for (const member of ['angle', 'from', 'to', 't', 'r', 'b', 'l', 'x', 'y']) {
+        assert.ok(names.includes(member), `expected maskLinear member "${member}"`);
+    }
+    // Crucially NOT sz keys — the layer is a structured value, not a variant.
+    assert.ok(!names.includes('bg'), 'maskLinear must not offer sz keys');
+    assert.ok(!names.includes('p'), 'maskLinear must not offer sz keys');
+});
+
+test('a mask side offers its stops', () => {
+    const names = namesAtMarker(
+        'const A = () => <div sz={{ maskLinear: { b: { /*|*/ } } }} />;',
+    );
+    assert.deepStrictEqual([...names].sort(), ['from', 'to']);
+});
+
+test('a mask stop offers position, colour and opacity', () => {
+    const names = namesAtMarker(
+        'const A = () => <div sz={{ maskLinear: { b: { from: { /*|*/ } } } }} />;',
+    );
+    assert.deepStrictEqual([...names].sort(), ['at', 'color', 'op']);
+});
+
+test('the radial and conic layers offer their own members', () => {
+    const radial = namesAtMarker('const A = () => <div sz={{ maskRadial: { /*|*/ } }} />;');
+    for (const member of ['at', 'size', 'shape', 'from', 'to']) {
+        assert.ok(radial.includes(member), `expected maskRadial member "${member}"`);
+    }
+    const conic = namesAtMarker('const A = () => <div sz={{ maskConic: { /*|*/ } }} />;');
+    assert.deepStrictEqual([...conic].sort(), ['angle', 'from', 'to']);
+});
+
+test('nesting below a scalar member stays silent', () => {
+    // `angle` holds a number, so an object under it is invalid sz structure.
+    assert.strictEqual(
+        namesAtMarker('const A = () => <div sz={{ maskLinear: { angle: { /*|*/ } } }} />;').length,
+        0,
+    );
+});
+
+test('mask layer keys appear in the top-level sz key list', () => {
+    // They carry no PROPERTY_MAP prefix, so every completion source that builds
+    // its key list from that map alone would omit them.
+    const names = namesAtMarker('const A = () => <div sz={{ /*|*/ }} />;');
+    for (const key of ['maskLinear', 'maskRadial', 'maskConic']) {
+        assert.ok(names.includes(key), `expected sz key "${key}"`);
+    }
+});
