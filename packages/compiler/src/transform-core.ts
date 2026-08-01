@@ -2698,7 +2698,27 @@ function isBackgroundGradientString(value: string): boolean {
     );
 }
 
-const SIMPLE_MASK_KEYS = new Set(['maskPos', 'maskSize', 'maskShape', 'maskComposite', 'maskMode']);
+/**
+ * Mask keys whose value IS the Tailwind suffix, with no rename or arbitrary
+ * form to consider. Everything else in the mask family needs a formatter,
+ * because Tailwind either renames the keyword (`match-source` → `mask-match`)
+ * or moves an arbitrary value under a longer prefix (`mask-size-[50%]`), and a
+ * blanket `mask-${value}` emitted a class Tailwind does not serve.
+ */
+const SIMPLE_MASK_KEYS = new Set(['maskShape', 'maskComposite']);
+
+/** Bare `mask-<keyword>` positions; anything else is an arbitrary position. */
+const MASK_POSITION_KEYWORDS: ReadonlySet<string> = new Set([
+    'center',
+    'top',
+    'bottom',
+    'left',
+    'right',
+    'top-left',
+    'top-right',
+    'bottom-left',
+    'bottom-right',
+]);
 
 /** Collects background position/size/repeat and simple mask utilities. */
 function collectBackgroundMaskProperty(
@@ -2714,6 +2734,10 @@ function collectBackgroundMaskProperty(
         utility = formatBackgroundRepeat(value);
     } else if (key === 'maskRepeat') utility = formatMaskRepeat(value);
     else if (key === 'maskType') utility = `mask-type-${value}`;
+    else if (key === 'maskSize') utility = formatMaskSize(value);
+    else if (key === 'maskPos') utility = formatMaskPosition(value);
+    else if (key === 'maskMode') utility = formatMaskMode(value);
+    else if (key === 'maskClip') utility = formatMaskClip(value);
     else if (SIMPLE_MASK_KEYS.has(key)) utility = `mask-${value}`;
     if (utility === null) return false;
     classes.push(`${prefix}${utility}`);
@@ -2743,10 +2767,147 @@ function formatBackgroundRepeat(value: string): string {
     return `bg-repeat-${suffix}`;
 }
 
-/** Formats a mask-repeat value. */
+/**
+ * Formats a mask-repeat value. `space` and `round` keep the `mask-repeat-`
+ * prefix; only `repeat`/`no-repeat`/`repeat-x`/`repeat-y` are bare.
+ */
 function formatMaskRepeat(value: string): string {
     if (value === 'repeat') return 'mask-repeat';
-    return value === 'no-repeat' ? 'mask-no-repeat' : `mask-${value}`;
+    if (value === 'no-repeat') return 'mask-no-repeat';
+    if (value === 'space' || value === 'round') return `mask-repeat-${value}`;
+    return `mask-${value}`;
+}
+
+/** Formats a mask-size value, mirroring `formatBackgroundSize`. */
+function formatMaskSize(value: string): string {
+    if (value === 'auto' || value === 'cover' || value === 'contain') return `mask-${value}`;
+    if (value.startsWith('--')) return `mask-size-(${value})`;
+    return `mask-size-[${normalizeArbitraryValue(value)}]`;
+}
+
+/** Formats a mask-position value, mirroring `formatBackgroundPosition`. */
+function formatMaskPosition(value: string): string {
+    if (MASK_POSITION_KEYWORDS.has(value)) return `mask-${value}`;
+    if (value.startsWith('--')) return `mask-position-(${value})`;
+    return `mask-position-[${normalizeArbitraryValue(value)}]`;
+}
+
+/** Formats a mask-mode value. Tailwind shortens `match-source` to `match`. */
+function formatMaskMode(value: string): string {
+    return value === 'match-source' ? 'mask-match' : `mask-${value}`;
+}
+
+// ── mask gradient slots ─────────────────────────────────────────────────────
+// `mask-image` composites THREE independent layers, one per CSS variable:
+//
+//   mask-image: var(--tw-mask-linear), var(--tw-mask-radial), var(--tw-mask-conic)
+//
+// so the sz surface is three keys, one per variable. Inside the linear slot the
+// angle utilities and the per-side utilities BOTH write `--tw-mask-linear`, with
+// different values, so they are mutually exclusive MODES rather than composable
+// fields — declaring both would silently drop one at the cascade.
+
+/** Keys that own one `--tw-mask-*` layer. */
+const MASK_SLOT_KEYS: ReadonlySet<string> = new Set(['maskLinear', 'maskRadial', 'maskConic']);
+
+/** Sides of the linear slot; each writes its own `--tw-mask-<side>` variable. */
+const MASK_SIDES: readonly string[] = ['t', 'r', 'b', 'l', 'x', 'y'];
+
+/** One gradient stop: a position, a colour, or both — they are separate vars. */
+interface MaskStopValue {
+    at?: string | number;
+    color?: string;
+    op?: number | string;
+}
+
+/**
+ * Render one gradient stop into its utilities. Position and colour live in
+ * DIFFERENT custom properties (`-from-position` vs `-from-color`), so a stop
+ * carrying both emits two classes rather than one fused token.
+ *
+ * A bare CSS variable reads as a POSITION in Tailwind; a variable meant as a
+ * colour needs the `(color:--x)` type hint — the same disambiguation the shadow
+ * family already needs.
+ *
+ * @param base - Utility root, e.g. `mask-b-from`.
+ * @param stop - The stop value, scalar shorthand or explicit object.
+ * @returns Zero, one or two utilities.
+ */
+function buildMaskStopClasses(base: string, stop: unknown): string[] {
+    if (stop === null || stop === undefined || stop === false) return [];
+    if (typeof stop === 'number') return [`${base}-${stop}`];
+    if (typeof stop === 'string') {
+        return [stop.startsWith('--') ? `${base}-(${stop})` : `${base}-${stop}`];
+    }
+    if (!isRecordValue(stop)) return [];
+    const value = stop as MaskStopValue;
+    const out: string[] = [];
+    if (value.at !== undefined && value.at !== null) {
+        const at = String(value.at);
+        out.push(at.startsWith('--') ? `${base}-(${at})` : `${base}-${at}`);
+    }
+    if (typeof value.color === 'string' && value.color) {
+        const colour = value.color.startsWith('--') ? `(color:${value.color})` : value.color;
+        const opacity = value.op === undefined || value.op === null ? '' : `/${value.op}`;
+        out.push(`${base}-${colour}${opacity}`);
+    }
+    return out;
+}
+
+/**
+ * Build every utility for one mask slot.
+ *
+ * @param slotKey - `maskLinear`, `maskRadial` or `maskConic`.
+ * @param value - The slot object.
+ * @returns The utilities, in declaration order.
+ */
+function buildMaskSlotClasses(slotKey: string, value: Record<string, unknown>): string[] {
+    if (slotKey === 'maskRadial') return buildMaskRadialClasses(value);
+    const family = slotKey === 'maskConic' ? 'conic' : 'linear';
+    const out: string[] = [];
+    const angle = value.angle;
+    if (typeof angle === 'number') {
+        out.push(angle < 0 ? `-mask-${family}-${Math.abs(angle)}` : `mask-${family}-${angle}`);
+    } else if (typeof angle === 'string' && angle) {
+        out.push(angle.startsWith('--') ? `mask-${family}-(${angle})` : `mask-${family}-${angle}`);
+    }
+    out.push(...buildMaskStopClasses(`mask-${family}-from`, value.from));
+    out.push(...buildMaskStopClasses(`mask-${family}-to`, value.to));
+    if (family === 'linear') {
+        for (const side of MASK_SIDES) {
+            const edge = value[side];
+            if (!isRecordValue(edge)) continue;
+            out.push(...buildMaskStopClasses(`mask-${side}-from`, edge.from));
+            out.push(...buildMaskStopClasses(`mask-${side}-to`, edge.to));
+        }
+    }
+    return out;
+}
+
+/**
+ * Build the radial slot. `at`, `size` and `shape` each write their own
+ * `--tw-mask-radial-*` variable, so they compose with the stops and with each
+ * other rather than competing.
+ *
+ * @param value - The `maskRadial` object.
+ * @returns The utilities, in declaration order.
+ */
+function buildMaskRadialClasses(value: Record<string, unknown>): string[] {
+    const out: string[] = [];
+    if (typeof value.at === 'string' && value.at) out.push(`mask-radial-at-${value.at}`);
+    if (typeof value.size === 'string' && value.size) out.push(`mask-radial-${value.size}`);
+    if (value.shape === 'circle' || value.shape === 'ellipse') out.push(`mask-${value.shape}`);
+    out.push(...buildMaskStopClasses('mask-radial-from', value.from));
+    out.push(...buildMaskStopClasses('mask-radial-to', value.to));
+    return out;
+}
+
+/**
+ * Formats a mask-clip value. Every box keyword takes the `mask-clip-` prefix
+ * EXCEPT `no-clip`, which Tailwind spells without it.
+ */
+function formatMaskClip(value: string): string {
+    return value === 'no-clip' ? 'mask-no-clip' : `mask-clip-${value}`;
 }
 
 const BORDER_COLOR_SIDES: Record<string, string> = {
@@ -3101,6 +3262,12 @@ function collectObjectProperty(
     if (rawKey === 'bgImg') {
         const gradient = buildBackgroundGradientClass(value as BackgroundGradientValue);
         if (gradient) classes.push(`${prefix}${gradient}`);
+        return true;
+    }
+    if (MASK_SLOT_KEYS.has(rawKey)) {
+        for (const utility of buildMaskSlotClasses(rawKey, value)) {
+            classes.push(`${prefix}${utility}`);
+        }
         return true;
     }
     if (rawKey in PROPERTY_MAP && 'color' in value) {
