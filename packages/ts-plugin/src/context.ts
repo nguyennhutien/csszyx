@@ -1,9 +1,7 @@
 import {
-    classifyStyleChain,
-    descendObjectForm,
     type ObjectFormMember,
     type ObjectValueForm,
-    objectValueForm,
+    resolveStyleChain,
     szvStyleChain,
 } from '@csszyx/tooling-metadata';
 import type ts from 'typescript/lib/tsserverlibrary';
@@ -415,29 +413,10 @@ function jsxAnchor(tsMod: typeof ts, object: ts.ObjectLiteralExpression): StyleR
  * @returns The resolution, or null when the structure gets no suggestions.
  */
 function resolveChain(chainInnerFirst: readonly string[]): StyleResolution | null {
-    const kind = classifyStyleChain(chainInnerFirst);
-    if (kind === 'style') return { form: null };
-    if (kind === 'object-form') {
-        // The form owner may sit above the cursor's object when the shape
-        // nests, so walk down to the form that actually owns it.
-        // Outermost first — see the note in classifyStyleChain: a form member
-        // can share a name with a property that owns its own form.
-        let owner = -1;
-        for (let index = chainInnerFirst.length - 1; index >= 0; index -= 1) {
-            if (objectValueForm(chainInnerFirst[index] ?? '') !== null) {
-                owner = index;
-                break;
-            }
-        }
-        if (owner < 0) return null;
-        return {
-            form: descendObjectForm(
-                objectValueForm(chainInnerFirst[owner] ?? ''),
-                chainInnerFirst.slice(0, owner).reverse(),
-            ),
-        };
-    }
-    return null;
+    const resolution = resolveStyleChain(chainInnerFirst);
+    return resolution.kind === 'style' || resolution.kind === 'object-form'
+        ? { form: resolution.form }
+        : null;
 }
 
 /** Resolve a proven szv/szr call reached by the ancestry walk.

@@ -253,6 +253,12 @@ const OPAQUE_OBJECT_KEYS: ReadonlySet<string> = new Set(['css']);
 /** What a nested-object chain inside a style region means. */
 export type StyleChainKind = 'style' | 'object-form' | 'opaque' | 'invalid';
 
+/** Structural verdict plus the exact form at the cursor, when applicable. */
+export interface StyleChainResolution {
+    readonly kind: StyleChainKind;
+    readonly form: ObjectValueForm | null;
+}
+
 /**
  * Classify one owner in a nested style chain.
  * @param name - Static owner name, or an empty dynamic placeholder.
@@ -262,7 +268,6 @@ export type StyleChainKind = 'style' | 'object-form' | 'opaque' | 'invalid';
 function classifyStyleOwner(name: string, index: number): StyleChainKind | null {
     if (!name) return null;
     if (OPAQUE_OBJECT_KEYS.has(name)) return index === 0 ? 'opaque' : 'invalid';
-    if (objectValueForm(name) !== null) return index === 0 ? 'object-form' : 'invalid';
     if (!PROPERTY_KEYS.has(name)) return null;
     return 'invalid';
 }
@@ -293,7 +298,7 @@ function findLastFormOwner(namesInnerFirst: readonly string[]): number {
  * @returns The chain kind; consumers serve suggestions only for 'style' and
  * 'object-form'.
  */
-export function classifyStyleChain(namesInnerFirst: readonly string[]): StyleChainKind {
+export function resolveStyleChain(namesInnerFirst: readonly string[]): StyleChainResolution {
     // A structured form may nest, so the owner that opens one is not always the
     // innermost name: `maskLinear: { b: { from: { … } } }` puts `from` and `b`
     // BELOW the owner. Find the outermost owner that opens a form and check the
@@ -310,17 +315,27 @@ export function classifyStyleChain(namesInnerFirst: readonly string[]): StyleCha
             objectValueForm(namesInnerFirst[formOwner] as string),
             inside,
         );
-        if (resolved === null && inside.length > 0) return 'invalid';
-        return 'object-form';
+        if (resolved === null) return { kind: 'invalid', form: null };
+        return { kind: 'object-form', form: resolved };
     }
     let kind: StyleChainKind = 'style';
     for (let index = 0; index < namesInnerFirst.length; index += 1) {
         const name = namesInnerFirst[index] ?? '';
         const ownerKind = classifyStyleOwner(name, index);
-        if (ownerKind === 'invalid') return ownerKind;
+        if (ownerKind === 'invalid') return { kind: ownerKind, form: null };
         if (ownerKind !== null) kind = ownerKind;
     }
-    return kind;
+    return { kind, form: null };
+}
+
+/**
+ * Classify a nested-object chain inside a style region.
+ *
+ * @param namesInnerFirst - Owner-name chain from the cursor's object outward.
+ * @returns The structural chain kind.
+ */
+export function classifyStyleChain(namesInnerFirst: readonly string[]): StyleChainKind {
+    return resolveStyleChain(namesInnerFirst).kind;
 }
 
 /**

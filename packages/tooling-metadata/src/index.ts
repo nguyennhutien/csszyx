@@ -16,7 +16,9 @@ export {
     type ObjectValueForm,
     objectValueForm,
     PROPERTY_KEYS,
+    resolveStyleChain,
     type StyleChainKind,
+    type StyleChainResolution,
     szvStyleChain,
 } from './relations';
 export {

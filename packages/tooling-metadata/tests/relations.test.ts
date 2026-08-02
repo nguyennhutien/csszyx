@@ -13,6 +13,7 @@ import {
     isUtilityPropertyKey,
     objectValueForm,
     PROPERTY_KEYS,
+    resolveStyleChain,
     szvStyleChain,
     valueSuggestionsFor,
 } from '../src/index.js';
@@ -105,6 +106,25 @@ describe('classifyStyleChain', () => {
         expect(classifyStyleChain(['hover', 'bg'])).toBe('invalid');
         expect(classifyStyleChain(['hover', 'maskLinear'])).toBe('invalid');
         expect(classifyStyleChain(['missing', 'maskLinear', 'hover'])).toBe('invalid');
+    });
+});
+
+describe('resolveStyleChain', () => {
+    it('returns the exact nested structured form at the cursor', () => {
+        expect(resolveStyleChain(['from', 'b', 'maskLinear']).kind).toBe('object-form');
+        expect(
+            resolveStyleChain(['from', 'b', 'maskLinear']).form?.members.map(member => member.name),
+        ).toEqual(['at', 'color', 'op']);
+    });
+
+    it('returns no form for style, opaque, and invalid chains', () => {
+        expect(resolveStyleChain(['hover'])).toEqual({ kind: 'style', form: null });
+        expect(resolveStyleChain(['css'])).toEqual({ kind: 'opaque', form: null });
+        expect(resolveStyleChain(['p'])).toEqual({ kind: 'invalid', form: null });
+        expect(resolveStyleChain(['missing', 'maskLinear'])).toEqual({
+            kind: 'invalid',
+            form: null,
+        });
     });
 });
 
