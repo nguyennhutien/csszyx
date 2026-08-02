@@ -39,10 +39,6 @@ echo "[verify-like-ci] Wiping cached build artefacts so turbo and vitest start f
 find packages apps playground -name dist -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null || true
 find playground packages/e2e -name '.csszyx' -type d -exec rm -rf {} + 2>/dev/null || true
 rm -rf .turbo apps/docs/.astro apps/docs/dist apps/docs/.csszyx
-rm -f packages/core-linux-arm64-gnu/csszyx-core.linux-arm64-gnu.node \
-      packages/core-linux-x64-gnu/csszyx-core.linux-x64-gnu.node \
-      packages/core-darwin-arm64/csszyx-core.darwin-arm64.node \
-      packages/core-darwin-x64/csszyx-core.darwin-x64.node
 
 echo "[verify-like-ci] Tracked symlink guard..."
 pnpm check:tracked-symlinks
@@ -64,6 +60,8 @@ pnpm gen:llms:check
 pnpm check:key-corpus
 
 echo "[verify-like-ci] Building host native engine (matches CI step)..."
+# `--clean` resolves the current platform before deleting its output. Do not
+# pre-delete every platform package: host and devcontainer share this worktree.
 env -u RUSTUP_TOOLCHAIN pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
 # The Rust gates live in a separate workflow (rust-check.yml), so a local run
