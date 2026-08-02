@@ -14,7 +14,7 @@ Controlling the box shadow of an element.
 | **Inset Ring**         | `box-shadow: inset (etc)`                   | `inset-ring`, `inset-ring-1`                                                                                      | `{ insetRing: 1 }`                                                                                                                           |                                                                                |
 | **None**               | `box-shadow: 0 0 #0000`                     | `shadow-none`                                                                                                     | `{ shadow: 'none' }`                                                                                                                         |                                                                                |
 | **Inset None**         | `box-shadow: inset 0 0 #0000`               | `inset-shadow-none`                                                                                               | `{ insetShadow: 'none' }`                                                                                                                    |                                                                                |
-| **Ring None**          | `box-shadow: 0 0 #0000`                     | `ring-none`                                                                                                       | `{ ring: 'none' }`                                                                                                                           |                                                                                |
+| **Ring None**          | `box-shadow: 0 0 #0000`                     | `ring-0`                                                                                                          | `{ ring: 'none' }`                                                                                                                           | Tailwind spells the zero ring `ring-0`; `ring-none` styles nothing.            |
 | **Color**              | `box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05)` | `shadow-blue-500`, `inset-shadow-blue-500`, `ring-blue-500`                                                       | `{ shadowColor: 'blue-500' }`                                                                                                                |                                                                                |
 | **Color + Opacity**    | `--tw-shadow-color: (value) / 50%`          | `shadow-blue-500/50`                                                                                              | `{ shadowColor: { color: 'blue-500', op: 50 } }`                                                                                             |                                                                                |
 | **Size + Opacity**     | `box-shadow: (size) / 12.5%`                | `shadow-sm/12.5`, `shadow-2xl/50`                                                                                 | `{ shadow: 'sm/12.5' }`, `{ shadow: '2xl/50' }`                                                                                              | **TW 4.3.3**: fractional opacity on named sizes.                               |
@@ -90,6 +90,13 @@ Controlling how an element's background image should blend with its background c
 Controlling the masking of an element with images, gradients, and CSS properties.
 
 > **Source:** [Tailwind CSS v4.1 Documentation](https://tailwindcss.com/docs/mask-image)
+
+**Migration (breaking):** the flat stop keys were removed — `maskFrom`/`maskTo`
+moved into their layer (`{ maskLinear: { from } }` etc.), `maskShape` moved to
+`{ maskRadial: { shape } }`, `maskVia` was removed with no equivalent (Tailwind
+has no via stop for masks), and gradient layer values on `mask`
+(`{ mask: 'linear-45' }`) moved to the layer keys. `mask` carries only a direct
+mask-image: `none`, `url(…)`, a CSS variable, or an arbitrary value.
 
 ### mask-image: Gradient Masks
 

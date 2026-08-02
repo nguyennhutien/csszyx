@@ -112,6 +112,24 @@ mask-image: var(--tw-mask-linear), var(--tw-mask-radial), var(--tw-mask-conic);
 so each layer is its own sz key. They stack — a linear and a radial mask
 declared together compose rather than fight.
 
+:::caution[Breaking: the flat mask stop keys were removed]
+The old flat spellings copied the background gradient's bare stops, which
+Tailwind never serves for masks (a mask stop is always scoped to its layer or
+edge). They now map onto the layer keys:
+
+| Before | After |
+| --- | --- |
+| `{ mask: 'linear-45' }` | `{ maskLinear: { angle: 45 } }` |
+| `{ maskFrom: '20%' }` | `{ maskLinear: { from: '20%' } }` (or `maskRadial` / `maskConic`) |
+| `{ maskTo: '80%' }` | `{ maskLinear: { to: '80%' } }` (or `maskRadial` / `maskConic`) |
+| `{ maskVia: '50%' }` | Removed with no equivalent — Tailwind has no via stop for masks. |
+| `{ maskShape: 'circle' }` | `{ maskRadial: { shape: 'circle' } }` |
+
+`mask` itself now carries only a direct mask-image: `none`, a `url(…)`, a CSS
+variable, or an arbitrary value. The compiler warns on every removed spelling
+(in the browser dev console too) and names the replacement.
+:::
+
 ### Linear layer
 
 Declare **either** an angle **or** per-side edges. Both write
