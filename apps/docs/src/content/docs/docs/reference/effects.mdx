@@ -100,6 +100,99 @@ import { BoxShadowScale, OpacityScale, BlurScale, GrayscaleFilter } from '../../
   { sz: "{ backdropSaturate: 200 }", tw: "backdrop-saturate-200" },
 ]} />
 
+## Mask
+
+Tailwind composites `mask-image` from three independent layers, one per CSS
+custom property:
+
+```css
+mask-image: var(--tw-mask-linear), var(--tw-mask-radial), var(--tw-mask-conic);
+```
+
+so each layer is its own sz key. They stack — a linear and a radial mask
+declared together compose rather than fight.
+
+:::caution[Breaking: the flat mask stop keys were removed]
+The old flat spellings copied the background gradient's bare stops, which
+Tailwind never serves for masks (a mask stop is always scoped to its layer or
+edge). They now map onto the layer keys:
+
+| Before | After |
+| --- | --- |
+| `{ mask: 'linear-45' }` | `{ maskLinear: { angle: 45 } }` |
+| `{ maskFrom: '20%' }` | `{ maskLinear: { from: '20%' } }` (or `maskRadial` / `maskConic`) |
+| `{ maskTo: '80%' }` | `{ maskLinear: { to: '80%' } }` (or `maskRadial` / `maskConic`) |
+| `{ maskVia: '50%' }` | Removed with no equivalent — Tailwind has no via stop for masks. |
+| `{ maskShape: 'circle' }` | `{ maskRadial: { shape: 'circle' } }` |
+
+`mask` itself now carries only a direct mask-image: `none`, a `url(…)`, a CSS
+variable, or an arbitrary value. The compiler warns on every removed spelling
+(in the browser dev console too) and names the replacement.
+:::
+
+### Linear layer
+
+Declare **either** an angle **or** per-side edges. Both write
+`--tw-mask-linear`, so they are alternative modes; declaring both keeps
+whichever came later. Sides compose with each other, because each owns its own
+variable, and `x` / `y` simply write two.
+
+<PropTable rows={[
+  { sz: "{ maskLinear: { angle: 45 } }", tw: "mask-linear-45" },
+  { sz: "{ maskLinear: { angle: -45 } }", tw: "-mask-linear-45" },
+  { sz: "{ maskLinear: { angle: 45, from: '20%', to: '80%' } }", tw: "mask-linear-45 mask-linear-from-20% mask-linear-to-80%" },
+  { sz: "{ maskLinear: { b: { from: '20%', to: '80%' } } }", tw: "mask-b-from-20% mask-b-to-80%" },
+  { sz: "{ maskLinear: { t: { from: '0%' }, b: { from: '60%' } } }", tw: "mask-t-from-0% mask-b-from-60%" },
+  { sz: "{ maskLinear: { x: { from: '20%' } } }", tw: "mask-x-from-20%" },
+]} />
+
+### Radial and conic layers
+
+`at`, `size` and `shape` each write their own variable, so they compose with the
+stops and with each other.
+
+<PropTable rows={[
+  { sz: "{ maskRadial: { at: 'top', shape: 'circle' } }", tw: "mask-radial-at-top mask-circle" },
+  { sz: "{ maskRadial: { size: 'closest-side', from: '0%', to: '100%' } }", tw: "mask-radial-closest-side mask-radial-from-0% mask-radial-to-100%" },
+  { sz: "{ maskConic: { angle: 90 } }", tw: "mask-conic-90" },
+  { sz: "{ maskConic: { from: '20%', to: '80%' } }", tw: "mask-conic-from-20% mask-conic-to-80%" },
+]} />
+
+### Gradient stops
+
+A stop carries a **position**, a **colour**, or both — Tailwind keeps them in
+different custom properties, so a stop with both emits one utility for each. A
+scalar is a position when numeric and a colour otherwise; a bare CSS variable
+reads as a position, so a variable meant as a colour goes in `color`.
+
+<PropTable rows={[
+  { sz: "{ maskLinear: { b: { from: '20%' } } }", tw: "mask-b-from-20%" },
+  { sz: "{ maskLinear: { b: { from: 'red-500' } } }", tw: "mask-b-from-red-500" },
+  { sz: "{ maskLinear: { b: { from: { color: 'red-500', op: 30 } } } }", tw: "mask-b-from-red-500/30" },
+  { sz: "{ maskLinear: { b: { from: { at: '20%', color: 'red-500' } } } }", tw: "mask-b-from-20% mask-b-from-red-500" },
+  { sz: "{ maskLinear: { b: { from: { at: '--c' } } } }", tw: "mask-b-from-(--c)" },
+  { sz: "{ maskLinear: { b: { from: { color: '--c' } } } }", tw: "mask-b-from-(color:--c)" },
+]} />
+
+### The rest of the mask family
+
+`mask` itself now carries a direct `mask-image` only — a gradient value belongs
+to its layer key.
+
+<PropTable rows={[
+  { sz: "{ mask: 'none' }", tw: "mask-none" },
+  { sz: "{ mask: \"url('/img.png')\" }", tw: "mask-[url('/img.png')]" },
+  { sz: "{ mask: '--my-mask' }", tw: "mask-(--my-mask)" },
+  { sz: "{ maskSize: 'cover' }", tw: "mask-cover" },
+  { sz: "{ maskSize: '50%' }", tw: "mask-size-[50%]" },
+  { sz: "{ maskPos: 'top-left' }", tw: "mask-top-left" },
+  { sz: "{ maskRepeat: 'space' }", tw: "mask-repeat-space" },
+  { sz: "{ maskClip: 'no-clip' }", tw: "mask-no-clip" },
+  { sz: "{ maskMode: 'match-source' }", tw: "mask-match" },
+  { sz: "{ maskType: 'alpha' }", tw: "mask-type-alpha" },
+  { sz: "{ maskComposite: 'add' }", tw: "mask-add" },
+]} />
+
 ## Examples
 
 ```tsx

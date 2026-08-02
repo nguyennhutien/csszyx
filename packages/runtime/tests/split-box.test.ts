@@ -233,3 +233,41 @@ describe('anti-drift coverage gate', () => {
         expect(roles).toEqual(new Set(['outer', 'inner']));
     });
 });
+
+describe('splitBox — the result memo', () => {
+    it('returns an object the CALLER owns, not the cached one', () => {
+        // The result fields are mutable and callers have always received an
+        // object of their own; handing out the shared cache entry would let
+        // one caller's write corrupt every later render.
+        const first = splitBox('m-4 px-2');
+        first.outer = 'clobbered';
+        first.inner = 'clobbered';
+        expect(splitBox('m-4 px-2')).toEqual({ outer: 'm-4', inner: 'px-2' });
+    });
+
+    it('repeats the same partition for the same className', () => {
+        expect(splitBox('m-4 px-2 md:flex')).toEqual(splitBox('m-4 px-2 md:flex'));
+        expect(splitBox('m-4 px-2 md:flex')).toEqual({ outer: 'm-4', inner: 'px-2 md:flex' });
+    });
+
+    it('never lets an override call read or write the default-options cache', () => {
+        expect(splitBox('m-4 px-2')).toEqual({ outer: 'm-4', inner: 'px-2' });
+        expect(splitBox('m-4 px-2', { inner: ['m'] })).toEqual({ outer: '', inner: 'm-4 px-2' });
+        expect(splitBox('m-4 px-2', { fallback: 'inner' })).toEqual({
+            outer: 'm-4',
+            inner: 'px-2',
+        });
+        // …and the default-options answer is unchanged afterwards.
+        expect(splitBox('m-4 px-2')).toEqual({ outer: 'm-4', inner: 'px-2' });
+    });
+
+    it('keeps answering correctly past the admission cap', () => {
+        expect(splitBox('m-4 px-2')).toEqual({ outer: 'm-4', inner: 'px-2' });
+        // Overflow inputs stop being admitted; entries cached before the
+        // flood must survive it, and overflow answers stay correct.
+        for (let i = 0; i < 900; i++) {
+            expect(splitBox(`m-4 p-${i}`)).toEqual({ outer: 'm-4', inner: `p-${i}` });
+        }
+        expect(splitBox('m-4 px-2')).toEqual({ outer: 'm-4', inner: 'px-2' });
+    });
+});

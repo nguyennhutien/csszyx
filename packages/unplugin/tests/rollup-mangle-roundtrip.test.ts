@@ -73,7 +73,10 @@ describe('pure Rollup production mangle round-trip', () => {
             'export const App = <div className="p-91 raw-rollup" sz={{ p: 91, m: 92 }} />;',
         );
 
-        const [prePlugin, postPlugin] = rollupPlugin({ build: { cache: false, parser: 'oxc' } });
+        const [prePlugin, postPlugin] = rollupPlugin({
+            build: { cache: false, parser: 'oxc' },
+            production: { mangle: true },
+        });
         const build = await rollup({
             input,
             plugins: [prePlugin, jsxLoweringPlugin(), cssEmitterPlugin(), postPlugin],

@@ -26,6 +26,9 @@ pub struct TransformOptions {
     /// under one engine only — the override must reach the native parser too.
     #[serde(default)]
     pub ast_budget: Option<usize>,
+    /// Cross-module szv registry payload, ordered-pair JSON from the bundler.
+    #[serde(default)]
+    pub cross_module_statics_json: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -85,6 +88,15 @@ pub struct TransformMetadata {
     /// Whether the result imports the runtime _szPart helper (dynamic array elements).
     #[serde(default)]
     pub uses_sz_part: bool,
+    /// Whether the result imports the runtime __szvPick helper (precompiled szv tables).
+    #[serde(default)]
+    pub uses_szv_pick: bool,
+    /// Whether the result imports the runtime __szvPick1 single-dimension helper.
+    pub uses_szv_pick1: bool,
+    /// True when every emitted `_szPart` argument is provably a string or
+    /// falsy (vacuously true with none).
+    #[serde(default)]
+    pub sz_part_args_provable: bool,
     /// Whether the result imports the runtime color-var helper.
     pub uses_color_var: bool,
     /// Whether the result imports the runtime spacing-var helper.

@@ -28,6 +28,8 @@ pub(crate) mod rewrite;
 #[cfg(feature = "native-engine")]
 #[allow(dead_code)]
 pub(crate) mod scope;
+#[cfg(feature = "native-engine")]
+pub(crate) mod szv_precompile;
 
 #[cfg(not(feature = "native-engine"))]
 use fast_path::{triage_source, FastPathTriage};
@@ -41,10 +43,12 @@ pub use contract::{
 };
 pub use ir::{
     ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, IrError, JsxOpeningElementIr,
-    RecoveryAttributeIr, SafeStyleSpreadExpressionIr, SafeStyleSpreadIr, SafeStyleSpreadObjectIr,
-    SafeStyleSpreadValueIr, SourceIr, StaticArrayPartIr, StaticSzObject, StaticSzProperty,
-    StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr, SzsAttributeIr,
-    SzsSlotEntryIr, TextSpan,
+    RecoveryAttributeIr, RuntimeFallbackDiagnosticIr, RuntimeFallbackKindIr,
+    SafeStyleSpreadExpressionIr, SafeStyleSpreadIr, SafeStyleSpreadObjectIr,
+    SafeStyleSpreadValueIr, SiteFallbackIr, SourceIr, StaticArrayPartIr, StaticSzObject,
+    StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr,
+    SzFallbackSiteIr, SzrImportRewriteIr, SzsAttributeIr, SzsSlotEntryIr, SzvReplacementIr,
+    SzvTableInsertionIr, TextSpan,
 };
 
 /// Error returned when the Rust transform engine cannot run in this build.

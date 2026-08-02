@@ -258,7 +258,6 @@ pub(crate) fn property_prefix(key: &str) -> Option<&'static str> {
         "maskSize" => Some("mask-size"),
         "maskPos" => Some("mask-position"),
         "maskRepeat" => Some("mask-repeat"),
-        "maskShape" => Some("mask"),
         "maskClip" => Some("mask-clip"),
         "maskOrigin" => Some("mask-origin"),
         "cursor" => Some("cursor"),
@@ -315,9 +314,6 @@ pub(crate) fn property_prefix(key: &str) -> Option<&'static str> {
         "scrollbarGutter" => Some("scrollbar-gutter"),
         "zoom" => Some("zoom"),
         "tabSize" => Some("tab"),
-        "maskFrom" => Some("mask-from"),
-        "maskVia" => Some("mask-via"),
-        "maskTo" => Some("mask-to"),
         _ => None,
     }
 }
@@ -434,7 +430,7 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
 
 /// Returns true when a property is lowered by a dedicated object branch.
 pub(crate) fn is_known_special_property(key: &str) -> bool {
-    matches!(key, "css")
+    matches!(key, "css" | "maskLinear" | "maskRadial" | "maskConic")
 }
 
 /// Returns true when a key is a removed boolean-sugar alias (flex/absolute/
@@ -611,5 +607,14 @@ pub(crate) fn is_aria_state(key: &str) -> bool {
             | "live"
             | "atomic"
             | "modal"
+    )
+}
+
+/// Returns true when a key is a parametric/scope variant stem (group, peer,
+/// has, not, data, aria, supports) that combines with dash/bracket syntax.
+pub(crate) fn is_special_variant(key: &str) -> bool {
+    matches!(
+        key,
+        "group" | "peer" | "has" | "not" | "data" | "aria" | "supports"
     )
 }

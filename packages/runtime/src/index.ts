@@ -73,6 +73,13 @@ export {
 } from './split-box.js';
 // Strip the sz prop before forwarding props to a host element
 export { stripSzProps } from './strip-sz-props.js';
+// Runtime picker for build-precompiled szv tables (string-only)
+export {
+    __szvPick,
+    __szvPick1,
+    type SzvCompiledTable,
+    type SzvPickSelection,
+} from './szv-pick.js';
 // Export variant authoring helper
 export { szv } from './variants.js';
 // Export verification functions

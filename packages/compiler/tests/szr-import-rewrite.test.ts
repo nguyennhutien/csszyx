@@ -1,0 +1,225 @@
+/**
+ * The szr import rewrite: proof matrix and three-engine decision parity.
+ *
+ * `import { szr } from '@csszyx/runtime'` ships the browser transform because
+ * the barrel's szr must lower sz OBJECTS standalone. When a file provably
+ * never passes szr anything but strings, the compiler retargets the import at
+ * the `/core` entry (same-package subpath — `csszyx` → `csszyx/core`), whose
+ * szr is string-first and compiler-free.
+ *
+ * Two invariants matter more than any single verdict:
+ *
+ * 1. **Decision parity.** A `build.parser` flip must not change the emitted
+ *    import — one engine rewriting while another keeps the barrel would mean
+ *    different bundles per parser. Every case here runs on all three engines
+ *    and asserts the same verdict.
+ * 2. **Conservative failure.** A wrong "keep" costs bytes; a wrong "rewrite"
+ *    crashes at runtime when an object reaches the string-only szr. Every
+ *    uncertain shape must therefore KEEP.
+ */
+import { describe, expect, it } from 'vitest';
+import {
+    countSzrWordOccurrences,
+    countSzrWordOccurrencesOutsideComments,
+    szrRewriteProofHolds,
+} from '../src/szr-import-rewrite.js';
+import { transformSourceCode } from '../src/transform.js';
+import { transformOxc } from '../src/transform-oxc.js';
+import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+
+type Engine = (source: string, filename?: string) => { code?: string };
+
+const LANES: ReadonlyArray<readonly [string, Engine]> = [
+    ['babel', transformSourceCode],
+    ['oxc', transformOxc as Engine],
+    ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
+];
+
+/**
+ * Whether one engine rewrote the file's szr import to a core entry.
+ *
+ * @param engine - Engine entry under test.
+ * @param source - Full module source.
+ * @returns True when the emitted import targets a `/core` subpath.
+ */
+function rewrites(engine: Engine, source: string): boolean {
+    const code = engine(source, '/p/t.tsx').code ?? source;
+    return (
+        code.includes('@csszyx/runtime/core') ||
+        code.includes("'csszyx/core'") ||
+        code.includes('"csszyx/core"')
+    );
+}
+
+const RUNTIME = "import { szr } from '@csszyx/runtime';\n";
+
+/** Sources that must be rewritten to the core entry. */
+const REWRITE_CASES: ReadonlyArray<readonly [string, string]> = [
+    ['string literals', `${RUNTIME}export const a = szr('p-4', 'm-2');`],
+    ['template literal (any interpolation)', `${RUNTIME}export const a = szr(\`p-\${size}\`);`],
+    ['&& guard — falsy left is skipped', `${RUNTIME}export const a = szr(cond && 'm-2');`],
+    ['ternary of strings', `${RUNTIME}export const a = szr(wide ? 'w-full' : 'w-64');`],
+    ['array of strings', `${RUNTIME}export const a = szr(['p-4', on && 'x']);`],
+    ['array of falsy literals', `${RUNTIME}export const a = szr([false, null, undefined]);`],
+    ['falsy literals', `${RUNTIME}export const a = szr('p-4', false, null, undefined);`],
+    ['umbrella source', "import { szr } from 'csszyx';\nexport const a = szr('p-4');"],
+    [
+        'double-quoted source',
+        'import { szr } from "@csszyx/runtime";\nexport const a = szr("p-4");',
+    ],
+    ['imported but never called', `${RUNTIME}export const a = 1;`],
+    ['multiple proven calls', `${RUNTIME}const x = szr('a'); export const b = szr('b', \`c\`);`],
+    ['parenthesized string argument', `${RUNTIME}export const a = szr(('p-4'));`],
+    ['inside JSX', `${RUNTIME}export const A = () => <div className={szr('p-4')} />;`],
+    // Comments are parser-classified and erased at runtime, so a doc mention
+    // must not veto the rewrite — real design systems document szr by name.
+    ['line comment mentions szr', `${RUNTIME}// szr is called below\nexport const a = szr('p-4');`],
+    [
+        'block comment mentions szr twice',
+        `${RUNTIME}/* szr wraps szr-safe strings */\nexport const a = szr('p-4');`,
+    ],
+    // Clause SPLITS: szr moves to the core entry, the rest stays on the barrel.
+    [
+        'multi-specifier clause splits',
+        "import { szr, szv } from '@csszyx/runtime';\nexport const a = szr('p-4');",
+    ],
+    [
+        'type specifier rides along in a split',
+        "import { szr, type SzInput } from '@csszyx/runtime';\nexport const a = szr('p-4');",
+    ],
+];
+
+/** Sources that must keep the barrel import. */
+const KEEP_CASES: ReadonlyArray<readonly [string, string]> = [
+    [
+        'string-named import conservatively fails reference accounting',
+        'import { "szr" as szr } from "@csszyx/runtime";\nexport const a = szr("p-4");',
+    ],
+    ['object argument', `${RUNTIME}export const a = szr({ p: 4 });`],
+    ['identifier argument', `${RUNTIME}export const a = szr(cfg);`],
+    ['call argument', `${RUNTIME}export const a = szr(mk());`],
+    ['member argument', `${RUNTIME}export const a = szr(theme.card);`],
+    ['|| with unprovable left', `${RUNTIME}export const a = szr(cfg || 'p-4');`],
+    ['?? with unprovable left', `${RUNTIME}export const a = szr(cfg ?? 'p-4');`],
+    ['|| with safe left but unsafe right', `${RUNTIME}export const a = szr('p-4' || cfg);`],
+    ['TS assertion is not proof', `${RUNTIME}export const a = szr(x as string);`],
+    ['spread argument', `${RUNTIME}export const a = szr(...parts);`],
+    ['array with spread', `${RUNTIME}export const a = szr(['p-4', ...rest]);`],
+    ['array with a hole', `${RUNTIME}export const a = szr(['p-4', , 'm-2']);`],
+    ['array with object element', `${RUNTIME}export const a = szr(['p-4', { m: 2 }]);`],
+    ['numeric argument (truthy non-string)', `${RUNTIME}export const a = szr(4);`],
+    ['true literal (truthy non-string)', `${RUNTIME}export const a = szr(true);`],
+    ['szr passed as a value', `${RUNTIME}export const a = ['x'].map(szr);`],
+    ['szr referenced without call', `${RUNTIME}export const helper = szr;`],
+    ['member call on szr', `${RUNTIME}export const a = szr.call(null, 'x');`],
+    [
+        'shadowing declaration',
+        `${RUNTIME}function f(szr) { return szr('x'); }\nexport const a = szr('p-4');`,
+    ],
+    [
+        'string mentions szr',
+        `${RUNTIME}export const a = szr('p-4'); export const doc = 'call szr here';`,
+    ],
+    ['aliased import', "import { szr as r } from '@csszyx/runtime';\nexport const a = r('p-4');"],
+    // Provably safe by construction — the recorder requires a plain named
+    // specifier whose local name is `szr` — but only construction said so
+    // until now.
+    ['namespace import', "import * as rt from '@csszyx/runtime';\nexport const a = rt.szr('p-4');"],
+    [
+        're-export of szr',
+        "export { szr } from '@csszyx/runtime';\nimport { szr } from '@csszyx/runtime';\nexport const a = szr('p-4');",
+    ],
+    [
+        'aliased szr inside a multi clause',
+        "import { szr as r, szv } from '@csszyx/runtime';\nexport const a = r('p-4');",
+    ],
+    [
+        'default import alongside szr',
+        "import def, { szr } from 'csszyx';\nexport const a = szr('p-4');",
+    ],
+    ['unmapped source package', "import { szr } from 'other-lib';\nexport const a = szr('p-4');"],
+    ['type-only declaration', "import type { szr } from '@csszyx/runtime';\ntype T = szr;"],
+    ['one proven and one unsafe call', `${RUNTIME}const x = szr('a'); export const b = szr(cfg);`],
+];
+
+describe.each(LANES)('%s lane', (_lane, engine) => {
+    it.each(REWRITE_CASES)('rewrites: %s', (_name, source) => {
+        expect(rewrites(engine, source)).toBe(true);
+    });
+
+    it.each(KEEP_CASES)('keeps the barrel: %s', (_name, source) => {
+        expect(rewrites(engine, source)).toBe(false);
+    });
+
+    it('leaves the rest of the module intact when rewriting', () => {
+        const source = `${RUNTIME}export const a = szr('p-4');\nexport const other = 42;`;
+        const code = engine(source, '/p/t.tsx').code ?? source;
+        expect(code).toContain('@csszyx/runtime/core');
+        expect(code).not.toMatch(/from ['"]@csszyx\/runtime['"]/);
+        expect(code).toContain("szr('p-4')");
+        expect(code).toContain('42');
+    });
+
+    it('splits a mixed clause into barrel and core lines', () => {
+        const source = "import { szr, szv } from '@csszyx/runtime';\nexport const a = szr('p-4');";
+        const code = engine(source, '/p/t.tsx').code ?? source;
+        // szv keeps the barrel; szr moves to the core entry; both lines exist.
+        expect(code).toMatch(/szv[^\n]*from ['"]@csszyx\/runtime['"]/);
+        expect(code).toMatch(/szr[^\n]*from ['"]@csszyx\/runtime\/core['"]/);
+        expect(code).not.toMatch(/szr[^\n]*from ['"]@csszyx\/runtime['"]/);
+    });
+});
+
+describe('three-engine decision parity', () => {
+    const all = [...REWRITE_CASES, ...KEEP_CASES];
+    it.each(all)('every engine agrees on: %s', (_name, source) => {
+        const verdicts = LANES.map(([, engine]) => rewrites(engine, source));
+        expect(new Set(verdicts).size).toBe(1);
+    });
+});
+
+describe('countSzrWordOccurrencesOutsideComments', () => {
+    it('subtracts occurrences inside the given comment spans', () => {
+        const source = "// szr docs\nszr('a');";
+        expect(countSzrWordOccurrencesOutsideComments(source, [{ start: 0, end: 11 }])).toBe(1);
+    });
+
+    it('handles a word flush against the span edges', () => {
+        const source = '/*szr*/szr();';
+        expect(countSzrWordOccurrencesOutsideComments(source, [{ start: 0, end: 7 }])).toBe(1);
+    });
+
+    it('is the raw count with no comments', () => {
+        expect(countSzrWordOccurrencesOutsideComments("szr('a')", [])).toBe(1);
+    });
+});
+
+describe('countSzrWordOccurrences', () => {
+    it('counts standalone words only', () => {
+        expect(countSzrWordOccurrences("szr('a'); myszr(); szr2(); a.szr; 'szr'")).toBe(3);
+    });
+
+    it('counts a word flush with both source boundaries', () => {
+        expect(countSzrWordOccurrences('szr')).toBe(1);
+    });
+
+    it('treats non-ASCII neighbours as boundaries — the overcounting direction', () => {
+        // `szrΩ` is one identifier, but counting it can only FAIL the proof.
+        expect(countSzrWordOccurrences('const szrΩ = 1;')).toBe(1);
+    });
+
+    it('returns zero for an empty or unrelated source', () => {
+        expect(countSzrWordOccurrences('')).toBe(0);
+        expect(countSzrWordOccurrences('const sz = 1; const zr = 2;')).toBe(0);
+    });
+});
+
+describe('szrRewriteProofHolds', () => {
+    it('rejects missing or incomplete argument analyses', () => {
+        const call = { arguments: [{}] };
+        expect(szrRewriteProofHolds([call], new Map(), new Set(), 'szr(x)', [])).toBe(false);
+        expect(szrRewriteProofHolds([call], new Map([[call, []]]), new Set(), 'szr(x)', [])).toBe(
+            false,
+        );
+    });
+});

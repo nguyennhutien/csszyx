@@ -51,8 +51,9 @@ describe('effects — box shadow', () => {
         expect(t({ ring: 1 })).toBe('ring-1');
     });
 
-    it('{ ring: "none" } → ring-none', () => {
-        expect(t({ ring: 'none' })).toBe('ring-none');
+    it('{ ring: "none" } → ring-0', () => {
+        // Tailwind spells the zero ring `ring-0`; `ring-none` styles nothing.
+        expect(t({ ring: 'none' })).toBe('ring-0');
     });
 
     it('{ insetRing: true } → inset-ring', () => {
@@ -115,28 +116,62 @@ describe('effects — background blend mode', () => {
 });
 
 describe('effects — masking', () => {
-    it('{ mask: "linear-45" } → mask-linear-45', () => {
-        expect(t({ mask: 'linear-45' })).toBe('mask-linear-45');
+    // Tailwind composites mask-image from one custom property per layer, so
+    // each layer is its own key. `mask` keeps only the direct mask-image forms.
+    it('{ maskLinear: { angle } } → mask-linear-<angle>', () => {
+        expect(t({ maskLinear: { angle: 45 } })).toBe('mask-linear-45');
+        expect(t({ maskLinear: { angle: -45 } })).toBe('-mask-linear-45');
+        expect(t({ maskLinear: { angle: '--a' } })).toBe('mask-linear-(--a)');
     });
 
-    it('{ mask: "-linear-45" } → -mask-linear-45', () => {
-        expect(t({ mask: '-linear-45' })).toBe('-mask-linear-45');
+    it('{ maskLinear } stops split position from colour', () => {
+        expect(t({ maskLinear: { angle: 45, from: '20%', to: '80%' } })).toBe(
+            'mask-linear-45 mask-linear-from-20% mask-linear-to-80%',
+        );
+        // Position and colour are different custom properties, so a stop
+        // carrying both emits two utilities rather than one fused token.
+        expect(t({ maskLinear: { from: { at: '20%', color: 'red-500' } } })).toBe(
+            'mask-linear-from-20% mask-linear-from-red-500',
+        );
+        expect(t({ maskLinear: { from: { color: 'red-500', op: 30 } } })).toBe(
+            'mask-linear-from-red-500/30',
+        );
     });
 
-    it('{ mask: "radial" } → mask-radial', () => {
-        expect(t({ mask: 'radial' })).toBe('mask-radial');
+    it('{ maskLinear } sides compose, because each owns its own variable', () => {
+        expect(t({ maskLinear: { t: { from: '0%' }, b: { from: '60%' } } })).toBe(
+            'mask-t-from-0% mask-b-from-60%',
+        );
+        expect(t({ maskLinear: { b: { from: '20%', to: '80%' } } })).toBe(
+            'mask-b-from-20% mask-b-to-80%',
+        );
+        expect(t({ maskLinear: { x: { from: '20%' } } })).toBe('mask-x-from-20%');
+    });
+
+    it('{ maskRadial } modifiers compose with its stops', () => {
+        expect(t({ maskRadial: { at: 'top', shape: 'circle', from: '0%', to: '100%' } })).toBe(
+            'mask-radial-at-top mask-circle mask-radial-from-0% mask-radial-to-100%',
+        );
+        expect(t({ maskRadial: { size: 'closest-side' } })).toBe('mask-radial-closest-side');
+    });
+
+    it('{ maskConic } takes an angle and stops', () => {
+        expect(t({ maskConic: { angle: 90 } })).toBe('mask-conic-90');
+        expect(t({ maskConic: { from: '20%', to: '80%' } })).toBe(
+            'mask-conic-from-20% mask-conic-to-80%',
+        );
     });
 
     it('{ mask: "none" } → mask-none', () => {
         expect(t({ mask: 'none' })).toBe('mask-none');
     });
 
-    it('{ mask: "linear-to-tr" } → mask-linear-to-tr', () => {
-        expect(t({ mask: 'linear-to-tr' })).toBe('mask-linear-to-tr');
-    });
-
-    it('{ maskShape: "circle" } → mask-circle', () => {
-        expect(t({ maskShape: 'circle' })).toBe('mask-circle');
+    it('a gradient value on `mask` no longer compiles — it moved to its layer', () => {
+        // These produced either a second way to the same class or, for the
+        // direction keywords, a class Tailwind never served.
+        for (const value of ['linear-45', '-linear-45', 'radial', 'linear-to-tr', 'conic-90']) {
+            expect(t({ mask: value })).toBe('');
+        }
     });
 
     it("{ mask: \"url('/img.png')\" } → mask-[url('/img.png')] (arbitrary)", () => {

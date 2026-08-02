@@ -98,6 +98,9 @@ const nextConfig: NextConfig = {
                 },
                 production: {
                     injectChecksum: true,
+                    // Mangling is opt-in; the e2e suite asserts the sz classes
+                    // ship encoded on the webpack lane, so this playground opts in.
+                    mangle: true,
                     mangleVars: true,
                 },
             }),

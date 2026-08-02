@@ -151,6 +151,9 @@ pub fn rewrite_static_sz_attributes_with_options(
         rewrote = true;
     }
 
+    rewrote |= apply_szv_precompile(&mut magic, ir);
+    rewrote |= apply_szr_import_rewrite(&mut magic, ir);
+
     if !rewrote {
         return if ir.sz_attributes.is_empty() {
             Err(StaticRewriteUnsupported::NoStaticSzAttribute)
@@ -160,6 +163,49 @@ pub fn rewrite_static_sz_attributes_with_options(
     }
 
     Ok(magic.to_string())
+}
+
+/// Apply the szv precompile splices: call-site replacements plus the table
+/// constants appended after their factory declarations.
+fn apply_szv_precompile(magic: &mut MagicString<'_>, ir: &SourceIr) -> bool {
+    let mut rewrote = false;
+    for replacement in &ir.szv_replacements {
+        magic.update_with(
+            replacement.span.start as usize,
+            replacement.span.end as usize,
+            replacement.replacement.clone(),
+            UpdateOptions {
+                overwrite: true,
+                ..UpdateOptions::default()
+            },
+        );
+        rewrote = true;
+    }
+    for insertion in &ir.szv_table_insertions {
+        magic.append_right(insertion.offset as usize, insertion.text.clone());
+        rewrote = true;
+    }
+    rewrote
+}
+
+/// Retarget a proven-safe szr import at the slim core entry.
+///
+/// The parser finalized the whole-file proof; this only splices the pre-quoted
+/// replacement over the source literal's span.
+fn apply_szr_import_rewrite(magic: &mut MagicString<'_>, ir: &SourceIr) -> bool {
+    let Some(szr_rewrite) = &ir.szr_import_rewrite else {
+        return false;
+    };
+    magic.update_with(
+        szr_rewrite.span.start as usize,
+        szr_rewrite.span.end as usize,
+        szr_rewrite.replacement.clone(),
+        UpdateOptions {
+            overwrite: true,
+            ..UpdateOptions::default()
+        },
+    );
+    true
 }
 
 fn rewrite_array_sz_attribute(

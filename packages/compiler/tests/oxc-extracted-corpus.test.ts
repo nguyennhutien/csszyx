@@ -21,7 +21,9 @@ type CorpusCategory =
     | 'metadata-divergence';
 
 const EXPECTED_SUMMARY: Record<CorpusCategory, number> = {
-    parity: 8,
+    // 8 → 10 when the sz-fallback-matrix suite landed: its two `const source`
+    // snippets qualify for extraction and both compare equal across engines.
+    parity: 11,
     'surgical-parity': 133,
     'oxc-throws': 0,
     // Was 1: the `bg:{ color, op: cond ? 30 : 100 }` snippet — oxc used to diverge
@@ -36,7 +38,7 @@ describe('Phase D3 — extracted compiler corpus categories', () => {
     const summary = summarise(snippets);
 
     it('extracts a stable source corpus from existing compiler tests', () => {
-        expect(snippets).toHaveLength(141);
+        expect(snippets).toHaveLength(144);
     });
 
     it('matches the current Babel-vs-oxc category summary', () => {

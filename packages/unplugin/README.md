@@ -2,7 +2,7 @@
 
 > Vite, Webpack, and esbuild integration for CSSzyx.
 
-Build-time plugin that transforms `sz` props into Tailwind classes, generates static CSS, mangles class names in production, and injects hydration scripts for SSR.
+Build-time plugin that transforms `sz` props into Tailwind classes, generates static CSS, optionally mangles class names in production (opt-in), and injects hydration scripts for SSR.
 
 ## Installation
 

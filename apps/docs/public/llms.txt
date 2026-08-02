@@ -263,7 +263,8 @@ compile error, so typos and legacy CSS-property names are caught by `tsc` (run
 ```
 
 Arbitrary variants are allowed by pattern: `{ '@container': {…} }`, `{ 'min-[320px]': {…} }`,
-`{ '[&>span]': {…} }`. **Custom breakpoints are typed from your CSS** — define one once in
+`{ '[&>span]': {…} }`. A STRING value under any variant key is a ready-made utility the
+variant prefixes with `:` — `{ 'data-[open]': 'sr-only' }` → `data-[open]:sr-only`. **Custom breakpoints are typed from your CSS** — define one once in
 Tailwind `@theme` and csszyx auto-generates the type:
 
 ```css
@@ -961,14 +962,19 @@ no tsconfig change needed.
 
 ## Production Build (Mangling)
 
-In production, class names are mangled for maximum compression:
+Class-name mangling is **opt-in** (`production.mangle` defaults to `false`) and is an
+obfuscation feature, not a size optimization: the runtime mangle map the page must ship
+costs more bytes than the shorter class names save, so enable it only when the original
+utility names should not be readable in the production bundle.
 
 ```js
 // vite.config.ts (production)
 ...csszyx({ production: { mangle: true } })
 ```
 
-Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injected automatically.
+Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injected
+automatically. `production.mangleMapDelivery` chooses where the runtime map ships
+(`'both'` default, `'html'`, or `'bundle'`; vite/rollup lanes).
 
 If an `sz`-generated utility also appears as a static string or template quasi in a
 source-level `class` or `className` attribute/property (including a `clsx(...)`
@@ -982,8 +988,8 @@ adapter keeps class names readable (and warns when `production.mangle: true` is
 explicit) because normal esbuild write-to-disk builds do not expose mutable final
 assets; source transforms and safelist generation still run.
 
-Set `production: { mangle: false }` to keep readable class names — the supported way to
-inspect the emitted CSS. To check what a single `sz` object
+With mangling left at its default (off), a build keeps readable class names — the
+supported way to inspect the emitted CSS. To check what a single `sz` object
 compiles to without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
 
 ### AST budget guard

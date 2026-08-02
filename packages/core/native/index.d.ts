@@ -34,6 +34,8 @@ export interface NativeTransformOptions {
     rootDir?: string;
     /** Per-file AST node cap override (`build.astBudgetLimit`). */
     astBudget?: number;
+    /** Cross-module szv registry payload (ordered-pair JSON). */
+    crossModuleStaticsJson?: string;
 }
 
 /** Native transform output shape returned per source file. */
@@ -78,6 +80,12 @@ export interface NativeTransformResult {
         usesSzcn: boolean;
         /** Whether the result imports the runtime _szPart helper (dynamic array elements). */
         usesSzPart: boolean;
+        /** Whether the result imports the runtime __szvPick helper. */
+        usesSzvPick: boolean;
+        /** Whether the result imports the runtime __szvPick1 single-dimension helper. */
+        usesSzvPick1: boolean;
+        /** True when every emitted _szPart argument is provably string/falsy. */
+        szPartArgsProvable: boolean;
         /** Whether the result imports the runtime color-var helper. */
         usesColorVar: boolean;
         /** Whether the emitted code calls the __szSpacingVar runtime helper. */

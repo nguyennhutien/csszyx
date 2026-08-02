@@ -254,6 +254,7 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
 
         let attribute_index = ir.sz_attributes.len();
         ir.sz_attributes.push(SzAttributeIr {
+            runtime_fallback_diagnostic: None,
             attribute_span: span(attribute_start, attribute_end)?,
             value_span: span(attribute_start + "sz=".len(), attribute_end)?,
             object,

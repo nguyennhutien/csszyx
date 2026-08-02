@@ -32,6 +32,14 @@ describe('include filter', () => {
     });
 });
 
+describe('production option validation', () => {
+    it('rejects an unknown mangle-map delivery lane instead of widening it', () => {
+        expect(() => vitePlugin({ production: { mangleMapDelivery: 'htlm' as never } })).toThrow(
+            /mangleMapDelivery must be 'both', 'html' or 'bundle'/,
+        );
+    });
+});
+
 describe('compileSources resolution warning', () => {
     it('warns once about entries that do not resolve to a directory', () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-compilesrc-'));

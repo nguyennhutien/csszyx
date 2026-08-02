@@ -43,6 +43,36 @@
         "types": "./dist/lite.d.cts",
         "default": "./dist/lite.cjs"
       }
+    },
+    "./core": {
+      "import": {
+        "types": "./dist/core.d.mts",
+        "default": "./dist/core.mjs"
+      },
+      "require": {
+        "types": "./dist/core.d.cts",
+        "default": "./dist/core.cjs"
+      }
+    },
+    "./lowering": {
+      "import": {
+        "types": "./dist/lowering.d.mts",
+        "default": "./dist/lowering.mjs"
+      },
+      "require": {
+        "types": "./dist/lowering.d.cts",
+        "default": "./dist/lowering.cjs"
+      }
+    },
+    "./merge": {
+      "import": {
+        "types": "./dist/merge.d.mts",
+        "default": "./dist/merge.mjs"
+      },
+      "require": {
+        "types": "./dist/merge.d.cts",
+        "default": "./dist/merge.cjs"
+      }
     }
   },
   "files": [
@@ -67,7 +97,10 @@
     "vite-plugin-wasm": "^3.6.0",
     "vitest": "^4.1.10"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/lowering.mjs",
+    "./dist/lowering.cjs"
+  ],
   "engines": {
     "node": "^22.18.0 || >=24.11.0"
   }

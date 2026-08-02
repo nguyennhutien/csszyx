@@ -38,9 +38,14 @@ const runServer = async (label, serverPath) => {
     };
     const responseFor = seq =>
         new Promise((resolveResponse, reject) => {
+            // Spawns a real tsserver and waits on its protocol responses, so the
+            // budget has to cover process startup under load, not just the
+            // request. Measured at ~1.2s alone; a full parallel run pushed it
+            // past the old 8s and failed as a timeout, which reads as a broken
+            // plugin rather than a busy machine.
             const timer = setTimeout(
                 () => reject(new Error(`${label} tsserver response ${seq} timed out`)),
-                8_000,
+                30_000,
             );
             responses.set(seq, message => {
                 clearTimeout(timer);

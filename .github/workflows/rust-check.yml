@@ -80,13 +80,14 @@ jobs:
       - name: Validate native package metadata
         run: node scripts/validate-native-packages.mjs
 
-      - name: Run native engine parser tests
-        run: cargo test --features native-engine transform::parser
-
-      # The parse-level parity harness is gated behind native-engine and is not
-      # matched by the transform::parser filter above, so run it explicitly.
-      - name: Run parse-parity harness
-        run: cargo test --features native-engine --test parse_parity_corpus
+      # Everything behind the native-engine gate: inline module tests (parser,
+      # lower, rewrite, engine, szv_precompile, …) AND every integration binary
+      # (parity corpuses, sz_fallback_parity, parser_panic_fuzz). The previous
+      # shape filtered by `transform::parser` plus one named binary, which
+      # silently skipped every other gated test — 157 lines of fallback parity
+      # assertions ran zero times here while the job stayed green.
+      - name: Run native engine tests
+        run: cargo test --features native-engine
 
       - name: Install wasm-pack
         run: cargo install wasm-pack --locked --version 0.14.0 || true

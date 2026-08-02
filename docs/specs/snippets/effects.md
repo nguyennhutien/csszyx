@@ -14,7 +14,7 @@ Controlling the box shadow of an element.
 | **Inset Ring**         | `box-shadow: inset (etc)`                   | `inset-ring`, `inset-ring-1`                                                                                      | `{ insetRing: 1 }`                                                                                                                           |                                                                                |
 | **None**               | `box-shadow: 0 0 #0000`                     | `shadow-none`                                                                                                     | `{ shadow: 'none' }`                                                                                                                         |                                                                                |
 | **Inset None**         | `box-shadow: inset 0 0 #0000`               | `inset-shadow-none`                                                                                               | `{ insetShadow: 'none' }`                                                                                                                    |                                                                                |
-| **Ring None**          | `box-shadow: 0 0 #0000`                     | `ring-none`                                                                                                       | `{ ring: 'none' }`                                                                                                                           |                                                                                |
+| **Ring None**          | `box-shadow: 0 0 #0000`                     | `ring-0`                                                                                                          | `{ ring: 'none' }`                                                                                                                           | Tailwind spells the zero ring `ring-0`; `ring-none` styles nothing.            |
 | **Color**              | `box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05)` | `shadow-blue-500`, `inset-shadow-blue-500`, `ring-blue-500`                                                       | `{ shadowColor: 'blue-500' }`                                                                                                                |                                                                                |
 | **Color + Opacity**    | `--tw-shadow-color: (value) / 50%`          | `shadow-blue-500/50`                                                                                              | `{ shadowColor: { color: 'blue-500', op: 50 } }`                                                                                             |                                                                                |
 | **Size + Opacity**     | `box-shadow: (size) / 12.5%`                | `shadow-sm/12.5`, `shadow-2xl/50`                                                                                 | `{ shadow: 'sm/12.5' }`, `{ shadow: '2xl/50' }`                                                                                              | **TW 4.3.3**: fractional opacity on named sizes.                               |
@@ -91,35 +91,29 @@ Controlling the masking of an element with images, gradients, and CSS properties
 
 > **Source:** [Tailwind CSS v4.1 Documentation](https://tailwindcss.com/docs/mask-image)
 
+**Migration (breaking):** the flat stop keys were removed — `maskFrom`/`maskTo`
+moved into their layer (`{ maskLinear: { from } }` etc.), `maskShape` moved to
+`{ maskRadial: { shape } }`, `maskVia` was removed with no equivalent (Tailwind
+has no via stop for masks), and gradient layer values on `mask`
+(`{ mask: 'linear-45' }`) moved to the layer keys. `mask` carries only a direct
+mask-image: `none`, `url(…)`, a CSS variable, or an arbitrary value.
+
 ### mask-image: Gradient Masks
 
-| Concept        | CSS Rule                                      | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note                       |
-| :------------- | :-------------------------------------------- | :---------------- | :------------------------ | :------------------------- |
-| **None**       | `mask-image: none`                            | `mask-none`       | `{ mask: 'none' }`        |                            |
-| **Linear**     | `mask-image: linear-gradient(45deg, ...)`     | `mask-linear-45`  | `{ mask: 'linear-45' }`   | Angle in degrees.          |
-| **Linear Neg** | `mask-image: linear-gradient(-45deg, ...)`    | `-mask-linear-45` | `{ mask: '-linear-45' }`  | Negative angle prefix `-`. |
-| **Radial**     | `mask-image: radial-gradient(...)`            | `mask-radial`     | `{ mask: 'radial' }`      |                            |
-| **Conic**      | `mask-image: conic-gradient(from 90deg, ...)` | `mask-conic-90`   | `{ mask: 'conic-90' }`    |                            |
-
-### mask-image: Direction Keywords
-
-| Concept             | CSS Rule                                            | Tailwind v4 Class   | `sz` Prop (Object Syntax)  | Note |
-| :------------------ | :-------------------------------------------------- | :------------------ | :------------------------- | :--- |
-| **To Top**          | `mask-image: linear-gradient(to top, ...)`          | `mask-linear-to-t`  | `{ mask: 'linear-to-t' }`  |      |
-| **To Top Right**    | `mask-image: linear-gradient(to top right, ...)`    | `mask-linear-to-tr` | `{ mask: 'linear-to-tr' }` |      |
-| **To Right**        | `mask-image: linear-gradient(to right, ...)`        | `mask-linear-to-r`  | `{ mask: 'linear-to-r' }`  |      |
-| **To Bottom Right** | `mask-image: linear-gradient(to bottom right, ...)` | `mask-linear-to-br` | `{ mask: 'linear-to-br' }` |      |
-| **To Bottom**       | `mask-image: linear-gradient(to bottom, ...)`       | `mask-linear-to-b`  | `{ mask: 'linear-to-b' }`  |      |
-| **To Bottom Left**  | `mask-image: linear-gradient(to bottom left, ...)`  | `mask-linear-to-bl` | `{ mask: 'linear-to-bl' }` |      |
-| **To Left**         | `mask-image: linear-gradient(to left, ...)`         | `mask-linear-to-l`  | `{ mask: 'linear-to-l' }`  |      |
-| **To Top Left**     | `mask-image: linear-gradient(to top left, ...)`     | `mask-linear-to-tl` | `{ mask: 'linear-to-tl' }` |      |
+| Concept        | CSS Rule                                      | Tailwind v4 Class       | `sz` Prop (Object Syntax)          | Note                       |
+| :------------- | :-------------------------------------------- | :---------------------- | :--------------------------------- | :------------------------- |
+| **None**       | `mask-image: none`                            | `mask-none`             | `{ mask: 'none' }`                 |                            |
+| **Linear**     | `mask-image: linear-gradient(45deg, ...)`     | `mask-linear-45`        | `{ maskLinear: { angle: 45 } }`    | Angle in degrees.          |
+| **Linear Neg** | `mask-image: linear-gradient(-45deg, ...)`    | `-mask-linear-45`       | `{ maskLinear: { angle: -45 } }`   | Negative angle prefix `-`. |
+| **Radial**     | `mask-image: radial-gradient(...)`            | `mask-radial-at-center` | `{ maskRadial: { at: 'center' } }` |                            |
+| **Conic**      | `mask-image: conic-gradient(from 90deg, ...)` | `mask-conic-90`         | `{ maskConic: { angle: 90 } }`     |                            |
 
 ### mask-image: Shape Modifiers (Radial)
 
-| Concept     | CSS Rule                          | Tailwind v4 Class | `sz` Prop (Object Syntax)  | Note                  |
-| :---------- | :-------------------------------- | :---------------- | :------------------------- | :-------------------- |
-| **Circle**  | `--tw-mask-radial-shape: circle`  | `mask-circle`     | `{ maskShape: 'circle' }`  | For radial gradients. |
-| **Ellipse** | `--tw-mask-radial-shape: ellipse` | `mask-ellipse`    | `{ maskShape: 'ellipse' }` | Default shape.        |
+| Concept     | CSS Rule                          | Tailwind v4 Class | `sz` Prop (Object Syntax)              | Note                  |
+| :---------- | :-------------------------------- | :---------------- | :------------------------------------- | :-------------------- |
+| **Circle**  | `--tw-mask-radial-shape: circle`  | `mask-circle`     | `{ maskRadial: { shape: 'circle' } }`  | For radial gradients. |
+| **Ellipse** | `--tw-mask-radial-shape: ellipse` | `mask-ellipse`    | `{ maskRadial: { shape: 'ellipse' } }` | Default shape.        |
 
 ### mask-image: Arbitrary Values
 
@@ -312,9 +306,9 @@ Controls how multiple masks are combined.
 
 Control the color stops used in mask gradient functions.
 
-| Concept      | CSS Rule              | Tailwind v4 Class   | `sz` Prop (Object Syntax) | Note |
-| :----------- | :-------------------- | :------------------ | :------------------------ | :--- |
-| **From**     | mask gradient start   | `mask-from-<color>` | `{ maskFrom: '<color>' }` |      |
-| **Via**      | mask gradient middle  | `mask-via-<color>`  | `{ maskVia: '<color>' }`  |      |
-| **To**       | mask gradient end     | `mask-to-<color>`   | `{ maskTo: '<color>' }`   |      |
-| **Variable** | `mask-from: var(--c)` | `mask-from-(--c)`   | `{ maskFrom: '--c' }`     |      |
+| Concept        | CSS Rule                         | Tailwind v4 Class                               | `sz` Prop (Object Syntax)                                       | Note                                   |
+| :------------- | :------------------------------- | :---------------------------------------------- | :-------------------------------------------------------------- | :------------------------------------- |
+| **Layer stop** | `--tw-mask-linear-from-position` | `mask-linear-from-20%`                          | `{ maskLinear: { from: '20%' } }`                               | Also `maskRadial` / `maskConic`.       |
+| **Side stop**  | `--tw-mask-bottom-from-position` | `mask-b-from-20%`                               | `{ maskLinear: { b: { from: '20%' } } }`                        | Sides: `t r b l x y`.                  |
+| **Colour**     | `--tw-mask-bottom-from-color`    | `mask-b-from-red-500/30`                        | `{ maskLinear: { b: { from: { color: 'red-500', op: 30 } } } }` | Position and colour are separate vars. |
+| **Variable**   | position vs colour               | `mask-b-from-(--c)` / `mask-b-from-(color:--c)` | `{ from: { at: '--c' } }` / `{ from: { color: '--c' } }`        | A bare var reads as a POSITION.        |

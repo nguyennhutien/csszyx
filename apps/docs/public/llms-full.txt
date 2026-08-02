@@ -263,7 +263,8 @@ compile error, so typos and legacy CSS-property names are caught by `tsc` (run
 ```
 
 Arbitrary variants are allowed by pattern: `{ '@container': {…} }`, `{ 'min-[320px]': {…} }`,
-`{ '[&>span]': {…} }`. **Custom breakpoints are typed from your CSS** — define one once in
+`{ '[&>span]': {…} }`. A STRING value under any variant key is a ready-made utility the
+variant prefixes with `:` — `{ 'data-[open]': 'sr-only' }` → `data-[open]:sr-only`. **Custom breakpoints are typed from your CSS** — define one once in
 Tailwind `@theme` and csszyx auto-generates the type:
 
 ```css
@@ -514,6 +515,34 @@ Data and state attributes.
 | **RTL/LTR**         | `rtl:mr-2`              | `{ rtl: { mr: 2 } }`                    |      |
 | **Open**            | `open:bg-white`         | `{ open: { bg: 'white' } }`             |      |
 | **Inert**           | `inert:opacity-50`      | `{ inert: { opacity: 50 } }`            |      |
+
+## Variant String Shorthand
+
+A **string value under a variant key** is a ready-made Tailwind utility to
+prefix — the variant chains onto it with `:`. Use it when the utility has no
+sz key spelling (e.g. `sr-only`) or when you already have the exact class.
+Works for every variant form, not just the simple names.
+
+| Concept                    | Tailwind v4 Class                      | `sz` Prop (Object Syntax)                       | Note                                             |
+| :------------------------- | :------------------------------------- | :---------------------------------------------- | :----------------------------------------------- |
+| **Known variant**          | `hover:translate-x-full`               | `{ hover: 'translate-x-full' }`                 |                                                  |
+| **Arbitrary data variant** | `data-[ending-style]:translate-x-full` | `{ 'data-[ending-style]': 'translate-x-full' }` |                                                  |
+| **Bare data variant**      | `data-open:sr-only`                    | `{ 'data-open': 'sr-only' }`                    | Attribute presence (Tailwind v4).                |
+| **Bare ARIA state**        | `aria-checked:opacity-50`              | `{ 'aria-checked': 'opacity-50' }`              | Built-in ARIA set only; others use `[...]`.      |
+| **Scope compound**         | `group-hover:translate-x-full`         | `{ 'group-hover': 'translate-x-full' }`         | Also `peer-*`, `not-*` with a known state.       |
+| **Arbitrary selector**     | `[&>li]:translate-x-full`              | `{ '[&>li]': 'translate-x-full' }`              |                                                  |
+| **Arbitrary breakpoint**   | `min-[900px]:flex`                     | `{ 'min-[900px]': 'flex' }`                     | Also `max-[...]`, `supports-[...]`, `has-[...]`. |
+
+The string is emitted verbatim after the variant — csszyx does not validate it
+against Tailwind's utility set, so prefer sz keys where one exists. A key that
+is not a variant keeps its property meaning: `{ 'not-italic': true }` is still
+the font-style utility.
+
+Negative utility keywords under a variant place the minus on the utility:
+`{ hover: { translateX: '-full' } }` → `hover:-translate-x-full`. Arbitrary
+negative values keep the sign inside the bracket:
+`{ 'data-[starting-style]': { translateX: '-100%' } }` →
+`data-[starting-style]:translate-x-[-100%]`.
 
 ## Helper Variants (Child/Descendants)
 
@@ -1145,7 +1174,7 @@ Controlling the box shadow of an element.
 | **Inset Ring**         | `box-shadow: inset (etc)`                   | `inset-ring`, `inset-ring-1`                                                                                      | `{ insetRing: 1 }`                                                                                                                           |                                                                                |
 | **None**               | `box-shadow: 0 0 #0000`                     | `shadow-none`                                                                                                     | `{ shadow: 'none' }`                                                                                                                         |                                                                                |
 | **Inset None**         | `box-shadow: inset 0 0 #0000`               | `inset-shadow-none`                                                                                               | `{ insetShadow: 'none' }`                                                                                                                    |                                                                                |
-| **Ring None**          | `box-shadow: 0 0 #0000`                     | `ring-none`                                                                                                       | `{ ring: 'none' }`                                                                                                                           |                                                                                |
+| **Ring None**          | `box-shadow: 0 0 #0000`                     | `ring-0`                                                                                                          | `{ ring: 'none' }`                                                                                                                           | Tailwind spells the zero ring `ring-0`; `ring-none` styles nothing.            |
 | **Color**              | `box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05)` | `shadow-blue-500`, `inset-shadow-blue-500`, `ring-blue-500`                                                       | `{ shadowColor: 'blue-500' }`                                                                                                                |                                                                                |
 | **Color + Opacity**    | `--tw-shadow-color: (value) / 50%`          | `shadow-blue-500/50`                                                                                              | `{ shadowColor: { color: 'blue-500', op: 50 } }`                                                                                             |                                                                                |
 | **Size + Opacity**     | `box-shadow: (size) / 12.5%`                | `shadow-sm/12.5`, `shadow-2xl/50`                                                                                 | `{ shadow: 'sm/12.5' }`, `{ shadow: '2xl/50' }`                                                                                              | **TW 4.3.3**: fractional opacity on named sizes.                               |
@@ -1222,35 +1251,29 @@ Controlling the masking of an element with images, gradients, and CSS properties
 
 > **Source:** [Tailwind CSS v4.1 Documentation](https://tailwindcss.com/docs/mask-image)
 
+**Migration (breaking):** the flat stop keys were removed — `maskFrom`/`maskTo`
+moved into their layer (`{ maskLinear: { from } }` etc.), `maskShape` moved to
+`{ maskRadial: { shape } }`, `maskVia` was removed with no equivalent (Tailwind
+has no via stop for masks), and gradient layer values on `mask`
+(`{ mask: 'linear-45' }`) moved to the layer keys. `mask` carries only a direct
+mask-image: `none`, `url(…)`, a CSS variable, or an arbitrary value.
+
 ### mask-image: Gradient Masks
 
-| Concept        | CSS Rule                                      | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note                       |
-| :------------- | :-------------------------------------------- | :---------------- | :------------------------ | :------------------------- |
-| **None**       | `mask-image: none`                            | `mask-none`       | `{ mask: 'none' }`        |                            |
-| **Linear**     | `mask-image: linear-gradient(45deg, ...)`     | `mask-linear-45`  | `{ mask: 'linear-45' }`   | Angle in degrees.          |
-| **Linear Neg** | `mask-image: linear-gradient(-45deg, ...)`    | `-mask-linear-45` | `{ mask: '-linear-45' }`  | Negative angle prefix `-`. |
-| **Radial**     | `mask-image: radial-gradient(...)`            | `mask-radial`     | `{ mask: 'radial' }`      |                            |
-| **Conic**      | `mask-image: conic-gradient(from 90deg, ...)` | `mask-conic-90`   | `{ mask: 'conic-90' }`    |                            |
-
-### mask-image: Direction Keywords
-
-| Concept             | CSS Rule                                            | Tailwind v4 Class   | `sz` Prop (Object Syntax)  | Note |
-| :------------------ | :-------------------------------------------------- | :------------------ | :------------------------- | :--- |
-| **To Top**          | `mask-image: linear-gradient(to top, ...)`          | `mask-linear-to-t`  | `{ mask: 'linear-to-t' }`  |      |
-| **To Top Right**    | `mask-image: linear-gradient(to top right, ...)`    | `mask-linear-to-tr` | `{ mask: 'linear-to-tr' }` |      |
-| **To Right**        | `mask-image: linear-gradient(to right, ...)`        | `mask-linear-to-r`  | `{ mask: 'linear-to-r' }`  |      |
-| **To Bottom Right** | `mask-image: linear-gradient(to bottom right, ...)` | `mask-linear-to-br` | `{ mask: 'linear-to-br' }` |      |
-| **To Bottom**       | `mask-image: linear-gradient(to bottom, ...)`       | `mask-linear-to-b`  | `{ mask: 'linear-to-b' }`  |      |
-| **To Bottom Left**  | `mask-image: linear-gradient(to bottom left, ...)`  | `mask-linear-to-bl` | `{ mask: 'linear-to-bl' }` |      |
-| **To Left**         | `mask-image: linear-gradient(to left, ...)`         | `mask-linear-to-l`  | `{ mask: 'linear-to-l' }`  |      |
-| **To Top Left**     | `mask-image: linear-gradient(to top left, ...)`     | `mask-linear-to-tl` | `{ mask: 'linear-to-tl' }` |      |
+| Concept        | CSS Rule                                      | Tailwind v4 Class       | `sz` Prop (Object Syntax)          | Note                       |
+| :------------- | :-------------------------------------------- | :---------------------- | :--------------------------------- | :------------------------- |
+| **None**       | `mask-image: none`                            | `mask-none`             | `{ mask: 'none' }`                 |                            |
+| **Linear**     | `mask-image: linear-gradient(45deg, ...)`     | `mask-linear-45`        | `{ maskLinear: { angle: 45 } }`    | Angle in degrees.          |
+| **Linear Neg** | `mask-image: linear-gradient(-45deg, ...)`    | `-mask-linear-45`       | `{ maskLinear: { angle: -45 } }`   | Negative angle prefix `-`. |
+| **Radial**     | `mask-image: radial-gradient(...)`            | `mask-radial-at-center` | `{ maskRadial: { at: 'center' } }` |                            |
+| **Conic**      | `mask-image: conic-gradient(from 90deg, ...)` | `mask-conic-90`         | `{ maskConic: { angle: 90 } }`     |                            |
 
 ### mask-image: Shape Modifiers (Radial)
 
-| Concept     | CSS Rule                          | Tailwind v4 Class | `sz` Prop (Object Syntax)  | Note                  |
-| :---------- | :-------------------------------- | :---------------- | :------------------------- | :-------------------- |
-| **Circle**  | `--tw-mask-radial-shape: circle`  | `mask-circle`     | `{ maskShape: 'circle' }`  | For radial gradients. |
-| **Ellipse** | `--tw-mask-radial-shape: ellipse` | `mask-ellipse`    | `{ maskShape: 'ellipse' }` | Default shape.        |
+| Concept     | CSS Rule                          | Tailwind v4 Class | `sz` Prop (Object Syntax)              | Note                  |
+| :---------- | :-------------------------------- | :---------------- | :------------------------------------- | :-------------------- |
+| **Circle**  | `--tw-mask-radial-shape: circle`  | `mask-circle`     | `{ maskRadial: { shape: 'circle' } }`  | For radial gradients. |
+| **Ellipse** | `--tw-mask-radial-shape: ellipse` | `mask-ellipse`    | `{ maskRadial: { shape: 'ellipse' } }` | Default shape.        |
 
 ### mask-image: Arbitrary Values
 
@@ -1443,12 +1466,12 @@ Controls how multiple masks are combined.
 
 Control the color stops used in mask gradient functions.
 
-| Concept      | CSS Rule              | Tailwind v4 Class   | `sz` Prop (Object Syntax) | Note |
-| :----------- | :-------------------- | :------------------ | :------------------------ | :--- |
-| **From**     | mask gradient start   | `mask-from-<color>` | `{ maskFrom: '<color>' }` |      |
-| **Via**      | mask gradient middle  | `mask-via-<color>`  | `{ maskVia: '<color>' }`  |      |
-| **To**       | mask gradient end     | `mask-to-<color>`   | `{ maskTo: '<color>' }`   |      |
-| **Variable** | `mask-from: var(--c)` | `mask-from-(--c)`   | `{ maskFrom: '--c' }`     |      |
+| Concept        | CSS Rule                         | Tailwind v4 Class                               | `sz` Prop (Object Syntax)                                       | Note                                   |
+| :------------- | :------------------------------- | :---------------------------------------------- | :-------------------------------------------------------------- | :------------------------------------- |
+| **Layer stop** | `--tw-mask-linear-from-position` | `mask-linear-from-20%`                          | `{ maskLinear: { from: '20%' } }`                               | Also `maskRadial` / `maskConic`.       |
+| **Side stop**  | `--tw-mask-bottom-from-position` | `mask-b-from-20%`                               | `{ maskLinear: { b: { from: '20%' } } }`                        | Sides: `t r b l x y`.                  |
+| **Colour**     | `--tw-mask-bottom-from-color`    | `mask-b-from-red-500/30`                        | `{ maskLinear: { b: { from: { color: 'red-500', op: 30 } } } }` | Position and colour are separate vars. |
+| **Variable**   | position vs colour               | `mask-b-from-(--c)` / `mask-b-from-(color:--c)` | `{ from: { at: '--c' } }` / `{ from: { color: '--c' } }`        | A bare var reads as a POSITION.        |
 
 
 # Filters
@@ -3417,10 +3440,10 @@ Controlling numeric glyphs.
 
 Controlling font-feature-settings. Added in Tailwind v4.2.
 
-| Concept       | CSS Rule                          | Tailwind v4 Class          | `sz` Prop (Object Syntax)      | Note |
-| :------------ | :-------------------------------- | :------------------------- | :----------------------------- | :--- |
-| **Normal**    | `font-feature-settings: normal`   | `font-features-normal`     | `{ fontFeatures: 'normal' }`   |      |
-| **Arbitrary** | `font-feature-settings: "liga" 1` | `font-features-["liga"_1]` | `{ fontFeatures: '"liga" 1' }` |      |
+| Concept       | CSS Rule                          | Tailwind v4 Class          | `sz` Prop (Object Syntax)      | Note                                                                              |
+| :------------ | :-------------------------------- | :------------------------- | :----------------------------- | :-------------------------------------------------------------------------------- |
+| **Normal**    | `font-feature-settings: normal`   | `font-features-[normal]`   | `{ fontFeatures: 'normal' }`   | Tailwind's `font-features-*` is functional-only; the bare keyword styles nothing. |
+| **Arbitrary** | `font-feature-settings: "liga" 1` | `font-features-["liga"_1]` | `{ fontFeatures: '"liga" 1' }` |                                                                                   |
 
 ## Font Style & Smoothing
 
@@ -3981,14 +4004,19 @@ no tsconfig change needed.
 
 ## Production Build (Mangling)
 
-In production, class names are mangled for maximum compression:
+Class-name mangling is **opt-in** (`production.mangle` defaults to `false`) and is an
+obfuscation feature, not a size optimization: the runtime mangle map the page must ship
+costs more bytes than the shorter class names save, so enable it only when the original
+utility names should not be readable in the production bundle.
 
 ```js
 // vite.config.ts (production)
 ...csszyx({ production: { mangle: true } })
 ```
 
-Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injected automatically.
+Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injected
+automatically. `production.mangleMapDelivery` chooses where the runtime map ships
+(`'both'` default, `'html'`, or `'bundle'`; vite/rollup lanes).
 
 If an `sz`-generated utility also appears as a static string or template quasi in a
 source-level `class` or `className` attribute/property (including a `clsx(...)`
@@ -4002,8 +4030,8 @@ adapter keeps class names readable (and warns when `production.mangle: true` is
 explicit) because normal esbuild write-to-disk builds do not expose mutable final
 assets; source transforms and safelist generation still run.
 
-Set `production: { mangle: false }` to keep readable class names — the supported way to
-inspect the emitted CSS. To check what a single `sz` object
+With mangling left at its default (off), a build keeps readable class names — the
+supported way to inspect the emitted CSS. To check what a single `sz` object
 compiles to without a build, run `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
 
 ### AST budget guard

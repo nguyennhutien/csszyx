@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    emitMissingCssFallback,
     missingTailwindEntryMessage,
+    shouldEmitMissingCssFallback,
     shouldEmitWarning,
     shouldWarnMissingTailwindEntry,
 } from '../src/unplugin.js';
@@ -24,6 +26,25 @@ describe('shouldEmitWarning', () => {
     it('suppresses a devOnly (usage-nudge) warning only in production', () => {
         expect(shouldEmitWarning(false, true, false)).toBe(true); // dev → shown
         expect(shouldEmitWarning(false, true, true)).toBe(false); // prod → silent
+    });
+});
+
+describe('shouldEmitMissingCssFallback', () => {
+    const missingCss = 'szv catalog at 1:1: factory config cannot be resolved at build time';
+
+    it('emits only actionable missing-CSS diagnostics when not quiet', () => {
+        expect(shouldEmitMissingCssFallback(false, missingCss)).toBe(true);
+        expect(shouldEmitMissingCssFallback(true, missingCss)).toBe(false);
+        expect(shouldEmitMissingCssFallback(false, 'ordinary diagnostic')).toBe(false);
+    });
+
+    it('routes an eligible diagnostic through the supplied channel', () => {
+        const emitted: string[] = [];
+        emitMissingCssFallback(false, missingCss, '/src/Card.tsx', message =>
+            emitted.push(message),
+        );
+        emitMissingCssFallback(true, missingCss, '/src/Card.tsx', message => emitted.push(message));
+        expect(emitted).toEqual([`[csszyx] /src/Card.tsx\n  ${missingCss}`]);
     });
 });
 

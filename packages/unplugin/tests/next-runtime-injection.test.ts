@@ -86,4 +86,34 @@ describe('Next runtime import injection', () => {
         expect(result.injected).toEqual([]);
         expect(result.code).toBe(code);
     });
+
+    it('splits provable szPart helpers between slim and barrel entries', () => {
+        const result = injectNextRuntimeImports('export const x = 1;', {
+            usesSzPart: true,
+            usesSzcn: true,
+            usesSzvPick: true,
+            usesSzvPick1: true,
+            szPartArgsProvable: true,
+        });
+
+        expect(result.injected).toEqual(['_szcn', '_szPart', '__szvPick', '__szvPick1']);
+        expect(result.code).toContain("import { _szcn, _szPart } from '@csszyx/runtime/merge';");
+        expect(result.code).toContain("import { __szvPick, __szvPick1 } from '@csszyx/runtime';");
+    });
+
+    it('supports each half of the slim split independently', () => {
+        const mergeOnly = injectNextRuntimeImports('export const x = 1;', {
+            usesSzPart: true,
+            szPartArgsProvable: true,
+        });
+        expect(mergeOnly.code).toContain("from '@csszyx/runtime/merge'");
+        expect(mergeOnly.code).not.toContain("from '@csszyx/runtime';");
+
+        const barrelOnly = injectNextRuntimeImports('export const x = 1;', {
+            usesSzvPick: true,
+            szPartArgsProvable: true,
+        });
+        expect(barrelOnly.code).toContain("from '@csszyx/runtime';");
+        expect(barrelOnly.code).not.toContain("from '@csszyx/runtime/merge'");
+    });
 });

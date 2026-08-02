@@ -266,7 +266,11 @@ describe('bgImg string syntax and repeats', () => {
         expect(cls({ bgRepeat: 'repeat-y' })).toBe('bg-repeat-y');
         expect(cls({ maskRepeat: 'repeat' })).toBe('mask-repeat');
         expect(cls({ maskRepeat: 'no-repeat' })).toBe('mask-no-repeat');
-        expect(cls({ maskRepeat: 'round' })).toBe('mask-round');
+        // Tailwind keeps the `mask-repeat-` prefix for space/round; only
+        // repeat/no-repeat/repeat-x/repeat-y are bare, so `mask-round` was a
+        // class it never served.
+        expect(cls({ maskRepeat: 'round' })).toBe('mask-repeat-round');
+        expect(cls({ maskRepeat: 'space' })).toBe('mask-repeat-space');
     });
     it('bgPos and bgSize', () => {
         expect(cls({ bgPos: 'center' })).toBe('bg-center');
@@ -389,7 +393,7 @@ describe('string property handler chain', () => {
     it('mask family passthrough and border-*Color longhands', () => {
         expect(cls({ maskPos: 'center' })).toBe('mask-center');
         expect(cls({ maskSize: 'cover' })).toBe('mask-cover');
-        expect(cls({ maskShape: 'circle' })).toBe('mask-circle');
+        expect(cls({ maskRadial: { shape: 'circle' } })).toBe('mask-circle');
         expect(cls({ maskComposite: 'add' })).toBe('mask-add');
         expect(cls({ borderXColor: 'red-500' })).toBe('border-x-red-500');
         expect(cls({ borderYColor: 'blue-500' })).toBe('border-y-blue-500');

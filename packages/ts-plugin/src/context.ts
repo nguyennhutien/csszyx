@@ -1,8 +1,7 @@
 import {
-    classifyStyleChain,
     type ObjectFormMember,
     type ObjectValueForm,
-    objectValueForm,
+    resolveStyleChain,
     szvStyleChain,
 } from '@csszyx/tooling-metadata';
 import type ts from 'typescript/lib/tsserverlibrary';
@@ -414,10 +413,10 @@ function jsxAnchor(tsMod: typeof ts, object: ts.ObjectLiteralExpression): StyleR
  * @returns The resolution, or null when the structure gets no suggestions.
  */
 function resolveChain(chainInnerFirst: readonly string[]): StyleResolution | null {
-    const kind = classifyStyleChain(chainInnerFirst);
-    if (kind === 'style') return { form: null };
-    if (kind === 'object-form') return { form: objectValueForm(chainInnerFirst[0] ?? '') };
-    return null;
+    const resolution = resolveStyleChain(chainInnerFirst);
+    return resolution.kind === 'style' || resolution.kind === 'object-form'
+        ? { form: resolution.form }
+        : null;
 }
 
 /** Resolve a proven szv/szr call reached by the ancestry walk.

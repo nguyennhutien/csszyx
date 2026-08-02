@@ -35,10 +35,20 @@ export interface DevelopmentConfig {
  */
 export interface ProductionConfig {
     /**
-     * Enable global class name mangling.
-     * Minifies class names to single characters (a, b, c, etc.).
+     * Rewrite csszyx-owned class names to short aliases (`z`, `y`, `x`, …).
      *
-     * @default true
+     * This is a **name-obfuscation** feature, not a compression one. Over a
+     * gzip- or brotli-served response it is flat to slightly negative: utility
+     * class names share long prefixes and repeat, which is exactly what the
+     * compressor exploits, so shortening them trades highly compressible bytes
+     * for the poorly compressible mangle map the runtime needs. Measured on the
+     * `vite-react` playground, mangling costs about 2 KB gzipped and its
+     * absolute ceiling — with a hypothetically free map — is a 0.26% saving.
+     *
+     * Enable it when the original class names should not be readable in the
+     * shipped bundle. Do not enable it expecting a smaller payload.
+     *
+     * @default false
      */
     mangle: boolean;
 
@@ -81,6 +91,41 @@ export interface ProductionConfig {
     mangleExclude?: string[];
 
     /**
+     * Where the runtime mangle map is delivered to the browser.
+     *
+     * The map is what lets runtime helpers (`szr`, `szv`, `szcn`, `szDecode`)
+     * speak the same class names as the mangled CSS. It travels two ways: an
+     * inline script in build-emitted HTML, and a module inside the JS bundle
+     * for pages the build does not own (a bundle embedded in a host shell, or
+     * a CSP that strips inline scripts).
+     *
+     * Both deliveries carry the full census, so a build that ships both pays
+     * for the map twice across HTML and JS. Narrow this when the app knows
+     * which delivery it actually needs:
+     *
+     * - `'both'` — inline script plus bundle module. Always correct.
+     * - `'html'` — inline script only. For apps that serve their own
+     *   csszyx-built HTML and allow inline scripts.
+     * - `'bundle'` — bundle module only. For embedded builds and CSP setups
+     *   that strip inline scripts.
+     *
+     * The hydration checksum payload is unaffected — it ships in every mode,
+     * so `'bundle'` still emits the JSON census tag into HTML the build owns
+     * (hydration verify reads it from the DOM); the value only drops the
+     * runtime installer script. Choosing a delivery the page does not receive
+     * leaves runtime helpers without a map, which passes original class names
+     * through while the CSS ships mangled, so narrow this only against a
+     * known deployment shape.
+     *
+     * Narrowing runs where the map is injected — the vite/rollup lanes. A
+     * webpack build ships the map unchanged and warns that the value has no
+     * effect there; an unknown value fails the build.
+     *
+     * @default 'both'
+     */
+    mangleMapDelivery?: MangleMapDelivery;
+
+    /**
      * Alias stable app-owned global CSS custom properties.
      *
      * This is the opt-in gate for the `g` tier. Phase H v1 is alias-only:
@@ -121,6 +166,11 @@ export interface ProductionConfig {
      */
     minify: boolean;
 }
+
+/**
+ * Delivery channels for the runtime mangle map.
+ */
+export type MangleMapDelivery = 'both' | 'html' | 'bundle';
 
 /**
  * Supported global custom-property optimization mode.
@@ -621,7 +671,10 @@ export const DEFAULT_DEVELOPMENT_CONFIG: DevelopmentConfig = {
  * Default production configuration.
  */
 export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
-    mangle: true,
+    // Off like the plugin's own default: mangling is obfuscation, not
+    // compression (the map costs more than the class bytes it saves), so a
+    // consumer merging these exported defaults must not get it implicitly.
+    mangle: false,
     mangleVars: false,
     mangleVarHoistMaxDepth: 5,
     contentHashing: true,

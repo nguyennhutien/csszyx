@@ -34,6 +34,8 @@ pub struct NativeTransformOptions {
     pub root_dir: Option<String>,
     /// Per-file AST node cap override (`build.astBudgetLimit`).
     pub ast_budget: Option<u32>,
+    /// Cross-module szv registry payload (ordered-pair JSON).
+    pub cross_module_statics_json: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -85,6 +87,12 @@ pub struct NativeTransformMetadata {
     pub uses_szcn: bool,
     /// Whether the result imports the runtime _szPart helper (dynamic array elements).
     pub uses_sz_part: bool,
+    /// Whether the result imports the runtime __szvPick helper.
+    pub uses_szv_pick: bool,
+    /// Whether the result imports the runtime __szvPick1 helper.
+    pub uses_szv_pick1: bool,
+    /// True when every emitted `_szPart` argument is provably string/falsy.
+    pub sz_part_args_provable: bool,
     /// Whether the result imports the runtime color-var helper.
     pub uses_color_var: bool,
     /// Whether the result imports the runtime spacing-var helper.
@@ -185,6 +193,7 @@ pub fn transform_batch_native(
                 .collect(),
             root_dir: options.root_dir,
             ast_budget: options.ast_budget.map(|budget| budget as usize),
+            cross_module_statics_json: options.cross_module_statics_json,
         },
     )
     .map(|results| {
@@ -228,6 +237,9 @@ impl From<TransformResult> for NativeTransformResult {
                 uses_merge: result.metadata.uses_merge,
                 uses_szcn: result.metadata.uses_szcn,
                 uses_sz_part: result.metadata.uses_sz_part,
+                uses_szv_pick: result.metadata.uses_szv_pick,
+                uses_szv_pick1: result.metadata.uses_szv_pick1,
+                sz_part_args_provable: result.metadata.sz_part_args_provable,
                 uses_color_var: result.metadata.uses_color_var,
                 uses_spacing_var: result.metadata.uses_spacing_var,
                 uses_unit_var: result.metadata.uses_unit_var,

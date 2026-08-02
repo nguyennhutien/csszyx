@@ -2,10 +2,11 @@ use oxc_allocator::Allocator;
 use oxc_ast::{
     ast::{
         Argument, ArrayExpression, ArrayExpressionElement, CallExpression, ConditionalExpression,
-        Expression, JSXAttribute, JSXAttributeItem, JSXAttributeName, JSXAttributeValue,
-        JSXElement, JSXElementName, JSXExpression, JSXFragment, JSXMemberExpression,
-        JSXMemberExpressionObject, JSXOpeningElement, JSXSpreadAttribute, ObjectExpression,
-        ObjectProperty, ObjectPropertyKind, PropertyKey, UnaryOperator,
+        Expression, ImportDeclaration, ImportDeclarationSpecifier, JSXAttribute, JSXAttributeItem,
+        JSXAttributeName, JSXAttributeValue, JSXElement, JSXElementName, JSXExpression,
+        JSXFragment, JSXMemberExpression, JSXMemberExpressionObject, JSXOpeningElement,
+        JSXSpreadAttribute, ObjectExpression, ObjectProperty, ObjectPropertyKind, PropertyKey,
+        TSTypeQuery, TSTypeQueryExprName, UnaryOperator, VariableDeclaration,
     },
     AstKind,
 };
@@ -59,6 +60,16 @@ pub fn parse_source_shell_with_budget(
     file: &TransformFile,
     ast_budget: usize,
 ) -> ParsedSourceShell {
+    parse_source_shell_with_budget_and_statics(file, ast_budget, &Vec::new())
+}
+
+/// [`parse_source_shell_with_budget`] with the bundler's cross-module szv
+/// registry, decoded to native IR objects.
+pub fn parse_source_shell_with_budget_and_statics(
+    file: &TransformFile,
+    ast_budget: usize,
+    cross_module: &super::szv_precompile::CrossModuleStatics,
+) -> ParsedSourceShell {
     let allocator = Allocator::default();
     let source_type = source_type_for_path(&file.filename);
     let parse_start = Instant::now();
@@ -86,9 +97,20 @@ pub fn parse_source_shell_with_budget(
             scope: &scope,
             program: &parsed.program,
             element_stack: Vec::new(),
+            szr_import: None,
+            szr_call_args: Vec::new(),
+            pending_szr_fallbacks: Vec::new(),
+            szv_candidates: Vec::new(),
+            szv_call_sites: Vec::new(),
+            szv_type_query_counts: Vec::new(),
+            szv_gate: file.source.contains("szv(") || !cross_module.is_empty(),
+            cross_module,
         };
         let ir_start = Instant::now();
         visitor.visit_program(&parsed.program);
+        let replaced_spans = visitor.finalize_szv_precompile();
+        visitor.emit_pending_szr_fallbacks(&replaced_spans);
+        visitor.finalize_szr_import_rewrite(&replaced_spans);
         timings.ir_ns = elapsed_ns(ir_start);
         visitor.ast_budget_exceeded
     };
@@ -163,6 +185,116 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     program: &'p oxc_ast::ast::Program<'p>,
     /// JSX element/fragment index stack for parent-tree lowering.
     element_stack: Vec<usize>,
+    /// Qualifying szr import clause: source-literal span (quotes included),
+    /// specifier value, whole-statement span, and the OTHER named specifiers'
+    /// spans (non-empty means the clause splits).
+    szr_import: Option<SzrImportRecord>,
+    /// Direct `szr(...)` calls as per-argument analyses; the proof is
+    /// deferred to finalize, where the szv precompile decides which factory
+    /// calls become strings.
+    szr_call_args: Vec<SzrCallRecord>,
+    /// szr calls whose first argument was unresolvable during the walk;
+    /// whether that is a real fallback is decided at finalize, after the szv
+    /// precompile has proven (or failed to prove) the argument.
+    pending_szr_fallbacks: Vec<PendingSzrFallback>,
+    /// File-local `const F = szv(<literal config>)` candidates that passed the
+    /// shape and overlap checks (reference accounting is deferred).
+    szv_candidates: Vec<SzvFactoryRecord>,
+    /// Every direct identifier-callee call that could be a factory call site.
+    szv_call_sites: Vec<SzvCallSite>,
+    /// `typeof X` type-query references by name — erased at runtime, so the
+    /// reference accounting must not charge them against the factory.
+    szv_type_query_counts: Vec<(String, usize)>,
+    /// Whether the file can contain an szv factory at all — without an szv
+    /// call there is nothing to precompile, and every parsed file would
+    /// otherwise pay the call-site vector for nothing.
+    szv_gate: bool,
+    /// Bundler-resolved imported factories: specifier → (name → config).
+    cross_module: &'p super::szv_precompile::CrossModuleStatics,
+}
+
+/// One qualifying szr import clause, recorded for the deferred rewrite.
+struct SzrImportRecord {
+    /// Span of the import source literal, quotes included.
+    source_span: super::TextSpan,
+    /// Slim entry selected while qualifying the import source.
+    target: &'static str,
+    /// Original source retained when a mixed import must be rebuilt.
+    source_value: String,
+    /// Span of the whole import declaration.
+    statement_span: super::TextSpan,
+    /// Spans of the other named specifiers staying on the original source.
+    other_specifier_spans: Vec<super::TextSpan>,
+}
+
+/// One direct `szr(...)` call with its per-argument analyses.
+struct SzrCallRecord {
+    /// Span of the whole call, linking deferred fallbacks back to it.
+    span: super::TextSpan,
+    /// Per-argument analyses, in argument order.
+    args: Vec<SzrArgAnalysis>,
+}
+
+/// Verdict for one szr argument: shape plus the factory calls inside it.
+struct SzrArgAnalysis {
+    /// Whether every non-factory leaf is provably a string or falsy.
+    shape_ok: bool,
+    /// Spans of identifier-callee calls that must collapse for the proof.
+    factory_spans: Vec<super::TextSpan>,
+}
+
+/// One deferred szr fallback: the classified diagnostic, held back until the
+/// szv precompile decides whether the argument collapsed to a string.
+struct PendingSzrFallback {
+    /// Span of the enclosing szr call.
+    call_span: super::TextSpan,
+    /// Pre-classified fallback payload.
+    fallback: super::SiteFallbackIr,
+}
+
+/// One qualified-so-far szv factory.
+struct SzvFactoryRecord {
+    /// Factory binding name.
+    name: String,
+    /// End offset of the declaration statement, for the table insertion.
+    statement_end: u32,
+    /// Compiled table (shape and overlap already validated).
+    table: super::szv_precompile::SzvTable,
+}
+
+/// One direct identifier-callee call.
+struct SzvCallSite {
+    /// Callee name.
+    callee: String,
+    /// Span of the whole call.
+    span: super::TextSpan,
+    /// Classified argument shape.
+    argument: Option<SzvCallArg>,
+}
+
+/// Argument shape of one potential factory call.
+enum SzvCallArg {
+    /// `F()` — resolved from defaults alone.
+    None,
+    /// Fully static selection, values pre-stringified.
+    Static(super::szv_precompile::StaticSelection),
+    /// Anything else with exactly one argument: spliced into `__szvPick`.
+    Dynamic {
+        /// Span of the whole selection argument.
+        span: super::TextSpan,
+        /// Set when the selection literal names exactly one static key, which
+        /// the splice may collapse to `__szvPick1` once the table confirms the
+        /// key is a real dimension.
+        single: Option<SzvSingleDimension>,
+    },
+}
+
+/// A selection literal of exactly one statically named dimension.
+struct SzvSingleDimension {
+    /// The selected dimension name.
+    dimension: String,
+    /// Span of the value expression, spliced as the picker's third argument.
+    value_span: super::TextSpan,
 }
 
 impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
@@ -312,7 +444,45 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
         }
 
         self.collect_catalog_call_classes(call);
+        self.record_szr_call_proof(call);
         walk::walk_call_expression(self, call);
+    }
+
+    fn visit_import_declaration(&mut self, declaration: &ImportDeclaration<'a>) {
+        if self.ast_budget_exceeded {
+            return;
+        }
+
+        self.record_szr_import_candidate(declaration);
+        self.record_cross_module_szv_factories(declaration);
+        walk::walk_import_declaration(self, declaration);
+    }
+
+    fn visit_variable_declaration(&mut self, declaration: &VariableDeclaration<'a>) {
+        if self.ast_budget_exceeded {
+            return;
+        }
+
+        self.record_szv_factory_candidates(declaration);
+        walk::walk_variable_declaration(self, declaration);
+    }
+
+    fn visit_ts_type_query(&mut self, query: &TSTypeQuery<'a>) {
+        if !self.ast_budget_exceeded && self.szv_gate {
+            if let TSTypeQueryExprName::IdentifierReference(identifier) = &query.expr_name {
+                let name = identifier.name.as_str();
+                if let Some(entry) = self
+                    .szv_type_query_counts
+                    .iter_mut()
+                    .find(|(existing, _)| existing == name)
+                {
+                    entry.1 += 1;
+                } else {
+                    self.szv_type_query_counts.push((name.to_string(), 1));
+                }
+            }
+        }
+        walk::walk_ts_type_query(self, query);
     }
 }
 
@@ -409,10 +579,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             self.ir.szs_diagnostics.push(message);
             return;
         }
-        let unsupported_message = format!(
-            "[csszyx] szs at {}: every slot must be an identifier key with a static object literal (or class string) value. Attribute left unchanged.",
-            self.ir.filename
-        );
+        let unsupported_message =
+            super::generated::sz_fallback_matrix::szs_unsupported_diagnostic(&self.ir.filename);
         let Some(JSXAttributeValue::ExpressionContainer(container)) = &attr.value else {
             self.ir.szs_diagnostics.push(unsupported_message);
             return;
@@ -475,6 +643,9 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     #[allow(clippy::too_many_lines)]
     fn collect_sz_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
         let ctx = self.resolve_context();
+        // Set only by the runtime-fallback branch below; every statically
+        // handled shape leaves it `None` so the engine emits nothing for it.
+        let mut runtime_fallback_diagnostic = None;
         let (
             object,
             value_span,
@@ -578,6 +749,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         runtime_fallback_span_from_jsx_expression(&container.expression)?;
                     let candidate_classes =
                         candidate_classes_from_jsx_expression(&container.expression, ctx);
+                    runtime_fallback_diagnostic = classify_runtime_fallback(&container.expression);
                     (
                         StaticSzObject::empty(),
                         value_span,
@@ -607,6 +779,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             runtime_fallback,
             runtime_fallback_spread,
             candidate_classes,
+            runtime_fallback_diagnostic,
             dynamic_css_vars,
         });
         Some(index)
@@ -671,6 +844,28 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             "dynamic" | "szr" => {
                 let Some(object) = static_object_from_argument(argument, self.resolve_context())
                 else {
+                    // `szr` compiles its literal argument so the classes reach
+                    // the safelist; an argument it cannot read means those
+                    // classes are never collected and the CSS is simply absent.
+                    // `dynamic()` is exempt — it injects its own rules at
+                    // runtime, which is the whole point of it. The diagnostic
+                    // itself is DEFERRED: whether this argument is a real
+                    // fallback depends on the szv precompile, decided at
+                    // finalize.
+                    if callee.name == "szr" {
+                        if let Some(expression) = argument.as_expression() {
+                            let (kind, detail) = classify_expression_fallback(expression);
+                            self.pending_szr_fallbacks.push(PendingSzrFallback {
+                                call_span: text_span(call.span()),
+                                fallback: super::SiteFallbackIr {
+                                    site: super::SzFallbackSiteIr::Szr,
+                                    kind,
+                                    detail,
+                                    offset: fallback_expression_offset(expression),
+                                },
+                            });
+                        }
+                    }
                     return;
                 };
                 self.ir
@@ -680,12 +875,403 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             "szv" => {
                 let Some(classes) = collect_szv_catalog_classes(argument, self.resolve_context())
                 else {
+                    // No catalogue is emitted, so none of the variant classes
+                    // are safelisted — under Tailwind `source(none)` that is
+                    // silently missing CSS for every variant it can produce.
+                    self.record_site_fallback(super::SzFallbackSiteIr::Szv, argument);
                     return;
                 };
                 self.ir.extracted_classes.extend(classes);
             }
             _ => {}
         }
+    }
+
+    /// Record an import declaration when it is the rewritable szr clause.
+    ///
+    /// Same qualifying shape as the JS lanes: one value import of `szr`, no
+    /// alias, from a mapped source. Anything else is simply not recorded — the
+    /// reference accounting then fails the proof.
+    fn record_szr_import_candidate(&mut self, declaration: &ImportDeclaration<'_>) {
+        if declaration.import_kind.is_type() {
+            return;
+        }
+        let source_value = declaration.source.value.as_str();
+        let Some(target) = szr_rewrite_target(source_value) else {
+            return;
+        };
+        let Some(specifiers) = &declaration.specifiers else {
+            return;
+        };
+        let mut saw_szr = false;
+        let mut other_specifier_spans: Vec<super::TextSpan> = Vec::new();
+        for entry in specifiers {
+            // A default or namespace specifier makes the clause shape one this
+            // rewrite does not rebuild — leave the whole declaration alone.
+            let ImportDeclarationSpecifier::ImportSpecifier(specifier) = entry else {
+                return;
+            };
+            if !specifier.import_kind.is_type()
+                && specifier.imported.name() == "szr"
+                && specifier.local.name == "szr"
+            {
+                saw_szr = true;
+            } else {
+                other_specifier_spans.push(text_span(specifier.span));
+            }
+        }
+        if !saw_szr {
+            return;
+        }
+        self.szr_import = Some(SzrImportRecord {
+            source_span: text_span(declaration.source.span),
+            target,
+            source_value: source_value.to_string(),
+            statement_span: text_span(declaration.span),
+            other_specifier_spans,
+        });
+    }
+
+    /// Record one direct identifier-callee call for the deferred proofs.
+    fn record_szr_call_proof(&mut self, call: &CallExpression<'_>) {
+        let Expression::Identifier(callee) = &call.callee else {
+            return;
+        };
+        if callee.name == "szr" {
+            let args = call
+                .arguments
+                .iter()
+                .map(|argument| analyze_szr_call_argument(argument))
+                .collect();
+            self.szr_call_args.push(SzrCallRecord {
+                span: text_span(call.span()),
+                args,
+            });
+            return;
+        }
+        if !self.szv_gate || SZV_RESERVED_FACTORY_NAMES.contains(&callee.name.as_str()) {
+            return;
+        }
+        let argument = classify_szv_call_argument(call);
+        self.szv_call_sites.push(SzvCallSite {
+            callee: callee.name.to_string(),
+            span: text_span(call.span()),
+            argument,
+        });
+    }
+
+    /// Record every `const F = szv(<literal config>)` declarator, compiling
+    /// the table when the config passes the shape and overlap checks.
+    fn record_szv_factory_candidates(&mut self, declaration: &VariableDeclaration<'_>) {
+        if !self.szv_gate {
+            return;
+        }
+        for declarator in &declaration.declarations {
+            let Some(name) = declarator.id.get_identifier_name() else {
+                continue;
+            };
+            if SZV_RESERVED_FACTORY_NAMES.contains(&name.as_str()) {
+                continue;
+            }
+            let Some(init) = &declarator.init else {
+                continue;
+            };
+            let Expression::CallExpression(call) = unwrap_expression(init) else {
+                continue;
+            };
+            let Expression::Identifier(callee) = &call.callee else {
+                continue;
+            };
+            if callee.name != "szv" || call.arguments.len() != 1 {
+                continue;
+            }
+            let Some(argument) = call.arguments[0].as_expression() else {
+                continue;
+            };
+            let Expression::ObjectExpression(object) = unwrap_expression(argument) else {
+                continue;
+            };
+            let Some(config_object) = strict_literal_object(object) else {
+                continue;
+            };
+            let Some(config) = super::szv_precompile::static_szv_config_from_object(&config_object)
+            else {
+                continue;
+            };
+            if !super::szv_precompile::szv_config_free_of_overlap(&config) {
+                continue;
+            }
+            self.szv_candidates.push(SzvFactoryRecord {
+                name: name.to_string(),
+                statement_end: declaration.span.end,
+                table: super::szv_precompile::compile_szv_table(&config),
+            });
+        }
+    }
+
+    /// Record factory candidates that arrive through imports, resolved by the
+    /// bundler's cross-module registry. The LOCAL binding name becomes the
+    /// factory name; qualification and table compilation run the same code the
+    /// local candidates use, so a `build.parser` flip cannot differ.
+    fn record_cross_module_szv_factories(&mut self, declaration: &ImportDeclaration<'_>) {
+        if declaration.import_kind.is_type() || self.cross_module.is_empty() {
+            return;
+        }
+        let source_value = declaration.source.value.as_str();
+        let Some((_, entries)) = self
+            .cross_module
+            .iter()
+            .find(|(specifier, _)| specifier == source_value)
+        else {
+            return;
+        };
+        let Some(specifiers) = &declaration.specifiers else {
+            return;
+        };
+        for entry in specifiers {
+            let ImportDeclarationSpecifier::ImportSpecifier(specifier) = entry else {
+                continue;
+            };
+            if specifier.import_kind.is_type() {
+                continue;
+            }
+            let imported = specifier.imported.name();
+            let Some((_, config_object)) =
+                entries.iter().find(|(name, _)| name.as_str() == imported)
+            else {
+                continue;
+            };
+            let local = specifier.local.name.as_str();
+            if SZV_RESERVED_FACTORY_NAMES.contains(&local)
+                || self.szv_candidates.iter().any(|c| c.name == local)
+            {
+                continue;
+            }
+            let Some(config) = super::szv_precompile::static_szv_config_from_object(config_object)
+            else {
+                continue;
+            };
+            if !super::szv_precompile::szv_config_free_of_overlap(&config) {
+                continue;
+            }
+            self.szv_candidates.push(SzvFactoryRecord {
+                name: local.to_string(),
+                statement_end: declaration.span.end,
+                table: super::szv_precompile::compile_szv_table(&config),
+            });
+        }
+    }
+
+    /// Standalone occurrences of one identifier in the source, comments
+    /// excluded — the reference accounting shared by a factory binding and its
+    /// emitted table constant.
+    fn word_occurrences_outside_comments(&self, word: &str) -> usize {
+        subtract_comment_occurrences(
+            super::szv_precompile::count_word_occurrences(self.source, word),
+            self.source,
+            &self.program.comments,
+            |slice| super::szv_precompile::count_word_occurrences(slice, word),
+        )
+    }
+
+    /// Decide the szv precompile after the whole file was walked, writing the
+    /// splices into the IR. Returns the spans of replaced factory calls so the
+    /// szr proof can treat them as strings.
+    fn finalize_szv_precompile(&mut self) -> Vec<super::TextSpan> {
+        let mut replaced: Vec<super::TextSpan> = Vec::new();
+        if self.szv_candidates.is_empty() {
+            return replaced;
+        }
+        let szr_factory_spans: Vec<super::TextSpan> = self
+            .szr_call_args
+            .iter()
+            .flat_map(|record| &record.args)
+            .flat_map(|analysis| analysis.factory_spans.iter().copied())
+            .collect();
+        let candidates = std::mem::take(&mut self.szv_candidates);
+        for candidate in &candidates {
+            let calls: Vec<&SzvCallSite> = self
+                .szv_call_sites
+                .iter()
+                .filter(|site| site.callee == candidate.name)
+                .collect();
+            if calls.is_empty() {
+                continue;
+            }
+            let accounted = calls
+                .iter()
+                .all(|site| szr_factory_spans.contains(&site.span) && site.argument.is_some());
+            if !accounted {
+                continue;
+            }
+            let type_queries = self
+                .szv_type_query_counts
+                .iter()
+                .find(|(name, _)| name == &candidate.name)
+                .map_or(0, |(_, count)| *count);
+            if self.word_occurrences_outside_comments(&candidate.name)
+                != 1 + calls.len() + type_queries
+            {
+                continue;
+            }
+            let table_ident = super::szv_precompile::szv_table_identifier(&candidate.name);
+            if self.word_occurrences_outside_comments(&table_ident) != 0 {
+                continue;
+            }
+            let mut needs_full_pick = false;
+            let mut needs_single_pick = false;
+            for (site, argument) in calls
+                .iter()
+                .filter_map(|site| site.argument.as_ref().map(|argument| (*site, argument)))
+            {
+                let replacement = match argument {
+                    SzvCallArg::None => super::szv_precompile::json_string_literal(
+                        &super::szv_precompile::compute_static_szv_pick(&candidate.table, None),
+                    ),
+                    SzvCallArg::Static(selection) => super::szv_precompile::json_string_literal(
+                        &super::szv_precompile::compute_static_szv_pick(
+                            &candidate.table,
+                            Some(selection),
+                        ),
+                    ),
+                    SzvCallArg::Dynamic { span, single } => {
+                        let (text, used_single) = dynamic_szv_replacement(
+                            self.source,
+                            &table_ident,
+                            &candidate.table,
+                            *span,
+                            single.as_ref(),
+                        );
+                        if used_single {
+                            needs_single_pick = true;
+                        } else {
+                            needs_full_pick = true;
+                        }
+                        text
+                    }
+                };
+                self.ir.szv_replacements.push(super::SzvReplacementIr {
+                    span: site.span,
+                    replacement,
+                });
+                replaced.push(site.span);
+            }
+            if needs_full_pick || needs_single_pick {
+                self.ir
+                    .szv_table_insertions
+                    .push(super::SzvTableInsertionIr {
+                        offset: candidate.statement_end,
+                        text: format!(
+                            "\nconst {table_ident} = {};",
+                            super::szv_precompile::serialize_szv_table(&candidate.table)
+                        ),
+                    });
+                self.ir.uses_szv_pick |= needs_full_pick;
+                self.ir.uses_szv_pick1 |= needs_single_pick;
+            }
+        }
+        replaced
+    }
+
+    /// Emit the deferred szr fallback diagnostics for arguments that stayed
+    /// unproven after the szv precompile, in their recorded (source) order.
+    fn emit_pending_szr_fallbacks(&mut self, replaced_spans: &[super::TextSpan]) {
+        let pending = std::mem::take(&mut self.pending_szr_fallbacks);
+        for record in pending {
+            let proven = self
+                .szr_call_args
+                .iter()
+                .find(|call| call.span == record.call_span)
+                .and_then(|call| call.args.first())
+                .is_some_and(|analysis| szr_argument_proven(analysis, replaced_spans));
+            if proven {
+                continue;
+            }
+            self.ir.site_fallbacks.push(record.fallback);
+        }
+    }
+
+    /// Decide the szr import rewrite after the whole file was walked.
+    ///
+    /// Mirrors the JS lanes' `szrRewriteApproved`: no unsafe call, and the raw
+    /// word count of `szr` equals one import specifier plus the proven calls.
+    /// A `build.parser` flip must not change the emitted import, so the three
+    /// verdicts are locked together by the cross-engine suite.
+    fn finalize_szr_import_rewrite(&mut self, replaced_spans: &[super::TextSpan]) {
+        let Some(record) = self.szr_import.take() else {
+            return;
+        };
+        let mut proven_calls = 0;
+        for record in &self.szr_call_args {
+            let all_safe = record
+                .args
+                .iter()
+                .all(|analysis| szr_argument_proven(analysis, replaced_spans));
+            if !all_safe {
+                return;
+            }
+            proven_calls += 1;
+        }
+        let occurrences = subtract_comment_occurrences(
+            count_szr_word_occurrences(self.source),
+            self.source,
+            &self.program.comments,
+            count_szr_word_occurrences,
+        );
+        if occurrences != 1 + proven_calls {
+            return;
+        }
+        let target = record.target;
+        // Preserve the author's quote character — the span covers it.
+        let quote = if self
+            .source
+            .as_bytes()
+            .get(record.source_span.start as usize)
+            == Some(&b'"')
+        {
+            '"'
+        } else {
+            '\''
+        };
+        if record.other_specifier_spans.is_empty() {
+            self.ir.szr_import_rewrite = Some(super::SzrImportRewriteIr {
+                span: record.source_span,
+                replacement: format!("{quote}{target}{quote}"),
+            });
+            return;
+        }
+        // Split the clause: rebuild the statement as the other specifiers on
+        // the original source, then szr alone on the core entry. Rebuilding
+        // from the specifier spans drops comments inside the clause; a comment
+        // mentioning szr already failed the reference accounting above.
+        let others = record
+            .other_specifier_spans
+            .iter()
+            .map(|span| &self.source[span.start as usize..span.end as usize])
+            .collect::<Vec<_>>()
+            .join(", ");
+        let source_value = &record.source_value;
+        self.ir.szr_import_rewrite = Some(super::SzrImportRewriteIr {
+            span: record.statement_span,
+            replacement: format!(
+                "import {{ {others} }} from {quote}{source_value}{quote};\nimport {{ szr }} from {quote}{target}{quote};"
+            ),
+        });
+    }
+
+    /// Record a `szr`/`szv` argument the parser could not read, classified for
+    /// the shared fallback matrix.
+    fn record_site_fallback(&mut self, site: super::SzFallbackSiteIr, argument: &Argument<'_>) {
+        let Some(expression) = argument.as_expression() else {
+            return;
+        };
+        let (kind, detail) = classify_expression_fallback(expression);
+        self.ir.site_fallbacks.push(super::SiteFallbackIr {
+            site,
+            kind,
+            detail,
+            offset: fallback_expression_offset(expression),
+        });
     }
 
     fn collect_recovery_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
@@ -1446,6 +2032,7 @@ fn static_array_part_from_expression(
         classes: Vec::new(),
         ternary: Some(ternary),
         dynamic_span: None,
+        dynamic_provable: false,
         candidates: Vec::new(),
         dynamic_object_literal: false,
     });
@@ -1471,6 +2058,7 @@ fn static_array_part_from_expression(
             classes: lower_static_sz_object(&partial.object),
             ternary: Some(partial.ternaries.remove(0)),
             dynamic_span: None,
+            dynamic_provable: false,
             candidates: Vec::new(),
             dynamic_object_literal: false,
         });
@@ -1491,6 +2079,7 @@ const fn static_array_part(
         classes,
         ternary: None,
         dynamic_span: None,
+        dynamic_provable: false,
         candidates: Vec::new(),
         dynamic_object_literal: false,
     }
@@ -1507,6 +2096,9 @@ fn dynamic_array_part(
         classes: Vec::new(),
         ternary: None,
         dynamic_span: Some(text_span(expression.span())),
+        // Same safety vocabulary as the szr proof: a provably string-or-falsy
+        // element never needs the object lowering at runtime.
+        dynamic_provable: is_provably_non_object_argument(expression),
         candidates: candidate_classes_from_expression(expression, ctx),
         dynamic_object_literal: matches!(unwrapped, Expression::ObjectExpression(_)),
     }
@@ -1552,6 +2144,500 @@ fn split_class_tokens(value: &str) -> Vec<String> {
 /// Returns the source span of the inner expression — what the rewriter
 /// will splice inside `_sz(…)` — so the emitted call preserves the
 /// user's exact text.
+/// Classify a runtime-fallback sz expression for the diagnostic matrix.
+///
+/// Mirrors the Babel lane's `describeRuntimeFallback` byte for byte, because a
+/// `build.parser` flip must not change the build log:
+///
+/// - Parentheses are seen through (Babel's AST has no parenthesized nodes).
+/// - TS wrappers are NOT seen through — Babel classifies `x as T` as
+///   `other`/`TSAsExpression`, so this lane must too, even though the span
+///   helpers below unwrap them for position purposes.
+/// - A computed member callee reports the index identifier (`table[key]()` →
+///   `` `key()` ``): Babel reads `callee.property` without checking
+///   `computed`, and that shared quirk is pinned by the parity suite.
+fn classify_runtime_fallback(
+    expression: &JSXExpression<'_>,
+) -> Option<super::RuntimeFallbackDiagnosticIr> {
+    use super::RuntimeFallbackDiagnosticIr;
+
+    let (kind, detail) = classify_expression_fallback(expression.as_expression()?);
+    Some(RuntimeFallbackDiagnosticIr { kind, detail })
+}
+
+/// Names that can never be szv factory bindings for the precompile.
+const SZV_RESERVED_FACTORY_NAMES: [&str; 5] = ["szr", "szv", "dynamic", "__szvPick", "__szvPick1"];
+
+/// Analyze one szr argument for the deferred proof.
+fn analyze_szr_call_argument(argument: &Argument<'_>) -> SzrArgAnalysis {
+    let Some(expression) = argument.as_expression() else {
+        return SzrArgAnalysis {
+            shape_ok: false,
+            factory_spans: Vec::new(),
+        };
+    };
+    let mut factory_spans = Vec::new();
+    let shape_ok = analyze_szr_argument(expression, &mut factory_spans);
+    SzrArgAnalysis {
+        shape_ok,
+        factory_spans,
+    }
+}
+
+/// Analyze one szr argument expression: provably string-or-falsy, allowing
+/// identifier factory calls as leaves.
+///
+/// Mirror of the JS lanes' walk. The collected factory spans are candidates
+/// only — the argument is proven when the shape holds AND every collected
+/// call was rewritten by the szv precompile.
+fn analyze_szr_argument(expression: &Expression<'_>, factories: &mut Vec<super::TextSpan>) -> bool {
+    let mut expression = expression;
+    while let Expression::ParenthesizedExpression(inner) = expression {
+        expression = &inner.expression;
+    }
+    match expression {
+        Expression::CallExpression(call) => {
+            if let Expression::Identifier(callee) = &call.callee {
+                if !SZV_RESERVED_FACTORY_NAMES.contains(&callee.name.as_str()) {
+                    factories.push(text_span(call.span()));
+                    return true;
+                }
+            }
+            false
+        }
+        Expression::StringLiteral(_)
+        | Expression::TemplateLiteral(_)
+        | Expression::NullLiteral(_) => true,
+        Expression::BooleanLiteral(literal) => !literal.value,
+        Expression::Identifier(identifier) => identifier.name == "undefined",
+        Expression::LogicalExpression(logical) => match logical.operator {
+            oxc_ast::ast::LogicalOperator::And => analyze_szr_argument(&logical.right, factories),
+            _ => {
+                analyze_szr_argument(&logical.left, factories)
+                    && analyze_szr_argument(&logical.right, factories)
+            }
+        },
+        Expression::ConditionalExpression(conditional) => {
+            analyze_szr_argument(&conditional.consequent, factories)
+                && analyze_szr_argument(&conditional.alternate, factories)
+        }
+        Expression::ArrayExpression(array) => array.elements.iter().all(|element| {
+            element
+                .as_expression()
+                .is_some_and(|expression| analyze_szr_argument(expression, factories))
+        }),
+        _ => false,
+    }
+}
+
+/// Whether one analyzed szr argument is fully proven: the shape held and
+/// every factory candidate inside it was rewritten to a string.
+fn szr_argument_proven(analysis: &SzrArgAnalysis, replaced_spans: &[super::TextSpan]) -> bool {
+    analysis.shape_ok
+        && analysis
+            .factory_spans
+            .iter()
+            .all(|span| replaced_spans.contains(span))
+}
+
+/// Classify one potential factory call's argument shape.
+///
+/// Static selections carry only string/boolean/safe-integer literal values
+/// (the tri-lane contract); everything else with exactly one argument splices
+/// into `__szvPick`, and extra arguments disqualify (dropping them would drop
+/// their evaluation).
+fn classify_szv_call_argument(call: &CallExpression<'_>) -> Option<SzvCallArg> {
+    match call.arguments.len() {
+        0 => Some(SzvCallArg::None),
+        1 => {
+            let expression = call.arguments[0].as_expression()?;
+            let unwrapped = unwrap_expression(expression);
+            let single = if let Expression::ObjectExpression(object) = unwrapped {
+                if let Some(selection) = strict_static_selection(object) {
+                    return Some(SzvCallArg::Static(selection));
+                }
+                single_dimension_selection(object)
+            } else {
+                None
+            };
+            Some(SzvCallArg::Dynamic {
+                span: text_span(unwrapped.span()),
+                single,
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Read a selection literal that names exactly one static dimension, e.g.
+/// `F({ direction: dir })` — mirror of the JS lanes' `planSingleDimensionPick`
+/// shape check. Whether the named key is a real dimension is decided later,
+/// where the compiled table is in hand.
+fn single_dimension_selection(object: &ObjectExpression<'_>) -> Option<SzvSingleDimension> {
+    let [property] = object.properties.as_slice() else {
+        return None;
+    };
+    let ObjectPropertyKind::ObjectProperty(entry) = property else {
+        return None;
+    };
+    if entry.computed {
+        return None;
+    }
+    // Identifier and string keys only. `static_property_key` also accepts a
+    // NUMERIC key, which the JS lanes reject here — using it would let this
+    // engine collapse a call the other two leave alone.
+    let dimension = match &entry.key {
+        PropertyKey::StaticIdentifier(identifier) => identifier.name.to_string(),
+        PropertyKey::StringLiteral(string) => string.value.to_string(),
+        _ => return None,
+    };
+    // `{ __proto__: v }` in a literal sets the PROTOTYPE instead of creating an
+    // own property, so the full picker's own-property probe selects nothing.
+    if dimension == "__proto__" {
+        return None;
+    }
+    Some(SzvSingleDimension {
+        dimension,
+        value_span: text_span(entry.value.span()),
+    })
+}
+
+/// Build the replacement text for one DYNAMIC factory call, preferring the
+/// single-dimension picker whenever it reproduces the full one. Returns the
+/// text and whether the single-dimension helper was the one emitted.
+fn dynamic_szv_replacement(
+    source: &str,
+    table_ident: &str,
+    table: &super::szv_precompile::SzvTable,
+    span: super::TextSpan,
+    single: Option<&SzvSingleDimension>,
+) -> (String, bool) {
+    if let Some(it) = single.filter(|it| single_dimension_pick_applies(table, &it.dimension)) {
+        let value = &source[it.value_span.start as usize..it.value_span.end as usize];
+        let dimension = super::szv_precompile::json_string_literal(&it.dimension);
+        return (
+            format!("__szvPick1({table_ident}, {dimension}, {value})"),
+            true,
+        );
+    }
+    let text = &source[span.start as usize..span.end as usize];
+    (format!("__szvPick({table_ident}, {text})"), false)
+}
+
+/// Whether the single-dimension picker reproduces the full picker for one
+/// table and dimension: no defaults (which make the OMITTED dimensions
+/// contribute classes the single-dimension picker never visits), and the key is
+/// a real dimension (so the unknown-variant dev warning keeps running through
+/// the full picker).
+fn single_dimension_pick_applies(table: &super::szv_precompile::SzvTable, dimension: &str) -> bool {
+    if table
+        .defaults
+        .as_ref()
+        .is_some_and(|pairs| !pairs.is_empty())
+    {
+        return false;
+    }
+    table.dimensions.iter().any(|(name, _)| name == dimension)
+}
+
+/// Evaluate a selection object literal under the tri-lane static contract.
+fn strict_static_selection(
+    object: &ObjectExpression<'_>,
+) -> Option<super::szv_precompile::StaticSelection> {
+    let mut selection: super::szv_precompile::StaticSelection = Vec::new();
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(entry) = property else {
+            return None;
+        };
+        if entry.computed {
+            return None;
+        }
+        let key = static_property_key(&entry.key)?;
+        let value = match unwrap_expression(&entry.value) {
+            Expression::StringLiteral(literal) => literal.value.to_string(),
+            Expression::BooleanLiteral(literal) => literal.value.to_string(),
+            Expression::NumericLiteral(literal) => {
+                super::szv_precompile::parity_safe_scalar_string(&super::StaticSzValue::Number(
+                    literal.value,
+                ))?
+            }
+            Expression::UnaryExpression(unary) => {
+                // Negated safe integers are part of the tri-lane contract.
+                if unary.operator != UnaryOperator::UnaryNegation {
+                    return None;
+                }
+                match unwrap_expression(&unary.argument) {
+                    Expression::NumericLiteral(literal) => {
+                        super::szv_precompile::parity_safe_scalar_string(
+                            &super::StaticSzValue::Number(-literal.value),
+                        )?
+                    }
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        };
+        selection.push((key, value));
+    }
+    Some(selection)
+}
+
+/// Evaluate an object expression under the Babel lane's literal-only
+/// vocabulary — string/number/boolean literals, a negated number, nested
+/// objects; TS wrappers and parentheses unwrap. Deliberately NOT the
+/// identifier-resolving extractor: a broader evaluator here would let this
+/// engine qualify a config the JS lanes bail on.
+fn strict_literal_object(object: &ObjectExpression<'_>) -> Option<StaticSzObject> {
+    let mut properties = Vec::new();
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(entry) = property else {
+            return None;
+        };
+        if entry.computed {
+            return None;
+        }
+        let key = static_property_key(&entry.key)?;
+        let value = strict_literal_value(&entry.value)?;
+        properties.push(super::StaticSzProperty {
+            key,
+            value,
+            span: text_span(entry.span),
+        });
+    }
+    Some(StaticSzObject { properties })
+}
+
+/// One literal value for `strict_literal_object`.
+fn strict_literal_value(expression: &Expression<'_>) -> Option<StaticSzValue> {
+    match unwrap_expression(expression) {
+        Expression::StringLiteral(literal) => {
+            Some(StaticSzValue::String(literal.value.to_string()))
+        }
+        Expression::NumericLiteral(literal) => Some(StaticSzValue::Number(literal.value)),
+        Expression::BooleanLiteral(literal) => Some(StaticSzValue::Boolean(literal.value)),
+        Expression::UnaryExpression(unary) => {
+            if unary.operator != UnaryOperator::UnaryNegation {
+                return None;
+            }
+            match unwrap_expression(&unary.argument) {
+                Expression::NumericLiteral(literal) => Some(StaticSzValue::Number(-literal.value)),
+                _ => None,
+            }
+        }
+        Expression::ObjectExpression(nested) => {
+            strict_literal_object(nested).map(StaticSzValue::Object)
+        }
+        _ => None,
+    }
+}
+
+/// Slim-entry target for a rewritable szr import source.
+///
+/// Same-package subpaths only, mirroring `SZR_IMPORT_REWRITE_TARGETS` in the
+/// TypeScript lanes: an app importing from `csszyx` may not resolve
+/// `@csszyx/runtime` under strict node_modules layouts.
+fn szr_rewrite_target(source: &str) -> Option<&'static str> {
+    match source {
+        "@csszyx/runtime" => Some("@csszyx/runtime/core"),
+        "csszyx" => Some("csszyx/core"),
+        _ => None,
+    }
+}
+
+/// True when the byte continues an identifier around `szr`.
+const fn is_identifier_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'$'
+}
+
+/// Subtract in-comment occurrences from a raw word count.
+///
+/// Mirrors `countWordOccurrencesOutsideComments` in the TypeScript lanes:
+/// comments are erased at runtime, so a doc comment mentioning a factory (or
+/// `szr`) must not fail the reference accounting. The spans come from the
+/// parser, delimiters included; subtraction per span is exact because comment
+/// delimiters are non-identifier characters, so no word straddles a span
+/// edge.
+fn subtract_comment_occurrences<F: Fn(&str) -> usize>(
+    count: usize,
+    source: &str,
+    comments: &oxc_allocator::Vec<'_, oxc_ast::ast::Comment>,
+    counter: F,
+) -> usize {
+    let mut count = count;
+    for comment in comments {
+        let slice = &source[comment.span.start as usize..comment.span.end as usize];
+        count = count.saturating_sub(counter(slice));
+    }
+    count
+}
+
+/// Count word-boundary occurrences of `szr` in the raw source.
+///
+/// Mirrors `countSzrWordOccurrences` in the TypeScript lanes byte for byte: a
+/// boundary is "not an ASCII identifier character", so a non-ASCII identifier
+/// continuation still counts — an overcount, which can only fail the proof.
+fn count_szr_word_occurrences(source: &str) -> usize {
+    let bytes = source.as_bytes();
+    let mut count = 0;
+    let mut at = 0;
+    while at + 3 <= bytes.len() {
+        if &bytes[at..at + 3] == b"szr" {
+            let before_ok = at == 0 || !is_identifier_byte(bytes[at - 1]);
+            let after_ok = at + 3 == bytes.len() || !is_identifier_byte(bytes[at + 3]);
+            if before_ok && after_ok {
+                count += 1;
+            }
+            at += 3;
+        } else {
+            at += 1;
+        }
+    }
+    count
+}
+
+/// Whether an expression can never evaluate to a truthy non-string.
+///
+/// Mirror of the JS lanes' check: string/template literals, `false`, `null`,
+/// `undefined`, `&&` with a safe right side (a falsy left short-circuits to a
+/// skipped falsy), `||`/`??`/ternary with all reachable results safe, arrays
+/// of safe elements. Parentheses are seen through (Babel's AST has no node for
+/// them); anything else — TS wrappers included — is unsafe, so the proof only
+/// errs toward keeping today's import.
+fn is_provably_non_object_argument(expression: &Expression<'_>) -> bool {
+    let mut expression = expression;
+    while let Expression::ParenthesizedExpression(inner) = expression {
+        expression = &inner.expression;
+    }
+    match expression {
+        Expression::StringLiteral(_)
+        | Expression::TemplateLiteral(_)
+        | Expression::NullLiteral(_) => true,
+        Expression::BooleanLiteral(literal) => !literal.value,
+        Expression::Identifier(identifier) => identifier.name == "undefined",
+        Expression::LogicalExpression(logical) => match logical.operator {
+            oxc_ast::ast::LogicalOperator::And => is_provably_non_object_argument(&logical.right),
+            _ => {
+                is_provably_non_object_argument(&logical.left)
+                    && is_provably_non_object_argument(&logical.right)
+            }
+        },
+        Expression::ConditionalExpression(conditional) => {
+            is_provably_non_object_argument(&conditional.consequent)
+                && is_provably_non_object_argument(&conditional.alternate)
+        }
+        Expression::ArrayExpression(array) => array.elements.iter().all(|element| {
+            element
+                .as_expression()
+                .is_some_and(is_provably_non_object_argument)
+        }),
+        _ => false,
+    }
+}
+
+/// Classify an expression into the shared matrix vocabulary.
+///
+/// Parentheses are seen through (Babel's AST has no node for them); TS wrappers
+/// are NOT, because Babel classifies those as `other`.
+fn classify_expression_fallback(
+    expression: &Expression<'_>,
+) -> (super::RuntimeFallbackKindIr, String) {
+    use super::RuntimeFallbackKindIr;
+
+    let mut expression = expression;
+    while let Expression::ParenthesizedExpression(inner) = expression {
+        expression = &inner.expression;
+    }
+
+    let (kind, detail) = match expression {
+        Expression::CallExpression(call) => {
+            let callee_name = match &call.callee {
+                Expression::Identifier(identifier) => identifier.name.as_str(),
+                Expression::StaticMemberExpression(member) => member.property.name.as_str(),
+                Expression::ComputedMemberExpression(member) => match &member.expression {
+                    Expression::Identifier(identifier) => identifier.name.as_str(),
+                    _ => super::generated::sz_fallback_matrix::SZ_FALLBACK_UNKNOWN_CALLEE,
+                },
+                _ => super::generated::sz_fallback_matrix::SZ_FALLBACK_UNKNOWN_CALLEE,
+            };
+            (RuntimeFallbackKindIr::Call, callee_name.to_string())
+        }
+        Expression::Identifier(identifier) => (
+            RuntimeFallbackKindIr::Identifier,
+            identifier.name.to_string(),
+        ),
+        Expression::StaticMemberExpression(_)
+        | Expression::ComputedMemberExpression(_)
+        | Expression::PrivateFieldExpression(_) => (RuntimeFallbackKindIr::Member, String::new()),
+        other => (
+            RuntimeFallbackKindIr::Other,
+            estree_expression_type_name(other).to_string(),
+        ),
+    };
+    (kind, detail)
+}
+
+/// Resolve the position Babel reports after discarding grouping parentheses.
+fn fallback_expression_offset(expression: &Expression<'_>) -> u32 {
+    let mut expression = expression;
+    while let Expression::ParenthesizedExpression(inner) = expression {
+        expression = &inner.expression;
+    }
+    // oxc may preserve the OUTER parentheses in a call's span even after
+    // `Argument::as_expression()` yields the call node. The callee starts where
+    // Babel's parenthesis-free CallExpression starts; for `(cond ? a : b)()`,
+    // the callee span still correctly begins at that grouping parenthesis.
+    match expression {
+        Expression::CallExpression(call) => call.callee.span().start,
+        other => other.span().start,
+    }
+}
+
+/// Babel-compatible node type name for the `other` matrix arm.
+///
+/// Curated to the shapes a real sz attribute can carry; the audited ones
+/// (TSAsExpression, TSNonNullExpression, ObjectExpression, NewExpression,
+/// LogicalExpression, ConditionalExpression, TemplateLiteral, AwaitExpression)
+/// are pinned against Babel by tests. Anything exotic falls back to a generic
+/// name rather than leaking oxc's internal variant vocabulary.
+const fn estree_expression_type_name(expression: &Expression<'_>) -> &'static str {
+    match expression {
+        Expression::ObjectExpression(_) => "ObjectExpression",
+        Expression::ArrayExpression(_) => "ArrayExpression",
+        Expression::TemplateLiteral(_) => "TemplateLiteral",
+        Expression::ConditionalExpression(_) => "ConditionalExpression",
+        Expression::LogicalExpression(_) => "LogicalExpression",
+        Expression::AwaitExpression(_) => "AwaitExpression",
+        Expression::NewExpression(_) => "NewExpression",
+        Expression::BinaryExpression(_) => "BinaryExpression",
+        Expression::UnaryExpression(_) => "UnaryExpression",
+        Expression::UpdateExpression(_) => "UpdateExpression",
+        Expression::AssignmentExpression(_) => "AssignmentExpression",
+        Expression::SequenceExpression(_) => "SequenceExpression",
+        Expression::TaggedTemplateExpression(_) => "TaggedTemplateExpression",
+        Expression::ArrowFunctionExpression(_) => "ArrowFunctionExpression",
+        Expression::FunctionExpression(_) => "FunctionExpression",
+        Expression::ClassExpression(_) => "ClassExpression",
+        Expression::ThisExpression(_) => "ThisExpression",
+        Expression::ChainExpression(_) => "ChainExpression",
+        Expression::YieldExpression(_) => "YieldExpression",
+        Expression::MetaProperty(_) => "MetaProperty",
+        Expression::TSAsExpression(_) => "TSAsExpression",
+        Expression::TSSatisfiesExpression(_) => "TSSatisfiesExpression",
+        Expression::TSNonNullExpression(_) => "TSNonNullExpression",
+        Expression::TSTypeAssertion(_) => "TSTypeAssertion",
+        Expression::TSInstantiationExpression(_) => "TSInstantiationExpression",
+        Expression::BooleanLiteral(_) => "BooleanLiteral",
+        Expression::NumericLiteral(_) => "NumericLiteral",
+        Expression::StringLiteral(_) => "StringLiteral",
+        Expression::NullLiteral(_) => "NullLiteral",
+        Expression::BigIntLiteral(_) => "BigIntLiteral",
+        Expression::RegExpLiteral(_) => "RegExpLiteral",
+        Expression::JSXElement(_) => "JSXElement",
+        Expression::JSXFragment(_) => "JSXFragment",
+        _ => "Expression",
+    }
+}
+
 fn runtime_fallback_span_from_jsx_expression(expression: &JSXExpression<'_>) -> Option<TextSpan> {
     match expression {
         JSXExpression::EmptyExpression(_) => None,
@@ -2813,8 +3899,10 @@ fn merge_static_property_deep(properties: &mut Vec<StaticSzProperty>, incoming: 
         .iter_mut()
         .find(|property| property.key == incoming.key)
     {
+        let key = existing.key.clone();
         match (&mut existing.value, incoming.value) {
             (StaticSzValue::Object(existing_object), StaticSzValue::Object(incoming_object)) => {
+                drop_displaced_sub_keys(&key, existing_object, &incoming_object);
                 merge_static_properties_deep(
                     &mut existing_object.properties,
                     incoming_object.properties,
@@ -2824,6 +3912,43 @@ fn merge_static_property_deep(properties: &mut Vec<StaticSzProperty>, incoming: 
         }
     } else {
         properties.push(incoming);
+    }
+}
+
+/// Sub-keys of one property that write the SAME CSS custom property, so only
+/// one group can be live at a time. Mirrors the TypeScript
+/// `EXCLUSIVE_SUB_KEY_GROUPS`: inside `maskLinear` the angle fields and the
+/// side fields both write `--tw-mask-linear`.
+const EXCLUSIVE_SUB_KEY_GROUPS: [(&str, [&[&str]; 2]); 1] = [(
+    "maskLinear",
+    [&["angle", "from", "to"], &["t", "r", "b", "l", "x", "y"]],
+)];
+
+/// Clear the group the incoming object displaced, so "last write wins" holds
+/// for the CSS property rather than for each field independently.
+fn drop_displaced_sub_keys(key: &str, existing: &mut StaticSzObject, incoming: &StaticSzObject) {
+    let Some((_, groups)) = EXCLUSIVE_SUB_KEY_GROUPS
+        .iter()
+        .find(|(name, _)| *name == key)
+    else {
+        return;
+    };
+    let claimed = groups.iter().find(|group| {
+        incoming
+            .properties
+            .iter()
+            .any(|property| group.contains(&property.key.as_str()))
+    });
+    let Some(claimed) = claimed else {
+        return;
+    };
+    for group in groups {
+        if std::ptr::eq(*group, *claimed) {
+            continue;
+        }
+        existing
+            .properties
+            .retain(|property| !group.contains(&property.key.as_str()));
     }
 }
 
@@ -3042,7 +4167,8 @@ fn string_value_span(span: Span, source: &str) -> TextSpan {
 mod tests {
     use super::{
         escape_json_string, parse_source_shell, parse_source_shell_with_budget,
-        source_type_for_path, string_value_span, MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
+        parse_source_shell_with_budget_and_statics, source_type_for_path, string_value_span,
+        MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
     };
     use crate::transform::{lower::lower_source_ir_classes, TransformFile};
     use oxc_span::Span;
@@ -3070,6 +4196,402 @@ mod tests {
             parsed.ir.sz_attributes[0].object.properties[0].value,
             super::StaticSzValue::Number(4.0)
         );
+    }
+
+    #[test]
+    fn parser_shell_covers_szr_proof_shape_matrix() {
+        let safe = r"import { szr } from '@csszyx/runtime';
+export const a = szr(('p-4'), `m-${n}`, false, null, undefined);
+export const b = szr(on && 'x', 'a' || 'b', cond ? 'c' : 'd', ['e', false]);";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Safe.tsx".into(),
+            source: safe.into(),
+        });
+        assert!(parsed.ir.szr_import_rewrite.is_some());
+
+        for argument in [
+            "cfg",
+            "mk()",
+            "true",
+            "4",
+            "cfg || 'x'",
+            "cond ? 'x' : cfg",
+            "['x', ...rest]",
+            "('x' as string)",
+        ] {
+            let source = format!(
+                "import {{ szr }} from '@csszyx/runtime'; export const x = szr({argument});"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Unsafe.tsx".into(),
+                source,
+            });
+            assert!(parsed.ir.szr_import_rewrite.is_none(), "{argument}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_covers_szv_candidate_guard_matrix_and_type_queries() {
+        let source = r"import { szr, szv } from '@csszyx/runtime';
+const { destructured } = obj;
+const dynamic = szv({ base: { p: 1 } });
+let missing;
+const scalar = 1;
+const member = api.szv({ base: { p: 1 } });
+const empty = szv();
+const spreadArg = szv(...args);
+const dynamicConfig = szv(config);
+const computed = szv({ [key]: { p: 1 } });
+const invalidBase = szv({ base: 'p-1' });
+const overlap = szv({ base: { p: 1 }, variants: { pad: { sm: { p: 2 } } } });
+const card = szv({ variants: { pad: { sm: { p: 2 } } } });
+type CardSelection = Parameters<typeof card>[0];
+type CardSelectionAgain = Parameters<typeof card>[0];
+type ExternalSelection = typeof import('./types');
+export const cls = szr(card({ pad: 'sm' }));";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Factories.tsx".into(),
+            source: source.into(),
+        });
+        assert_eq!(parsed.ir.szv_replacements.len(), 1);
+        assert!(parsed.ir.szr_import_rewrite.is_some());
+    }
+
+    #[test]
+    fn parser_shell_covers_import_candidate_guard_matrix() {
+        for source in [
+            "import type { szr } from '@csszyx/runtime';",
+            "import { szr } from 'other';",
+            "import '@csszyx/runtime';",
+            "import def, { szr } from '@csszyx/runtime';",
+            "import * as rt from '@csszyx/runtime';",
+            "import { szv } from '@csszyx/runtime';",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Imports.tsx".into(),
+                source: source.into(),
+            });
+            assert!(parsed.ir.szr_import_rewrite.is_none(), "{source}");
+        }
+
+        let budgeted = parse_source_shell_with_budget(
+            &TransformFile {
+                filename: "/repo/src/Budget.tsx".into(),
+                source: "import { szr } from '@csszyx/runtime';".into(),
+            },
+            1,
+        );
+        assert!(budgeted.ast_budget_exceeded);
+
+        let import_after_budget = parse_source_shell_with_budget(
+            &TransformFile {
+                filename: "/repo/src/LateImport.tsx".into(),
+                source: "const before = { nested: true }; import { szr } from '@csszyx/runtime';"
+                    .into(),
+            },
+            1,
+        );
+        assert!(import_after_budget.ast_budget_exceeded);
+        assert!(import_after_budget.ir.szr_import_rewrite.is_none());
+    }
+
+    #[test]
+    fn parser_shell_covers_cross_module_import_guards() {
+        use crate::transform::{StaticSzObject, StaticSzProperty, StaticSzValue, TextSpan};
+
+        let config = StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: "variants".into(),
+                value: StaticSzValue::Object(StaticSzObject {
+                    properties: vec![StaticSzProperty {
+                        key: "pad".into(),
+                        value: StaticSzValue::Object(StaticSzObject {
+                            properties: vec![StaticSzProperty {
+                                key: "sm".into(),
+                                value: StaticSzValue::Object(StaticSzObject {
+                                    properties: vec![StaticSzProperty {
+                                        key: "p".into(),
+                                        value: StaticSzValue::Number(2.0),
+                                        span: TextSpan { start: 0, end: 0 },
+                                    }],
+                                }),
+                                span: TextSpan { start: 0, end: 0 },
+                            }],
+                        }),
+                        span: TextSpan { start: 0, end: 0 },
+                    }],
+                }),
+                span: TextSpan { start: 0, end: 0 },
+            }],
+        };
+        let invalid = StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: "base".into(),
+                value: StaticSzValue::String("invalid".into()),
+                span: TextSpan { start: 0, end: 0 },
+            }],
+        };
+        let overlap = StaticSzObject {
+            properties: vec![
+                StaticSzProperty {
+                    key: "base".into(),
+                    value: StaticSzValue::Object(StaticSzObject {
+                        properties: vec![StaticSzProperty {
+                            key: "p".into(),
+                            value: StaticSzValue::Number(1.0),
+                            span: TextSpan { start: 0, end: 0 },
+                        }],
+                    }),
+                    span: TextSpan { start: 0, end: 0 },
+                },
+                config.properties[0].clone(),
+            ],
+        };
+        let statics = vec![(
+            "./styles".into(),
+            vec![
+                ("card".into(), config),
+                ("invalid".into(), invalid),
+                ("overlap".into(), overlap),
+            ],
+        )];
+        let source = r"import type { card as typed } from './styles';
+import './styles';
+import { type card as typedSpecifier } from './styles';
+import def, { card as ignoredDefault } from './styles';
+import { missing, invalid, overlap, card as szv, card as localCard } from './styles';
+import { card as duplicate } from './styles';
+export const cls = szr(localCard({ pad: 'sm' }));";
+        let parsed = parse_source_shell_with_budget_and_statics(
+            &TransformFile {
+                filename: "/repo/src/Cross.tsx".into(),
+                source: source.into(),
+            },
+            usize::MAX,
+            &statics,
+        );
+        assert_eq!(parsed.ir.szv_replacements.len(), 1);
+    }
+
+    #[test]
+    fn parser_shell_classifies_extended_fallback_expression_names() {
+        let cases = [
+            ("a + b", "BinaryExpression"),
+            ("!a", "UnaryExpression"),
+            ("a++", "UpdateExpression"),
+            ("a = b", "AssignmentExpression"),
+            ("(a, b)", "SequenceExpression"),
+            ("tag`x`", "TaggedTemplateExpression"),
+            ("() => a", "ArrowFunctionExpression"),
+            ("function () {}", "FunctionExpression"),
+            ("class {}", "ClassExpression"),
+            ("this", "ThisExpression"),
+            ("a?.b", "ChainExpression"),
+            ("import.meta", "MetaProperty"),
+            ("a as string", "TSAsExpression"),
+            ("a satisfies string", "TSSatisfiesExpression"),
+            ("a!", "TSNonNullExpression"),
+            ("true", "BooleanLiteral"),
+            ("42", "NumericLiteral"),
+            ("1n", "BigIntLiteral"),
+            ("/x/", "RegExpLiteral"),
+            ("<span />", "JSXElement"),
+            ("<>x</>", "JSXFragment"),
+            ("null", "NullLiteral"),
+            ("import('x')", "Expression"),
+        ];
+        for (expression, expected) in cases {
+            let source = format!("const A = () => <div sz={{{expression}}} />;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/FallbackKinds.tsx".into(),
+                source,
+            });
+            let details = parsed
+                .ir
+                .sz_attributes
+                .iter()
+                .filter_map(|attribute| attribute.runtime_fallback_diagnostic.as_ref())
+                .map(|diagnostic| diagnostic.detail.as_str())
+                .chain(
+                    parsed
+                        .ir
+                        .site_fallbacks
+                        .iter()
+                        .map(|fallback| fallback.detail.as_str()),
+                )
+                .collect::<Vec<_>>();
+            assert!(details.contains(&expected), "{expression}: {details:?}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_mask_linear_group_merge_drops_the_displaced_group() {
+        let source = "const A = () => <div sz={[{ maskLinear: { angle: 45 } }, { maskLinear: { b: { from: '0%' } } }]} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/MaskMerge.tsx".into(),
+            source: source.into(),
+        });
+        let lowered = lower_source_ir_classes(&parsed.ir);
+        assert_eq!(lowered.classes, ["mask-b-from-0%"]);
+
+        let mut existing = super::StaticSzObject {
+            properties: vec![super::StaticSzProperty {
+                key: "angle".into(),
+                value: super::StaticSzValue::Number(45.0),
+                span: super::TextSpan { start: 0, end: 0 },
+            }],
+        };
+        super::drop_displaced_sub_keys(
+            "maskLinear",
+            &mut existing,
+            &super::StaticSzObject {
+                properties: vec![super::StaticSzProperty {
+                    key: "unknown".into(),
+                    value: super::StaticSzValue::Boolean(true),
+                    span: super::TextSpan { start: 0, end: 0 },
+                }],
+            },
+        );
+        assert_eq!(existing.properties.len(), 1);
+    }
+
+    #[test]
+    fn parser_shell_covers_szv_selection_and_reference_guard_matrix() {
+        let cases = [
+            "card()",
+            "card({ pad: true })",
+            "card({ pad: 2 })",
+            "card({ pad: -2 })",
+            "card({ pad: -9007199254740992 })",
+            "card({ pad: +2 })",
+            "card({ pad: -value })",
+            "card({ ...selection })",
+            "card({ [key]: value })",
+            "card({})",
+            "card({ pad: value, tone: other })",
+            "card({ 'pad': value })",
+            "card({ 1: value })",
+            "card({ __proto__: value })",
+            "card(...args)",
+            "card(value, sideEffect())",
+            "api.card()",
+            "api[key + 1]()",
+        ];
+        for call in cases {
+            let source = format!(
+                "import {{ szr, szv }} from '@csszyx/runtime'; const card = szv({{ variants: {{ pad: {{ sm: {{ p: 2 }} }} }} }}); export const cls = szr({call});"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Selections.tsx".into(),
+                source,
+            });
+            assert!(!parsed.panicked, "{call}");
+        }
+
+        for suffix in [
+            "export const leak = card({ pad: 'sm' });",
+            "export const occupied = __szvT_card;",
+        ] {
+            let source = format!(
+                "import {{ szr, szv }} from '@csszyx/runtime'; const card = szv({{ variants: {{ pad: {{ sm: {{ p: 2 }} }} }} }}); export const cls = szr(card({{ pad: 'sm' }})); {suffix}"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/References.tsx".into(),
+                source,
+            });
+            assert!(parsed.ir.szv_replacements.is_empty(), "{suffix}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_covers_dynamic_array_provability_matrix() {
+        for expression in [
+            "(`x-${n}`)",
+            "`a-${n}` || `b-${n}`",
+            "['a', false, null]",
+            "['a', , 'b']",
+            "['a', ...rest]",
+            "cond ? `a-${n}` : `b-${n}`",
+        ] {
+            let source = format!("const A = () => <div sz={{[{{ p: 4 }}, {expression}]}} />;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Arrays.tsx".into(),
+                source,
+            });
+            assert!(!parsed.panicked, "{expression}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_covers_spread_argument_and_double_quote_rewrite_guards() {
+        for source in [
+            "import { szr } from '@csszyx/runtime'; export const x = szr(...parts);",
+            "import { szr } from '@csszyx/runtime'; export const x = szr(szv());",
+            "import { szr } from '@csszyx/runtime'; export const x = szr('x'); export const doc = 'szr';",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Guards.tsx".into(),
+                source: source.into(),
+            });
+            assert!(parsed.ir.szr_import_rewrite.is_none());
+        }
+        let source = "import { szr } from \"@csszyx/runtime\"; export const x = szr('x');";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Double.tsx".into(),
+            source: source.into(),
+        });
+        assert!(parsed.ir.szr_import_rewrite.is_some());
+    }
+
+    #[test]
+    fn parser_shell_classifies_yield_and_typescript_only_fallbacks() {
+        let yielded = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Yield.tsx".into(),
+            source: "function* A(){ return <div sz={yield value} />; }".into(),
+        });
+        assert_eq!(
+            yielded.ir.sz_attributes[0]
+                .runtime_fallback_diagnostic
+                .as_ref()
+                .map(|diagnostic| diagnostic.detail.as_str()),
+            Some("YieldExpression")
+        );
+
+        for (expression, expected) in [
+            ("<string>value", "TSTypeAssertion"),
+            ("fn<string>", "TSInstantiationExpression"),
+        ] {
+            let source = format!("import {{ szr }} from '@csszyx/runtime'; szr({expression});");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Types.ts".into(),
+                source,
+            });
+            assert_eq!(parsed.ir.site_fallbacks[0].detail, expected);
+        }
+
+        let type_queries = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Queries.ts".into(),
+            source: "type Local = typeof value; type External = typeof import('./types');".into(),
+        });
+        assert!(!type_queries.panicked);
+    }
+
+    #[test]
+    fn parser_shell_covers_strict_literal_scalar_guards() {
+        for config in [
+            "{ base: { hidden: true } }",
+            "{ base: { p: +2 } }",
+            "{ base: { p: -value } }",
+        ] {
+            let source = format!(
+                "import {{ szr, szv }} from '@csszyx/runtime'; const card = szv({config}); export const cls = szr(card());"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/StrictLiterals.tsx".into(),
+                source,
+            });
+            assert!(!parsed.panicked, "{config}");
+        }
     }
 
     #[test]

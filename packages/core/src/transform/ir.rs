@@ -51,6 +51,23 @@ pub struct SourceIr {
     pub class_attributes: Vec<ClassAttributeIr>,
     /// Classes extracted from static `dynamic({...})` calls.
     pub extracted_classes: Vec<String>,
+    /// `szr`/`szv` calls whose argument could not be read at build time.
+    #[serde(default)]
+    pub site_fallbacks: Vec<SiteFallbackIr>,
+    /// Proven-safe szr import retarget, when the whole-file proof held.
+    #[serde(default)]
+    pub szr_import_rewrite: Option<SzrImportRewriteIr>,
+    /// szv precompile call-site splices.
+    #[serde(default)]
+    pub szv_replacements: Vec<SzvReplacementIr>,
+    /// szv precompile table-constant insertions.
+    #[serde(default)]
+    pub szv_table_insertions: Vec<SzvTableInsertionIr>,
+    /// Whether any splice emitted a `__szvPick` call.
+    #[serde(default)]
+    pub uses_szv_pick: bool,
+    /// Whether any splice emitted a `__szvPick1` single-dimension call.
+    pub uses_szv_pick1: bool,
     /// Style attributes found in source order.
     pub style_attributes: Vec<StyleAttributeIr>,
     /// Static `szRecover` attributes found in source order.
@@ -108,6 +125,12 @@ impl SourceIr {
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: Vec::new(),
             extracted_classes: Vec::new(),
+            site_fallbacks: Vec::new(),
+            szr_import_rewrite: None,
+            szv_replacements: Vec::new(),
+            szv_table_insertions: Vec::new(),
+            uses_szv_pick: false,
+            uses_szv_pick1: false,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
@@ -212,6 +235,92 @@ pub enum SafeStyleSpreadValueIr {
     Expression(TextSpan),
 }
 
+/// One szv precompile splice: a factory call span and its replacement text
+/// (a JSON string literal for a static pick, or a `__szvPick(...)` call).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SzvReplacementIr {
+    /// Span of the `F(selection?)` call being replaced.
+    pub span: TextSpan,
+    /// Replacement expression text.
+    pub replacement: String,
+}
+
+/// One emitted table constant, appended after its factory's declaration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SzvTableInsertionIr {
+    /// End offset of the factory's declaration statement.
+    pub offset: u32,
+    /// Full `const __szvT_F = {...};` statement text (leading newline included).
+    pub text: String,
+}
+
+/// A proven-safe szr import to retarget at the slim core entry.
+///
+/// Present only when the whole-file proof held: the single unaliased
+/// `import { szr }` clause, every direct `szr(...)` argument provably a
+/// string or falsy, and the raw-text reference accounting exact. The
+/// replacement is pre-quoted with the author's quote character so the
+/// rewriter splices it verbatim.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SzrImportRewriteIr {
+    /// Span of the import source literal, quotes included.
+    pub span: TextSpan,
+    /// Quoted replacement specifier.
+    pub replacement: String,
+}
+
+/// A construct that could not be resolved at build time.
+///
+/// Carries the site because `szr(expr)` and `szv(config)` fail the same way
+/// `sz={expr}` does, but the consequence and the advice differ, so the renderer
+/// needs to know which one it was.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SiteFallbackIr {
+    /// Which construct hit the failure (`szr` or `szv`).
+    pub site: SzFallbackSiteIr,
+    /// Shape classification driving the matrix entry.
+    pub kind: RuntimeFallbackKindIr,
+    /// Kind-specific detail (callee name, identifier name, or node type).
+    pub detail: String,
+    /// Byte offset of the unresolved expression, for `line:column`.
+    pub offset: u32,
+}
+
+/// Construct that produced a build-time-unresolvable diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SzFallbackSiteIr {
+    /// `szr(<expr>)` — the literal argument could not be read.
+    Szr,
+    /// `szv(<config>)` — the variant config could not be read.
+    Szv,
+}
+
+/// Matrix classification of a runtime-fallback sz expression (ADR 0011).
+///
+/// Mirrors the shared `SzFallbackKind` vocabulary. Recorded by the parser —
+/// the only layer that still holds the AST — so the engine can render the
+/// diagnostic later without re-parsing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RuntimeFallbackKindIr {
+    /// A call expression; `detail` carries the callee name.
+    Call,
+    /// A bare identifier; `detail` carries its name.
+    Identifier,
+    /// A member expression; `detail` is unused.
+    Member,
+    /// Anything else; `detail` carries the Babel-compatible node type name.
+    Other,
+}
+
+/// Why an sz expression was left to the runtime, for the fallback matrix.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeFallbackDiagnosticIr {
+    /// Shape classification driving the matrix entry.
+    pub kind: RuntimeFallbackKindIr,
+    /// Kind-specific detail (callee name, identifier name, or node type).
+    pub detail: String,
+}
+
 /// JSX `sz` attribute and its parser-normalized static object.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SzAttributeIr {
@@ -256,6 +365,10 @@ pub struct SzAttributeIr {
     pub runtime_fallback_spread: bool,
     /// Static classes visible inside runtime-fallback shapes.
     pub candidate_classes: Vec<String>,
+    /// Matrix classification for a runtime-fallback attribute, or `None` for
+    /// statically handled attributes (and IR that predates the field).
+    #[serde(default)]
+    pub runtime_fallback_diagnostic: Option<RuntimeFallbackDiagnosticIr>,
     /// Dynamic object properties emitted through CSS custom properties.
     pub dynamic_css_vars: Vec<DynamicCssVarIr>,
 }
@@ -293,6 +406,11 @@ pub struct StaticArrayPartIr {
     /// Source span of a dynamic item's expression; absent for static items.
     #[serde(default)]
     pub dynamic_span: Option<TextSpan>,
+    /// Whether the dynamic expression is provably a string or falsy at
+    /// runtime (szr-proof vocabulary). Serde default false — a stale IR can
+    /// only lose the optimization, never claim safety it did not prove.
+    #[serde(default)]
+    pub dynamic_provable: bool,
     /// Safelist candidates statically visible inside a dynamic item (ternary
     /// branches, guarded objects). Kept per part so class discovery order
     /// stays element order — mangle IDs are assigned in discovery order.
@@ -520,6 +638,7 @@ mod tests {
                 runtime_fallback: false,
                 runtime_fallback_spread: false,
                 candidate_classes: Vec::new(),
+                runtime_fallback_diagnostic: None,
                 dynamic_css_vars: Vec::new(),
             }],
             unsupported_sz_attribute_spans: Vec::new(),
@@ -530,6 +649,12 @@ mod tests {
                 expression_span: None,
             }],
             extracted_classes: Vec::new(),
+            site_fallbacks: Vec::new(),
+            szr_import_rewrite: None,
+            szv_replacements: Vec::new(),
+            szv_table_insertions: Vec::new(),
+            uses_szv_pick: false,
+            uses_szv_pick1: false,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),

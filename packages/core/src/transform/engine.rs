@@ -8,8 +8,8 @@ use super::{
     fast_path::{triage_source, FastPathTriage},
     global_var_aliases::apply_global_var_aliases,
     lower::{collect_unknown_sz_keys, lower_source_ir_classes},
-    parser::{parse_source_shell_with_budget, AST_BUDGET},
-    recovery::{generate_inline_recovery_token, offset_to_line_column},
+    parser::{parse_source_shell_with_budget_and_statics, AST_BUDGET},
+    recovery::{generate_inline_recovery_token, offset_to_line_column, LineIndex},
     rewrite::rewrite_static_sz_attributes,
     DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile, TransformMetadata,
     TransformOptions, TransformProducer, TransformResult, TransformTimings,
@@ -171,6 +171,9 @@ fn transform_fast_static_ir_with_options(
             uses_merge: false,
             uses_szcn: false,
             uses_sz_part: false,
+            uses_szv_pick: false,
+            uses_szv_pick1: false,
+            sz_part_args_provable: true,
             uses_color_var: false,
             uses_spacing_var: false,
             uses_unit_var: false,
@@ -205,7 +208,16 @@ fn transform_static_classes_with_options(
     total_start: Instant,
     options: TransformOptions,
 ) -> TransformResult {
-    let parsed = parse_source_shell_with_budget(file, options.ast_budget.unwrap_or(AST_BUDGET));
+    let cross_module = options
+        .cross_module_statics_json
+        .as_deref()
+        .map(super::szv_precompile::decode_cross_module_statics)
+        .unwrap_or_default();
+    let parsed = parse_source_shell_with_budget_and_statics(
+        file,
+        options.ast_budget.unwrap_or(AST_BUDGET),
+        &cross_module,
+    );
     let global_var_aliases = (!options.global_var_aliases.is_empty())
         .then(|| apply_global_var_aliases(&parsed.ir, &options.global_var_aliases));
     let alias_ir = global_var_aliases
@@ -232,7 +244,11 @@ fn transform_static_classes_with_options(
     // valid ones flowing through className/recovery-token emission.
     let has_parser_errors = !diagnostics.is_empty();
     diagnostics.extend(unsupported_sz_diagnostics(file, &parsed.ir));
-    diagnostics.extend(runtime_fallback_spread_diagnostics(file, &parsed.ir));
+    // One line table per file, built lazily on the first position lookup: a
+    // file that reports nothing must not pay a pass over its own source.
+    let mut lines: Option<LineIndex> = None;
+    diagnostics.extend(runtime_fallback_diagnostics(file, &parsed.ir, &mut lines));
+    diagnostics.extend(site_fallback_diagnostics(file, &parsed.ir, &mut lines));
     diagnostics.extend(style_spread_collision_diagnostics(file, &parsed.ir));
     diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
     diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
@@ -285,6 +301,13 @@ fn transform_static_classes_with_options(
                 .iter()
                 .any(|part| part.dynamic_span.is_some())
         });
+    // Vacuously true with no dynamic parts; false as soon as one part could
+    // be an object at runtime.
+    let sz_part_args_provable = parsed.ir.sz_attributes.iter().all(|attr| {
+        attr.array_parts
+            .iter()
+            .all(|part| part.dynamic_span.is_none() || part.dynamic_provable)
+    });
     let uses_merge = transformed
         && parsed.ir.jsx_opening_elements.iter().any(|element| {
             let Some(class_index) = element.class_attribute_index else {
@@ -360,6 +383,9 @@ fn transform_static_classes_with_options(
             uses_merge,
             uses_szcn,
             uses_sz_part,
+            sz_part_args_provable,
+            uses_szv_pick: parsed.ir.uses_szv_pick,
+            uses_szv_pick1: parsed.ir.uses_szv_pick1,
             uses_color_var,
             uses_spacing_var,
             uses_unit_var,
@@ -434,23 +460,98 @@ fn unsupported_sz_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec
         .collect()
 }
 
-/// Build-log diagnostic for an `sz` prop forced to a runtime fallback by a
-/// top-level object spread (`sz={{ ...x }}`). The file still transforms (the
-/// `_sz` helper handles it), but the spread can't be statically resolved, so
-/// it may produce no styles in production — this surfaces it instead of failing
-/// silently. The `unresolvable sz spread` phrase is the marker the bundler
-/// plugin matches to promote these to a build-log warning in every mode.
-fn runtime_fallback_spread_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
-    ir.sz_attributes
+/// Resolve a byte offset to Babel-compatible `line:column` — 1-based line,
+/// 1-based column counted in UTF-16 code units, because that is what
+/// `expression.loc.start.column + 1` produces on the JS lanes and the three
+/// engines must print identical positions.
+fn babel_line_column(source: &str, lines: &mut Option<LineIndex>, offset: u32) -> (u32, usize) {
+    let (line, byte_column) = lines
+        .get_or_insert_with(|| LineIndex::new(source))
+        .line_column(source, offset);
+    let end = offset.min(u32::try_from(source.len()).unwrap_or(u32::MAX)) as usize;
+    let start = end - byte_column as usize;
+    (line, source[start..end].encode_utf16().count() + 1)
+}
+
+/// Build-log diagnostics for `szr`/`szv` calls whose argument the parser could
+/// not read.
+///
+/// Same wording, order and `line:column` semantics as the JS lanes — the site
+/// label and the advice come from the shared matrix, so a `build.parser` flip
+/// cannot change the text.
+fn site_fallback_diagnostics(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    lines: &mut Option<LineIndex>,
+) -> Vec<String> {
+    use super::generated::sz_fallback_matrix::{
+        format_sz_fallback_diagnostic, SzFallbackKind, SzFallbackSite,
+    };
+    use super::{RuntimeFallbackKindIr, SzFallbackSiteIr};
+
+    ir.site_fallbacks
         .iter()
-        .filter(|attr| attr.runtime_fallback_spread)
-        .map(|attr| {
-            format!(
-                "[csszyx] unresolvable sz spread at {}:{}: sz={{{{ ...x }}}} can't be resolved at build time and falls back to runtime (it may produce no styles in production). Use array form: sz={{[x, {{ … }}]}}.",
-                file.filename, attr.value_span.start
-            )
+        .map(|fallback| {
+            let (line, column) = babel_line_column(&file.source, lines, fallback.offset);
+            let kind = match fallback.kind {
+                RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
+                RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
+                RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
+                RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
+            };
+            let site = match fallback.site {
+                SzFallbackSiteIr::Szr => SzFallbackSite::Szr,
+                SzFallbackSiteIr::Szv => SzFallbackSite::Szv,
+            };
+            format_sz_fallback_diagnostic(site, &format!("{line}:{column}"), kind, &fallback.detail)
         })
         .collect()
+}
+
+/// Build-log diagnostics for `sz` props left to the runtime `_sz(...)` helper.
+///
+/// Emits the shared fallback matrix entry (why, and what to do instead) and —
+/// for an object literal with a top-level spread — the unresolvable-spread
+/// notice, in the same per-attribute order and with the same wording and
+/// `line:column` positions as the Babel and oxc lanes, so a `build.parser`
+/// flip cannot change the build log. The `unresolvable sz spread` phrase is
+/// the marker the bundler plugin matches to promote those to a build-log
+/// warning in every mode.
+fn runtime_fallback_diagnostics(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    lines: &mut Option<LineIndex>,
+) -> Vec<String> {
+    use super::generated::sz_fallback_matrix::{
+        sz_fallback_reason, sz_fallback_suggestion, SzFallbackKind,
+    };
+    use super::RuntimeFallbackKindIr;
+
+    let mut out = Vec::new();
+    for attr in &ir.sz_attributes {
+        let Some(diagnostic) = &attr.runtime_fallback_diagnostic else {
+            continue;
+        };
+        let (line, column) = babel_line_column(&file.source, lines, attr.value_span.start);
+        let kind = match diagnostic.kind {
+            RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
+            RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
+            RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
+            RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
+        };
+        let reason = sz_fallback_reason(kind, &diagnostic.detail);
+        let suggestion = sz_fallback_suggestion(kind);
+        out.push(format!(
+            "sz fallback at {line}:{column}: {reason}.
+  Suggestion: {suggestion}"
+        ));
+        if attr.runtime_fallback_spread {
+            out.push(format!(
+                "[csszyx] unresolvable sz spread at {line}:{column}: sz={{{{ ...x }}}} cannot be resolved at build time and falls back to runtime; it may render no styles in production. Use array form: sz={{[x, {{ ... }}]}}."
+            ));
+        }
+    }
+    out
 }
 
 /// Warn when generated style custom properties share an element with a prop
@@ -505,11 +606,18 @@ fn unknown_property_diagnostics(
     let mut unknown = Vec::new();
     let mut dead_steps = Vec::new();
     let mut property_objects = Vec::new();
+    let mut mask_members = Vec::new();
+    // Built on the first position lookup, not up front: a file whose `sz` props
+    // are all clean reaches none of the branches below, and must not pay a pass
+    // over its own source for a table nobody reads.
+    let mut lines: Option<LineIndex> = None;
     for attr in &ir.sz_attributes {
         unknown.clear();
         collect_unknown_sz_keys(&attr.object, &mut unknown);
         for (key, offset) in &unknown {
-            let (line, _) = offset_to_line_column(&file.source, *offset);
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, *offset);
             // A numeric key is almost never a typo — it means an array or a spread
             // reached `sz`. Match the JS engines' wording so a `build.parser` flip
             // does not change the diagnostic text.
@@ -518,15 +626,21 @@ fn unknown_property_diagnostics(
                     "[csszyx] sz received a numeric key \"{key}\" at {location}:{line}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored."
                 ));
             } else {
+                // Wording mirrors the JS lanes byte for byte. Deliberately NOT
+                // "this will be ignored": the key is lowered as a literal class
+                // exactly like a known one, so the old text sent people looking
+                // for a missing class instead of a dead one.
                 out.push(format!(
-                    "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. This will be ignored. Check for typos."
+                    "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility."
                 ));
             }
         }
         dead_steps.clear();
         super::lower::collect_dead_spacing_steps(&attr.object, &mut dead_steps);
         for (key, value, offset) in &dead_steps {
-            let (line, _) = offset_to_line_column(&file.source, *offset);
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, *offset);
             // Wording matches the JS engines' warnDeadSpacingStep so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
@@ -536,11 +650,25 @@ fn unknown_property_diagnostics(
         property_objects.clear();
         super::lower::collect_property_object_values(&attr.object, &mut property_objects);
         for (key, nested, offset) in &property_objects {
-            let (line, _) = offset_to_line_column(&file.source, *offset);
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, *offset);
             // Wording matches the JS engines' warnPropertyObjectValue so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] \"{key}\" is a property, not a variant, but received an object {{ {nested} }} at {location}:{line}. This compiles to \"{key}:*\" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use {{ color: '...', op: ... }}."
+            ));
+        }
+        mask_members.clear();
+        super::lower::collect_unknown_mask_slot_members(&attr.object, &mut mask_members);
+        for (owner, member, allowed, offset) in &mask_members {
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, *offset);
+            // Wording matches the JS engines' warnMaskSlotMember so a
+            // `build.parser` flip does not change the diagnostic text.
+            out.push(format!(
+                "[csszyx] {owner}: unknown field \"{member}\" at {location}:{line} — nothing is emitted for it. {owner} takes {{ {allowed} }}."
             ));
         }
     }
@@ -612,6 +740,9 @@ fn noop_result(file: &TransformFile) -> TransformResult {
             uses_merge: false,
             uses_szcn: false,
             uses_sz_part: false,
+            uses_szv_pick: false,
+            uses_szv_pick1: false,
+            sz_part_args_provable: true,
             uses_color_var: false,
             uses_spacing_var: false,
             uses_unit_var: false,
@@ -811,6 +942,37 @@ mod tests {
     }
 
     #[test]
+    fn static_engine_reports_every_site_fallback_kind_and_site() {
+        let file = TransformFile {
+            filename: "/repo/src/Fallbacks.tsx".to_string(),
+            source: "import { szr, szv } from 'csszyx';\nexport const a = szr(cfg);\nexport const b = szr(cfg.x);\nexport const c = szr(await cfg);\nexport const d = szv(makeConfig());"
+                .to_string(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(diagnostics.contains("szr fallback at 2:"), "{diagnostics}");
+        assert!(diagnostics.contains("identifier `cfg`"), "{diagnostics}");
+        assert!(diagnostics.contains("member expression"), "{diagnostics}");
+        assert!(diagnostics.contains("AwaitExpression"), "{diagnostics}");
+        assert!(diagnostics.contains("szv catalog at 5:"), "{diagnostics}");
+    }
+
+    #[test]
+    fn static_engine_reports_unknown_mask_members() {
+        let file = TransformFile {
+            filename: "/repo/src/Mask.tsx".to_string(),
+            source: "export const A = () => <div sz={{ maskLinear: { form: '20%' } }} />;"
+                .to_string(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("maskLinear: unknown field \"form\"")));
+    }
+
+    #[test]
     fn static_engine_reports_only_unsafe_style_spread_collisions() {
         for source in [
             "const A=({width,props})=><div sz={{w:width}} {...props}/>;",
@@ -1000,7 +1162,12 @@ mod tests {
         assert!(result.metadata.transformed);
         assert!(result.metadata.uses_runtime);
         assert!(result.classes.is_empty());
-        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "sz fallback at 1:45: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+            )]
+        );
     }
 
     #[test]
@@ -1021,7 +1188,12 @@ mod tests {
         assert!(result.metadata.transformed);
         assert!(result.metadata.uses_runtime);
         assert_eq!(result.classes, ["p-4"]);
-        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "sz fallback at 1:69: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+            )]
+        );
     }
 
     #[test]
@@ -1149,7 +1321,14 @@ mod tests {
         assert!(result.metadata.transformed);
         assert!(result.metadata.uses_runtime);
         assert!(result.classes.is_empty());
-        assert!(result.diagnostics.is_empty());
+        // Byte-identical to the Babel lane's diagnostic for this source — the
+        // fallback matrix is a three-engine parity surface (ADR 0011).
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "sz fallback at 1:36: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+            )]
+        );
     }
 
     #[test]
@@ -1171,7 +1350,12 @@ mod tests {
         assert!(result.metadata.uses_merge);
         assert!(result.classes.is_empty());
         assert_eq!(result.raw_class_names, ["existing"]);
-        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "sz fallback at 1:57: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+            )]
+        );
     }
 
     #[test]
@@ -1193,7 +1377,12 @@ mod tests {
         assert!(result.metadata.uses_merge);
         assert!(result.classes.is_empty());
         assert!(result.raw_class_names.is_empty());
-        assert!(result.diagnostics.is_empty());
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "sz fallback at 1:59: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+            )]
+        );
     }
 
     #[test]

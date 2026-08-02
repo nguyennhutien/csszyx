@@ -19,8 +19,10 @@ const nextConfig: NextConfig = {
                 },
                 production: {
                     injectChecksum: true,
+                    // Mangling is opt-in; the e2e suite asserts encoded classes
+                    // and the hydration map, so this playground opts in.
+                    mangle: true,
                     mangleVars: true,
-                    // mangle: false,
                 },
             }),
         );

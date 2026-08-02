@@ -220,6 +220,77 @@ function classifyMatchedPrefix(
 }
 
 /**
+ * Mask utilities key by the `--tw-mask-*` custom property they write, not by
+ * the `mask` prefix they share. Tailwind composites mask-image from three
+ * layer variables, and inside the linear layer every side owns another, so
+ * `mask-t-from-0%` and `mask-b-from-60%` are different declarations that must
+ * BOTH survive — keying them together dropped one silently.
+ */
+const MASK_SIDES: ReadonlySet<string> = new Set(['t', 'r', 'b', 'l', 'x', 'y']);
+
+/** Layers of `mask-image`; each owns its own variable and never conflicts. */
+const MASK_LAYERS: ReadonlySet<string> = new Set(['linear', 'radial', 'conic']);
+
+/** Radial extent keywords, which share `--tw-mask-radial-size`. */
+const MASK_RADIAL_SIZES: ReadonlySet<string> = new Set([
+    'closest-side',
+    'closest-corner',
+    'farthest-side',
+    'farthest-corner',
+]);
+
+/** `x` and `y` write two sides each, so they cover those sides' keys. */
+const MASK_SIDE_COVERAGE: Readonly<Record<string, readonly string[]>> = {
+    x: ['x', 'l', 'r'],
+    y: ['y', 't', 'b'],
+};
+
+/**
+ * Classify a `mask-*` token by the custom property it writes.
+ *
+ * @param norm - Normalized token, `mask-` prefix included.
+ * @param variant - Variant prefix removed from the token.
+ * @returns `{ key, covers }`, or null to fall through to the shared tables.
+ */
+function classifyMaskToken(
+    norm: string,
+    variant: string,
+): { key: string; covers: string[] } | null {
+    if (norm === 'mask-circle' || norm === 'mask-ellipse') {
+        const key = `${variant} mask-radial-shape`;
+        return { key, covers: [key] };
+    }
+    const rest = norm.slice('mask-'.length);
+    const [head, second] = rest.split('-', 2);
+
+    if (MASK_SIDES.has(head) && (second === 'from' || second === 'to')) {
+        const sides = MASK_SIDE_COVERAGE[head] ?? [head];
+        return {
+            key: `${variant} mask-${head}-${second}`,
+            covers: sides.map(side => `${variant} mask-${side}-${second}`),
+        };
+    }
+    if (!MASK_LAYERS.has(head)) return null;
+    if (second === 'from' || second === 'to') {
+        const key = `${variant} mask-${head}-${second}`;
+        return { key, covers: [key] };
+    }
+    if (head === 'radial') {
+        if (second === 'at') {
+            const key = `${variant} mask-radial-position`;
+            return { key, covers: [key] };
+        }
+        if (MASK_RADIAL_SIZES.has(rest.slice('radial-'.length))) {
+            const key = `${variant} mask-radial-size`;
+            return { key, covers: [key] };
+        }
+    }
+    // Bare `mask-linear-45` / `mask-conic-90`: the layer's own gradient.
+    const key = `${variant} mask-${head}`;
+    return { key, covers: [key] };
+}
+
+/**
  * Classify a token for merging: its conflict `key` plus the `covers` keys it
  * removes when it appears (the key itself, and — for a spacing shorthand — the
  * longhand keys it subsumes). Returns `null` when the token can't be confidently
@@ -237,6 +308,10 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
         return null;
     }
     const firstSegment = norm.split('-', 1)[0] as string;
+    if (firstSegment === 'mask' && norm.length > 'mask-'.length) {
+        const masked = classifyMaskToken(norm, variant);
+        if (masked !== null) return masked;
+    }
     // A token that belongs to an ambiguous prefix AND classifies to a concrete
     // value group (e.g. `text-ellipsis`/`text-clip` → `text:overflow`, or a
     // data-type-hinted variable like `text-(color:--x)` → `text:color`) is a
@@ -280,15 +355,43 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
 }
 
 /**
- * Memo for repeated merges. Layered components call szcn with IDENTICAL inputs
- * every render (component defaults are constants), so a small LRU turns the
- * per-render cost into one Map lookup. The cache self-invalidates when either
- * classification input changes: the custom-group registration generation, or
- * the identity of the runtime decode bridge (both normally settle at startup,
- * before render loops, so steady-state renders never clear).
+ * One memoized argument position. The memo is a TRIE over the input strings,
+ * not a map keyed by their concatenation: building `${a} ${b}` produces a fresh
+ * V8 cons-string on every call, and a cons-string carries no cached hash, so
+ * each `Map` operation on it re-flattens and re-hashes the whole key —
+ * measured at ~115 ns, an order of magnitude more than the merge lookup it was
+ * meant to save. Walking one `Map.get` per argument instead hashes nothing: the
+ * arguments are the caller's own string constants, already internalized with
+ * their hash cached (measured ~7 ns for the two-argument layered-component
+ * shape).
  */
-const MEMO_MAX_ENTRIES = 500;
-const memo = new Map<string, string>();
+interface MergeMemoNode {
+    /** Merged output for the exact input path ending at this node. */
+    result?: string;
+    /** Children keyed by the next non-empty string input. */
+    next?: Map<string, MergeMemoNode>;
+}
+
+/**
+ * Memo for repeated merges. Layered components call szcn with IDENTICAL inputs
+ * every render (component defaults are constants), so the trie turns the
+ * per-render cost into one Map lookup per argument. The cache self-invalidates
+ * when either classification input changes: the custom-group registration
+ * generation, or the identity of the runtime decode bridge (both normally
+ * settle at startup, before render loops, so steady-state renders never clear).
+ *
+ * Over the cap the trie STOPS ADMITTING new paths rather than evicting — the
+ * same policy `splitBox`'s token memo uses. Per-entry LRU recency needs a
+ * `delete` + `set` on every HIT (measured ~11% of the hit cost), and dropping
+ * the whole trie at the cap flushed every hot entry each time a batch of
+ * distinct inputs crossed it — `szcn(BASE, props.className)` in a list render
+ * does exactly that. Admission-stop keeps the working set (the app's
+ * component-count paths, captured early) hot at zero per-hit cost; overflow
+ * traffic pays only its own uncached merge, which it paid under either policy.
+ */
+const MEMO_MAX_NODES = 500;
+const memoRoot: MergeMemoNode = {};
+let memoNodes = 0;
 let memoGroupsGeneration = -1;
 let memoDecodeRef: unknown;
 
@@ -306,12 +409,6 @@ let memoDecodeRef: unknown;
  * @example szcn('gap-2 p-4', 'gap-8') // → 'p-4 gap-8'  (gap-8 overrides gap-2)
  */
 export function szcn(...inputs: ClassInput[]): string {
-    let key = '';
-    for (const input of inputs) {
-        if (input && typeof input === 'string') {
-            key = key === '' ? input : `${key} ${input}`;
-        }
-    }
     const generation = getSzcnGroupsGeneration();
     // Compare the runtime OBJECT IDENTITY, not mere presence: a swapped bridge
     // (tests, or an exotic host replacing the inline script's object) must not
@@ -321,24 +418,38 @@ export function szcn(...inputs: ClassInput[]): string {
     // this never clears.
     const runtimeRef = mangleBridge();
     if (generation !== memoGroupsGeneration || runtimeRef !== memoDecodeRef) {
-        memo.clear();
+        memoRoot.result = undefined;
+        memoRoot.next = undefined;
+        memoNodes = 0;
         memoGroupsGeneration = generation;
         memoDecodeRef = runtimeRef;
     }
-    const cached = memo.get(key);
-    if (cached !== undefined) {
-        // Refresh recency so hot merges never age out.
-        memo.delete(key);
-        memo.set(key, cached);
-        return cached;
-    }
-    const merged = mergeUncached(inputs);
-    memo.set(key, merged);
-    if (memo.size > MEMO_MAX_ENTRIES) {
-        const oldest = memo.keys().next().value;
-        if (oldest !== undefined) {
-            memo.delete(oldest);
+    // Falsy inputs are skipped here exactly as `mergeUncached` skips them, so
+    // `szcn('a', false, 'b')` and `szcn('a', 'b')` share one trie path.
+    let node = memoRoot;
+    for (const input of inputs) {
+        if (!input || typeof input !== 'string') {
+            continue;
         }
+        let child = node.next?.get(input);
+        if (child === undefined) {
+            // Admission stop at the cap (see the memo note): the walk so far
+            // stays byte-identical for cached paths, and a novel path past
+            // the cap takes the uncached merge without disturbing the trie.
+            if (memoNodes >= MEMO_MAX_NODES) {
+                return mergeUncached(inputs, runtimeRef);
+            }
+            child = {};
+            node.next ??= new Map();
+            node.next.set(input, child);
+            memoNodes++;
+        }
+        node = child;
+    }
+    let merged = node.result;
+    if (merged === undefined) {
+        merged = mergeUncached(inputs, runtimeRef);
+        node.result = merged;
     }
     return merged;
 }
@@ -360,19 +471,19 @@ export function szcn(...inputs: ClassInput[]): string {
  * @returns The merged className string.
  */
 export function _szcn(...inputs: ClassInput[]): string {
-    return mergeUncached(inputs);
+    return mergeUncached(inputs, mangleBridge());
 }
 
 /**
  * The uncached merge — see {@link szcn} for the contract.
  *
  * @param inputs - Class strings; falsy inputs are skipped.
+ * @param bridge - The runtime bridge, read once by the caller.
  * @returns The merged className string.
  */
-function mergeUncached(inputs: readonly ClassInput[]): string {
+function mergeUncached(inputs: readonly ClassInput[], bridge: MangleBridge | undefined): string {
     const order: string[] = [];
     const byKey = new Map<string, string>();
-    const bridge = mangleBridge();
 
     for (const input of inputs) {
         if (!input || typeof input !== 'string') {

@@ -1691,6 +1691,73 @@ export interface TableProps {
 // ============================================================================
 
 /**
+ * One mask gradient stop. Position and colour are DIFFERENT custom properties,
+ * so a stop may carry both and emits one utility for each. A scalar is a
+ * position when numeric, a colour otherwise; a bare CSS variable reads as a
+ * position, so a variable meant as a colour goes in `color`.
+ */
+export interface MaskStopObject {
+    /** Gradient position — a percentage, a spacing step, or a CSS variable. */
+    at?: string | number;
+    /** Stop colour. */
+    color?: ColorValue;
+    /** Colour opacity, applied as the `/<op>` modifier. */
+    op?: number | string;
+}
+
+/** A mask gradient stop, scalar or explicit. */
+export type MaskStop = string | number | MaskStopObject;
+
+/** One side of the linear mask layer. */
+export interface MaskEdge {
+    from?: MaskStop;
+    to?: MaskStop;
+}
+
+/**
+ * The linear mask layer. `angle` and the per-side edges both write
+ * `--tw-mask-linear`, so declaring both leaves the cascade to pick one — the
+ * merge keeps whichever the later object declared.
+ */
+export interface MaskLinearProps {
+    /** Gradient angle in degrees, negative for the mirrored direction. */
+    angle?: string | number;
+    from?: MaskStop;
+    to?: MaskStop;
+    /** Top edge. */
+    t?: MaskEdge;
+    /** Right edge. */
+    r?: MaskEdge;
+    /** Bottom edge. */
+    b?: MaskEdge;
+    /** Left edge. */
+    l?: MaskEdge;
+    /** Left and right edges. */
+    x?: MaskEdge;
+    /** Top and bottom edges. */
+    y?: MaskEdge;
+}
+
+/** The radial mask layer. `at`, `size` and `shape` each own their own variable. */
+export interface MaskRadialProps {
+    /** Focal position, e.g. `top`, `bottom-left`, `center`. */
+    at?: string;
+    /** Gradient extent. */
+    size?: 'closest-side' | 'closest-corner' | 'farthest-side' | 'farthest-corner' | (string & {});
+    shape?: 'circle' | 'ellipse';
+    from?: MaskStop;
+    to?: MaskStop;
+}
+
+/** The conic mask layer. */
+export interface MaskConicProps {
+    /** Starting angle in degrees. */
+    angle?: string | number;
+    from?: MaskStop;
+    to?: MaskStop;
+}
+
+/**
  *
  */
 export interface MaskProps {
@@ -1702,19 +1769,38 @@ export interface MaskProps {
     maskPos?: string;
     /** CSS mask-repeat */
     maskRepeat?: 'repeat' | 'no-repeat' | 'repeat-x' | 'repeat-y' | 'round' | 'space';
-    /** CSS mask-type (shape-rendering) */
-    maskShape?: 'alpha' | 'luminance';
     /** CSS mask-clip */
-    maskClip?: 'border' | 'content' | 'fill' | 'padding' | 'stroke' | 'view' | (string & {});
+    maskClip?:
+        | 'border'
+        | 'content'
+        | 'fill'
+        | 'padding'
+        | 'stroke'
+        | 'view'
+        | 'no-clip'
+        | (string & {});
     /** CSS mask-origin */
     maskOrigin?: 'border' | 'content' | 'fill' | 'padding' | 'stroke' | 'view' | (string & {});
+    /** CSS mask-mode */
+    maskMode?: 'alpha' | 'luminance' | 'match-source';
+    /** CSS mask-type, for an SVG `<mask>` */
+    maskType?: 'alpha' | 'luminance';
+    /** CSS mask-composite */
+    maskComposite?: 'add' | 'subtract' | 'intersect' | 'exclude';
 
-    /** Mask gradient from color stop (v4.1) */
-    maskFrom?: ColorPropValue;
-    /** Mask gradient via color stop (v4.1) */
-    maskVia?: ColorPropValue;
-    /** Mask gradient to color stop (v4.1) */
-    maskTo?: ColorPropValue;
+    /**
+     * The linear mask layer — `--tw-mask-linear`.
+     *
+     * Declare EITHER an angle with its stops, OR per-side edges: both write the
+     * same custom property, so they are alternative modes, not fields to
+     * combine. Sides compose with each other, since each owns its own variable;
+     * `x` and `y` simply write two.
+     */
+    maskLinear?: MaskLinearProps;
+    /** The radial mask layer — `--tw-mask-radial`. */
+    maskRadial?: MaskRadialProps;
+    /** The conic mask layer — `--tw-mask-conic`. */
+    maskConic?: MaskConicProps;
 }
 
 // ============================================================================

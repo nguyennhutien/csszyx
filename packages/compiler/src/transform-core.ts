@@ -47,15 +47,68 @@ export function deepMergeSzObjects(target: SzObject, source: SzObject): SzObject
     const result: SzObject = { ...target };
     for (const [key, value] of Object.entries(source)) {
         const existing = result[key];
-        result[key] =
+        const merged =
             existing !== null &&
             typeof existing === 'object' &&
             value !== null &&
             typeof value === 'object'
                 ? deepMergeSzObjects(existing, value)
                 : value;
+        result[key] = dropDisplacedSubKeys(key, merged, value);
     }
     return result;
+}
+
+/** Sides of the linear mask slot; each writes its own `--tw-mask-<side>` variable. */
+const MASK_SIDES: readonly string[] = ['t', 'r', 'b', 'l', 'x', 'y'];
+
+/**
+ * Sub-keys of one property that write the SAME CSS custom property, so only one
+ * group can be live at a time. Deep merge alone would keep both groups, which
+ * the cascade then resolves silently by stylesheet order rather than by the
+ * author's later declaration.
+ *
+ * `maskLinear` is the case: the angle utilities and the per-side utilities both
+ * write `--tw-mask-linear`, with different values.
+ */
+const EXCLUSIVE_SUB_KEY_GROUPS: Readonly<Record<string, readonly (readonly string[])[]>> = {
+    maskLinear: [['angle', 'from', 'to'], MASK_SIDES],
+};
+
+/**
+ * Drop the sub-keys the incoming object displaced. When two groups compete for
+ * one CSS property, the group the LATER object declares wins outright and the
+ * other is cleared, so "last write wins" holds for the property rather than for
+ * each field independently.
+ *
+ * @param key - The property key being merged.
+ * @param merged - The deep-merged value.
+ * @param incoming - The later object's value for this key.
+ * @returns The merged value with displaced groups removed.
+ */
+function dropDisplacedSubKeys(key: string, merged: SzValue, incoming: SzValue): SzValue {
+    const groups = EXCLUSIVE_SUB_KEY_GROUPS[key];
+    if (
+        groups === undefined ||
+        merged === null ||
+        typeof merged !== 'object' ||
+        Array.isArray(merged) ||
+        incoming === null ||
+        typeof incoming !== 'object' ||
+        Array.isArray(incoming)
+    ) {
+        return merged;
+    }
+    const claimed = groups.find(group => group.some(field => field in incoming));
+    if (claimed === undefined) {
+        return merged;
+    }
+    const kept: SzObject = { ...(merged as SzObject) };
+    for (const group of groups) {
+        if (group === claimed) continue;
+        for (const field of group) delete kept[field];
+    }
+    return kept;
 }
 
 /**
@@ -374,7 +427,6 @@ export const PROPERTY_MAP: Record<string, string> = {
     maskSize: 'mask-size',
     maskPos: 'mask-position',
     maskRepeat: 'mask-repeat',
-    maskShape: 'mask',
     maskClip: 'mask-clip',
     maskOrigin: 'mask-origin',
 
@@ -445,11 +497,6 @@ export const PROPERTY_MAP: Record<string, string> = {
 
     // Tab Size (v4.3)
     tabSize: 'tab',
-
-    // Mask gradient color stops (v4.1)
-    maskFrom: 'mask-from',
-    maskVia: 'mask-via',
-    maskTo: 'mask-to',
 };
 
 // ============================================================================
@@ -466,6 +513,23 @@ const CSS_VAR_TYPE_HINTS: Record<string, string> = {
 // SUGGESTION_MAP: Removed aliases → canonical key migration hints (dev only)
 // This is exported for the MCP server so AI can guide users accurately.
 // ============================================================================
+/**
+ * Removed keys whose replacement is a SHAPE, not another key name. These need
+ * their own sentence: rendering them through the SUGGESTION_MAP template would
+ * print the prose as if it were a key ("Use the canonical key "maskLinear /
+ * maskRadial / maskConic with { from }" …").
+ */
+export const MIGRATION_NOTES: Record<string, string> = {
+    // Mask gradient stops moved onto the layer that owns them: Tailwind has no
+    // bare `mask-from-*`, only `mask-<layer>-from-*` and `mask-<side>-from-*`.
+    maskFrom:
+        'the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }',
+    maskTo: 'the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }',
+    maskVia:
+        'masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic',
+    maskShape: 'the shape keyword moved to maskRadial — { shape: "circle" | "ellipse" }',
+};
+
 export const SUGGESTION_MAP: Record<string, string> = {
     // Background
     backgroundColor: 'bg',
@@ -817,7 +881,15 @@ const ARIA_STATES = new Set([
 // ============================================================================
 // Object-valued keys lowered by dedicated branches rather than PROPERTY_MAP.
 // This table also feeds native known-key generation so diagnostics cannot drift.
-const KNOWN_SPECIAL_PROPERTIES = new Set(['css']);
+// `css` plus the three mask layers, which are lowered by a dedicated object
+// branch rather than a PROPERTY_MAP prefix, so they need naming here to be
+// recognised as valid keys.
+export const KNOWN_SPECIAL_PROPERTIES: Set<string> = new Set([
+    'css',
+    'maskLinear',
+    'maskRadial',
+    'maskConic',
+]);
 
 // Boolean shorthands kept on purpose. A key stays boolean only when it is NOT a
 // value-alias of a single mutually-exclusive CSS property: composite utilities
@@ -1040,7 +1112,7 @@ const SNAP_DIRECT_MAP: Record<string, Record<string, string>> = {
 // ============================================================================
 // NEGATIVE_ALLOWED: Properties that support negative values
 // ============================================================================
-const NEGATIVE_ALLOWED = new Set([
+export const NEGATIVE_ALLOWED: Set<string> = new Set([
     'm',
     'mt',
     'mr',
@@ -1339,6 +1411,15 @@ function needsArbitraryBrackets(value: string): boolean {
         v.includes('clamp(') || // Clamp
         v.includes('min(') || // Min
         v.includes('max(') || // Max
+        // Gradient functions. A mask or background taking one as a raw value
+        // needs brackets like every other CSS function; without them the class
+        // is `mask-linear-gradient(…)`, which Tailwind does not serve.
+        // One probe, not six: every gradient function name ends in
+        // `-gradient(`, and the three `repeating-*` spellings contain their
+        // base name anyway, so the extra checks only re-scanned the value on
+        // the common no-gradient path. The Rust lane already carries the
+        // three-check form with the same reasoning.
+        v.includes('-gradient(') ||
         v.includes(' ') // Values with spaces need brackets
     );
 }
@@ -1643,6 +1724,67 @@ function isInactiveVariantValue(value: SzValue): boolean {
 /** Returns whether a group/peer key uses arbitrary selector syntax. */
 function isArbitraryGroupPeerKey(key: string): boolean {
     return key.startsWith('.') || key.startsWith('#') || key.startsWith('[') || key.startsWith(':');
+}
+
+/**
+ * Resolves a key to the variant prefix a STRING value chains onto with `:`.
+ *
+ * A string value under a variant key is a ready-made utility to prefix
+ * (`{ hover: 'translate-x-full' }` → `hover:translate-x-full`) — the contract
+ * users infer from the known-variant form. This predicate is the single
+ * decision point for which keys get that treatment; anything it rejects falls
+ * through to property handling. It deliberately mirrors what the OBJECT-value
+ * path accepts, so the two value forms cannot disagree about whether a key is
+ * a variant (field-reported: `data-[ending-style]` joined with `-` for a
+ * string but `:` for an object, emitting dead classes only for strings).
+ *
+ * Kept a positive list rather than "anything unknown": a typo'd property key
+ * with a string value must keep reaching the unknown-property warning instead
+ * of silently minting a variant.
+ *
+ * The Rust engine reimplements this in `lower.rs` (`variant_string_prefix`);
+ * the two must stay in lockstep — parity-tested per shape.
+ *
+ * @param key - the sz key holding a string value.
+ * @returns the variant prefix to place before `:`, or null when the key is
+ * not a variant.
+ */
+export function variantStringPrefix(key: string): string | null {
+    if (KNOWN_VARIANTS.has(key)) return getVariantPrefix(key);
+    if (isArbitraryVariant(key)) return normalizeArbitraryVariant(key);
+    return bracketVariantPrefix(key) ?? compoundVariantPrefix(key);
+}
+
+/** Resolve named arbitrary variants such as data-[open] and min-[40rem]. */
+function bracketVariantPrefix(key: string): string | null {
+    const bracketAt = key.indexOf('-[');
+    if (bracketAt <= 0 || !key.endsWith(']')) return null;
+    const stem = key.slice(0, bracketAt);
+    return isBracketVariantStem(stem) ? key : null;
+}
+
+/** Whether a stem may own an arbitrary bracket payload. */
+function isBracketVariantStem(stem: string): boolean {
+    return (
+        SPECIAL_VARIANTS.has(stem) || KNOWN_VARIANTS.has(stem) || stem === 'min' || stem === 'max'
+    );
+}
+
+/** Resolve compound scope, aria, and bare data variants. */
+function compoundVariantPrefix(key: string): string | null {
+    const dashAt = key.indexOf('-');
+    if (dashAt <= 0) return null;
+    const stem = key.slice(0, dashAt);
+    const rest = key.slice(dashAt + 1);
+    return isCompoundVariant(stem, rest) ? key : null;
+}
+
+/** Whether a stem/state pair forms a supported compound variant. */
+function isCompoundVariant(stem: string, rest: string): boolean {
+    const scoped = stem === 'group' || stem === 'peer' || stem === 'not';
+    if (scoped) return KNOWN_VARIANTS.has(rest);
+    if (stem === 'aria') return ARIA_STATES.has(rest);
+    return stem === 'data' && rest.length > 0;
 }
 
 /** Returns whether a key names a supported variant. */
@@ -2618,7 +2760,13 @@ function formatBackgroundImage(rawValue: string): string {
     const value = rawValue.trim();
     if (value === 'none') return 'bg-none';
     const normalized = value.startsWith('-') ? value.slice(1) : value;
-    if (normalized.startsWith('repeating-')) {
+    // Any CSS function other than url() is an arbitrary image value, so it goes
+    // in brackets verbatim. This covers every gradient function — they open
+    // with the same `linear-`/`radial`/`conic` the KEYWORDS do, and reading one
+    // as a keyword produced `bg-linear-gradient(…)`, which Tailwind does not
+    // serve, while letting it fall to the url() default wrapped it into
+    // `url(linear-gradient(…))`, which is a broken URL rather than a gradient.
+    if (normalized.includes('(') && !normalized.startsWith('url(')) {
         return `bg-[${normalizeArbitraryValue(value)}]`;
     }
     if (isBackgroundGradientString(normalized)) {
@@ -2642,7 +2790,27 @@ function isBackgroundGradientString(value: string): boolean {
     );
 }
 
-const SIMPLE_MASK_KEYS = new Set(['maskPos', 'maskSize', 'maskShape', 'maskComposite', 'maskMode']);
+/**
+ * Mask keys whose value IS the Tailwind suffix, with no rename or arbitrary
+ * form to consider. Everything else in the mask family needs a formatter,
+ * because Tailwind either renames the keyword (`match-source` → `mask-match`)
+ * or moves an arbitrary value under a longer prefix (`mask-size-[50%]`), and a
+ * blanket `mask-${value}` emitted a class Tailwind does not serve.
+ */
+const SIMPLE_MASK_KEYS = new Set(['maskComposite']);
+
+/** Bare `mask-<keyword>` positions; anything else is an arbitrary position. */
+const MASK_POSITION_KEYWORDS: ReadonlySet<string> = new Set([
+    'center',
+    'top',
+    'bottom',
+    'left',
+    'right',
+    'top-left',
+    'top-right',
+    'bottom-left',
+    'bottom-right',
+]);
 
 /** Collects background position/size/repeat and simple mask utilities. */
 function collectBackgroundMaskProperty(
@@ -2656,8 +2824,15 @@ function collectBackgroundMaskProperty(
     else if (key === 'bgSize') utility = formatBackgroundSize(value);
     else if (key === 'bgRepeat' || key === 'backgroundRepeat') {
         utility = formatBackgroundRepeat(value);
+    } else if (key === 'mask' && isMaskLayerValue(value)) {
+        warnMaskLayerValue(value);
+        return true;
     } else if (key === 'maskRepeat') utility = formatMaskRepeat(value);
     else if (key === 'maskType') utility = `mask-type-${value}`;
+    else if (key === 'maskSize') utility = formatMaskSize(value);
+    else if (key === 'maskPos') utility = formatMaskPosition(value);
+    else if (key === 'maskMode') utility = formatMaskMode(value);
+    else if (key === 'maskClip') utility = formatMaskClip(value);
     else if (SIMPLE_MASK_KEYS.has(key)) utility = `mask-${value}`;
     if (utility === null) return false;
     classes.push(`${prefix}${utility}`);
@@ -2687,10 +2862,270 @@ function formatBackgroundRepeat(value: string): string {
     return `bg-repeat-${suffix}`;
 }
 
-/** Formats a mask-repeat value. */
+/**
+ * Formats a mask-repeat value. `space` and `round` keep the `mask-repeat-`
+ * prefix; only `repeat`/`no-repeat`/`repeat-x`/`repeat-y` are bare.
+ */
 function formatMaskRepeat(value: string): string {
     if (value === 'repeat') return 'mask-repeat';
-    return value === 'no-repeat' ? 'mask-no-repeat' : `mask-${value}`;
+    if (value === 'no-repeat') return 'mask-no-repeat';
+    if (value === 'space' || value === 'round') return `mask-repeat-${value}`;
+    return `mask-${value}`;
+}
+
+/** Formats a mask-size value, mirroring `formatBackgroundSize`. */
+function formatMaskSize(value: string): string {
+    if (value === 'auto' || value === 'cover' || value === 'contain') return `mask-${value}`;
+    if (value.startsWith('--')) return `mask-size-(${value})`;
+    return `mask-size-[${normalizeArbitraryValue(value)}]`;
+}
+
+/** Formats a mask-position value, mirroring `formatBackgroundPosition`. */
+function formatMaskPosition(value: string): string {
+    if (MASK_POSITION_KEYWORDS.has(value)) return `mask-${value}`;
+    if (value.startsWith('--')) return `mask-position-(${value})`;
+    return `mask-position-[${normalizeArbitraryValue(value)}]`;
+}
+
+/** Formats a mask-mode value. Tailwind shortens `match-source` to `match`. */
+function formatMaskMode(value: string): string {
+    return value === 'match-source' ? 'mask-match' : `mask-${value}`;
+}
+
+// ── mask gradient slots ─────────────────────────────────────────────────────
+// `mask-image` composites THREE independent layers, one per CSS variable:
+//
+//   mask-image: var(--tw-mask-linear), var(--tw-mask-radial), var(--tw-mask-conic)
+//
+// so the sz surface is three keys, one per variable. Inside the linear slot the
+// angle utilities and the per-side utilities BOTH write `--tw-mask-linear`, with
+// different values, so they are mutually exclusive MODES rather than composable
+// fields — declaring both would silently drop one at the cascade.
+
+/** Keys that own one `--tw-mask-*` layer. */
+const MASK_SLOT_KEYS: ReadonlySet<string> = new Set(['maskLinear', 'maskRadial', 'maskConic']);
+
+/** Legal members per slot; anything else emits nothing and deserves a warning. */
+const MASK_SLOT_MEMBERS: Readonly<Record<string, readonly string[]>> = {
+    maskLinear: ['angle', 'from', 'to', ...MASK_SIDES],
+    maskConic: ['angle', 'from', 'to'],
+    maskRadial: ['at', 'size', 'shape', 'from', 'to'],
+};
+
+/** Legal members of one linear edge object (`{ b: { from, to } }`). */
+const MASK_EDGE_MEMBERS: readonly string[] = ['from', 'to'];
+
+// Dev-only de-dup, browser included — same reasoning as warnedMaskLayerValues.
+const warnedMaskSlotMembers = new Set<string>();
+
+/**
+ * Warn that a mask slot member is not part of the slot's shape.
+ *
+ * A member the builders do not recognise emits NOTHING — worse than an unknown
+ * top-level key, which at least leaves a dead class in the DOM to find. The
+ * slot shapes are closed (member NAMES are validated; member VALUES stay
+ * unvalidated, matching the compiler's prefix-mapping design), so a typo like
+ * `form` for `from` is fully detectable.
+ *
+ * @param owner - The slot (or `slot.edge`) whose shape was missed.
+ * @param member - The unrecognised member key.
+ * @param allowed - The members the owner accepts, for the message.
+ */
+function warnMaskSlotMember(owner: string, member: string, allowed: readonly string[]): void {
+    if (process.env.NODE_ENV === 'production') return;
+    const sig = `${owner}.${member}`;
+    if (warnedMaskSlotMembers.has(sig)) return;
+    warnedMaskSlotMembers.add(sig);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] ${owner}: unknown field "${member}"${at} — nothing is emitted for it. ` +
+            `${owner} takes { ${allowed.join(', ')} }.`,
+    );
+}
+
+/** One gradient stop: a position, a colour, or both — they are separate vars. */
+interface MaskStopValue {
+    at?: string | number;
+    color?: string;
+    op?: number | string;
+}
+
+/**
+ * Render one gradient stop into its utilities. Position and colour live in
+ * DIFFERENT custom properties (`-from-position` vs `-from-color`), so a stop
+ * carrying both emits two classes rather than one fused token.
+ *
+ * A bare CSS variable reads as a POSITION in Tailwind; a variable meant as a
+ * colour needs the `(color:--x)` type hint — the same disambiguation the shadow
+ * family already needs.
+ *
+ * @param base - Utility root, e.g. `mask-b-from`.
+ * @param stop - The stop value, scalar shorthand or explicit object.
+ * @returns Zero, one or two utilities.
+ */
+function buildMaskStopClasses(base: string, stop: unknown): string[] {
+    if (stop === null || stop === undefined || stop === false) return [];
+    if (typeof stop === 'number') return [`${base}-${stop}`];
+    if (typeof stop === 'string') return [buildMaskPositionClass(base, stop)];
+    if (!isRecordValue(stop)) return [];
+    const value = stop as MaskStopValue;
+    const out: string[] = [];
+    if (value.at !== undefined && value.at !== null) {
+        out.push(buildMaskPositionClass(base, String(value.at)));
+    }
+    const colour = buildMaskColourClass(base, value);
+    if (colour) out.push(colour);
+    return out;
+}
+
+/** Render a mask position scalar, including CSS custom properties. */
+function buildMaskPositionClass(base: string, value: string): string {
+    return value.startsWith('--') ? `${base}-(${value})` : `${base}-${value}`;
+}
+
+/** Render the colour half of an explicit mask stop. */
+function buildMaskColourClass(base: string, value: MaskStopValue): string | null {
+    if (typeof value.color !== 'string' || !value.color) return null;
+    const colour = value.color.startsWith('--') ? `(color:${value.color})` : value.color;
+    const opacity = value.op === undefined || value.op === null ? '' : `/${value.op}`;
+    return `${base}-${colour}${opacity}`;
+}
+
+/**
+ * Build every utility for one mask slot.
+ *
+ * @param slotKey - `maskLinear`, `maskRadial` or `maskConic`.
+ * @param value - The slot object.
+ * @returns The utilities, in declaration order.
+ */
+function buildMaskSlotClasses(slotKey: string, value: Record<string, unknown>): string[] {
+    warnUnknownMaskMembers(slotKey, value, MASK_SLOT_MEMBERS[slotKey] as readonly string[]);
+    if (slotKey === 'maskRadial') return buildMaskRadialClasses(value);
+    const family = slotKey === 'maskConic' ? 'conic' : 'linear';
+    const out = [
+        ...buildMaskAngleClasses(family, value.angle),
+        ...buildMaskStopClasses(`mask-${family}-from`, value.from),
+        ...buildMaskStopClasses(`mask-${family}-to`, value.to),
+    ];
+    if (family === 'linear') out.push(...buildLinearMaskEdgeClasses(slotKey, value));
+    return out;
+}
+
+/** Warn once for every member outside a mask object's closed vocabulary. */
+function warnUnknownMaskMembers(
+    owner: string,
+    value: Record<string, unknown>,
+    allowed: readonly string[],
+): void {
+    for (const member of Object.keys(value)) {
+        if (!allowed.includes(member)) warnMaskSlotMember(owner, member, allowed);
+    }
+}
+
+/** Render a linear/conic angle scalar. */
+function buildMaskAngleClasses(family: string, angle: unknown): string[] {
+    if (typeof angle === 'number') {
+        return [angle < 0 ? `-mask-${family}-${Math.abs(angle)}` : `mask-${family}-${angle}`];
+    }
+    if (typeof angle !== 'string' || !angle) return [];
+    return [angle.startsWith('--') ? `mask-${family}-(${angle})` : `mask-${family}-${angle}`];
+}
+
+/** Render all directional stop groups belonging to a linear mask. */
+function buildLinearMaskEdgeClasses(slotKey: string, value: Record<string, unknown>): string[] {
+    const out: string[] = [];
+    for (const side of MASK_SIDES) {
+        const edge = value[side];
+        if (!isRecordValue(edge)) continue;
+        warnUnknownMaskMembers(`${slotKey}.${side}`, edge, MASK_EDGE_MEMBERS);
+        out.push(
+            ...buildMaskStopClasses(`mask-${side}-from`, edge.from),
+            ...buildMaskStopClasses(`mask-${side}-to`, edge.to),
+        );
+    }
+    return out;
+}
+
+/**
+ * Build the radial slot. `at`, `size` and `shape` each write their own
+ * `--tw-mask-radial-*` variable, so they compose with the stops and with each
+ * other rather than competing.
+ *
+ * @param value - The `maskRadial` object.
+ * @returns The utilities, in declaration order.
+ */
+function buildMaskRadialClasses(value: Record<string, unknown>): string[] {
+    const out: string[] = [];
+    if (typeof value.at === 'string' && value.at) out.push(`mask-radial-at-${value.at}`);
+    if (typeof value.size === 'string' && value.size) out.push(`mask-radial-${value.size}`);
+    if (value.shape === 'circle' || value.shape === 'ellipse') out.push(`mask-${value.shape}`);
+    out.push(
+        ...buildMaskStopClasses('mask-radial-from', value.from),
+        ...buildMaskStopClasses('mask-radial-to', value.to),
+    );
+    return out;
+}
+
+/**
+ * Whether a `mask` value names one of the gradient LAYERS rather than an image.
+ *
+ * The layers moved to `maskLinear` / `maskRadial` / `maskConic`, which own the
+ * `--tw-mask-<layer>` variables. `mask` now carries only a direct mask-image:
+ * `none`, a `url(…)`, a CSS variable, or an arbitrary value.
+ *
+ * @param value - The raw `mask` value.
+ * @returns True when the value belongs to a layer key.
+ */
+function isMaskLayerValue(value: string): boolean {
+    // A CSS function is an arbitrary mask-image, not a layer name:
+    // `linear-gradient(…)` shares the `linear-` opening but compiles to
+    // `mask-[linear-gradient(…)]` and must keep working.
+    if (value.includes('(')) return false;
+    const bare = value.startsWith('-') ? value.slice(1) : value;
+    return /^(linear|radial|conic)(-|$)/.test(bare);
+}
+
+/** Layer value → the key that now owns it. */
+const MASK_LAYER_KEY_BY_FAMILY: Readonly<Record<string, string>> = {
+    linear: 'maskLinear',
+    radial: 'maskRadial',
+    conic: 'maskConic',
+};
+
+// Dev-only de-dup, browser included: like the alignment props above, mask
+// values most often resolve at runtime via `_sz` in a prop-API component,
+// where `window` is defined — so the migration warning must fire there too.
+const warnedMaskLayerValues = new Set<string>();
+
+/**
+ * Warn that a `mask` layer value moved, naming the key that replaced it.
+ * Fires in browser dev as well (unlike szDevWarningsEnabled warnings): the
+ * consequence is a silently dropped mask, which is exactly the migration
+ * mistake a first-time user makes inside a runtime-resolved sz object.
+ *
+ * @param value - The raw `mask` value.
+ */
+function warnMaskLayerValue(value: string): void {
+    if (process.env.NODE_ENV === 'production') return;
+    if (warnedMaskLayerValues.has(value)) return;
+    warnedMaskLayerValues.add(value);
+    const bare = value.startsWith('-') ? value.slice(1) : value;
+    const family = /^(linear|radial|conic)/.exec(bare)?.[1] as string;
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] mask: '${value}'${at} — gradient layers moved to ` +
+            `"${MASK_LAYER_KEY_BY_FAMILY[family]}". Tailwind composites mask-image from ` +
+            'one variable per layer, so each layer is its own key. `mask` now takes a ' +
+            'direct mask-image only: none, a url(), or a CSS variable.',
+    );
+}
+
+/**
+ * Formats a mask-clip value. Every box keyword takes the `mask-clip-` prefix
+ * EXCEPT `no-clip`, which Tailwind spells without it.
+ */
+function formatMaskClip(value: string): string {
+    return value === 'no-clip' ? 'mask-no-clip' : `mask-clip-${value}`;
 }
 
 const BORDER_COLOR_SIDES: Record<string, string> = {
@@ -2821,6 +3256,7 @@ function isKnownSzPropertyKey(key: string): boolean {
             key.startsWith('@') ||
             KNOWN_VARIANTS.has(key) ||
             SPECIAL_VARIANTS.has(key) ||
+            variantStringPrefix(key) !== null ||
             key === 'min' ||
             key === 'max',
     );
@@ -2829,6 +3265,10 @@ function isKnownSzPropertyKey(key: string): boolean {
 /** Builds the diagnostic for an unsupported key without runtime context. */
 function unknownSzPropertyMessage(key: string): string {
     const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    const note = MIGRATION_NOTES[key];
+    if (note) {
+        return `[csszyx] "${key}" was removed${at}: ${note}.`;
+    }
     const suggestion = SUGGESTION_MAP[key];
     if (suggestion) {
         return `[csszyx] Use the canonical key "${suggestion}" instead of "${key}"${at}.`;
@@ -2840,9 +3280,16 @@ function unknownSzPropertyMessage(key: string): string {
             'keys was expected. The value is ignored.'
         );
     }
+    // Deliberately NOT "this will be ignored": the key is not dropped, it is
+    // lowered as a literal class exactly like a known one. Saying otherwise
+    // sent people looking for a missing class instead of a dead one. The key
+    // is also not blocked — a project can serve it with `@utility`, and
+    // refusing to emit would make csszyx the thing standing between the author
+    // and a fix they can already make themselves.
     return (
         `[csszyx] Unknown property "${key}" in sz prop${at}. ` +
-        'This will be ignored. Check for typos.'
+        'The class is still emitted, so it styles nothing unless Tailwind ' +
+        "serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility."
     );
 }
 
@@ -2855,33 +3302,58 @@ function buildGenericStringClass(
 ): string {
     const importantValue = handleImportant(value);
     const finalValue = normalizeGenericStringValue(rawKey, key, importantValue.value);
+    // The minus belongs on the UTILITY, after any variant prefix:
+    // hover:-translate-x-full, never -hover:translate-x-full. The Rust engine
+    // always placed it correctly; putting it before `prefix` here emitted a
+    // selector Tailwind never generates (field-reported as silently dead
+    // drawer transitions).
     const className =
         finalValue.startsWith('-') && NEGATIVE_ALLOWED.has(key)
-            ? `-${prefix}${key}-${finalValue.substring(1)}`
+            ? `${prefix}-${key}-${finalValue.substring(1)}`
             : `${prefix}${key}-${finalValue}`;
     return importantValue.important ? `${className}!` : className;
 }
 
 /** Normalizes string values into Tailwind utility suffix syntax. */
 function normalizeGenericStringValue(rawKey: string, key: string, value: string): string {
-    if (isTailwindBuildFunction(value) || (value.startsWith('--') && value.includes('('))) {
-        return `[${normalizeArbitraryValue(value)}]`;
-    }
-    if (value.startsWith('--')) {
-        const typeHint = CSS_VAR_TYPE_HINTS[rawKey];
-        return typeHint ? `(${typeHint}:${value})` : `(${value})`;
-    }
+    // `ring: 'none'` reads like CSS, but Tailwind spells the zero ring
+    // `ring-0` — `ring-none` styles nothing.
+    if (rawKey === 'ring' && value === 'none') return '0';
+    // Tailwind's font-features utility is functional-only: bare
+    // `font-features-normal` styles nothing while `font-features-[normal]`
+    // compiles.
+    if (rawKey === 'fontFeatures' && value === 'normal') return '[normal]';
+    if (isArbitraryFunctionValue(value)) return `[${normalizeArbitraryValue(value)}]`;
+    const variable = normalizeCustomPropertyValue(rawKey, value);
+    if (variable) return variable;
     if (value.startsWith('var(')) return `[${normalizeArbitraryValue(value)}]`;
-    if (/^\d+\/\d+$/.test(value)) {
-        return FRACTION_SUPPORTED_PROPS.has(rawKey) ? value : `[${value}]`;
-    }
-    if (key === 'aspect' && /^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)) {
-        return /^\d+\/\d+$/.test(value) ? value : `[${value}]`;
-    }
+    const ratio = normalizeRatioValue(rawKey, key, value);
+    if (ratio) return ratio;
     if (needsArbitraryBrackets(value) || /^\d+\.\d+%$/.test(value)) {
         return `[${normalizeArbitraryValue(value)}]`;
     }
     return value;
+}
+
+/** Whether Tailwind needs a function-like value in arbitrary brackets. */
+function isArbitraryFunctionValue(value: string): boolean {
+    return isTailwindBuildFunction(value) || (value.startsWith('--') && value.includes('('));
+}
+
+/** Normalize a bare CSS custom property with its optional Tailwind type hint. */
+function normalizeCustomPropertyValue(rawKey: string, value: string): string | null {
+    if (!value.startsWith('--')) return null;
+    const typeHint = CSS_VAR_TYPE_HINTS[rawKey];
+    return typeHint ? `(${typeHint}:${value})` : `(${value})`;
+}
+
+/** Normalize fraction and aspect-ratio strings without widening other props. */
+function normalizeRatioValue(rawKey: string, key: string, value: string): string | null {
+    if (/^\d+\/\d+$/.test(value)) {
+        return FRACTION_SUPPORTED_PROPS.has(rawKey) ? value : `[${value}]`;
+    }
+    if (key !== 'aspect' || !/^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)) return null;
+    return `[${value}]`;
 }
 
 /** Indexed text-size utility eligible for a matching leading utility. */
@@ -3034,6 +3506,12 @@ function collectObjectProperty(
         if (gradient) classes.push(`${prefix}${gradient}`);
         return true;
     }
+    if (MASK_SLOT_KEYS.has(rawKey)) {
+        for (const utility of buildMaskSlotClasses(rawKey, value)) {
+            classes.push(`${prefix}${utility}`);
+        }
+        return true;
+    }
     if (rawKey in PROPERTY_MAP && 'color' in value) {
         classes.push(
             buildColorObjectClass(rawKey, value as { color: string; op?: number | string }, prefix),
@@ -3047,6 +3525,25 @@ function collectObjectProperty(
 
 /** Property keys already nudged about stray object values (once each). */
 const _warnedPropertyObjects = new Set<string>();
+
+/**
+ * Test-only: clear every dev-warning de-dup set.
+ *
+ * The sets are process-wide by design (a prop-API component re-rendering the
+ * same mistake must not spam the console), which makes any suite that asserts
+ * a warning FIRES depend on no earlier test having triggered the same key.
+ * Vitest's per-file isolation hides that today; a shared worker, a shuffled
+ * order, or two lanes probing one key inside one file exposes it. Suites call
+ * this in `beforeEach` so their assertions stand on their own.
+ */
+export function __resetSzWarnDedupForTests(): void {
+    warnedAlignmentValues.clear();
+    warnedMaskLayerValues.clear();
+    warnedMaskSlotMembers.clear();
+    _warnedSpacingSteps.clear();
+    _warnedOpacityTokens.clear();
+    _warnedPropertyObjects.clear();
+}
 
 /**
  * Warns when a PROPERTY key receives an object that is not the `{ color, op }`
@@ -3166,8 +3663,9 @@ function collectUnresolvedStringProperty(
         classes.push(`${prefix}${snapClass}`);
         return true;
     }
-    if (KNOWN_VARIANTS.has(rawKey)) {
-        classes.push(`${prefix}${getVariantPrefix(rawKey)}:${value}`);
+    const variantForString = variantStringPrefix(rawKey);
+    if (variantForString !== null) {
+        classes.push(`${prefix}${variantForString}:${value}`);
         return true;
     }
     return false;

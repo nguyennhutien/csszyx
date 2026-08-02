@@ -11,6 +11,7 @@ import {
     isRustTransformAvailable,
     type SourceTransformResult,
     sortStrings,
+    szFallbackConsequenceOf,
     type TokenData,
     type TransformSourceCodeOptions,
     transform,
@@ -57,6 +58,15 @@ import {
     injectRecoveryManifest,
 } from './html-transformer.js';
 import { escapeForDoubleQuotedString, escapeJsonForInlineScript } from './inline-script-escape.js';
+import {
+    computeMangleSizeVerdict,
+    createMangleSizeAccount,
+    type MangleSizeAccount,
+    mangleSizeMessage,
+    recordCssPair,
+    resetMangleSizeAccount,
+} from './mangle-size-report.js';
+import { runtimeHelperGroupsFromUsage } from './next-runtime-injection.js';
 import { resolveParserMode } from './parser-mode.js';
 import { normalizePathSeparators } from './path-normalization.js';
 import {
@@ -68,6 +78,11 @@ import {
 } from './rsc-boundary.js';
 import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
+import {
+    recordSzvRegistryFile,
+    resolveCrossModuleStaticsFor,
+    type SzvCrossModuleRegistry,
+} from './szv-registry.js';
 import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
@@ -727,6 +742,34 @@ export function shouldEmitWarning(
         return false;
     }
     return true;
+}
+
+/**
+ * Whether a transform diagnostic describes missing CSS and may be printed.
+ *
+ * @param quiet - Whether all build warnings are muted.
+ * @param message - Compiler diagnostic to classify.
+ * @returns True when the diagnostic is an unsilenced missing-CSS failure.
+ */
+export function shouldEmitMissingCssFallback(quiet: boolean, message: string): boolean {
+    return !quiet && szFallbackConsequenceOf(message) === 'missing-css';
+}
+
+/**
+ * Emit one missing-CSS fallback through the caller's output channel.
+ *
+ * @param quiet - Whether all build warnings are muted.
+ * @param message - Compiler diagnostic to classify and emit.
+ * @param id - Bundler module identifier included in the warning.
+ * @param emit - Warning output channel.
+ */
+export function emitMissingCssFallback(
+    quiet: boolean,
+    message: string,
+    id: string,
+    emit: (message: string) => void,
+): void {
+    if (shouldEmitMissingCssFallback(quiet, message)) emit(`[csszyx] ${id}\n  ${message}`);
 }
 
 /**
@@ -2303,20 +2346,52 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 } {
     assertGlobalVarMangleConfig(options);
 
-    // Mangling is a production bundle-size optimization with no value in a dev
-    // server: the dev CSS pipeline (e.g. a separate @tailwindcss/vite) serves
-    // UN-mangled class names, so applying a mangle map at runtime via `szr` would
-    // emit class names that have no matching CSS — silently collapsing szv-driven
-    // layouts in `vite serve` only. Forced off for `command === 'serve'` below
+    // Mangling is opt-IN: it obfuscates class names and, over a compressed
+    // response, costs bytes rather than saving them (utility names compress far
+    // better than the map that has to ship alongside them), so a build only pays
+    // for it when it asks. It also has no value in a dev server: the dev CSS
+    // pipeline (e.g. a separate @tailwindcss/vite) serves UN-mangled class names,
+    // so applying a mangle map at runtime via `szr` would emit class names that
+    // have no matching CSS — silently collapsing szv-driven layouts in
+    // `vite serve` only. Forced off for `command === 'serve'` below
     // (configResolved), so dev always uses readable class names that match the
     // dev CSS. `let` because the command is only known at configResolved.
-    let manglingEnabled = options.production?.mangle !== false;
+    let manglingEnabled = options.production?.mangle === true;
+    // Cross-module szv registry: built once during prescan, resolved per file.
+    // PRODUCTION ONLY (v1): a dev server would need registry-dependency
+    // invalidation (module A's config edit must re-transform module B), a
+    // whole failure class this cut removes — dev keeps today's exact behavior.
+    // Forced off for `command === 'serve'` below, like mangling.
+    let crossModuleRegistryEnabled = process.env.NODE_ENV !== 'development';
+    /** absPath (separator-normalized) → exported factory configs. */
+    const szvCrossModuleRegistry: SzvCrossModuleRegistry = new Map();
     // Class names the mangler must never produce as a token, so a short alias
     // can't collide with a literal class in non-csszyx CSS (hybrid builds). Comes
     // from config, so it is available identically at every finalizeMangleMap call
     // site (buildEnd / transformIndexHtml / generateBundle / processAssets) — the
     // reason a config exclude-list is consistent where a bundle-CSS scan would not.
     const mangleReserved = new Set(options.production?.mangleExclude ?? []);
+    // Which delivery channels carry the runtime mangle map. Both channels ship
+    // the whole census, so a build that needs only one was paying for the map
+    // twice across HTML and JS. Defaults to 'both': dropping a channel is only
+    // safe against a known deployment shape, and guessing wrong leaves runtime
+    // helpers mapless while the CSS ships mangled.
+    const mangleMapDelivery = options.production?.mangleMapDelivery ?? 'both';
+    if (!['both', 'html', 'bundle'].includes(mangleMapDelivery)) {
+        // A typo ('htlm') would otherwise read as 'both' through the two
+        // negative comparisons below — silently, in the option whose whole
+        // point is narrowing against a known deployment shape.
+        throw new Error(
+            `[csszyx] production.mangleMapDelivery must be 'both', 'html' or 'bundle'; got ${JSON.stringify(mangleMapDelivery)}.`,
+        );
+    }
+    const deliverMapInHtml = mangleMapDelivery !== 'bundle';
+    const deliverMapInBundle = mangleMapDelivery !== 'html';
+    // Weighs the map against the CSS it bought. Counts channels that actually
+    // shipped rather than the configured ones: a webpack build never takes the
+    // bundle module, and a library build emits no HTML, so charging for a
+    // channel the build did not use would overstate the cost.
+    const sizeAccount: MangleSizeAccount = createMangleSizeAccount();
     // User can raise/lower the AST node budget per build via the existing
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
     // compiler falls back to the default 50 000 in @csszyx/compiler.
@@ -2726,6 +2801,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     ): SourceTransformResult {
         const compilerOptions = createCompilerOptions(astBudget);
         const effectiveFilename = normalizeSourceFilename(filename);
+        const crossModuleStatics = resolveCrossModuleStaticsFor(
+            szvCrossModuleRegistry,
+            filename,
+            source,
+        );
+        if (crossModuleStatics !== undefined) {
+            compilerOptions.crossModuleStatics = crossModuleStatics;
+        }
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
 
         if (cacheEnabled) {
@@ -2926,6 +3009,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             mangleVars: compilerOptions.mangleVars,
             mangleVarHoistMaxDepth: compilerOptions.mangleVarHoistMaxDepth,
             globalVarAliases: normalizeGlobalVarAliasesForCache(compilerOptions.globalVarAliases),
+            // The registry entries fed to this file are part of its identity:
+            // module A's config change must miss B's cached transform, or the
+            // cache serves a stale table.
+            crossModuleStatics:
+                compilerOptions.crossModuleStatics === undefined
+                    ? undefined
+                    : JSON.stringify(compilerOptions.crossModuleStatics),
             filename: effectiveFilename,
             source,
         };
@@ -3303,6 +3393,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function prescanAndWriteClasses(): void {
         refreshCompileSourceDirs();
+        // A registry entry outlives its file otherwise: a module that stops
+        // exporting a qualifying factory would keep its old table through any
+        // later prescan in the same process.
+        szvCrossModuleRegistry.clear();
         const prescanStarted = performance.now();
         const discoveredClasses = new Set<string>();
         // Raw className values feed both Tailwind safelisting and the authored
@@ -3330,9 +3424,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // load. Raw-only modules therefore participate even when they do not
             // need the expensive sz parser pass.
             recordAuthoredClasses(content);
+            recordSzvRegistryEntries(filePath, content);
             if (fileMayContainSafelistableSz(content)) {
                 prescanSources.push({ filePath, content });
             }
+        }
+
+        /**
+         * Record one file's exported szv factories into the cross-module
+         * registry, so importing files can precompile them.
+         *
+         * @param filePath Absolute source path.
+         * @param content Source text.
+         */
+        function recordSzvRegistryEntries(filePath: string, content: string): void {
+            if (!crossModuleRegistryEnabled) return;
+            recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content);
         }
 
         /**
@@ -3738,6 +3845,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         usesMerge: boolean;
         usesSzcn: boolean;
         usesSzPart: boolean;
+        usesSzvPick: boolean;
+        usesSzvPick1: boolean;
+        szPartArgsProvable: boolean;
         usesColorVar: boolean;
         usesSpacingVar: boolean;
         usesUnitVar: boolean;
@@ -3758,6 +3868,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesMerge: false,
             usesSzcn: false,
             usesSzPart: false,
+            usesSzvPick: false,
+            usesSzvPick1: false,
+            szPartArgsProvable: true,
             usesColorVar: false,
             usesSpacingVar: false,
             usesUnitVar: false,
@@ -3801,9 +3914,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         for (const message of result.diagnostics) {
             if (message.includes('unresolvable sz spread')) {
                 state.spreadWarnings.add(`${id}\n  ${message}`);
-            } else if (message.includes('AST budget exceeded')) {
-                console.warn(`[csszyx] ${id}\n  ${message}`);
+                continue;
             }
+            if (message.includes('AST budget exceeded')) {
+                console.warn(`[csszyx] ${id}\n  ${message}`);
+                continue;
+            }
+            // missing-css means the classes never reached the safelist — the
+            // styles are simply absent, which is the failure class that must
+            // surface in production builds too (same tier as the spread
+            // warning above). `quiet` still silences it: that flag is the
+            // documented way to mute every build warning.
+            emitMissingCssFallback(quiet, message, id, console.warn);
         }
         if (quiet || result.diagnostics.length === 0 || process.env.NODE_ENV === 'production') {
             return;
@@ -3811,7 +3933,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         for (const message of result.diagnostics) {
             if (
                 message.includes('unresolvable sz spread') ||
-                message.includes('AST budget exceeded')
+                message.includes('AST budget exceeded') ||
+                szFallbackConsequenceOf(message) === 'missing-css'
             ) {
                 continue;
             }
@@ -3833,6 +3956,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesMerge: result.usesMerge,
             usesSzcn: result.usesSzcn,
             usesSzPart: result.usesSzPart,
+            usesSzvPick: result.usesSzvPick,
+            usesSzvPick1: result.usesSzvPick1,
+            szPartArgsProvable: result.szPartArgsProvable,
             usesColorVar: result.usesColorVar,
             usesSpacingVar: result.usesSpacingVar,
             usesUnitVar: result.usesUnitVar,
@@ -3906,16 +4032,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param output Pre-transform helper usage.
      * @returns Runtime export names in stable import order.
      */
-    function requiredRuntimeHelpers(output: PreTransformOutput): string[] {
-        const helpers: string[] = [];
-        if (output.usesRuntime) helpers.push('_sz');
-        if (output.usesMerge) helpers.push('_szMerge');
-        if (output.usesSzcn) helpers.push('_szcn');
-        if (output.usesSzPart) helpers.push('_szPart');
-        if (output.usesColorVar) helpers.push('__szColorVar');
-        if (output.usesSpacingVar) helpers.push('__szSpacingVar');
-        if (output.usesUnitVar) helpers.push('__szUnitVar');
-        return helpers;
+    function requiredRuntimeHelpers(output: PreTransformOutput): {
+        barrel: string[];
+        merge: string[];
+    } {
+        // A file whose only object-capable emissions are _szPart calls with
+        // provably string-or-falsy arguments never lowers at runtime: its
+        // merge helpers come from the compiler-free entry, saving the whole
+        // browser transform. Any _sz or _szMerge emission keeps the barrel,
+        // whose helpers self-register the lowerer.
+        return runtimeHelperGroupsFromUsage(output);
     }
 
     /**
@@ -3926,22 +4052,32 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Rewritten source when imports were added, otherwise null.
      */
     function injectRuntimeHelpers(code: string, output: PreTransformOutput): string | null {
-        const imports = requiredRuntimeHelpers(output);
-        const hasRuntimeImport = imports.length > 0 && code.includes('@csszyx/runtime');
+        const groups = requiredRuntimeHelpers(output);
+        let result: string | null = null;
+        let current = code;
+        if (groups.merge.length > 0 && !current.includes('@csszyx/runtime/merge')) {
+            current = insertRuntimeImport(
+                current,
+                `import { ${groups.merge.join(', ')} } from '@csszyx/runtime/merge';\n`,
+            );
+            result = current;
+        }
+        const imports = groups.barrel;
+        const hasRuntimeImport = imports.length > 0 && current.includes('@csszyx/runtime');
         const needed = hasRuntimeImport
-            ? imports.filter(name => !importsRuntimeHelper(code, name))
+            ? imports.filter(name => !importsRuntimeHelper(current, name))
             : imports;
-        if (needed.length === 0) return null;
+        if (needed.length === 0) return result;
 
-        const existingImport = findRuntimeImportClause(code);
+        const existingImport = findRuntimeImportClause(current);
         if (existingImport) {
-            return code.replace(
+            return current.replace(
                 existingImport.statement,
                 `${existingImport.prefixWithBody}, ${needed.join(', ')} } from '@csszyx/runtime'`,
             );
         }
         const importStatement = `import { ${needed.join(', ')} } from '@csszyx/runtime';\n`;
-        return insertRuntimeImport(code, importStatement);
+        return insertRuntimeImport(current, importStatement);
     }
 
     /**
@@ -4009,6 +4145,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // production build).
         if (
             !manglingEnabled ||
+            !deliverMapInBundle ||
             !shouldProcessSource(id) ||
             !MANGLE_RUNTIME_CONSUMER_RE.test(transformedCode) ||
             transformedCode.includes(MANGLE_RUNTIME_VIRTUAL_ID)
@@ -4109,6 +4246,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // No finalize here: the module carries placeholders that
                     // output processing fills from the FINAL map, after the
                     // mangle passes have run over the chunk.
+                    sizeAccount.channels.add('bundle');
                     return createMangleRuntimeModule(globalVarAliasPrefix);
                 }
                 if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
@@ -4169,7 +4307,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     code.includes('sz=') ||
                     code.includes('szs=') ||
                     /\bsz\s*:\s*["'{]/.test(code) ||
-                    code.includes('sz: "');
+                    code.includes('sz: "') ||
+                    // szr-only modules (no sz attribute) historically skipped the
+                    // compiler entirely — which also skipped the szr import
+                    // rewrite AND the szr fallback diagnostics. The substring is
+                    // deliberately loose; a false positive only costs one file
+                    // the compiler pass, which then changes nothing.
+                    code.includes('szr(');
                 const output = hasSzProp
                     ? transformSzSource(code, id, message => this.warn(message))
                     : unchangedPreTransform(code);
@@ -4322,6 +4466,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (compiler.options?.mode === 'development') {
                     manglingEnabled = false;
                 }
+                // `webpack --watch` (any mode) rebuilds against the ONE prescan
+                // registry — the beforeCompile guard below even skips the
+                // prescan on rebuilds — so an edited factory module keeps its
+                // stale table. Same v1 cut as the vite/rollup watch guards.
+                if (compiler.watchMode === true || compiler.options?.watch === true) {
+                    crossModuleRegistryEnabled = false;
+                }
+                // Delivery is decided by the vite/rollup hooks (module
+                // injection + transformIndexHtml); this lane ships the map the
+                // way it always did, so a narrowed value would silently not
+                // narrow anything.
+                if (manglingEnabled && mangleMapDelivery !== 'both') {
+                    console.warn(
+                        `[csszyx] production.mangleMapDelivery: '${mangleMapDelivery}' has no ` +
+                            'effect on the webpack lane — map delivery only narrows on vite/rollup builds.',
+                    );
+                }
                 compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
@@ -4350,7 +4511,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             rollup: {
                 /** Records the rollup lane for the mangle-runtime gate. */
                 buildStart() {
+                    // A watch rebuild reuses the one prescan registry forever:
+                    // an edited factory module would keep serving its OLD
+                    // variant table to every importer, and the transform cache
+                    // would key on the stale value. The v1 cut (no
+                    // registry-dependency invalidation) therefore extends to
+                    // watch mode — `rollup -w` here, and vite build --watch
+                    // through the same rollup context.
                     activeFramework = 'rollup';
+                    const meta = (this as unknown as { meta?: { watchMode?: boolean } }).meta;
+                    if (meta?.watchMode) {
+                        crossModuleRegistryEnabled = false;
+                    }
                 },
             },
 
@@ -4369,6 +4541,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // not match the un-mangled dev CSS. See `manglingEnabled` above.
                     if (config.command === 'serve') {
                         manglingEnabled = false;
+                        crossModuleRegistryEnabled = false;
+                    }
+                    // `vite build --watch` is a production-mode build with the
+                    // dev server's staleness problem: the registry is recorded
+                    // once at prescan and never re-recorded, so a factory edit
+                    // would compile importers against the old table on every
+                    // rebuild. Same v1 cut as `serve`.
+                    if (config.build?.watch) {
+                        crossModuleRegistryEnabled = false;
                     }
                     evictTransformCacheOnce();
                     // Pre-scan source files so Tailwind can discover classes
@@ -4516,7 +4697,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             minify: process.env.NODE_ENV === 'production',
                             varMangleMap: state.varMangleMap,
                             globalVarAliasPrefix,
+                            installRuntimeObject: deliverMapInHtml,
                         });
+                        // The hydration-verify contract reads the JSON tag from
+                        // the DOM, so the census ships in the HTML whenever the
+                        // page is built here — 'bundle' only drops the runtime
+                        // installer. Charge the channel accordingly, or the
+                        // advisory understates what actually shipped.
+                        if (manglingEnabled) {
+                            sizeAccount.channels.add('html');
+                        }
                         // Recovery manifest is a no-op when zero szRecover tokens were
                         // emitted across the build, so pages without recovery sites get
                         // no extra script tag. In production, dev-only tokens are stripped
@@ -4596,7 +4786,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         mangledSources: Set<string>,
         externalClasses: Set<string>,
     ): string {
-        let css = rewriteCssWithValidatedGlobalVarPlan(
+        const css = rewriteCssWithValidatedGlobalVarPlan(
             source,
             file,
             state.globalVarValidationResult,
@@ -4609,8 +4799,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             });
             for (const className of result.mangledClasses) mangledSources.add(className);
             for (const className of result.unmangledClasses) externalClasses.add(className);
-            if (result.transformedCount > 0) css = result.css;
-            return css;
+            const mangled = result.transformedCount > 0 ? result.css : css;
+            recordCssPair(sizeAccount, css, mangled);
+            return mangled;
         } catch (error) {
             if (isCssSyntaxError(error)) return css;
             throw error;
@@ -4634,6 +4825,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             collectMangleHybridHazards(state.mangleMap, mangledSources, externalClasses),
         );
         if (message) console.warn(message);
+        reportMangleSize();
+    }
+
+    /**
+     * Tell the build what mangling actually cost, once every CSS asset has been
+     * weighed. Silent unless the map came out more expensive than the CSS it
+     * bought, so a build that got what it paid for stays quiet.
+     */
+    function reportMangleSize(): void {
+        const verdict = computeMangleSizeVerdict(
+            sizeAccount,
+            JSON.stringify(createHydrationMangleMap(state.mangleMap, state.varMangleMap)),
+        );
+        const message = mangleSizeMessage(verdict);
+        if (message) console.warn(message);
+        // Each output pass weighs its own assets; see resetMangleSizeAccount.
+        resetMangleSizeAccount(sizeAccount);
     }
 
     /**

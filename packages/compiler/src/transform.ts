@@ -11,6 +11,35 @@ import {
 } from './property-types.js';
 import { generateInlineRecoveryToken, isValidInlineRecoveryMode } from './recovery-tokens.js';
 import {
+    describeSzFallback,
+    formatSzFallbackDiagnostic,
+    SZ_FALLBACK_UNKNOWN_CALLEE,
+    type SzFallbackDescription,
+    type SzFallbackKind,
+    type SzFallbackSite,
+    szsUnsupportedDiagnostic,
+} from './sz-fallback-matrix.js';
+import { SZR_IMPORT_REWRITE_TARGETS, szrRewriteProofHolds } from './szr-import-rewrite.js';
+import {
+    coerceParitySafeSelectionValue,
+    computeStaticSzvPick,
+    emitUnprovenSzrFallbacks,
+    qualifyStaticSzvConfig,
+    recordCrossModuleSzvFactoryImports,
+    recordIdentifierCallByName,
+    recordSzvTypeQueryByName,
+    type SzvPrecompileState as SharedSzvPrecompileState,
+    type StaticSzvConfig,
+    type StaticSzvSelection,
+    SZV_RESERVED_FACTORY_NAMES,
+    type SzrArgumentAnalysisOf,
+    type SzvPrecompiledTable,
+    serializeSzvTable,
+    singleDimensionPickAllowed,
+    szvFactoryAccountingHolds,
+    szvTableIdentifier,
+} from './szv-precompile.js';
+import {
     deepMergeSzObjects,
     formatSzWarnLocation,
     getVariantPrefix,
@@ -165,22 +194,18 @@ function transformSzsAttribute(
     }
     const container = path.node.value;
     if (!t.isJSXExpressionContainer(container) || !t.isObjectExpression(container.expression)) {
-        diagnostics.push(szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedDiagnostic(filename ?? '<anonymous>'));
         return false;
     }
     const slotMap = container.expression;
     if (!isValidSzsSlotMap(slotMap)) {
-        diagnostics.push(szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedDiagnostic(filename ?? '<anonymous>'));
         return false;
     }
     setSzWarnLocation(
         formatSzWarnLocation(filename ?? 'file.tsx', path.node.loc?.start.line, rootDir),
     );
     const compiledSlots = compileSzsSlots(slotMap);
-    if (!compiledSlots) {
-        diagnostics.push(szsUnsupportedMessage(filename));
-        return false;
-    }
     applyCompiledSzsSlots(compiledSlots, pendingClasses);
     path.node.name = t.jsxIdentifier('szsc');
     return true;
@@ -190,9 +215,9 @@ function transformSzsAttribute(
  * Compiles every validated szs slot without mutating the source map.
  *
  * @param slotMap Validated static slot map.
- * @returns Compiled slots, or null when a value is unsupported.
+ * @returns Compiled slots.
  */
-function compileSzsSlots(slotMap: t.ObjectExpression): CompiledSzsSlot[] | null {
+function compileSzsSlots(slotMap: t.ObjectExpression): CompiledSzsSlot[] {
     const compiledSlots: CompiledSzsSlot[] = [];
     for (const property of slotMap.properties) {
         const slot = property as t.ObjectProperty;
@@ -200,8 +225,9 @@ function compileSzsSlots(slotMap: t.ObjectExpression): CompiledSzsSlot[] | null 
             compiledSlots.push({ slot, classes: slot.value.value, rewrite: false });
             continue;
         }
-        const compiled = tryStaticTransformNode(slot.value as t.Node);
-        if (!compiled || !t.isStringLiteral(compiled)) return null;
+        // `isValidSzsSlotMap` has already proven this is a pure literal object,
+        // the exact subset `tryStaticTransformNode` lowers to a string.
+        const compiled = tryStaticTransformNode(slot.value as t.Node) as t.StringLiteral;
         compiledSlots.push({ slot, classes: compiled.value, rewrite: true });
     }
     return compiledSlots;
@@ -480,6 +506,8 @@ interface SzArrayTransformResult {
     transformed: boolean;
     usesSzcn: boolean;
     usesSzPart: boolean;
+    /** False when any emitted `_szPart` argument could be an object. */
+    szPartArgsProvable?: boolean;
 }
 
 /** Result of compiling an sz object expression. */
@@ -667,13 +695,13 @@ function resolveStaticSzExpression(
 }
 
 /** Runtime fallback reason and its actionable replacement guidance. */
-interface RuntimeFallbackDescription {
-    reason: string;
-    suggestion: string;
-}
+type RuntimeFallbackDescription = SzFallbackDescription;
 
 /**
  * Describes why one sz expression requires runtime evaluation.
+ *
+ * Classifies the Babel node, then defers the wording to the shared matrix so
+ * the oxc and Rust lanes cannot drift from it.
  *
  * @param expression Unresolved sz expression.
  * @returns Runtime fallback reason and suggestion.
@@ -681,36 +709,20 @@ interface RuntimeFallbackDescription {
 function describeRuntimeFallback(expression: t.Expression): RuntimeFallbackDescription {
     if (t.isCallExpression(expression)) {
         const callee = expression.callee;
-        let name = '?';
+        let name: string = SZ_FALLBACK_UNKNOWN_CALLEE;
         if (t.isIdentifier(callee)) name = callee.name;
         else if (t.isMemberExpression(callee) && t.isIdentifier(callee.property)) {
             name = callee.property.name;
         }
-        return {
-            reason: `function call \`${name}()\` result is unknown at build time`,
-            suggestion:
-                'If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().',
-        };
+        return describeSzFallback('call', name);
     }
     if (t.isIdentifier(expression)) {
-        return {
-            reason: `identifier \`${expression.name}\` could not be resolved to a static value`,
-            suggestion:
-                "Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().",
-        };
+        return describeSzFallback('identifier', expression.name);
     }
     if (t.isMemberExpression(expression)) {
-        return {
-            reason: 'member expression is not statically resolvable',
-            suggestion:
-                'Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().',
-        };
+        return describeSzFallback('member');
     }
-    return {
-        reason: `expression of type \`${expression.type}\` is not statically analyzable`,
-        suggestion:
-            'Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().',
-    };
+    return describeSzFallback('other', expression.type);
 }
 
 /**
@@ -748,6 +760,826 @@ function warnStyleSpreadCollision(
             'this element spreads props that may contain style, while sz emits an explicit style attribute. ' +
             'Move the spread style to an explicit style prop so csszyx can merge both values.',
     );
+}
+
+/** Whole-file accumulator for the szr import-rewrite proof. */
+interface SzrRewriteState {
+    /** The qualifying import declaration carrying the szr specifier. */
+    importDeclaration: babel.NodePath<t.ImportDeclaration> | null;
+    /** The unaliased value specifier for szr inside that clause. */
+    szrSpecifier: t.ImportSpecifier | null;
+    /** szr calls whose first argument was unresolvable at visit time; the
+     * fallback diagnostic is emitted at exit ONLY when the argument also
+     * failed the provable-with-factories analysis — a plain string or a
+     * rewritten factory call is not a fallback. */
+    pendingFallbacks: Array<{ call: t.CallExpression; expression: t.Expression }>;
+    /**
+     * Direct `szr(...)` calls, proof deferred to Program exit: whether an
+     * argument is safe can depend on the szv precompile (a rewritten factory
+     * call becomes a string), which is only decided once the whole file has
+     * been walked.
+     */
+    szrCalls: t.CallExpression[];
+}
+
+/** One file-local `const F = szv(<config>)` factory candidate. */
+interface SzvFactoryCandidate {
+    /** Factory binding name (the LOCAL name for an imported factory). */
+    name: string;
+    /** Statement path the table constant is inserted after. */
+    statementPath: babel.NodePath;
+    /** Statically resolved config, or null when extraction failed. */
+    config: StaticSzvConfig | null;
+}
+
+/** Whole-file accumulator for the szv per-key precompile (Babel AST). */
+type SzvPrecompileState = SharedSzvPrecompileState<t.CallExpression, t.Node, SzvFactoryCandidate>;
+
+/**
+ * Record an import declaration when it carries the rewritable szr specifier.
+ *
+ * Qualifying shape: a named-specifier clause (no default or namespace import)
+ * from a mapped source, containing a value (not type) import of `szr` with no
+ * alias. The clause may carry OTHER named specifiers — the rewrite then SPLITS
+ * it, moving only szr to the core entry and leaving the rest on the original
+ * source. Anything else is simply not recorded — the reference accounting then
+ * fails the proof, since the word `szr` appears without a matching proven call.
+ *
+ * @param path - The import declaration path.
+ * @param state - Whole-file proof accumulator.
+ */
+function recordSzrImportCandidate(
+    path: babel.NodePath<t.ImportDeclaration>,
+    state: SzrRewriteState,
+): void {
+    const declaration = path.node;
+    if (declaration.importKind === 'type') return;
+    if (SZR_IMPORT_REWRITE_TARGETS[declaration.source.value] === undefined) return;
+    let szrSpecifier: t.ImportSpecifier | null = null;
+    for (const specifier of declaration.specifiers) {
+        // A default or namespace specifier makes the clause shape one this
+        // rewrite does not rebuild — leave the whole declaration alone.
+        if (!t.isImportSpecifier(specifier)) return;
+        if (specifier.importKind === 'type') continue;
+        const imported = specifier.imported;
+        const importedName = t.isIdentifier(imported) ? imported.name : imported.value;
+        if (importedName === 'szr' && specifier.local.name === 'szr') {
+            szrSpecifier = specifier;
+        }
+    }
+    if (szrSpecifier === null) return;
+    state.importDeclaration = path;
+    state.szrSpecifier = szrSpecifier;
+}
+
+/**
+ * Record one direct identifier-callee call for the deferred proofs.
+ *
+ * @param call - The call expression node.
+ * @param szrState - szr import-rewrite accumulator.
+ * @param szvState - szv precompile accumulator.
+ */
+function recordIdentifierCall(
+    call: t.CallExpression,
+    szrState: SzrRewriteState,
+    szvState: SzvPrecompileState,
+): void {
+    const calleeName = t.isIdentifier(call.callee) ? call.callee.name : null;
+    recordIdentifierCallByName(call, calleeName, szrState.szrCalls, szvState);
+}
+
+/**
+ * Record one `typeof X` type-query reference.
+ *
+ * Type queries are erased at runtime: `Parameters<typeof factory>[0]` is the
+ * idiomatic way to derive a selection type, and it must not fail the
+ * factory's reference accounting.
+ *
+ * @param node - The type-query node.
+ * @param state - szv precompile accumulator.
+ */
+function recordSzvTypeQuery(node: t.TSTypeQuery, state: SzvPrecompileState): void {
+    recordSzvTypeQueryByName(t.isIdentifier(node.exprName) ? node.exprName.name : null, state);
+}
+
+/**
+ * Record a variable declarator when it is a `const F = szv(<expr>)` factory.
+ *
+ * The config is extracted strictly — `evaluateStaticObject` returns null for
+ * anything non-literal — and validated later; a null config simply
+ * disqualifies without touching the file.
+ *
+ * @param path - Declarator path.
+ * @param state - szv precompile accumulator.
+ */
+function recordSzvFactoryCandidate(
+    path: babel.NodePath<t.VariableDeclarator>,
+    state: SzvPrecompileState,
+): void {
+    if (!state.enabled) return;
+    const node = path.node;
+    if (!t.isIdentifier(node.id) || !node.init) return;
+    const init = unwrapTsExpression(node.init);
+    if (!t.isCallExpression(init)) return;
+    if (!t.isIdentifier(init.callee) || init.callee.name !== 'szv') return;
+    if (init.arguments.length !== 1) return;
+    const name = node.id.name;
+    if (SZV_RESERVED_FACTORY_NAMES.has(name)) return;
+    // A duplicate name (two scopes) can never pass the reference accounting,
+    // so keeping the first is safe either way.
+    if (state.candidates.has(name)) return;
+    const argument = unwrapTsExpression(init.arguments[0]);
+    const config = t.isObjectExpression(argument)
+        ? (evaluateStaticObject(argument) as StaticSzvConfig | null)
+        : null;
+    const statementPath = path.parentPath as babel.NodePath;
+    state.candidates.set(name, { name, statementPath, config });
+}
+
+/**
+ * Record factory candidates that arrive through imports, resolved by the
+ * bundler's cross-module registry.
+ *
+ * The LOCAL binding name becomes the factory name (aliases welcome — the
+ * registry lookup is by exported name), and the whole local machinery —
+ * accounting, call classification, table insertion after the import — then
+ * runs unchanged.
+ *
+ * @param path - The import declaration path.
+ * @param state - szv precompile accumulator.
+ */
+function recordCrossModuleSzvFactories(
+    path: babel.NodePath<t.ImportDeclaration>,
+    state: SzvPrecompileState,
+): void {
+    recordCrossModuleSzvFactoryImports(
+        path.node.source.value,
+        path.node.importKind === 'type',
+        path.node.specifiers.map(specifier =>
+            t.isImportSpecifier(specifier)
+                ? {
+                      importedName: t.isIdentifier(specifier.imported)
+                          ? specifier.imported.name
+                          : specifier.imported.value,
+                      localName: specifier.local.name,
+                      typeOnly: specifier.importKind === 'type',
+                  }
+                : { importedName: null, localName: null, typeOnly: false },
+        ),
+        state,
+        (name, config) => ({
+            name,
+            statementPath: path,
+            config: config as StaticSzvConfig,
+        }),
+    );
+}
+
+/**
+ * Whether an expression can never evaluate to a truthy non-string.
+ *
+ * The runtime skips falsy values and passes strings through, so "safe" means
+ * every reachable result is a string or falsy. Anything unrecognised is
+ * unsafe — the proof only ever errs toward keeping today's import.
+ *
+ * @param expression - Argument expression.
+ * @returns True when the value provably needs no object lowering.
+ */
+function isProvablyNonObjectArgument(expression: t.Expression): boolean {
+    if (t.isStringLiteral(expression) || t.isTemplateLiteral(expression)) return true;
+    if (t.isBooleanLiteral(expression)) return expression.value === false;
+    if (t.isNullLiteral(expression)) return true;
+    if (t.isIdentifier(expression)) return expression.name === 'undefined';
+    if (t.isLogicalExpression(expression)) {
+        // `a && b`: a truthy left yields b; a falsy left yields the falsy left,
+        // which the runtime skips — so only the right side needs proving.
+        if (expression.operator === '&&') return isProvablyNonObjectArgument(expression.right);
+        // `a || b` / `a ?? b`: a truthy (or non-nullish) left IS the result.
+        return (
+            isProvablyNonObjectArgument(expression.left) &&
+            isProvablyNonObjectArgument(expression.right)
+        );
+    }
+    if (t.isConditionalExpression(expression)) {
+        return (
+            isProvablyNonObjectArgument(expression.consequent) &&
+            isProvablyNonObjectArgument(expression.alternate)
+        );
+    }
+    if (t.isArrayExpression(expression)) {
+        return expression.elements.every(
+            element =>
+                element !== null &&
+                !t.isSpreadElement(element) &&
+                isProvablyNonObjectArgument(element),
+        );
+    }
+    return false;
+}
+
+/**
+ * Apply the szr import rewrite when the whole-file proof holds.
+ *
+ * Runs AFTER the szv precompile: an argument the precompile rewrote is a
+ * string by construction, so those call nodes pass the safety check on shape.
+ *
+ * @param state - Whole-file proof accumulator.
+ * @param szvState - szv precompile accumulator (for rewritten-argument shapes).
+ * @param source - Original file text, for reference accounting.
+ * @returns Whether the import declaration was mutated.
+ */
+function applySzrImportRewrite(
+    state: SzrRewriteState,
+    szvState: SzvPrecompileState,
+    source: string,
+): boolean {
+    if (state.importDeclaration === null) return false;
+    if (
+        !szrRewriteProofHolds(
+            state.szrCalls,
+            szvState.szrArgumentAnalyses,
+            szvState.replacedCalls,
+            source,
+            szvState.commentSpans,
+        )
+    ) {
+        return false;
+    }
+    const declaration = state.importDeclaration.node;
+    const target = SZR_IMPORT_REWRITE_TARGETS[declaration.source.value];
+    const others = declaration.specifiers.filter(specifier => specifier !== state.szrSpecifier);
+    if (others.length === 0) {
+        // A fresh node: mutating `.value` alone leaves `extra.raw` pointing at
+        // the old text, and the generator prefers the raw form.
+        declaration.source = t.stringLiteral(target);
+        return true;
+    }
+    // Split the clause: the other specifiers keep the original source, szr
+    // moves to its own core-entry declaration right after.
+    declaration.specifiers = others;
+    state.importDeclaration.insertAfter(
+        t.importDeclaration(
+            [t.importSpecifier(t.identifier('szr'), t.identifier('szr'))],
+            t.stringLiteral(target),
+        ),
+    );
+    return true;
+}
+
+/** Analysis of one szr argument: shape verdict plus nested factory calls. */
+type SzrArgumentAnalysis = SzrArgumentAnalysisOf<t.CallExpression>;
+
+/**
+ * Analyze one szr argument for the provable-with-factories contract.
+ *
+ * Mirrors {@link isProvablyNonObjectArgument} exactly, with one extra leaf: a
+ * direct call of a non-reserved identifier is a factory CANDIDATE — the shape
+ * is fine, and the final verdict depends on whether the szv precompile
+ * rewrites that call to a string. `cond && cardSz(sel)` is the design-system
+ * shape this exists for: a falsy left is skipped by the runtime, and the
+ * rewritten right is a string on every path.
+ *
+ * @param expression - Argument expression.
+ * @param factories - Collected factory-call candidates (appended to).
+ * @returns Whether the shape can be proven, factories permitting.
+ */
+function analyzeSzrArgument(expression: t.Expression, factories: t.CallExpression[]): boolean {
+    if (t.isCallExpression(expression)) {
+        if (
+            t.isIdentifier(expression.callee) &&
+            !SZV_RESERVED_FACTORY_NAMES.has(expression.callee.name)
+        ) {
+            factories.push(expression);
+            return true;
+        }
+        return false;
+    }
+    if (t.isStringLiteral(expression) || t.isTemplateLiteral(expression)) return true;
+    if (t.isBooleanLiteral(expression)) return expression.value === false;
+    if (t.isNullLiteral(expression)) return true;
+    if (t.isIdentifier(expression)) return expression.name === 'undefined';
+    if (t.isLogicalExpression(expression)) {
+        if (expression.operator === '&&') return analyzeSzrArgument(expression.right, factories);
+        return (
+            analyzeSzrArgument(expression.left, factories) &&
+            analyzeSzrArgument(expression.right, factories)
+        );
+    }
+    if (t.isConditionalExpression(expression)) {
+        return (
+            analyzeSzrArgument(expression.consequent, factories) &&
+            analyzeSzrArgument(expression.alternate, factories)
+        );
+    }
+    if (t.isArrayExpression(expression)) {
+        return expression.elements.every(
+            element =>
+                element !== null &&
+                !t.isSpreadElement(element) &&
+                analyzeSzrArgument(element, factories),
+        );
+    }
+    return false;
+}
+
+/**
+ * Swap replaced factory calls in place, anywhere the analysis walked.
+ *
+ * @param parent - Owner of the expression slot.
+ * @param key - Slot name or index on the owner.
+ * @param replacements - Factory call → replacement expression map.
+ */
+function replaceAnalyzedFactoryCalls(
+    parent: Record<string | number, unknown>,
+    key: string | number,
+    replacements: ReadonlyMap<t.Node, t.Expression>,
+): void {
+    const node = parent[key] as t.Node;
+    const replacement = replacements.get(node);
+    if (replacement) {
+        parent[key] = replacement;
+        return;
+    }
+    if (t.isLogicalExpression(node)) {
+        replaceAnalyzedFactoryCalls(
+            node as unknown as Record<string, unknown>,
+            'left',
+            replacements,
+        );
+        replaceAnalyzedFactoryCalls(
+            node as unknown as Record<string, unknown>,
+            'right',
+            replacements,
+        );
+        return;
+    }
+    if (t.isConditionalExpression(node)) {
+        replaceAnalyzedFactoryCalls(
+            node as unknown as Record<string, unknown>,
+            'consequent',
+            replacements,
+        );
+        replaceAnalyzedFactoryCalls(
+            node as unknown as Record<string, unknown>,
+            'alternate',
+            replacements,
+        );
+        return;
+    }
+    if (t.isArrayExpression(node)) {
+        for (let index = 0; index < node.elements.length; index++) {
+            replaceAnalyzedFactoryCalls(
+                node.elements as unknown as Record<number, unknown>,
+                index,
+                replacements,
+            );
+        }
+    }
+}
+
+/**
+ * Plan and apply the szv per-key precompile for one file.
+ *
+ * For every qualified factory — static config, no canonical overlap, every
+ * reference accounted for as a direct single-argument call inside an `szr(...)`
+ * argument position — each call site collapses to a build-time string literal
+ * (static selection) or a `__szvPick(TABLE, selection)` pick (dynamic
+ * selection), and the table constant is inserted after the factory when any
+ * dynamic pick needs it. Every uncertain shape disqualifies its factory and
+ * changes nothing.
+ *
+ * @param state - szv precompile accumulator.
+ * @param szrState - szr accumulator (for argument-position checks).
+ * @param source - Original file text, for reference accounting.
+ * @returns Whether any rewrite was applied.
+ */
+function applySzvPrecompile(
+    state: SzvPrecompileState,
+    szrState: SzrRewriteState,
+    source: string,
+): boolean {
+    recordSzrArgumentAnalyses(state, szrState.szrCalls);
+    if (state.candidates.size === 0) return false;
+    const szrArgumentNodes = collectBabelSzrFactoryNodes(state.szrArgumentAnalyses.values());
+    let rewrote = false;
+    for (const candidate of state.candidates.values()) {
+        rewrote =
+            applyBabelSzvCandidate(candidate, state, szrState, szrArgumentNodes, source) || rewrote;
+    }
+    return rewrote;
+}
+
+/**
+ * Analyze each szr argument once for all downstream proofs and rewrites.
+ *
+ * @param state - Szv precompile state.
+ * @param calls - Recorded szr calls.
+ */
+function recordSzrArgumentAnalyses(
+    state: SzvPrecompileState,
+    calls: readonly t.CallExpression[],
+): void {
+    for (const call of calls) {
+        const analyses: SzrArgumentAnalysis[] = call.arguments.map(argument => {
+            const factories: t.CallExpression[] = [];
+            const shapeOk = t.isExpression(argument) && analyzeSzrArgument(argument, factories);
+            return { shapeOk, factories };
+        });
+        state.szrArgumentAnalyses.set(call, analyses);
+    }
+}
+
+/**
+ * Flatten analyzed Babel factory calls into the identity-accounting set.
+ *
+ * @param analysesByCall - Per-call argument analyses.
+ * @returns Factory call nodes admitted by szr argument shapes.
+ */
+function collectBabelSzrFactoryNodes(
+    analysesByCall: Iterable<readonly SzrArgumentAnalysis[]>,
+): Set<t.Node> {
+    const nodes = new Set<t.Node>();
+    for (const analyses of analysesByCall) {
+        for (const analysis of analyses) {
+            for (const factory of analysis.factories) nodes.add(factory);
+        }
+    }
+    return nodes;
+}
+
+/**
+ * Apply one qualified Babel factory without mixing file-level orchestration.
+ *
+ * @param candidate - Factory candidate.
+ * @param state - Szv precompile state.
+ * @param szrState - Szr rewrite state.
+ * @param szrArgumentNodes - Factory calls admitted by szr shapes.
+ * @param source - Original source text.
+ * @returns True when at least one call was replaced.
+ */
+function applyBabelSzvCandidate(
+    candidate: SzvFactoryCandidate,
+    state: SzvPrecompileState,
+    szrState: SzrRewriteState,
+    szrArgumentNodes: ReadonlySet<t.Node>,
+    source: string,
+): boolean {
+    const table = qualifySzvFactory(candidate);
+    if (table === null) return false;
+    const calls = state.identifierCalls.get(candidate.name) ?? [];
+    if (!babelSzvFactoryAccounted(candidate.name, calls, szrArgumentNodes, source, state)) {
+        return false;
+    }
+    const plan = planBabelSzvReplacements(candidate.name, table, calls);
+    applyBabelSzvReplacements(szrState.szrCalls, plan.replacements);
+    for (const replaced of plan.replacements.keys()) state.replacedCalls.add(replaced);
+    recordBabelPickerUsage(candidate, table, plan, state);
+    return plan.replacements.size > 0;
+}
+
+/**
+ * Run the shared accounting proof with Babel's state containers.
+ *
+ * @param name - Factory binding name.
+ * @param calls - Direct calls to the binding.
+ * @param szrArgumentNodes - Calls admitted by szr shapes.
+ * @param source - Original source text.
+ * @param state - Szv precompile state.
+ * @returns True when every observable reference is accounted for.
+ */
+function babelSzvFactoryAccounted(
+    name: string,
+    calls: readonly t.CallExpression[],
+    szrArgumentNodes: ReadonlySet<t.Node>,
+    source: string,
+    state: SzvPrecompileState,
+): boolean {
+    return szvFactoryAccountingHolds(
+        name,
+        calls,
+        szrArgumentNodes,
+        source,
+        state.commentSpans,
+        state.typeQueryCounts,
+    );
+}
+
+/** Babel replacement map plus the runtime picker imports it requires. */
+interface BabelSzvReplacementPlan {
+    replacements: Map<t.Node, t.Expression>;
+    pickNeeded: boolean;
+    pick1Needed: boolean;
+}
+
+/**
+ * Build every replacement for one qualified Babel factory.
+ *
+ * @param name - Factory binding name.
+ * @param table - Qualified precompiled table.
+ * @param calls - Calls to replace.
+ * @returns Replacement map and required picker kinds.
+ */
+function planBabelSzvReplacements(
+    name: string,
+    table: SzvPrecompiledTable,
+    calls: readonly t.CallExpression[],
+): BabelSzvReplacementPlan {
+    const plan: BabelSzvReplacementPlan = {
+        replacements: new Map(),
+        pickNeeded: false,
+        pick1Needed: false,
+    };
+    for (const call of calls) addBabelSzvReplacement(plan, call, name, table);
+    return plan;
+}
+
+/**
+ * Add one static, full-picker, or single-picker Babel replacement.
+ *
+ * @param plan - Mutable replacement plan.
+ * @param call - Factory call.
+ * @param name - Factory binding name.
+ * @param table - Qualified precompiled table.
+ */
+function addBabelSzvReplacement(
+    plan: BabelSzvReplacementPlan,
+    call: t.CallExpression,
+    name: string,
+    table: SzvPrecompiledTable,
+): void {
+    const replacement = planSzvCallReplacement(call, name, table);
+    if (replacement.kind === 'static') {
+        plan.replacements.set(call, t.stringLiteral(replacement.value));
+        return;
+    }
+    const tableId = t.identifier(szvTableIdentifier(name));
+    if (replacement.kind === 'dynamic1') {
+        plan.pick1Needed = true;
+        plan.replacements.set(
+            call,
+            t.callExpression(t.identifier('__szvPick1'), [
+                tableId,
+                t.stringLiteral(replacement.dimension),
+                replacement.value,
+            ]),
+        );
+        return;
+    }
+    plan.pickNeeded = true;
+    plan.replacements.set(
+        call,
+        t.callExpression(t.identifier('__szvPick'), [tableId, replacement.selection]),
+    );
+}
+
+/**
+ * Replace analyzed factory calls in every szr argument tree.
+ *
+ * @param calls - Recorded szr calls.
+ * @param replacements - Factory-node replacements.
+ */
+function applyBabelSzvReplacements(
+    calls: readonly t.CallExpression[],
+    replacements: ReadonlyMap<t.Node, t.Expression>,
+): void {
+    for (const call of calls) {
+        for (let index = 0; index < call.arguments.length; index++) {
+            replaceAnalyzedFactoryCalls(
+                call.arguments as unknown as Record<number, unknown>,
+                index,
+                replacements,
+            );
+        }
+    }
+}
+
+/**
+ * Insert the table and remember which Babel runtime pickers are required.
+ *
+ * @param candidate - Factory candidate.
+ * @param table - Qualified precompiled table.
+ * @param plan - Replacement plan.
+ * @param state - Szv precompile state.
+ */
+function recordBabelPickerUsage(
+    candidate: SzvFactoryCandidate,
+    table: SzvPrecompiledTable,
+    plan: BabelSzvReplacementPlan,
+    state: SzvPrecompileState,
+): void {
+    if (!plan.pickNeeded && !plan.pick1Needed) return;
+    insertSzvTableDeclaration(candidate, table);
+    if (plan.pickNeeded) state.usedPick = true;
+    if (plan.pick1Needed) state.usedPick1 = true;
+}
+
+/**
+ * Emit the deferred szr fallback diagnostics for arguments that stayed
+ * unproven after the precompile.
+ *
+ * @param szrState - szr accumulator with the pending records.
+ * @param szvState - szv accumulator with analyses and replacements.
+ * @param diagnostics - Compiler diagnostics sink.
+ */
+function emitPendingSzrFallbacks(
+    szrState: SzrRewriteState,
+    szvState: SzvPrecompileState,
+    diagnostics: string[],
+): void {
+    emitUnprovenSzrFallbacks(
+        szrState.pendingFallbacks,
+        szvState.szrArgumentAnalyses,
+        szvState.replacedCalls,
+        expression => pushSiteFallbackDiagnostic(diagnostics, 'szr', expression),
+    );
+}
+
+/**
+ * Validate a candidate's config shape, check overlap, and compile its table.
+ *
+ * @param candidate - The factory candidate.
+ * @returns The compiled table, or null when the factory does not qualify.
+ */
+function qualifySzvFactory(candidate: SzvFactoryCandidate): SzvPrecompiledTable | null {
+    return candidate.config === null ? null : qualifyStaticSzvConfig(candidate.config);
+}
+
+/** Planned replacement for one factory call site. */
+type SzvCallReplacement =
+    | { kind: 'static'; value: string }
+    | { kind: 'dynamic1'; dimension: string; value: t.Expression }
+    | { kind: 'dynamic'; selection: t.Expression };
+
+/**
+ * Decide how one factory call collapses.
+ *
+ * @param call - The `F(selection?)` call.
+ * @param _factoryName - Factory name (for symmetry with the other lanes).
+ * @param table - The factory's compiled table.
+ * @returns A build-time string, or a dynamic pick over the argument.
+ */
+function planSzvCallReplacement(
+    call: t.CallExpression,
+    _factoryName: string,
+    table: SzvPrecompiledTable,
+): SzvCallReplacement {
+    if (call.arguments.length === 0) {
+        return { kind: 'static', value: computeStaticSzvPick(table, undefined) };
+    }
+    const argument = unwrapTsExpression(call.arguments[0]);
+    if (t.isObjectExpression(argument)) {
+        const selection = evaluateStaticSzvSelection(argument);
+        if (selection !== null) {
+            return { kind: 'static', value: computeStaticSzvPick(table, selection) };
+        }
+        const single = planSingleDimensionPick(argument, table);
+        if (single !== null) {
+            return single;
+        }
+    }
+    return { kind: 'dynamic', selection: argument as t.Expression };
+}
+
+/**
+ * Plan the single-dimension pick for a selection literal that names exactly one
+ * known variant, e.g. `F({ direction: dir })` — the shape a design system
+ * writes constantly, and the one where the full picker's walk over every OTHER
+ * dimension can only miss.
+ *
+ * @param expression - The selection object expression.
+ * @param table - The factory's compiled table.
+ * @returns The planned single-dimension pick, or null when it does not apply.
+ */
+function planSingleDimensionPick(
+    expression: t.ObjectExpression,
+    table: SzvPrecompiledTable,
+): { kind: 'dynamic1'; dimension: string; value: t.Expression } | null {
+    if (expression.properties.length !== 1) return null;
+    const property = expression.properties[0];
+    if (!t.isObjectProperty(property) || property.computed) return null;
+    const key = staticSzvSelectionKey(property.key);
+    // The defaults / __proto__ / own-property rules live in the shared spec —
+    // both lanes must reach the same verdict.
+    if (!singleDimensionPickAllowed(table, key)) return null;
+    const value = unwrapTsExpression(property.value) as t.Expression;
+    return { kind: 'dynamic1', dimension: key, value };
+}
+
+/**
+ * Evaluate a selection object literal when it is fully static and primitive.
+ *
+ * @param expression - The selection object expression.
+ * @returns The plain selection, or null when any part is not a literal.
+ */
+function evaluateStaticSzvSelection(expression: t.ObjectExpression): StaticSzvSelection | null {
+    const selection: StaticSzvSelection = {};
+    for (const property of expression.properties) {
+        if (!t.isObjectProperty(property) || property.computed) return null;
+        const key = staticSzvSelectionKey(property.key);
+        if (key === null) return null;
+        // TS wrappers unwrap, matching the oxc lane's evaluator.
+        const value = unwrapTsExpression(property.value);
+        // Literal extraction only — the value-domain rule (string / boolean /
+        // safe integer, negated included) lives in the shared spec so both
+        // lanes coerce identically.
+        let raw: unknown;
+        if (t.isNumericLiteral(value)) {
+            raw = value.value;
+        } else if (
+            t.isUnaryExpression(value) &&
+            value.operator === '-' &&
+            t.isNumericLiteral(value.argument)
+        ) {
+            raw = -value.argument.value;
+        } else if (t.isStringLiteral(value) || t.isBooleanLiteral(value)) {
+            raw = value.value;
+        } else {
+            return null;
+        }
+        const coerced = coerceParitySafeSelectionValue(raw);
+        if (coerced === null) return null;
+        selection[key] = coerced;
+    }
+    return selection;
+}
+
+/**
+ * Read the identifier/string key vocabulary shared by static szv selections.
+ *
+ * @param key - Babel property key to classify.
+ * @returns The static key text, or null for unsupported key shapes.
+ */
+function staticSzvSelectionKey(key: t.Expression | t.Identifier | t.PrivateName): string | null {
+    if (t.isIdentifier(key)) return key.name;
+    if (t.isStringLiteral(key)) return key.value;
+    return null;
+}
+
+/**
+ * Insert `const __szvT_F = {...};` right after the factory's declaration.
+ *
+ * @param candidate - The factory candidate.
+ * @param table - The compiled table.
+ */
+function insertSzvTableDeclaration(
+    candidate: SzvFactoryCandidate,
+    table: SzvPrecompiledTable,
+): void {
+    const statement = candidate.statementPath;
+    const payload = JSON.parse(serializeSzvTable(table)) as Record<string, unknown>;
+    statement.insertAfter(
+        t.variableDeclaration('const', [
+            t.variableDeclarator(
+                t.identifier(szvTableIdentifier(candidate.name)),
+                t.valueToNode(payload) as t.Expression,
+            ),
+        ]),
+    );
+}
+
+/**
+ * Record a build-time-unresolvable construct through the shared matrix.
+ *
+ * Classifies the Babel node, then defers wording and position formatting to the
+ * matrix so the oxc and Rust lanes stay byte-identical.
+ *
+ * @param diagnostics Compiler diagnostics sink.
+ * @param site Which construct hit the failure.
+ * @param expression The expression that could not be read.
+ */
+function pushSiteFallbackDiagnostic(
+    diagnostics: string[],
+    site: SzFallbackSite,
+    expression: t.Expression,
+): void {
+    const location = expression.loc as t.SourceLocation;
+    const position = `${location.start.line}:${location.start.column + 1}`;
+    const { kind, detail } = classifyFallbackExpression(expression);
+    diagnostics.push(formatSzFallbackDiagnostic(site, position, kind, detail));
+}
+
+/**
+ * Classify a Babel expression into the shared matrix vocabulary.
+ *
+ * @param expression Unresolved expression.
+ * @returns Matrix kind plus its interpolated detail.
+ */
+function classifyFallbackExpression(expression: t.Expression): {
+    kind: SzFallbackKind;
+    detail: string;
+} {
+    if (t.isCallExpression(expression)) {
+        const callee = expression.callee;
+        let name: string = SZ_FALLBACK_UNKNOWN_CALLEE;
+        if (t.isIdentifier(callee)) name = callee.name;
+        else if (t.isMemberExpression(callee) && t.isIdentifier(callee.property)) {
+            name = callee.property.name;
+        }
+        return { kind: 'call', detail: name };
+    }
+    if (t.isIdentifier(expression)) return { kind: 'identifier', detail: expression.name };
+    if (t.isMemberExpression(expression)) return { kind: 'member', detail: '' };
+    return { kind: 'other', detail: expression.type };
 }
 
 /**
@@ -802,6 +1634,8 @@ interface SzValueTransformResult {
     usesUnitVar: boolean;
     usesSzcn: boolean;
     usesSzPart: boolean;
+    /** False when any emitted `_szPart` argument could be an object. */
+    szPartArgsProvable?: boolean;
 }
 
 /**
@@ -1173,9 +2007,18 @@ function transformSzArrayExpression(
 
     const args: t.Expression[] = [];
     let usesSzPart = false;
+    let szPartArgsProvable = true;
     for (const part of parts) {
         const partUsesSzPart = appendSzArrayArgument(part, args, getBinding, classes, diagnostics);
         usesSzPart ||= partUsesSzPart;
+        if (partUsesSzPart) {
+            // Same safety vocabulary as the szr proof: a provably string-or-
+            // falsy element never needs the object lowering at runtime, so the
+            // bundler can import the merge helpers from the compiler-free entry.
+            szPartArgsProvable &&= isProvablyNonObjectArgument(
+                (part as Extract<SzArrayPart, { kind: 'dyn' }>).node,
+            );
+        }
     }
     if (existing.classExpression) {
         args.unshift(existing.classExpression);
@@ -1189,7 +2032,7 @@ function transformSzArrayExpression(
     }
     path.node.name.name = 'className';
     path.node.value = t.jsxExpressionContainer(t.callExpression(t.identifier('_szcn'), args));
-    return { transformed: true, usesSzcn: true, usesSzPart };
+    return { transformed: true, usesSzcn: true, usesSzPart, szPartArgsProvable };
 }
 
 /**
@@ -1220,6 +2063,16 @@ export interface TransformSourceCodeOptions {
      * are still safe to transform.
      */
     astBudget?: number;
+
+    /**
+     * Statically resolved szv factories imported from OTHER modules, keyed by
+     * the import specifier exactly as this file writes it, then by exported
+     * name. Built once by the bundler plugin from its prescan registry and fed
+     * to every engine identically, so cross-module knowledge can never differ
+     * per parser. Value shape is the same literal-only config contract the
+     * local precompile enforces.
+     */
+    crossModuleStatics?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 
     /**
      * Opt into tiered CSS custom property names for parser paths that support
@@ -1284,6 +2137,16 @@ export interface SourceTransformResult {
     usesSzcn: boolean;
     /** Whether the source needs the _szPart runtime helper (dynamic array elements). */
     usesSzPart: boolean;
+    /** Whether the source needs the __szvPick runtime helper (precompiled szv tables). */
+    usesSzvPick: boolean;
+    /** Whether the source needs the __szvPick1 single-dimension runtime helper. */
+    usesSzvPick1: boolean;
+    /**
+     * True when every emitted `_szPart` argument is provably a string or
+     * falsy (vacuously true with none). Lets the bundler import the merge
+     * helpers from the compiler-free entry.
+     */
+    szPartArgsProvable: boolean;
     /** Whether the source needs the color-var runtime helper. */
     usesColorVar: boolean;
     usesSpacingVar: boolean;
@@ -1321,10 +2184,35 @@ export function transformSourceCode(
     const classMergeUsage: ClassMergeUsage = { runtime: false, merge: false };
     let usesSzcn = false;
     let usesSzPart = false;
+    let szPartArgsProvable = true;
     let usesColorVar = false;
     let usesSpacingVar = false;
     let usesUnitVar = false;
     let transformed = false;
+    const szrRewrite: SzrRewriteState = {
+        importDeclaration: null,
+        szrSpecifier: null,
+        pendingFallbacks: [],
+        szrCalls: [],
+    };
+    const crossModuleStatics = options?.crossModuleStatics;
+    const szvPrecompile: SzvPrecompileState = {
+        // Every transformed file would otherwise pay the identifier-call map
+        // for nothing; without an szv call — or a cross-module entry that can
+        // introduce an imported factory — there is nothing to precompile.
+        enabled:
+            source.includes('szv(') ||
+            (crossModuleStatics !== undefined && Object.keys(crossModuleStatics).length > 0),
+        crossModuleStatics,
+        typeQueryCounts: new Map(),
+        szrArgumentAnalyses: new Map(),
+        commentSpans: [],
+        replacedCalls: new Set(),
+        candidates: new Map(),
+        identifierCalls: new Map(),
+        usedPick: false,
+        usedPick1: false,
+    };
     const collectedClasses = new Set<string>();
     // Classes discovered from `szs` slot values. Kept OUT of collectedClasses
     // until after the traversal so the discovery order is deterministic across
@@ -1349,6 +2237,9 @@ export function transformSourceCode(
             transformed: false,
             usesRuntime: false,
             usesMerge: false,
+            usesSzvPick: false,
+            usesSzvPick1: false,
+            szPartArgsProvable: true,
             usesSzcn: false,
             usesSzPart: false,
             usesColorVar: false,
@@ -1382,6 +2273,12 @@ export function transformSourceCode(
                         // Clear any unknown-property warn location a previous
                         // transform left set after an early return.
                         setSzWarnLocation(undefined);
+                        for (const comment of file.ast.comments as t.Comment[]) {
+                            szvPrecompile.commentSpans.push({
+                                start: comment.start as number,
+                                end: comment.end as number,
+                            });
+                        }
                         let nodeCount = 0;
                         babel.traverse(file.ast, {
                             enter() {
@@ -1493,6 +2390,7 @@ export function transformSourceCode(
                             usesUnitVar ||= valueResult.usesUnitVar;
                             usesSzcn ||= valueResult.usesSzcn;
                             usesSzPart ||= valueResult.usesSzPart;
+                            szPartArgsProvable &&= valueResult.szPartArgsProvable !== false;
                         },
 
                         // ── szv catalog extraction ────────────────────────────────────────
@@ -1504,12 +2402,14 @@ export function transformSourceCode(
                                 extractSzvCatalog(
                                     path,
                                     collectedClasses,
+                                    diagnostics,
                                     filename,
                                     options?.rootDir,
                                 )
                             ) {
                                 transformed = true;
                             }
+                            recordSzvFactoryCandidate(path, szvPrecompile);
                         },
 
                         // ── dynamic() / szr() literal extraction ─────────────────────────
@@ -1524,9 +2424,32 @@ export function transformSourceCode(
                             collectRuntimeLiteralClasses(
                                 path,
                                 collectedClasses,
+                                szrRewrite,
                                 filename,
                                 options?.rootDir,
                             );
+                            recordIdentifierCall(path.node, szrRewrite, szvPrecompile);
+                        },
+
+                        TSTypeQuery(path: babel.NodePath<t.TSTypeQuery>) {
+                            recordSzvTypeQuery(path.node, szvPrecompile);
+                        },
+
+                        // ── szr import rewrite (slim core entry) ─────────────────────────
+                        ImportDeclaration(path: babel.NodePath<t.ImportDeclaration>) {
+                            recordSzrImportCandidate(path, szrRewrite);
+                            recordCrossModuleSzvFactories(path, szvPrecompile);
+                        },
+                        Program: {
+                            exit() {
+                                if (applySzvPrecompile(szvPrecompile, szrRewrite, source)) {
+                                    transformed = true;
+                                }
+                                emitPendingSzrFallbacks(szrRewrite, szvPrecompile, diagnostics);
+                                if (applySzrImportRewrite(szrRewrite, szvPrecompile, source)) {
+                                    transformed = true;
+                                }
+                            },
                         },
                     },
                 }),
@@ -1546,6 +2469,9 @@ export function transformSourceCode(
             usesMerge: classMergeUsage.merge,
             usesSzcn: usesSzcn,
             usesSzPart: usesSzPart,
+            usesSzvPick: szvPrecompile.usedPick,
+            usesSzvPick1: szvPrecompile.usedPick1,
+            szPartArgsProvable,
             usesColorVar: usesColorVar,
             usesSpacingVar: usesSpacingVar,
             usesUnitVar: usesUnitVar,
@@ -1570,6 +2496,9 @@ export function transformSourceCode(
             usesMerge: false,
             usesSzcn: false,
             usesSzPart: false,
+            usesSzvPick: false,
+            usesSzvPick1: false,
+            szPartArgsProvable: true,
             usesColorVar: false,
             usesSpacingVar: false,
             usesUnitVar: false,
@@ -1587,6 +2516,7 @@ export function transformSourceCode(
  *
  * @param path Variable declarator path.
  * @param collectedClasses Shared class collection.
+ * @param diagnostics Compiler diagnostics sink.
  * @param filename Source filename for diagnostics.
  * @param rootDir Project root for relative diagnostics.
  * @returns Whether a catalog declaration was inserted.
@@ -1594,13 +2524,20 @@ export function transformSourceCode(
 function extractSzvCatalog(
     path: babel.NodePath<t.VariableDeclarator>,
     collectedClasses: Set<string>,
+    diagnostics: string[],
     filename?: string,
     rootDir?: string,
 ): boolean {
     const init = path.node.init;
     if (!isStaticSzvDeclaration(path.node, init)) return false;
     const config = resolveToConstObjectExpression(init.arguments[0], path.scope);
-    if (!config) return false;
+    if (!config) {
+        // No catalogue is emitted, so none of the variant classes are
+        // safelisted — under Tailwind `source(none)` that is silently missing
+        // CSS for every variant the factory can produce.
+        pushSiteFallbackDiagnostic(diagnostics, 'szv', init.arguments[0] as t.Expression);
+        return false;
+    }
 
     const classStrings = collectSzvCatalogClasses(config, path.scope, init, filename, rootDir);
     if (classStrings.length === 0) return false;
@@ -1747,6 +2684,9 @@ function insertSzvCatalogDeclaration(
     classStrings: string[],
 ): boolean {
     if (!t.isIdentifier(path.node.id) || !path.parentPath?.isVariableDeclaration()) return false;
+    // Idempotency: a pipeline that applies the transform twice (some loader
+    // chains do) must not stack a second catalog on top of the first.
+    if (path.scope.hasBinding(`_szv_catalog_${path.node.id.name}`)) return false;
     const catalog = t.variableDeclaration('const', [
         t.variableDeclarator(
             t.identifier(`_szv_catalog_${path.node.id.name}`),
@@ -1762,19 +2702,35 @@ function insertSzvCatalogDeclaration(
  *
  * @param path Call-expression path.
  * @param collectedClasses Shared class collection.
+ * @param szrState szr accumulator for deferred fallback records.
  * @param filename Source filename for diagnostics.
  * @param rootDir Project root for relative diagnostics.
  */
 function collectRuntimeLiteralClasses(
     path: babel.NodePath<t.CallExpression>,
     collectedClasses: Set<string>,
+    szrState: SzrRewriteState,
     filename?: string,
     rootDir?: string,
 ): void {
     const callee = path.node.callee;
     if (!isRuntimeLiteralCall(callee) || path.node.arguments.length === 0) return;
     const object = resolveRuntimeLiteralObject(path.node.arguments[0], path.scope);
-    if (!object) return;
+    if (!object) {
+        // `szr` compiles its literal argument so the classes reach the
+        // safelist; an argument it cannot read means those classes are never
+        // collected and the CSS is simply absent. `dynamic()` is exempt — it
+        // injects its own rules at runtime, which is the whole point of it.
+        // The diagnostic itself is DEFERRED: whether this argument is a real
+        // fallback depends on the szv precompile, decided at Program exit.
+        if (callee.name === 'szr' && t.isExpression(path.node.arguments[0])) {
+            szrState.pendingFallbacks.push({
+                call: path.node,
+                expression: path.node.arguments[0],
+            });
+        }
+        return;
+    }
 
     const warningLocation =
         callee.name === 'szr'
@@ -1867,22 +2823,6 @@ type GetBinding = (name: string) => { path: babel.NodePath } | null | undefined;
  */
 function isHostElementName(name: t.Node): boolean {
     return t.isJSXIdentifier(name) && /^[a-z]/.test(name.name);
-}
-
-/**
- * The shared unsupported-szs diagnostic — the exact contract (identifier keys,
- * pure-literal object or class-string values) is enforced identically by all
- * three engines so their outputs stay in parity.
- *
- * @param filename - source filename for context.
- * @returns the diagnostic message.
- */
-function szsUnsupportedMessage(filename: string | undefined): string {
-    return (
-        `[csszyx] szs at ${filename ?? '<anonymous>'}: ` +
-        'every slot must be an identifier key with a static object literal ' +
-        '(or class string) value. Attribute left unchanged.'
-    );
 }
 
 /**

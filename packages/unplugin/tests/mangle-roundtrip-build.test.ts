@@ -159,11 +159,24 @@ async function buildWithMangle(parser: 'rust' | 'oxc' | 'babel'): Promise<Mangle
     }
 
     const html = readFileSync(join(root, 'dist', 'index.html'), 'utf8');
-    const mapSource = html.match(/var m=(\{[^;]*?\});/)?.[1];
+    // The canonical payload is the __CSSZYX_MANGLE_MAP__ JSON tag: on
+    // class-only builds the installer re-reads it instead of embedding a
+    // second `var m={…}` literal, so the tag is the only form present in
+    // every variant. Builds with variable mangling namespace its keys with
+    // `class:`; strip that so the assertions below see plain class names.
+    const mapSource = html.match(
+        /<script id="__CSSZYX_MANGLE_MAP__" type="application\/json">([^<]*)<\/script>/,
+    )?.[1];
     if (!mapSource) {
         throw new Error(`no mangle map script injected into the built HTML (${parser})`);
     }
-    return { js, css, map: JSON.parse(mapSource) as Record<string, string> };
+    const payload = JSON.parse(mapSource) as Record<string, string>;
+    const map = Object.fromEntries(
+        Object.entries(payload)
+            .filter(([key]) => !key.startsWith('var:'))
+            .map(([key, value]) => [key.replace(/^class:/, ''), value]),
+    );
+    return { js, css, map };
 }
 
 const OWNED_CLASSES = ['m-3', 'mx-0', 'mx-4', 'text-red-500', 'hover:bg-zinc-100'];

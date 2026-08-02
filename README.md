@@ -54,7 +54,7 @@ Full walkthrough: <https://csszyx.com>
 ## Features
 
 - **Type-safe `sz` prop** — full TypeScript autocomplete for every Tailwind v4 utility and variant
-- **Class-name mangling** — reversed-tier encoding (`p-4` → `z`, `bg-red-500` → `y`) drives ~40% bundle reduction on typical apps
+- **Class-name obfuscation** — opt-in reversed-tier encoding (`p-4` → `z`, `bg-red-500` → `y`) hides the utility vocabulary in shipped bundles; a name-hiding feature, not a compression one
 - **SSR-safe hydration** — SHA-256 checksum validation detects mangle-map mismatch between server and client and preserves server HTML
 - **Zero-runtime static path** — fully-static `sz` objects compile to string literals; dynamic objects stay light (5ns zero-alloc for 0–4 keys)
 - **Variant authoring (`szv`)** — CVA-style factories for finite enum props; every combination extracted and safelisted at build time

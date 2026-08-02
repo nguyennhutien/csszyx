@@ -120,7 +120,12 @@ describe('_szMerge', () => {
     });
 
     it('should apply utility-aware merging after resolving sz objects', () => {
-        expect(_szMerge({ p: 4, gap: 2 }, { p: 8 })).toBe('gap-2 p-8');
+        // Adjacent objects deep-merge before they lower, so the surviving `p`
+        // keeps its ORIGINAL position instead of being appended after `gap`.
+        // This is the order the compiler produces for the same static array,
+        // and class order fixes production mangle ids — the two lanes have to
+        // agree or the same source yields different tokens per build path.
+        expect(_szMerge({ p: 4, gap: 2 }, { p: 8 })).toBe('p-8 gap-2');
     });
 
     it('should handle multiple spaces', () => {
@@ -133,6 +138,38 @@ describe('_szMerge', () => {
 
     it('should handle array arguments with objects and remove duplicates', () => {
         expect(_szMerge([{ p: 4 }, [{ p: 4 }, { m: 4 }]])).toBe('p-4 m-4');
+    });
+
+    describe('array separator matrix — runtime must match the compiler fold', () => {
+        // Adjacency decides whether two sz objects deep-merge, and class order
+        // fixes production mangle ids: if the compiler folds an array one way
+        // and the runtime another, the same source mints different tokens
+        // depending on which lane resolved it. Each expectation below was
+        // captured from transformSourceCode on the identical static array.
+        it.each([
+            ['plain adjacency', [{ p: 4 }, { p: 8 }], 'p-8'],
+            ['null between objects', [{ p: 4 }, null, { p: 8 }], 'p-8'],
+            ['undefined between objects', [{ p: 4 }, undefined, { p: 8 }], 'p-8'],
+            ['false between objects', [{ p: 4 }, false, { p: 8 }], 'p-8'],
+            // biome-ignore lint/suspicious/noSparseArray: the hole IS the case
+            ['hole between objects', [{ p: 4 }, , { p: 8 }], 'p-8'],
+            ['partial fusion override', [{ p: 4, gap: 2 }, { p: 8 }], 'p-8 gap-2'],
+        ])('%s', (_name, input, expected) => {
+            expect(_sz(input as never)).toBe(expected);
+        });
+
+        it('a string element separates the objects instead of merging them', () => {
+            // The compiler bails on this shape rather than folding it, so the
+            // runtime answer IS the contract: both objects lower in place and
+            // CSS order decides, exactly like hand-written classes.
+            expect(_sz([{ p: 4 }, 'm-2', { p: 8 }] as never)).toBe('p-4 m-2 p-8');
+        });
+
+        it('a nested array lowers per element without cross-merging', () => {
+            // Also a compiler-bail shape: elements of the inner array do not
+            // join the outer adjacency run.
+            expect(_sz([[{ p: 4 }], { p: 8 }] as never)).toBe('p-4 p-8');
+        });
     });
 });
 
@@ -255,5 +292,34 @@ describe('_szPart — dynamic sz array element normalizer', () => {
 
     it('joins a nested array of parts', () => {
         expect(_szPart([{ p: 4 }, 'card', false])).toBe('p-4 card');
+    });
+});
+
+describe('szr — mask layer modes are exclusive when arrays merge', () => {
+    // Runtime has to reach the same verdict as the compiler: the angle fields
+    // and the side fields compete for --tw-mask-linear, so whichever group the
+    // later element declares clears the other rather than both surviving.
+    it('a later side declaration clears the angle mode', () => {
+        expect(
+            szr([
+                { maskLinear: { angle: 45, from: '20%' } },
+                { maskLinear: { b: { from: '0%' } } },
+            ]),
+        ).toBe('mask-b-from-0%');
+    });
+
+    it('a later angle declaration clears the sides', () => {
+        expect(
+            szr([{ maskLinear: { b: { from: '0%', to: '100%' } } }, { maskLinear: { angle: 45 } }]),
+        ).toBe('mask-linear-45');
+    });
+
+    it('within one mode only the declared field is replaced', () => {
+        expect(
+            szr([
+                { maskLinear: { b: { from: '20%', to: '80%' } } },
+                { maskLinear: { b: { from: '40%' } } },
+            ]),
+        ).toBe('mask-b-from-40% mask-b-to-80%');
     });
 });

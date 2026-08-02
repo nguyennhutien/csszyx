@@ -628,6 +628,12 @@ mod tests {
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: Vec::new(),
             extracted_classes: Vec::new(),
+            site_fallbacks: Vec::new(),
+            szr_import_rewrite: None,
+            szv_replacements: Vec::new(),
+            szv_table_insertions: Vec::new(),
+            uses_szv_pick: false,
+            uses_szv_pick1: false,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
@@ -789,6 +795,7 @@ mod tests {
             runtime_fallback: false,
             runtime_fallback_spread: false,
             candidate_classes: Vec::new(),
+            runtime_fallback_diagnostic: None,
             dynamic_css_vars,
         }
     }

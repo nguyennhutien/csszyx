@@ -177,6 +177,7 @@ mod tests {
             runtime_fallback: false,
             runtime_fallback_spread: false,
             candidate_classes: Vec::new(),
+            runtime_fallback_diagnostic: None,
             dynamic_css_vars: Vec::new(),
         });
 
@@ -312,6 +313,7 @@ mod tests {
             runtime_fallback: false,
             runtime_fallback_spread: false,
             candidate_classes: Vec::new(),
+            runtime_fallback_diagnostic: None,
             dynamic_css_vars: Vec::new(),
         });
 

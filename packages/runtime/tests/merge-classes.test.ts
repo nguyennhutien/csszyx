@@ -667,3 +667,97 @@ describe('_szMerge — utility-aware parity with szcn', () => {
         }
     });
 });
+
+describe('szcn — the argument trie memo', () => {
+    afterEach(() => {
+        (globalThis as { __csszyx?: unknown }).__csszyx = undefined;
+    });
+
+    it('keys by ARGUMENT, so a repeated shape stays correct', () => {
+        expect(szcn('gap-2 p-4', 'gap-8')).toBe('p-4 gap-8');
+        expect(szcn('gap-2 p-4', 'gap-8')).toBe('p-4 gap-8');
+        // A different second argument is a different path, not a stale hit.
+        expect(szcn('gap-2 p-4', 'gap-1')).toBe('p-4 gap-1');
+        expect(szcn('gap-2 p-4', 'gap-8')).toBe('p-4 gap-8');
+    });
+
+    it('splits the same tokens the same way however they are grouped', () => {
+        // The old concatenated key made these one entry; the trie makes them
+        // two. Both must still produce the identical merge.
+        expect(szcn('gap-2 p-4 gap-8')).toBe('p-4 gap-8');
+        expect(szcn('gap-2', 'p-4 gap-8')).toBe('p-4 gap-8');
+        expect(szcn('gap-2 p-4', 'gap-8')).toBe('p-4 gap-8');
+    });
+
+    it('walks past falsy inputs instead of branching on them', () => {
+        expect(szcn('gap-2', false, 'gap-8')).toBe('gap-8');
+        expect(szcn('gap-2', 'gap-8')).toBe('gap-8');
+        expect(szcn(null, 'gap-2', undefined, 'gap-8', '')).toBe('gap-8');
+        expect(szcn()).toBe('');
+    });
+
+    it('keeps answering correctly past the admission cap', () => {
+        expect(szcn('gap-2', 'gap-8')).toBe('gap-8');
+        // Well past MEMO_MAX_NODES: overflow paths stop being admitted, and
+        // the hot entry admitted before the flood must survive it.
+        for (let i = 0; i < 900; i++) {
+            expect(szcn(`p-${i}`, 'm-1')).toBe(`p-${i} m-1`);
+        }
+        expect(szcn('gap-2', 'gap-8')).toBe('gap-8');
+    });
+
+    it('does not serve a memoized merge across a bridge swap mid-path', () => {
+        expect(szcn('flex-col', 'gap-2')).toBe('flex-col gap-2');
+        (globalThis as { __csszyx?: unknown }).__csszyx = {
+            mangleMap: { 'flex-col': 'm7', 'gap-2': 'q3' },
+            decode: (c: string) => ({ m7: 'flex-col', q3: 'gap-2' })[c] ?? c,
+        };
+        expect(szcn('flex-col', 'gap-2')).toBe('m7 q3');
+    });
+});
+
+describe('szcn — mask utilities key by the CSS variable they write', () => {
+    // Tailwind composites mask-image from three layer variables, and inside the
+    // linear layer every side owns another. Keying all `mask-*` together — which
+    // the shared prefix table does — dropped declarations that compose.
+    it('keeps sides that compose, because each owns its own variable', () => {
+        expect(szcn('mask-t-from-0%', 'mask-b-from-20%')).toBe('mask-t-from-0% mask-b-from-20%');
+        expect(szcn('mask-l-from-0%', 'mask-r-from-0%')).toBe('mask-l-from-0% mask-r-from-0%');
+    });
+
+    it('keeps from and to apart — they are different custom properties', () => {
+        expect(szcn('mask-b-from-0%', 'mask-b-to-100%')).toBe('mask-b-from-0% mask-b-to-100%');
+        expect(szcn('mask-linear-from-20%', 'mask-linear-to-80%')).toBe(
+            'mask-linear-from-20% mask-linear-to-80%',
+        );
+    });
+
+    it('overrides the same side and stop', () => {
+        expect(szcn('mask-b-from-0%', 'mask-b-from-40%')).toBe('mask-b-from-40%');
+    });
+
+    it('treats x and y as shorthands over their sides, like px over pl', () => {
+        // A later shorthand subsumes the sides it writes; a later side only
+        // refines one of them, so the shorthand survives for the other.
+        expect(szcn('mask-l-from-50%', 'mask-x-from-0%')).toBe('mask-x-from-0%');
+        expect(szcn('mask-x-from-0%', 'mask-l-from-50%')).toBe('mask-x-from-0% mask-l-from-50%');
+    });
+
+    it('never merges across layers', () => {
+        expect(szcn('mask-linear-45', 'mask-radial-at-top')).toBe(
+            'mask-linear-45 mask-radial-at-top',
+        );
+    });
+
+    it('still collapses the mutually exclusive radial modifiers', () => {
+        expect(szcn('mask-circle', 'mask-ellipse')).toBe('mask-ellipse');
+        expect(szcn('mask-radial-closest-side', 'mask-radial-farthest-corner')).toBe(
+            'mask-radial-farthest-corner',
+        );
+        expect(szcn('mask-radial-custom-a', 'mask-radial-custom-b')).toBe('mask-radial-custom-b');
+    });
+
+    it('leaves the non-gradient mask keys merging as before', () => {
+        expect(szcn('mask-cover', 'mask-contain')).toBe('mask-contain');
+    });
+});

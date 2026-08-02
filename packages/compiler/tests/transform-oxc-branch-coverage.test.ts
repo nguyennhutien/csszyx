@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-
+import { szsUnsupportedDiagnostic } from '../src/sz-fallback-matrix.js';
 import type { TransformOxcResult } from '../src/transform-oxc.js';
 import { OxcNotImplementedError, transformOxc } from '../src/transform-oxc.js';
 
@@ -131,7 +131,7 @@ describe('transform-oxc: szs slot maps', () => {
         ['an identifier slot value', 'export const A = ({ v }) => <Panel szs={{ body: v }} />;'],
     ])('rejects szs with %s', (_label, source) => {
         const result = run(source);
-        expect(result.diagnostics.join('\n')).toContain('every slot must be an identifier key');
+        expect(result.diagnostics).toContain(szsUnsupportedDiagnostic('F.tsx'));
     });
 });
 

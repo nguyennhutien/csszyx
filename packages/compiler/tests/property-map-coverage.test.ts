@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { PROPERTY_MAP } from '../src/transform-core.js';
+import { KNOWN_SPECIAL_PROPERTIES, PROPERTY_MAP } from '../src/transform-core.js';
 
 const dir = fileURLToPath(new URL('.', import.meta.url));
 
@@ -48,6 +48,22 @@ describe('PROPERTY_MAP — every key has test coverage', () => {
             expect(
                 pattern.test(testContent),
                 `No test found for PROPERTY_MAP key "${key}". Add a test in packages/compiler/tests/.`,
+            ).toBe(true);
+        });
+    }
+});
+
+// Special-cased keys live OUTSIDE PROPERTY_MAP (their handlers are bespoke, not
+// the prefix path), which put them outside the gate above — the mask layer keys
+// shipped with hand-written suites only because someone remembered. Same
+// mechanism, second key source, so forgetting is no longer possible.
+describe('KNOWN_SPECIAL_PROPERTIES — every key has test coverage', () => {
+    for (const key of KNOWN_SPECIAL_PROPERTIES) {
+        it(`${key}`, () => {
+            const pattern = new RegExp(`[{,]\\s*${key}\\s*:`);
+            expect(
+                pattern.test(testContent),
+                `No test found for special-cased key "${key}". Add a test in packages/compiler/tests/.`,
             ).toBe(true);
         });
     }

@@ -6,7 +6,7 @@
 ## Features
 
 - **Build-time transforms** — the `sz` prop compiles to atomic Tailwind classes; static styles cost zero runtime
-- **Production mangling** — class names compress (`p-4` → `z`) with a native Rust engine driving the build
+- **Production mangling** — opt-in class-name obfuscation (`p-4` → `z`) with a native Rust engine driving the build
 - **SSR hydration safety** — SHA-256 checksum validation, abort-and-preserve on mismatch
 - **Variant authoring** — `szv` factories for finite enum props, extracted and safelisted at build time
 - **Mangle-aware merging** — `szcn` resolves last-wins overrides even on mangled classes
@@ -48,8 +48,8 @@ function Button() {
 }
 ```
 
-At build time this compiles to `className="bg-blue-500 text-white p-4"` — and
-in production those classes mangle to short tokens backed by the same CSS.
+At build time this compiles to `className="bg-blue-500 text-white p-4"`. Turn on
+`production.mangle` and those classes become short tokens backed by the same CSS.
 
 ## Object Syntax
 

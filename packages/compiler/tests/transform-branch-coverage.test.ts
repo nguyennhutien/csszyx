@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { szsUnsupportedDiagnostic } from '../src/sz-fallback-matrix.js';
 import { ASTBudgetExceededError, transform, transformSourceCode } from '../src/transform.js';
+import { transformOxc } from '../src/transform-oxc.js';
 
 /**
  * Branch-coverage tests for the pure-JS (Babel) source transform in
@@ -98,6 +100,22 @@ describe('szRecover attribute', () => {
 
 // ── szs slot maps ───────────────────────────────────────────────────────────
 describe('szs slot maps', () => {
+    it.each([
+        ['babel', transformSourceCode],
+        ['oxc', transformOxc],
+    ])('uses anonymous filename fallbacks in the %s lane', (_lane, engine) => {
+        expect(
+            engine('const A = () => <div szs={{ root: { p: 4 } }} />;').diagnostics[0],
+        ).toContain('<anonymous>');
+        expect(engine('const A = () => <Comp szs="bad" />;').diagnostics[0]).toContain(
+            '<anonymous>',
+        );
+        expect(engine('const A = () => <Comp szs={{ root: value }} />;').diagnostics[0]).toContain(
+            '<anonymous>',
+        );
+        expect(engine('const A = () => <Comp szs={{ root: { p: 4 } }} />;').code).toContain('p-4');
+    });
+
     it('warns when szs is placed on a host element', () => {
         const jsx = 'const A = () => <div szs={{ root: { p: 4 } }} />;';
         const r = run(jsx);
@@ -110,17 +128,13 @@ describe('szs slot maps', () => {
     it('warns when szs value is not an object expression container', () => {
         const jsx = 'const A = () => <Comp szs="not-an-object" />;';
         const r = run(jsx);
-        expect(r.diagnostics.some(d => d.includes('every slot must be an identifier key'))).toBe(
-            true,
-        );
+        expect(r.diagnostics).toContain(szsUnsupportedDiagnostic('file.tsx'));
     });
 
     it('warns when a slot value violates the v1 contract', () => {
         const jsx = 'const A = ({ x }) => <Comp szs={{ root: x }} />;';
         const r = run(jsx);
-        expect(r.diagnostics.some(d => d.includes('every slot must be an identifier key'))).toBe(
-            true,
-        );
+        expect(r.diagnostics).toContain(szsUnsupportedDiagnostic('file.tsx'));
     });
 
     it('compiles object slot values and renames szs → szsc', () => {
@@ -1177,7 +1191,7 @@ describe('anonymous filename (<anonymous>) diagnostics', () => {
 
     it('uses <anonymous> in the unsupported-szs diagnostic when no filename is given', () => {
         const r = transformSourceCode('const A = () => <Comp szs="bad" />;');
-        expect(r.diagnostics.some(d => d.includes('szs at <anonymous>: every slot'))).toBe(true);
+        expect(r.diagnostics).toContain(szsUnsupportedDiagnostic('<anonymous>'));
     });
 });
 

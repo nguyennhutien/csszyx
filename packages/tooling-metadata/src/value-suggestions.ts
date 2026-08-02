@@ -508,3 +508,40 @@ export const COLOR_VALUE_PROPS: readonly string[] = Object.entries(VALUE_SUGGEST
     .map(([key]) => key);
 
 // ============================================================================
+
+// ============================================================================
+// NEGATIVE VALUE SUGGESTIONS
+// ============================================================================
+
+/**
+ * Suggested values whose NEGATIVE form generates no CSS, so editors must not
+ * offer it.
+ *
+ * Every other suggested value on a negative-capable key does compile negated —
+ * including non-numeric ones like `full`, `1/2` and `tight`, which is why this
+ * is an explicit list rather than a "numbers only" rule. Verified by compiling
+ * all 870 key×value pairs through the compiler and then through real Tailwind:
+ * 846 negate, and only these four are positive-only. The verification runs as a
+ * test (`negative-value-suggestions.test.ts` in `@csszyx/unplugin`, where the
+ * Tailwind compile harness lives), so a Tailwind release that changes this
+ * fails CI instead of silently suggesting a dead value.
+ */
+const NON_NEGATABLE_VALUES: ReadonlySet<string> = new Set(['auto', 'first', 'last', 'none']);
+
+/**
+ * Negative counterparts of a key's suggested values, in the same order.
+ *
+ * Returns an empty array for keys whose utility has no negative form, so
+ * callers can concatenate unconditionally.
+ *
+ * @param key - The sz prop key.
+ * @param negativeCapable - Whether the key's utility accepts a negative value
+ * (`NEGATIVE_VALUE_KEYS` from the generated metadata).
+ * @returns The `-value` strings to offer after the positive ones.
+ */
+export function negativeValueSuggestions(key: string, negativeCapable: boolean): string[] {
+    if (!negativeCapable) return [];
+    return (VALUE_SUGGESTIONS[key] ?? [])
+        .filter(value => !NON_NEGATABLE_VALUES.has(value))
+        .map(value => `-${value}`);
+}

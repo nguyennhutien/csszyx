@@ -9,6 +9,8 @@ export type NextRuntimeHelper =
     | '_szMerge'
     | '_szcn'
     | '_szPart'
+    | '__szvPick'
+    | '__szvPick1'
     | '__szColorVar'
     | '__szSpacingVar'
     | '__szUnitVar';
@@ -19,6 +21,9 @@ export interface NextRuntimeImportUsage {
     usesMerge?: boolean;
     usesSzcn?: boolean;
     usesSzPart?: boolean;
+    usesSzvPick?: boolean;
+    usesSzvPick1?: boolean;
+    szPartArgsProvable?: boolean;
     usesColorVar?: boolean;
     usesSpacingVar?: boolean;
     usesUnitVar?: boolean;
@@ -28,6 +33,43 @@ export interface NextRuntimeImportUsage {
 export interface NextRuntimeImportInjectionResult {
     code: string;
     injected: NextRuntimeHelper[];
+}
+
+/** Runtime helpers grouped by their package entry while preserving global order. */
+export interface RuntimeHelperGroups {
+    readonly all: NextRuntimeHelper[];
+    readonly barrel: NextRuntimeHelper[];
+    readonly merge: NextRuntimeHelper[];
+}
+
+/**
+ * Collect compiler runtime helpers and assign slim-safe merge helpers to the
+ * compiler-free entry.
+ *
+ * @param usage Runtime helper usage flags.
+ * @returns Stable helper order plus package-entry groups.
+ */
+export function runtimeHelperGroupsFromUsage(usage: NextRuntimeImportUsage): RuntimeHelperGroups {
+    const slim =
+        usage.usesSzPart === true &&
+        usage.szPartArgsProvable === true &&
+        usage.usesRuntime !== true &&
+        usage.usesMerge !== true;
+    const groups: RuntimeHelperGroups = { all: [], barrel: [], merge: [] };
+    const append = (helper: NextRuntimeHelper, toMerge = false): void => {
+        groups.all.push(helper);
+        (toMerge ? groups.merge : groups.barrel).push(helper);
+    };
+    if (usage.usesRuntime) append('_sz');
+    if (usage.usesMerge) append('_szMerge');
+    if (usage.usesSzcn) append('_szcn', slim);
+    if (usage.usesSzPart) append('_szPart', slim);
+    if (usage.usesSzvPick) append('__szvPick');
+    if (usage.usesSzvPick1) append('__szvPick1');
+    if (usage.usesColorVar) append('__szColorVar');
+    if (usage.usesSpacingVar) append('__szSpacingVar');
+    if (usage.usesUnitVar) append('__szUnitVar');
+    return groups;
 }
 
 /**
@@ -41,7 +83,10 @@ export function injectNextRuntimeImports(
     code: string,
     usage: NextRuntimeImportUsage,
 ): NextRuntimeImportInjectionResult {
-    const helpers = runtimeHelpersFromUsage(usage);
+    // Same slim rule as the vite/webpack hook: provably string-only _szPart
+    // arguments route the merge helpers through the compiler-free entry.
+    const groups = runtimeHelperGroupsFromUsage(usage);
+    const helpers = groups.all;
     if (helpers.length === 0) {
         return { code, injected: [] };
     }
@@ -54,6 +99,22 @@ export function injectNextRuntimeImports(
         return { code, injected: [] };
     }
 
+    if (groups.merge.length > 0) {
+        const mergeHelpers = missing.filter(helper => groups.merge.includes(helper));
+        const barrelHelpers = missing.filter(helper => groups.barrel.includes(helper));
+        let next = insertRuntimeImport(
+            code,
+            `import { ${mergeHelpers.join(', ')} } from '@csszyx/runtime/merge';\n`,
+        );
+        if (barrelHelpers.length > 0) {
+            next = insertRuntimeImport(
+                next,
+                `import { ${barrelHelpers.join(', ')} } from '@csszyx/runtime';\n`,
+            );
+        }
+        return { code: next, injected: missing };
+    }
+
     return {
         code: insertRuntimeImport(
             code,
@@ -61,36 +122,6 @@ export function injectNextRuntimeImports(
         ),
         injected: missing,
     };
-}
-
-/**
- *
- * @param usage
- */
-function runtimeHelpersFromUsage(usage: NextRuntimeImportUsage): NextRuntimeHelper[] {
-    const helpers: NextRuntimeHelper[] = [];
-    if (usage.usesRuntime) {
-        helpers.push('_sz');
-    }
-    if (usage.usesMerge) {
-        helpers.push('_szMerge');
-    }
-    if (usage.usesSzcn) {
-        helpers.push('_szcn');
-    }
-    if (usage.usesSzPart) {
-        helpers.push('_szPart');
-    }
-    if (usage.usesColorVar) {
-        helpers.push('__szColorVar');
-    }
-    if (usage.usesSpacingVar) {
-        helpers.push('__szSpacingVar');
-    }
-    if (usage.usesUnitVar) {
-        helpers.push('__szUnitVar');
-    }
-    return helpers;
 }
 
 /**

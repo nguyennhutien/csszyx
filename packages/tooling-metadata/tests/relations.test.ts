@@ -9,12 +9,19 @@ import {
     COLOR_OBJECT_PROPS,
     chainAllowsNesting,
     classifyStyleChain,
+    descendObjectForm,
     isUtilityPropertyKey,
     objectValueForm,
     PROPERTY_KEYS,
+    resolveStyleChain,
     szvStyleChain,
+    valueSuggestionsFor,
 } from '../src/index.js';
-import { COLOR_VALUE_PROPS, VALUE_SUGGESTIONS } from '../src/value-suggestions.js';
+import {
+    COLOR_VALUE_PROPS,
+    negativeValueSuggestions,
+    VALUE_SUGGESTIONS,
+} from '../src/value-suggestions.js';
 
 describe('isUtilityPropertyKey', () => {
     it('is true for utility properties and false for variants/unknowns', () => {
@@ -54,6 +61,26 @@ describe('objectValueForm', () => {
     it('returns null for a plain utility property', () => {
         expect(objectValueForm('p')).toBeNull();
     });
+
+    it('descends through structured members and stops at scalar leaves', () => {
+        const mask = objectValueForm('maskLinear');
+        expect(descendObjectForm(mask, ['b', 'from'])?.members.map(member => member.name)).toEqual([
+            'at',
+            'color',
+            'op',
+        ]);
+        expect(descendObjectForm(mask, ['angle'])).toBeNull();
+        expect(descendObjectForm(mask, ['missing'])).toBeNull();
+        expect(descendObjectForm(null, ['missing'])).toBeNull();
+        expect(descendObjectForm(mask, ['angle', 'nested'])).toBeNull();
+    });
+
+    it('exposes every mask layer form', () => {
+        expect(objectValueForm('maskRadial')?.members.map(member => member.name)).toContain(
+            'shape',
+        );
+        expect(objectValueForm('maskConic')?.members.map(member => member.name)).toContain('angle');
+    });
 });
 
 describe('classifyStyleChain', () => {
@@ -77,6 +104,27 @@ describe('classifyStyleChain', () => {
     it('rejects a nested object under a plain or non-innermost utility property', () => {
         expect(classifyStyleChain(['p'])).toBe('invalid');
         expect(classifyStyleChain(['hover', 'bg'])).toBe('invalid');
+        expect(classifyStyleChain(['hover', 'maskLinear'])).toBe('invalid');
+        expect(classifyStyleChain(['missing', 'maskLinear', 'hover'])).toBe('invalid');
+    });
+});
+
+describe('resolveStyleChain', () => {
+    it('returns the exact nested structured form at the cursor', () => {
+        expect(resolveStyleChain(['from', 'b', 'maskLinear']).kind).toBe('object-form');
+        expect(
+            resolveStyleChain(['from', 'b', 'maskLinear']).form?.members.map(member => member.name),
+        ).toEqual(['at', 'color', 'op']);
+    });
+
+    it('returns no form for style, opaque, and invalid chains', () => {
+        expect(resolveStyleChain(['hover'])).toEqual({ kind: 'style', form: null });
+        expect(resolveStyleChain(['css'])).toEqual({ kind: 'opaque', form: null });
+        expect(resolveStyleChain(['p'])).toEqual({ kind: 'invalid', form: null });
+        expect(resolveStyleChain(['missing', 'maskLinear'])).toEqual({
+            kind: 'invalid',
+            form: null,
+        });
     });
 });
 
@@ -106,5 +154,13 @@ describe('metadata data surface', () => {
         expect(PROPERTY_KEYS.has('p')).toBe(true);
         expect(VALUE_SUGGESTIONS.color?.length ?? 0).toBeGreaterThan(0);
         expect(VALUE_SUGGESTIONS.opacity?.length ?? 0).toBeGreaterThan(0);
+    });
+
+    it('builds positive and negative suggestion lists at the metadata source', () => {
+        expect(valueSuggestionsFor('translateX')).toContain('-full');
+        expect(valueSuggestionsFor('definitely-missing')).toEqual([]);
+        expect(negativeValueSuggestions('translateX', false)).toEqual([]);
+        expect(negativeValueSuggestions('translateX', true)).toContain('-full');
+        expect(negativeValueSuggestions('definitely-missing', true)).toEqual([]);
     });
 });

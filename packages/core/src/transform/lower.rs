@@ -8,8 +8,8 @@ use std::borrow::Cow;
 
 use super::{
     generated::tables::{
-        boolean_class, is_aria_state, is_known_variant, is_removed_boolean_sugar, property_prefix,
-        variant_prefix,
+        boolean_class, is_aria_state, is_known_variant, is_removed_boolean_sugar,
+        is_special_variant, property_prefix, variant_prefix,
     },
     SourceIr, StaticSzObject, StaticSzValue,
 };
@@ -150,11 +150,16 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
         || is_removed_boolean_sugar(key)
         || is_known_variant(key)
         || is_aria_state(key)
-        || variant_prefix(key).is_some()
-        || is_special_cased_property(key)
+        // Cheap byte probes BEFORE variant_string_prefix: that helper builds a
+        // whitespace-stripped String for any `[...]` key just to answer
+        // `.is_some()`, so a bracket key must short-circuit ahead of it (the
+        // TypeScript twin already orders these this way).
         || key.starts_with("--")
         || key.starts_with('[')
         || key.starts_with('@')
+        || variant_string_prefix(key).is_some()
+        || variant_prefix(key).is_some()
+        || is_special_cased_property(key)
         || matches!(
             key,
             "min"
@@ -182,7 +187,10 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
 fn is_special_cased_property(key: &str) -> bool {
     matches!(
         key,
-        "alignContent"
+        "maskLinear"
+            | "maskRadial"
+            | "maskConic"
+            | "alignContent"
             | "backgroundRepeat"
             | "listStyle"
             | "maskComposite"
@@ -203,7 +211,20 @@ fn is_special_cased_property(key: &str) -> bool {
 pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
     for property in &object.properties {
         if !is_known_sz_key(&property.key) {
-            out.push((property.key.clone(), property.span.start));
+            // An OBJECT value means variant nesting, and variant names are
+            // open-ended: a `--breakpoint-*` token from the app's `@theme`
+            // (`{ tablet: { p: 4 } }`) or an arbitrary selector cannot appear in
+            // any static table here. The lowering treats the key as a variant
+            // and emits `tablet:p-4` correctly, so flagging it read as
+            // "Unknown property …" for a class that WAS
+            // emitted — a warning that lies, and only on this engine (the JS
+            // lanes warn from their scalar-value path alone). Descend so the
+            // nested keys are still checked.
+            if let StaticSzValue::Object(nested) = &property.value {
+                collect_unknown_sz_keys(nested, out);
+            } else {
+                out.push((property.key.clone(), property.span.start));
+            }
             continue;
         }
         if let StaticSzValue::Object(nested) = &property.value {
@@ -280,6 +301,74 @@ pub(crate) fn collect_dead_spacing_steps(
 }
 
 /// Collects PROPERTY keys whose value is an object that is not the
+/// Legal members of one mask slot. Mirrors the TypeScript
+/// `MASK_SLOT_MEMBERS` table; anything else emits nothing at lowering.
+#[cfg(feature = "native-engine")]
+fn mask_slot_members(slot: &str) -> Option<&'static [&'static str]> {
+    match slot {
+        "maskLinear" => Some(&["angle", "from", "to", "t", "r", "b", "l", "x", "y"]),
+        "maskConic" => Some(&["angle", "from", "to"]),
+        "maskRadial" => Some(&["at", "size", "shape", "from", "to"]),
+        _ => None,
+    }
+}
+
+/// Legal members of one linear edge object. Mirrors `MASK_EDGE_MEMBERS`.
+#[cfg(feature = "native-engine")]
+const MASK_EDGE_MEMBERS: [&str; 2] = ["from", "to"];
+
+/// Collect mask-slot members the builders do not recognise.
+///
+/// An unknown member inside a slot emits NOTHING — worse than an unknown
+/// top-level key, which at least leaves a dead class in the DOM to find. The
+/// slot shapes are closed, so member NAMES are fully checkable (values stay
+/// unvalidated, matching the prefix-mapping design). Descends through variant
+/// nesting like the lowering does.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_unknown_mask_slot_members(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, String, u32)>,
+) {
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            continue;
+        };
+        let Some(members) = mask_slot_members(&property.key) else {
+            collect_unknown_mask_slot_members(nested, out);
+            continue;
+        };
+        for entry in &nested.properties {
+            if !members.contains(&entry.key.as_str()) {
+                out.push((
+                    property.key.clone(),
+                    entry.key.clone(),
+                    members.join(", "),
+                    entry.span.start,
+                ));
+                continue;
+            }
+            if property.key != "maskLinear"
+                || !matches!(entry.key.as_str(), "t" | "r" | "b" | "l" | "x" | "y")
+            {
+                continue;
+            }
+            let StaticSzValue::Object(edge) = &entry.value else {
+                continue;
+            };
+            for edge_entry in &edge.properties {
+                if !MASK_EDGE_MEMBERS.contains(&edge_entry.key.as_str()) {
+                    out.push((
+                        format!("{}.{}", property.key, entry.key),
+                        edge_entry.key.clone(),
+                        MASK_EDGE_MEMBERS.join(", "),
+                        edge_entry.span.start,
+                    ));
+                }
+            }
+        }
+    }
+}
+
 /// `{ color, op }` form. The lowering falls through to variant handling and
 /// emits classes like `p:bg-red-500` — `p:` matches no Tailwind variant, so
 /// the styles silently generate no CSS. Reports the first nested keys so the
@@ -416,6 +505,16 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
                     continue;
                 }
 
+                if matches!(
+                    property.key.as_str(),
+                    "maskLinear" | "maskRadial" | "maskConic"
+                ) {
+                    for utility in build_mask_slot_classes(&property.key, nested) {
+                        classes.push(format!("{prefix}{utility}"));
+                    }
+                    continue;
+                }
+
                 // Color-with-opacity object — { bg: { color: 'blue-500', op: 20 } }
                 // → bg-blue-500/20. Distinguished from variant nesting by a
                 // `color` member on a key that maps to a color utility, matching
@@ -537,6 +636,56 @@ fn lower_not_variant(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
             lower_object_into(body, &next_prefix, classes);
         }
     }
+}
+
+/// Resolves a key to the variant prefix a STRING value chains onto with `:`.
+///
+/// A string value under a variant key is a ready-made utility to prefix
+/// (`{ hover: 'translate-x-full' }` → `hover:translate-x-full`). Mirrors
+/// `variantStringPrefix` in `transform-core.ts` decision for decision — the
+/// two must stay in lockstep, parity-tested per shape. A positive list on
+/// purpose: a typo'd property key with a string value must keep reaching the
+/// unknown-property path instead of silently minting a variant.
+fn variant_string_prefix(key: &str) -> Option<Cow<'_, str>> {
+    if is_known_variant(key) {
+        return Some(get_variant_prefix(key));
+    }
+    if key.starts_with('[') && key.ends_with(']') {
+        // "[& > li]" → "[&>li]", matching the JS normalizeArbitraryVariant.
+        return Some(Cow::Owned(
+            key.chars().filter(|c| !c.is_whitespace()).collect(),
+        ));
+    }
+    if let Some(bracket_at) = key.find("-[") {
+        if bracket_at > 0 && key.ends_with(']') {
+            let stem = &key[..bracket_at];
+            if is_special_variant(stem) || is_known_variant(stem) || stem == "min" || stem == "max"
+            {
+                return Some(Cow::Borrowed(key));
+            }
+        }
+        return None;
+    }
+    if let Some(dash_at) = key.find('-') {
+        let stem = &key[..dash_at];
+        let rest = &key[dash_at + 1..];
+        // group-hover / peer-checked / not-hover: scope variants compound with
+        // a KNOWN variant state. Gating on the rest excludes utilities that
+        // merely start with the same stem (not-italic is font-style).
+        if (stem == "group" || stem == "peer" || stem == "not") && is_known_variant(rest) {
+            return Some(Cow::Borrowed(key));
+        }
+        // aria-checked and friends are Tailwind's built-in aria set; anything
+        // outside it needs the bracket form and must not silently variant.
+        if stem == "aria" && is_aria_state(rest) {
+            return Some(Cow::Borrowed(key));
+        }
+        // Tailwind v4 accepts any bare data-* variant (attribute presence).
+        if stem == "data" && !rest.is_empty() {
+            return Some(Cow::Borrowed(key));
+        }
+    }
+    None
 }
 
 /// Resolves a variant key to its emitted prefix (VARIANT_MAP entry or
@@ -732,6 +881,15 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             Some(format_number_class(class_key.as_ref(), *value, prefix))
         }
         StaticSzValue::String(value) => {
+            // A string under a variant key is a ready-made utility to prefix.
+            // Property keys and variant keys are disjoint (locked by test), so
+            // checking first cannot shadow a property lowering. The JS lanes
+            // previously owned this branch alone, which left the default
+            // engine emitting `hover-translate-x-full` — a dash-joined class
+            // Tailwind never generates (field-reported as silent dead styles).
+            if let Some(variant) = variant_string_prefix(key) {
+                return Some(format!("{prefix}{variant}:{value}"));
+            }
             // leading numeric STRINGS are the unitless line-height ratio and
             // auto-bracket (leading: '1.5' → leading-[1.5]); bare numbers ride
             // the spacing scale. Mirrors the oxc lane.
@@ -829,21 +987,61 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             if key == "alignContent" {
                 return Some(format!("{prefix}content-{value}"));
             }
-            // mask-* sub-properties collapse the sub-axis: maskPos: 'center' is
-            // mask-center, not mask-position-center.
-            if matches!(
-                key,
-                "maskPos" | "maskSize" | "maskShape" | "maskComposite" | "maskMode"
-            ) {
+            // `ring: 'none'` reads like CSS, but Tailwind spells the zero ring
+            // `ring-0` — `ring-none` styles nothing.
+            if key == "ring" && value == "none" {
+                return Some(format!("{prefix}ring-0"));
+            }
+            // Tailwind's font-features utility is functional-only: bare
+            // `font-features-normal` styles nothing while
+            // `font-features-[normal]` compiles.
+            if key == "fontFeatures" && value == "normal" {
+                return Some(format!("{prefix}font-features-[normal]"));
+            }
+            // Only these two mask keys take the value as the suffix verbatim.
+            // The rest need a formatter: Tailwind renames some keywords and
+            // moves arbitrary values under a longer prefix, so a blanket
+            // `mask-{value}` emitted names it does not serve.
+            if key == "maskComposite" {
                 return Some(format!("{prefix}mask-{value}"));
             }
             if key == "maskType" {
                 return Some(format!("{prefix}mask-type-{value}"));
             }
+            // The gradient LAYERS moved to maskLinear/maskRadial/maskConic, which
+            // own the `--tw-mask-<layer>` variables. `mask` now carries only a
+            // direct mask-image, so a layer value emits nothing here.
+            if key == "mask" && is_mask_layer_value(value) {
+                return None;
+            }
+            if key == "maskSize" {
+                return Some(format!("{prefix}{}", format_mask_size(value)));
+            }
+            if key == "maskPos" {
+                return Some(format!("{prefix}{}", format_mask_position(value)));
+            }
+            if key == "maskMode" {
+                // Tailwind shortens `match-source` to `mask-match`.
+                return Some(if value == "match-source" {
+                    format!("{prefix}mask-match")
+                } else {
+                    format!("{prefix}mask-{value}")
+                });
+            }
+            if key == "maskClip" {
+                // Every box keyword takes `mask-clip-` EXCEPT `no-clip`.
+                return Some(if value == "no-clip" {
+                    format!("{prefix}mask-no-clip")
+                } else {
+                    format!("{prefix}mask-clip-{value}")
+                });
+            }
             if key == "maskRepeat" {
                 return Some(match value.as_str() {
                     "repeat" => format!("{prefix}mask-repeat"),
                     "no-repeat" => format!("{prefix}mask-no-repeat"),
+                    // space/round keep the `mask-repeat-` prefix.
+                    "space" | "round" => format!("{prefix}mask-repeat-{value}"),
                     _ => format!("{prefix}mask-{value}"),
                 });
             }
@@ -1129,6 +1327,206 @@ fn css_var_type_hint(key: &str) -> Option<&'static str> {
     }
 }
 
+/// Sides of the linear mask slot; each writes its own `--tw-mask-<side>`.
+const MASK_SIDES: [&str; 6] = ["t", "r", "b", "l", "x", "y"];
+
+/// Render one gradient stop. Position and colour live in DIFFERENT custom
+/// properties, so a stop carrying both emits two utilities. A bare CSS variable
+/// reads as a POSITION; a variable meant as a colour needs the `(color:--x)`
+/// hint. Mirrors the TypeScript `buildMaskStopClasses`.
+fn build_mask_stop_classes(base: &str, value: Option<&StaticSzValue>) -> Vec<String> {
+    let Some(value) = value else {
+        return Vec::new();
+    };
+    match value {
+        StaticSzValue::Number(number) => vec![format!("{base}-{}", format_abs_number(*number))],
+        StaticSzValue::String(text) if text.starts_with("--") => vec![format!("{base}-({text})")],
+        StaticSzValue::String(text) => vec![format!("{base}-{text}")],
+        StaticSzValue::Object(object) => {
+            let mut out = Vec::new();
+            if let Some(at) = object.properties.iter().find(|prop| prop.key == "at") {
+                let rendered = match &at.value {
+                    StaticSzValue::Number(number) => {
+                        format!("{base}-{}", format_abs_number(*number))
+                    }
+                    StaticSzValue::String(text) if text.starts_with("--") => {
+                        format!("{base}-({text})")
+                    }
+                    StaticSzValue::String(text) => format!("{base}-{text}"),
+                    StaticSzValue::Boolean(_) | StaticSzValue::Object(_) => String::new(),
+                };
+                if !rendered.is_empty() {
+                    out.push(rendered);
+                }
+            }
+            if let Some(colour) = object_string_property(object, "color") {
+                let rendered = if colour.starts_with("--") {
+                    format!("(color:{colour})")
+                } else {
+                    colour.to_string()
+                };
+                let opacity = object
+                    .properties
+                    .iter()
+                    .find(|prop| prop.key == "op")
+                    .map_or_else(String::new, |prop| match &prop.value {
+                        StaticSzValue::Number(number) => format!("/{}", format_abs_number(*number)),
+                        StaticSzValue::String(text) => format!("/{text}"),
+                        StaticSzValue::Boolean(_) | StaticSzValue::Object(_) => String::new(),
+                    });
+                out.push(format!("{base}-{rendered}{opacity}"));
+            }
+            out
+        }
+        StaticSzValue::Boolean(_) => Vec::new(),
+    }
+}
+
+/// Build the radial slot. `at`, `size` and `shape` each write their own
+/// `--tw-mask-radial-*` variable, so they compose with the stops.
+fn build_mask_radial_classes(object: &StaticSzObject) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(at) = object_string_property(object, "at") {
+        out.push(format!("mask-radial-at-{at}"));
+    }
+    if let Some(size) = object_string_property(object, "size") {
+        out.push(format!("mask-radial-{size}"));
+    }
+    if let Some(shape) = object_string_property(object, "shape") {
+        if matches!(shape, "circle" | "ellipse") {
+            out.push(format!("mask-{shape}"));
+        }
+    }
+    let find = |name: &str| {
+        object
+            .properties
+            .iter()
+            .find(|p| p.key == name)
+            .map(|p| &p.value)
+    };
+    out.extend(build_mask_stop_classes("mask-radial-from", find("from")));
+    out.extend(build_mask_stop_classes("mask-radial-to", find("to")));
+    out
+}
+
+/// Build every utility for one mask slot. Mirrors `buildMaskSlotClasses`.
+fn build_mask_slot_classes(slot_key: &str, object: &StaticSzObject) -> Vec<String> {
+    if slot_key == "maskRadial" {
+        return build_mask_radial_classes(object);
+    }
+    let family = if slot_key == "maskConic" {
+        "conic"
+    } else {
+        "linear"
+    };
+    let mut out = Vec::new();
+    if let Some(angle) = object.properties.iter().find(|prop| prop.key == "angle") {
+        match &angle.value {
+            StaticSzValue::Number(number) if *number < 0.0 => {
+                out.push(format!("-mask-{family}-{}", format_abs_number(*number)));
+            }
+            StaticSzValue::Number(number) => {
+                out.push(format!("mask-{family}-{}", format_abs_number(*number)));
+            }
+            StaticSzValue::String(text) if text.starts_with("--") => {
+                out.push(format!("mask-{family}-({text})"));
+            }
+            StaticSzValue::String(text) => out.push(format!("mask-{family}-{text}")),
+            _ => {}
+        }
+    }
+    let find = |name: &str| {
+        object
+            .properties
+            .iter()
+            .find(|p| p.key == name)
+            .map(|p| &p.value)
+    };
+    out.extend(build_mask_stop_classes(
+        &format!("mask-{family}-from"),
+        find("from"),
+    ));
+    out.extend(build_mask_stop_classes(
+        &format!("mask-{family}-to"),
+        find("to"),
+    ));
+    if family == "linear" {
+        for side in MASK_SIDES {
+            let Some(StaticSzValue::Object(edge)) = find(side) else {
+                continue;
+            };
+            let edge_find = |name: &str| {
+                edge.properties
+                    .iter()
+                    .find(|p| p.key == name)
+                    .map(|p| &p.value)
+            };
+            out.extend(build_mask_stop_classes(
+                &format!("mask-{side}-from"),
+                edge_find("from"),
+            ));
+            out.extend(build_mask_stop_classes(
+                &format!("mask-{side}-to"),
+                edge_find("to"),
+            ));
+        }
+    }
+    out
+}
+
+/// Whether a `mask` value names a gradient LAYER rather than an image. Mirrors
+/// the TypeScript `isMaskLayerValue`.
+fn is_mask_layer_value(value: &str) -> bool {
+    // A CSS function is an arbitrary mask-image, not a layer name:
+    // `linear-gradient(…)` shares the `linear-` opening but compiles to
+    // `mask-[linear-gradient(…)]` and must keep working.
+    if value.contains('(') {
+        return false;
+    }
+    let bare = value.strip_prefix('-').unwrap_or(value);
+    for family in ["linear", "radial", "conic"] {
+        if bare == family || bare.starts_with(&format!("{family}-")) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Bare `mask-<keyword>` positions; anything else is an arbitrary position.
+const MASK_POSITION_KEYWORDS: [&str; 9] = [
+    "center",
+    "top",
+    "bottom",
+    "left",
+    "right",
+    "top-left",
+    "top-right",
+    "bottom-left",
+    "bottom-right",
+];
+
+/// Formats a mask-size value, mirroring the TypeScript `formatMaskSize`.
+fn format_mask_size(value: &str) -> String {
+    if matches!(value, "auto" | "cover" | "contain") {
+        return format!("mask-{value}");
+    }
+    if value.starts_with("--") {
+        return format!("mask-size-({value})");
+    }
+    format!("mask-size-[{}]", normalize_arbitrary_value(value))
+}
+
+/// Formats a mask-position value, mirroring `formatMaskPosition`.
+fn format_mask_position(value: &str) -> String {
+    if MASK_POSITION_KEYWORDS.contains(&value) {
+        return format!("mask-{value}");
+    }
+    if value.starts_with("--") {
+        return format!("mask-position-({value})");
+    }
+    format!("mask-position-[{}]", normalize_arbitrary_value(value))
+}
+
 fn format_bg_img_object(object: &StaticSzObject, prefix: &str) -> Option<String> {
     let gradient = object_string_property(object, "gradient")?;
     let mut class_name = match gradient {
@@ -1268,6 +1666,14 @@ fn format_bg_img_string(value: &str, prefix: &str) -> String {
 
     let normalized = value.strip_prefix('-').unwrap_or(value);
     if normalized.starts_with("repeating-") {
+        return format!("{prefix}bg-[{}]", normalize_arbitrary_value(value));
+    }
+    // Any CSS function other than url() is an arbitrary image value, so it goes
+    // in brackets verbatim. Gradient functions open with the same
+    // `linear-`/`radial`/`conic` the KEYWORDS do; reading one as a keyword
+    // produced `bg-linear-gradient(…)`, which Tailwind does not serve, and
+    // letting it fall to the url() default wrapped it into a broken URL.
+    if normalized.contains('(') && !normalized.starts_with("url(") {
         return format!("{prefix}bg-[{}]", normalize_arbitrary_value(value));
     }
     if normalized.starts_with("linear-")
@@ -1495,6 +1901,12 @@ fn needs_brackets(value: &str) -> bool {
         || value.contains("clamp(")
         || value.contains("min(")
         || value.contains("max(")
+        // Gradient functions need brackets like every other CSS function;
+        // without them the class is `mask-linear-gradient(…)`, which Tailwind
+        // does not serve. Repeating variants are covered by the base names.
+        || value.contains("linear-gradient(")
+        || value.contains("radial-gradient(")
+        || value.contains("conic-gradient(")
         || value.contains(' ')
     {
         return true;
@@ -1584,9 +1996,11 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_unknown_sz_keys, format_color_opacity_object, has_slash_opacity, is_known_sz_key,
-        is_percent, is_tailwind_build_function, is_unsigned_decimal, lower_source_ir_classes,
-        lower_static_sz_object, needs_brackets,
+        build_mask_radial_classes, build_mask_slot_classes, build_mask_stop_classes,
+        collect_unknown_sz_keys, format_color_opacity_object, format_mask_position,
+        format_mask_size, has_slash_opacity, is_known_sz_key, is_mask_layer_value, is_percent,
+        is_tailwind_build_function, is_unsigned_decimal, lower_source_ir_classes,
+        lower_static_sz_object, needs_brackets, variant_string_prefix,
     };
     use crate::transform::{
         ClassAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
@@ -2344,6 +2758,186 @@ mod tests {
     }
 
     #[test]
+    fn reads_a_bracketed_variant_string_prefix() {
+        assert_eq!(
+            variant_string_prefix("min-[40rem]").as_deref(),
+            Some("min-[40rem]")
+        );
+        assert!(variant_string_prefix("unknown-[value]").is_none());
+        assert!(variant_string_prefix("unknown-[value").is_none());
+    }
+
+    #[test]
+    fn builds_every_mask_stop_shape() {
+        assert_eq!(
+            build_mask_stop_classes("mask-from", None),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            build_mask_stop_classes("mask-from", Some(&StaticSzValue::Number(12.5))),
+            ["mask-from-12.5"]
+        );
+        assert_eq!(
+            build_mask_stop_classes("mask-from", Some(&StaticSzValue::String("--at".into()))),
+            ["mask-from-(--at)"]
+        );
+        assert_eq!(
+            build_mask_stop_classes("mask-from", Some(&StaticSzValue::String("20%".into()))),
+            ["mask-from-20%"]
+        );
+
+        let rich_stop = object(vec![
+            property("at", StaticSzValue::Number(25.0)),
+            property("color", StaticSzValue::String("--brand".into())),
+            property("op", StaticSzValue::String("40%".into())),
+        ]);
+        let StaticSzValue::Object(rich_stop) = rich_stop else {
+            unreachable!()
+        };
+        assert_eq!(
+            build_mask_stop_classes("mask-from", Some(&StaticSzValue::Object(rich_stop))),
+            ["mask-from-25", "mask-from-(color:--brand)/40%"]
+        );
+
+        for at in [
+            StaticSzValue::String("--at".into()),
+            StaticSzValue::String("30%".into()),
+        ] {
+            let stop = object(vec![property("at", at)]);
+            let StaticSzValue::Object(stop) = stop else {
+                unreachable!()
+            };
+            assert_eq!(
+                build_mask_stop_classes("mask-from", Some(&StaticSzValue::Object(stop))).len(),
+                1
+            );
+        }
+        let numeric_op = object(vec![
+            property("color", StaticSzValue::String("red-500".into())),
+            property("op", StaticSzValue::Number(50.0)),
+        ]);
+        let StaticSzValue::Object(numeric_op) = numeric_op else {
+            unreachable!()
+        };
+        assert_eq!(
+            build_mask_stop_classes("mask-from", Some(&StaticSzValue::Object(numeric_op))),
+            ["mask-from-red-500/50"]
+        );
+
+        let invalid_stop = object(vec![
+            property("at", StaticSzValue::Boolean(true)),
+            property("color", StaticSzValue::String("red-500".into())),
+            property("op", StaticSzValue::Boolean(true)),
+        ]);
+        let StaticSzValue::Object(invalid_stop) = invalid_stop else {
+            unreachable!()
+        };
+        assert_eq!(
+            build_mask_stop_classes("mask-to", Some(&StaticSzValue::Object(invalid_stop))),
+            ["mask-to-red-500"]
+        );
+        assert!(build_mask_stop_classes("mask-to", Some(&StaticSzValue::Boolean(true))).is_empty());
+    }
+
+    #[test]
+    fn builds_every_mask_slot_shape() {
+        let radial = StaticSzObject {
+            properties: vec![
+                property("at", StaticSzValue::String("top".into())),
+                property("size", StaticSzValue::String("closest-side".into())),
+                property("shape", StaticSzValue::String("circle".into())),
+                property("from", StaticSzValue::String("0%".into())),
+                property("to", StaticSzValue::String("100%".into())),
+            ],
+        };
+        assert_eq!(
+            build_mask_radial_classes(&radial),
+            [
+                "mask-radial-at-top",
+                "mask-radial-closest-side",
+                "mask-circle",
+                "mask-radial-from-0%",
+                "mask-radial-to-100%",
+            ]
+        );
+
+        for (angle, expected) in [
+            (StaticSzValue::Number(-45.0), "-mask-linear-45"),
+            (StaticSzValue::Number(45.0), "mask-linear-45"),
+            (
+                StaticSzValue::String("--angle".into()),
+                "mask-linear-(--angle)",
+            ),
+            (StaticSzValue::String("to-r".into()), "mask-linear-to-r"),
+        ] {
+            let slot = StaticSzObject {
+                properties: vec![property("angle", angle)],
+            };
+            assert_eq!(build_mask_slot_classes("maskLinear", &slot), [expected]);
+        }
+        assert!(build_mask_slot_classes(
+            "maskLinear",
+            &StaticSzObject {
+                properties: vec![property("angle", StaticSzValue::Boolean(true))],
+            },
+        )
+        .is_empty());
+        let edge_slot = StaticSzObject {
+            properties: vec![property(
+                "x",
+                object(vec![
+                    property("from", StaticSzValue::String("10%".into())),
+                    property("to", StaticSzValue::String("90%".into())),
+                ]),
+            )],
+        };
+        assert_eq!(
+            build_mask_slot_classes("maskLinear", &edge_slot),
+            ["mask-x-from-10%", "mask-x-to-90%"]
+        );
+        assert_eq!(
+            build_mask_slot_classes(
+                "maskConic",
+                &StaticSzObject {
+                    properties: vec![property("angle", StaticSzValue::Number(30.0))],
+                },
+            ),
+            ["mask-conic-30"]
+        );
+    }
+
+    #[test]
+    fn classifies_mask_layer_values_sizes_and_positions() {
+        assert!(is_mask_layer_value("linear-from-20%"));
+        assert!(is_mask_layer_value("-radial"));
+        assert!(!is_mask_layer_value("linear-gradient(red,blue)"));
+        assert!(!is_mask_layer_value("image"));
+        assert_eq!(format_mask_size("cover"), "mask-cover");
+        assert_eq!(format_mask_size("--size"), "mask-size-(--size)");
+        assert_eq!(format_mask_size("20px 30px"), "mask-size-[20px_30px]");
+        assert_eq!(format_mask_position("center"), "mask-center");
+        assert_eq!(format_mask_position("--pos"), "mask-position-(--pos)");
+        assert_eq!(
+            format_mask_position("20px 30px"),
+            "mask-position-[20px_30px]"
+        );
+
+        let direct = StaticSzObject {
+            properties: vec![
+                property("mask", StaticSzValue::String("linear".into())),
+                property(
+                    "bgImg",
+                    StaticSzValue::String("linear-gradient(red, blue)".into()),
+                ),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&direct),
+            ["bg-[linear-gradient(red,_blue)]"]
+        );
+    }
+
+    #[test]
     fn lowers_background_size_and_content_special_cases() {
         let object = StaticSzObject {
             properties: vec![property(
@@ -2623,6 +3217,73 @@ mod tests {
     }
 
     #[test]
+    fn variant_string_prefix_mirrors_the_typescript_predicate() {
+        // Shape-for-shape with `variantStringPrefix` in transform-core.ts —
+        // the pinned contract is that a build.parser flip cannot change which
+        // keys colon-join a string value.
+        assert_eq!(variant_string_prefix("hover").as_deref(), Some("hover"));
+        assert_eq!(
+            variant_string_prefix("[& > li]").as_deref(),
+            Some("[&>li]"),
+            "arbitrary variants collapse whitespace"
+        );
+        assert_eq!(
+            variant_string_prefix("data-[open]").as_deref(),
+            Some("data-[open]")
+        );
+        assert_eq!(
+            variant_string_prefix("min-[900px]").as_deref(),
+            Some("min-[900px]")
+        );
+        assert_eq!(
+            variant_string_prefix("group-hover").as_deref(),
+            Some("group-hover")
+        );
+        assert_eq!(
+            variant_string_prefix("aria-checked").as_deref(),
+            Some("aria-checked")
+        );
+        assert_eq!(
+            variant_string_prefix("data-open").as_deref(),
+            Some("data-open")
+        );
+    }
+
+    #[test]
+    fn variant_string_prefix_rejects_non_variants() {
+        // A typo'd key must keep reaching the unknown-property path; silently
+        // minting a variant would hide the typo forever.
+        assert_eq!(variant_string_prefix("foo-[bar]"), None);
+        assert_eq!(
+            variant_string_prefix("not-italic"),
+            None,
+            "not-italic is the font-style utility, not a variant chain"
+        );
+        assert_eq!(
+            variant_string_prefix("aria-foo"),
+            None,
+            "unknown aria attributes need the bracket form"
+        );
+        for key in ["translateX", "p", "bg", "foo", "50"] {
+            assert_eq!(variant_string_prefix(key), None, "{key}");
+        }
+    }
+
+    #[test]
+    fn string_value_under_a_variant_key_colon_joins() {
+        let object = StaticSzObject {
+            properties: vec![property(
+                "data-[ending-style]",
+                StaticSzValue::String("translate-x-full".to_string()),
+            )],
+        };
+        assert_eq!(
+            lower_static_sz_object(&object),
+            vec!["data-[ending-style]:translate-x-full".to_string()]
+        );
+    }
+
+    #[test]
     fn lowers_negative_and_skips_false_booleans() {
         // A `false` value emits nothing. The italic/antialiased `false` aliases
         // were removed with the boolean sugar — use { fontStyle: 'normal' }.
@@ -2714,6 +3375,7 @@ mod tests {
                 runtime_fallback: false,
                 runtime_fallback_spread: false,
                 candidate_classes: Vec::new(),
+                runtime_fallback_diagnostic: None,
                 dynamic_css_vars: Vec::new(),
             }],
             unsupported_sz_attribute_spans: Vec::new(),
@@ -2724,6 +3386,12 @@ mod tests {
                 expression_span: None,
             }],
             extracted_classes: Vec::new(),
+            site_fallbacks: Vec::new(),
+            szr_import_rewrite: None,
+            szv_replacements: Vec::new(),
+            szv_table_insertions: Vec::new(),
+            uses_szv_pick: false,
+            uses_szv_pick1: false,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
             unsupported_recovery_attribute_spans: Vec::new(),
@@ -2736,5 +3404,147 @@ mod tests {
 
         assert_eq!(lowered.classes, ["inset-s-4"]);
         assert_eq!(lowered.raw_class_names, ["block"]);
+    }
+
+    #[cfg(feature = "native-engine")]
+    fn mask_member_hits(object: &StaticSzObject) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        super::collect_unknown_mask_slot_members(object, &mut out);
+        out.into_iter()
+            .map(|(owner, member, _allowed, _offset)| (owner, member))
+            .collect()
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn flags_an_unknown_member_of_each_slot() {
+        // A typo inside a slot emits NOTHING at lowering, so the collector is
+        // the only thing standing between the author and a silently missing
+        // mask. Mirrors the TypeScript `warnMaskSlotMember` allowlists.
+        let linear = StaticSzObject {
+            properties: vec![property(
+                "maskLinear",
+                object(vec![property("form", StaticSzValue::String("20%".into()))]),
+            )],
+        };
+        assert_eq!(
+            mask_member_hits(&linear),
+            [("maskLinear".to_string(), "form".to_string())]
+        );
+
+        let conic = StaticSzObject {
+            properties: vec![property(
+                "maskConic",
+                object(vec![property(
+                    "t",
+                    object(vec![property("from", StaticSzValue::String("0%".into()))]),
+                )]),
+            )],
+        };
+        // Sides belong to the linear slot only.
+        assert_eq!(
+            mask_member_hits(&conic),
+            [("maskConic".to_string(), "t".to_string())]
+        );
+
+        let radial = StaticSzObject {
+            properties: vec![property(
+                "maskRadial",
+                object(vec![
+                    property("bogus", StaticSzValue::Number(1.0)),
+                    property("at", StaticSzValue::String("top".into())),
+                ]),
+            )],
+        };
+        assert_eq!(
+            mask_member_hits(&radial),
+            [("maskRadial".to_string(), "bogus".to_string())]
+        );
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn flags_an_unknown_member_inside_a_linear_edge() {
+        let branch = StaticSzObject {
+            properties: vec![property(
+                "maskLinear",
+                object(vec![property(
+                    "b",
+                    object(vec![
+                        property("from", StaticSzValue::String("0%".into())),
+                        property("form", StaticSzValue::String("50%".into())),
+                    ]),
+                )]),
+            )],
+        };
+        assert_eq!(
+            mask_member_hits(&branch),
+            [("maskLinear.b".to_string(), "form".to_string())]
+        );
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn stays_silent_for_legal_slots_and_descends_through_variants() {
+        let legal = StaticSzObject {
+            properties: vec![property(
+                "maskLinear",
+                object(vec![
+                    property("angle", StaticSzValue::Number(45.0)),
+                    property(
+                        "b",
+                        object(vec![property("from", StaticSzValue::String("0%".into()))]),
+                    ),
+                ]),
+            )],
+        };
+        assert!(mask_member_hits(&legal).is_empty());
+
+        let scalar_edge = StaticSzObject {
+            properties: vec![property(
+                "maskLinear",
+                object(vec![property("b", StaticSzValue::String("20%".into()))]),
+            )],
+        };
+        assert!(mask_member_hits(&scalar_edge).is_empty());
+
+        // A slot nested under a variant is still reached — the walk descends
+        // through any object that is not itself a slot.
+        let nested = StaticSzObject {
+            properties: vec![property(
+                "hover",
+                object(vec![property(
+                    "maskRadial",
+                    object(vec![property(
+                        "shpe",
+                        StaticSzValue::String("circle".into()),
+                    )]),
+                )]),
+            )],
+        };
+        assert_eq!(
+            mask_member_hits(&nested),
+            [("maskRadial".to_string(), "shpe".to_string())]
+        );
+
+        // A non-object slot value carries no members to check.
+        let scalar = StaticSzObject {
+            properties: vec![property("maskLinear", StaticSzValue::Number(45.0))],
+        };
+        assert!(mask_member_hits(&scalar).is_empty());
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn reports_the_allowed_member_list_for_the_message() {
+        let branch = StaticSzObject {
+            properties: vec![property(
+                "maskLinear",
+                object(vec![property("nope", StaticSzValue::Boolean(true))]),
+            )],
+        };
+        let mut out = Vec::new();
+        super::collect_unknown_mask_slot_members(&branch, &mut out);
+        assert_eq!(out[0].2, "angle, from, to, t, r, b, l, x, y");
     }
 }

@@ -98,6 +98,11 @@ beforeEach(() => {
 });
 
 describe('validateDocument — unknown keys', () => {
+    it('explains removed shape keys through their migration note', () => {
+        const [diagnostic] = diagnosticsFor("const A = () => <div sz={{ maskVia: 'red' }} />;");
+        expect(diagnostic?.message).toMatch(/^'maskVia' was removed:/);
+    });
+
     it('warns on an unknown key with the docs link and an exact range', () => {
         const text = 'const A = () => <div sz={{ foo: 4, p: 2 }} />;';
         const diags = diagnosticsFor(text);

@@ -16,7 +16,13 @@
 
 import * as vscode from 'vscode';
 
-import { BOOLEAN_SHORTHANDS, KNOWN_VARIANTS, PROPERTY_MAP, SUGGESTION_MAP } from './data.js';
+import {
+    BOOLEAN_SHORTHANDS,
+    KNOWN_VARIANTS,
+    MIGRATION_NOTES,
+    PROPERTY_MAP,
+    SUGGESTION_MAP,
+} from './data.js';
 import { findSzExpressions } from './parser.js';
 import { parseObjectLiteralSafe } from './safe-eval.js';
 
@@ -81,13 +87,22 @@ function createUnknownKeyDiagnostic(
         document.positionAt(absOffset),
         document.positionAt(absOffset + key.length),
     );
+    const note = MIGRATION_NOTES[key];
     const suggestion = SUGGESTION_MAP[key];
-    const message = suggestion
-        ? `Unknown sz prop '${key}'. Did you mean '${suggestion}'?`
-        : `Unknown sz prop '${key}'. See https://csszyx.com/docs/sz-props for valid props.`;
+    let message: string;
+    if (note) {
+        // A removed key with a SHAPE replacement reads wrong through the
+        // did-you-mean template ("Did you mean 'maskLinear / maskRadial /
+        // maskConic with { from }'?") — say what happened instead.
+        message = `'${key}' was removed: ${note}.`;
+    } else if (suggestion) {
+        message = `Unknown sz prop '${key}'. Did you mean '${suggestion}'?`;
+    } else {
+        message = `Unknown sz prop '${key}'. See https://csszyx.com/docs/sz-props for valid props.`;
+    }
     const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Warning);
     diagnostic.source = DIAGNOSTIC_SOURCE;
-    if (suggestion) {
+    if (note || suggestion) {
         diagnostic.code = {
             value: 'unknown-prop',
             target: vscode.Uri.parse('https://csszyx.com/docs/migrate'),

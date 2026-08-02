@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const compilerMock = vi.hoisted(() => ({
+    transformRust: vi.fn(),
     transformRustBatch: vi.fn(),
 }));
 
@@ -13,6 +14,7 @@ vi.mock('@csszyx/compiler', async importOriginal => {
     return {
         ...actual,
         ensureRustTransformAvailable: vi.fn(),
+        transformRust: compilerMock.transformRust,
         transformRustBatch: compilerMock.transformRustBatch,
     };
 });
@@ -21,12 +23,14 @@ const { vitePlugin } = await import('../src/unplugin.js');
 
 type ViteConfigHook = {
     configResolved?: (config: { root: string }) => void;
+    transform?: (this: { warn(message: string): void }, code: string, id: string) => unknown;
 };
 
 const tempDirs: string[] = [];
 
 afterEach(() => {
     compilerMock.transformRustBatch.mockReset();
+    compilerMock.transformRust.mockReset();
     vi.restoreAllMocks();
     for (const dir of tempDirs.splice(0)) {
         rmSync(dir, { recursive: true, force: true });
@@ -147,6 +151,31 @@ describe('prescan AST budget', () => {
         expect(budgetWarnings[0]).toContain('astBudgetLimit');
         // The healthy sibling file still reaches the safelist.
         expect(readFileSync(join(root, 'csszyx-classes.html'), 'utf8')).toContain('m-2');
+    });
+
+    it('surfaces a transform-time AST budget diagnostic in production mode', () => {
+        const root = tempRoot();
+        const source = 'export const Big = () => <div sz={{ p: 4 }} />;';
+        const file = join(root, 'src/Big.tsx');
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        compilerMock.transformRustBatch.mockImplementation((files: unknown[]) =>
+            files.map(() => emptyBatchResult()),
+        );
+        compilerMock.transformRust.mockReturnValue({
+            ...emptyBatchResult(),
+            code: source,
+            diagnostics: ['[csszyx] AST budget exceeded: the IR walk stopped mid-file.'],
+        });
+
+        const [prePlugin] = vitePlugin({
+            build: { parser: 'rust', cache: false },
+        }) as ViteConfigHook[];
+        prePlugin.configResolved?.({ root });
+        prePlugin.transform?.call({ warn() {} }, source, file);
+
+        expect(warn.mock.calls.map(call => String(call[0])).join('\n')).toContain(
+            'AST budget exceeded',
+        );
     });
 
     it('oxc prescan extracts a real page file the transform-hook budget would reject', () => {

@@ -253,7 +253,6 @@ export const PROPERTY_MAP = {
     "maskSize": "mask-size",
     "maskPos": "mask-position",
     "maskRepeat": "mask-repeat",
-    "maskShape": "mask",
     "maskClip": "mask-clip",
     "maskOrigin": "mask-origin",
     "cursor": "cursor",
@@ -309,10 +308,7 @@ export const PROPERTY_MAP = {
     "scrollbarTrack": "scrollbar-track",
     "scrollbarGutter": "scrollbar-gutter",
     "zoom": "zoom",
-    "tabSize": "tab",
-    "maskFrom": "mask-from",
-    "maskVia": "mask-via",
-    "maskTo": "mask-to"
+    "tabSize": "tab"
 } as const;
 export const BOOLEAN_SHORTHANDS = [
     "backdropBlur",
@@ -555,4 +551,74 @@ export const SUGGESTION_MAP = {
     "flexWrapReverse": "flexWrap: 'wrap-reverse'",
     "flexNowrap": "flexWrap: 'nowrap'"
 } as const;
+/** Removed keys whose replacement is a SHAPE, not another key name — rendered
+ * as "was removed: <note>", never through the did-you-mean template. */
+export const MIGRATION_NOTES = {
+    "maskFrom": "the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }",
+    "maskTo": "the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }",
+    "maskVia": "masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic",
+    "maskShape": "the shape keyword moved to maskRadial — { shape: \"circle\" | \"ellipse\" }"
+} as const;
+/** sz keys whose utility accepts a negative value (`{ mt: '-4' }` → `-mt-4`).
+ * Derived from the compiler's NEGATIVE_ALLOWED, which is keyed by Tailwind
+ * prefix; editors need the sz-key view to offer negative value completions. */
+export const NEGATIVE_VALUE_KEYS = [
+    "backdropHueRotate",
+    "bottom",
+    "col",
+    "colEnd",
+    "colStart",
+    "end",
+    "hueRotate",
+    "indent",
+    "inset",
+    "insetBe",
+    "insetBs",
+    "insetE",
+    "insetS",
+    "insetX",
+    "insetY",
+    "left",
+    "m",
+    "mask",
+    "mb",
+    "mbe",
+    "mbs",
+    "me",
+    "ml",
+    "mr",
+    "ms",
+    "mt",
+    "mx",
+    "my",
+    "order",
+    "right",
+    "rotate",
+    "rotateX",
+    "rotateY",
+    "rotateZ",
+    "row",
+    "rowEnd",
+    "rowStart",
+    "scaleZ",
+    "scrollM",
+    "scrollMb",
+    "scrollMl",
+    "scrollMr",
+    "scrollMt",
+    "scrollMx",
+    "scrollMy",
+    "skewX",
+    "skewY",
+    "spaceX",
+    "spaceY",
+    "start",
+    "top",
+    "tracking",
+    "translate",
+    "translateX",
+    "translateY",
+    "translateZ",
+    "z"
+] as const;
 export { VALUE_SUGGESTIONS } from './value-suggestions';

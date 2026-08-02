@@ -39,13 +39,12 @@ echo "[verify-like-ci] Wiping cached build artefacts so turbo and vitest start f
 find packages apps playground -name dist -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null || true
 find playground packages/e2e -name '.csszyx' -type d -exec rm -rf {} + 2>/dev/null || true
 rm -rf .turbo apps/docs/.astro apps/docs/dist apps/docs/.csszyx
-rm -f packages/core-linux-arm64-gnu/csszyx-core.linux-arm64-gnu.node \
-      packages/core-linux-x64-gnu/csszyx-core.linux-x64-gnu.node \
-      packages/core-darwin-arm64/csszyx-core.darwin-arm64.node \
-      packages/core-darwin-x64/csszyx-core.darwin-x64.node
 
 echo "[verify-like-ci] Tracked symlink guard..."
 pnpm check:tracked-symlinks
+
+echo "[verify-like-ci] Raw NUL byte guard (binary-flipped source files)..."
+pnpm check:no-nul-bytes
 
 echo "[verify-like-ci] Biome preflight (strict — no auto-fix, no unsafe-skip)..."
 pnpm lint:fast
@@ -56,9 +55,15 @@ echo "[verify-like-ci] Generated-artefact staleness gates (sz-key fixture, parit
 pnpm gen:key-tests:check
 pnpm gen:parity-corpus:check
 pnpm gen:rust-tables:check
+pnpm gen:sz-fallback-matrix:check
+pnpm gen:sz-allowlist:check
+pnpm gen:box-role:check
+pnpm gen:llms:check
 pnpm check:key-corpus
 
 echo "[verify-like-ci] Building host native engine (matches CI step)..."
+# `--clean` resolves the current platform before deleting its output. Do not
+# pre-delete every platform package: host and devcontainer share this worktree.
 env -u RUSTUP_TOOLCHAIN pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
 # The Rust gates live in a separate workflow (rust-check.yml), so a local run
@@ -75,8 +80,11 @@ echo "[verify-like-ci] Rust gates (rustfmt, clippy x3 feature sets, native check
     cargo clippy --features native-engine --all-targets -- -D warnings
     node scripts/check-native.mjs
     cargo test
-    cargo test --features native-engine transform::parser
-    cargo test --features native-engine --test parity_corpus
+    # Full native-engine run: inline tests of every gated module plus every
+    # integration binary (parity corpuses, sz_fallback_parity,
+    # parser_panic_fuzz). Name filters proved unsafe here — they silently
+    # skip gated tests that don't match, and CI stays green.
+    cargo test --features native-engine
 )
 
 echo "[verify-like-ci] Running unit tests through turbo (catches missing build deps)..."
@@ -97,6 +105,12 @@ pnpm type-check
 
 echo "[verify-like-ci] Corpus round-trip (fails on broken mappings, like CI)..."
 pnpm corpus:check --require-no-broken
+
+# Ask the installed Tailwind whether every class the mapping emits actually
+# produces CSS. A mapping that emits a name Tailwind no longer serves styles
+# nothing, silently — the failure csszyx exists to prevent.
+echo "[verify-like-ci] Emitted-class oracle (dead classes vs real Tailwind)..."
+pnpm check:emitted-classes
 
 echo "[verify-like-ci] Workspace build (every playground, every package)..."
 pnpm build

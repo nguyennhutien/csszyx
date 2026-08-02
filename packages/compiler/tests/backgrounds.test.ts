@@ -347,3 +347,35 @@ describe('backgrounds — variant prefix propagation (before/after/hover)', () =
         );
     });
 });
+
+describe('backgrounds — a gradient FUNCTION is an arbitrary image, not a keyword', () => {
+    // `linear-gradient(…)` opens with the same `linear-` the gradient KEYWORDS
+    // do. Reading it as one produced `bg-linear-gradient(…)`, which Tailwind
+    // does not serve; letting it fall through to the url() default wrapped it
+    // into `url(linear-gradient(…))`, a broken URL rather than a gradient.
+    it('brackets every gradient function verbatim', () => {
+        expect(t({ bgImg: 'linear-gradient(to_right,red,blue)' })).toBe(
+            'bg-[linear-gradient(to_right,red,blue)]',
+        );
+        expect(t({ bgImg: 'radial-gradient(circle,red,blue)' })).toBe(
+            'bg-[radial-gradient(circle,red,blue)]',
+        );
+        expect(t({ bgImg: 'conic-gradient(from_90deg,red,blue)' })).toBe(
+            'bg-[conic-gradient(from_90deg,red,blue)]',
+        );
+        expect(t({ bgImg: 'repeating-linear-gradient(45deg,red_0,blue_10px)' })).toBe(
+            'bg-[repeating-linear-gradient(45deg,red_0,blue_10px)]',
+        );
+    });
+
+    it('leaves the gradient keywords and the url forms alone', () => {
+        expect(t({ bgImg: 'linear-to-r' })).toBe('bg-linear-to-r');
+        expect(t({ bgImg: 'gradient-to-r' })).toBe('bg-linear-to-r');
+        expect(t({ bgImg: 'radial' })).toBe('bg-radial');
+        expect(t({ bgImg: 'conic-90' })).toBe('bg-conic-90');
+        expect(t({ bgImg: 'none' })).toBe('bg-none');
+        expect(t({ bgImg: '--my-image' })).toBe('bg-(image:--my-image)');
+        expect(t({ bgImg: 'url(/i.png)' })).toBe('bg-[url(/i.png)]');
+        expect(t({ bgImg: '/i.png' })).toBe('bg-[url(/i.png)]');
+    });
+});

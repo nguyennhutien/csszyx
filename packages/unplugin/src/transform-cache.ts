@@ -4,11 +4,15 @@ import * as path from 'node:path';
 
 import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@csszyx/compiler';
 
-// 10: transform results carry `usesSpacingVar`/`usesUnitVar` — a schema-9
-// entry deserialized into the new shape would resurrect those flags as
-// `undefined`, silently skipping `__szSpacingVar`/`__szUnitVar` import
-// injection for code that calls them.
-const CACHE_SCHEMA_VERSION = 10;
+// 12: transform results carry `szPartArgsProvable` — a schema-11 entry would
+// resurrect it as `undefined`, and the injection would then route a file's
+// merge helpers through the wrong entry (heavy instead of slim, or worse,
+// slim for a file whose parts were never proven).
+// 15: the mask migration pass changed emitted classes (ring-0,
+// font-features-[normal]) and added slot-member diagnostics — a schema-14
+// entry would replay the old class strings and the old warning set for any
+// file whose source hash did not move.
+const CACHE_SCHEMA_VERSION = 15;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';
@@ -24,6 +28,9 @@ interface SerializedTransformResult {
     usesMerge: boolean;
     usesSzcn: boolean;
     usesSzPart: boolean;
+    usesSzvPick: boolean;
+    usesSzvPick1: boolean;
+    szPartArgsProvable: boolean;
     usesColorVar: boolean;
     usesSpacingVar: boolean;
     usesUnitVar: boolean;
@@ -88,6 +95,8 @@ export interface TransformCacheKeyInput {
     mangleVarHoistMaxDepth?: number;
     /** Exact global custom-property alias table used by compiler rewrites. */
     globalVarAliases?: ReadonlyArray<readonly [string, string]>;
+    /** Serialized cross-module registry entries fed to this file, if any. */
+    crossModuleStatics?: string;
     /** Source filename; recovery tokens depend on it. */
     filename: string;
     /** Source file contents. */
@@ -133,6 +142,7 @@ export function createTransformCacheKey(input: TransformCacheKeyInput): Transfor
         `mangleVars=${input.mangleVars === true}`,
         `mangleVarHoistMaxDepth=${input.mangleVarHoistMaxDepth ?? 'default'}`,
         `globalVarAliases=${JSON.stringify(globalVarAliases)}`,
+        `crossModuleStatics=${input.crossModuleStatics ?? 'none'}`,
         `filename=${input.filename}`,
         `source=${inputSha256}`,
     ].join('\n');
@@ -317,6 +327,9 @@ function serializeResult(result: CacheableTransformResult): SerializedTransformR
         usesMerge: result.usesMerge,
         usesSzcn: result.usesSzcn,
         usesSzPart: result.usesSzPart,
+        usesSzvPick: result.usesSzvPick,
+        usesSzvPick1: result.usesSzvPick1,
+        szPartArgsProvable: result.szPartArgsProvable,
         usesColorVar: result.usesColorVar,
         usesSpacingVar: result.usesSpacingVar,
         usesUnitVar: result.usesUnitVar,
@@ -342,6 +355,9 @@ function deserializeResult(result: SerializedTransformResult): CacheableTransfor
         usesMerge: result.usesMerge,
         usesSzcn: result.usesSzcn,
         usesSzPart: result.usesSzPart,
+        usesSzvPick: result.usesSzvPick,
+        usesSzvPick1: result.usesSzvPick1,
+        szPartArgsProvable: result.szPartArgsProvable,
         usesColorVar: result.usesColorVar,
         usesSpacingVar: result.usesSpacingVar,
         usesUnitVar: result.usesUnitVar,

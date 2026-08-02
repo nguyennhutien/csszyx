@@ -9,6 +9,8 @@ export default defineBuildConfig({
         './src/webpack',
         './src/dynamic',
         './src/dynamic-react',
+        './src/core',
+        './src/lowering',
     ],
     declaration: 'node16',
     rollup: {

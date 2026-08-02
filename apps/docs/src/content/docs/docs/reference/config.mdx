@@ -127,10 +127,11 @@ Controls production build behavior.
 
 ```ts
 interface ProductionConfig {
-  mangle: boolean; // Minify class names (z, y, x, ...)
+  mangle: boolean; // Obfuscate class names (z, y, x, ...) — opt-in, default false
   mangleVars: boolean; // Opt into dynamic sz CSS variable mangling and hoisting
   mangleVarHoistMaxDepth: number; // Max cascade depth for mangleVars hoisting
   mangleGlobalVars?: GlobalVarMangleConfig; // Explicit global token alias tier
+  mangleMapDelivery?: 'both' | 'html' | 'bundle'; // Where the runtime map ships
   contentHashing: boolean; // Hash for immutable caching
   injectChecksum: boolean; // Add hydration checksum to HTML
   incrementalBuild: boolean; // Enable build caching
@@ -140,9 +141,9 @@ interface ProductionConfig {
 
 :::tip[Inspecting CSS / hybrid apps]
 Mangling rewrites every eligible csszyx-owned class name to a short alias (`z`, `y`, …), so
-the production bundle no longer contains the original utility names. Set
-`production: { mangle: false }` to keep readable class names — the supported way to
-verify the CSS a build emits. Classes that also appear as static strings or template
+the production bundle no longer contains the original utility names. It is **off by
+default**, so a build keeps readable class names — the supported way to verify the CSS a
+build emits — until you set `production: { mangle: true }`. Classes that also appear as static strings or template
 quasis in source-level `class`/`className` attributes or properties (including
 `clsx(...)` expressions) automatically retain their original names, so raw and `sz`
 consumers keep matching the same CSS rule. To check a single `sz` object without a build, run
@@ -188,6 +189,56 @@ in order:
 
 `scan-collisions` reports the candidates and prints a paste-ready `mangleExclude`;
 it does not edit your files — apply the rename or the exclude yourself.
+:::
+
+:::caution[Mangling is not a compression win on a gzip-served app]
+Expect mangling to **obfuscate** class names, not to shrink the payload. Over a
+compressed response the arithmetic usually comes out flat or slightly negative:
+
+- gzip already collapses repeated class names into short backreferences, so
+  shortening `flex-col` to `o7` saves ~1–2 B per occurrence, not the 6 the name
+  lengths suggest. Short random tokens also compress worse than the repetitive
+  utility vocabulary they replace, so mangled CSS can even gain a few bytes.
+- The runtime mangle map is a fixed cost that scales with the census, and the
+  occurrence distribution has a long tail — most names appear once or twice, far
+  short of paying for their own map entry.
+
+Measured on the `vite-react` playground (151 censused names), `mangle: true` costs
+about **+2 KB gzipped** against the same build with mangling off; `mangleMapDelivery:
+'html'` brings that to roughly **+0.7 KB**. Enable mangling when you want the class
+names unreadable, and treat the byte delta as a rounding error in either direction.
+:::
+
+#### `mangleMapDelivery`
+
+The runtime mangle map is what lets `szr`, `szv`, `szcn`, and `szDecode` speak the
+same class names as the mangled CSS. It reaches the browser two ways, and by
+default a build ships **both**:
+
+| Value      | Inline script in HTML | Module in the JS bundle | Use when                                                       |
+| ---------- | --------------------- | ----------------------- | -------------------------------------------------------------- |
+| `'both'`   | ✅                    | ✅                      | Default. Always correct, pays for the map twice.               |
+| `'html'`   | ✅                    | ❌                      | The app serves its own csszyx-built HTML and allows inline scripts. |
+| `'bundle'` | ❌                    | ✅                      | The bundle is embedded in a host page csszyx never built, or a CSP strips inline scripts. |
+
+```ts
+production: { mangle: true, mangleMapDelivery: 'html' }
+```
+
+The hydration checksum payload ships in every mode, so SSR verification is
+unaffected — which also means `'bundle'` still emits the JSON census tag into
+HTML the build owns (hydration verify reads it from the DOM); the value only
+drops the runtime installer script. Narrow this only against a deployment shape
+you know: if the page never receives the delivery you picked, runtime helpers
+silently fall back to original class names while the CSS ships mangled — the
+styles simply do not apply. When in doubt, leave it at `'both'`.
+
+:::note[vite/rollup lanes only]
+Delivery narrowing runs where the map is injected — the **vite/rollup** hooks.
+A webpack build ships the map the way it always did and warns when a narrowed
+value would silently do nothing; esbuild builds keep readable class names
+entirely. An unknown value fails the build instead of silently reading as
+`'both'`.
 :::
 
 :::note[Mangling follows your bundler, not your framework]

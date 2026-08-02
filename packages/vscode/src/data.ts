@@ -5,15 +5,19 @@
 
 import {
     BOOLEAN_SHORTHANDS,
+    MIGRATION_NOTES as GENERATED_MIGRATION_NOTES,
     SUGGESTION_MAP as GENERATED_SUGGESTION_MAP,
     KNOWN_VARIANTS,
     PROPERTY_MAP,
-    VALUE_SUGGESTIONS,
+    valueSuggestionsFor,
 } from '@csszyx/tooling-metadata';
 import * as vscode from 'vscode';
 
 /** Widen generated literal keys for diagnostics fed by arbitrary user input. */
 export const SUGGESTION_MAP: Readonly<Record<string, string>> = GENERATED_SUGGESTION_MAP;
+
+/** Removed keys whose replacement is a shape, not a key name. */
+export const MIGRATION_NOTES: Readonly<Record<string, string>> = GENERATED_MIGRATION_NOTES;
 
 // ============================================================================
 // PRE-BUILT COMPLETION ITEMS (built once at module load)
@@ -91,11 +95,11 @@ export const TOP_LEVEL_VARIANT_COMPLETIONS: vscode.CompletionItem[] = [...KNOWN_
  * @returns Array of CompletionItems, or empty array if no suggestions exist for this key
  */
 export function getValueCompletions(key: string): vscode.CompletionItem[] {
-    const values = VALUE_SUGGESTIONS[key];
-    if (!values) {
+    const values = valueSuggestionsFor(key);
+    if (values.length === 0) {
         return [];
     }
-    return values.map(v => {
+    return values.map((v, index) => {
         const isNum = !Number.isNaN(Number(v)) && v !== '';
         const item = new vscode.CompletionItem(
             v,
@@ -105,6 +109,11 @@ export function getValueCompletions(key: string): vscode.CompletionItem[] {
         item.filterText = v;
         const detailValue = isNum ? v : `'${v}'`;
         item.detail = `${key}: ${detailValue}`;
+        // Preserve the curated order (positives, then negatives) instead of
+        // letting the client sort `-4` next to `4`: with an empty prefix the
+        // dropdown should read as the natural positive scale. Padded so 10
+        // sorts after 9.
+        item.sortText = String(index).padStart(4, '0');
         return item;
     });
 }

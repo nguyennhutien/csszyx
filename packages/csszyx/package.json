@@ -55,7 +55,15 @@
       "types": "./dist/dynamic-react.d.mts",
       "import": "./dist/dynamic-react.mjs"
     },
-    "./browser": "./dist/browser.iife.js"
+    "./browser": "./dist/browser.iife.js",
+    "./core": {
+      "types": "./dist/core.d.mts",
+      "import": "./dist/core.mjs"
+    },
+    "./lowering": {
+      "types": "./dist/lowering.d.mts",
+      "import": "./dist/lowering.mjs"
+    }
   },
   "files": [
     "dist"
@@ -79,7 +87,9 @@
     "unbuild": "^3.6.1",
     "vitest": "^4.1.10"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/lowering.mjs"
+  ],
   "engines": {
     "node": "^22.18.0 || >=24.11.0"
   }

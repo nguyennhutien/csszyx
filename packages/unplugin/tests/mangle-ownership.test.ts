@@ -93,6 +93,7 @@ async function runVite(root: string): Promise<void> {
             ...(vitePlugin({
                 build: { cache: false, parser: 'oxc' },
                 compileSources: ['packages/vui/src'],
+                production: { mangle: true },
             }) as PluginOption[]),
         ],
         build: { emptyOutDir: true, minify: true, outDir: 'dist' },

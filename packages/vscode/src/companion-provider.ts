@@ -22,10 +22,9 @@
  */
 
 import {
-    classifyStyleChain,
     type ObjectFormMember,
     type ObjectValueForm,
-    objectValueForm,
+    resolveStyleChain,
     szvStyleChain,
 } from '@csszyx/tooling-metadata';
 import * as vscode from 'vscode';
@@ -201,9 +200,8 @@ function completionsForContext(
     const styleChain = styleChainFor(context);
     if (styleChain === null) return undefined;
     const innerFirst = [...styleChain].reverse();
-    const kind = classifyStyleChain(innerFirst);
+    const { kind, form } = resolveStyleChain(innerFirst);
     if (kind !== 'style' && kind !== 'object-form') return undefined;
-    const form = kind === 'object-form' ? objectValueForm(innerFirst[0] ?? '') : null;
 
     if (context.type === 'key' || context.type === 'variant-key') {
         return withoutSiblings(
