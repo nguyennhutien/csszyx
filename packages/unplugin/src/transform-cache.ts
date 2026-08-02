@@ -8,7 +8,11 @@ import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@
 // resurrect it as `undefined`, and the injection would then route a file's
 // merge helpers through the wrong entry (heavy instead of slim, or worse,
 // slim for a file whose parts were never proven).
-const CACHE_SCHEMA_VERSION = 14;
+// 15: the mask migration pass changed emitted classes (ring-0,
+// font-features-[normal]) and added slot-member diagnostics — a schema-14
+// entry would replay the old class strings and the old warning set for any
+// file whose source hash did not move.
+const CACHE_SCHEMA_VERSION = 15;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';

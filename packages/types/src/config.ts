@@ -109,10 +109,17 @@ export interface ProductionConfig {
      * - `'bundle'` — bundle module only. For embedded builds and CSP setups
      *   that strip inline scripts.
      *
-     * The hydration checksum payload is unaffected — it ships in every mode.
-     * Choosing a delivery the page does not receive leaves runtime helpers
-     * without a map, which passes original class names through while the CSS
-     * ships mangled, so narrow this only against a known deployment shape.
+     * The hydration checksum payload is unaffected — it ships in every mode,
+     * so `'bundle'` still emits the JSON census tag into HTML the build owns
+     * (hydration verify reads it from the DOM); the value only drops the
+     * runtime installer script. Choosing a delivery the page does not receive
+     * leaves runtime helpers without a map, which passes original class names
+     * through while the CSS ships mangled, so narrow this only against a
+     * known deployment shape.
+     *
+     * Narrowing runs where the map is injected — the vite/rollup lanes. A
+     * webpack build ships the map unchanged and warns that the value has no
+     * effect there; an unknown value fails the build.
      *
      * @default 'both'
      */

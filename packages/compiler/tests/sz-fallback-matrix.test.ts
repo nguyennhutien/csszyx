@@ -10,11 +10,14 @@
 import { describe, expect, it } from 'vitest';
 import {
     describeSzFallback,
+    formatSzFallbackDiagnostic,
     SZ_FALLBACK_DETAIL_PLACEHOLDER,
     SZ_FALLBACK_KINDS,
     SZ_FALLBACK_MATRIX,
     SZ_FALLBACK_UNKNOWN_CALLEE,
     type SzFallbackKind,
+    szFallbackConsequenceOf,
+    szsUnsupportedDiagnostic,
 } from '../src/sz-fallback-matrix.js';
 import { transformSourceCode } from '../src/transform.js';
 import { transformOxc } from '../src/transform-oxc.js';
@@ -94,6 +97,31 @@ describe('describeSzFallback', () => {
         for (const kind of SZ_FALLBACK_KINDS) {
             expect(SZ_FALLBACK_MATRIX[kind as SzFallbackKind]).toBeDefined();
         }
+    });
+});
+
+describe('szFallbackConsequenceOf', () => {
+    it('classifies every rendered site through the renderer itself', () => {
+        // Built FROM the renderer on purpose: a wording change flows through
+        // both sides of the assertion, so the classifier cannot strand the
+        // routing the way an inlined substring match in the bundler did.
+        expect(szFallbackConsequenceOf(formatSzFallbackDiagnostic('szr', '1:1', 'call', 'f'))).toBe(
+            'missing-css',
+        );
+        expect(szFallbackConsequenceOf(formatSzFallbackDiagnostic('szv', '1:1', 'call', 'f'))).toBe(
+            'missing-css',
+        );
+        expect(szFallbackConsequenceOf(formatSzFallbackDiagnostic('sz', '1:1', 'member'))).toBe(
+            'nudge',
+        );
+        expect(szFallbackConsequenceOf(szsUnsupportedDiagnostic('/p/t.tsx'))).toBe('missing-css');
+    });
+
+    it('leaves messages outside the matrix unclassified', () => {
+        expect(szFallbackConsequenceOf('[csszyx] Unknown property "x" in sz prop.')).toBe(
+            undefined,
+        );
+        expect(szFallbackConsequenceOf('unresolvable sz spread at 1:1')).toBe(undefined);
     });
 });
 

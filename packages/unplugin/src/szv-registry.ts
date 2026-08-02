@@ -36,14 +36,21 @@ export function recordSzvRegistryFile(
     filePath: string,
     content: string,
 ): void {
-    if (!content.includes('szv(') || !content.includes('export')) return;
-    const entries = extractSzvRegistryEntries(content, filePath);
-    if (entries.length === 0) return;
+    const key = normalizePathSeparators(filePath);
+    const qualifies = content.includes('szv(') && content.includes('export');
+    const entries = qualifies ? extractSzvRegistryEntries(content, filePath) : [];
+    if (entries.length === 0) {
+        // Re-recording a file that STOPPED qualifying must evict its entry, or
+        // importers keep compiling against a table the module no longer
+        // exports.
+        registry.delete(key);
+        return;
+    }
     const byName: Record<string, Record<string, unknown>> = {};
     for (const entry of entries) {
         byName[entry.exportName] = entry.config;
     }
-    registry.set(normalizePathSeparators(filePath), byName);
+    registry.set(key, byName);
 }
 
 /** Extension probes tried against the registry, resolution order fixed. */

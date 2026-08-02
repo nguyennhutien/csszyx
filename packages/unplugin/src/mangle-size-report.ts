@@ -39,6 +39,22 @@ export function createMangleSizeAccount(): MangleSizeAccount {
 }
 
 /**
+ * Zero an accumulator in place, keeping its identity.
+ *
+ * A watch rebuild starts a fresh output pass over the same closure-held
+ * account; without the reset the CSS totals accumulate monotonically across
+ * rebuilds, driving the verdict negative and silencing the advisory from the
+ * second rebuild on.
+ *
+ * @param account - The account to zero.
+ */
+export function resetMangleSizeAccount(account: MangleSizeAccount): void {
+    account.cssGzBefore = 0;
+    account.cssGzAfter = 0;
+    account.channels.clear();
+}
+
+/**
  * Gzipped size of a string, at the level a CDN would realistically serve.
  *
  * Level 6 (zlib's default) rather than 9: the verdict is a comparison between

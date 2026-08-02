@@ -54,6 +54,12 @@ export {
 } from './recovery.js';
 export { sortStrings } from './sort.js';
 export { parseStaticObjectLiteral } from './static-object-parser.js';
+// Export the fallback-consequence classifier so the bundler routes
+// diagnostics through the module that renders their labels.
+export {
+    type SzFallbackConsequence,
+    szFallbackConsequenceOf,
+} from './sz-fallback-matrix.js';
 export {
     type CssVariableMangleValue,
     type GlobalVarAliasTableInput,

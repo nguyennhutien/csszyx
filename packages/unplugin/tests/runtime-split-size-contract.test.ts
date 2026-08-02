@@ -112,6 +112,19 @@ describe('runtime split size contract', () => {
         expect(probe.gzipBytes).toBeLessThan(1_000);
     });
 
+    it('barrel __szvPick stays light — the shape the plugin injects', async () => {
+        // The unplugin injects the pickers from the BARREL on purpose (a
+        // measured call: the barrel szv surface tree-shakes clean, and /core
+        // would be a second import line for the same bytes). This probe pins
+        // the injected shape itself, so the claim rests on a bundle, not on
+        // the szv probe above happening to share a chunk.
+        const probe = await bundleProbe(
+            "import { __szvPick, __szvPick1 } from '@csszyx/runtime'; console.log(__szvPick, __szvPick1);",
+        );
+        expect(probe.hasCompiler).toBe(false);
+        expect(probe.gzipBytes).toBeLessThan(2_000);
+    });
+
     it('core szr ships no compiler', async () => {
         const probe = await bundleProbe(
             "import { szr } from '@csszyx/runtime/core'; console.log(szr);",
@@ -176,7 +189,9 @@ describe('szv precompile, end to end', () => {
         // dynamic path becomes a table pick, every szr argument is therefore a
         // string, the szr import moves to /core - and the transform chunk
         // never ships. The picker injection is the unplugin's job, so this
-        // probe appends the import the plugin would inject.
+        // probe appends the exact import the plugin injects — the BARREL form
+        // (requiredRuntimeHelpers routes __szvPick there), not a hand-written
+        // /core line the plugin never emits.
         const { transformSourceCode } = require('@csszyx/compiler');
         // The single-clause import is the shape people actually write; the
         // compiler splits it, moving szr to the core entry on its own line.
@@ -186,7 +201,7 @@ describe('szv precompile, end to end', () => {
             'export const C = (sel) => szr(cardSz(sel), cardSz({ pad: "sm" }));\n';
         const result = transformSourceCode(source, '/app/Card.tsx');
         expect(result.usesSzvPick).toBe(true);
-        const compiled = `import { __szvPick } from '@csszyx/runtime/core';\n${result.code as string}`;
+        const compiled = `import { __szvPick } from '@csszyx/runtime';\n${result.code as string}`;
         expect(compiled).toContain('@csszyx/runtime/core');
         expect(compiled).toContain('__szvT_cardSz');
         const probe = await bundleProbe(compiled);

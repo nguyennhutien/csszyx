@@ -11,6 +11,7 @@ import {
     isRustTransformAvailable,
     type SourceTransformResult,
     sortStrings,
+    szFallbackConsequenceOf,
     type TokenData,
     type TransformSourceCodeOptions,
     transform,
@@ -63,6 +64,7 @@ import {
     type MangleSizeAccount,
     mangleSizeMessage,
     recordCssPair,
+    resetMangleSizeAccount,
 } from './mangle-size-report.js';
 import { resolveParserMode } from './parser-mode.js';
 import { normalizePathSeparators } from './path-normalization.js';
@@ -2346,6 +2348,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // safe against a known deployment shape, and guessing wrong leaves runtime
     // helpers mapless while the CSS ships mangled.
     const mangleMapDelivery = options.production?.mangleMapDelivery ?? 'both';
+    if (!['both', 'html', 'bundle'].includes(mangleMapDelivery)) {
+        // A typo ('htlm') would otherwise read as 'both' through the two
+        // negative comparisons below — silently, in the option whose whole
+        // point is narrowing against a known deployment shape.
+        throw new Error(
+            `[csszyx] production.mangleMapDelivery must be 'both', 'html' or 'bundle'; got ${JSON.stringify(mangleMapDelivery)}.`,
+        );
+    }
     const deliverMapInHtml = mangleMapDelivery !== 'bundle';
     const deliverMapInBundle = mangleMapDelivery !== 'html';
     // Weighs the map against the CSS it bought. Counts channels that actually
@@ -3354,6 +3364,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function prescanAndWriteClasses(): void {
         refreshCompileSourceDirs();
+        // A registry entry outlives its file otherwise: a module that stops
+        // exporting a qualifying factory would keep its old table through any
+        // later prescan in the same process.
+        szvCrossModuleRegistry.clear();
         const prescanStarted = performance.now();
         const discoveredClasses = new Set<string>();
         // Raw className values feed both Tailwind safelisting and the authored
@@ -3871,7 +3885,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         for (const message of result.diagnostics) {
             if (message.includes('unresolvable sz spread')) {
                 state.spreadWarnings.add(`${id}\n  ${message}`);
-            } else if (message.includes('AST budget exceeded')) {
+                continue;
+            }
+            if (message.includes('AST budget exceeded')) {
+                console.warn(`[csszyx] ${id}\n  ${message}`);
+                continue;
+            }
+            // missing-css means the classes never reached the safelist — the
+            // styles are simply absent, which is the failure class that must
+            // surface in production builds too (same tier as the spread
+            // warning above). `quiet` still silences it: that flag is the
+            // documented way to mute every build warning.
+            if (!quiet && szFallbackConsequenceOf(message) === 'missing-css') {
                 console.warn(`[csszyx] ${id}\n  ${message}`);
             }
         }
@@ -3881,7 +3906,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         for (const message of result.diagnostics) {
             if (
                 message.includes('unresolvable sz spread') ||
-                message.includes('AST budget exceeded')
+                message.includes('AST budget exceeded') ||
+                szFallbackConsequenceOf(message) === 'missing-css'
             ) {
                 continue;
             }
@@ -4429,6 +4455,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (compiler.options?.mode === 'development') {
                     manglingEnabled = false;
                 }
+                // `webpack --watch` (any mode) rebuilds against the ONE prescan
+                // registry — the beforeCompile guard below even skips the
+                // prescan on rebuilds — so an edited factory module keeps its
+                // stale table. Same v1 cut as the vite/rollup watch guards.
+                if (compiler.watchMode === true || compiler.options?.watch === true) {
+                    crossModuleRegistryEnabled = false;
+                }
+                // Delivery is decided by the vite/rollup hooks (module
+                // injection + transformIndexHtml); this lane ships the map the
+                // way it always did, so a narrowed value would silently not
+                // narrow anything.
+                if (manglingEnabled && mangleMapDelivery !== 'both') {
+                    console.warn(
+                        `[csszyx] production.mangleMapDelivery: '${mangleMapDelivery}' has no ` +
+                            'effect on the webpack lane — map delivery only narrows on vite/rollup builds.',
+                    );
+                }
                 compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
@@ -4457,7 +4500,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             rollup: {
                 /** Records the rollup lane for the mangle-runtime gate. */
                 buildStart() {
+                    // A watch rebuild reuses the one prescan registry forever:
+                    // an edited factory module would keep serving its OLD
+                    // variant table to every importer, and the transform cache
+                    // would key on the stale value. The v1 cut (no
+                    // registry-dependency invalidation) therefore extends to
+                    // watch mode — `rollup -w` here, and vite build --watch
+                    // through the same rollup context.
                     activeFramework = 'rollup';
+                    const meta = (this as unknown as { meta?: { watchMode?: boolean } }).meta;
+                    if (meta?.watchMode) {
+                        crossModuleRegistryEnabled = false;
+                    }
                 },
             },
 
@@ -4476,6 +4530,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // not match the un-mangled dev CSS. See `manglingEnabled` above.
                     if (config.command === 'serve') {
                         manglingEnabled = false;
+                        crossModuleRegistryEnabled = false;
+                    }
+                    // `vite build --watch` is a production-mode build with the
+                    // dev server's staleness problem: the registry is recorded
+                    // once at prescan and never re-recorded, so a factory edit
+                    // would compile importers against the old table on every
+                    // rebuild. Same v1 cut as `serve`.
+                    if (config.build?.watch) {
                         crossModuleRegistryEnabled = false;
                     }
                     evictTransformCacheOnce();
@@ -4626,7 +4688,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             globalVarAliasPrefix,
                             installRuntimeObject: deliverMapInHtml,
                         });
-                        if (deliverMapInHtml && manglingEnabled) {
+                        // The hydration-verify contract reads the JSON tag from
+                        // the DOM, so the census ships in the HTML whenever the
+                        // page is built here — 'bundle' only drops the runtime
+                        // installer. Charge the channel accordingly, or the
+                        // advisory understates what actually shipped.
+                        if (manglingEnabled) {
                             sizeAccount.channels.add('html');
                         }
                         // Recovery manifest is a no-op when zero szRecover tokens were
@@ -4762,6 +4829,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         );
         const message = mangleSizeMessage(verdict);
         if (message) console.warn(message);
+        // Each output pass weighs its own assets; see resetMangleSizeAccount.
+        resetMangleSizeAccount(sizeAccount);
     }
 
     /**

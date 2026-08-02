@@ -147,6 +147,54 @@ const SITE_LABEL: Readonly<Record<SzFallbackSite, string>> = {
     szv: 'szv catalog',
 };
 
+/**
+ * What the reader of one diagnostic must fear.
+ *
+ * `missing-css`: classes were never collected, so under Tailwind
+ * `source(none)` the CSS is simply absent — an integrity failure that must
+ * surface in production builds too. `nudge`: the runtime lane still resolves
+ * the styles; the diagnostic is advisory and stays dev-only.
+ */
+export type SzFallbackConsequence = 'missing-css' | 'nudge';
+
+/**
+ * Consequence per site. `sz` keeps a runtime fallback (the expression
+ * resolves in the browser), so it nudges; an unreadable `szr` argument or
+ * `szv` config means the classes never reached the safelist.
+ */
+export const SZ_FALLBACK_SITE_CONSEQUENCE: Readonly<Record<SzFallbackSite, SzFallbackConsequence>> =
+    {
+        sz: 'nudge',
+        szr: 'missing-css',
+        szv: 'missing-css',
+    };
+
+/**
+ * Classify a rendered diagnostic back to its consequence.
+ *
+ * Owned by the module that RENDERS the labels, so routing built on this
+ * cannot drift from the wording the way an inlined substring match would —
+ * change a label above and this classifier changes with it. (Structured
+ * diagnostic fields across the three engines are the fuller answer; until
+ * that contract exists, the classifier is the single point of coupling.)
+ *
+ * @param message - One raw diagnostic line as an engine emitted it.
+ * @returns The consequence, or undefined for messages outside the matrix.
+ */
+export function szFallbackConsequenceOf(message: string): SzFallbackConsequence | undefined {
+    for (const site of Object.keys(SITE_LABEL) as SzFallbackSite[]) {
+        if (message.startsWith(`${SITE_LABEL[site]} at `)) {
+            return SZ_FALLBACK_SITE_CONSEQUENCE[site];
+        }
+    }
+    // szs renders through its own builder; an unresolved slot map means no
+    // slot classes were compiled, which is the same absent-CSS failure.
+    if (message.startsWith('[csszyx] szs at ')) {
+        return 'missing-css';
+    }
+    return undefined;
+}
+
 /** What went wrong, for {@link szsUnsupportedDiagnostic}. */
 const SZS_REASON =
     'a slot value could not be read at build time, so no slot classes were compiled.';

@@ -114,3 +114,32 @@ describe('resolveCrossModuleStaticsFor', () => {
         ).toBeUndefined();
     });
 });
+
+describe('registry staleness', () => {
+    it('evicts a file that stops exporting a qualifying factory', () => {
+        // Without the eviction, importers keep resolving a table the module no
+        // longer exports — the same stale-registry class the watch-mode cut
+        // guards against, reachable within one process via re-recording.
+        const registry = registryWith('/app/src/styles.ts');
+        expect(registry.size).toBe(1);
+        recordSzvRegistryFile(registry, '/app/src/styles.ts', 'export const nothingHere = 1;\n');
+        expect(registry.size).toBe(0);
+        expect(
+            resolveCrossModuleStaticsFor(
+                registry,
+                '/app/src/Card.tsx',
+                "import { cardSz } from './styles';\n",
+            ),
+        ).toBeUndefined();
+    });
+
+    it('evicts when the factory no longer parses as a static config', () => {
+        const registry = registryWith('/app/src/styles.ts');
+        recordSzvRegistryFile(
+            registry,
+            '/app/src/styles.ts',
+            "import { szv } from '@csszyx/runtime';\nexport const cardSz = szv(makeConfig());\n",
+        );
+        expect(registry.size).toBe(0);
+    });
+});
