@@ -546,3 +546,317 @@ fn decode_ordered_value(value: &serde_json::Value) -> Option<StaticSzValue> {
 pub(crate) fn szv_table_identifier(factory_name: &str) -> String {
     format!("__szvT_{factory_name}")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::transform::ir::StaticSzProperty;
+    use crate::transform::TextSpan;
+
+    fn entry(key: &str, value: StaticSzValue) -> StaticSzProperty {
+        StaticSzProperty {
+            key: key.to_string(),
+            value,
+            span: TextSpan { start: 0, end: 0 },
+        }
+    }
+
+    fn object(entries: Vec<StaticSzProperty>) -> StaticSzObject {
+        StaticSzObject {
+            properties: entries,
+        }
+    }
+
+    fn text(value: &str) -> StaticSzValue {
+        StaticSzValue::String(value.to_string())
+    }
+
+    fn number(value: f64) -> StaticSzValue {
+        StaticSzValue::Number(value)
+    }
+
+    fn nested(entries: Vec<StaticSzProperty>) -> StaticSzValue {
+        StaticSzValue::Object(object(entries))
+    }
+
+    /// Qualify through the same entry point the parser uses, so every unit
+    /// below exercises the productized path, not a hand-built config.
+    fn config_from(entries: Vec<StaticSzProperty>) -> Option<StaticSzvConfig> {
+        static_szv_config_from_object(&object(entries))
+    }
+
+    fn paths_of(branch: &StaticSzObject) -> Vec<String> {
+        let mut out = Vec::new();
+        collect_canonical_leaf_paths(branch, "", &mut out);
+        out
+    }
+
+    #[test]
+    fn collects_canonical_leaf_paths_through_nesting() {
+        let branch = object(vec![
+            entry("md", nested(vec![entry("p", number(4.0))])),
+            entry("bg", text("red-500")),
+        ]);
+        assert_eq!(paths_of(&branch), ["md\u{0}p", "bg"]);
+    }
+
+    #[test]
+    fn property_key_subtrees_fold_to_the_parent_path() {
+        let branch = object(vec![entry(
+            "bg",
+            nested(vec![
+                entry("color", text("red-500")),
+                entry("op", number(50.0)),
+            ]),
+        )]);
+        assert_eq!(paths_of(&branch), ["bg"]);
+    }
+
+    #[test]
+    fn flags_equal_prefix_and_suffix_conflicts_only() {
+        let path = |value: &str| vec![value.to_string()];
+        assert!(leaf_paths_conflict(&path("p"), &path("p")));
+        assert!(leaf_paths_conflict(&path("md"), &path("md\u{0}p")));
+        assert!(leaf_paths_conflict(&path("md\u{0}p"), &path("md")));
+        assert!(!leaf_paths_conflict(&path("md\u{0}p"), &path("md\u{0}m")));
+        assert!(!leaf_paths_conflict(&path("p"), &path("md\u{0}p")));
+    }
+
+    #[test]
+    fn same_dimension_leaves_never_conflict() {
+        let config = config_from(vec![entry(
+            "variants",
+            nested(vec![entry(
+                "pad",
+                nested(vec![
+                    entry("sm", nested(vec![entry("p", number(2.0))])),
+                    entry("lg", nested(vec![entry("p", number(8.0))])),
+                ]),
+            )]),
+        )])
+        .expect("well-shaped config qualifies");
+        assert!(szv_config_free_of_overlap(&config));
+    }
+
+    #[test]
+    fn cross_dimension_overlap_disqualifies() {
+        let config = config_from(vec![entry(
+            "variants",
+            nested(vec![
+                entry(
+                    "pad",
+                    nested(vec![entry("sm", nested(vec![entry("p", number(2.0))]))]),
+                ),
+                entry(
+                    "space",
+                    nested(vec![entry("a", nested(vec![entry("p", number(4.0))]))]),
+                ),
+            ]),
+        )])
+        .expect("well-shaped config qualifies");
+        assert!(!szv_config_free_of_overlap(&config));
+    }
+
+    #[test]
+    fn qualification_rejects_unknown_keys_and_non_record_shapes() {
+        assert!(config_from(vec![
+            entry("variants", nested(Vec::new())),
+            entry("compoundVariants", text("unsupported")),
+        ])
+        .is_none());
+        assert!(config_from(vec![entry(
+            "variants",
+            nested(vec![entry("pad", nested(vec![entry("sm", text("p-2"))]))]),
+        )])
+        .is_none());
+        assert!(config_from(vec![entry(
+            "defaultVariants",
+            nested(vec![entry("pad", number(2.5))]),
+        )])
+        .is_none());
+    }
+
+    #[test]
+    fn op_modifier_disqualifies_any_branch() {
+        let config = config_from(vec![entry(
+            "variants",
+            nested(vec![entry(
+                "tone",
+                nested(vec![entry("a", nested(vec![entry("op", number(50.0))]))]),
+            )]),
+        )])
+        .expect("shape qualifies; overlap is the separate verdict");
+        assert!(!szv_config_free_of_overlap(&config));
+    }
+
+    #[test]
+    fn css_namespace_allows_one_level_and_rejects_deeper_nesting() {
+        let flat = config_from(vec![entry(
+            "base",
+            nested(vec![entry("css", nested(vec![entry("--x", text("1px"))]))]),
+        )])
+        .expect("shape qualifies");
+        assert!(szv_config_free_of_overlap(&flat));
+
+        let deep = config_from(vec![entry(
+            "base",
+            nested(vec![entry(
+                "css",
+                nested(vec![entry(
+                    "sel",
+                    nested(vec![entry("color", text("red"))]),
+                )]),
+            )]),
+        )])
+        .expect("shape qualifies");
+        assert!(!szv_config_free_of_overlap(&deep));
+    }
+
+    #[test]
+    fn fusion_family_conflicts_across_dimensions() {
+        let config = config_from(vec![entry(
+            "variants",
+            nested(vec![
+                entry(
+                    "size",
+                    nested(vec![entry("a", nested(vec![entry("text", text("lg"))]))]),
+                ),
+                entry(
+                    "line",
+                    nested(vec![entry("b", nested(vec![entry("leading", text("7"))]))]),
+                ),
+            ]),
+        )])
+        .expect("well-shaped config qualifies");
+        assert!(!szv_config_free_of_overlap(&config));
+    }
+
+    #[test]
+    fn parity_safe_scalars_stringify_like_the_js_lanes() {
+        assert_eq!(
+            parity_safe_scalar_string(&text("primary")).as_deref(),
+            Some("primary")
+        );
+        assert_eq!(
+            parity_safe_scalar_string(&StaticSzValue::Boolean(true)).as_deref(),
+            Some("true")
+        );
+        assert_eq!(
+            parity_safe_scalar_string(&number(4.0)).as_deref(),
+            Some("4")
+        );
+        assert_eq!(
+            parity_safe_scalar_string(&number(-3.0)).as_deref(),
+            Some("-3")
+        );
+        assert_eq!(parity_safe_scalar_string(&number(2.5)), None);
+        assert_eq!(
+            parity_safe_scalar_string(&number(9_007_199_254_740_992.0)),
+            None
+        );
+    }
+
+    #[test]
+    fn integer_like_keys_follow_js_iteration_order() {
+        assert!(is_array_index_like("0"));
+        assert!(is_array_index_like("4294967294"));
+        assert!(!is_array_index_like("4294967295"));
+        assert!(!is_array_index_like("01"));
+        assert!(!is_array_index_like(""));
+
+        let config = config_from(vec![entry(
+            "variants",
+            nested(vec![
+                entry(
+                    "pad",
+                    nested(vec![entry("sm", nested(vec![entry("p", number(2.0))]))]),
+                ),
+                entry(
+                    "10",
+                    nested(vec![entry("a", nested(vec![entry("m", number(1.0))]))]),
+                ),
+                entry(
+                    "2",
+                    nested(vec![entry("b", nested(vec![entry("gap", number(2.0))]))]),
+                ),
+            ]),
+        )])
+        .expect("well-shaped config qualifies");
+        let dimensions: Vec<&str> = config
+            .variants
+            .iter()
+            .map(|(dimension, _)| dimension.as_str())
+            .collect();
+        assert_eq!(dimensions, ["2", "10", "pad"]);
+    }
+
+    fn compiled_tone_table() -> SzvTable {
+        let config = config_from(vec![
+            entry("base", nested(vec![entry("p", number(2.0))])),
+            entry(
+                "variants",
+                nested(vec![entry(
+                    "tone",
+                    nested(vec![entry(
+                        "primary",
+                        nested(vec![entry("bg", text("blue-500"))]),
+                    )]),
+                )]),
+            ),
+            entry(
+                "defaultVariants",
+                nested(vec![entry("tone", text("primary"))]),
+            ),
+        ])
+        .expect("well-shaped config qualifies");
+        compile_szv_table(&config)
+    }
+
+    #[test]
+    fn static_pick_fills_absent_keys_and_skips_unknown_values() {
+        let table = compiled_tone_table();
+        assert_eq!(compute_static_szv_pick(&table, None), "p-2 bg-blue-500");
+        let explicit: StaticSelection = vec![("tone".to_string(), "primary".to_string())];
+        assert_eq!(
+            compute_static_szv_pick(&table, Some(&explicit)),
+            "p-2 bg-blue-500"
+        );
+        // A present key with an unknown value neither matches nor falls back
+        // to the default: the entry is simply skipped.
+        let unknown: StaticSelection = vec![("tone".to_string(), "nope".to_string())];
+        assert_eq!(compute_static_szv_pick(&table, Some(&unknown)), "p-2");
+    }
+
+    #[test]
+    fn serialized_table_matches_json_stringify() {
+        assert_eq!(
+            serialize_szv_table(&compiled_tone_table()),
+            r#"{"base":"p-2","d":{"tone":{"primary":"bg-blue-500"}},"defaults":{"tone":"primary"}}"#
+        );
+        assert_eq!(json_string_literal("a\u{0}b\n"), r#""a\u0000b\n""#);
+    }
+
+    #[test]
+    fn cross_module_decode_tolerates_malformed_payloads() {
+        assert!(decode_cross_module_statics("not json").is_empty());
+        assert!(decode_cross_module_statics("{}").is_empty());
+        assert!(decode_cross_module_statics(r#"[["./styles",[["cardSz","scalar"]]]]"#).is_empty());
+
+        let decoded =
+            decode_cross_module_statics(r#"[["./styles",[["cardSz",[["base",[["p",4]]]]]]]]"#);
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].0, "./styles");
+        assert_eq!(decoded[0].1[0].0, "cardSz");
+        assert_eq!(decoded[0].1[0].1.properties[0].key, "base");
+    }
+
+    #[test]
+    fn counts_words_at_identifier_boundaries() {
+        assert_eq!(
+            count_word_occurrences("cardSz(cardSz2); myCardSz; \"cardSz\"", "cardSz"),
+            2
+        );
+        assert_eq!(count_word_occurrences("", "cardSz"), 0);
+        assert_eq!(count_word_occurrences("x", ""), 0);
+    }
+}
