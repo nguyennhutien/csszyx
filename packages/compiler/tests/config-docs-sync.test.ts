@@ -33,4 +33,30 @@ describe('config docs sync', () => {
         expect(typesConfig).toContain(`\`${parserDefault}\` is the default parser.`);
         expect(unpluginReadme).toContain(`The default \`${parserDefault}\` path`);
     });
+
+    it('keeps the documented production.mangle default in sync with shared config', () => {
+        // The breaking flip to opt-in landed in the plugin first and missed
+        // this exported default, so consumers merging DEFAULT_PRODUCTION_CONFIG
+        // got mangling ON while every doc said it was off. Pin all three
+        // surfaces to the same literal so a one-sided edit fails here.
+        const configDocs = readFileSync(
+            join(REPO_ROOT, 'apps/docs/src/content/docs/docs/reference/config.mdx'),
+            'utf8',
+        );
+        const typesConfig = readFileSync(join(REPO_ROOT, 'packages/types/src/config.ts'), 'utf8');
+
+        const mangleDefaultMatch = typesConfig.match(
+            /export const DEFAULT_PRODUCTION_CONFIG[^}]*mangle:\s*(true|false)/,
+        );
+        expect(
+            mangleDefaultMatch,
+            'DEFAULT_PRODUCTION_CONFIG.mangle must be a boolean literal',
+        ).not.toBeNull();
+        const mangleDefault = mangleDefaultMatch?.[1];
+
+        expect(mangleDefault).toBe('false');
+        expect(typesConfig).toContain(`* @default ${mangleDefault}`);
+        expect(configDocs).toContain(`opt-in, default ${mangleDefault}`);
+        expect(configDocs).toContain('It is **off by\ndefault**');
+    });
 });

@@ -664,7 +664,10 @@ export const DEFAULT_DEVELOPMENT_CONFIG: DevelopmentConfig = {
  * Default production configuration.
  */
 export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
-    mangle: true,
+    // Off like the plugin's own default: mangling is obfuscation, not
+    // compression (the map costs more than the class bytes it saves), so a
+    // consumer merging these exported defaults must not get it implicitly.
+    mangle: false,
     mangleVars: false,
     mangleVarHoistMaxDepth: 5,
     contentHashing: true,
