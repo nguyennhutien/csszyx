@@ -3223,4 +3223,138 @@ mod tests {
         assert_eq!(lowered.classes, ["inset-s-4"]);
         assert_eq!(lowered.raw_class_names, ["block"]);
     }
+
+    #[cfg(feature = "native-engine")]
+    fn mask_member_hits(object: &StaticSzObject) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        super::collect_unknown_mask_slot_members(object, &mut out);
+        out.into_iter()
+            .map(|(owner, member, _allowed, _offset)| (owner, member))
+            .collect()
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn flags_an_unknown_member_of_each_slot() {
+        // A typo inside a slot emits NOTHING at lowering, so the collector is
+        // the only thing standing between the author and a silently missing
+        // mask. Mirrors the TypeScript `warnMaskSlotMember` allowlists.
+        let linear = StaticSzObject {
+            properties: vec![property(
+                "maskLinear",
+                object(vec![property("form", StaticSzValue::String("20%".into()))]),
+            )],
+        };
+        assert_eq!(
+            mask_member_hits(&linear),
+            [("maskLinear".to_string(), "form".to_string())]
+        );
+
+        let conic = StaticSzObject {
+            properties: vec![property(
+                "maskConic",
+                object(vec![property(
+                    "t",
+                    object(vec![property("from", StaticSzValue::String("0%".into()))]),
+                )]),
+            )],
+        };
+        // Sides belong to the linear slot only.
+        assert_eq!(
+            mask_member_hits(&conic),
+            [("maskConic".to_string(), "t".to_string())]
+        );
+
+        let radial = StaticSzObject {
+            properties: vec![property(
+                "maskRadial",
+                object(vec![
+                    property("bogus", StaticSzValue::Number(1.0)),
+                    property("at", StaticSzValue::String("top".into())),
+                ]),
+            )],
+        };
+        assert_eq!(
+            mask_member_hits(&radial),
+            [("maskRadial".to_string(), "bogus".to_string())]
+        );
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn flags_an_unknown_member_inside_a_linear_edge() {
+        let branch = StaticSzObject {
+            properties: vec![property(
+                "maskLinear",
+                object(vec![property(
+                    "b",
+                    object(vec![
+                        property("from", StaticSzValue::String("0%".into())),
+                        property("form", StaticSzValue::String("50%".into())),
+                    ]),
+                )]),
+            )],
+        };
+        assert_eq!(
+            mask_member_hits(&branch),
+            [("maskLinear.b".to_string(), "form".to_string())]
+        );
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn stays_silent_for_legal_slots_and_descends_through_variants() {
+        let legal = StaticSzObject {
+            properties: vec![property(
+                "maskLinear",
+                object(vec![
+                    property("angle", StaticSzValue::Number(45.0)),
+                    property(
+                        "b",
+                        object(vec![property("from", StaticSzValue::String("0%".into()))]),
+                    ),
+                ]),
+            )],
+        };
+        assert!(mask_member_hits(&legal).is_empty());
+
+        // A slot nested under a variant is still reached — the walk descends
+        // through any object that is not itself a slot.
+        let nested = StaticSzObject {
+            properties: vec![property(
+                "hover",
+                object(vec![property(
+                    "maskRadial",
+                    object(vec![property(
+                        "shpe",
+                        StaticSzValue::String("circle".into()),
+                    )]),
+                )]),
+            )],
+        };
+        assert_eq!(
+            mask_member_hits(&nested),
+            [("maskRadial".to_string(), "shpe".to_string())]
+        );
+
+        // A non-object slot value carries no members to check.
+        let scalar = StaticSzObject {
+            properties: vec![property("maskLinear", StaticSzValue::Number(45.0))],
+        };
+        assert!(mask_member_hits(&scalar).is_empty());
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn reports_the_allowed_member_list_for_the_message() {
+        let branch = StaticSzObject {
+            properties: vec![property(
+                "maskLinear",
+                object(vec![property("nope", StaticSzValue::Boolean(true))]),
+            )],
+        };
+        let mut out = Vec::new();
+        super::collect_unknown_mask_slot_members(&branch, &mut out);
+        assert_eq!(out[0].2, "angle, from, to, t, r, b, l, x, y");
+    }
 }
