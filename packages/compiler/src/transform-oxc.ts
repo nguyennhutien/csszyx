@@ -59,6 +59,7 @@ import {
     recordCrossModuleSzvFactoryImports,
     recordIdentifierCallByName,
     recordSzvTypeQueryByName,
+    type StaticSzvSelection,
     SZV_RESERVED_FACTORY_NAMES,
     type SzrArgumentAnalysisOf,
     type SzvPrecompiledTable,
@@ -2339,12 +2340,7 @@ function planSingleDimensionPickOxc(
     if (shaped.computed) return null;
     // Identifier and string keys only, matching the Babel lane — a numeric key
     // bails on both, so the two lanes cannot reach different verdicts.
-    const key =
-        shaped.key.type === 'Identifier'
-            ? (shaped.key.name ?? null)
-            : shaped.key.type === 'Literal' && typeof shaped.key.value === 'string'
-              ? shaped.key.value
-              : null;
+    const key = staticSzvSelectionKeyOxc(shaped.key);
     // The defaults / __proto__ / own-property rules live in the shared spec —
     // both lanes must reach the same verdict.
     if (!singleDimensionPickAllowed(table, key)) return null;
@@ -2358,12 +2354,10 @@ function planSingleDimensionPickOxc(
  * @param node - The selection object expression.
  * @returns The plain selection, or null when any part is not a literal.
  */
-function evaluateStaticSzvSelectionOxc(
-    node: OxcNode,
-): Record<string, string | number | boolean | null> | null {
+function evaluateStaticSzvSelectionOxc(node: OxcNode): StaticSzvSelection | null {
     const evaluated = evaluateStaticObjectOxc(node);
     if (evaluated === null) return null;
-    const selection: Record<string, string | number | boolean | null> = {};
+    const selection: StaticSzvSelection = {};
     for (const key of Object.keys(evaluated)) {
         // The value-domain rule (string / boolean / safe integer) lives in the
         // shared spec so both lanes coerce identically.
@@ -2372,6 +2366,25 @@ function evaluateStaticSzvSelectionOxc(
         selection[key] = coerced;
     }
     return selection;
+}
+
+/**
+ * Read the identifier/string key vocabulary shared by static szv selections.
+ *
+ * @param key - Oxc property key to classify.
+ * @param key.type - Oxc node type.
+ * @param key.name - Identifier text when present.
+ * @param key.value - Literal value when present.
+ * @returns The static key text, or null for unsupported key shapes.
+ */
+function staticSzvSelectionKeyOxc(key: {
+    type: string;
+    name?: string;
+    value?: unknown;
+}): string | null {
+    if (key.type === 'Identifier') return key.name ?? null;
+    if (key.type === 'Literal' && typeof key.value === 'string') return key.value;
+    return null;
 }
 
 /**

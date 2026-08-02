@@ -67,6 +67,33 @@ async function bundleProbe(source: string): Promise<BundleProbe> {
     };
 }
 
+const LIGHT_RUNTIME_PROBES = [
+    {
+        label: 'barrel szv stays light — the anti-poisoning guard',
+        source: "import { szv } from '@csszyx/runtime'; console.log(szv);",
+        minGzipBytes: 400,
+        maxGzipBytes: 1_400,
+    },
+    {
+        label: 'barrel szDecode stays tiny',
+        source: "import { szDecode } from '@csszyx/runtime'; console.log(szDecode);",
+        minGzipBytes: 100,
+        maxGzipBytes: 500,
+    },
+    {
+        label: 'barrel __szvPick stays light — the shape the plugin injects',
+        source: "import { __szvPick, __szvPick1 } from '@csszyx/runtime'; console.log(__szvPick, __szvPick1);",
+        minGzipBytes: 150,
+        maxGzipBytes: 800,
+    },
+    {
+        label: 'core szr ships no compiler',
+        source: "import { szr } from '@csszyx/runtime/core'; console.log(szr);",
+        minGzipBytes: 350,
+        maxGzipBytes: 1_500,
+    },
+] as const;
+
 describe('runtime split size contract', () => {
     it('the marker string still identifies the compiler chunk', () => {
         // If a compiler refactor ever renames this warning, every assertion
@@ -95,55 +122,13 @@ describe('runtime split size contract', () => {
         expect(probe.hasCompiler).toBe(true);
     });
 
-    it('barrel szv stays light — the anti-poisoning guard', async () => {
-        // The one regression this architecture could cause: a top-level impure
-        // statement anywhere in the barrel graph would be retained for every
-        // consumer and weld the compiler onto szv/szcn/szDecode imports.
-        const probe = await bundleProbe("import { szv } from '@csszyx/runtime'; console.log(szv);");
+    it.each(LIGHT_RUNTIME_PROBES)('$label', async ({ source, minGzipBytes, maxGzipBytes }) => {
+        // A ceiling catches compiler poisoning; the floor catches a probe
+        // tree-shaken empty, which would make that ceiling meaningless.
+        const probe = await bundleProbe(source);
         expect(probe.hasCompiler).toBe(false);
-        expect(probe.gzipBytes).toBeLessThan(1_400);
-        // Floors ratchet the other way: a probe collapsing far below its
-        // honest cost means the bundler shook the entry empty and the ceiling
-        // proved nothing. Measured 860 B gz when the band was set.
-        expect(probe.gzipBytes).toBeGreaterThan(400);
-    });
-
-    it('barrel szDecode stays tiny', async () => {
-        const probe = await bundleProbe(
-            "import { szDecode } from '@csszyx/runtime'; console.log(szDecode);",
-        );
-        expect(probe.hasCompiler).toBe(false);
-        expect(probe.gzipBytes).toBeLessThan(500);
-        // Measured 234 B gz when the band was set.
-        expect(probe.gzipBytes).toBeGreaterThan(100);
-    });
-
-    it('barrel __szvPick stays light — the shape the plugin injects', async () => {
-        // The unplugin injects the pickers from the BARREL on purpose (a
-        // measured call: the barrel szv surface tree-shakes clean, and /core
-        // would be a second import line for the same bytes). This probe pins
-        // the injected shape itself, so the claim rests on a bundle, not on
-        // the szv probe above happening to share a chunk.
-        const probe = await bundleProbe(
-            "import { __szvPick, __szvPick1 } from '@csszyx/runtime'; console.log(__szvPick, __szvPick1);",
-        );
-        expect(probe.hasCompiler).toBe(false);
-        expect(probe.gzipBytes).toBeLessThan(800);
-        // Measured 269 B gz when the band was set.
-        expect(probe.gzipBytes).toBeGreaterThan(150);
-    });
-
-    it('core szr ships no compiler', async () => {
-        const probe = await bundleProbe(
-            "import { szr } from '@csszyx/runtime/core'; console.log(szr);",
-        );
-        expect(probe.hasCompiler).toBe(false);
-        // 13.1 KB before the split, ~3 KB while core still carried the merge
-        // family, 603 B once /merge became its own entry. Headroom for chunk
-        // noise, tight enough to catch the merge tables sneaking back in.
-        expect(probe.gzipBytes).toBeLessThan(1_500);
-        // Measured 748 B gz when the band was set.
-        expect(probe.gzipBytes).toBeGreaterThan(350);
+        expect(probe.gzipBytes).toBeLessThan(maxGzipBytes);
+        expect(probe.gzipBytes).toBeGreaterThan(minGzipBytes);
     });
 
     it('the merge entry carries the group tables but no compiler', async () => {

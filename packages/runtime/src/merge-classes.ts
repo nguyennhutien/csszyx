@@ -441,9 +441,7 @@ export function szcn(...inputs: ClassInput[]): string {
                 return mergeUncached(inputs, runtimeRef);
             }
             child = {};
-            if (node.next === undefined) {
-                node.next = new Map();
-            }
+            node.next ??= new Map();
             node.next.set(input, child);
             memoNodes++;
         }

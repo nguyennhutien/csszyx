@@ -138,9 +138,7 @@ function szJoin(classes: SzInput[], depth: number): string {
             continue;
         }
         if (typeof cls !== 'string' && !Array.isArray(cls)) {
-            if (pending === null) {
-                pending = [];
-            }
+            pending ??= [];
             pending.push(cls);
             continue;
         }

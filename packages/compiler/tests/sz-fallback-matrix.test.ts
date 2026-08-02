@@ -118,10 +118,10 @@ describe('szFallbackConsequenceOf', () => {
     });
 
     it('leaves messages outside the matrix unclassified', () => {
-        expect(szFallbackConsequenceOf('[csszyx] Unknown property "x" in sz prop.')).toBe(
-            undefined,
-        );
-        expect(szFallbackConsequenceOf('unresolvable sz spread at 1:1')).toBe(undefined);
+        expect(
+            szFallbackConsequenceOf('[csszyx] Unknown property "x" in sz prop.'),
+        ).toBeUndefined();
+        expect(szFallbackConsequenceOf('unresolvable sz spread at 1:1')).toBeUndefined();
     });
 });
 

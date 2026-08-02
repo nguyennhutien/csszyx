@@ -65,8 +65,7 @@ export function __szvPick(table: SzvCompiledTable, selection?: SzvPickSelection)
                 ? selection[dimension]
                 : undefined;
         // null/undefined falls back to the default — it does not clear it.
-        const value =
-            selected === null || selected === undefined ? table.defaults?.[dimension] : selected;
+        const value = selected ?? table.defaults?.[dimension];
         if (value === null || value === undefined) {
             continue;
         }

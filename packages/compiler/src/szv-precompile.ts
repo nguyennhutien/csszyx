@@ -32,6 +32,9 @@ export interface SzvPrecompiledTable {
     defaults?: Record<string, string>;
 }
 
+/** Primitive selection shape accepted by every szv precompile lane. */
+export type StaticSzvSelection = Record<string, string | number | boolean | null>;
+
 /**
  * Keys the lowering FUSES across key boundaries: `text` and `leading` combine
  * into one `text-lg/7` composite. Cross-branch co-occurrence of any two of
@@ -347,7 +350,7 @@ export function isPlainRecord(value: unknown): value is Record<string, unknown> 
  */
 export function computeStaticSzvPick(
     table: SzvPrecompiledTable,
-    selection: Record<string, string | number | boolean | null> | undefined,
+    selection: StaticSzvSelection | undefined,
 ): string {
     let result = table.base;
     for (const dimension of Object.keys(table.d)) {
@@ -358,8 +361,7 @@ export function computeStaticSzvPick(
                 ? // biome-ignore lint/style/noNonNullAssertion: the own-property check guarantees presence.
                   selection[dimension]!
                 : undefined;
-        const value =
-            selected === null || selected === undefined ? table.defaults?.[dimension] : selected;
+        const value = selected ?? table.defaults?.[dimension];
         if (value === null || value === undefined) {
             continue;
         }

@@ -30,6 +30,7 @@ import {
     recordSzvTypeQueryByName,
     type SzvPrecompileState as SharedSzvPrecompileState,
     type StaticSzvConfig,
+    type StaticSzvSelection,
     SZV_RESERVED_FACTORY_NAMES,
     type SzrArgumentAnalysisOf,
     type SzvPrecompiledTable,
@@ -1334,11 +1335,7 @@ function planSingleDimensionPick(
     if (expression.properties.length !== 1) return null;
     const property = expression.properties[0];
     if (!t.isObjectProperty(property) || property.computed) return null;
-    const key = t.isIdentifier(property.key)
-        ? property.key.name
-        : t.isStringLiteral(property.key)
-          ? property.key.value
-          : null;
+    const key = staticSzvSelectionKey(property.key);
     // The defaults / __proto__ / own-property rules live in the shared spec —
     // both lanes must reach the same verdict.
     if (!singleDimensionPickAllowed(table, key)) return null;
@@ -1353,17 +1350,11 @@ function planSingleDimensionPick(
  * @param expression - The selection object expression.
  * @returns The plain selection, or null when any part is not a literal.
  */
-function evaluateStaticSzvSelection(
-    expression: t.ObjectExpression,
-): Record<string, string | number | boolean | null> | null {
-    const selection: Record<string, string | number | boolean | null> = {};
+function evaluateStaticSzvSelection(expression: t.ObjectExpression): StaticSzvSelection | null {
+    const selection: StaticSzvSelection = {};
     for (const property of expression.properties) {
         if (!t.isObjectProperty(property) || property.computed) return null;
-        const key = t.isIdentifier(property.key)
-            ? property.key.name
-            : t.isStringLiteral(property.key)
-              ? property.key.value
-              : null;
+        const key = staticSzvSelectionKey(property.key);
         if (key === null) return null;
         // TS wrappers unwrap, matching the oxc lane's evaluator.
         const value = unwrapTsExpression(property.value);
@@ -1389,6 +1380,18 @@ function evaluateStaticSzvSelection(
         selection[key] = coerced;
     }
     return selection;
+}
+
+/**
+ * Read the identifier/string key vocabulary shared by static szv selections.
+ *
+ * @param key - Babel property key to classify.
+ * @returns The static key text, or null for unsupported key shapes.
+ */
+function staticSzvSelectionKey(key: t.Expression | t.Identifier | t.PrivateName): string | null {
+    if (t.isIdentifier(key)) return key.name;
+    if (t.isStringLiteral(key)) return key.value;
+    return null;
 }
 
 /**

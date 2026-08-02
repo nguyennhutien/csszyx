@@ -3002,8 +3002,10 @@ function buildMaskSlotClasses(slotKey: string, value: Record<string, unknown>): 
     } else if (typeof angle === 'string' && angle) {
         out.push(angle.startsWith('--') ? `mask-${family}-(${angle})` : `mask-${family}-${angle}`);
     }
-    out.push(...buildMaskStopClasses(`mask-${family}-from`, value.from));
-    out.push(...buildMaskStopClasses(`mask-${family}-to`, value.to));
+    out.push(
+        ...buildMaskStopClasses(`mask-${family}-from`, value.from),
+        ...buildMaskStopClasses(`mask-${family}-to`, value.to),
+    );
     if (family === 'linear') {
         for (const side of MASK_SIDES) {
             const edge = value[side];
@@ -3013,8 +3015,10 @@ function buildMaskSlotClasses(slotKey: string, value: Record<string, unknown>): 
                     warnMaskSlotMember(`${slotKey}.${side}`, member, MASK_EDGE_MEMBERS);
                 }
             }
-            out.push(...buildMaskStopClasses(`mask-${side}-from`, edge.from));
-            out.push(...buildMaskStopClasses(`mask-${side}-to`, edge.to));
+            out.push(
+                ...buildMaskStopClasses(`mask-${side}-from`, edge.from),
+                ...buildMaskStopClasses(`mask-${side}-to`, edge.to),
+            );
         }
     }
     return out;
@@ -3033,8 +3037,10 @@ function buildMaskRadialClasses(value: Record<string, unknown>): string[] {
     if (typeof value.at === 'string' && value.at) out.push(`mask-radial-at-${value.at}`);
     if (typeof value.size === 'string' && value.size) out.push(`mask-radial-${value.size}`);
     if (value.shape === 'circle' || value.shape === 'ellipse') out.push(`mask-${value.shape}`);
-    out.push(...buildMaskStopClasses('mask-radial-from', value.from));
-    out.push(...buildMaskStopClasses('mask-radial-to', value.to));
+    out.push(
+        ...buildMaskStopClasses('mask-radial-from', value.from),
+        ...buildMaskStopClasses('mask-radial-to', value.to),
+    );
     return out;
 }
 
