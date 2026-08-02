@@ -113,7 +113,7 @@ Controls production build behavior:
 
 ```ts
 interface ProductionConfig {
-  mangle: boolean; // Minify class names (z, y, x, ...)
+  mangle: boolean; // Obfuscate class names (z, y, x, ...) — opt-in, default false
   contentHashing: boolean; // Hash for immutable caching
   injectChecksum: boolean; // Add hydration checksum to HTML
   incrementalBuild: boolean; // Enable build caching
@@ -123,7 +123,7 @@ interface ProductionConfig {
 
 **Defaults:**
 
-- `mangle`: `true`
+- `mangle`: `false`
 - `contentHashing`: `true`
 - `injectChecksum`: `true`
 - `incrementalBuild`: `true`
