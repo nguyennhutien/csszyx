@@ -47,6 +47,13 @@ const CORPUS = path.join(REPO, 'packages/core/tests/fixtures/parity-corpus.json'
 interface Baseline {
     readonly kind: 'accepted' | 'known-dead';
     readonly reason: string;
+    /**
+     * True when the class is dead under the stock theme but served once a
+     * project declares the right theme variable. Such entries are exempt from
+     * the stale-baseline failure: whether they produce CSS is a property of
+     * the theme, not of the mapping.
+     */
+    readonly themeConditional?: boolean;
 }
 
 const BASELINE: ReadonlyMap<string, Baseline> = new Map([
@@ -86,6 +93,7 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
                 `font-${n}`,
                 {
                     kind: 'known-dead',
+                    themeConditional: true,
                     reason: `{ weight: ${n} } — dead unless the project declares --font-weight-${n}; Tailwind serves font-[${n}] or the named weights`,
                 },
             ] as const,
@@ -167,16 +175,52 @@ function collectTokens(records: readonly CorpusRecord[]): Map<string, string> {
  */
 async function main(): Promise<void> {
     const listAll = process.argv.includes('--list');
+
+    // The major assert lives HERE, in the repo gate's entrypoint — not in the
+    // oracle loader. The user-project lane must resolve Tailwind from the
+    // user's cwd and degrade safely when v4 is absent, so requiring a major is
+    // a property of this gate, and only checks the copy THIS script resolved
+    // (packages/cli keeps its own permanent v3 pin for unrelated reasons).
+    const tailwindManifest = fileURLToPath(import.meta.resolve('tailwindcss/package.json'));
+    const { version } = JSON.parse(await readFile(tailwindManifest, 'utf8')) as {
+        version: string;
+    };
+    if (!version.startsWith('4.')) {
+        throw new Error(
+            `check:emitted-classes resolved tailwindcss ${version}, but the oracle needs the ` +
+                'repo-pinned 4.x. The hoist winner changed — restore the pin in root devDependencies.',
+        );
+    }
+
     const records = JSON.parse(await readFile(CORPUS, 'utf8')) as CorpusRecord[];
     const origins = collectTokens(records);
     const tokens = [...origins.keys()];
 
     const designSystem = await loadStockDesignSystem();
-    const css = designSystem.candidatesToCss(tokens);
+    // A deliberately bogus candidate rides along as a self-proof: if Tailwind
+    // ever stops reporting an unservable class as `null` (say `undefined` or
+    // `''` after an API change), every dead class would read as alive and the
+    // gate would pass vacuously. The probe fails loudly instead.
+    const selfProofToken = 'zz-not-a-class';
+    const css = designSystem.candidatesToCss([...tokens, selfProofToken]);
+    if (css[tokens.length] !== null) {
+        throw new Error(
+            `the oracle no longer detects dead classes: candidatesToCss("${selfProofToken}") ` +
+                `returned ${JSON.stringify(css[tokens.length])} instead of null`,
+        );
+    }
     const dead = tokens.filter((_, index) => css[index] === null);
 
     const unbaselined = dead.filter(token => !BASELINE.has(token));
     const baselined = dead.filter(token => BASELINE.has(token));
+    // The ratchet's other direction: a baselined class that now DOES produce
+    // CSS is a fixed mapping whose baseline entry outlived it. Theme-conditional
+    // entries are exempt — their liveness is a property of the theme.
+    const deadSet = new Set(dead);
+    const stale = tokens.filter(token => {
+        const entry = BASELINE.get(token);
+        return entry !== undefined && entry.themeConditional !== true && !deadSet.has(token);
+    });
 
     console.log(
         `checked ${tokens.length} emitted class tokens from ${records.length} corpus records`,
@@ -198,6 +242,18 @@ async function main(): Promise<void> {
         }
     }
 
+    if (stale.length > 0) {
+        console.log('\nSTALE baseline entries — these produce CSS now:');
+        for (const token of stale) {
+            console.log(`  ${token.padEnd(24)} ${BASELINE.get(token)?.reason}`);
+        }
+        console.log(
+            '\nThe mapping (or Tailwind) now serves these classes. Remove their BASELINE\n' +
+                'entries in scripts/check-emitted-classes.ts so the dead-class count only ratchets down.',
+        );
+        process.exitCode = 1;
+    }
+
     if (unbaselined.length > 0) {
         console.log('\nNEW dead classes — these emit no CSS and are not baselined:');
         for (const token of unbaselined) {
@@ -208,6 +264,8 @@ async function main(): Promise<void> {
                 'in scripts/check-emitted-classes.ts with the reason it is tolerated.',
         );
         process.exitCode = 1;
+    }
+    if (process.exitCode === 1) {
         return;
     }
 

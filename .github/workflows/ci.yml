@@ -475,6 +475,12 @@ jobs:
       - name: Check sz fallback matrix is current
         run: pnpm gen:sz-fallback-matrix:check
 
+      # llms.txt / llms-full.txt are GENERATED from docs/specs/llms-template.md
+      # plus the snippets — a hand edit to the outputs is silently overwritten
+      # by the next `pnpm build`. Fail while the drift is still visible.
+      - name: Check llms outputs are current
+        run: pnpm gen:llms:check
+
       # The sz-key allowlist (purifySz's authoritative set for untrusted input)
       # is generated from the compiler's PROPERTY_MAP / BOOLEAN_SHORTHANDS. Fail
       # if regenerating would change it, so a new sz prop can't be silently
