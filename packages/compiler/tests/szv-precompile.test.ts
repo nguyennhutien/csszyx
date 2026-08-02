@@ -404,7 +404,14 @@ describe('shared spec units', () => {
         expect(qualifyStaticSzvConfig({ variants: {}, compoundVariants: [] })).toBeNull();
         expect(qualifyStaticSzvConfig({ variants: { pad: { sm: 'p-2' } } })).toBeNull();
         expect(qualifyStaticSzvConfig({ defaultVariants: { pad: 2.5 } })).toBeNull();
+        expect(qualifyStaticSzvConfig({ base: 'p-2' })).toBeNull();
+        expect(qualifyStaticSzvConfig({ variants: 'bad' })).toBeNull();
+        expect(qualifyStaticSzvConfig({ defaultVariants: 'bad' })).toBeNull();
         expect(qualifyStaticSzvConfig(null)).toBeNull();
+    });
+
+    it('keeps an empty variant branch as an empty compiled class', () => {
+        expect(qualifyStaticSzvConfig({ variants: { pad: { empty: {} } } })?.d.pad.empty).toBe('');
     });
 
     it('counts words at identifier boundaries', () => {
@@ -412,6 +419,8 @@ describe('shared spec units', () => {
         expect(countWordOccurrences('', 'cardSz')).toBe(0);
         expect(countWordOccurrences('x', '')).toBe(0);
         expect(countWordOccurrencesOutsideComments('factory()', '', [])).toBe(0);
+        expect(countWordOccurrences('cardSz', 'cardSz')).toBe(1);
+        expect(countWordOccurrencesOutsideComments('cardSz', 'cardSz', [])).toBe(1);
     });
 
     it('records only enabled named type queries', () => {
@@ -439,6 +448,7 @@ describe('shared spec units', () => {
                 { importedName: 'card', localName: null, typeOnly: false },
                 { importedName: 'card', localName: 'szv', typeOnly: false },
                 { importedName: 'card', localName: 'typed', typeOnly: true },
+                { importedName: 'card', localName: 'localCard', typeOnly: false },
             ],
             state,
             (localName, config) => ({ localName, config }),

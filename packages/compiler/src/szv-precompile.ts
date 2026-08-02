@@ -218,7 +218,9 @@ export function szvConfigFreeOfOverlap(config: StaticSzvConfig): boolean {
     if (config.base) collectCanonicalLeafPaths(config.base, '', basePaths);
     const dimensions = Object.keys(config.variants ?? {});
     const leafPathsByDimension = dimensions.map(dimension =>
-        collectDimensionLeafPaths(config.variants?.[dimension] ?? {}),
+        collectDimensionLeafPaths(
+            (config.variants as Record<string, Record<string, Record<string, unknown>>>)[dimension],
+        ),
     );
     if (baseConflictsWithLeaves(basePaths, leafPathsByDimension)) return false;
     return !dimensionsConflict(leafPathsByDimension);
