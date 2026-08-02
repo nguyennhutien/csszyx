@@ -1752,34 +1752,39 @@ function isArbitraryGroupPeerKey(key: string): boolean {
 export function variantStringPrefix(key: string): string | null {
     if (KNOWN_VARIANTS.has(key)) return getVariantPrefix(key);
     if (isArbitraryVariant(key)) return normalizeArbitraryVariant(key);
+    return bracketVariantPrefix(key) ?? compoundVariantPrefix(key);
+}
+
+/** Resolve named arbitrary variants such as data-[open] and min-[40rem]. */
+function bracketVariantPrefix(key: string): string | null {
     const bracketAt = key.indexOf('-[');
-    if (bracketAt > 0 && key.endsWith(']')) {
-        const stem = key.slice(0, bracketAt);
-        return SPECIAL_VARIANTS.has(stem) ||
-            KNOWN_VARIANTS.has(stem) ||
-            stem === 'min' ||
-            stem === 'max'
-            ? key
-            : null;
-    }
+    if (bracketAt <= 0 || !key.endsWith(']')) return null;
+    const stem = key.slice(0, bracketAt);
+    return isBracketVariantStem(stem) ? key : null;
+}
+
+/** Whether a stem may own an arbitrary bracket payload. */
+function isBracketVariantStem(stem: string): boolean {
+    return (
+        SPECIAL_VARIANTS.has(stem) || KNOWN_VARIANTS.has(stem) || stem === 'min' || stem === 'max'
+    );
+}
+
+/** Resolve compound scope, aria, and bare data variants. */
+function compoundVariantPrefix(key: string): string | null {
     const dashAt = key.indexOf('-');
-    if (dashAt > 0) {
-        const stem = key.slice(0, dashAt);
-        const rest = key.slice(dashAt + 1);
-        // group-hover / peer-checked / not-hover: scope variants compound with
-        // a KNOWN variant state. Gating on the rest excludes utilities that
-        // merely start with the same stem (not-italic is font-style, not a
-        // variant chain).
-        if ((stem === 'group' || stem === 'peer' || stem === 'not') && KNOWN_VARIANTS.has(rest)) {
-            return key;
-        }
-        // aria-checked and friends are Tailwind's built-in aria set; anything
-        // outside it needs the bracket form and must not silently variant.
-        if (stem === 'aria' && ARIA_STATES.has(rest)) return key;
-        // Tailwind v4 accepts any bare data-* variant (attribute presence).
-        if (stem === 'data' && rest.length > 0) return key;
-    }
-    return null;
+    if (dashAt <= 0) return null;
+    const stem = key.slice(0, dashAt);
+    const rest = key.slice(dashAt + 1);
+    return isCompoundVariant(stem, rest) ? key : null;
+}
+
+/** Whether a stem/state pair forms a supported compound variant. */
+function isCompoundVariant(stem: string, rest: string): boolean {
+    const scoped = stem === 'group' || stem === 'peer' || stem === 'not';
+    if (scoped) return KNOWN_VARIANTS.has(rest);
+    if (stem === 'aria') return ARIA_STATES.has(rest);
+    return stem === 'data' && rest.length > 0;
 }
 
 /** Returns whether a key names a supported variant. */
@@ -2961,22 +2966,29 @@ interface MaskStopValue {
 function buildMaskStopClasses(base: string, stop: unknown): string[] {
     if (stop === null || stop === undefined || stop === false) return [];
     if (typeof stop === 'number') return [`${base}-${stop}`];
-    if (typeof stop === 'string') {
-        return [stop.startsWith('--') ? `${base}-(${stop})` : `${base}-${stop}`];
-    }
+    if (typeof stop === 'string') return [buildMaskPositionClass(base, stop)];
     if (!isRecordValue(stop)) return [];
     const value = stop as MaskStopValue;
     const out: string[] = [];
     if (value.at !== undefined && value.at !== null) {
-        const at = String(value.at);
-        out.push(at.startsWith('--') ? `${base}-(${at})` : `${base}-${at}`);
+        out.push(buildMaskPositionClass(base, String(value.at)));
     }
-    if (typeof value.color === 'string' && value.color) {
-        const colour = value.color.startsWith('--') ? `(color:${value.color})` : value.color;
-        const opacity = value.op === undefined || value.op === null ? '' : `/${value.op}`;
-        out.push(`${base}-${colour}${opacity}`);
-    }
+    const colour = buildMaskColourClass(base, value);
+    if (colour) out.push(colour);
     return out;
+}
+
+/** Render a mask position scalar, including CSS custom properties. */
+function buildMaskPositionClass(base: string, value: string): string {
+    return value.startsWith('--') ? `${base}-(${value})` : `${base}-${value}`;
+}
+
+/** Render the colour half of an explicit mask stop. */
+function buildMaskColourClass(base: string, value: MaskStopValue): string | null {
+    if (typeof value.color !== 'string' || !value.color) return null;
+    const colour = value.color.startsWith('--') ? `(color:${value.color})` : value.color;
+    const opacity = value.op === undefined || value.op === null ? '' : `/${value.op}`;
+    return `${base}-${colour}${opacity}`;
 }
 
 /**
@@ -2987,39 +2999,50 @@ function buildMaskStopClasses(base: string, stop: unknown): string[] {
  * @returns The utilities, in declaration order.
  */
 function buildMaskSlotClasses(slotKey: string, value: Record<string, unknown>): string[] {
-    const members = MASK_SLOT_MEMBERS[slotKey];
-    if (members) {
-        for (const member of Object.keys(value)) {
-            if (!members.includes(member)) warnMaskSlotMember(slotKey, member, members);
-        }
-    }
+    warnUnknownMaskMembers(slotKey, value, MASK_SLOT_MEMBERS[slotKey]);
     if (slotKey === 'maskRadial') return buildMaskRadialClasses(value);
     const family = slotKey === 'maskConic' ? 'conic' : 'linear';
-    const out: string[] = [];
-    const angle = value.angle;
-    if (typeof angle === 'number') {
-        out.push(angle < 0 ? `-mask-${family}-${Math.abs(angle)}` : `mask-${family}-${angle}`);
-    } else if (typeof angle === 'string' && angle) {
-        out.push(angle.startsWith('--') ? `mask-${family}-(${angle})` : `mask-${family}-${angle}`);
-    }
-    out.push(
+    const out = [
+        ...buildMaskAngleClasses(family, value.angle),
         ...buildMaskStopClasses(`mask-${family}-from`, value.from),
         ...buildMaskStopClasses(`mask-${family}-to`, value.to),
-    );
-    if (family === 'linear') {
-        for (const side of MASK_SIDES) {
-            const edge = value[side];
-            if (!isRecordValue(edge)) continue;
-            for (const member of Object.keys(edge)) {
-                if (!MASK_EDGE_MEMBERS.includes(member)) {
-                    warnMaskSlotMember(`${slotKey}.${side}`, member, MASK_EDGE_MEMBERS);
-                }
-            }
-            out.push(
-                ...buildMaskStopClasses(`mask-${side}-from`, edge.from),
-                ...buildMaskStopClasses(`mask-${side}-to`, edge.to),
-            );
-        }
+    ];
+    if (family === 'linear') out.push(...buildLinearMaskEdgeClasses(slotKey, value));
+    return out;
+}
+
+/** Warn once for every member outside a mask object's closed vocabulary. */
+function warnUnknownMaskMembers(
+    owner: string,
+    value: Record<string, unknown>,
+    allowed: readonly string[] | undefined,
+): void {
+    if (!allowed) return;
+    for (const member of Object.keys(value)) {
+        if (!allowed.includes(member)) warnMaskSlotMember(owner, member, allowed);
+    }
+}
+
+/** Render a linear/conic angle scalar. */
+function buildMaskAngleClasses(family: string, angle: unknown): string[] {
+    if (typeof angle === 'number') {
+        return [angle < 0 ? `-mask-${family}-${Math.abs(angle)}` : `mask-${family}-${angle}`];
+    }
+    if (typeof angle !== 'string' || !angle) return [];
+    return [angle.startsWith('--') ? `mask-${family}-(${angle})` : `mask-${family}-${angle}`];
+}
+
+/** Render all directional stop groups belonging to a linear mask. */
+function buildLinearMaskEdgeClasses(slotKey: string, value: Record<string, unknown>): string[] {
+    const out: string[] = [];
+    for (const side of MASK_SIDES) {
+        const edge = value[side];
+        if (!isRecordValue(edge)) continue;
+        warnUnknownMaskMembers(`${slotKey}.${side}`, edge, MASK_EDGE_MEMBERS);
+        out.push(
+            ...buildMaskStopClasses(`mask-${side}-from`, edge.from),
+            ...buildMaskStopClasses(`mask-${side}-to`, edge.to),
+        );
     }
     return out;
 }
@@ -3301,24 +3324,37 @@ function normalizeGenericStringValue(rawKey: string, key: string, value: string)
     // `font-features-normal` styles nothing while `font-features-[normal]`
     // compiles.
     if (rawKey === 'fontFeatures' && value === 'normal') return '[normal]';
-    if (isTailwindBuildFunction(value) || (value.startsWith('--') && value.includes('('))) {
-        return `[${normalizeArbitraryValue(value)}]`;
-    }
-    if (value.startsWith('--')) {
-        const typeHint = CSS_VAR_TYPE_HINTS[rawKey];
-        return typeHint ? `(${typeHint}:${value})` : `(${value})`;
-    }
+    if (isArbitraryFunctionValue(value)) return `[${normalizeArbitraryValue(value)}]`;
+    const variable = normalizeCustomPropertyValue(rawKey, value);
+    if (variable) return variable;
     if (value.startsWith('var(')) return `[${normalizeArbitraryValue(value)}]`;
-    if (/^\d+\/\d+$/.test(value)) {
-        return FRACTION_SUPPORTED_PROPS.has(rawKey) ? value : `[${value}]`;
-    }
-    if (key === 'aspect' && /^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)) {
-        return /^\d+\/\d+$/.test(value) ? value : `[${value}]`;
-    }
+    const ratio = normalizeRatioValue(rawKey, key, value);
+    if (ratio) return ratio;
     if (needsArbitraryBrackets(value) || /^\d+\.\d+%$/.test(value)) {
         return `[${normalizeArbitraryValue(value)}]`;
     }
     return value;
+}
+
+/** Whether Tailwind needs a function-like value in arbitrary brackets. */
+function isArbitraryFunctionValue(value: string): boolean {
+    return isTailwindBuildFunction(value) || (value.startsWith('--') && value.includes('('));
+}
+
+/** Normalize a bare CSS custom property with its optional Tailwind type hint. */
+function normalizeCustomPropertyValue(rawKey: string, value: string): string | null {
+    if (!value.startsWith('--')) return null;
+    const typeHint = CSS_VAR_TYPE_HINTS[rawKey];
+    return typeHint ? `(${typeHint}:${value})` : `(${value})`;
+}
+
+/** Normalize fraction and aspect-ratio strings without widening other props. */
+function normalizeRatioValue(rawKey: string, key: string, value: string): string | null {
+    if (/^\d+\/\d+$/.test(value)) {
+        return FRACTION_SUPPORTED_PROPS.has(rawKey) ? value : `[${value}]`;
+    }
+    if (key !== 'aspect' || !/^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)) return null;
+    return `[${value}]`;
 }
 
 /** Indexed text-size utility eligible for a matching leading utility. */
