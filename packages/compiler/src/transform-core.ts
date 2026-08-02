@@ -1414,12 +1414,12 @@ function needsArbitraryBrackets(value: string): boolean {
         // Gradient functions. A mask or background taking one as a raw value
         // needs brackets like every other CSS function; without them the class
         // is `mask-linear-gradient(…)`, which Tailwind does not serve.
-        v.includes('linear-gradient(') ||
-        v.includes('radial-gradient(') ||
-        v.includes('conic-gradient(') ||
-        v.includes('repeating-linear-gradient(') ||
-        v.includes('repeating-radial-gradient(') ||
-        v.includes('repeating-conic-gradient(') ||
+        // One probe, not six: every gradient function name ends in
+        // `-gradient(`, and the three `repeating-*` spellings contain their
+        // base name anyway, so the extra checks only re-scanned the value on
+        // the common no-gradient path. The Rust lane already carries the
+        // three-check form with the same reasoning.
+        v.includes('-gradient(') ||
         v.includes(' ') // Values with spaces need brackets
     );
 }

@@ -433,11 +433,40 @@ export function countWordOccurrencesOutsideComments(
     word: string,
     comments: readonly CommentSpan[],
 ): number {
-    let count = countWordOccurrences(source, word);
-    for (const comment of comments) {
-        count -= countWordOccurrences(source.slice(comment.start, comment.end), word);
+    if (word.length === 0) {
+        return 0;
     }
-    return count;
+    // One pass over the source, skipping matches that fall inside a comment,
+    // rather than a full count minus one re-count per comment: the subtracting
+    // form allocated a substring for EVERY comment in the file on every
+    // candidate, and this runs once per candidate identifier per file.
+    let count = 0;
+    let from = 0;
+    let commentIndex = 0;
+    while (true) {
+        const at = source.indexOf(word, from);
+        if (at === -1) {
+            return count;
+        }
+        // Comment spans arrive in source order from every parser, so the
+        // cursor only ever moves forward across the whole scan.
+        while (commentIndex < comments.length && comments[commentIndex].end <= at) {
+            commentIndex += 1;
+        }
+        const enclosing = comments[commentIndex];
+        if (enclosing !== undefined && enclosing.start <= at) {
+            // Inside a comment — jump to its end rather than re-testing every
+            // occurrence within it.
+            from = enclosing.end;
+            continue;
+        }
+        const before = at === 0 ? '' : source[at - 1];
+        const after = at + word.length >= source.length ? '' : source[at + word.length];
+        if ((before === '' || !/[\w$]/.test(before)) && (after === '' || !/[\w$]/.test(after))) {
+            count += 1;
+        }
+        from = at + word.length;
+    }
 }
 
 /**
@@ -457,6 +486,9 @@ export function serializeSzvTable(table: SzvPrecompiledTable): string {
     return JSON.stringify(payload);
 }
 
+/** Prefix of every emitted table constant; reserved, never author-written. */
+const SZV_TABLE_PREFIX = '__szvT_';
+
 /**
  * Name of the emitted table constant for one factory.
  *
@@ -464,7 +496,7 @@ export function serializeSzvTable(table: SzvPrecompiledTable): string {
  * @returns The table identifier.
  */
 export function szvTableIdentifier(factoryName: string): string {
-    return `__szvT_${factoryName}`;
+    return `${SZV_TABLE_PREFIX}${factoryName}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -653,6 +685,12 @@ export function szvFactoryAccountingHolds<TCall extends { arguments: { length: n
     const occurrences = countWordOccurrencesOutsideComments(source, factoryName, commentSpans);
     if (occurrences !== 1 + calls.length + typeQueries) {
         return false;
+    }
+    // The table name is a reserved prefix nobody writes by hand, so almost
+    // every real file lacks it entirely; one whole-source probe answers for
+    // all candidates and skips a second scan per candidate.
+    if (!source.includes(SZV_TABLE_PREFIX)) {
+        return true;
     }
     const tableOccurrences = countWordOccurrencesOutsideComments(
         source,

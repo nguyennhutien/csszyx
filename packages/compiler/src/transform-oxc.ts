@@ -206,10 +206,15 @@ export function transformOxc(
         identifierCalls: new Map(),
         replacedCalls: new Set(),
         szrArgumentAnalyses: new Map(),
-        commentSpans: (
-            (parsed as unknown as { comments?: Array<{ start: number; end: number }> }).comments ??
-            []
-        ).map(comment => ({ start: comment.start, end: comment.end })),
+        // Only the szv/szr proofs read these, so a file with neither pays
+        // nothing for mapping every comment in it.
+        commentSpans:
+            source.includes('szv(') || source.includes('szr')
+                ? (
+                      (parsed as unknown as { comments?: Array<{ start: number; end: number }> })
+                          .comments ?? []
+                  ).map(comment => ({ start: comment.start, end: comment.end }))
+                : [],
         usedPick: false,
         usedPick1: false,
     };
