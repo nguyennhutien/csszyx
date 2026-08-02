@@ -6,7 +6,8 @@
  * contract: install only when absent, mirror the HTML script's object shape,
  * and stay inert without a `window`.
  */
-import { homedir } from 'node:os';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
@@ -247,12 +248,23 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
             rollup: { buildStart: (this: { meta: { watchMode: boolean } }) => void };
             vite: { configResolved: (config: unknown) => void };
         };
-        const root = resolve(homedir(), '.cache/csszyx-tests/mangle-runtime-watch');
+        const root = mkdtempSync(resolve(tmpdir(), 'csszyx-watch-registry-'));
+        mkdirSync(resolve(root, 'src'));
+        writeFileSync(
+            resolve(root, 'src/styles.ts'),
+            "import { szv } from '@csszyx/runtime'; export const card = szv({ base: { p: 1 } });",
+        );
 
-        expect(() => plugin.rollup.buildStart.call({ meta: { watchMode: true } })).not.toThrow();
-        expect(() =>
-            plugin.vite.configResolved({ root, command: 'build', build: { watch: {} } }),
-        ).not.toThrow();
+        try {
+            expect(() =>
+                plugin.rollup.buildStart.call({ meta: { watchMode: true } }),
+            ).not.toThrow();
+            expect(() =>
+                plugin.vite.configResolved({ root, command: 'build', build: { watch: {} } }),
+            ).not.toThrow();
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 
     it('warns when webpack receives a delivery mode it cannot narrow', () => {

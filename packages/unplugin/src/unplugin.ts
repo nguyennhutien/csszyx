@@ -66,6 +66,7 @@ import {
     recordCssPair,
     resetMangleSizeAccount,
 } from './mangle-size-report.js';
+import { runtimeHelperGroupsFromUsage } from './next-runtime-injection.js';
 import { resolveParserMode } from './parser-mode.js';
 import { normalizePathSeparators } from './path-normalization.js';
 import {
@@ -741,6 +742,32 @@ export function shouldEmitWarning(
         return false;
     }
     return true;
+}
+
+/**
+ * Whether a transform diagnostic describes missing CSS and may be printed.
+ *
+ * @param quiet - Whether all build warnings are muted.
+ * @param message - Compiler diagnostic to classify.
+ * @returns True when the diagnostic is an unsilenced missing-CSS failure.
+ */
+export function shouldEmitMissingCssFallback(quiet: boolean, message: string): boolean {
+    return !quiet && szFallbackConsequenceOf(message) === 'missing-css';
+}
+
+/**
+ * Emit one missing-CSS fallback through the caller's output channel.
+ *
+ * @param quiet - Whether all build warnings are muted.
+ * @param message - Compiler diagnostic to classify and emit.
+ * @param emit - Warning output channel.
+ */
+export function emitMissingCssFallback(
+    quiet: boolean,
+    message: string,
+    emit: (message: string) => void,
+): void {
+    if (shouldEmitMissingCssFallback(quiet, message)) emit(message);
 }
 
 /**
@@ -3896,9 +3923,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // surface in production builds too (same tier as the spread
             // warning above). `quiet` still silences it: that flag is the
             // documented way to mute every build warning.
-            if (!quiet && szFallbackConsequenceOf(message) === 'missing-css') {
-                console.warn(`[csszyx] ${id}\n  ${message}`);
-            }
+            emitMissingCssFallback(quiet, message, fallback =>
+                console.warn(`[csszyx] ${id}\n  ${fallback}`),
+            );
         }
         if (quiet || result.diagnostics.length === 0 || process.env.NODE_ENV === 'production') {
             return;
@@ -4014,23 +4041,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // merge helpers come from the compiler-free entry, saving the whole
         // browser transform. Any _sz or _szMerge emission keeps the barrel,
         // whose helpers self-register the lowerer.
-        const slim =
-            output.usesSzPart &&
-            output.szPartArgsProvable &&
-            !output.usesRuntime &&
-            !output.usesMerge;
-        const barrel: string[] = [];
-        const merge: string[] = [];
-        if (output.usesRuntime) barrel.push('_sz');
-        if (output.usesMerge) barrel.push('_szMerge');
-        if (output.usesSzcn) (slim ? merge : barrel).push('_szcn');
-        if (output.usesSzPart) (slim ? merge : barrel).push('_szPart');
-        if (output.usesSzvPick) barrel.push('__szvPick');
-        if (output.usesSzvPick1) barrel.push('__szvPick1');
-        if (output.usesColorVar) barrel.push('__szColorVar');
-        if (output.usesSpacingVar) barrel.push('__szSpacingVar');
-        if (output.usesUnitVar) barrel.push('__szUnitVar');
-        return { barrel, merge };
+        return runtimeHelperGroupsFromUsage(output);
     }
 
     /**

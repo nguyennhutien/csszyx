@@ -30,7 +30,25 @@ vi.mock('@csszyx/core/native', () => {
             if (control.mode === 'no-result') {
                 return [];
             }
-            return [];
+            return [
+                {
+                    code: 'const x = 1;',
+                    map: null,
+                    classes: [],
+                    rawClassNames: [],
+                    diagnostics: [],
+                    recoveryTokens: [],
+                    cssVariableMap: [],
+                    metadata: {
+                        transformed: false,
+                        usesRuntime: false,
+                        usesMerge: false,
+                        usesSzcn: false,
+                        usesSzPart: false,
+                        usesColorVar: false,
+                    },
+                },
+            ];
         },
     };
 });
@@ -67,6 +85,14 @@ describe('transform-rust without a native binding', () => {
     it('throws when the native transform returns no result', () => {
         control.mode = 'no-result';
         expect(() => transformRust('const x = 1;', 'a.tsx')).toThrow(/returned no result/);
+    });
+
+    it('defaults metadata absent from an older native binding', () => {
+        control.mode = 'ok';
+        const result = transformRust('const x = 1;', 'a.tsx');
+        expect(result.usesSzvPick).toBe(false);
+        expect(result.usesSzvPick1).toBe(false);
+        expect(result.szPartArgsProvable).toBe(false);
     });
 
     it('isRustTransformAvailable reports false and caches the probe', () => {
