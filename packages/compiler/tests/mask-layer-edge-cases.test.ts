@@ -58,6 +58,12 @@ describe('mask layers — empty and incomplete shapes emit nothing', () => {
         expectParity('{ maskLinear: { b: { from: {} } } }', '');
         expectParity('{ maskRadial: {} }', '');
         expectParity('{ maskConic: {} }', '');
+        expectParity('{ maskLinear: { from: [] } }', '');
+    });
+
+    it('emits string and custom-property angles', () => {
+        expectParity("{ maskLinear: { angle: '45deg' } }", 'mask-linear-45deg');
+        expectParity("{ maskConic: { angle: '--turn' } }", 'mask-conic-(--turn)');
     });
 
     it('emits nothing for a stop that is explicitly absent', () => {

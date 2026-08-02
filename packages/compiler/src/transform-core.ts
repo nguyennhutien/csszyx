@@ -2999,7 +2999,7 @@ function buildMaskColourClass(base: string, value: MaskStopValue): string | null
  * @returns The utilities, in declaration order.
  */
 function buildMaskSlotClasses(slotKey: string, value: Record<string, unknown>): string[] {
-    warnUnknownMaskMembers(slotKey, value, MASK_SLOT_MEMBERS[slotKey]);
+    warnUnknownMaskMembers(slotKey, value, MASK_SLOT_MEMBERS[slotKey] as readonly string[]);
     if (slotKey === 'maskRadial') return buildMaskRadialClasses(value);
     const family = slotKey === 'maskConic' ? 'conic' : 'linear';
     const out = [
@@ -3015,9 +3015,8 @@ function buildMaskSlotClasses(slotKey: string, value: Record<string, unknown>): 
 function warnUnknownMaskMembers(
     owner: string,
     value: Record<string, unknown>,
-    allowed: readonly string[] | undefined,
+    allowed: readonly string[],
 ): void {
-    if (!allowed) return;
     for (const member of Object.keys(value)) {
         if (!allowed.includes(member)) warnMaskSlotMember(owner, member, allowed);
     }
@@ -3111,7 +3110,7 @@ function warnMaskLayerValue(value: string): void {
     if (warnedMaskLayerValues.has(value)) return;
     warnedMaskLayerValues.add(value);
     const bare = value.startsWith('-') ? value.slice(1) : value;
-    const family = /^(linear|radial|conic)/.exec(bare)?.[1] ?? 'linear';
+    const family = /^(linear|radial|conic)/.exec(bare)?.[1] as string;
     const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
     console.warn(
         `[csszyx] mask: '${value}'${at} — gradient layers moved to ` +

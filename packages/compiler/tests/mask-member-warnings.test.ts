@@ -8,9 +8,9 @@
  * engine). The JS lanes share `warnMaskSlotMember` in transform-core (console
  * channel), the native engine mirrors it as a diagnostic.
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { transformSourceCode } from '../src/transform.js';
-import { __resetSzWarnDedupForTests } from '../src/transform-core.js';
+import { __resetSzWarnDedupForTests, setSzWarnLocation, transform } from '../src/transform-core.js';
 import { transformOxc } from '../src/transform-oxc.js';
 import { captureWarnings, ENGINES, type TriEngine } from './tri-engine-harness.js';
 
@@ -20,7 +20,27 @@ beforeEach(() => {
     __resetSzWarnDedupForTests();
 });
 
+afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    setSzWarnLocation(undefined);
+});
+
 describe('mask slot member warnings', () => {
+    it('deduplicates direct warnings and omits a location when none is set', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        transform({ maskLinear: { typo: 1 } });
+        transform({ maskLinear: { typo: 2 } });
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).not.toContain(' at ');
+    });
+
+    it('suppresses slot and migration warnings in production', () => {
+        vi.stubEnv('NODE_ENV', 'production');
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        transform({ maskLinear: { typo: 1 }, mask: 'linear-45' });
+        expect(warn).not.toHaveBeenCalled();
+    });
     it.each(ENGINES)('%s warns for a top-level typo inside maskLinear', (_lane, engine) => {
         const tsx = "export const A = () => <div sz={{ maskLinear: { form: '20%' } }} />;";
         const { warnings } = captureWarnings(engine, tsx);
