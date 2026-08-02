@@ -101,7 +101,11 @@ describe('runtime split size contract', () => {
         // consumer and weld the compiler onto szv/szcn/szDecode imports.
         const probe = await bundleProbe("import { szv } from '@csszyx/runtime'; console.log(szv);");
         expect(probe.hasCompiler).toBe(false);
-        expect(probe.gzipBytes).toBeLessThan(2_000);
+        expect(probe.gzipBytes).toBeLessThan(1_400);
+        // Floors ratchet the other way: a probe collapsing far below its
+        // honest cost means the bundler shook the entry empty and the ceiling
+        // proved nothing. Measured 860 B gz when the band was set.
+        expect(probe.gzipBytes).toBeGreaterThan(400);
     });
 
     it('barrel szDecode stays tiny', async () => {
@@ -109,7 +113,9 @@ describe('runtime split size contract', () => {
             "import { szDecode } from '@csszyx/runtime'; console.log(szDecode);",
         );
         expect(probe.hasCompiler).toBe(false);
-        expect(probe.gzipBytes).toBeLessThan(1_000);
+        expect(probe.gzipBytes).toBeLessThan(500);
+        // Measured 234 B gz when the band was set.
+        expect(probe.gzipBytes).toBeGreaterThan(100);
     });
 
     it('barrel __szvPick stays light — the shape the plugin injects', async () => {
@@ -122,7 +128,9 @@ describe('runtime split size contract', () => {
             "import { __szvPick, __szvPick1 } from '@csszyx/runtime'; console.log(__szvPick, __szvPick1);",
         );
         expect(probe.hasCompiler).toBe(false);
-        expect(probe.gzipBytes).toBeLessThan(2_000);
+        expect(probe.gzipBytes).toBeLessThan(800);
+        // Measured 269 B gz when the band was set.
+        expect(probe.gzipBytes).toBeGreaterThan(150);
     });
 
     it('core szr ships no compiler', async () => {
@@ -134,6 +142,8 @@ describe('runtime split size contract', () => {
         // family, 603 B once /merge became its own entry. Headroom for chunk
         // noise, tight enough to catch the merge tables sneaking back in.
         expect(probe.gzipBytes).toBeLessThan(1_500);
+        // Measured 748 B gz when the band was set.
+        expect(probe.gzipBytes).toBeGreaterThan(350);
     });
 
     it('the merge entry carries the group tables but no compiler', async () => {
@@ -144,6 +154,8 @@ describe('runtime split size contract', () => {
         // The box-role tables are the merge family's data — ~5 KB is its
         // honest cost. The barrel _szPart was 17 KB WITH the compiler.
         expect(probe.gzipBytes).toBeLessThan(7_000);
+        // Measured 5 358 B gz when the band was set.
+        expect(probe.gzipBytes).toBeGreaterThan(2_500);
     });
 
     it('the bare /lowering import survives bundling and restores the compiler', async () => {

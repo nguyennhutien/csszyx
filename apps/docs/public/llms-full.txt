@@ -3440,10 +3440,10 @@ Controlling numeric glyphs.
 
 Controlling font-feature-settings. Added in Tailwind v4.2.
 
-| Concept       | CSS Rule                          | Tailwind v4 Class          | `sz` Prop (Object Syntax)      | Note |
-| :------------ | :-------------------------------- | :------------------------- | :----------------------------- | :--- |
+| Concept       | CSS Rule                          | Tailwind v4 Class          | `sz` Prop (Object Syntax)      | Note                                                                              |
+| :------------ | :-------------------------------- | :------------------------- | :----------------------------- | :-------------------------------------------------------------------------------- |
 | **Normal**    | `font-feature-settings: normal`   | `font-features-[normal]`   | `{ fontFeatures: 'normal' }`   | Tailwind's `font-features-*` is functional-only; the bare keyword styles nothing. |
-| **Arbitrary** | `font-feature-settings: "liga" 1` | `font-features-["liga"_1]` | `{ fontFeatures: '"liga" 1' }` |      |
+| **Arbitrary** | `font-feature-settings: "liga" 1` | `font-features-["liga"_1]` | `{ fontFeatures: '"liga" 1' }` |                                                                                   |
 
 ## Font Style & Smoothing
 
