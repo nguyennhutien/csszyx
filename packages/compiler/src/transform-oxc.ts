@@ -2099,7 +2099,7 @@ function recordCrossModuleSzvFactoriesOxc(node: OxcNode, state: OxcSzvPrecompile
             const importedName = specifier.imported?.name ?? specifier.imported?.value;
             return specifier.type === 'ImportSpecifier'
                 ? {
-                      importedName: typeof importedName === 'string' ? importedName : null,
+                      importedName: importedName as string,
                       localName: specifier.local.name,
                       typeOnly: specifier.importKind === 'type',
                   }

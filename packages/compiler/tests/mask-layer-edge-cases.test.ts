@@ -59,6 +59,7 @@ describe('mask layers — empty and incomplete shapes emit nothing', () => {
         expectParity('{ maskRadial: {} }', '');
         expectParity('{ maskConic: {} }', '');
         expectParity('{ maskLinear: { from: [] } }', '');
+        expectParity('{ maskLinear: { b: { from: true } } }', '');
     });
 
     it('emits string and custom-property angles', () => {

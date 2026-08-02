@@ -52,6 +52,12 @@ const MATRIX: ReadonlyArray<readonly [string, string, boolean, boolean]> = [
         true,
     ],
     [
+        'guarded template is provable',
+        'export const A = ({ on, n }) => <div sz={[{ p: 4 }, on && `a-${n}`]} />;',
+        true,
+        true,
+    ],
+    [
         'nested string array is provable',
         "export const A = () => <div sz={[{ p: 4 }, ['a', false, null]]} />;",
         true,

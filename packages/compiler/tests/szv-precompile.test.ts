@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 import {
     coerceParitySafeSelectionValue,
     collectCanonicalLeafPaths,
+    computeStaticSzvPick,
     countWordOccurrences,
     countWordOccurrencesOutsideComments,
     leafPathsConflict,
@@ -194,6 +195,31 @@ const MATRIX: ReadonlyArray<readonly [string, string, 'static' | 'dynamic' | 'ba
         'an unrelated member-callee declaration is ignored',
         `${FACTORY}const other = ns.szv({});\nexport const cls = szr(cardSz({ pad: 'lg' }));`,
         'static',
+    ],
+    [
+        'a reserved factory binding is never precompiled',
+        "const dynamic = szv({ variants: { pad: { lg: { p: 8 } } } });\nexport const cls = szr(dynamic({ pad: 'lg' }));",
+        'bail',
+    ],
+    [
+        'duplicate local factory names bail conservatively',
+        `${FACTORY}{ const cardSz = szv({ variants: { pad: { sm: { p: 2 } } } }); }\nexport const cls = szr(cardSz({ pad: 'lg' }));`,
+        'bail',
+    ],
+    [
+        'a bigint config key is not a static object key',
+        "const f = szv({ variants: { 1n: { yes: { p: 1 } } } });\nexport const cls = szr(f({ 1n: 'yes' }));",
+        'bail',
+    ],
+    [
+        'a negated dynamic config value is not static',
+        'const f = szv({ base: { p: -space } });\nexport const cls = szr(f({}));',
+        'bail',
+    ],
+    [
+        'a negated string config value is not static',
+        "const f = szv({ base: { p: -'space' } });\nexport const cls = szr(f({}));",
+        'bail',
     ],
     [
         'a parenthesized factory declaration still precompiles',
@@ -592,6 +618,7 @@ describe('the single-dimension picker', () => {
             `${PLAIN}export const C = ({ k, v }) => szr(plainSz({ [k]: v }));`,
             'pick',
         ],
+        ['a numeric key', `${PLAIN}export const C = ({ v }) => szr(plainSz({ 0: v }));`, 'pick'],
         [
             'a spread selection',
             `${PLAIN}export const C = ({ rest }) => szr(plainSz({ ...rest }));`,
@@ -638,5 +665,16 @@ describe('the single-dimension picker', () => {
             const shape = pickShape(engine, source);
             expect(shape.args, lane).toBe('__szvT_plainSz,"pad",p');
         }
+    });
+});
+
+describe('computeStaticSzvPick', () => {
+    it('ignores a selected value absent from a qualified dimension table', () => {
+        expect(
+            computeStaticSzvPick(
+                { base: 'base', d: { tone: { quiet: 'text-muted' } } },
+                { tone: 'missing' },
+            ),
+        ).toBe('base');
     });
 });

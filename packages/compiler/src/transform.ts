@@ -892,8 +892,7 @@ function recordSzvFactoryCandidate(
     const config = t.isObjectExpression(argument)
         ? (evaluateStaticObject(argument) as StaticSzvConfig | null)
         : null;
-    const statementPath = path.parentPath;
-    if (!statementPath) return;
+    const statementPath = path.parentPath as babel.NodePath;
     state.candidates.set(name, { name, statementPath, config });
 }
 
@@ -1095,8 +1094,7 @@ function replaceAnalyzedFactoryCalls(
     key: string | number,
     replacements: ReadonlyMap<t.Node, t.Expression>,
 ): void {
-    const node = parent[key] as t.Node | null | undefined;
-    if (!node) return;
+    const node = parent[key] as t.Node;
     const replacement = replacements.get(node);
     if (replacement) {
         parent[key] = replacement;
@@ -1463,8 +1461,7 @@ function planSingleDimensionPick(
     // The defaults / __proto__ / own-property rules live in the shared spec —
     // both lanes must reach the same verdict.
     if (!singleDimensionPickAllowed(table, key)) return null;
-    const value = unwrapTsExpression(property.value);
-    if (!t.isExpression(value)) return null;
+    const value = unwrapTsExpression(property.value) as t.Expression;
     return { kind: 'dynamic1', dimension: key, value };
 }
 
@@ -1555,9 +1552,8 @@ function pushSiteFallbackDiagnostic(
     site: SzFallbackSite,
     expression: t.Expression,
 ): void {
-    const position = expression.loc
-        ? `${expression.loc.start.line}:${expression.loc.start.column + 1}`
-        : '?';
+    const location = expression.loc as t.SourceLocation;
+    const position = `${location.start.line}:${location.start.column + 1}`;
     const { kind, detail } = classifyFallbackExpression(expression);
     diagnostics.push(formatSzFallbackDiagnostic(site, position, kind, detail));
 }
@@ -2277,16 +2273,11 @@ export function transformSourceCode(
                         // Clear any unknown-property warn location a previous
                         // transform left set after an early return.
                         setSzWarnLocation(undefined);
-                        for (const comment of file.ast.comments ?? []) {
-                            if (
-                                typeof comment.start === 'number' &&
-                                typeof comment.end === 'number'
-                            ) {
-                                szvPrecompile.commentSpans.push({
-                                    start: comment.start,
-                                    end: comment.end,
-                                });
-                            }
+                        for (const comment of file.ast.comments as t.Comment[]) {
+                            szvPrecompile.commentSpans.push({
+                                start: comment.start as number,
+                                end: comment.end as number,
+                            });
                         }
                         let nodeCount = 0;
                         babel.traverse(file.ast, {
