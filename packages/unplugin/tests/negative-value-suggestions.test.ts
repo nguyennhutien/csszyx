@@ -35,7 +35,10 @@ let css = '';
  */
 function hasRule(className: string): boolean {
     if (!className) return false;
-    const escaped = `.${className.replace(/([.:/[\]()%])/g, '\\$1')}`;
+    // Backslash first — it IS the CSS escape character, so escaping the other
+    // metacharacters without it would leave a literal `\` in the needle
+    // unescaped and the lookup would silently miss.
+    const escaped = `.${className.replace(/([\\.:/[\]()%])/g, '\\$1')}`;
     return (
         css.includes(`${escaped}{`) || css.includes(`${escaped},`) || css.includes(`${escaped} `)
     );
