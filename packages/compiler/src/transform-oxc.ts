@@ -2026,10 +2026,19 @@ function recordSzvTypeQueryOxc(node: OxcNode, state: OxcSzvPrecompileState): voi
 /** Minimal variable-declaration shape the factory scan reads. */
 interface VariableDeclarationNode {
     end: number;
-    declarations?: Array<{
-        id?: { type: string; name?: string };
-        init?: OxcNode | null;
-    }>;
+    declarations?: VariableDeclaratorNode[];
+}
+
+/** Minimal variable-declarator shape shared by local and exported szv scans. */
+interface VariableDeclaratorNode {
+    id?: { type: string; name?: string };
+    init?: OxcNode | null;
+}
+
+/** One syntactically valid `name = szv(config)` declaration. */
+interface OxcSzvFactoryDeclaration {
+    name: string;
+    config: Record<string, unknown> | null;
 }
 
 /**
@@ -2042,21 +2051,36 @@ function recordSzvFactoryCandidatesOxc(node: OxcNode, state: OxcSzvPrecompileSta
     if (!state.enabled) return;
     const declaration = node as unknown as VariableDeclarationNode;
     for (const declarator of declaration.declarations ?? []) {
-        if (declarator.id?.type !== 'Identifier' || !declarator.init) continue;
-        const name = declarator.id.name;
-        if (name === undefined || SZV_RESERVED_FACTORY_NAMES.has(name)) continue;
-        if (state.candidates.has(name)) continue;
-        const init = unwrapExpression(declarator.init);
-        if (init.type !== 'CallExpression') continue;
-        const call = init as CallExpressionNode;
-        if (call.callee.type !== 'Identifier') continue;
-        if ((call.callee as IdentifierNode).name !== 'szv') continue;
-        if (call.arguments.length !== 1) continue;
-        const argument = unwrapExpression(call.arguments[0] as OxcNode);
-        const config =
-            argument.type === 'ObjectExpression' ? evaluateStaticObjectOxc(argument) : null;
-        state.candidates.set(name, { name, statementEnd: declaration.end, config });
+        const factory = readSzvFactoryDeclaratorOxc(declarator);
+        if (factory === null || state.candidates.has(factory.name)) continue;
+        state.candidates.set(factory.name, {
+            name: factory.name,
+            statementEnd: declaration.end,
+            config: factory.config,
+        });
     }
+}
+
+/**
+ * Read the syntax shared by local and exported szv factory declarations.
+ *
+ * @param declarator - Oxc variable declarator.
+ * @returns Factory name/config, or null when the declaration is not `szv`.
+ */
+function readSzvFactoryDeclaratorOxc(
+    declarator: VariableDeclaratorNode,
+): OxcSzvFactoryDeclaration | null {
+    if (declarator.id?.type !== 'Identifier' || !declarator.init) return null;
+    const name = declarator.id.name;
+    if (name === undefined || SZV_RESERVED_FACTORY_NAMES.has(name)) return null;
+    const init = unwrapExpression(declarator.init);
+    if (init.type !== 'CallExpression') return null;
+    const call = init as CallExpressionNode;
+    if (call.callee.type !== 'Identifier') return null;
+    if ((call.callee as IdentifierNode).name !== 'szv' || call.arguments.length !== 1) return null;
+    const argument = unwrapExpression(call.arguments[0] as OxcNode);
+    const config = argument.type === 'ObjectExpression' ? evaluateStaticObjectOxc(argument) : null;
+    return { name, config };
 }
 
 /**
@@ -2202,9 +2226,28 @@ function applySzvPrecompileOxc(
     source: string,
     edits: MagicString,
 ): boolean {
-    // Analyze every szr argument ONCE — the analyses drive factory accounting,
-    // the szr proof, and the deferred fallbacks.
-    for (const call of szrState.szrCalls) {
+    recordOxcSzrArgumentAnalyses(state, szrState.szrCalls);
+    if (state.candidates.size === 0) return false;
+    const szrArgumentNodes = collectOxcSzrFactoryNodes(state.szrArgumentAnalyses.values());
+    let rewrote = false;
+    for (const candidate of state.candidates.values()) {
+        rewrote =
+            applyOxcSzvCandidate(candidate, state, source, edits, szrArgumentNodes) || rewrote;
+    }
+    return rewrote;
+}
+
+/**
+ * Analyze each oxc szr argument once for all downstream proofs.
+ *
+ * @param state - Oxc szv precompile state.
+ * @param calls - Recorded szr calls.
+ */
+function recordOxcSzrArgumentAnalyses(
+    state: OxcSzvPrecompileState,
+    calls: readonly CallExpressionNode[],
+): void {
+    for (const call of calls) {
         const analyses: OxcSzrArgumentAnalysis[] = call.arguments.map(argument => {
             const factories: CallExpressionNode[] = [];
             const shapeOk = analyzeSzrArgumentOxc(argument as OxcNode, factories);
@@ -2212,69 +2255,148 @@ function applySzvPrecompileOxc(
         });
         state.szrArgumentAnalyses.set(call, analyses);
     }
-    if (state.candidates.size === 0) return false;
-    const szrArgumentNodes = new Set<unknown>();
-    for (const analyses of state.szrArgumentAnalyses.values()) {
+}
+
+/**
+ * Flatten analyzed oxc factory calls into the identity-accounting set.
+ *
+ * @param analysesByCall - Per-call argument analyses.
+ * @returns Factory call nodes admitted by szr argument shapes.
+ */
+function collectOxcSzrFactoryNodes(
+    analysesByCall: Iterable<readonly OxcSzrArgumentAnalysis[]>,
+): Set<unknown> {
+    const nodes = new Set<unknown>();
+    for (const analyses of analysesByCall) {
         for (const analysis of analyses) {
-            for (const factory of analysis.factories) {
-                szrArgumentNodes.add(factory);
-            }
+            for (const factory of analysis.factories) nodes.add(factory);
         }
     }
+    return nodes;
+}
 
-    let rewrote = false;
-    for (const candidate of state.candidates.values()) {
-        const table = candidate.config === null ? null : qualifyStaticSzvConfig(candidate.config);
-        if (table === null) continue;
-        const calls = state.identifierCalls.get(candidate.name) ?? [];
-        if (
-            !szvFactoryAccountingHolds(
-                candidate.name,
-                calls,
-                szrArgumentNodes,
-                source,
-                state.commentSpans,
-                state.typeQueryCounts,
-            )
-        ) {
-            continue;
-        }
-
-        let pickNeeded = false;
-        let pick1Needed = false;
-        for (const call of calls) {
-            const shaped = call as unknown as { start: number; end: number };
-            const replacement = planSzvCallReplacementOxc(call, table, source);
-            if (replacement.kind === 'static') {
-                edits.overwrite(shaped.start, shaped.end, JSON.stringify(replacement.value));
-            } else if (replacement.kind === 'dynamic1') {
-                pick1Needed = true;
-                edits.overwrite(
-                    shaped.start,
-                    shaped.end,
-                    `__szvPick1(${szvTableIdentifier(candidate.name)}, ${JSON.stringify(replacement.dimension)}, ${replacement.valueText})`,
-                );
-            } else {
-                pickNeeded = true;
-                edits.overwrite(
-                    shaped.start,
-                    shaped.end,
-                    `__szvPick(${szvTableIdentifier(candidate.name)}, ${replacement.selectionText})`,
-                );
-            }
-            state.replacedCalls.add(call);
-            rewrote = true;
-        }
-        if (pickNeeded || pick1Needed) {
-            edits.appendRight(
-                candidate.statementEnd,
-                `\nconst ${szvTableIdentifier(candidate.name)} = ${serializeSzvTable(table)};`,
-            );
-            if (pickNeeded) state.usedPick = true;
-            if (pick1Needed) state.usedPick1 = true;
-        }
+/**
+ * Apply one qualified oxc factory without mixing file-level orchestration.
+ *
+ * @param candidate - Factory candidate.
+ * @param state - Oxc szv precompile state.
+ * @param source - Original source text.
+ * @param edits - MagicString edit buffer.
+ * @param szrArgumentNodes - Factory calls admitted by szr shapes.
+ * @returns True when at least one call was replaced.
+ */
+function applyOxcSzvCandidate(
+    candidate: OxcSzvFactoryCandidate,
+    state: OxcSzvPrecompileState,
+    source: string,
+    edits: MagicString,
+    szrArgumentNodes: ReadonlySet<unknown>,
+): boolean {
+    const table = candidate.config === null ? null : qualifyStaticSzvConfig(candidate.config);
+    if (table === null) return false;
+    const calls = state.identifierCalls.get(candidate.name) ?? [];
+    if (!oxcSzvFactoryAccounted(candidate.name, calls, szrArgumentNodes, source, state))
+        return false;
+    const pickerKinds = new Set<'full' | 'single'>();
+    for (const call of calls) {
+        const picker = applyOxcSzvCallReplacement(call, candidate.name, table, source, edits);
+        if (picker) pickerKinds.add(picker);
+        state.replacedCalls.add(call);
     }
-    return rewrote;
+    recordOxcPickerUsage(candidate, table, pickerKinds, state, edits);
+    return calls.length > 0;
+}
+
+/**
+ * Run the shared accounting proof with oxc's state containers.
+ *
+ * @param name - Factory binding name.
+ * @param calls - Direct calls to the binding.
+ * @param szrArgumentNodes - Calls admitted by szr shapes.
+ * @param source - Original source text.
+ * @param state - Oxc szv precompile state.
+ * @returns True when every observable reference is accounted for.
+ */
+function oxcSzvFactoryAccounted(
+    name: string,
+    calls: readonly CallExpressionNode[],
+    szrArgumentNodes: ReadonlySet<unknown>,
+    source: string,
+    state: OxcSzvPrecompileState,
+): boolean {
+    return szvFactoryAccountingHolds(
+        name,
+        calls,
+        szrArgumentNodes,
+        source,
+        state.commentSpans,
+        state.typeQueryCounts,
+    );
+}
+
+/**
+ * Write one oxc replacement and report the picker import it needs.
+ *
+ * @param call - Factory call.
+ * @param name - Factory binding name.
+ * @param table - Qualified precompiled table.
+ * @param source - Original source text.
+ * @param edits - MagicString edit buffer.
+ * @returns Picker kind, or null for a static replacement.
+ */
+function applyOxcSzvCallReplacement(
+    call: CallExpressionNode,
+    name: string,
+    table: SzvPrecompiledTable,
+    source: string,
+    edits: MagicString,
+): 'full' | 'single' | null {
+    const shaped = call as unknown as { start: number; end: number };
+    const replacement = planSzvCallReplacementOxc(call, table, source);
+    if (replacement.kind === 'static') {
+        edits.overwrite(shaped.start, shaped.end, JSON.stringify(replacement.value));
+        return null;
+    }
+    const tableName = szvTableIdentifier(name);
+    if (replacement.kind === 'dynamic1') {
+        edits.overwrite(
+            shaped.start,
+            shaped.end,
+            `__szvPick1(${tableName}, ${JSON.stringify(replacement.dimension)}, ${replacement.valueText})`,
+        );
+        return 'single';
+    }
+    edits.overwrite(
+        shaped.start,
+        shaped.end,
+        `__szvPick(${tableName}, ${replacement.selectionText})`,
+    );
+    return 'full';
+}
+
+/**
+ * Insert the oxc table and remember the runtime pickers it requires.
+ *
+ * @param candidate - Factory candidate.
+ * @param table - Qualified precompiled table.
+ * @param pickerKinds - Picker imports required by replacements.
+ * @param state - Oxc szv precompile state.
+ * @param edits - MagicString edit buffer.
+ */
+function recordOxcPickerUsage(
+    candidate: OxcSzvFactoryCandidate,
+    table: SzvPrecompiledTable,
+    pickerKinds: ReadonlySet<'full' | 'single'>,
+    state: OxcSzvPrecompileState,
+    edits: MagicString,
+): void {
+    if (pickerKinds.size === 0) return;
+    edits.appendRight(
+        candidate.statementEnd,
+        `\nconst ${szvTableIdentifier(candidate.name)} = ${serializeSzvTable(table)};`,
+    );
+    if (pickerKinds.has('full')) state.usedPick = true;
+    if (pickerKinds.has('single')) state.usedPick1 = true;
 }
 
 /** Planned replacement for one factory call site (oxc lane). */
@@ -6749,24 +6871,17 @@ export function extractSzvRegistryEntries(source: string, filename: string): Szv
         if (statement.type !== 'ExportNamedDeclaration') continue;
         const declaration = (statement as unknown as { declaration?: OxcNode }).declaration;
         if (declaration?.type !== 'VariableDeclaration') continue;
-        for (const declarator of (declaration as unknown as VariableDeclarationNode).declarations ??
-            []) {
-            if (declarator.id?.type !== 'Identifier' || !declarator.init) continue;
-            const exportName = declarator.id.name;
-            if (exportName === undefined || SZV_RESERVED_FACTORY_NAMES.has(exportName)) {
+        const declarators = (declaration as unknown as VariableDeclarationNode).declarations ?? [];
+        for (const declarator of declarators) {
+            const factory = readSzvFactoryDeclaratorOxc(declarator);
+            if (
+                factory === null ||
+                factory.config === null ||
+                qualifyStaticSzvConfig(factory.config) === null
+            ) {
                 continue;
             }
-            const init = unwrapExpression(declarator.init);
-            if (init.type !== 'CallExpression') continue;
-            const call = init as CallExpressionNode;
-            if (call.callee.type !== 'Identifier') continue;
-            if ((call.callee as IdentifierNode).name !== 'szv') continue;
-            if (call.arguments.length !== 1) continue;
-            const argument = unwrapExpression(call.arguments[0] as OxcNode);
-            if (argument.type !== 'ObjectExpression') continue;
-            const config = evaluateStaticObjectOxc(argument);
-            if (config === null || qualifyStaticSzvConfig(config) === null) continue;
-            out.push({ exportName, config });
+            out.push({ exportName: factory.name, config: factory.config });
         }
     }
     return out;

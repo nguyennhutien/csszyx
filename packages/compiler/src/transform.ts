@@ -1160,9 +1160,28 @@ function applySzvPrecompile(
     szrState: SzrRewriteState,
     source: string,
 ): boolean {
-    // Analyze every szr argument ONCE — the analyses drive factory accounting,
-    // the nested replacements, the szr proof, and the deferred fallbacks.
-    for (const call of szrState.szrCalls) {
+    recordSzrArgumentAnalyses(state, szrState.szrCalls);
+    if (state.candidates.size === 0) return false;
+    const szrArgumentNodes = collectBabelSzrFactoryNodes(state.szrArgumentAnalyses.values());
+    let rewrote = false;
+    for (const candidate of state.candidates.values()) {
+        rewrote =
+            applyBabelSzvCandidate(candidate, state, szrState, szrArgumentNodes, source) || rewrote;
+    }
+    return rewrote;
+}
+
+/**
+ * Analyze each szr argument once for all downstream proofs and rewrites.
+ *
+ * @param state - Szv precompile state.
+ * @param calls - Recorded szr calls.
+ */
+function recordSzrArgumentAnalyses(
+    state: SzvPrecompileState,
+    calls: readonly t.CallExpression[],
+): void {
+    for (const call of calls) {
         const analyses: SzrArgumentAnalysis[] = call.arguments.map(argument => {
             const factories: t.CallExpression[] = [];
             const shapeOk = t.isExpression(argument) && analyzeSzrArgument(argument, factories);
@@ -1170,85 +1189,190 @@ function applySzvPrecompile(
         });
         state.szrArgumentAnalyses.set(call, analyses);
     }
-    if (state.candidates.size === 0) return false;
-    const szrArgumentNodes = new Set<t.Node>();
-    for (const analyses of state.szrArgumentAnalyses.values()) {
+}
+
+/**
+ * Flatten analyzed Babel factory calls into the identity-accounting set.
+ *
+ * @param analysesByCall - Per-call argument analyses.
+ * @returns Factory call nodes admitted by szr argument shapes.
+ */
+function collectBabelSzrFactoryNodes(
+    analysesByCall: Iterable<readonly SzrArgumentAnalysis[]>,
+): Set<t.Node> {
+    const nodes = new Set<t.Node>();
+    for (const analyses of analysesByCall) {
         for (const analysis of analyses) {
-            for (const factory of analysis.factories) {
-                szrArgumentNodes.add(factory);
-            }
+            for (const factory of analysis.factories) nodes.add(factory);
         }
     }
+    return nodes;
+}
 
-    let rewrote = false;
-    for (const candidate of state.candidates.values()) {
-        const table = qualifySzvFactory(candidate);
-        if (table === null) continue;
-        const calls = state.identifierCalls.get(candidate.name) ?? [];
-        if (
-            !szvFactoryAccountingHolds(
-                candidate.name,
-                calls,
-                szrArgumentNodes,
-                source,
-                state.commentSpans,
-                state.typeQueryCounts,
-            )
-        ) {
-            continue;
-        }
+/**
+ * Apply one qualified Babel factory without mixing file-level orchestration.
+ *
+ * @param candidate - Factory candidate.
+ * @param state - Szv precompile state.
+ * @param szrState - Szr rewrite state.
+ * @param szrArgumentNodes - Factory calls admitted by szr shapes.
+ * @param source - Original source text.
+ * @returns True when at least one call was replaced.
+ */
+function applyBabelSzvCandidate(
+    candidate: SzvFactoryCandidate,
+    state: SzvPrecompileState,
+    szrState: SzrRewriteState,
+    szrArgumentNodes: ReadonlySet<t.Node>,
+    source: string,
+): boolean {
+    const table = qualifySzvFactory(candidate);
+    if (table === null) return false;
+    const calls = state.identifierCalls.get(candidate.name) ?? [];
+    if (!babelSzvFactoryAccounted(candidate.name, calls, szrArgumentNodes, source, state)) {
+        return false;
+    }
+    const plan = planBabelSzvReplacements(candidate.name, table, calls);
+    applyBabelSzvReplacements(szrState.szrCalls, plan.replacements);
+    for (const replaced of plan.replacements.keys()) state.replacedCalls.add(replaced);
+    recordBabelPickerUsage(candidate, table, plan, state);
+    return plan.replacements.size > 0;
+}
 
-        let pickNeeded = false;
-        let pick1Needed = false;
-        const replacements = new Map<t.Node, t.Expression>();
-        for (const call of calls) {
-            const replacement = planSzvCallReplacement(call, candidate.name, table);
-            if (replacement.kind === 'static') {
-                replacements.set(call, t.stringLiteral(replacement.value));
-            } else if (replacement.kind === 'dynamic1') {
-                pick1Needed = true;
-                replacements.set(
-                    call,
-                    t.callExpression(t.identifier('__szvPick1'), [
-                        t.identifier(szvTableIdentifier(candidate.name)),
-                        t.stringLiteral(replacement.dimension),
-                        replacement.value,
-                    ]),
-                );
-            } else {
-                pickNeeded = true;
-                replacements.set(
-                    call,
-                    t.callExpression(t.identifier('__szvPick'), [
-                        t.identifier(szvTableIdentifier(candidate.name)),
-                        replacement.selection,
-                    ]),
-                );
-            }
-        }
+/**
+ * Run the shared accounting proof with Babel's state containers.
+ *
+ * @param name - Factory binding name.
+ * @param calls - Direct calls to the binding.
+ * @param szrArgumentNodes - Calls admitted by szr shapes.
+ * @param source - Original source text.
+ * @param state - Szv precompile state.
+ * @returns True when every observable reference is accounted for.
+ */
+function babelSzvFactoryAccounted(
+    name: string,
+    calls: readonly t.CallExpression[],
+    szrArgumentNodes: ReadonlySet<t.Node>,
+    source: string,
+    state: SzvPrecompileState,
+): boolean {
+    return szvFactoryAccountingHolds(
+        name,
+        calls,
+        szrArgumentNodes,
+        source,
+        state.commentSpans,
+        state.typeQueryCounts,
+    );
+}
 
-        for (const call of szrState.szrCalls) {
-            for (let index = 0; index < call.arguments.length; index++) {
-                replaceAnalyzedFactoryCalls(
-                    call.arguments as unknown as Record<number, unknown>,
-                    index,
-                    replacements,
-                );
-            }
-        }
-        for (const replaced of replacements.keys()) {
-            state.replacedCalls.add(replaced);
-        }
-        if (pickNeeded || pick1Needed) {
-            insertSzvTableDeclaration(candidate, table);
-            if (pickNeeded) state.usedPick = true;
-            if (pick1Needed) state.usedPick1 = true;
-        }
-        if (replacements.size > 0) {
-            rewrote = true;
+/** Babel replacement map plus the runtime picker imports it requires. */
+interface BabelSzvReplacementPlan {
+    replacements: Map<t.Node, t.Expression>;
+    pickNeeded: boolean;
+    pick1Needed: boolean;
+}
+
+/**
+ * Build every replacement for one qualified Babel factory.
+ *
+ * @param name - Factory binding name.
+ * @param table - Qualified precompiled table.
+ * @param calls - Calls to replace.
+ * @returns Replacement map and required picker kinds.
+ */
+function planBabelSzvReplacements(
+    name: string,
+    table: SzvPrecompiledTable,
+    calls: readonly t.CallExpression[],
+): BabelSzvReplacementPlan {
+    const plan: BabelSzvReplacementPlan = {
+        replacements: new Map(),
+        pickNeeded: false,
+        pick1Needed: false,
+    };
+    for (const call of calls) addBabelSzvReplacement(plan, call, name, table);
+    return plan;
+}
+
+/**
+ * Add one static, full-picker, or single-picker Babel replacement.
+ *
+ * @param plan - Mutable replacement plan.
+ * @param call - Factory call.
+ * @param name - Factory binding name.
+ * @param table - Qualified precompiled table.
+ */
+function addBabelSzvReplacement(
+    plan: BabelSzvReplacementPlan,
+    call: t.CallExpression,
+    name: string,
+    table: SzvPrecompiledTable,
+): void {
+    const replacement = planSzvCallReplacement(call, name, table);
+    if (replacement.kind === 'static') {
+        plan.replacements.set(call, t.stringLiteral(replacement.value));
+        return;
+    }
+    const tableId = t.identifier(szvTableIdentifier(name));
+    if (replacement.kind === 'dynamic1') {
+        plan.pick1Needed = true;
+        plan.replacements.set(
+            call,
+            t.callExpression(t.identifier('__szvPick1'), [
+                tableId,
+                t.stringLiteral(replacement.dimension),
+                replacement.value,
+            ]),
+        );
+        return;
+    }
+    plan.pickNeeded = true;
+    plan.replacements.set(
+        call,
+        t.callExpression(t.identifier('__szvPick'), [tableId, replacement.selection]),
+    );
+}
+
+/**
+ * Replace analyzed factory calls in every szr argument tree.
+ *
+ * @param calls - Recorded szr calls.
+ * @param replacements - Factory-node replacements.
+ */
+function applyBabelSzvReplacements(
+    calls: readonly t.CallExpression[],
+    replacements: ReadonlyMap<t.Node, t.Expression>,
+): void {
+    for (const call of calls) {
+        for (let index = 0; index < call.arguments.length; index++) {
+            replaceAnalyzedFactoryCalls(
+                call.arguments as unknown as Record<number, unknown>,
+                index,
+                replacements,
+            );
         }
     }
-    return rewrote;
+}
+
+/**
+ * Insert the table and remember which Babel runtime pickers are required.
+ *
+ * @param candidate - Factory candidate.
+ * @param table - Qualified precompiled table.
+ * @param plan - Replacement plan.
+ * @param state - Szv precompile state.
+ */
+function recordBabelPickerUsage(
+    candidate: SzvFactoryCandidate,
+    table: SzvPrecompiledTable,
+    plan: BabelSzvReplacementPlan,
+    state: SzvPrecompileState,
+): void {
+    if (!plan.pickNeeded && !plan.pick1Needed) return;
+    insertSzvTableDeclaration(candidate, table);
+    if (plan.pickNeeded) state.usedPick = true;
+    if (plan.pick1Needed) state.usedPick1 = true;
 }
 
 /**
