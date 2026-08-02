@@ -12,18 +12,26 @@
  * "oxc lacks the warning" — it does not. Each lane therefore probes a DISTINCT
  * property key here.
  */
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { transformSourceCode } from '../src/transform.js';
+import { __resetSzWarnDedupForTests } from '../src/transform-core.js';
 import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
 import { captureWarnings, type TriEngine } from './tri-engine-harness.js';
 
-/** [lane, engine, distinct property key] — one key per lane, dodging dedup. */
+/** [lane, engine, property key]. Keys stay distinct so the dedup case
+ * below can still observe a genuine second-lane silence. */
 const LANES: ReadonlyArray<readonly [string, TriEngine, string]> = [
     ['babel', transformSourceCode, 'p'],
     ['oxc', transformOxc as TriEngine, 'm'],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as TriEngine, 'w']] as const) : []),
 ];
+
+beforeEach(() => {
+    // The warning set is process-wide by design; without the reset the
+    // suite would depend on no earlier test having probed these keys.
+    __resetSzWarnDedupForTests();
+});
 
 describe('property-object warning parity', () => {
     it.each(LANES)('%s warns for a property key holding an object', (_lane, engine, key) => {

@@ -90,6 +90,71 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
         expect(code).not.toMatch(/szr\("/);
     });
 
+    // The v1 cut resolves NAMED relative imports only. These two shapes stay
+    // outside it on purpose; what matters is that they degrade to the runtime
+    // path (correct output, no optimization) instead of resolving wrongly.
+    it('leaves a namespace import alone rather than resolving through it', () => {
+        const tsx =
+            "import { szr } from '@csszyx/runtime';\n" +
+            "import * as styles from './styles';\n" +
+            "export const cls = szr(styles.cardSz({ pad: 'lg' }));";
+        const code = engine(tsx, '/p/t.tsx', { crossModuleStatics: STATICS }).code ?? tsx;
+        expect(code).toContain('styles.cardSz(');
+        expect(code).not.toContain('__szvT_');
+    });
+
+    it('leaves a re-export chain alone rather than following it', () => {
+        const tsx =
+            "import { szr } from '@csszyx/runtime';\n" +
+            "export { rowSz } from './barrel';\n" +
+            "import { cardSz } from './barrel';\n" +
+            "export const cls = szr(cardSz({ pad: 'lg' }));";
+        // The registry keys the DEFINING module, so a barrel that merely
+        // forwards the export carries no entry — nothing resolves.
+        const code = engine(tsx, '/p/t.tsx', { crossModuleStatics: STATICS }).code ?? tsx;
+        expect(code).toContain('cardSz(');
+        expect(code).not.toContain('__szvT_');
+    });
+
+    it('keeps JS key order across the payload transport', () => {
+        // The payload is ordered pairs precisely so integer-like keys survive
+        // JSON with the order `Object.keys` gives them: ascending numerics
+        // first, then declaration order. A Map or plain object on the wire
+        // would re-sort them and the emitted class order would follow.
+        const tsx =
+            "import { szr } from '@csszyx/runtime';\n" +
+            "import { orderSz } from './styles';\n" +
+            'export const C = (s) => szr(orderSz(s));';
+        const statics = {
+            './styles': {
+                orderSz: {
+                    variants: {
+                        '10': { a: { m: 1 } },
+                        pad: { s: { p: 1 } },
+                        '2': { b: { gap: 2 } },
+                    },
+                },
+            },
+        };
+        const code = engine(tsx, '/p/t.tsx', { crossModuleStatics: statics }).code ?? tsx;
+        // Sliced rather than matched: a lazy `[\s\S]*?` up to the terminator
+        // is the polynomial shape the ReDoS gate rejects, and indexOf answers
+        // the same question in one pass.
+        const start = code.indexOf('__szvT_orderSz');
+        const table = start === -1 ? '' : code.slice(start, code.indexOf(';', start));
+        // Position comparison rather than a key-matching pattern: a quantified
+        // digit class is exactly what the ReDoS gate rejects, and the lanes
+        // spell the keys differently anyway (a numeric key is always quoted,
+        // `pad` is bare in the Babel literal and quoted in the Rust JSON).
+        const keyIndex = (key: string): number => {
+            const quoted = table.indexOf(`"${key}"`);
+            return quoted === -1 ? table.indexOf(`${key}:`) : quoted;
+        };
+        expect(keyIndex('2'), table).toBeGreaterThanOrEqual(0);
+        expect(keyIndex('2')).toBeLessThan(keyIndex('10'));
+        expect(keyIndex('10')).toBeLessThan(keyIndex('pad'));
+    });
+
     it('ignores entries for names the file does not import', () => {
         const source =
             "import { szr } from '@csszyx/runtime';\n" +

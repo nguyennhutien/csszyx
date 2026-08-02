@@ -2926,18 +2926,6 @@ const warnedMaskSlotMembers = new Set<string>();
  * @param member - The unrecognised member key.
  * @param allowed - The members the owner accepts, for the message.
  */
-/**
- * Test-only: clear the mask warning de-dup sets so ordering between test
- * files (and lanes within one file) cannot decide whether a warning fires.
- */
-export function __resetMaskWarnDedupForTests(): void {
-    warnedMaskLayerValues.clear();
-    warnedMaskSlotMembers.clear();
-}
-
-/**
- *
- */
 function warnMaskSlotMember(owner: string, member: string, allowed: readonly string[]): void {
     if (process.env.NODE_ENV === 'production') return;
     const sig = `${owner}.${member}`;
@@ -3496,6 +3484,25 @@ function collectObjectProperty(
 
 /** Property keys already nudged about stray object values (once each). */
 const _warnedPropertyObjects = new Set<string>();
+
+/**
+ * Test-only: clear every dev-warning de-dup set.
+ *
+ * The sets are process-wide by design (a prop-API component re-rendering the
+ * same mistake must not spam the console), which makes any suite that asserts
+ * a warning FIRES depend on no earlier test having triggered the same key.
+ * Vitest's per-file isolation hides that today; a shared worker, a shuffled
+ * order, or two lanes probing one key inside one file exposes it. Suites call
+ * this in `beforeEach` so their assertions stand on their own.
+ */
+export function __resetSzWarnDedupForTests(): void {
+    warnedAlignmentValues.clear();
+    warnedMaskLayerValues.clear();
+    warnedMaskSlotMembers.clear();
+    _warnedSpacingSteps.clear();
+    _warnedOpacityTokens.clear();
+    _warnedPropertyObjects.clear();
+}
 
 /**
  * Warns when a PROPERTY key receives an object that is not the `{ color, op }`

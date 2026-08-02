@@ -10,14 +10,14 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { transformSourceCode } from '../src/transform.js';
-import { __resetMaskWarnDedupForTests } from '../src/transform-core.js';
+import { __resetSzWarnDedupForTests } from '../src/transform-core.js';
 import { transformOxc } from '../src/transform-oxc.js';
 import { captureWarnings, ENGINES, type TriEngine } from './tri-engine-harness.js';
 
 beforeEach(() => {
     // The shared JS warning set de-duplicates process-wide; without the reset,
     // lane order would decide which lane looks silent.
-    __resetMaskWarnDedupForTests();
+    __resetSzWarnDedupForTests();
 });
 
 describe('mask slot member warnings', () => {

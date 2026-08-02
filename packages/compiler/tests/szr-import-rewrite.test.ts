@@ -113,6 +113,14 @@ const KEEP_CASES: ReadonlyArray<readonly [string, string]> = [
         `${RUNTIME}export const a = szr('p-4'); export const doc = 'call szr here';`,
     ],
     ['aliased import', "import { szr as r } from '@csszyx/runtime';\nexport const a = r('p-4');"],
+    // Provably safe by construction — the recorder requires a plain named
+    // specifier whose local name is `szr` — but only construction said so
+    // until now.
+    ['namespace import', "import * as rt from '@csszyx/runtime';\nexport const a = rt.szr('p-4');"],
+    [
+        're-export of szr',
+        "export { szr } from '@csszyx/runtime';\nimport { szr } from '@csszyx/runtime';\nexport const a = szr('p-4');",
+    ],
     [
         'aliased szr inside a multi clause',
         "import { szr as r, szv } from '@csszyx/runtime';\nexport const a = r('p-4');",

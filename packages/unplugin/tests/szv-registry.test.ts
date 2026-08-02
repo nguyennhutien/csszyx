@@ -133,6 +133,31 @@ describe('registry staleness', () => {
         ).toBeUndefined();
     });
 
+    it('resolves mutually importing modules without recursing', () => {
+        // Two files each importing the other's factory. Resolution reads the
+        // prescan-built map and never follows an edge, so a cycle cannot
+        // recurse by construction — pinned cheaply because "by construction"
+        // stops being true the moment resolution learns to traverse.
+        const registry: SzvCrossModuleRegistry = new Map();
+        const aSource =
+            "import { szv } from '@csszyx/runtime';\n" +
+            "import { bSz } from './b';\n" +
+            'export const aSz = szv({ variants: { pad: { sm: { p: 2 } } } });\n';
+        const bSource =
+            "import { szv } from '@csszyx/runtime';\n" +
+            "import { aSz } from './a';\n" +
+            'export const bSz = szv({ variants: { gap: { tight: { gap: 1 } } } });\n';
+        recordSzvRegistryFile(registry, '/app/src/a.ts', aSource);
+        recordSzvRegistryFile(registry, '/app/src/b.ts', bSource);
+
+        expect(
+            Object.keys(resolveCrossModuleStaticsFor(registry, '/app/src/a.ts', aSource) ?? {}),
+        ).toEqual(['./b']);
+        expect(
+            Object.keys(resolveCrossModuleStaticsFor(registry, '/app/src/b.ts', bSource) ?? {}),
+        ).toEqual(['./a']);
+    });
+
     it('evicts when the factory no longer parses as a static config', () => {
         const registry = registryWith('/app/src/styles.ts');
         recordSzvRegistryFile(

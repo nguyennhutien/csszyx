@@ -185,4 +185,44 @@ describe('mask layer merge — the later group claims the CSS property', () => {
             'mask-linear-45 mask-radial-from-0%',
         );
     });
+
+    // The exclusion is a MERGE rule, so it needs two objects to apply. Inside
+    // one literal there is nothing to merge and both modes emit, leaving the
+    // stylesheet to pick a winner — the shape a caution block warns about
+    // rather than one the compiler can resolve.
+    it('does not apply inside a single literal, where nothing merges', () => {
+        expectParity(
+            "{ maskLinear: { angle: 45, b: { from: '0%' } } }",
+            'mask-linear-45 mask-b-from-0%',
+        );
+    });
+
+    it('applies inside a variant, where the variant objects merge first', () => {
+        expectMergeParity(
+            "[{ hover: { maskLinear: { angle: 45 } } }, { hover: { maskLinear: { b: { from: '0%' } } } }]",
+            'hover:mask-b-from-0%',
+        );
+    });
+
+    it('an empty later slot claims nothing', () => {
+        // `{}` carries no field, so the merge has nothing to override with —
+        // an empty object must not read as "clear this layer".
+        expectMergeParity('[{ maskLinear: { angle: 45 } }, { maskLinear: {} }]', 'mask-linear-45');
+    });
+
+    it('a direct mask image and a layer both survive — different properties', () => {
+        // `mask` sets mask-image outright while the layers compose through
+        // --tw-mask-*, so these are not competitors and neither is dropped.
+        expectParity("{ mask: 'none', maskLinear: { angle: 45 } }", 'mask-none mask-linear-45');
+    });
+
+    it('a shorthand side and the side it covers both survive, in table order', () => {
+        // `x` covers `l`/`r` the way `px` covers `pl`/`pr`: each writes its own
+        // variable, so both are kept. The emission order follows the side
+        // table (t r b l x y), not the declaration order.
+        expectParity(
+            "{ maskLinear: { x: { from: '10%' }, l: { from: '20%' } } }",
+            'mask-l-from-20% mask-x-from-10%',
+        );
+    });
 });
