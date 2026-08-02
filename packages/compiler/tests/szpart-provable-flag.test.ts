@@ -40,6 +40,36 @@ const MATRIX: ReadonlyArray<readonly [string, string, boolean, boolean]> = [
         true,
     ],
     [
+        'parenthesized template element is provable',
+        'export const A = ({ n }) => <div sz={[{ p: 4 }, (`col-${n}`)]} />;',
+        true,
+        true,
+    ],
+    [
+        'logical templates are provable',
+        'export const A = ({ n }) => <div sz={[{ p: 4 }, `a-${n}` || `b-${n}`]} />;',
+        true,
+        true,
+    ],
+    [
+        'nested string array is provable',
+        "export const A = () => <div sz={[{ p: 4 }, ['a', false, null]]} />;",
+        true,
+        true,
+    ],
+    [
+        'nested array hole is not provable',
+        "export const A = () => <div sz={[{ p: 4 }, ['a', , 'b']]} />;",
+        false,
+        true,
+    ],
+    [
+        'nested array spread is not provable',
+        "export const A = ({ rest }) => <div sz={[{ p: 4 }, ['a', ...rest]]} />;",
+        false,
+        true,
+    ],
+    [
         'identifier element is not provable',
         'export const A = ({ extra }) => <div sz={[{ p: 4 }, extra]} />;',
         false,

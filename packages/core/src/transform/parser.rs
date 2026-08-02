@@ -217,7 +217,9 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
 struct SzrImportRecord {
     /// Span of the import source literal, quotes included.
     source_span: super::TextSpan,
-    /// The import source value.
+    /// Slim entry selected while qualifying the import source.
+    target: &'static str,
+    /// Original source retained when a mixed import must be rebuilt.
     source_value: String,
     /// Span of the whole import declaration.
     statement_span: super::TextSpan,
@@ -267,7 +269,7 @@ struct SzvCallSite {
     /// Span of the whole call.
     span: super::TextSpan,
     /// Classified argument shape.
-    argument: SzvCallArg,
+    argument: Option<SzvCallArg>,
 }
 
 /// Argument shape of one potential factory call.
@@ -285,8 +287,6 @@ enum SzvCallArg {
         /// key is a real dimension.
         single: Option<SzvSingleDimension>,
     },
-    /// More than one argument (dropping extras would drop their evaluation).
-    Disqualifying,
 }
 
 /// A selection literal of exactly one statically named dimension.
@@ -861,7 +861,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                                     site: super::SzFallbackSiteIr::Szr,
                                     kind,
                                     detail,
-                                    offset: expression.span().start,
+                                    offset: fallback_expression_offset(expression),
                                 },
                             });
                         }
@@ -897,9 +897,9 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             return;
         }
         let source_value = declaration.source.value.as_str();
-        if szr_rewrite_target(source_value).is_none() {
+        let Some(target) = szr_rewrite_target(source_value) else {
             return;
-        }
+        };
         let Some(specifiers) = &declaration.specifiers else {
             return;
         };
@@ -925,6 +925,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         }
         self.szr_import = Some(SzrImportRecord {
             source_span: text_span(declaration.source.span),
+            target,
             source_value: source_value.to_string(),
             statement_span: text_span(declaration.span),
             other_specifier_spans,
@@ -1097,10 +1098,9 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             if calls.is_empty() {
                 continue;
             }
-            let accounted = calls.iter().all(|site| {
-                szr_factory_spans.contains(&site.span)
-                    && !matches!(site.argument, SzvCallArg::Disqualifying)
-            });
+            let accounted = calls
+                .iter()
+                .all(|site| szr_factory_spans.contains(&site.span) && site.argument.is_some());
             if !accounted {
                 continue;
             }
@@ -1120,8 +1120,11 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             }
             let mut needs_full_pick = false;
             let mut needs_single_pick = false;
-            for site in calls {
-                let replacement = match &site.argument {
+            for (site, argument) in calls
+                .iter()
+                .filter_map(|site| site.argument.as_ref().map(|argument| (*site, argument)))
+            {
+                let replacement = match argument {
                     SzvCallArg::None => super::szv_precompile::json_string_literal(
                         &super::szv_precompile::compute_static_szv_pick(&candidate.table, None),
                     ),
@@ -1146,7 +1149,6 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         }
                         text
                     }
-                    SzvCallArg::Disqualifying => continue,
                 };
                 self.ir.szv_replacements.push(super::SzvReplacementIr {
                     span: site.span,
@@ -1219,9 +1221,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         if occurrences != 1 + proven_calls {
             return;
         }
-        let Some(target) = szr_rewrite_target(&record.source_value) else {
-            return;
-        };
+        let target = record.target;
         // Preserve the author's quote character — the span covers it.
         let quote = if self
             .source
@@ -1270,7 +1270,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             site,
             kind,
             detail,
-            offset: expression.span().start,
+            offset: fallback_expression_offset(expression),
         });
     }
 
@@ -2246,28 +2246,28 @@ fn szr_argument_proven(analysis: &SzrArgAnalysis, replaced_spans: &[super::TextS
 /// (the tri-lane contract); everything else with exactly one argument splices
 /// into `__szvPick`, and extra arguments disqualify (dropping them would drop
 /// their evaluation).
-fn classify_szv_call_argument(call: &CallExpression<'_>) -> SzvCallArg {
+fn classify_szv_call_argument(call: &CallExpression<'_>) -> Option<SzvCallArg> {
     match call.arguments.len() {
-        0 => SzvCallArg::None,
+        0 => Some(SzvCallArg::None),
         1 => {
             let Some(expression) = call.arguments[0].as_expression() else {
-                return SzvCallArg::Disqualifying;
+                return None;
             };
             let unwrapped = unwrap_expression(expression);
             let single = if let Expression::ObjectExpression(object) = unwrapped {
                 if let Some(selection) = strict_static_selection(object) {
-                    return SzvCallArg::Static(selection);
+                    return Some(SzvCallArg::Static(selection));
                 }
                 single_dimension_selection(object)
             } else {
                 None
             };
-            SzvCallArg::Dynamic {
+            Some(SzvCallArg::Dynamic {
                 span: text_span(unwrapped.span()),
                 single,
-            }
+            })
         }
-        _ => SzvCallArg::Disqualifying,
+        _ => None,
     }
 }
 
@@ -2578,6 +2578,22 @@ fn classify_expression_fallback(
     (kind, detail)
 }
 
+/// Resolve the position Babel reports after discarding grouping parentheses.
+fn fallback_expression_offset(expression: &Expression<'_>) -> u32 {
+    let mut expression = expression;
+    while let Expression::ParenthesizedExpression(inner) = expression {
+        expression = &inner.expression;
+    }
+    // oxc may preserve the OUTER parentheses in a call's span even after
+    // `Argument::as_expression()` yields the call node. The callee starts where
+    // Babel's parenthesis-free CallExpression starts; for `(cond ? a : b)()`,
+    // the callee span still correctly begins at that grouping parenthesis.
+    match expression {
+        Expression::CallExpression(call) => call.callee.span().start,
+        other => other.span().start,
+    }
+}
+
 /// Babel-compatible node type name for the `other` matrix arm.
 ///
 /// Curated to the shapes a real sz attribute can carry; the audited ones
@@ -2620,7 +2636,6 @@ const fn estree_expression_type_name(expression: &Expression<'_>) -> &'static st
         Expression::RegExpLiteral(_) => "RegExpLiteral",
         Expression::JSXElement(_) => "JSXElement",
         Expression::JSXFragment(_) => "JSXFragment",
-        Expression::Super(_) => "Super",
         _ => "Expression",
     }
 }
@@ -4154,7 +4169,8 @@ fn string_value_span(span: Span, source: &str) -> TextSpan {
 mod tests {
     use super::{
         escape_json_string, parse_source_shell, parse_source_shell_with_budget,
-        source_type_for_path, string_value_span, MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
+        parse_source_shell_with_budget_and_statics, source_type_for_path, string_value_span,
+        MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
     };
     use crate::transform::{lower::lower_source_ir_classes, TransformFile};
     use oxc_span::Span;
@@ -4182,6 +4198,402 @@ mod tests {
             parsed.ir.sz_attributes[0].object.properties[0].value,
             super::StaticSzValue::Number(4.0)
         );
+    }
+
+    #[test]
+    fn parser_shell_covers_szr_proof_shape_matrix() {
+        let safe = r#"import { szr } from '@csszyx/runtime';
+export const a = szr(('p-4'), `m-${n}`, false, null, undefined);
+export const b = szr(on && 'x', 'a' || 'b', cond ? 'c' : 'd', ['e', false]);"#;
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Safe.tsx".into(),
+            source: safe.into(),
+        });
+        assert!(parsed.ir.szr_import_rewrite.is_some());
+
+        for argument in [
+            "cfg",
+            "mk()",
+            "true",
+            "4",
+            "cfg || 'x'",
+            "cond ? 'x' : cfg",
+            "['x', ...rest]",
+            "('x' as string)",
+        ] {
+            let source = format!(
+                "import {{ szr }} from '@csszyx/runtime'; export const x = szr({argument});"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Unsafe.tsx".into(),
+                source,
+            });
+            assert!(parsed.ir.szr_import_rewrite.is_none(), "{argument}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_covers_szv_candidate_guard_matrix_and_type_queries() {
+        let source = r#"import { szr, szv } from '@csszyx/runtime';
+const { destructured } = obj;
+const dynamic = szv({ base: { p: 1 } });
+let missing;
+const scalar = 1;
+const member = api.szv({ base: { p: 1 } });
+const empty = szv();
+const spreadArg = szv(...args);
+const dynamicConfig = szv(config);
+const computed = szv({ [key]: { p: 1 } });
+const invalidBase = szv({ base: 'p-1' });
+const overlap = szv({ base: { p: 1 }, variants: { pad: { sm: { p: 2 } } } });
+const card = szv({ variants: { pad: { sm: { p: 2 } } } });
+type CardSelection = Parameters<typeof card>[0];
+type CardSelectionAgain = Parameters<typeof card>[0];
+type ExternalSelection = typeof import('./types');
+export const cls = szr(card({ pad: 'sm' }));"#;
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Factories.tsx".into(),
+            source: source.into(),
+        });
+        assert_eq!(parsed.ir.szv_replacements.len(), 1);
+        assert!(parsed.ir.szr_import_rewrite.is_some());
+    }
+
+    #[test]
+    fn parser_shell_covers_import_candidate_guard_matrix() {
+        for source in [
+            "import type { szr } from '@csszyx/runtime';",
+            "import { szr } from 'other';",
+            "import '@csszyx/runtime';",
+            "import def, { szr } from '@csszyx/runtime';",
+            "import * as rt from '@csszyx/runtime';",
+            "import { szv } from '@csszyx/runtime';",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Imports.tsx".into(),
+                source: source.into(),
+            });
+            assert!(parsed.ir.szr_import_rewrite.is_none(), "{source}");
+        }
+
+        let budgeted = parse_source_shell_with_budget(
+            &TransformFile {
+                filename: "/repo/src/Budget.tsx".into(),
+                source: "import { szr } from '@csszyx/runtime';".into(),
+            },
+            1,
+        );
+        assert!(budgeted.ast_budget_exceeded);
+
+        let import_after_budget = parse_source_shell_with_budget(
+            &TransformFile {
+                filename: "/repo/src/LateImport.tsx".into(),
+                source: "const before = { nested: true }; import { szr } from '@csszyx/runtime';"
+                    .into(),
+            },
+            1,
+        );
+        assert!(import_after_budget.ast_budget_exceeded);
+        assert!(import_after_budget.ir.szr_import_rewrite.is_none());
+    }
+
+    #[test]
+    fn parser_shell_covers_cross_module_import_guards() {
+        use crate::transform::{StaticSzObject, StaticSzProperty, StaticSzValue, TextSpan};
+
+        let config = StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: "variants".into(),
+                value: StaticSzValue::Object(StaticSzObject {
+                    properties: vec![StaticSzProperty {
+                        key: "pad".into(),
+                        value: StaticSzValue::Object(StaticSzObject {
+                            properties: vec![StaticSzProperty {
+                                key: "sm".into(),
+                                value: StaticSzValue::Object(StaticSzObject {
+                                    properties: vec![StaticSzProperty {
+                                        key: "p".into(),
+                                        value: StaticSzValue::Number(2.0),
+                                        span: TextSpan { start: 0, end: 0 },
+                                    }],
+                                }),
+                                span: TextSpan { start: 0, end: 0 },
+                            }],
+                        }),
+                        span: TextSpan { start: 0, end: 0 },
+                    }],
+                }),
+                span: TextSpan { start: 0, end: 0 },
+            }],
+        };
+        let invalid = StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: "base".into(),
+                value: StaticSzValue::String("invalid".into()),
+                span: TextSpan { start: 0, end: 0 },
+            }],
+        };
+        let overlap = StaticSzObject {
+            properties: vec![
+                StaticSzProperty {
+                    key: "base".into(),
+                    value: StaticSzValue::Object(StaticSzObject {
+                        properties: vec![StaticSzProperty {
+                            key: "p".into(),
+                            value: StaticSzValue::Number(1.0),
+                            span: TextSpan { start: 0, end: 0 },
+                        }],
+                    }),
+                    span: TextSpan { start: 0, end: 0 },
+                },
+                config.properties[0].clone(),
+            ],
+        };
+        let statics = vec![(
+            "./styles".into(),
+            vec![
+                ("card".into(), config),
+                ("invalid".into(), invalid),
+                ("overlap".into(), overlap),
+            ],
+        )];
+        let source = r#"import type { card as typed } from './styles';
+import './styles';
+import { type card as typedSpecifier } from './styles';
+import def, { card as ignoredDefault } from './styles';
+import { missing, invalid, overlap, card as szv, card as localCard } from './styles';
+import { card as duplicate } from './styles';
+export const cls = szr(localCard({ pad: 'sm' }));"#;
+        let parsed = parse_source_shell_with_budget_and_statics(
+            &TransformFile {
+                filename: "/repo/src/Cross.tsx".into(),
+                source: source.into(),
+            },
+            usize::MAX,
+            &statics,
+        );
+        assert_eq!(parsed.ir.szv_replacements.len(), 1);
+    }
+
+    #[test]
+    fn parser_shell_classifies_extended_fallback_expression_names() {
+        let cases = [
+            ("a + b", "BinaryExpression"),
+            ("!a", "UnaryExpression"),
+            ("a++", "UpdateExpression"),
+            ("a = b", "AssignmentExpression"),
+            ("(a, b)", "SequenceExpression"),
+            ("tag`x`", "TaggedTemplateExpression"),
+            ("() => a", "ArrowFunctionExpression"),
+            ("function () {}", "FunctionExpression"),
+            ("class {}", "ClassExpression"),
+            ("this", "ThisExpression"),
+            ("a?.b", "ChainExpression"),
+            ("import.meta", "MetaProperty"),
+            ("a as string", "TSAsExpression"),
+            ("a satisfies string", "TSSatisfiesExpression"),
+            ("a!", "TSNonNullExpression"),
+            ("true", "BooleanLiteral"),
+            ("42", "NumericLiteral"),
+            ("1n", "BigIntLiteral"),
+            ("/x/", "RegExpLiteral"),
+            ("<span />", "JSXElement"),
+            ("<>x</>", "JSXFragment"),
+            ("null", "NullLiteral"),
+            ("import('x')", "Expression"),
+        ];
+        for (expression, expected) in cases {
+            let source = format!("const A = () => <div sz={{{expression}}} />;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/FallbackKinds.tsx".into(),
+                source,
+            });
+            let details = parsed
+                .ir
+                .sz_attributes
+                .iter()
+                .filter_map(|attribute| attribute.runtime_fallback_diagnostic.as_ref())
+                .map(|diagnostic| diagnostic.detail.as_str())
+                .chain(
+                    parsed
+                        .ir
+                        .site_fallbacks
+                        .iter()
+                        .map(|fallback| fallback.detail.as_str()),
+                )
+                .collect::<Vec<_>>();
+            assert!(details.contains(&expected), "{expression}: {details:?}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_mask_linear_group_merge_drops_the_displaced_group() {
+        let source = "const A = () => <div sz={[{ maskLinear: { angle: 45 } }, { maskLinear: { b: { from: '0%' } } }]} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/MaskMerge.tsx".into(),
+            source: source.into(),
+        });
+        let lowered = lower_source_ir_classes(&parsed.ir);
+        assert_eq!(lowered.classes, ["mask-b-from-0%"]);
+
+        let mut existing = super::StaticSzObject {
+            properties: vec![super::StaticSzProperty {
+                key: "angle".into(),
+                value: super::StaticSzValue::Number(45.0),
+                span: super::TextSpan { start: 0, end: 0 },
+            }],
+        };
+        super::drop_displaced_sub_keys(
+            "maskLinear",
+            &mut existing,
+            &super::StaticSzObject {
+                properties: vec![super::StaticSzProperty {
+                    key: "unknown".into(),
+                    value: super::StaticSzValue::Boolean(true),
+                    span: super::TextSpan { start: 0, end: 0 },
+                }],
+            },
+        );
+        assert_eq!(existing.properties.len(), 1);
+    }
+
+    #[test]
+    fn parser_shell_covers_szv_selection_and_reference_guard_matrix() {
+        let cases = [
+            "card()",
+            "card({ pad: true })",
+            "card({ pad: 2 })",
+            "card({ pad: -2 })",
+            "card({ pad: -9007199254740992 })",
+            "card({ pad: +2 })",
+            "card({ pad: -value })",
+            "card({ ...selection })",
+            "card({ [key]: value })",
+            "card({})",
+            "card({ pad: value, tone: other })",
+            "card({ 'pad': value })",
+            "card({ 1: value })",
+            "card({ __proto__: value })",
+            "card(...args)",
+            "card(value, sideEffect())",
+            "api.card()",
+            "api[key + 1]()",
+        ];
+        for call in cases {
+            let source = format!(
+                "import {{ szr, szv }} from '@csszyx/runtime'; const card = szv({{ variants: {{ pad: {{ sm: {{ p: 2 }} }} }} }}); export const cls = szr({call});"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Selections.tsx".into(),
+                source,
+            });
+            assert!(!parsed.panicked, "{call}");
+        }
+
+        for suffix in [
+            "export const leak = card({ pad: 'sm' });",
+            "export const occupied = __szvT_card;",
+        ] {
+            let source = format!(
+                "import {{ szr, szv }} from '@csszyx/runtime'; const card = szv({{ variants: {{ pad: {{ sm: {{ p: 2 }} }} }} }}); export const cls = szr(card({{ pad: 'sm' }})); {suffix}"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/References.tsx".into(),
+                source,
+            });
+            assert!(parsed.ir.szv_replacements.is_empty(), "{suffix}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_covers_dynamic_array_provability_matrix() {
+        for expression in [
+            "(`x-${n}`)",
+            "`a-${n}` || `b-${n}`",
+            "['a', false, null]",
+            "['a', , 'b']",
+            "['a', ...rest]",
+            "cond ? `a-${n}` : `b-${n}`",
+        ] {
+            let source = format!("const A = () => <div sz={{[{{ p: 4 }}, {expression}]}} />;");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Arrays.tsx".into(),
+                source,
+            });
+            assert!(!parsed.panicked, "{expression}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_covers_spread_argument_and_double_quote_rewrite_guards() {
+        for source in [
+            "import { szr } from '@csszyx/runtime'; export const x = szr(...parts);",
+            "import { szr } from '@csszyx/runtime'; export const x = szr(szv());",
+            "import { szr } from '@csszyx/runtime'; export const x = szr('x'); export const doc = 'szr';",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Guards.tsx".into(),
+                source: source.into(),
+            });
+            assert!(parsed.ir.szr_import_rewrite.is_none());
+        }
+        let source = "import { szr } from \"@csszyx/runtime\"; export const x = szr('x');";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Double.tsx".into(),
+            source: source.into(),
+        });
+        assert!(parsed.ir.szr_import_rewrite.is_some());
+    }
+
+    #[test]
+    fn parser_shell_classifies_yield_and_typescript_only_fallbacks() {
+        let yielded = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Yield.tsx".into(),
+            source: "function* A(){ return <div sz={yield value} />; }".into(),
+        });
+        assert_eq!(
+            yielded.ir.sz_attributes[0]
+                .runtime_fallback_diagnostic
+                .as_ref()
+                .map(|diagnostic| diagnostic.detail.as_str()),
+            Some("YieldExpression")
+        );
+
+        for (expression, expected) in [
+            ("<string>value", "TSTypeAssertion"),
+            ("fn<string>", "TSInstantiationExpression"),
+        ] {
+            let source = format!("import {{ szr }} from '@csszyx/runtime'; szr({expression});");
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/Types.ts".into(),
+                source,
+            });
+            assert_eq!(parsed.ir.site_fallbacks[0].detail, expected);
+        }
+
+        let type_queries = parse_source_shell(&TransformFile {
+            filename: "/repo/src/Queries.ts".into(),
+            source: "type Local = typeof value; type External = typeof import('./types');".into(),
+        });
+        assert!(!type_queries.panicked);
+    }
+
+    #[test]
+    fn parser_shell_covers_strict_literal_scalar_guards() {
+        for config in [
+            "{ base: { hidden: true } }",
+            "{ base: { p: +2 } }",
+            "{ base: { p: -value } }",
+        ] {
+            let source = format!(
+                "import {{ szr, szv }} from '@csszyx/runtime'; const card = szv({config}); export const cls = szr(card());"
+            );
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/StrictLiterals.tsx".into(),
+                source,
+            });
+            assert!(!parsed.panicked, "{config}");
+        }
     }
 
     #[test]

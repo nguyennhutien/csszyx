@@ -237,6 +237,20 @@ describe('picker hardening', () => {
         expect(__szvPick(table, { pad: null })).toBe('p-8');
         expect(__szvPick(table, { pad: undefined })).toBe('p-8');
     });
+
+    it('describes structurally invalid selection values without coercing them', () => {
+        const table = compileTable({ variants: { pad: { sm: { p: 2 } } } });
+        const seen: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+            seen.push(args.map(String).join(' '));
+        });
+
+        __szvPick(table, { pad: [] });
+        __szvPick(table, { pad: { value: 'sm' } });
+
+        expect(seen.join('\n')).toContain('"an array" is not a value of variant "pad"');
+        expect(seen.join('\n')).toContain('"object" is not a value of variant "pad"');
+    });
 });
 
 describe('__szvPick1 equivalence (exhaustive)', () => {

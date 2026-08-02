@@ -9,8 +9,9 @@
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
-import { describe, expect, it } from 'vitest';
-import { unplugin as rawInstance, vitePlugin } from '../src/unplugin.js';
+import { describe, expect, it, vi } from 'vitest';
+import webpack from 'webpack';
+import { unplugin as rawInstance, vitePlugin, webpackPlugin } from '../src/unplugin.js';
 import {
     CHECKSUM_PLACEHOLDER,
     createMangleRuntimeModule,
@@ -211,8 +212,9 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
         // then records the lane, exactly as a real webpack build would before
         // any module transforms.
         plugin.vite.configResolved({ root, command: 'build' });
-        const webpackCompiler = (mode: string) => ({
+        const webpackCompiler = (mode: string, watchMode = false) => ({
             options: { mode },
+            watchMode,
             context: root,
             hooks: {
                 beforeCompile: { tap: () => undefined },
@@ -233,5 +235,43 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
             code?: string;
         } | null;
         expect(devOut?.code ?? RUNTIME_CONSUMER).not.toContain(MANGLE_RUNTIME_VIRTUAL_ID);
+
+        expect(() => plugin.webpack(webpackCompiler('production', true))).not.toThrow();
+    });
+
+    it('accepts rollup and vite watch modes while disabling their stale registry', () => {
+        const plugin = rawInstance.raw(
+            { production: { mangle: true } },
+            { framework: 'rollup' },
+        ) as unknown as {
+            rollup: { buildStart: (this: { meta: { watchMode: boolean } }) => void };
+            vite: { configResolved: (config: unknown) => void };
+        };
+        const root = resolve(homedir(), '.cache/csszyx-tests/mangle-runtime-watch');
+
+        expect(() => plugin.rollup.buildStart.call({ meta: { watchMode: true } })).not.toThrow();
+        expect(() =>
+            plugin.vite.configResolved({ root, command: 'build', build: { watch: {} } }),
+        ).not.toThrow();
+    });
+
+    it('warns when webpack receives a delivery mode it cannot narrow', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const compiler = webpack({
+            mode: 'production',
+            context: process.cwd(),
+            entry: {},
+            plugins: [
+                webpackPlugin({
+                    production: { mangle: true, mangleMapDelivery: 'html' },
+                }),
+            ],
+        });
+
+        expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining('has no effect on the webpack lane'),
+        );
+        void compiler.close(() => undefined);
+        warn.mockRestore();
     });
 });

@@ -59,6 +59,7 @@ const REWRITE_CASES: ReadonlyArray<readonly [string, string]> = [
     ['&& guard — falsy left is skipped', `${RUNTIME}export const a = szr(cond && 'm-2');`],
     ['ternary of strings', `${RUNTIME}export const a = szr(wide ? 'w-full' : 'w-64');`],
     ['array of strings', `${RUNTIME}export const a = szr(['p-4', on && 'x']);`],
+    ['array of falsy literals', `${RUNTIME}export const a = szr([false, null, undefined]);`],
     ['falsy literals', `${RUNTIME}export const a = szr('p-4', false, null, undefined);`],
     ['umbrella source', "import { szr } from 'csszyx';\nexport const a = szr('p-4');"],
     [
@@ -98,6 +99,7 @@ const KEEP_CASES: ReadonlyArray<readonly [string, string]> = [
     ['TS assertion is not proof', `${RUNTIME}export const a = szr(x as string);`],
     ['spread argument', `${RUNTIME}export const a = szr(...parts);`],
     ['array with spread', `${RUNTIME}export const a = szr(['p-4', ...rest]);`],
+    ['array with a hole', `${RUNTIME}export const a = szr(['p-4', , 'm-2']);`],
     ['array with object element', `${RUNTIME}export const a = szr(['p-4', { m: 2 }]);`],
     ['numeric argument (truthy non-string)', `${RUNTIME}export const a = szr(4);`],
     ['true literal (truthy non-string)', `${RUNTIME}export const a = szr(true);`],

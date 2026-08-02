@@ -194,6 +194,7 @@ describe('extractSzvRegistryEntries', () => {
             "import { szv } from '@csszyx/runtime';\n" +
             'export const a = szv({ variants: { p1: { x: { p: 1 } } } });\n' +
             'const local = szv({ variants: { hidden: { y: { m: 1 } } } });\n' +
+            'export const __szvPick = szv({ base: { m: 1 } });\n' +
             'export const b = szv({ base: { flex: true } });\n';
         const entries = extractSzvRegistryEntries(source, '/p/styles.ts');
         expect(entries.map(entry => entry.exportName)).toEqual(['a', 'b']);

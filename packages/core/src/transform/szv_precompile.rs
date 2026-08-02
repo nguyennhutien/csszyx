@@ -663,10 +663,30 @@ mod tests {
         )])
         .expect("well-shaped config qualifies");
         assert!(!szv_config_free_of_overlap(&config));
+
+        let base_overlap = config_from(vec![
+            entry("base", nested(vec![entry("p", number(1.0))])),
+            entry(
+                "variants",
+                nested(vec![entry(
+                    "pad",
+                    nested(vec![entry("sm", nested(vec![entry("p", number(2.0))]))]),
+                )]),
+            ),
+        ])
+        .expect("well-shaped config qualifies");
+        assert!(!szv_config_free_of_overlap(&base_overlap));
     }
 
     #[test]
     fn qualification_rejects_unknown_keys_and_non_record_shapes() {
+        assert!(config_from(vec![entry("base", text("p-2"))]).is_none());
+        assert!(config_from(vec![entry("variants", text("invalid"))]).is_none());
+        assert!(config_from(vec![entry(
+            "variants",
+            nested(vec![entry("pad", text("invalid"))]),
+        )])
+        .is_none());
         assert!(config_from(vec![
             entry("variants", nested(Vec::new())),
             entry("compoundVariants", text("unsupported")),
@@ -682,6 +702,8 @@ mod tests {
             nested(vec![entry("pad", number(2.5))]),
         )])
         .is_none());
+        assert!(config_from(vec![entry("defaultVariants", text("invalid"))]).is_none());
+        assert!(parity_safe_scalar_string(&nested(Vec::new())).is_none());
     }
 
     #[test]
@@ -718,6 +740,13 @@ mod tests {
         )])
         .expect("shape qualifies");
         assert!(!szv_config_free_of_overlap(&deep));
+
+        let scalar_css = config_from(vec![entry(
+            "base",
+            nested(vec![entry("css", text("invalid"))]),
+        )])
+        .expect("shape qualifies");
+        assert!(!szv_config_free_of_overlap(&scalar_css));
     }
 
     #[test]
@@ -833,6 +862,17 @@ mod tests {
         // to the default: the entry is simply skipped.
         let unknown: StaticSelection = vec![("tone".to_string(), "nope".to_string())];
         assert_eq!(compute_static_szv_pick(&table, Some(&unknown)), "p-2");
+
+        let table = SzvTable {
+            base: String::new(),
+            dimensions: vec![
+                ("a".into(), vec![("on".into(), "p-2".into())]),
+                ("b".into(), vec![("off".into(), String::new())]),
+            ],
+            defaults: None,
+        };
+        let selection = vec![("a".into(), "on".into()), ("b".into(), "off".into())];
+        assert_eq!(compute_static_szv_pick(&table, Some(&selection)), "p-2");
     }
 
     #[test]
@@ -842,6 +882,24 @@ mod tests {
             r#"{"base":"p-2","d":{"tone":{"primary":"bg-blue-500"}},"defaults":{"tone":"primary"}}"#
         );
         assert_eq!(json_string_literal("a\u{0}b\n"), r#""a\u0000b\n""#);
+        assert_eq!(
+            json_string_literal("\"\\\r\t\u{8}\u{c}\u{1}"),
+            r#""\"\\\r\t\b\f\u0001""#
+        );
+        let table = SzvTable {
+            base: String::new(),
+            dimensions: Vec::new(),
+            defaults: Some(vec![("a".into(), "1".into()), ("b".into(), "2".into())]),
+        };
+        assert_eq!(
+            serialize_szv_table(&table),
+            r#"{"base":"","d":{},"defaults":{"a":"1","b":"2"}}"#
+        );
+        let no_defaults = SzvTable {
+            defaults: Some(Vec::new()),
+            ..table
+        };
+        assert_eq!(serialize_szv_table(&no_defaults), r#"{"base":"","d":{}}"#);
     }
 
     #[test]
@@ -849,6 +907,20 @@ mod tests {
         assert!(decode_cross_module_statics("not json").is_empty());
         assert!(decode_cross_module_statics("{}").is_empty());
         assert!(decode_cross_module_statics(r#"[["./styles",[["cardSz","scalar"]]]]"#).is_empty());
+        for malformed in [
+            r#"["bad-entry"]"#,
+            r#"[[1,[]]]"#,
+            r#"[["./styles",["bad-name-entry"]]]"#,
+            r#"[["./styles",[[1,[]]]]]"#,
+            r#"[["./styles",[["cardSz",[[1,true]]]]]]"#,
+            r#"[["./styles",[["cardSz",[["base",null]]]]]]"#,
+            r#"[["./styles",[["cardSz",[["base",["bad-pair"]]]]]]]"#,
+        ] {
+            assert!(
+                decode_cross_module_statics(malformed).is_empty(),
+                "{malformed}"
+            );
+        }
 
         let decoded =
             decode_cross_module_statics(r#"[["./styles",[["cardSz",[["base",[["p",4]]]]]]]]"#);
@@ -856,6 +928,13 @@ mod tests {
         assert_eq!(decoded[0].0, "./styles");
         assert_eq!(decoded[0].1[0].0, "cardSz");
         assert_eq!(decoded[0].1[0].1.properties[0].key, "base");
+        let boolean = decode_cross_module_statics(
+            r#"[["./styles",[["cardSz",[["base",[["flex",true]]]]]]]]"#,
+        );
+        assert_eq!(
+            boolean[0].1[0].1.properties[0].value,
+            nested(vec![entry("flex", StaticSzValue::Boolean(true))])
+        );
     }
 
     #[test]

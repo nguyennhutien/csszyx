@@ -1996,8 +1996,10 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        collect_unknown_sz_keys, format_color_opacity_object, has_slash_opacity, is_known_sz_key,
-        is_percent, is_tailwind_build_function, is_unsigned_decimal, lower_source_ir_classes,
+        build_mask_radial_classes, build_mask_slot_classes, build_mask_stop_classes,
+        collect_unknown_sz_keys, format_color_opacity_object, format_mask_position,
+        format_mask_size, has_slash_opacity, is_known_sz_key, is_mask_layer_value, is_percent,
+        is_tailwind_build_function, is_unsigned_decimal, lower_source_ir_classes,
         lower_static_sz_object, needs_brackets, variant_string_prefix,
     };
     use crate::transform::{
@@ -2756,6 +2758,176 @@ mod tests {
     }
 
     #[test]
+    fn lowers_complete_mask_slot_matrix() {
+        assert_eq!(
+            variant_string_prefix("min-[40rem]").as_deref(),
+            Some("min-[40rem]")
+        );
+        assert!(variant_string_prefix("unknown-[value]").is_none());
+        assert!(variant_string_prefix("unknown-[value").is_none());
+        assert_eq!(
+            build_mask_stop_classes("mask-from", None),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            build_mask_stop_classes("mask-from", Some(&StaticSzValue::Number(12.5))),
+            ["mask-from-12.5"]
+        );
+        assert_eq!(
+            build_mask_stop_classes("mask-from", Some(&StaticSzValue::String("--at".into()))),
+            ["mask-from-(--at)"]
+        );
+        assert_eq!(
+            build_mask_stop_classes("mask-from", Some(&StaticSzValue::String("20%".into()))),
+            ["mask-from-20%"]
+        );
+
+        let rich_stop = object(vec![
+            property("at", StaticSzValue::Number(25.0)),
+            property("color", StaticSzValue::String("--brand".into())),
+            property("op", StaticSzValue::String("40%".into())),
+        ]);
+        let StaticSzValue::Object(rich_stop) = rich_stop else {
+            unreachable!()
+        };
+        assert_eq!(
+            build_mask_stop_classes("mask-from", Some(&StaticSzValue::Object(rich_stop))),
+            ["mask-from-25", "mask-from-(color:--brand)/40%"]
+        );
+
+        for at in [
+            StaticSzValue::String("--at".into()),
+            StaticSzValue::String("30%".into()),
+        ] {
+            let stop = object(vec![property("at", at)]);
+            let StaticSzValue::Object(stop) = stop else {
+                unreachable!()
+            };
+            assert_eq!(
+                build_mask_stop_classes("mask-from", Some(&StaticSzValue::Object(stop))).len(),
+                1
+            );
+        }
+        let numeric_op = object(vec![
+            property("color", StaticSzValue::String("red-500".into())),
+            property("op", StaticSzValue::Number(50.0)),
+        ]);
+        let StaticSzValue::Object(numeric_op) = numeric_op else {
+            unreachable!()
+        };
+        assert_eq!(
+            build_mask_stop_classes("mask-from", Some(&StaticSzValue::Object(numeric_op))),
+            ["mask-from-red-500/50"]
+        );
+
+        let invalid_stop = object(vec![
+            property("at", StaticSzValue::Boolean(true)),
+            property("color", StaticSzValue::String("red-500".into())),
+            property("op", StaticSzValue::Boolean(true)),
+        ]);
+        let StaticSzValue::Object(invalid_stop) = invalid_stop else {
+            unreachable!()
+        };
+        assert_eq!(
+            build_mask_stop_classes("mask-to", Some(&StaticSzValue::Object(invalid_stop))),
+            ["mask-to-red-500"]
+        );
+        assert!(build_mask_stop_classes("mask-to", Some(&StaticSzValue::Boolean(true))).is_empty());
+
+        let radial = StaticSzObject {
+            properties: vec![
+                property("at", StaticSzValue::String("top".into())),
+                property("size", StaticSzValue::String("closest-side".into())),
+                property("shape", StaticSzValue::String("circle".into())),
+                property("from", StaticSzValue::String("0%".into())),
+                property("to", StaticSzValue::String("100%".into())),
+            ],
+        };
+        assert_eq!(
+            build_mask_radial_classes(&radial),
+            [
+                "mask-radial-at-top",
+                "mask-radial-closest-side",
+                "mask-circle",
+                "mask-radial-from-0%",
+                "mask-radial-to-100%",
+            ]
+        );
+
+        for (angle, expected) in [
+            (StaticSzValue::Number(-45.0), "-mask-linear-45"),
+            (StaticSzValue::Number(45.0), "mask-linear-45"),
+            (
+                StaticSzValue::String("--angle".into()),
+                "mask-linear-(--angle)",
+            ),
+            (StaticSzValue::String("to-r".into()), "mask-linear-to-r"),
+        ] {
+            let slot = StaticSzObject {
+                properties: vec![property("angle", angle)],
+            };
+            assert_eq!(build_mask_slot_classes("maskLinear", &slot), [expected]);
+        }
+        assert!(build_mask_slot_classes(
+            "maskLinear",
+            &StaticSzObject {
+                properties: vec![property("angle", StaticSzValue::Boolean(true))],
+            },
+        )
+        .is_empty());
+        let edge_slot = StaticSzObject {
+            properties: vec![property(
+                "x",
+                object(vec![
+                    property("from", StaticSzValue::String("10%".into())),
+                    property("to", StaticSzValue::String("90%".into())),
+                ]),
+            )],
+        };
+        assert_eq!(
+            build_mask_slot_classes("maskLinear", &edge_slot),
+            ["mask-x-from-10%", "mask-x-to-90%"]
+        );
+        assert_eq!(
+            build_mask_slot_classes(
+                "maskConic",
+                &StaticSzObject {
+                    properties: vec![property("angle", StaticSzValue::Number(30.0))],
+                },
+            ),
+            ["mask-conic-30"]
+        );
+
+        assert!(is_mask_layer_value("linear-from-20%"));
+        assert!(is_mask_layer_value("-radial"));
+        assert!(!is_mask_layer_value("linear-gradient(red,blue)"));
+        assert!(!is_mask_layer_value("image"));
+        assert_eq!(format_mask_size("cover"), "mask-cover");
+        assert_eq!(format_mask_size("--size"), "mask-size-(--size)");
+        assert_eq!(format_mask_size("20px 30px"), "mask-size-[20px_30px]");
+        assert_eq!(format_mask_position("center"), "mask-center");
+        assert_eq!(format_mask_position("--pos"), "mask-position-(--pos)");
+        assert_eq!(
+            format_mask_position("20px 30px"),
+            "mask-position-[20px_30px]"
+        );
+
+        let direct = StaticSzObject {
+            properties: vec![
+                property("mask", StaticSzValue::String("linear".into())),
+                property(
+                    "bgImg",
+                    StaticSzValue::String("linear-gradient(red, blue)".into()),
+                ),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&direct),
+            ["bg-[linear-gradient(red,_blue)]"]
+        );
+    }
+
+    #[test]
     fn lowers_background_size_and_content_special_cases() {
         let object = StaticSzObject {
             properties: vec![property(
@@ -3317,6 +3489,14 @@ mod tests {
             )],
         };
         assert!(mask_member_hits(&legal).is_empty());
+
+        let scalar_edge = StaticSzObject {
+            properties: vec![property(
+                "maskLinear",
+                object(vec![property("b", StaticSzValue::String("20%".into()))]),
+            )],
+        };
+        assert!(mask_member_hits(&scalar_edge).is_empty());
 
         // A slot nested under a variant is still reached — the walk descends
         // through any object that is not itself a slot.

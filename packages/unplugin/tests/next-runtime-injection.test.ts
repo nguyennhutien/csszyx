@@ -86,4 +86,18 @@ describe('Next runtime import injection', () => {
         expect(result.injected).toEqual([]);
         expect(result.code).toBe(code);
     });
+
+    it('splits provable szPart helpers between slim and barrel entries', () => {
+        const result = injectNextRuntimeImports('export const x = 1;', {
+            usesSzPart: true,
+            usesSzcn: true,
+            usesSzvPick: true,
+            usesSzvPick1: true,
+            szPartArgsProvable: true,
+        });
+
+        expect(result.injected).toEqual(['_szcn', '_szPart', '__szvPick', '__szvPick1']);
+        expect(result.code).toContain("import { _szcn, _szPart } from '@csszyx/runtime/merge';");
+        expect(result.code).toContain("import { __szvPick, __szvPick1 } from '@csszyx/runtime';");
+    });
 });

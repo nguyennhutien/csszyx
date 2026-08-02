@@ -205,10 +205,6 @@ function transformSzsAttribute(
         formatSzWarnLocation(filename ?? 'file.tsx', path.node.loc?.start.line, rootDir),
     );
     const compiledSlots = compileSzsSlots(slotMap);
-    if (!compiledSlots) {
-        diagnostics.push(szsUnsupportedDiagnostic(filename ?? '<anonymous>'));
-        return false;
-    }
     applyCompiledSzsSlots(compiledSlots, pendingClasses);
     path.node.name = t.jsxIdentifier('szsc');
     return true;
@@ -218,9 +214,9 @@ function transformSzsAttribute(
  * Compiles every validated szs slot without mutating the source map.
  *
  * @param slotMap Validated static slot map.
- * @returns Compiled slots, or null when a value is unsupported.
+ * @returns Compiled slots.
  */
-function compileSzsSlots(slotMap: t.ObjectExpression): CompiledSzsSlot[] | null {
+function compileSzsSlots(slotMap: t.ObjectExpression): CompiledSzsSlot[] {
     const compiledSlots: CompiledSzsSlot[] = [];
     for (const property of slotMap.properties) {
         const slot = property as t.ObjectProperty;
@@ -228,8 +224,9 @@ function compileSzsSlots(slotMap: t.ObjectExpression): CompiledSzsSlot[] | null 
             compiledSlots.push({ slot, classes: slot.value.value, rewrite: false });
             continue;
         }
-        const compiled = tryStaticTransformNode(slot.value as t.Node);
-        if (!compiled || !t.isStringLiteral(compiled)) return null;
+        // `isValidSzsSlotMap` has already proven this is a pure literal object,
+        // the exact subset `tryStaticTransformNode` lowers to a string.
+        const compiled = tryStaticTransformNode(slot.value as t.Node) as t.StringLiteral;
         compiledSlots.push({ slot, classes: compiled.value, rewrite: true });
     }
     return compiledSlots;

@@ -179,7 +179,6 @@ function pickSelectionValueKey(value: unknown): string | null {
  * @returns A short description for the dev warning.
  */
 function describePickValue(value: unknown): string {
-    if (value === null) return 'null';
     if (Array.isArray(value)) return 'an array';
     return typeof value;
 }

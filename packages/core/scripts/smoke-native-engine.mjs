@@ -235,9 +235,7 @@ function assertNativeEngineTransform(binding) {
   if (JSON.stringify(dynamicSz.classes) !== JSON.stringify(["p-4"])) {
     fail(`Unexpected dynamic sz classes: ${JSON.stringify(dynamicSz.classes)}`);
   }
-  if (dynamicSz.diagnostics?.length !== 0) {
-    fail(`Expected no dynamic sz diagnostics: ${dynamicSz.diagnostics}`);
-  }
+  assertIdentifierFallbackDiagnostic(dynamicSz, 68, "dynamic sz");
 
   if (
     mergeRuntimeSz.code !==
@@ -264,11 +262,7 @@ function assertNativeEngineTransform(binding) {
       `Unexpected merge runtime rawClassNames: ${JSON.stringify(mergeRuntimeSz.rawClassNames)}`,
     );
   }
-  if (mergeRuntimeSz.diagnostics?.length !== 0) {
-    fail(
-      `Expected no merge runtime sz diagnostics: ${mergeRuntimeSz.diagnostics}`,
-    );
-  }
+  assertIdentifierFallbackDiagnostic(mergeRuntimeSz, 70, "merge runtime sz");
 
   if (
     mergeDynamicClass.code !==
@@ -289,6 +283,11 @@ function assertNativeEngineTransform(binding) {
       `Unexpected merge dynamic class rawClassNames: ${JSON.stringify(mergeDynamicClass.rawClassNames)}`,
     );
   }
+  assertIdentifierFallbackDiagnostic(
+    mergeDynamicClass,
+    75,
+    "merge dynamic class",
+  );
 
   if (!recover.code.includes('szRecover="csr" data-sz-recovery-token="')) {
     fail(`Unexpected recovery code: ${recover.code}`);
@@ -311,6 +310,15 @@ function assertNativeEngineTransform(binding) {
     !recoveryToken.path.endsWith("fixtures/recover.tsx:1:27")
   ) {
     fail(`Unexpected recovery token data: ${JSON.stringify(recoveryToken)}`);
+  }
+}
+
+function assertIdentifierFallbackDiagnostic(result, column, label) {
+  const expected = [
+    `sz fallback at 1:${column}: identifier \`styles\` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().`,
+  ];
+  if (JSON.stringify(result.diagnostics) !== JSON.stringify(expected)) {
+    fail(`Unexpected ${label} diagnostics: ${result.diagnostics}`);
   }
 }
 

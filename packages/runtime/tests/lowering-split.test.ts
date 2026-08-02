@@ -13,7 +13,7 @@
  * must THROW with the one-line fix — never return '' and silently unstyle the
  * page.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     _sz as barrelSz,
     _szMerge as barrelSzMerge,
@@ -85,6 +85,14 @@ describe('core object paths without a lowerer', () => {
 });
 
 describe('registration', () => {
+    it('the side-effect entry registers lowering without the barrel', async () => {
+        vi.resetModules();
+        setSzLowering(null);
+        await import('../src/lowering-register.js');
+        expect(getSzLowering()).not.toBeNull();
+        expect(_sz({ p: 4 })).toBe('p-4');
+    });
+
     it('registerSzLowering makes core helpers object-capable', () => {
         registerSzLowering();
         expect(szr({ p: 4, bg: 'red-500' })).toBe('p-4 bg-red-500');

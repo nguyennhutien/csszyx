@@ -31,6 +31,7 @@ const WARNING_CASES: ReadonlyArray<readonly [string, string, string]> = [
     ['szr identifier', 'export const a = szr(cfg);', 'szr fallback at 2:22'],
     ['szr member', 'export const a = szr(cfg.x);', 'szr fallback at 2:22'],
     ['szr call', 'export const a = szr(mk());', 'szr fallback at 2:22'],
+    ['szr parenthesized call', 'export const a = szr((mk()));', 'szr fallback at 2:23'],
     ['szr member callee', 'export const a = szr(theme.build());', 'szr fallback at 2:22'],
     ['szr unreadable callee', 'export const a = szr((c ? f : g)());', 'szr fallback at 2:22'],
     ['szv identifier', 'export const v = szv(cfg);', 'szv catalog at 2:22'],

@@ -1634,7 +1634,7 @@ interface OxcSzsEntry {
  * @param source Original source.
  * @param globalVarAliases Global CSS variable aliases.
  * @param cssVariableMap Emitted CSS variable mapping.
- * @returns Compiled entries, or null when one entry is unsupported.
+ * @returns Compiled entries.
  */
 function compileOxcSzsEntries(
     slotMap: ObjectExpressionNode,
@@ -1643,7 +1643,7 @@ function compileOxcSzsEntries(
     source: string,
     globalVarAliases: Map<string, string>,
     cssVariableMap: Map<string, CssVariableMangleValue>,
-): OxcSzsEntry[] | null {
+): OxcSzsEntry[] {
     const entries: OxcSzsEntry[] = [];
     for (const propertyNode of slotMap.properties) {
         const property = propertyNode as PropertyNode;
@@ -1660,20 +1660,17 @@ function compileOxcSzsEntries(
             });
             continue;
         }
-        try {
-            const slotObject = astObjectToSzObject(
-                property.value as ObjectExpressionNode,
-                filename,
-                bindings,
-            );
-            const compiled = compileSzObject(
-                applyGlobalVarAliasesToSzObject(slotObject, globalVarAliases, cssVariableMap),
-            ).className;
-            entries.push({ keyText, classNames: compiled, text: JSON.stringify(compiled) });
-        } catch (error) {
-            if (error instanceof OxcNotImplementedError) return null;
-            throw error;
-        }
+        // `isValidSzsSlotMap` has already proven the object uses only the
+        // literal shapes understood by `astObjectToSzObject`.
+        const slotObject = astObjectToSzObject(
+            property.value as ObjectExpressionNode,
+            filename,
+            bindings,
+        );
+        const compiled = compileSzObject(
+            applyGlobalVarAliasesToSzObject(slotObject, globalVarAliases, cssVariableMap),
+        ).className;
+        entries.push({ keyText, classNames: compiled, text: JSON.stringify(compiled) });
     }
     return entries;
 }
@@ -1734,11 +1731,6 @@ function transformOxcSzsAttribute(params: OxcSzsAttributeParams): boolean {
         cssVariableMap,
     );
     setSzWarnLocation(undefined);
-    if (!entries) {
-        diagnostics.push(szsUnsupportedDiagnostic(filename ?? '<anonymous>'));
-        return false;
-    }
-
     const body = entries.map(entry => `${entry.keyText}: ${entry.text}`).join(', ');
     edits.overwrite(
         attribute.start,
@@ -2592,7 +2584,14 @@ function pushSiteFallbackDiagnostic(
     source: string,
 ): void {
     if (!expression) return;
-    const { line, column } = offsetToLineColumn(source, expression.start);
+    // Babel drops parenthesized-expression nodes, so position and wording both
+    // point at the inner expression on that lane. Keep oxc byte-identical.
+    let positionedExpression = expression;
+    while (positionedExpression.type === 'ParenthesizedExpression') {
+        positionedExpression = (positionedExpression as unknown as { expression: OxcNode })
+            .expression;
+    }
+    const { line, column } = offsetToLineColumn(source, positionedExpression.start);
     const { kind, detail } = classifyFallbackExpression(expression);
     diagnostics.push(formatSzFallbackDiagnostic(site, `${line}:${column + 1}`, kind, detail));
 }
@@ -6729,6 +6728,7 @@ export function extractSzvRegistryEntries(source: string, filename: string): Szv
             body?: OxcNode[];
         };
     } catch {
+        /* v8 ignore next -- oxc reports syntax errors in-band; only native/parser failures throw. */
         return [];
     }
     const out: SzvRegistryEntry[] = [];

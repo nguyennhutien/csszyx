@@ -942,6 +942,37 @@ mod tests {
     }
 
     #[test]
+    fn static_engine_reports_every_site_fallback_kind_and_site() {
+        let file = TransformFile {
+            filename: "/repo/src/Fallbacks.tsx".to_string(),
+            source: "import { szr, szv } from 'csszyx';\nexport const a = szr(cfg);\nexport const b = szr(cfg.x);\nexport const c = szr(await cfg);\nexport const d = szv(makeConfig());"
+                .to_string(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(diagnostics.contains("szr fallback at 2:"), "{diagnostics}");
+        assert!(diagnostics.contains("identifier `cfg`"), "{diagnostics}");
+        assert!(diagnostics.contains("member expression"), "{diagnostics}");
+        assert!(diagnostics.contains("AwaitExpression"), "{diagnostics}");
+        assert!(diagnostics.contains("szv catalog at 5:"), "{diagnostics}");
+    }
+
+    #[test]
+    fn static_engine_reports_unknown_mask_members() {
+        let file = TransformFile {
+            filename: "/repo/src/Mask.tsx".to_string(),
+            source: "export const A = () => <div sz={{ maskLinear: { form: '20%' } }} />;"
+                .to_string(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.contains("maskLinear: unknown field \"form\"")));
+    }
+
+    #[test]
     fn static_engine_reports_only_unsafe_style_spread_collisions() {
         for source in [
             "const A=({width,props})=><div sz={{w:width}} {...props}/>;",
