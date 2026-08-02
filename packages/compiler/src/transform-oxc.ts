@@ -2518,47 +2518,7 @@ function staticSzvSelectionKeyOxc(key: {
  * @returns True when the value provably needs no object lowering.
  */
 function isProvablyNonObjectArgumentOxc(rawExpression: OxcNode): boolean {
-    let expression = rawExpression;
-    while (expression.type === 'ParenthesizedExpression') {
-        expression = (expression as unknown as { expression: OxcNode }).expression;
-    }
-    if (expression.type === 'Literal') {
-        const value = (expression as unknown as { value: unknown }).value;
-        return typeof value === 'string' || value === false || value === null;
-    }
-    if (expression.type === 'TemplateLiteral') return true;
-    if (expression.type === 'Identifier') {
-        return (expression as IdentifierNode).name === 'undefined';
-    }
-    if (expression.type === 'LogicalExpression') {
-        const logical = expression as unknown as {
-            operator: string;
-            left: OxcNode;
-            right: OxcNode;
-        };
-        if (logical.operator === '&&') return isProvablyNonObjectArgumentOxc(logical.right);
-        return (
-            isProvablyNonObjectArgumentOxc(logical.left) &&
-            isProvablyNonObjectArgumentOxc(logical.right)
-        );
-    }
-    if (expression.type === 'ConditionalExpression') {
-        const conditional = expression as unknown as { consequent: OxcNode; alternate: OxcNode };
-        return (
-            isProvablyNonObjectArgumentOxc(conditional.consequent) &&
-            isProvablyNonObjectArgumentOxc(conditional.alternate)
-        );
-    }
-    if (expression.type === 'ArrayExpression') {
-        const elements = (expression as unknown as { elements: Array<OxcNode | null> }).elements;
-        return elements.every(
-            element =>
-                element !== null &&
-                element.type !== 'SpreadElement' &&
-                isProvablyNonObjectArgumentOxc(element),
-        );
-    }
-    return false;
+    return analyzeNonObjectArgumentOxc(rawExpression, null);
 }
 
 /**
@@ -2574,6 +2534,25 @@ function isProvablyNonObjectArgumentOxc(rawExpression: OxcNode): boolean {
  * @returns Whether the non-factory shape is provably string-or-falsy.
  */
 function analyzeSzrArgumentOxc(rawExpression: OxcNode, factories: CallExpressionNode[]): boolean {
+    return analyzeNonObjectArgumentOxc(rawExpression, factories);
+}
+
+/**
+ * Prove a string-or-falsy argument shape and optionally collect factory leaves.
+ *
+ * Keeping the structural recursion shared prevents the ordinary `_szPart`
+ * proof and the szr rewrite proof from drifting as oxc adds node shapes. A
+ * null sink deliberately rejects calls because only szr can prove them later
+ * through the szv precompile accounting pass.
+ *
+ * @param rawExpression - Argument expression.
+ * @param factories - Factory-call sink for szr analysis, or null to reject calls.
+ * @returns Whether the expression is provably string-or-falsy.
+ */
+function analyzeNonObjectArgumentOxc(
+    rawExpression: OxcNode,
+    factories: CallExpressionNode[] | null,
+): boolean {
     let expression = rawExpression;
     while (expression.type === 'ParenthesizedExpression') {
         expression = (expression as unknown as { expression: OxcNode }).expression;
@@ -2581,6 +2560,7 @@ function analyzeSzrArgumentOxc(rawExpression: OxcNode, factories: CallExpression
     if (expression.type === 'CallExpression') {
         const call = expression as CallExpressionNode;
         if (
+            factories !== null &&
             call.callee.type === 'Identifier' &&
             !SZV_RESERVED_FACTORY_NAMES.has((call.callee as IdentifierNode).name)
         ) {
@@ -2603,17 +2583,19 @@ function analyzeSzrArgumentOxc(rawExpression: OxcNode, factories: CallExpression
             left: OxcNode;
             right: OxcNode;
         };
-        if (logical.operator === '&&') return analyzeSzrArgumentOxc(logical.right, factories);
+        if (logical.operator === '&&') {
+            return analyzeNonObjectArgumentOxc(logical.right, factories);
+        }
         return (
-            analyzeSzrArgumentOxc(logical.left, factories) &&
-            analyzeSzrArgumentOxc(logical.right, factories)
+            analyzeNonObjectArgumentOxc(logical.left, factories) &&
+            analyzeNonObjectArgumentOxc(logical.right, factories)
         );
     }
     if (expression.type === 'ConditionalExpression') {
         const conditional = expression as unknown as { consequent: OxcNode; alternate: OxcNode };
         return (
-            analyzeSzrArgumentOxc(conditional.consequent, factories) &&
-            analyzeSzrArgumentOxc(conditional.alternate, factories)
+            analyzeNonObjectArgumentOxc(conditional.consequent, factories) &&
+            analyzeNonObjectArgumentOxc(conditional.alternate, factories)
         );
     }
     if (expression.type === 'ArrayExpression') {
@@ -2622,7 +2604,7 @@ function analyzeSzrArgumentOxc(rawExpression: OxcNode, factories: CallExpression
             element =>
                 element !== null &&
                 element.type !== 'SpreadElement' &&
-                analyzeSzrArgumentOxc(element, factories),
+                analyzeNonObjectArgumentOxc(element, factories),
         );
     }
     return false;
@@ -6871,11 +6853,7 @@ export function extractSzvRegistryEntries(source: string, filename: string): Szv
         const declarators = (declaration as unknown as VariableDeclarationNode).declarations;
         for (const declarator of declarators) {
             const factory = readSzvFactoryDeclaratorOxc(declarator);
-            if (
-                factory === null ||
-                factory.config === null ||
-                qualifyStaticSzvConfig(factory.config) === null
-            ) {
+            if (factory?.config == null || qualifyStaticSzvConfig(factory.config) === null) {
                 continue;
             }
             out.push({ exportName: factory.name, config: factory.config });
