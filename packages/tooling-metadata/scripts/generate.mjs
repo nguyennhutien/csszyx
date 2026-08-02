@@ -6,6 +6,7 @@ import ts from 'typescript';
 import {
     BOOLEAN_SHORTHANDS,
     KNOWN_VARIANTS,
+    MIGRATION_NOTES,
     NEGATIVE_ALLOWED,
     PROPERTY_MAP,
     SUGGESTION_MAP,
@@ -59,6 +60,9 @@ export const PROPERTY_MAP = ${serialize(PROPERTY_MAP)} as const;
 export const BOOLEAN_SHORTHANDS = ${serialize([...BOOLEAN_SHORTHANDS].sort())} as const;
 export const KNOWN_VARIANTS = ${serialize([...KNOWN_VARIANTS].sort())} as const;
 export const SUGGESTION_MAP = ${serialize(SUGGESTION_MAP)} as const;
+/** Removed keys whose replacement is a SHAPE, not another key name — rendered
+ * as "was removed: <note>", never through the did-you-mean template. */
+export const MIGRATION_NOTES = ${serialize(MIGRATION_NOTES)} as const;
 /** sz keys whose utility accepts a negative value (\`{ mt: '-4' }\` → \`-mt-4\`).
  * Derived from the compiler's NEGATIVE_ALLOWED, which is keyed by Tailwind
  * prefix; editors need the sz-key view to offer negative value completions. */

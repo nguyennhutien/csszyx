@@ -144,9 +144,6 @@ export const PROPERTY_CATEGORY_MAP: Record<string, PropertyCategory> = {
     dropShadowColor: PropertyCategory.COLOR,
     scrollbarThumb: PropertyCategory.COLOR,
     scrollbarTrack: PropertyCategory.COLOR,
-    maskFrom: PropertyCategory.COLOR,
-    maskVia: PropertyCategory.COLOR,
-    maskTo: PropertyCategory.COLOR,
 
     // ---- UNITLESS ----
     opacity: PropertyCategory.UNITLESS,

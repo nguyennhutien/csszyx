@@ -99,16 +99,6 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
             ] as const,
     ) as ReadonlyArray<readonly [string, Baseline]>),
 
-    // ── known-dead: unconditional ───────────────────────────────────────────
-    ['ring-none', { kind: 'known-dead', reason: "{ ring: 'none' } — Tailwind serves ring-0" }],
-    [
-        'font-features-normal',
-        {
-            kind: 'known-dead',
-            reason: "{ fontFeatures: 'normal' } — Tailwind has no font-features-* utility",
-        },
-    ],
-
     // ── known-dead: unknown sz key that still emits ─────────────────────────
     ...(['break-word', 'pointer-none'].map(
         c =>
@@ -116,7 +106,7 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
                 c,
                 {
                     kind: 'known-dead',
-                    reason: 'emitted from an UNKNOWN sz key — the warning says "will be ignored" but the dead class still ships',
+                    reason: 'emitted from an UNKNOWN sz key — warned truthfully, but the dead class still ships (systemic; the drop-vs-emit decision is still open)',
                 },
             ] as const,
     ) as ReadonlyArray<readonly [string, Baseline]>),

@@ -13602,7 +13602,7 @@
         }
       ]
     },
-    "oxc": "font-features-normal"
+    "oxc": "font-features-[normal]"
   },
   {
     "sz": "{\"fontSmoothing\":\"grayscale\"}",
@@ -21724,7 +21724,7 @@
         }
       ]
     },
-    "oxc": "ring-none"
+    "oxc": "ring-0"
   },
   {
     "sz": "{\"rotate\":-45}",

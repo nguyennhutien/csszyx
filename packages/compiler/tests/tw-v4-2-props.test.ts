@@ -232,9 +232,11 @@ describe('scrollPbs / scrollPbe / scrollMbs / scrollMbe', () => {
 // ============================================================================
 
 describe('fontFeatures (font-feature-settings)', () => {
-    it('should emit font-features-* class', () => {
+    it('should emit the bracketed form for the normal keyword', () => {
+        // Tailwind's font-features utility is functional-only: the bare
+        // keyword styles nothing while the bracketed form compiles.
         const result = transform({ fontFeatures: 'normal' });
-        expect(result.className).toBe('font-features-normal');
+        expect(result.className).toBe('font-features-[normal]');
     });
 
     it('should emit arbitrary font-features class for feature string', () => {

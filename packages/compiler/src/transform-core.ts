@@ -513,14 +513,24 @@ const CSS_VAR_TYPE_HINTS: Record<string, string> = {
 // SUGGESTION_MAP: Removed aliases → canonical key migration hints (dev only)
 // This is exported for the MCP server so AI can guide users accurately.
 // ============================================================================
-export const SUGGESTION_MAP: Record<string, string> = {
+/**
+ * Removed keys whose replacement is a SHAPE, not another key name. These need
+ * their own sentence: rendering them through the SUGGESTION_MAP template would
+ * print the prose as if it were a key ("Use the canonical key "maskLinear /
+ * maskRadial / maskConic with { from }" …").
+ */
+export const MIGRATION_NOTES: Record<string, string> = {
     // Mask gradient stops moved onto the layer that owns them: Tailwind has no
     // bare `mask-from-*`, only `mask-<layer>-from-*` and `mask-<side>-from-*`.
-    maskFrom: 'maskLinear / maskRadial / maskConic with { from }',
-    maskTo: 'maskLinear / maskRadial / maskConic with { to }',
+    maskFrom:
+        'the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }',
+    maskTo: 'the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }',
     maskVia:
-        'maskLinear / maskRadial / maskConic { from, to } — Tailwind has no via stop for masks',
-    maskShape: 'maskRadial with { shape }',
+        'masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic',
+    maskShape: 'the shape keyword moved to maskRadial — { shape: "circle" | "ellipse" }',
+};
+
+export const SUGGESTION_MAP: Record<string, string> = {
     // Background
     backgroundColor: 'bg',
     backgroundImage: 'bgImg',
@@ -2893,6 +2903,56 @@ const MASK_SLOT_KEYS: ReadonlySet<string> = new Set(['maskLinear', 'maskRadial',
 /** Sides of the linear slot; each writes its own `--tw-mask-<side>` variable. */
 const MASK_SIDES: readonly string[] = ['t', 'r', 'b', 'l', 'x', 'y'];
 
+/** Legal members per slot; anything else emits nothing and deserves a warning. */
+const MASK_SLOT_MEMBERS: Readonly<Record<string, readonly string[]>> = {
+    maskLinear: ['angle', 'from', 'to', ...MASK_SIDES],
+    maskConic: ['angle', 'from', 'to'],
+    maskRadial: ['at', 'size', 'shape', 'from', 'to'],
+};
+
+/** Legal members of one linear edge object (`{ b: { from, to } }`). */
+const MASK_EDGE_MEMBERS: readonly string[] = ['from', 'to'];
+
+// Dev-only de-dup, browser included — same reasoning as warnedMaskLayerValues.
+const warnedMaskSlotMembers = new Set<string>();
+
+/**
+ * Warn that a mask slot member is not part of the slot's shape.
+ *
+ * A member the builders do not recognise emits NOTHING — worse than an unknown
+ * top-level key, which at least leaves a dead class in the DOM to find. The
+ * slot shapes are closed (member NAMES are validated; member VALUES stay
+ * unvalidated, matching the compiler's prefix-mapping design), so a typo like
+ * `form` for `from` is fully detectable.
+ *
+ * @param owner - The slot (or `slot.edge`) whose shape was missed.
+ * @param member - The unrecognised member key.
+ * @param allowed - The members the owner accepts, for the message.
+ */
+/**
+ * Test-only: clear the mask warning de-dup sets so ordering between test
+ * files (and lanes within one file) cannot decide whether a warning fires.
+ */
+export function __resetMaskWarnDedupForTests(): void {
+    warnedMaskLayerValues.clear();
+    warnedMaskSlotMembers.clear();
+}
+
+/**
+ *
+ */
+function warnMaskSlotMember(owner: string, member: string, allowed: readonly string[]): void {
+    if (process.env.NODE_ENV === 'production') return;
+    const sig = `${owner}.${member}`;
+    if (warnedMaskSlotMembers.has(sig)) return;
+    warnedMaskSlotMembers.add(sig);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] ${owner}: unknown field "${member}"${at} — nothing is emitted for it. ` +
+            `${owner} takes { ${allowed.join(', ')} }.`,
+    );
+}
+
 /** One gradient stop: a position, a colour, or both — they are separate vars. */
 interface MaskStopValue {
     at?: string | number;
@@ -2942,6 +3002,12 @@ function buildMaskStopClasses(base: string, stop: unknown): string[] {
  * @returns The utilities, in declaration order.
  */
 function buildMaskSlotClasses(slotKey: string, value: Record<string, unknown>): string[] {
+    const members = MASK_SLOT_MEMBERS[slotKey];
+    if (members) {
+        for (const member of Object.keys(value)) {
+            if (!members.includes(member)) warnMaskSlotMember(slotKey, member, members);
+        }
+    }
     if (slotKey === 'maskRadial') return buildMaskRadialClasses(value);
     const family = slotKey === 'maskConic' ? 'conic' : 'linear';
     const out: string[] = [];
@@ -2957,6 +3023,11 @@ function buildMaskSlotClasses(slotKey: string, value: Record<string, unknown>): 
         for (const side of MASK_SIDES) {
             const edge = value[side];
             if (!isRecordValue(edge)) continue;
+            for (const member of Object.keys(edge)) {
+                if (!MASK_EDGE_MEMBERS.includes(member)) {
+                    warnMaskSlotMember(`${slotKey}.${side}`, member, MASK_EDGE_MEMBERS);
+                }
+            }
             out.push(...buildMaskStopClasses(`mask-${side}-from`, edge.from));
             out.push(...buildMaskStopClasses(`mask-${side}-to`, edge.to));
         }
@@ -3008,13 +3079,23 @@ const MASK_LAYER_KEY_BY_FAMILY: Readonly<Record<string, string>> = {
     conic: 'maskConic',
 };
 
+// Dev-only de-dup, browser included: like the alignment props above, mask
+// values most often resolve at runtime via `_sz` in a prop-API component,
+// where `window` is defined — so the migration warning must fire there too.
+const warnedMaskLayerValues = new Set<string>();
+
 /**
  * Warn that a `mask` layer value moved, naming the key that replaced it.
+ * Fires in browser dev as well (unlike szDevWarningsEnabled warnings): the
+ * consequence is a silently dropped mask, which is exactly the migration
+ * mistake a first-time user makes inside a runtime-resolved sz object.
  *
  * @param value - The raw `mask` value.
  */
 function warnMaskLayerValue(value: string): void {
-    if (!szDevWarningsEnabled()) return;
+    if (process.env.NODE_ENV === 'production') return;
+    if (warnedMaskLayerValues.has(value)) return;
+    warnedMaskLayerValues.add(value);
     const bare = value.startsWith('-') ? value.slice(1) : value;
     const family = /^(linear|radial|conic)/.exec(bare)?.[1] ?? 'linear';
     const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
@@ -3171,6 +3252,10 @@ function isKnownSzPropertyKey(key: string): boolean {
 /** Builds the diagnostic for an unsupported key without runtime context. */
 function unknownSzPropertyMessage(key: string): string {
     const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    const note = MIGRATION_NOTES[key];
+    if (note) {
+        return `[csszyx] "${key}" was removed${at}: ${note}.`;
+    }
     const suggestion = SUGGESTION_MAP[key];
     if (suggestion) {
         return `[csszyx] Use the canonical key "${suggestion}" instead of "${key}"${at}.`;
@@ -3191,7 +3276,7 @@ function unknownSzPropertyMessage(key: string): string {
     return (
         `[csszyx] Unknown property "${key}" in sz prop${at}. ` +
         'The class is still emitted, so it styles nothing unless Tailwind ' +
-        'serves that utility. Check for typos.'
+        "serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility."
     );
 }
 
@@ -3218,6 +3303,13 @@ function buildGenericStringClass(
 
 /** Normalizes string values into Tailwind utility suffix syntax. */
 function normalizeGenericStringValue(rawKey: string, key: string, value: string): string {
+    // `ring: 'none'` reads like CSS, but Tailwind spells the zero ring
+    // `ring-0` — `ring-none` styles nothing.
+    if (rawKey === 'ring' && value === 'none') return '0';
+    // Tailwind's font-features utility is functional-only: bare
+    // `font-features-normal` styles nothing while `font-features-[normal]`
+    // compiles.
+    if (rawKey === 'fontFeatures' && value === 'normal') return '[normal]';
     if (isTailwindBuildFunction(value) || (value.startsWith('--') && value.includes('('))) {
         return `[${normalizeArbitraryValue(value)}]`;
     }

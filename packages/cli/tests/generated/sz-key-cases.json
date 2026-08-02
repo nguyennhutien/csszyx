@@ -3834,11 +3834,11 @@
                     "sz": {
                         "fontFeatures": "normal"
                     },
-                    "class": "font-features-normal"
+                    "class": "font-features-[normal]"
                 }
             ],
             "reverse": [
-                "font-features-normal"
+                "font-features-[normal]"
             ]
         },
         "fontSmoothing": {
@@ -7690,13 +7690,13 @@
                     "sz": {
                         "ring": "none"
                     },
-                    "class": "ring-none"
+                    "class": "ring-0"
                 }
             ],
             "reverse": [
                 "ring",
-                "ring-1",
-                "ring-none"
+                "ring-0",
+                "ring-1"
             ]
         },
         "ringColor": {

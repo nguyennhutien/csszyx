@@ -132,8 +132,10 @@ describe('typography — font variant numeric', () => {
 });
 
 describe('typography — font features', () => {
-    it('{ fontFeatures: "normal" } → font-features-normal', () => {
-        expect(t({ fontFeatures: 'normal' })).toBe('font-features-normal');
+    it('{ fontFeatures: "normal" } → font-features-[normal]', () => {
+        // Tailwind's font-features utility is functional-only: the bare
+        // keyword styles nothing while the bracketed form compiles.
+        expect(t({ fontFeatures: 'normal' })).toBe('font-features-[normal]');
     });
 
     it('{ fontFeatures: \'"liga" 1\' } → font-features-["liga"_1] (arbitrary)', () => {

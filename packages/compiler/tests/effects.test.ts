@@ -51,8 +51,9 @@ describe('effects — box shadow', () => {
         expect(t({ ring: 1 })).toBe('ring-1');
     });
 
-    it('{ ring: "none" } → ring-none', () => {
-        expect(t({ ring: 'none' })).toBe('ring-none');
+    it('{ ring: "none" } → ring-0', () => {
+        // Tailwind spells the zero ring `ring-0`; `ring-none` styles nothing.
+        expect(t({ ring: 'none' })).toBe('ring-0');
     });
 
     it('{ insetRing: true } → inset-ring', () => {

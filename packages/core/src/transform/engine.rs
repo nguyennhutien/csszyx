@@ -606,6 +606,7 @@ fn unknown_property_diagnostics(
     let mut unknown = Vec::new();
     let mut dead_steps = Vec::new();
     let mut property_objects = Vec::new();
+    let mut mask_members = Vec::new();
     // Built on the first position lookup, not up front: a file whose `sz` props
     // are all clean reaches none of the branches below, and must not pay a pass
     // over its own source for a table nobody reads.
@@ -630,7 +631,7 @@ fn unknown_property_diagnostics(
                 // exactly like a known one, so the old text sent people looking
                 // for a missing class instead of a dead one.
                 out.push(format!(
-                    "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos."
+                    "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility."
                 ));
             }
         }
@@ -656,6 +657,18 @@ fn unknown_property_diagnostics(
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] \"{key}\" is a property, not a variant, but received an object {{ {nested} }} at {location}:{line}. This compiles to \"{key}:*\" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use {{ color: '...', op: ... }}."
+            ));
+        }
+        mask_members.clear();
+        super::lower::collect_unknown_mask_slot_members(&attr.object, &mut mask_members);
+        for (owner, member, allowed, offset) in &mask_members {
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, *offset);
+            // Wording matches the JS engines' warnMaskSlotMember so a
+            // `build.parser` flip does not change the diagnostic text.
+            out.push(format!(
+                "[csszyx] {owner}: unknown field \"{member}\" at {location}:{line} — nothing is emitted for it. {owner} takes {{ {allowed} }}."
             ));
         }
     }

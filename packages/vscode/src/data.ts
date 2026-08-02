@@ -5,6 +5,7 @@
 
 import {
     BOOLEAN_SHORTHANDS,
+    MIGRATION_NOTES as GENERATED_MIGRATION_NOTES,
     SUGGESTION_MAP as GENERATED_SUGGESTION_MAP,
     KNOWN_VARIANTS,
     PROPERTY_MAP,
@@ -14,6 +15,9 @@ import * as vscode from 'vscode';
 
 /** Widen generated literal keys for diagnostics fed by arbitrary user input. */
 export const SUGGESTION_MAP: Readonly<Record<string, string>> = GENERATED_SUGGESTION_MAP;
+
+/** Removed keys whose replacement is a shape, not a key name. */
+export const MIGRATION_NOTES: Readonly<Record<string, string>> = GENERATED_MIGRATION_NOTES;
 
 // ============================================================================
 // PRE-BUILT COMPLETION ITEMS (built once at module load)

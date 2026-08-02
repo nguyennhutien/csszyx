@@ -453,10 +453,6 @@ export const KNOWN_VARIANTS = [
     "xl"
 ] as const;
 export const SUGGESTION_MAP = {
-    "maskFrom": "maskLinear / maskRadial / maskConic with { from }",
-    "maskTo": "maskLinear / maskRadial / maskConic with { to }",
-    "maskVia": "maskLinear / maskRadial / maskConic { from, to } — Tailwind has no via stop for masks",
-    "maskShape": "maskRadial with { shape }",
     "backgroundColor": "bg",
     "backgroundImage": "bgImg",
     "backgroundSize": "bgSize",
@@ -554,6 +550,14 @@ export const SUGGESTION_MAP = {
     "scrollbarWidth": "scrollbar",
     "flexWrapReverse": "flexWrap: 'wrap-reverse'",
     "flexNowrap": "flexWrap: 'nowrap'"
+} as const;
+/** Removed keys whose replacement is a SHAPE, not another key name — rendered
+ * as "was removed: <note>", never through the did-you-mean template. */
+export const MIGRATION_NOTES = {
+    "maskFrom": "the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }",
+    "maskTo": "the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }",
+    "maskVia": "masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic",
+    "maskShape": "the shape keyword moved to maskRadial — { shape: \"circle\" | \"ellipse\" }"
 } as const;
 /** sz keys whose utility accepts a negative value (`{ mt: '-4' }` → `-mt-4`).
  * Derived from the compiler's NEGATIVE_ALLOWED, which is keyed by Tailwind

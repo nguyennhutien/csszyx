@@ -174,16 +174,13 @@ describe('mask gradient color stops (v4.1)', () => {
         expect(transform({ maskFrom: '--c' }).className).toBe('mask-from-(--c)');
     });
 
-    it('maskFrom is COLOR category', () => {
-        expect(PROPERTY_CATEGORY_MAP.maskFrom).toBe(PropertyCategory.COLOR);
-    });
-
-    it('maskVia is COLOR category', () => {
-        expect(PROPERTY_CATEGORY_MAP.maskVia).toBe(PropertyCategory.COLOR);
-    });
-
-    it('maskTo is COLOR category', () => {
-        expect(PROPERTY_CATEGORY_MAP.maskTo).toBe(PropertyCategory.COLOR);
+    it('removed mask stop keys carry no category', () => {
+        // maskFrom/maskVia/maskTo were removed with the mask-layer redesign;
+        // a leftover COLOR categorization routed them into color validation,
+        // which intercepted the value BEFORE the migration note could fire.
+        expect(PROPERTY_CATEGORY_MAP.maskFrom).toBeUndefined();
+        expect(PROPERTY_CATEGORY_MAP.maskVia).toBeUndefined();
+        expect(PROPERTY_CATEGORY_MAP.maskTo).toBeUndefined();
     });
 });
 

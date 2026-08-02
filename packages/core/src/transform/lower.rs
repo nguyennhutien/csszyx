@@ -297,6 +297,74 @@ pub(crate) fn collect_dead_spacing_steps(
 }
 
 /// Collects PROPERTY keys whose value is an object that is not the
+/// Legal members of one mask slot. Mirrors the TypeScript
+/// `MASK_SLOT_MEMBERS` table; anything else emits nothing at lowering.
+#[cfg(feature = "native-engine")]
+fn mask_slot_members(slot: &str) -> Option<&'static [&'static str]> {
+    match slot {
+        "maskLinear" => Some(&["angle", "from", "to", "t", "r", "b", "l", "x", "y"]),
+        "maskConic" => Some(&["angle", "from", "to"]),
+        "maskRadial" => Some(&["at", "size", "shape", "from", "to"]),
+        _ => None,
+    }
+}
+
+/// Legal members of one linear edge object. Mirrors `MASK_EDGE_MEMBERS`.
+#[cfg(feature = "native-engine")]
+const MASK_EDGE_MEMBERS: [&str; 2] = ["from", "to"];
+
+/// Collect mask-slot members the builders do not recognise.
+///
+/// An unknown member inside a slot emits NOTHING — worse than an unknown
+/// top-level key, which at least leaves a dead class in the DOM to find. The
+/// slot shapes are closed, so member NAMES are fully checkable (values stay
+/// unvalidated, matching the prefix-mapping design). Descends through variant
+/// nesting like the lowering does.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_unknown_mask_slot_members(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, String, u32)>,
+) {
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            continue;
+        };
+        let Some(members) = mask_slot_members(&property.key) else {
+            collect_unknown_mask_slot_members(nested, out);
+            continue;
+        };
+        for entry in &nested.properties {
+            if !members.contains(&entry.key.as_str()) {
+                out.push((
+                    property.key.clone(),
+                    entry.key.clone(),
+                    members.join(", "),
+                    entry.span.start,
+                ));
+                continue;
+            }
+            if property.key != "maskLinear"
+                || !matches!(entry.key.as_str(), "t" | "r" | "b" | "l" | "x" | "y")
+            {
+                continue;
+            }
+            let StaticSzValue::Object(edge) = &entry.value else {
+                continue;
+            };
+            for edge_entry in &edge.properties {
+                if !MASK_EDGE_MEMBERS.contains(&edge_entry.key.as_str()) {
+                    out.push((
+                        format!("{}.{}", property.key, entry.key),
+                        edge_entry.key.clone(),
+                        MASK_EDGE_MEMBERS.join(", "),
+                        edge_entry.span.start,
+                    ));
+                }
+            }
+        }
+    }
+}
+
 /// `{ color, op }` form. The lowering falls through to variant handling and
 /// emits classes like `p:bg-red-500` — `p:` matches no Tailwind variant, so
 /// the styles silently generate no CSS. Reports the first nested keys so the
@@ -914,6 +982,17 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             // content-between). Kept distinct from the `content` CSS property above.
             if key == "alignContent" {
                 return Some(format!("{prefix}content-{value}"));
+            }
+            // `ring: 'none'` reads like CSS, but Tailwind spells the zero ring
+            // `ring-0` — `ring-none` styles nothing.
+            if key == "ring" && value == "none" {
+                return Some(format!("{prefix}ring-0"));
+            }
+            // Tailwind's font-features utility is functional-only: bare
+            // `font-features-normal` styles nothing while
+            // `font-features-[normal]` compiles.
+            if key == "fontFeatures" && value == "normal" {
+                return Some(format!("{prefix}font-features-[normal]"));
             }
             // Only these two mask keys take the value as the suffix verbatim.
             // The rest need a formatter: Tailwind renames some keywords and
