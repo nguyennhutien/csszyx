@@ -156,40 +156,49 @@ export function leafPathsConflict(a: readonly string[], b: readonly string[]): b
  * @returns True when the canonical paths are trustworthy.
  */
 function branchKeysCanonicalizable(branch: Record<string, unknown>): boolean {
-    for (const key of Object.keys(branch)) {
-        // `op` is a modifier that fuses into whichever color-bearing key it
-        // meets at lowering; per-key compilation cannot represent that, so any
-        // branch carrying it disqualifies the config outright.
-        if (key === 'op') {
-            return false;
-        }
-        const value = branch[key];
-        // The `css` escape hatch is a NAMESPACE, not a fusion unit: each child
-        // is an arbitrary CSS property emitting its own arbitrary-property
-        // class, and its paths live under the `css` prefix. One level only —
-        // an object nested deeper inside css is not a declaration.
-        if (key === 'css' && value !== null && typeof value === 'object' && !Array.isArray(value)) {
-            for (const declaration of Object.values(value as Record<string, unknown>)) {
-                if (declaration !== null && typeof declaration === 'object') {
-                    return false;
-                }
-            }
-            continue;
-        }
-        if (
-            PROPERTY_MAP[key] === undefined &&
-            !KNOWN_VARIANTS.has(key) &&
-            !SPECIAL_ALLOWED_SZ_KEYS.has(key)
-        ) {
-            return false;
-        }
-        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-            if (!branchKeysCanonicalizable(value as Record<string, unknown>)) {
-                return false;
-            }
-        }
-    }
-    return true;
+    return Object.keys(branch).every(key => branchKeyCanonicalizable(key, branch[key]));
+}
+
+/**
+ * Decide whether one branch member has a trustworthy canonical path.
+ *
+ * @param key - Member key.
+ * @param value - Member value.
+ * @returns True when the member can participate in overlap analysis.
+ */
+function branchKeyCanonicalizable(key: string, value: unknown): boolean {
+    // `op` fuses into whichever color-bearing key it meets and therefore
+    // cannot be represented by independent per-key compilation.
+    if (key === 'op') return false;
+    if (key === 'css' && isPlainRecord(value)) return cssDeclarationsCanonicalizable(value);
+    if (!isCanonicalSzKey(key)) return false;
+    return !isPlainRecord(value) || branchKeysCanonicalizable(value);
+}
+
+/**
+ * The css namespace accepts declarations, never another object layer.
+ *
+ * @param css - Arbitrary-property declarations.
+ * @returns True when every child is a scalar declaration.
+ */
+function cssDeclarationsCanonicalizable(css: Record<string, unknown>): boolean {
+    return Object.values(css).every(
+        declaration => declaration === null || typeof declaration !== 'object',
+    );
+}
+
+/**
+ * Whether a key belongs to the overlap detector's closed vocabulary.
+ *
+ * @param key - Candidate sz key.
+ * @returns True when the key has known lowering semantics.
+ */
+function isCanonicalSzKey(key: string): boolean {
+    return (
+        PROPERTY_MAP[key] !== undefined ||
+        KNOWN_VARIANTS.has(key) ||
+        SPECIAL_ALLOWED_SZ_KEYS.has(key)
+    );
 }
 
 /**
@@ -204,50 +213,74 @@ function branchKeysCanonicalizable(branch: Record<string, unknown>): boolean {
  * @returns True when the per-key rewrite preserves semantics.
  */
 export function szvConfigFreeOfOverlap(config: StaticSzvConfig): boolean {
-    if (config.base && !branchKeysCanonicalizable(config.base)) {
-        return false;
-    }
-    for (const dimension of Object.keys(config.variants ?? {})) {
-        const values = config.variants?.[dimension] ?? {};
-        for (const value of Object.keys(values)) {
-            if (!branchKeysCanonicalizable(values[value])) {
-                return false;
-            }
-        }
-    }
+    if (!configBranchesCanonicalizable(config)) return false;
     const basePaths: string[] = [];
-    if (config.base) {
-        collectCanonicalLeafPaths(config.base, '', basePaths);
-    }
+    if (config.base) collectCanonicalLeafPaths(config.base, '', basePaths);
     const dimensions = Object.keys(config.variants ?? {});
-    const leafPathsByDimension: string[][][] = dimensions.map(dimension => {
-        const values = config.variants?.[dimension] ?? {};
-        return Object.keys(values).map(value => {
-            const paths: string[] = [];
-            collectCanonicalLeafPaths(values[value], '', paths);
-            return paths;
-        });
-    });
+    const leafPathsByDimension = dimensions.map(dimension =>
+        collectDimensionLeafPaths(config.variants?.[dimension] ?? {}),
+    );
+    if (baseConflictsWithLeaves(basePaths, leafPathsByDimension)) return false;
+    return !dimensionsConflict(leafPathsByDimension);
+}
 
-    for (const dimensionLeaves of leafPathsByDimension) {
-        for (const leaf of dimensionLeaves) {
-            if (leafPathsConflict(basePaths, leaf)) {
-                return false;
-            }
-        }
-    }
-    for (let i = 0; i < leafPathsByDimension.length; i++) {
-        for (let j = i + 1; j < leafPathsByDimension.length; j++) {
-            for (const leafA of leafPathsByDimension[i]) {
-                for (const leafB of leafPathsByDimension[j]) {
+/**
+ * Validate every base and variant branch before trusting canonical paths.
+ *
+ * @param config - Static szv config.
+ * @returns True when every co-occurring branch can be canonicalized.
+ */
+function configBranchesCanonicalizable(config: StaticSzvConfig): boolean {
+    if (config.base && !branchKeysCanonicalizable(config.base)) return false;
+    return Object.values(config.variants ?? {}).every(values =>
+        Object.values(values).every(branchKeysCanonicalizable),
+    );
+}
+
+/**
+ * Collect canonical paths for every mutually exclusive value in a dimension.
+ *
+ * @param values - Dimension value branches.
+ * @returns Canonical leaf paths grouped by value.
+ */
+function collectDimensionLeafPaths(values: Record<string, Record<string, unknown>>): string[][] {
+    return Object.values(values).map(branch => {
+        const paths: string[] = [];
+        collectCanonicalLeafPaths(branch, '', paths);
+        return paths;
+    });
+}
+
+/**
+ * Whether the always-present base conflicts with any selectable leaf.
+ *
+ * @param base - Canonical base paths.
+ * @param dimensions - Canonical paths grouped by dimension and value.
+ * @returns True when a selectable leaf overrides the base.
+ */
+function baseConflictsWithLeaves(base: string[], dimensions: string[][][]): boolean {
+    return dimensions.some(leaves => leaves.some(leaf => leafPathsConflict(base, leaf)));
+}
+
+/**
+ * Whether leaves from any two co-occurring dimensions conflict.
+ *
+ * @param dimensions - Canonical paths grouped by dimension and value.
+ * @returns True when two dimensions can override each other.
+ */
+function dimensionsConflict(dimensions: string[][][]): boolean {
+    for (let i = 0; i < dimensions.length; i++) {
+        for (let j = i + 1; j < dimensions.length; j++) {
+            for (const leafA of dimensions[i]) {
+                for (const leafB of dimensions[j]) {
                     if (leafPathsConflict(leafA, leafB)) {
-                        return false;
+                        return true;
                     }
                 }
             }
         }
     }
-    return true;
+    return false;
 }
 
 /**
@@ -279,53 +312,102 @@ export function isParitySafeNumber(value: number): boolean {
  */
 export function qualifyStaticSzvConfig(config: unknown): SzvPrecompiledTable | null {
     if (!isPlainRecord(config)) return null;
-    for (const key of Object.keys(config)) {
-        if (key !== 'base' && key !== 'variants' && key !== 'defaultVariants') return null;
-    }
+    if (!Object.keys(config).every(isSzvConfigKey)) return null;
     const candidate = config as StaticSzvConfig;
     if (candidate.base !== undefined && !isPlainRecord(candidate.base)) return null;
-    const variants = candidate.variants ?? {};
-    if (!isPlainRecord(variants)) return null;
-    for (const dimension of Object.keys(variants)) {
-        const values = variants[dimension];
-        if (!isPlainRecord(values)) return null;
-        for (const value of Object.keys(values)) {
-            if (!isPlainRecord(values[value])) return null;
-        }
-    }
+    const variants = qualifyVariantDimensions(candidate.variants);
+    if (variants === null) return null;
     const defaults = candidate.defaultVariants;
-    const normalizedDefaults: Record<string, string> = {};
-    if (defaults !== undefined) {
-        if (!isPlainRecord(defaults)) return null;
-        for (const dimension of Object.keys(defaults)) {
-            const value = (defaults as Record<string, unknown>)[dimension];
-            if (typeof value === 'string' || typeof value === 'boolean') {
-                normalizedDefaults[dimension] = String(value);
-            } else if (typeof value === 'number' && isParitySafeNumber(value)) {
-                normalizedDefaults[dimension] = String(value);
-            } else {
-                return null;
-            }
-        }
-    }
+    const normalizedDefaults = defaults === undefined ? undefined : normalizeSzvDefaults(defaults);
+    if (normalizedDefaults === null) return null;
     if (!szvConfigFreeOfOverlap(candidate)) return null;
 
-    const d: Record<string, Record<string, string>> = {};
-    for (const dimension of Object.keys(variants)) {
-        d[dimension] = {};
-        for (const value of Object.keys(variants[dimension])) {
-            d[dimension][value] = transform(
-                variants[dimension][value] as Parameters<typeof transform>[0],
-            ).className;
-        }
-    }
     return {
         base: candidate.base
             ? transform(candidate.base as Parameters<typeof transform>[0]).className
             : '',
-        d,
-        defaults: defaults === undefined ? undefined : normalizedDefaults,
+        d: compileSzvDimensions(variants),
+        defaults: normalizedDefaults,
     };
+}
+
+/**
+ * Whether a top-level config key belongs to the strict szv contract.
+ *
+ * @param key - Candidate config key.
+ * @returns True for a supported top-level key.
+ */
+function isSzvConfigKey(key: string): boolean {
+    return key === 'base' || key === 'variants' || key === 'defaultVariants';
+}
+
+/**
+ * Validate the variants record and narrow every leaf to an sz object.
+ *
+ * @param value - Candidate variants value.
+ * @returns Qualified dimensions, or null for an invalid shape.
+ */
+function qualifyVariantDimensions(
+    value: unknown,
+): Record<string, Record<string, Record<string, unknown>>> | null {
+    if (value === undefined) return {};
+    if (!isPlainRecord(value)) return null;
+    for (const values of Object.values(value)) {
+        if (!isPlainRecord(values) || !Object.values(values).every(isPlainRecord)) return null;
+    }
+    return value as Record<string, Record<string, Record<string, unknown>>>;
+}
+
+/**
+ * Normalize defaults only when their stringification is tri-lane safe.
+ *
+ * @param value - Candidate defaults value.
+ * @returns Stringified defaults, or null for an unsafe scalar.
+ */
+function normalizeSzvDefaults(value: unknown): Record<string, string> | null {
+    if (!isPlainRecord(value)) return null;
+    const normalized: Record<string, string> = {};
+    for (const [dimension, selected] of Object.entries(value)) {
+        if (!isParitySafeSelectionScalar(selected)) return null;
+        normalized[dimension] = String(selected);
+    }
+    return normalized;
+}
+
+/**
+ * Whether a selection scalar stringifies identically in all engines.
+ *
+ * @param value - Candidate scalar.
+ * @returns True when every engine produces the same key string.
+ */
+function isParitySafeSelectionScalar(value: unknown): value is string | number | boolean {
+    return (
+        typeof value === 'string' ||
+        typeof value === 'boolean' ||
+        (typeof value === 'number' && isParitySafeNumber(value))
+    );
+}
+
+/**
+ * Lower every qualified dimension/value branch into its class string.
+ *
+ * @param variants - Qualified variant dimensions.
+ * @returns Precompiled class strings grouped by dimension and value.
+ */
+function compileSzvDimensions(
+    variants: Record<string, Record<string, Record<string, unknown>>>,
+): Record<string, Record<string, string>> {
+    return Object.fromEntries(
+        Object.entries(variants).map(([dimension, values]) => [
+            dimension,
+            Object.fromEntries(
+                Object.entries(values).map(([value, branch]) => [
+                    value,
+                    transform(branch as Parameters<typeof transform>[0]).className,
+                ]),
+            ),
+        ]),
+    );
 }
 
 /**
@@ -447,28 +529,76 @@ export function countWordOccurrencesOutsideComments(
     let commentIndex = 0;
     while (true) {
         const at = source.indexOf(word, from);
-        if (at === -1) {
-            return count;
-        }
+        if (at === -1) return count;
         // Comment spans arrive in source order from every parser, so the
         // cursor only ever moves forward across the whole scan.
-        while (commentIndex < comments.length && comments[commentIndex].end <= at) {
-            commentIndex += 1;
-        }
+        commentIndex = advanceCommentCursor(comments, commentIndex, at);
         const enclosing = comments[commentIndex];
-        if (enclosing !== undefined && enclosing.start <= at) {
+        if (commentContainsOffset(enclosing, at)) {
             // Inside a comment — jump to its end rather than re-testing every
             // occurrence within it.
             from = enclosing.end;
             continue;
         }
-        const before = at === 0 ? '' : source[at - 1];
-        const after = at + word.length >= source.length ? '' : source[at + word.length];
-        if ((before === '' || !/[\w$]/.test(before)) && (after === '' || !/[\w$]/.test(after))) {
-            count += 1;
-        }
+        if (isStandaloneWordAt(source, word, at)) count += 1;
         from = at + word.length;
     }
+}
+
+/**
+ * Skip comment spans that finish before the current match.
+ *
+ * @param comments - Ordered parser comment spans.
+ * @param start - Current cursor index.
+ * @param offset - Current word-match offset.
+ * @returns First comment that may contain or follow the match.
+ */
+function advanceCommentCursor(
+    comments: readonly CommentSpan[],
+    start: number,
+    offset: number,
+): number {
+    let index = start;
+    while (index < comments.length && comments[index].end <= offset) index += 1;
+    return index;
+}
+
+/**
+ * Whether one optional comment span contains the match offset.
+ *
+ * @param comment - Current comment cursor value.
+ * @param offset - Current word-match offset.
+ * @returns True when the match is inside the comment.
+ */
+function commentContainsOffset(
+    comment: CommentSpan | undefined,
+    offset: number,
+): comment is CommentSpan {
+    return comment !== undefined && comment.start <= offset;
+}
+
+/**
+ * Whether a raw match is bounded like a JavaScript identifier word.
+ *
+ * @param source - Original source text.
+ * @param word - Candidate identifier.
+ * @param at - Match offset.
+ * @returns True when neither neighbour continues the identifier.
+ */
+function isStandaloneWordAt(source: string, word: string, at: number): boolean {
+    const before = at === 0 ? '' : source[at - 1];
+    const after = at + word.length >= source.length ? '' : source[at + word.length];
+    return !isIdentifierCharacter(before) && !isIdentifierCharacter(after);
+}
+
+/**
+ * Empty boundaries and non-word characters terminate an identifier.
+ *
+ * @param value - One neighbouring character.
+ * @returns True when the character can continue an identifier.
+ */
+function isIdentifierCharacter(value: string): boolean {
+    return value !== '' && /[\w$]/.test(value);
 }
 
 /**
