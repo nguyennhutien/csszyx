@@ -15,7 +15,7 @@
         "@csszyx/unplugin": "workspace:*",
         "@tailwindcss/postcss": "^4.3.3",
         "csszyx": "workspace:*",
-        "next": "^15.5.21",
+        "next": "^15.5.22",
         "react": "^19.2.4",
         "react-dom": "^19.2.4",
         "tailwindcss": "^4.3.3"
@@ -28,7 +28,7 @@
         "@types/react": "^19.2.17",
         "@types/react-dom": "^19.2.3",
         "eslint": "^9.39.5",
-        "eslint-config-next": "^16.2.10",
+        "eslint-config-next": "^16.2.12",
         "typescript": "^5.9.3"
     }
 }

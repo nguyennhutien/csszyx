@@ -124,7 +124,7 @@
     "@csszyx/svelte-adapter": "workspace:*",
     "@csszyx/types": "workspace:*",
     "@csszyx/vue-adapter": "workspace:*",
-    "postcss": "^8.5.19",
+    "postcss": "^8.5.23",
     "postcss-selector-parser": "^7.1.4",
     "postcss-value-parser": "^4.2.0",
     "proper-lockfile": "^4.1.2",
@@ -140,12 +140,12 @@
     "@types/node": "^22.20.1",
     "@types/proper-lockfile": "^4.1.4",
     "esbuild": "0.28.1",
-    "rollup": "^4.62.2",
+    "rollup": "^4.62.3",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1",
     "vite": "^8.1.5",
     "vitest": "^4.1.10",
-    "webpack": "^5.108.4"
+    "webpack": "^5.109.0"
   },
   "sideEffects": false,
   "engines": {
