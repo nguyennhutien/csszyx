@@ -760,14 +760,16 @@ export function shouldEmitMissingCssFallback(quiet: boolean, message: string): b
  *
  * @param quiet - Whether all build warnings are muted.
  * @param message - Compiler diagnostic to classify and emit.
+ * @param id - Bundler module identifier included in the warning.
  * @param emit - Warning output channel.
  */
 export function emitMissingCssFallback(
     quiet: boolean,
     message: string,
+    id: string,
     emit: (message: string) => void,
 ): void {
-    if (shouldEmitMissingCssFallback(quiet, message)) emit(message);
+    if (shouldEmitMissingCssFallback(quiet, message)) emit(`[csszyx] ${id}\n  ${message}`);
 }
 
 /**
@@ -3923,9 +3925,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // surface in production builds too (same tier as the spread
             // warning above). `quiet` still silences it: that flag is the
             // documented way to mute every build warning.
-            emitMissingCssFallback(quiet, message, fallback =>
-                console.warn(`[csszyx] ${id}\n  ${fallback}`),
-            );
+            emitMissingCssFallback(quiet, message, id, console.warn);
         }
         if (quiet || result.diagnostics.length === 0 || process.env.NODE_ENV === 'production') {
             return;

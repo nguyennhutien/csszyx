@@ -40,9 +40,11 @@ describe('shouldEmitMissingCssFallback', () => {
 
     it('routes an eligible diagnostic through the supplied channel', () => {
         const emitted: string[] = [];
-        emitMissingCssFallback(false, missingCss, message => emitted.push(message));
-        emitMissingCssFallback(true, missingCss, message => emitted.push(message));
-        expect(emitted).toEqual([missingCss]);
+        emitMissingCssFallback(false, missingCss, '/src/Card.tsx', message =>
+            emitted.push(message),
+        );
+        emitMissingCssFallback(true, missingCss, '/src/Card.tsx', message => emitted.push(message));
+        expect(emitted).toEqual([`[csszyx] /src/Card.tsx\n  ${missingCss}`]);
     });
 });
 
