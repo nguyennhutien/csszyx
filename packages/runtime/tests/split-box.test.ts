@@ -261,8 +261,10 @@ describe('splitBox — the result memo', () => {
         expect(splitBox('m-4 px-2')).toEqual({ outer: 'm-4', inner: 'px-2' });
     });
 
-    it('keeps answering correctly after the cap drops the cache', () => {
+    it('keeps answering correctly past the admission cap', () => {
         expect(splitBox('m-4 px-2')).toEqual({ outer: 'm-4', inner: 'px-2' });
+        // Overflow inputs stop being admitted; entries cached before the
+        // flood must survive it, and overflow answers stay correct.
         for (let i = 0; i < 900; i++) {
             expect(splitBox(`m-4 p-${i}`)).toEqual({ outer: 'm-4', inner: `p-${i}` });
         }

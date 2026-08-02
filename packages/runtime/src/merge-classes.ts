@@ -381,11 +381,14 @@ interface MergeMemoNode {
  * generation, or the identity of the runtime decode bridge (both normally
  * settle at startup, before render loops, so steady-state renders never clear).
  *
- * Over the cap the whole trie is dropped rather than evicted one entry at a
- * time — the same policy `splitBox`'s token memo uses. Per-entry LRU recency
- * needs a `delete` + `set` on every HIT (measured ~11% of the hit cost), which
- * is a poor trade for a cache whose working set is bounded by the app's
- * component count and only overflows on adversarial dynamic input.
+ * Over the cap the trie STOPS ADMITTING new paths rather than evicting — the
+ * same policy `splitBox`'s token memo uses. Per-entry LRU recency needs a
+ * `delete` + `set` on every HIT (measured ~11% of the hit cost), and dropping
+ * the whole trie at the cap flushed every hot entry each time a batch of
+ * distinct inputs crossed it — `szcn(BASE, props.className)` in a list render
+ * does exactly that. Admission-stop keeps the working set (the app's
+ * component-count paths, captured early) hot at zero per-hit cost; overflow
+ * traffic pays only its own uncached merge, which it paid under either policy.
  */
 const MEMO_MAX_NODES = 500;
 const memoRoot: MergeMemoNode = {};
@@ -415,11 +418,7 @@ export function szcn(...inputs: ClassInput[]): string {
     // lookups. In production it is installed once for the page lifetime, so
     // this never clears.
     const runtimeRef = mangleBridge();
-    if (
-        generation !== memoGroupsGeneration ||
-        runtimeRef !== memoDecodeRef ||
-        memoNodes >= MEMO_MAX_NODES
-    ) {
+    if (generation !== memoGroupsGeneration || runtimeRef !== memoDecodeRef) {
         memoRoot.result = undefined;
         memoRoot.next = undefined;
         memoNodes = 0;
@@ -435,6 +434,12 @@ export function szcn(...inputs: ClassInput[]): string {
         }
         let child = node.next?.get(input);
         if (child === undefined) {
+            // Admission stop at the cap (see the memo note): the walk so far
+            // stays byte-identical for cached paths, and a novel path past
+            // the cap takes the uncached merge without disturbing the trie.
+            if (memoNodes >= MEMO_MAX_NODES) {
+                return mergeUncached(inputs, runtimeRef);
+            }
             child = {};
             if (node.next === undefined) {
                 node.next = new Map();

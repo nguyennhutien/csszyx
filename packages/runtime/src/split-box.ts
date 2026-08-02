@@ -290,10 +290,12 @@ export function splitBox(className: string, options: SplitBoxOptions = {}): Spli
     let cached = splitMemo.get(className);
     if (cached === undefined) {
         cached = splitBoxUncached(className, options);
-        if (splitMemo.size >= SPLIT_MEMO_MAX) {
-            splitMemo.clear();
+        // Admission stop at the cap, not a clear: clearing flushed every hot
+        // entry whenever cold traffic crossed the cap, while overflow calls
+        // pay only their own uncached split under either policy.
+        if (splitMemo.size < SPLIT_MEMO_MAX) {
+            splitMemo.set(className, cached);
         }
-        splitMemo.set(className, cached);
     }
     // A FRESH result object per call, never the cached one: `SplitBoxResult`'s
     // fields are mutable and callers have always received an object they own.

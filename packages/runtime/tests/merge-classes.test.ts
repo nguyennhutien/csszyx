@@ -696,9 +696,10 @@ describe('szcn — the argument trie memo', () => {
         expect(szcn()).toBe('');
     });
 
-    it('keeps answering correctly after the cap drops the cache', () => {
+    it('keeps answering correctly past the admission cap', () => {
         expect(szcn('gap-2', 'gap-8')).toBe('gap-8');
-        // Well past MEMO_MAX_NODES, so the hot entry above is dropped.
+        // Well past MEMO_MAX_NODES: overflow paths stop being admitted, and
+        // the hot entry admitted before the flood must survive it.
         for (let i = 0; i < 900; i++) {
             expect(szcn(`p-${i}`, 'm-1')).toBe(`p-${i} m-1`);
         }
