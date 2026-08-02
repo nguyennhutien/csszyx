@@ -46,6 +46,7 @@
     "gen:sz-fallback-matrix:check": "node --import tsx/esm scripts/gen-sz-fallback-matrix.mjs --check",
     "check:key-corpus": "node scripts/check-key-corpus-consistency.mjs",
     "check:tracked-symlinks": "node --test scripts/validate-tracked-symlinks.test.mjs && node scripts/validate-tracked-symlinks.mjs",
+    "check:no-nul-bytes": "node --test scripts/validate-no-nul-bytes.test.mjs && node scripts/validate-no-nul-bytes.mjs",
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run dev --parallel",
     "test": "turbo run test",

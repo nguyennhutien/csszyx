@@ -47,6 +47,9 @@ rm -f packages/core-linux-arm64-gnu/csszyx-core.linux-arm64-gnu.node \
 echo "[verify-like-ci] Tracked symlink guard..."
 pnpm check:tracked-symlinks
 
+echo "[verify-like-ci] Raw NUL byte guard (binary-flipped source files)..."
+pnpm check:no-nul-bytes
+
 echo "[verify-like-ci] Biome preflight (strict — no auto-fix, no unsafe-skip)..."
 pnpm lint:fast
 
