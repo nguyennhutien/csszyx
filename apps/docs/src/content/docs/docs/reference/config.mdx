@@ -226,10 +226,20 @@ production: { mangle: true, mangleMapDelivery: 'html' }
 ```
 
 The hydration checksum payload ships in every mode, so SSR verification is
-unaffected. Narrow this only against a deployment shape you know: if the page never
-receives the delivery you picked, runtime helpers silently fall back to original
-class names while the CSS ships mangled — the styles simply do not apply. When in
-doubt, leave it at `'both'`.
+unaffected — which also means `'bundle'` still emits the JSON census tag into
+HTML the build owns (hydration verify reads it from the DOM); the value only
+drops the runtime installer script. Narrow this only against a deployment shape
+you know: if the page never receives the delivery you picked, runtime helpers
+silently fall back to original class names while the CSS ships mangled — the
+styles simply do not apply. When in doubt, leave it at `'both'`.
+
+:::note[vite/rollup lanes only]
+Delivery narrowing runs where the map is injected — the **vite/rollup** hooks.
+A webpack build ships the map the way it always did and warns when a narrowed
+value would silently do nothing; esbuild builds keep readable class names
+entirely. An unknown value fails the build instead of silently reading as
+`'both'`.
+:::
 
 :::note[Mangling follows your bundler, not your framework]
 Class mangling (and the collision warning above) run wherever csszyx builds your
