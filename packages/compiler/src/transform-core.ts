@@ -874,7 +874,12 @@ const ARIA_STATES = new Set([
 // `css` plus the three mask layers, which are lowered by a dedicated object
 // branch rather than a PROPERTY_MAP prefix, so they need naming here to be
 // recognised as valid keys.
-const KNOWN_SPECIAL_PROPERTIES = new Set(['css', 'maskLinear', 'maskRadial', 'maskConic']);
+export const KNOWN_SPECIAL_PROPERTIES: Set<string> = new Set([
+    'css',
+    'maskLinear',
+    'maskRadial',
+    'maskConic',
+]);
 
 // Boolean shorthands kept on purpose. A key stays boolean only when it is NOT a
 // value-alias of a single mutually-exclusive CSS property: composite utilities

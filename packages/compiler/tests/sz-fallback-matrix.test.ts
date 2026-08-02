@@ -18,6 +18,7 @@ import {
 } from '../src/sz-fallback-matrix.js';
 import { transformSourceCode } from '../src/transform.js';
 import { transformOxc } from '../src/transform-oxc.js';
+import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
 
 /** Sources that drive each classification arm through a real transform. */
 const FALLBACK_SOURCES: ReadonlyArray<readonly [string, string]> = [
@@ -143,4 +144,18 @@ describe('engine parity for sz fallback diagnostics', () => {
         expect(transformSourceCode(source, '/p/t.tsx').diagnostics ?? []).toEqual([]);
         expect(transformOxc(source, '/p/t.tsx').diagnostics ?? []).toEqual([]);
     });
+});
+
+// The Rust integration suite (sz_fallback_parity.rs) pins the same wording
+// against hand-captured Babel output; this block compares the two lanes LIVE,
+// so a wording change on either side fails without regenerating a snapshot.
+describe.skipIf(!isRustTransformAvailable())('rust lane parity for sz fallback diagnostics', () => {
+    for (const [label, source] of FALLBACK_SOURCES) {
+        it(`rust and babel agree on ${label}`, () => {
+            const babel = transformSourceCode(source, '/p/t.tsx').diagnostics ?? [];
+            const rust = transformRust(source, '/p/t.tsx').diagnostics ?? [];
+            expect(rust).toEqual(babel);
+            expect(babel.length).toBeGreaterThan(0);
+        });
+    }
 });
