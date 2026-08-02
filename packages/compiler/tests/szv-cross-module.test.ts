@@ -189,6 +189,15 @@ describe('three-engine cross-module parity', () => {
 });
 
 describe('extractSzvRegistryEntries', () => {
+    it('ignores exported non-variable declarations and export lists', () => {
+        expect(
+            extractSzvRegistryEntries(
+                'export function szv() {}\nconst local = 1; export { local };',
+                '/p/styles.ts',
+            ),
+        ).toEqual([]);
+    });
+
     it('extracts exported literal factories, order preserved', () => {
         const source =
             "import { szv } from '@csszyx/runtime';\n" +

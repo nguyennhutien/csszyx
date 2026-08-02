@@ -91,12 +91,17 @@ const REWRITE_CASES: ReadonlyArray<readonly [string, string]> = [
 
 /** Sources that must keep the barrel import. */
 const KEEP_CASES: ReadonlyArray<readonly [string, string]> = [
+    [
+        'string-named import conservatively fails reference accounting',
+        'import { "szr" as szr } from "@csszyx/runtime";\nexport const a = szr("p-4");',
+    ],
     ['object argument', `${RUNTIME}export const a = szr({ p: 4 });`],
     ['identifier argument', `${RUNTIME}export const a = szr(cfg);`],
     ['call argument', `${RUNTIME}export const a = szr(mk());`],
     ['member argument', `${RUNTIME}export const a = szr(theme.card);`],
     ['|| with unprovable left', `${RUNTIME}export const a = szr(cfg || 'p-4');`],
     ['?? with unprovable left', `${RUNTIME}export const a = szr(cfg ?? 'p-4');`],
+    ['|| with safe left but unsafe right', `${RUNTIME}export const a = szr('p-4' || cfg);`],
     ['TS assertion is not proof', `${RUNTIME}export const a = szr(x as string);`],
     ['spread argument', `${RUNTIME}export const a = szr(...parts);`],
     ['array with spread', `${RUNTIME}export const a = szr(['p-4', ...rest]);`],
@@ -133,6 +138,7 @@ const KEEP_CASES: ReadonlyArray<readonly [string, string]> = [
         "import def, { szr } from 'csszyx';\nexport const a = szr('p-4');",
     ],
     ['unmapped source package', "import { szr } from 'other-lib';\nexport const a = szr('p-4');"],
+    ['type-only declaration', "import type { szr } from '@csszyx/runtime';\ntype T = szr;"],
     ['one proven and one unsafe call', `${RUNTIME}const x = szr('a'); export const b = szr(cfg);`],
 ];
 

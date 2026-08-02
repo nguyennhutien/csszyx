@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { szsUnsupportedDiagnostic } from '../src/sz-fallback-matrix.js';
 import { ASTBudgetExceededError, transform, transformSourceCode } from '../src/transform.js';
+import { transformOxc } from '../src/transform-oxc.js';
 
 /**
  * Branch-coverage tests for the pure-JS (Babel) source transform in
@@ -99,6 +100,22 @@ describe('szRecover attribute', () => {
 
 // ── szs slot maps ───────────────────────────────────────────────────────────
 describe('szs slot maps', () => {
+    it.each([
+        ['babel', transformSourceCode],
+        ['oxc', transformOxc],
+    ])('uses anonymous filename fallbacks in the %s lane', (_lane, engine) => {
+        expect(
+            engine('const A = () => <div szs={{ root: { p: 4 } }} />;').diagnostics[0],
+        ).toContain('<anonymous>');
+        expect(engine('const A = () => <Comp szs="bad" />;').diagnostics[0]).toContain(
+            '<anonymous>',
+        );
+        expect(engine('const A = () => <Comp szs={{ root: value }} />;').diagnostics[0]).toContain(
+            '<anonymous>',
+        );
+        expect(engine('const A = () => <Comp szs={{ root: { p: 4 } }} />;').code).toContain('p-4');
+    });
+
     it('warns when szs is placed on a host element', () => {
         const jsx = 'const A = () => <div szs={{ root: { p: 4 } }} />;';
         const r = run(jsx);

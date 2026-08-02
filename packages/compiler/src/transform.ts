@@ -1553,9 +1553,8 @@ function insertSzvTableDeclaration(
 function pushSiteFallbackDiagnostic(
     diagnostics: string[],
     site: SzFallbackSite,
-    expression: t.Expression | undefined,
+    expression: t.Expression,
 ): void {
-    if (!expression) return;
     const position = expression.loc
         ? `${expression.loc.start.line}:${expression.loc.start.column + 1}`
         : '?';

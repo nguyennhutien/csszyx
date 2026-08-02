@@ -212,9 +212,8 @@ export function transformOxc(
         commentSpans:
             source.includes('szv(') || source.includes('szr')
                 ? (
-                      (parsed as unknown as { comments?: Array<{ start: number; end: number }> })
-                          .comments ?? []
-                  ).map(comment => ({ start: comment.start, end: comment.end }))
+                      parsed as unknown as { comments: Array<{ start: number; end: number }> }
+                  ).comments.map(comment => ({ start: comment.start, end: comment.end }))
                 : [],
         usedPick: false,
         usedPick1: false,
@@ -1873,13 +1872,13 @@ function offsetToLineColumn(source: string, offset: number): { line: number; col
     let high = lineStarts.length - 1;
     while (low < high) {
         const mid = (low + high + 1) >> 1;
-        if ((lineStarts[mid] ?? 0) <= limit) {
+        if ((lineStarts[mid] as number) <= limit) {
             low = mid;
         } else {
             high = mid - 1;
         }
     }
-    return { line: low + 1, column: limit - (lineStarts[low] ?? 0) };
+    return { line: low + 1, column: limit - (lineStarts[low] as number) };
 }
 
 /**
@@ -1940,12 +1939,12 @@ type OxcSzvPrecompileState = SzvPrecompileState<
 /** Minimal import-declaration shape the proof reads. */
 interface ImportDeclarationNode {
     importKind?: string;
-    source: { value?: unknown; start: number; end: number };
-    specifiers?: Array<{
+    source: { value: string; start: number; end: number };
+    specifiers: Array<{
         type: string;
         importKind?: string;
         imported?: { name?: string; value?: unknown };
-        local?: { name?: string };
+        local: { name: string };
     }>;
 }
 
@@ -1961,10 +1960,9 @@ interface ImportDeclarationNode {
 function recordSzrImportCandidateOxc(node: OxcNode, state: OxcSzrRewriteState): void {
     const declaration = node as unknown as ImportDeclarationNode;
     if (declaration.importKind === 'type') return;
-    const sourceValue = declaration.source?.value;
-    if (typeof sourceValue !== 'string') return;
+    const sourceValue = declaration.source.value;
     if (SZR_IMPORT_REWRITE_TARGETS[sourceValue] === undefined) return;
-    const specifiers = declaration.specifiers ?? [];
+    const specifiers = declaration.specifiers;
     let sawSzr = false;
     const others: Array<{ start: number; end: number }> = [];
     for (const specifier of specifiers) {
@@ -1976,7 +1974,7 @@ function recordSzrImportCandidateOxc(node: OxcNode, state: OxcSzrRewriteState): 
         if (
             specifier.importKind !== 'type' &&
             importedName === 'szr' &&
-            specifier.local?.name === 'szr'
+            specifier.local.name === 'szr'
         ) {
             sawSzr = true;
         } else {
@@ -2018,7 +2016,7 @@ function recordIdentifierCallOxc(
 function recordSzvTypeQueryOxc(node: OxcNode, state: OxcSzvPrecompileState): void {
     const exprName = (node as unknown as { exprName?: { type: string; name?: string } }).exprName;
     recordSzvTypeQueryByName(
-        exprName?.type === 'Identifier' ? (exprName.name ?? null) : null,
+        exprName?.type === 'Identifier' ? (exprName.name as string) : null,
         state,
     );
 }
@@ -2026,7 +2024,7 @@ function recordSzvTypeQueryOxc(node: OxcNode, state: OxcSzvPrecompileState): voi
 /** Minimal variable-declaration shape the factory scan reads. */
 interface VariableDeclarationNode {
     end: number;
-    declarations?: VariableDeclaratorNode[];
+    declarations: VariableDeclaratorNode[];
 }
 
 /** Minimal variable-declarator shape shared by local and exported szv scans. */
@@ -2050,7 +2048,7 @@ interface OxcSzvFactoryDeclaration {
 function recordSzvFactoryCandidatesOxc(node: OxcNode, state: OxcSzvPrecompileState): void {
     if (!state.enabled) return;
     const declaration = node as unknown as VariableDeclarationNode;
-    for (const declarator of declaration.declarations ?? []) {
+    for (const declarator of declaration.declarations) {
         const factory = readSzvFactoryDeclaratorOxc(declarator);
         if (factory === null || state.candidates.has(factory.name)) continue;
         state.candidates.set(factory.name, {
@@ -2095,14 +2093,14 @@ function recordCrossModuleSzvFactoriesOxc(node: OxcNode, state: OxcSzvPrecompile
     const sourceValue = declaration.source?.value;
     const statement = node as unknown as { end: number };
     recordCrossModuleSzvFactoryImports(
-        typeof sourceValue === 'string' ? sourceValue : null,
+        sourceValue,
         declaration.importKind === 'type',
-        (declaration.specifiers ?? []).map(specifier => {
+        declaration.specifiers.map(specifier => {
             const importedName = specifier.imported?.name ?? specifier.imported?.value;
             return specifier.type === 'ImportSpecifier'
                 ? {
                       importedName: typeof importedName === 'string' ? importedName : null,
-                      localName: specifier.local?.name ?? null,
+                      localName: specifier.local.name,
                       typeOnly: specifier.importKind === 'type',
                   }
                 : { importedName: null, localName: null, typeOnly: false };
@@ -2142,7 +2140,7 @@ function unwrapParenthesizedOxc(node: OxcNode): OxcNode {
  */
 function evaluateStaticObjectOxc(node: OxcNode): Record<string, unknown> | null {
     const result: Record<string, unknown> = {};
-    const properties = (node as unknown as { properties: OxcNode[] }).properties ?? [];
+    const properties = (node as unknown as { properties: OxcNode[] }).properties;
     for (const property of properties) {
         if (property.type !== 'Property') return null;
         const shaped = property as unknown as {
@@ -2153,7 +2151,7 @@ function evaluateStaticObjectOxc(node: OxcNode): Record<string, unknown> | null 
         if (shaped.computed) return null;
         let key: string | null = null;
         if (shaped.key.type === 'Identifier') {
-            key = shaped.key.name ?? null;
+            key = shaped.key.name as string;
         } else if (shaped.key.type === 'Literal' && typeof shaped.key.value === 'string') {
             key = shaped.key.value;
         } else if (shaped.key.type === 'Literal' && typeof shaped.key.value === 'number') {
@@ -2450,7 +2448,7 @@ function planSingleDimensionPickOxc(
     table: SzvPrecompiledTable,
     source: string,
 ): { kind: 'dynamic1'; dimension: string; valueText: string } | null {
-    const properties = (node as unknown as { properties: OxcNode[] }).properties ?? [];
+    const properties = (node as unknown as { properties: OxcNode[] }).properties;
     if (properties.length !== 1) return null;
     const property = properties[0];
     if (property.type !== 'Property') return null;
@@ -2504,7 +2502,7 @@ function staticSzvSelectionKeyOxc(key: {
     name?: string;
     value?: unknown;
 }): string | null {
-    if (key.type === 'Identifier') return key.name ?? null;
+    if (key.type === 'Identifier') return key.name as string;
     if (key.type === 'Literal' && typeof key.value === 'string') return key.value;
     return null;
 }
@@ -2691,13 +2689,13 @@ function applySzrImportRewriteOxc(
     // original source, then szr alone on the core entry. Rebuilding from the
     // specifier spans drops comments inside the clause; a comment mentioning
     // szr already failed the reference accounting above.
-    if (state.statementSpan === null) return false;
+    const statementSpan = state.statementSpan as { start: number; end: number };
     const others = state.otherSpecifierSpans
         .map(span => source.slice(span.start, span.end))
         .join(', ');
     edits.overwrite(
-        state.statementSpan.start,
-        state.statementSpan.end,
+        statementSpan.start,
+        statementSpan.end,
         `import { ${others} } from ${quote}${state.sourceValue}${quote};\n` +
             `import { szr } from ${quote}${target}${quote};`,
     );
@@ -2715,10 +2713,9 @@ function applySzrImportRewriteOxc(
 function pushSiteFallbackDiagnostic(
     diagnostics: string[],
     site: SzFallbackSite,
-    expression: OxcNode | undefined,
+    expression: OxcNode,
     source: string,
 ): void {
-    if (!expression) return;
     // Babel drops parenthesized-expression nodes, so position and wording both
     // point at the inner expression on that lane. Keep oxc byte-identical.
     let positionedExpression = expression;
@@ -2755,7 +2752,7 @@ function classifyFallbackExpression(rawExpression: OxcNode): {
             name = (callee as IdentifierNode).name;
         } else if (
             callee.type === 'MemberExpression' &&
-            ((callee as unknown as { property?: OxcNode }).property?.type ?? '') === 'Identifier'
+            (callee as unknown as { property: OxcNode }).property.type === 'Identifier'
         ) {
             name = String(
                 ((callee as unknown as { property: OxcNode }).property as IdentifierNode).name,
@@ -6857,21 +6854,21 @@ export function extractSzvRegistryEntries(source: string, filename: string): Szv
     if (!source.includes('szv(') || !source.includes('export')) {
         return [];
     }
-    let program: { body?: OxcNode[] };
+    let program: { body: OxcNode[] };
     try {
         program = parseSync(filename, source, { lang: 'tsx' }).program as unknown as {
-            body?: OxcNode[];
+            body: OxcNode[];
         };
     } catch {
         /* v8 ignore next -- oxc reports syntax errors in-band; only native/parser failures throw. */
         return [];
     }
     const out: SzvRegistryEntry[] = [];
-    for (const statement of program.body ?? []) {
+    for (const statement of program.body) {
         if (statement.type !== 'ExportNamedDeclaration') continue;
         const declaration = (statement as unknown as { declaration?: OxcNode }).declaration;
         if (declaration?.type !== 'VariableDeclaration') continue;
-        const declarators = (declaration as unknown as VariableDeclarationNode).declarations ?? [];
+        const declarators = (declaration as unknown as VariableDeclarationNode).declarations;
         for (const declarator of declarators) {
             const factory = readSzvFactoryDeclaratorOxc(declarator);
             if (

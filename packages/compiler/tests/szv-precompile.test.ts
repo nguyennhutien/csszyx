@@ -186,6 +186,16 @@ const MATRIX: ReadonlyArray<readonly [string, string, 'static' | 'dynamic' | 'ba
         'static',
     ],
     [
+        'a qualified type query still counts as an outside reference',
+        `${FACTORY}type Selection = typeof ns.cardSz;\nexport const cls = szr(cardSz({ pad: 'lg' }));`,
+        'bail',
+    ],
+    [
+        'an unrelated member-callee declaration is ignored',
+        `${FACTORY}const other = ns.szv({});\nexport const cls = szr(cardSz({ pad: 'lg' }));`,
+        'static',
+    ],
+    [
         'a parenthesized factory declaration still precompiles',
         "const f = (szv({ variants: { pad: { sm: { p: 2 } } } }));\nexport const cls = szr(f({ pad: 'sm' }));",
         'static',
