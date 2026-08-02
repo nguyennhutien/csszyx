@@ -12,37 +12,9 @@
  * negative-hoist divergence reached a release before, so the guard has to be a
  * test that names the shapes directly.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, it } from 'vitest';
 
-import {
-    isRustTransformAvailable,
-    transformOxc,
-    transformRust,
-    transformSourceCode,
-} from '../src/index.js';
-
-type Transform = typeof transformSourceCode;
-
-const ENGINES: ReadonlyArray<readonly [string, Transform]> = [
-    ['babel', transformSourceCode],
-    ['oxc', transformOxc],
-    ...(isRustTransformAvailable() ? ([['rust', transformRust]] as const) : []),
-];
-
-/**
- * Transform one sz literal on every engine and assert they agree.
- *
- * @param sz - The sz object source, as written in JSX.
- * @param expected - The className every engine must emit.
- */
-function expectParity(sz: string, expected: string): void {
-    const source = `export const A = () => <div sz={${sz}} />;`;
-    for (const [name, transform] of ENGINES) {
-        const code = transform(source, 'mask-layer.tsx').code ?? '';
-        const emitted = /className="([^"]*)"/.exec(code)?.[1] ?? '';
-        expect(emitted, `${name} — ${sz}`).toBe(expected);
-    }
-}
+import { ENGINES, expectParity } from './tri-engine-harness.js';
 
 describe('mask layers — three-engine parity', () => {
     it('linear angles, including the negative and variable forms', () => {

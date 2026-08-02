@@ -50,19 +50,22 @@ import {
     type SzFallbackSite,
     szsUnsupportedDiagnostic,
 } from './sz-fallback-matrix.js';
+import { SZR_IMPORT_REWRITE_TARGETS, szrRewriteProofHolds } from './szr-import-rewrite.js';
 import {
-    countSzrWordOccurrencesOutsideComments,
-    SZR_IMPORT_REWRITE_TARGETS,
-    szrRewriteApproved,
-} from './szr-import-rewrite.js';
-import {
-    type CommentSpan,
+    coerceParitySafeSelectionValue,
     computeStaticSzvPick,
-    countWordOccurrencesOutsideComments,
-    isParitySafeNumber,
+    emitUnprovenSzrFallbacks,
     qualifyStaticSzvConfig,
+    recordCrossModuleSzvFactoryImports,
+    recordIdentifierCallByName,
+    recordSzvTypeQueryByName,
+    SZV_RESERVED_FACTORY_NAMES,
+    type SzrArgumentAnalysisOf,
     type SzvPrecompiledTable,
+    type SzvPrecompileState,
     serializeSzvTable,
+    singleDimensionPickAllowed,
+    szvFactoryAccountingHolds,
     szvTableIdentifier,
 } from './szv-precompile.js';
 import type {
@@ -323,7 +326,10 @@ export function transformOxc(
             transformOxcSzsAttributes({
                 attributes: szsAttrs,
                 openingNode,
-                filename: effectiveFilename,
+                // Raw on purpose: the szs diagnostics apply the same '<anonymous>'
+                // default the Babel lane uses; effectiveFilename's 'file.tsx' is a
+                // PARSER default and must not leak into shared wording.
+                filename,
                 rootDir: options?.rootDir,
                 bindings: objectBindings,
                 source,
@@ -1689,7 +1695,7 @@ function transformOxcSzsAttribute(params: OxcSzsAttributeParams): boolean {
     } = params;
     if (isHostOpeningElementName(openingNode.name as unknown as OxcNode)) {
         diagnostics.push(
-            `[csszyx] szs at ${filename}: ` +
+            `[csszyx] szs at ${filename ?? '<anonymous>'}: ` +
                 'szs has no effect on a host element — it maps slot names of a ' +
                 'custom component. Attribute left unchanged.',
         );
@@ -1701,20 +1707,22 @@ function transformOxcSzsAttribute(params: OxcSzsAttributeParams): boolean {
             ? (value as unknown as { expression: OxcNode }).expression
             : null;
     if (expression?.type !== 'ObjectExpression') {
-        diagnostics.push(szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedDiagnostic(filename ?? '<anonymous>'));
         return false;
     }
     const slotMap = expression as ObjectExpressionNode;
     if (!isValidSzsSlotMap(slotMap)) {
-        diagnostics.push(szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedDiagnostic(filename ?? '<anonymous>'));
         return false;
     }
 
     const { line } = offsetToLineColumn(source, attribute.start);
-    setSzWarnLocation(formatSzWarnLocation(filename, line, rootDir));
+    setSzWarnLocation(formatSzWarnLocation(filename ?? 'file.tsx', line, rootDir));
     const entries = compileOxcSzsEntries(
         slotMap,
-        filename,
+        // The compile path keeps the parser's default — only the szs
+        // DIAGNOSTIC wording takes the shared '<anonymous>' fallback.
+        filename ?? 'file.tsx',
         bindings,
         source,
         globalVarAliases,
@@ -1722,7 +1730,7 @@ function transformOxcSzsAttribute(params: OxcSzsAttributeParams): boolean {
     );
     setSzWarnLocation(undefined);
     if (!entries) {
-        diagnostics.push(szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedDiagnostic(filename ?? '<anonymous>'));
         return false;
     }
 
@@ -1762,7 +1770,7 @@ function transformOxcSzsAttributes(params: OxcSzsAttributesParams): boolean {
 /** Shared inputs for lowering szs attributes on one oxc opening element. */
 interface OxcSzsTransformParams {
     readonly openingNode: JsxOpeningElementNode;
-    readonly filename: string;
+    readonly filename: string | undefined;
     readonly rootDir: string | undefined;
     readonly bindings: Map<string, ObjectExpressionNode>;
     readonly source: string;
@@ -1912,12 +1920,7 @@ interface OxcSzrRewriteState {
 }
 
 /** Verdict for one szr argument: shape plus the factory calls inside it. */
-interface OxcSzrArgumentAnalysis {
-    /** Whether every non-factory leaf is provably a string or falsy. */
-    shapeOk: boolean;
-    /** Identifier-callee calls that must collapse for the proof to hold. */
-    factories: CallExpressionNode[];
-}
+type OxcSzrArgumentAnalysis = SzrArgumentAnalysisOf<CallExpressionNode>;
 
 /** One file-local `const F = szv(<config>)` factory candidate (oxc lane). */
 interface OxcSzvFactoryCandidate {
@@ -1930,37 +1933,11 @@ interface OxcSzvFactoryCandidate {
 }
 
 /** Whole-file accumulator for the szv per-key precompile (oxc lane). */
-interface OxcSzvPrecompileState {
-    /** Whether the file can contain an szv factory at all. */
-    enabled: boolean;
-    /** `typeof X` type-query references by name (erased at runtime). */
-    typeQueryCounts: Map<string, number>;
-    /** Imported-factory configs by specifier, from the bundler's registry. */
-    crossModuleStatics?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
-    /** Factory candidates by binding name. */
-    candidates: Map<string, OxcSzvFactoryCandidate>;
-    /** Every direct identifier-callee call, by callee name. */
-    identifierCalls: Map<string, CallExpressionNode[]>;
-    /** Factory call nodes whose spans were spliced (string on all paths). */
-    replacedCalls: Set<CallExpressionNode>;
-    /** Per-szr-call argument analyses, computed once in the apply phase. */
-    szrArgumentAnalyses: Map<CallExpressionNode, OxcSzrArgumentAnalysis[]>;
-    /** Comment spans from the parse, for comment-excluded accounting. */
-    commentSpans: CommentSpan[];
-    /** Whether any rewrite emitted a `__szvPick` call. */
-    usedPick: boolean;
-    /** Whether any rewrite emitted a `__szvPick1` single-dimension call. */
-    usedPick1: boolean;
-}
-
-/** Names that can never be szv factory bindings for the precompile. */
-const OXC_SZV_RESERVED_FACTORY_NAMES = new Set([
-    'szr',
-    'szv',
-    'dynamic',
-    '__szvPick',
-    '__szvPick1',
-]);
+type OxcSzvPrecompileState = SzvPrecompileState<
+    CallExpressionNode,
+    CallExpressionNode,
+    OxcSzvFactoryCandidate
+>;
 
 /** Minimal import-declaration shape the proof reads. */
 interface ImportDeclarationNode {
@@ -2028,19 +2005,9 @@ function recordIdentifierCallOxc(
     szrState: OxcSzrRewriteState,
     szvState: OxcSzvPrecompileState,
 ): void {
-    if (node.callee.type !== 'Identifier') return;
-    const name = (node.callee as IdentifierNode).name;
-    if (name === 'szr') {
-        szrState.szrCalls.push(node);
-        return;
-    }
-    if (!szvState.enabled) return;
-    const existing = szvState.identifierCalls.get(name);
-    if (existing) {
-        existing.push(node);
-    } else {
-        szvState.identifierCalls.set(name, [node]);
-    }
+    const calleeName =
+        node.callee.type === 'Identifier' ? (node.callee as IdentifierNode).name : null;
+    recordIdentifierCallByName(node, calleeName, szrState.szrCalls, szvState);
 }
 
 /**
@@ -2051,10 +2018,11 @@ function recordIdentifierCallOxc(
  * @param state - szv precompile accumulator.
  */
 function recordSzvTypeQueryOxc(node: OxcNode, state: OxcSzvPrecompileState): void {
-    if (!state.enabled) return;
     const exprName = (node as unknown as { exprName?: { type: string; name?: string } }).exprName;
-    if (exprName?.type !== 'Identifier' || exprName.name === undefined) return;
-    state.typeQueryCounts.set(exprName.name, (state.typeQueryCounts.get(exprName.name) ?? 0) + 1);
+    recordSzvTypeQueryByName(
+        exprName?.type === 'Identifier' ? (exprName.name ?? null) : null,
+        state,
+    );
 }
 
 /** Minimal variable-declaration shape the factory scan reads. */
@@ -2078,7 +2046,7 @@ function recordSzvFactoryCandidatesOxc(node: OxcNode, state: OxcSzvPrecompileSta
     for (const declarator of declaration.declarations ?? []) {
         if (declarator.id?.type !== 'Identifier' || !declarator.init) continue;
         const name = declarator.id.name;
-        if (name === undefined || OXC_SZV_RESERVED_FACTORY_NAMES.has(name)) continue;
+        if (name === undefined || SZV_RESERVED_FACTORY_NAMES.has(name)) continue;
         if (state.candidates.has(name)) continue;
         const init = unwrapExpression(declarator.init);
         if (init.type !== 'CallExpression') continue;
@@ -2102,27 +2070,28 @@ function recordSzvFactoryCandidatesOxc(node: OxcNode, state: OxcSzvPrecompileSta
  */
 function recordCrossModuleSzvFactoriesOxc(node: OxcNode, state: OxcSzvPrecompileState): void {
     const declaration = node as unknown as ImportDeclarationNode;
-    if (declaration.importKind === 'type') return;
     const sourceValue = declaration.source?.value;
-    if (typeof sourceValue !== 'string') return;
-    const entries = state.crossModuleStatics?.[sourceValue];
-    if (entries === undefined) return;
     const statement = node as unknown as { end: number };
-    for (const specifier of declaration.specifiers ?? []) {
-        if (specifier.type !== 'ImportSpecifier' || specifier.importKind === 'type') continue;
-        const importedName = specifier.imported?.name ?? specifier.imported?.value;
-        if (typeof importedName !== 'string') continue;
-        const config = entries[importedName];
-        if (config === undefined) continue;
-        const localName = specifier.local?.name;
-        if (localName === undefined || OXC_SZV_RESERVED_FACTORY_NAMES.has(localName)) continue;
-        if (state.candidates.has(localName)) continue;
-        state.candidates.set(localName, {
-            name: localName,
+    recordCrossModuleSzvFactoryImports(
+        typeof sourceValue === 'string' ? sourceValue : null,
+        declaration.importKind === 'type',
+        (declaration.specifiers ?? []).map(specifier => {
+            const importedName = specifier.imported?.name ?? specifier.imported?.value;
+            return specifier.type === 'ImportSpecifier'
+                ? {
+                      importedName: typeof importedName === 'string' ? importedName : null,
+                      localName: specifier.local?.name ?? null,
+                      typeOnly: specifier.importKind === 'type',
+                  }
+                : { importedName: null, localName: null, typeOnly: false };
+        }),
+        state,
+        (name, config) => ({
+            name,
             statementEnd: statement.end,
             config,
-        });
-    }
+        }),
+    );
 }
 
 /**
@@ -2260,30 +2229,18 @@ function applySzvPrecompileOxc(
         const table = candidate.config === null ? null : qualifyStaticSzvConfig(candidate.config);
         if (table === null) continue;
         const calls = state.identifierCalls.get(candidate.name) ?? [];
-        if (calls.length === 0) continue;
-        let accounted = true;
-        for (const call of calls) {
-            if (!szrArgumentNodes.has(call) || call.arguments.length > 1) {
-                accounted = false;
-                break;
-            }
-        }
-        if (!accounted) continue;
-        const typeQueries = state.typeQueryCounts.get(candidate.name) ?? 0;
-        const occurrences = countWordOccurrencesOutsideComments(
-            source,
-            candidate.name,
-            state.commentSpans,
-        );
-        if (occurrences !== 1 + calls.length + typeQueries) {
+        if (
+            !szvFactoryAccountingHolds(
+                candidate.name,
+                calls,
+                szrArgumentNodes,
+                source,
+                state.commentSpans,
+                state.typeQueryCounts,
+            )
+        ) {
             continue;
         }
-        const tableOccurrences = countWordOccurrencesOutsideComments(
-            source,
-            szvTableIdentifier(candidate.name),
-            state.commentSpans,
-        );
-        if (tableOccurrences !== 0) continue;
 
         let pickNeeded = false;
         let pick1Needed = false;
@@ -2373,11 +2330,6 @@ function planSingleDimensionPickOxc(
     table: SzvPrecompiledTable,
     source: string,
 ): { kind: 'dynamic1'; dimension: string; valueText: string } | null {
-    // A default makes the dimensions the selection OMITS contribute classes,
-    // and the single-dimension picker never visits them.
-    if (table.defaults !== undefined && Object.keys(table.defaults).length > 0) {
-        return null;
-    }
     const properties = (node as unknown as { properties: OxcNode[] }).properties ?? [];
     if (properties.length !== 1) return null;
     const property = properties[0];
@@ -2396,14 +2348,9 @@ function planSingleDimensionPickOxc(
             : shaped.key.type === 'Literal' && typeof shaped.key.value === 'string'
               ? shaped.key.value
               : null;
-    if (key === null) return null;
-    // `{ __proto__: v }` in a literal sets the PROTOTYPE instead of creating an
-    // own property, so the full picker's own-property probe selects nothing.
-    if (key === '__proto__') return null;
-    // Own dimensions only, so the runtime never indexes an inherited member and
-    // the unknown-variant dev warning keeps running through the full picker.
-    // biome-ignore lint/suspicious/noPrototypeBuiltins: the auto-fix is Object.hasOwn, which is ES2022; this package's lib is ES2021.
-    if (!Object.prototype.hasOwnProperty.call(table.d, key)) return null;
+    // The defaults / __proto__ / own-property rules live in the shared spec —
+    // both lanes must reach the same verdict.
+    if (!singleDimensionPickAllowed(table, key)) return null;
     const value = shaped.value as unknown as { start: number; end: number };
     return { kind: 'dynamic1', dimension: key, valueText: source.slice(value.start, value.end) };
 }
@@ -2421,17 +2368,11 @@ function evaluateStaticSzvSelectionOxc(
     if (evaluated === null) return null;
     const selection: Record<string, string | number | boolean | null> = {};
     for (const key of Object.keys(evaluated)) {
-        const value = evaluated[key];
-        // Tri-lane static contract: string/boolean/safe-integer only; null and
-        // undefined stay dynamic so the runtime picker owns their semantics.
-        if (typeof value === 'number') {
-            if (!isParitySafeNumber(value)) return null;
-            selection[key] = value;
-        } else if (typeof value === 'string' || typeof value === 'boolean') {
-            selection[key] = value;
-        } else {
-            return null;
-        }
+        // The value-domain rule (string / boolean / safe integer) lives in the
+        // shared spec so both lanes coerce identically.
+        const coerced = coerceParitySafeSelectionValue(evaluated[key]);
+        if (coerced === null) return null;
+        selection[key] = coerced;
     }
     return selection;
 }
@@ -2511,7 +2452,7 @@ function analyzeSzrArgumentOxc(rawExpression: OxcNode, factories: CallExpression
         const call = expression as CallExpressionNode;
         if (
             call.callee.type === 'Identifier' &&
-            !OXC_SZV_RESERVED_FACTORY_NAMES.has((call.callee as IdentifierNode).name)
+            !SZV_RESERVED_FACTORY_NAMES.has((call.callee as IdentifierNode).name)
         ) {
             factories.push(call);
             return true;
@@ -2558,21 +2499,6 @@ function analyzeSzrArgumentOxc(rawExpression: OxcNode, factories: CallExpression
 }
 
 /**
- * Whether one analyzed szr argument is fully proven: the shape held and every
- * factory candidate inside it was rewritten to a string.
- *
- * @param analysis - The argument's analysis.
- * @param replaced - Node-identity set of rewritten factory calls.
- * @returns True for a proven-string argument.
- */
-function szrArgumentProvenOxc(
-    analysis: OxcSzrArgumentAnalysis,
-    replaced: ReadonlySet<CallExpressionNode>,
-): boolean {
-    return analysis.shapeOk && analysis.factories.every(factory => replaced.has(factory));
-}
-
-/**
  * Emit the deferred szr fallback diagnostics for arguments that stayed
  * unproven after the precompile.
  *
@@ -2587,14 +2513,12 @@ function emitPendingSzrFallbacksOxc(
     source: string,
     diagnostics: string[],
 ): void {
-    for (const pending of szrState.pendingFallbacks) {
-        const analyses = szvState.szrArgumentAnalyses.get(pending.call);
-        const first = analyses?.[0];
-        if (first !== undefined && szrArgumentProvenOxc(first, szvState.replacedCalls)) {
-            continue;
-        }
-        pushSiteFallbackDiagnostic(diagnostics, 'szr', pending.expression, source);
-    }
+    emitUnprovenSzrFallbacks(
+        szrState.pendingFallbacks,
+        szvState.szrArgumentAnalyses,
+        szvState.replacedCalls,
+        expression => pushSiteFallbackDiagnostic(diagnostics, 'szr', expression, source),
+    );
 }
 
 /**
@@ -2613,18 +2537,17 @@ function applySzrImportRewriteOxc(
     edits: MagicString,
 ): boolean {
     if (state.sourceSpan === null) return false;
-    let provenCalls = 0;
-    for (const call of state.szrCalls) {
-        const analyses = szvState.szrArgumentAnalyses.get(call) ?? [];
-        if (call.arguments.length !== analyses.length) return false;
-        const allSafe = analyses.every(analysis =>
-            szrArgumentProvenOxc(analysis, szvState.replacedCalls),
-        );
-        if (!allSafe) return false;
-        provenCalls += 1;
+    if (
+        !szrRewriteProofHolds(
+            state.szrCalls,
+            szvState.szrArgumentAnalyses,
+            szvState.replacedCalls,
+            source,
+            szvState.commentSpans,
+        )
+    ) {
+        return false;
     }
-    const occurrences = countSzrWordOccurrencesOutsideComments(source, szvState.commentSpans);
-    if (!szrRewriteApproved(occurrences, provenCalls, false)) return false;
     const target = SZR_IMPORT_REWRITE_TARGETS[state.sourceValue];
     // Preserve the author's quote character — the span covers it.
     const quote = source[state.sourceSpan.start] === '"' ? '"' : "'";
@@ -2780,18 +2703,6 @@ function isHostOpeningElementName(nameNode: OxcNode): boolean {
         nameNode.type === 'JSXIdentifier' &&
         /^[a-z]/.test(String((nameNode as unknown as { name: string }).name))
     );
-}
-
-/**
- * The shared unsupported-szs diagnostic — the exact contract (identifier keys,
- * pure-literal object or class-string values) is enforced identically by all
- * three engines so their outputs stay in parity.
- *
- * @param filename Source filename for context.
- * @returns The diagnostic message.
- */
-function szsUnsupportedMessage(filename: string): string {
-    return szsUnsupportedDiagnostic(filename);
 }
 
 /**
@@ -6824,7 +6735,7 @@ export function extractSzvRegistryEntries(source: string, filename: string): Szv
             []) {
             if (declarator.id?.type !== 'Identifier' || !declarator.init) continue;
             const exportName = declarator.id.name;
-            if (exportName === undefined || OXC_SZV_RESERVED_FACTORY_NAMES.has(exportName)) {
+            if (exportName === undefined || SZV_RESERVED_FACTORY_NAMES.has(exportName)) {
                 continue;
             }
             const init = unwrapExpression(declarator.init);

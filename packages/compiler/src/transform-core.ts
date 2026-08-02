@@ -59,6 +59,9 @@ export function deepMergeSzObjects(target: SzObject, source: SzObject): SzObject
     return result;
 }
 
+/** Sides of the linear mask slot; each writes its own `--tw-mask-<side>` variable. */
+const MASK_SIDES: readonly string[] = ['t', 'r', 'b', 'l', 'x', 'y'];
+
 /**
  * Sub-keys of one property that write the SAME CSS custom property, so only one
  * group can be live at a time. Deep merge alone would keep both groups, which
@@ -69,10 +72,7 @@ export function deepMergeSzObjects(target: SzObject, source: SzObject): SzObject
  * write `--tw-mask-linear`, with different values.
  */
 const EXCLUSIVE_SUB_KEY_GROUPS: Readonly<Record<string, readonly (readonly string[])[]>> = {
-    maskLinear: [
-        ['angle', 'from', 'to'],
-        ['t', 'r', 'b', 'l', 'x', 'y'],
-    ],
+    maskLinear: [['angle', 'from', 'to'], MASK_SIDES],
 };
 
 /**
@@ -2899,9 +2899,6 @@ function formatMaskMode(value: string): string {
 
 /** Keys that own one `--tw-mask-*` layer. */
 const MASK_SLOT_KEYS: ReadonlySet<string> = new Set(['maskLinear', 'maskRadial', 'maskConic']);
-
-/** Sides of the linear slot; each writes its own `--tw-mask-<side>` variable. */
-const MASK_SIDES: readonly string[] = ['t', 'r', 'b', 'l', 'x', 'y'];
 
 /** Legal members per slot; anything else emits nothing and deserves a warning. */
 const MASK_SLOT_MEMBERS: Readonly<Record<string, readonly string[]>> = {

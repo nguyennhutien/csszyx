@@ -185,14 +185,22 @@ fn collect_canonical_leaf_paths(branch: &StaticSzObject, prefix: &str, out: &mut
     }
 }
 
+/// Whether `long` extends `short` by at least one NUL-joined segment — the
+/// allocation-free form of `long.starts_with(&format!("{short}\u{0}"))`, which
+/// built two heap Strings per pair inside the overlap detector's innermost
+/// loop.
+fn extends_leaf_path(long: &str, short: &str) -> bool {
+    long.len() > short.len() && long.as_bytes()[short.len()] == 0 && long.starts_with(short)
+}
+
 /// Whether two branches conflict under deep merge (equal paths, or one leaf
 /// path prefixing the other). Mirrors `leafPathsConflict`.
 fn leaf_paths_conflict(a: &[String], b: &[String]) -> bool {
     for path_a in a {
         for path_b in b {
             if path_a == path_b
-                || path_a.starts_with(&format!("{path_b}\u{0}"))
-                || path_b.starts_with(&format!("{path_a}\u{0}"))
+                || extends_leaf_path(path_a, path_b)
+                || extends_leaf_path(path_b, path_a)
             {
                 return true;
             }

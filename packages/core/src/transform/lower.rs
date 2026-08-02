@@ -150,12 +150,16 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
         || is_removed_boolean_sugar(key)
         || is_known_variant(key)
         || is_aria_state(key)
-        || variant_string_prefix(key).is_some()
-        || variant_prefix(key).is_some()
-        || is_special_cased_property(key)
+        // Cheap byte probes BEFORE variant_string_prefix: that helper builds a
+        // whitespace-stripped String for any `[...]` key just to answer
+        // `.is_some()`, so a bracket key must short-circuit ahead of it (the
+        // TypeScript twin already orders these this way).
         || key.starts_with("--")
         || key.starts_with('[')
         || key.starts_with('@')
+        || variant_string_prefix(key).is_some()
+        || variant_prefix(key).is_some()
+        || is_special_cased_property(key)
         || matches!(
             key,
             "min"

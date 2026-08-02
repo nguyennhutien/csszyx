@@ -19,20 +19,23 @@ import {
     type SzFallbackSite,
     szsUnsupportedDiagnostic,
 } from './sz-fallback-matrix.js';
+import { SZR_IMPORT_REWRITE_TARGETS, szrRewriteProofHolds } from './szr-import-rewrite.js';
 import {
-    countSzrWordOccurrencesOutsideComments,
-    SZR_IMPORT_REWRITE_TARGETS,
-    szrRewriteApproved,
-} from './szr-import-rewrite.js';
-import {
-    type CommentSpan,
+    coerceParitySafeSelectionValue,
     computeStaticSzvPick,
-    countWordOccurrencesOutsideComments,
-    isParitySafeNumber,
+    emitUnprovenSzrFallbacks,
     qualifyStaticSzvConfig,
+    recordCrossModuleSzvFactoryImports,
+    recordIdentifierCallByName,
+    recordSzvTypeQueryByName,
+    type SzvPrecompileState as SharedSzvPrecompileState,
     type StaticSzvConfig,
+    SZV_RESERVED_FACTORY_NAMES,
+    type SzrArgumentAnalysisOf,
     type SzvPrecompiledTable,
     serializeSzvTable,
+    singleDimensionPickAllowed,
+    szvFactoryAccountingHolds,
     szvTableIdentifier,
 } from './szv-precompile.js';
 import {
@@ -190,12 +193,12 @@ function transformSzsAttribute(
     }
     const container = path.node.value;
     if (!t.isJSXExpressionContainer(container) || !t.isObjectExpression(container.expression)) {
-        diagnostics.push(szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedDiagnostic(filename ?? '<anonymous>'));
         return false;
     }
     const slotMap = container.expression;
     if (!isValidSzsSlotMap(slotMap)) {
-        diagnostics.push(szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedDiagnostic(filename ?? '<anonymous>'));
         return false;
     }
     setSzWarnLocation(
@@ -203,7 +206,7 @@ function transformSzsAttribute(
     );
     const compiledSlots = compileSzsSlots(slotMap);
     if (!compiledSlots) {
-        diagnostics.push(szsUnsupportedMessage(filename));
+        diagnostics.push(szsUnsupportedDiagnostic(filename ?? '<anonymous>'));
         return false;
     }
     applyCompiledSzsSlots(compiledSlots, pendingClasses);
@@ -791,33 +794,8 @@ interface SzvFactoryCandidate {
     config: StaticSzvConfig | null;
 }
 
-/** Whole-file accumulator for the szv per-key precompile. */
-interface SzvPrecompileState {
-    /** Whether the file can contain an szv factory at all. */
-    enabled: boolean;
-    /** `typeof X` type-query references by name — erased at runtime, so the
-     * reference accounting must not charge them against the factory. */
-    typeQueryCounts: Map<string, number>;
-    /** Per-szr-call argument analyses, computed once at exit. */
-    szrArgumentAnalyses: Map<t.CallExpression, SzrArgumentAnalysis[]>;
-    /** Comment spans from the parse, for comment-excluded accounting. */
-    commentSpans: CommentSpan[];
-    /** Factory calls actually rewritten to strings or picks. */
-    replacedCalls: Set<t.Node>;
-    /** Imported-factory configs by specifier, from the bundler's registry. */
-    crossModuleStatics?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
-    /** Factory candidates by binding name. */
-    candidates: Map<string, SzvFactoryCandidate>;
-    /** Every direct identifier-callee call, by callee name. */
-    identifierCalls: Map<string, t.CallExpression[]>;
-    /** Whether any rewrite emitted a `__szvPick` call. */
-    usedPick: boolean;
-    /** Whether any rewrite emitted a `__szvPick1` single-dimension call. */
-    usedPick1: boolean;
-}
-
-/** Names that can never be szv factory bindings for the precompile. */
-const SZV_RESERVED_FACTORY_NAMES = new Set(['szr', 'szv', 'dynamic', '__szvPick', '__szvPick1']);
+/** Whole-file accumulator for the szv per-key precompile (Babel AST). */
+type SzvPrecompileState = SharedSzvPrecompileState<t.CallExpression, t.Node, SzvFactoryCandidate>;
 
 /**
  * Record an import declaration when it carries the rewritable szr specifier.
@@ -868,19 +846,8 @@ function recordIdentifierCall(
     szrState: SzrRewriteState,
     szvState: SzvPrecompileState,
 ): void {
-    if (!t.isIdentifier(call.callee)) return;
-    const name = call.callee.name;
-    if (name === 'szr') {
-        szrState.szrCalls.push(call);
-        return;
-    }
-    if (!szvState.enabled) return;
-    const existing = szvState.identifierCalls.get(name);
-    if (existing) {
-        existing.push(call);
-    } else {
-        szvState.identifierCalls.set(name, [call]);
-    }
+    const calleeName = t.isIdentifier(call.callee) ? call.callee.name : null;
+    recordIdentifierCallByName(call, calleeName, szrState.szrCalls, szvState);
 }
 
 /**
@@ -894,9 +861,7 @@ function recordIdentifierCall(
  * @param state - szv precompile accumulator.
  */
 function recordSzvTypeQuery(node: t.TSTypeQuery, state: SzvPrecompileState): void {
-    if (!state.enabled || !t.isIdentifier(node.exprName)) return;
-    const name = node.exprName.name;
-    state.typeQueryCounts.set(name, (state.typeQueryCounts.get(name) ?? 0) + 1);
+    recordSzvTypeQueryByName(t.isIdentifier(node.exprName) ? node.exprName.name : null, state);
 }
 
 /**
@@ -950,23 +915,27 @@ function recordCrossModuleSzvFactories(
     path: babel.NodePath<t.ImportDeclaration>,
     state: SzvPrecompileState,
 ): void {
-    const entries = state.crossModuleStatics?.[path.node.source.value];
-    if (entries === undefined || path.node.importKind === 'type') return;
-    for (const specifier of path.node.specifiers) {
-        if (!t.isImportSpecifier(specifier) || specifier.importKind === 'type') continue;
-        const imported = specifier.imported;
-        const importedName = t.isIdentifier(imported) ? imported.name : imported.value;
-        const config = entries[importedName];
-        if (config === undefined) continue;
-        const localName = specifier.local.name;
-        if (SZV_RESERVED_FACTORY_NAMES.has(localName)) continue;
-        if (state.candidates.has(localName)) continue;
-        state.candidates.set(localName, {
-            name: localName,
+    recordCrossModuleSzvFactoryImports(
+        path.node.source.value,
+        path.node.importKind === 'type',
+        path.node.specifiers.map(specifier =>
+            t.isImportSpecifier(specifier)
+                ? {
+                      importedName: t.isIdentifier(specifier.imported)
+                          ? specifier.imported.name
+                          : specifier.imported.value,
+                      localName: specifier.local.name,
+                      typeOnly: specifier.importKind === 'type',
+                  }
+                : { importedName: null, localName: null, typeOnly: false },
+        ),
+        state,
+        (name, config) => ({
+            name,
             statementPath: path,
             config: config as StaticSzvConfig,
-        });
-    }
+        }),
+    );
 }
 
 /**
@@ -1028,18 +997,17 @@ function applySzrImportRewrite(
     source: string,
 ): boolean {
     if (state.importDeclaration === null) return false;
-    let provenCalls = 0;
-    for (const call of state.szrCalls) {
-        const analyses = szvState.szrArgumentAnalyses.get(call) ?? [];
-        if (call.arguments.length !== analyses.length) return false;
-        const allSafe = analyses.every(analysis =>
-            szrArgumentProven(analysis, szvState.replacedCalls),
-        );
-        if (!allSafe) return false;
-        provenCalls += 1;
+    if (
+        !szrRewriteProofHolds(
+            state.szrCalls,
+            szvState.szrArgumentAnalyses,
+            szvState.replacedCalls,
+            source,
+            szvState.commentSpans,
+        )
+    ) {
+        return false;
     }
-    const occurrences = countSzrWordOccurrencesOutsideComments(source, szvState.commentSpans);
-    if (!szrRewriteApproved(occurrences, provenCalls, false)) return false;
     const declaration = state.importDeclaration.node;
     const target = SZR_IMPORT_REWRITE_TARGETS[declaration.source.value];
     const others = declaration.specifiers.filter(specifier => specifier !== state.szrSpecifier);
@@ -1062,12 +1030,7 @@ function applySzrImportRewrite(
 }
 
 /** Analysis of one szr argument: shape verdict plus nested factory calls. */
-interface SzrArgumentAnalysis {
-    /** True when every reachable result is a string, falsy, or a factory call. */
-    shapeOk: boolean;
-    /** Factory-call candidates found anywhere in the expression. */
-    factories: t.CallExpression[];
-}
+type SzrArgumentAnalysis = SzrArgumentAnalysisOf<t.CallExpression>;
 
 /**
  * Analyze one szr argument for the provable-with-factories contract.
@@ -1224,7 +1187,18 @@ function applySzvPrecompile(
         const table = qualifySzvFactory(candidate);
         if (table === null) continue;
         const calls = state.identifierCalls.get(candidate.name) ?? [];
-        if (!szvFactoryAccountingHolds(candidate, calls, szrArgumentNodes, source, state)) continue;
+        if (
+            !szvFactoryAccountingHolds(
+                candidate.name,
+                calls,
+                szrArgumentNodes,
+                source,
+                state.commentSpans,
+                state.typeQueryCounts,
+            )
+        ) {
+            continue;
+        }
 
         let pickNeeded = false;
         let pick1Needed = false;
@@ -1280,18 +1254,6 @@ function applySzvPrecompile(
 }
 
 /**
- * Whether one analyzed szr argument is fully proven: the shape held and every
- * factory candidate inside it was rewritten to a string.
- *
- * @param analysis - The argument's analysis.
- * @param replaced - Node-identity set of rewritten factory calls.
- * @returns True for a proven-string argument.
- */
-function szrArgumentProven(analysis: SzrArgumentAnalysis, replaced: ReadonlySet<t.Node>): boolean {
-    return analysis.shapeOk && analysis.factories.every(factory => replaced.has(factory));
-}
-
-/**
  * Emit the deferred szr fallback diagnostics for arguments that stayed
  * unproven after the precompile.
  *
@@ -1304,14 +1266,12 @@ function emitPendingSzrFallbacks(
     szvState: SzvPrecompileState,
     diagnostics: string[],
 ): void {
-    for (const pending of szrState.pendingFallbacks) {
-        const analyses = szvState.szrArgumentAnalyses.get(pending.call);
-        const first = analyses?.[0];
-        if (first !== undefined && szrArgumentProven(first, szvState.replacedCalls)) {
-            continue;
-        }
-        pushSiteFallbackDiagnostic(diagnostics, 'szr', pending.expression);
-    }
+    emitUnprovenSzrFallbacks(
+        szrState.pendingFallbacks,
+        szvState.szrArgumentAnalyses,
+        szvState.replacedCalls,
+        expression => pushSiteFallbackDiagnostic(diagnostics, 'szr', expression),
+    );
 }
 
 /**
@@ -1322,50 +1282,6 @@ function emitPendingSzrFallbacks(
  */
 function qualifySzvFactory(candidate: SzvFactoryCandidate): SzvPrecompiledTable | null {
     return candidate.config === null ? null : qualifyStaticSzvConfig(candidate.config);
-}
-
-/**
- * Reference accounting for one factory.
- *
- * The factory name must occur exactly `1 (declaration) + calls` times, every
- * call must sit directly in an `szr(...)` argument position with at most one
- * argument, and the table identifier must be free in the file.
- *
- * @param candidate - The factory candidate.
- * @param calls - Every direct call of the factory in the file.
- * @param szrArgumentNodes - Node-identity set of szr argument factory calls.
- * @param source - Original file text.
- * @param state - Whole-file accumulator, for type-query and comment data.
- * @returns True when every reference is accounted for.
- */
-function szvFactoryAccountingHolds(
-    candidate: SzvFactoryCandidate,
-    calls: readonly t.CallExpression[],
-    szrArgumentNodes: ReadonlySet<t.Node>,
-    source: string,
-    state: SzvPrecompileState,
-): boolean {
-    if (calls.length === 0) return false;
-    for (const call of calls) {
-        if (!szrArgumentNodes.has(call)) return false;
-        if (call.arguments.length > 1) return false;
-    }
-    const typeQueries = state.typeQueryCounts.get(candidate.name) ?? 0;
-    const occurrences = countWordOccurrencesOutsideComments(
-        source,
-        candidate.name,
-        state.commentSpans,
-    );
-    if (occurrences !== 1 + calls.length + typeQueries) {
-        return false;
-    }
-    const tableOccurrences = countWordOccurrencesOutsideComments(
-        source,
-        szvTableIdentifier(candidate.name),
-        state.commentSpans,
-    );
-    if (tableOccurrences !== 0) return false;
-    return true;
 }
 
 /** Planned replacement for one factory call site. */
@@ -1418,11 +1334,6 @@ function planSingleDimensionPick(
     expression: t.ObjectExpression,
     table: SzvPrecompiledTable,
 ): { kind: 'dynamic1'; dimension: string; value: t.Expression } | null {
-    // A default makes the dimensions the selection OMITS contribute classes,
-    // and the single-dimension picker never visits them.
-    if (table.defaults !== undefined && Object.keys(table.defaults).length > 0) {
-        return null;
-    }
     if (expression.properties.length !== 1) return null;
     const property = expression.properties[0];
     if (!t.isObjectProperty(property) || property.computed) return null;
@@ -1431,16 +1342,9 @@ function planSingleDimensionPick(
         : t.isStringLiteral(property.key)
           ? property.key.value
           : null;
-    if (key === null) return null;
-    // `{ __proto__: v }` in a literal sets the PROTOTYPE instead of creating an
-    // own property, so the full picker's own-property probe reads undefined and
-    // selects nothing. Indexing the table by it would not — leave it alone.
-    if (key === '__proto__') return null;
-    // Own dimensions only, so the runtime never indexes an inherited member
-    // (`constructor`, `toString`) and the unknown-variant dev warning keeps
-    // running through the full picker.
-    // biome-ignore lint/suspicious/noPrototypeBuiltins: the auto-fix is Object.hasOwn, which is ES2022; this package's lib is ES2021.
-    if (!Object.prototype.hasOwnProperty.call(table.d, key)) return null;
+    // The defaults / __proto__ / own-property rules live in the shared spec —
+    // both lanes must reach the same verdict.
+    if (!singleDimensionPickAllowed(table, key)) return null;
     const value = unwrapTsExpression(property.value);
     if (!t.isExpression(value)) return null;
     return { kind: 'dynamic1', dimension: key, value };
@@ -1466,26 +1370,26 @@ function evaluateStaticSzvSelection(
         if (key === null) return null;
         // TS wrappers unwrap, matching the oxc lane's evaluator.
         const value = unwrapTsExpression(property.value);
-        // The tri-lane static contract: string, boolean, or safe-integer
-        // literal values (negated included) only. Everything else — null and
-        // undefined included — takes the dynamic path, where the runtime
-        // picker applies the exact JS semantics without three engines
-        // re-implementing them.
+        // Literal extraction only — the value-domain rule (string / boolean /
+        // safe integer, negated included) lives in the shared spec so both
+        // lanes coerce identically.
+        let raw: unknown;
         if (t.isNumericLiteral(value)) {
-            if (!isParitySafeNumber(value.value)) return null;
-            selection[key] = value.value;
+            raw = value.value;
         } else if (
             t.isUnaryExpression(value) &&
             value.operator === '-' &&
             t.isNumericLiteral(value.argument)
         ) {
-            if (!isParitySafeNumber(-value.argument.value)) return null;
-            selection[key] = -value.argument.value;
+            raw = -value.argument.value;
         } else if (t.isStringLiteral(value) || t.isBooleanLiteral(value)) {
-            selection[key] = value.value;
+            raw = value.value;
         } else {
             return null;
         }
+        const coerced = coerceParitySafeSelectionValue(raw);
+        if (coerced === null) return null;
+        selection[key] = coerced;
     }
     return selection;
 }
@@ -2805,18 +2709,6 @@ type GetBinding = (name: string) => { path: babel.NodePath } | null | undefined;
  */
 function isHostElementName(name: t.Node): boolean {
     return t.isJSXIdentifier(name) && /^[a-z]/.test(name.name);
-}
-
-/**
- * The shared unsupported-szs diagnostic — the exact contract (identifier keys,
- * pure-literal object or class-string values) is enforced identically by all
- * three engines so their outputs stay in parity.
- *
- * @param filename - source filename for context.
- * @returns the diagnostic message.
- */
-function szsUnsupportedMessage(filename: string | undefined): string {
-    return szsUnsupportedDiagnostic(filename ?? '<anonymous>');
 }
 
 /**

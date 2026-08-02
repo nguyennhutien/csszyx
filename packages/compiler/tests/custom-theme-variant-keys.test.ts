@@ -14,9 +14,7 @@
  * false positive for a false negative.
  */
 import { describe, expect, it } from 'vitest';
-import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { captureWarnings, ENGINES } from './tri-engine-harness.js';
 
 /** Breakpoint names taken from a real `@theme inline` block, verbatim. */
 const CUSTOM_VARIANT_SOURCES: ReadonlyArray<readonly [string, string]> = [
@@ -36,11 +34,6 @@ const CUSTOM_VARIANT_SOURCES: ReadonlyArray<readonly [string, string]> = [
     ['{ tablet: { hover: { p: 4 } } }', 'tablet:hover:p-4'],
 ];
 
-interface LaneResult {
-    className: string | undefined;
-    warnings: number;
-}
-
 /**
  * Transform one sz object and count warnings on BOTH channels.
  *
@@ -48,65 +41,43 @@ interface LaneResult {
  * returns them as diagnostics, so a comparison that reads only one channel
  * would call two identical behaviours a divergence.
  *
- * @param transform - Engine entry under test.
- * @param szObject - The sz object literal source text.
- * @returns Emitted className and the total warning count.
+ * @param engine - The lane under test.
+ * @param szObject - Source text of the sz object literal.
+ * @returns The emitted className and how many warnings the lane produced.
  */
-function run(
-    transform: (source: string, filename?: string) => { code?: string; diagnostics?: string[] },
+function warningCount(
+    engine: (typeof ENGINES)[number][1],
     szObject: string,
-): LaneResult {
+): { className: string | undefined; warnings: number } {
     const source = `export const A = () => <div sz={${szObject}} />;`;
-    const logged: string[] = [];
-    const original = console.warn;
-    console.warn = (...args: unknown[]) => {
-        logged.push(args.map(String).join(' '));
-    };
-    let result: { code?: string; diagnostics?: string[] };
-    try {
-        result = transform(source, '/p/t.tsx');
-    } finally {
-        console.warn = original;
-    }
-    const isNoise = (message: string): boolean => message.includes('Tip: run');
-    return {
-        className: result.code?.match(/className="([^"]*)"/)?.[1],
-        warnings:
-            (result.diagnostics ?? []).filter(m => !isNoise(String(m))).length +
-            logged.filter(m => !isNoise(m)).length,
-    };
+    const { className, warnings } = captureWarnings(engine, source);
+    return { className, warnings: warnings.length };
 }
 
-const LANES: ReadonlyArray<readonly [string, typeof transformSourceCode]> = [
-    ['babel', transformSourceCode],
-    ['oxc', transformOxc as unknown as typeof transformSourceCode],
-    ...(isRustTransformAvailable()
-        ? ([['rust', transformRust as unknown as typeof transformSourceCode]] as const)
-        : []),
-];
-
-describe.each(LANES)('%s lane', (_lane, transform) => {
+describe.each(ENGINES)('%s lane', (_lane, engine) => {
     it.each(CUSTOM_VARIANT_SOURCES)('emits the variant class for %s', (szObject, expected) => {
-        expect(run(transform, szObject).className).toBe(expected);
+        expect(warningCount(engine, szObject).className).toBe(expected);
     });
 
     it.each(CUSTOM_VARIANT_SOURCES)('stays silent for %s', szObject => {
-        expect(run(transform, szObject).warnings).toBe(0);
+        expect(warningCount(engine, szObject).warnings).toBe(0);
     });
 
     it('still reports a typo nested inside a custom variant', () => {
         // The false-positive fix must not silence the subtree: this is the
         // assertion that keeps it a targeted change.
-        const result = run(transform, '{ tablet: { zzznope: 4 } }');
+        const result = warningCount(engine, '{ tablet: { zzznope: 4 } }');
         expect(result.warnings).toBeGreaterThan(0);
         expect(result.className).toBe('tablet:zzznope-4');
     });
 
     it('still reports a typo at the top level', () => {
-        expect(run(transform, '{ zzznope: 4 }').warnings).toBeGreaterThan(0);
+        expect(warningCount(engine, '{ zzznope: 4 }').warnings).toBeGreaterThan(0);
     });
 
     it('still reports a typo two variants deep', () => {
-        expect(run(transform, '{ tablet: { hover: { zzznope: 4 } } }').warnings).toBeGreaterThan(0);
+        expect(
+            warningCount(engine, '{ tablet: { hover: { zzznope: 4 } } }').warnings,
+        ).toBeGreaterThan(0);
     });
 });

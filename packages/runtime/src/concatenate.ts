@@ -42,30 +42,13 @@ function ensureLowering(): void {
 }
 
 /**
- * Zero-overhead className passthrough/concatenation helper.
+ * Back-compat `_sz`, with the barrel's lazy lowering registration applied
+ * first. Canonical contract, examples, and the compiler-injection note live
+ * on {@link coreSz} in `core.ts` — this file only adds `ensureLowering()`.
  *
- * When the compiler pre-transforms sz objects to strings at build time,
- * this function simply passes through the string (zero overhead).
- * For runtime usage, it can also concatenate multiple class strings
- * or transform SzObjects on-the-fly.
- *
- * @param {...SzInput[]} classes - Class names or SzObjects to concatenate
- * @returns {string} Combined className string
- *
- * @example
- * ```typescript
- * // Passthrough (from compiler) - zero overhead
- * _sz('p-4 bg-red-500')
- * // Returns: "p-4 bg-red-500"
- *
- * // With conditionals
- * _sz('base', isActive && 'active', error && 'error')
- * // Returns: "base active" (if isActive is true, error is false)
- *
- * // With SzObject (runtime transform)
- * _sz({ p: 4, bg: 'red-500' })
- * // Returns: "p-4 bg-red-500"
- * ```
+ * @param classes - Class strings, sz objects, arrays, or falsy values.
+ * @returns The resolved className string.
+ * @see {@link coreSz} for the full docblock, examples included.
  */
 export function _sz(...classes: SzInput[]): string {
     ensureLowering();
@@ -73,46 +56,19 @@ export function _sz(...classes: SzInput[]): string {
 }
 
 /**
- * Resolve sz object(s) and/or class strings into a single className string,
- * mangle-aware. This is the PUBLIC, hand-written name for the otherwise
- * compiler-injected `_sz` helper (the `_` prefix marks compiler-generated code
- * you should not hand-author; `szr` is the one you call by hand).
- *
- * Reach for `szr` when you build a className from `szv` factory output or sz
- * objects — e.g. a split/layered design system that declares variants in a
- * module and resolves them at the leaf:
- *
- * ```ts
- * import { szr, szv } from '@csszyx/runtime';
- * const cardSz = szv({ variants: { pad: { lg: { p: 8 } } } });
- * const cls = szr(cardSz({ pad: 'lg' }), isWide && stackSz({ gap: 'xl' }));
- * ```
- *
- * Falsy inputs are skipped (clsx-style). `szr` CONCATENATES (keeps every class);
- * to combine with last-wins OVERRIDE on a same-utility conflict, use `szcn`.
- * `szr` accepts sz OBJECTS; `szcn` accepts className STRINGS.
- *
- * @param classes - sz objects, class strings, or falsy values (skipped).
- * @returns The resolved className string (mangled in a production build).
+ * Back-compat `szr` — the public, hand-written name for {@link _sz}. See
+ * {@link coreSz} for the full contract (`szr` vs `szcn`, falsy handling).
  */
 export const szr: (...classes: SzInput[]) => string = _sz;
 
 /**
- * Merges className strings with mangle-aware, utility-group last-wins semantics.
+ * Back-compat `_szMerge`, with the barrel's lazy lowering registration
+ * applied first. Canonical contract and examples live on {@link coreSzMerge}
+ * in `merge.ts` — this file only adds `ensureLowering()`.
  *
- * Useful when combining multiple className sources that may overlap.
- *
- * @param {...SzInput[]} classes - Class names or SzObjects to merge
- * @returns {string} Merged className string with later utility conflicts winning
- *
- * @example
- * ```typescript
- * _szMerge('gap-2 p-4', 'gap-8')
- * // Returns: "p-4 gap-8"
- *
- * _szMerge({ p: 4 }, { p: 2, m: 4 })
- * // Returns: "p-2 m-4"
- * ```
+ * @param classes - Class strings, sz objects, arrays, or falsy values.
+ * @returns The merged className string, last utility winning.
+ * @see {@link coreSzMerge} for the full docblock, examples included.
  */
 export function _szMerge(...classes: SzInput[]): string {
     ensureLowering();
@@ -120,26 +76,15 @@ export function _szMerge(...classes: SzInput[]): string {
 }
 
 /**
- * Normalizes one dynamic element of a compiled sz array into a class string
- * for `szcn`.
+ * Back-compat `_szPart`, delegating to this file's lowering-aware `_szMerge`
+ * above. Body and contract are identical to `merge.ts`'s `_szPart` by
+ * construction — both are `typeof value === 'string' ? value :
+ * <local _szMerge>(value)`; only which `_szMerge` they close over differs
+ * (this one registers the lowerer first). See `merge.ts` for the full
+ * docblock, examples included.
  *
- * The build rewrites `sz={[...]}` arrays with runtime elements into
- * `szcn(..., _szPart(<expr>), ...)`: the compiler cannot know whether the
- * expression yields a class string (a forwarded `szsc` slot), an sz object,
- * or a falsy guard — this helper resolves whichever arrives so `szcn` only
- * ever group-merges strings. Strings pass through untouched; everything else
- * (sz objects, nested arrays, falsy) goes through `_szMerge`'s existing
- * compile-and-join.
- *
- * @param {unknown} value - One runtime array element.
- * @returns {string} The element as a class string (`''` for falsy).
- *
- * @example
- * ```typescript
- * _szPart('text-lg')          // "text-lg"  (string passthrough)
- * _szPart({ p: 4 })           // "p-4"      (compiled)
- * _szPart(undefined)          // ""
- * ```
+ * @param value - One compiled array element: a class string or an sz object.
+ * @returns The element's className contribution.
  */
 export function _szPart(value: unknown): string {
     return typeof value === 'string' ? value : _szMerge(value as SzInput);

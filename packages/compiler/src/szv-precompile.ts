@@ -466,3 +466,281 @@ export function serializeSzvTable(table: SzvPrecompiledTable): string {
 export function szvTableIdentifier(factoryName: string): string {
     return `__szvT_${factoryName}`;
 }
+
+// ---------------------------------------------------------------------------
+// Engine-agnostic halves of the per-lane precompile drivers.
+//
+// Both TypeScript lanes drive their AST walks through the shared functions
+// below, so the DECISION of which files precompile — reserved names, reference
+// accounting, pick eligibility, the szr proof plumbing — cannot drift per
+// parser. Only AST reading and text splicing stay per lane; a divergence there
+// is a mechanics bug, a divergence HERE would make `build.parser` change the
+// emitted code.
+// ---------------------------------------------------------------------------
+
+/** Names that can never be szv factory bindings for the precompile. */
+export const SZV_RESERVED_FACTORY_NAMES: ReadonlySet<string> = new Set([
+    'szr',
+    'szv',
+    'dynamic',
+    '__szvPick',
+    '__szvPick1',
+]);
+
+/** Analysis of one szr argument: shape verdict plus nested factory calls. */
+export interface SzrArgumentAnalysisOf<TCall> {
+    /** True when every reachable result is a string, falsy, or a factory call. */
+    shapeOk: boolean;
+    /** Factory-call candidates found anywhere in the expression. */
+    factories: TCall[];
+}
+
+/**
+ * Whole-file accumulator for the szv per-key precompile, generic over the
+ * lane's AST vocabulary: `TCall` is the call-expression node, `TNode` the
+ * widest node type tracked for replacements, `TCandidate` the lane's factory
+ * candidate record.
+ */
+export interface SzvPrecompileState<TCall, TNode, TCandidate> {
+    /** Whether the file can contain an szv factory at all. */
+    enabled: boolean;
+    /** `typeof X` type-query references by name — erased at runtime, so the
+     * reference accounting must not charge them against the factory. */
+    typeQueryCounts: Map<string, number>;
+    /** Per-szr-call argument analyses, computed once in the apply phase. */
+    szrArgumentAnalyses: Map<TCall, SzrArgumentAnalysisOf<TCall>[]>;
+    /** Comment spans from the parse, for comment-excluded accounting. */
+    commentSpans: CommentSpan[];
+    /** Factory calls actually rewritten to strings or picks. */
+    replacedCalls: Set<TNode>;
+    /** Imported-factory configs by specifier, from the bundler's registry. */
+    crossModuleStatics?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+    /** Factory candidates by binding name. */
+    candidates: Map<string, TCandidate>;
+    /** Every direct identifier-callee call, by callee name. */
+    identifierCalls: Map<string, TCall[]>;
+    /** Whether any rewrite emitted a `__szvPick` call. */
+    usedPick: boolean;
+    /** Whether any rewrite emitted a `__szvPick1` single-dimension call. */
+    usedPick1: boolean;
+}
+
+/**
+ * Record one direct identifier-callee call for the deferred proofs.
+ *
+ * @param call - The call node.
+ * @param calleeName - Its identifier callee name, or null for any other shape.
+ * @param szrCalls - The lane's collected `szr(...)` calls (appended to).
+ * @param state - szv precompile accumulator.
+ */
+export function recordIdentifierCallByName<TCall>(
+    call: TCall,
+    calleeName: string | null,
+    szrCalls: TCall[],
+    state: Pick<SzvPrecompileState<TCall, unknown, unknown>, 'enabled' | 'identifierCalls'>,
+): void {
+    if (calleeName === null) return;
+    if (calleeName === 'szr') {
+        szrCalls.push(call);
+        return;
+    }
+    if (!state.enabled) return;
+    const existing = state.identifierCalls.get(calleeName);
+    if (existing) {
+        existing.push(call);
+    } else {
+        state.identifierCalls.set(calleeName, [call]);
+    }
+}
+
+/**
+ * Record one `typeof X` type-query reference by name.
+ *
+ * Type queries are erased at runtime: `Parameters<typeof factory>[0]` is the
+ * idiomatic way to derive a selection type, and it must not fail the
+ * factory's reference accounting.
+ *
+ * @param name - The queried identifier name, or null for any other shape.
+ * @param state - szv precompile accumulator.
+ */
+export function recordSzvTypeQueryByName(
+    name: string | null,
+    state: Pick<SzvPrecompileState<unknown, unknown, unknown>, 'enabled' | 'typeQueryCounts'>,
+): void {
+    if (!state.enabled || name === null) return;
+    state.typeQueryCounts.set(name, (state.typeQueryCounts.get(name) ?? 0) + 1);
+}
+
+/** One import specifier, reduced to the names the registry lookup needs. */
+export interface CrossModuleImportSpecifier {
+    /** Exported name on the source module, or null for unsupported shapes. */
+    importedName: string | null;
+    /** Local binding name, or null for unsupported shapes. */
+    localName: string | null;
+    /** True for a type-only specifier (erased at runtime). */
+    typeOnly: boolean;
+}
+
+/**
+ * Record factory candidates that arrive through imports, resolved by the
+ * bundler's cross-module registry.
+ *
+ * The LOCAL binding name becomes the factory name (aliases welcome — the
+ * registry lookup is by exported name), and the whole local machinery —
+ * accounting, call classification, table insertion after the import — then
+ * runs unchanged.
+ *
+ * @param sourceValue - The import's source specifier, or null when unreadable.
+ * @param typeImport - True for a type-only import declaration.
+ * @param specifiers - The clause's specifiers, reduced to names.
+ * @param state - szv precompile accumulator.
+ * @param makeCandidate - Lane-specific candidate builder (insertion anchor).
+ */
+export function recordCrossModuleSzvFactoryImports<TCandidate>(
+    sourceValue: string | null,
+    typeImport: boolean,
+    specifiers: readonly CrossModuleImportSpecifier[],
+    state: Pick<
+        SzvPrecompileState<unknown, unknown, TCandidate>,
+        'crossModuleStatics' | 'candidates'
+    >,
+    makeCandidate: (localName: string, config: unknown) => TCandidate,
+): void {
+    if (typeImport || sourceValue === null) return;
+    const entries = state.crossModuleStatics?.[sourceValue];
+    if (entries === undefined) return;
+    for (const specifier of specifiers) {
+        if (specifier.typeOnly || specifier.importedName === null) continue;
+        const config = entries[specifier.importedName];
+        if (config === undefined) continue;
+        const localName = specifier.localName;
+        if (localName === null || SZV_RESERVED_FACTORY_NAMES.has(localName)) continue;
+        if (state.candidates.has(localName)) continue;
+        state.candidates.set(localName, makeCandidate(localName, config));
+    }
+}
+
+/**
+ * Reference accounting for one factory.
+ *
+ * The factory name must occur exactly `1 (declaration) + calls + type queries`
+ * times outside comments, every call must sit directly in an `szr(...)`
+ * argument position with at most one argument, and the table identifier must
+ * be free in the file.
+ *
+ * @param factoryName - The factory binding name.
+ * @param calls - Every direct call of the factory in the file.
+ * @param szrArgumentNodes - Node-identity set of szr argument factory calls.
+ * @param source - Original file text.
+ * @param commentSpans - Comment spans, for comment-excluded accounting.
+ * @param typeQueryCounts - `typeof X` reference counts by name.
+ * @returns True when every reference is accounted for.
+ */
+export function szvFactoryAccountingHolds<TCall extends { arguments: { length: number } }>(
+    factoryName: string,
+    calls: readonly TCall[],
+    szrArgumentNodes: ReadonlySet<unknown>,
+    source: string,
+    commentSpans: readonly CommentSpan[],
+    typeQueryCounts: ReadonlyMap<string, number>,
+): boolean {
+    if (calls.length === 0) return false;
+    for (const call of calls) {
+        if (!szrArgumentNodes.has(call)) return false;
+        if (call.arguments.length > 1) return false;
+    }
+    const typeQueries = typeQueryCounts.get(factoryName) ?? 0;
+    const occurrences = countWordOccurrencesOutsideComments(source, factoryName, commentSpans);
+    if (occurrences !== 1 + calls.length + typeQueries) {
+        return false;
+    }
+    const tableOccurrences = countWordOccurrencesOutsideComments(
+        source,
+        szvTableIdentifier(factoryName),
+        commentSpans,
+    );
+    return tableOccurrences === 0;
+}
+
+/**
+ * Whether the single-dimension picker may serve a selection naming `key`.
+ *
+ * A default makes the dimensions the selection OMITS contribute classes, and
+ * the single-dimension picker never visits them. `{ __proto__: v }` in a
+ * literal sets the PROTOTYPE instead of creating an own property, so the full
+ * picker's own-property probe selects nothing — indexing the table by it
+ * would not. And own dimensions only, so the runtime never indexes an
+ * inherited member (`constructor`, `toString`) and the unknown-variant dev
+ * warning keeps running through the full picker.
+ *
+ * @param table - The factory's compiled table.
+ * @param key - The selection's single key, or null for unsupported shapes.
+ * @returns True when `__szvPick1` reproduces the full picker for this key.
+ */
+export function singleDimensionPickAllowed(
+    table: SzvPrecompiledTable,
+    key: string | null,
+): key is string {
+    if (table.defaults !== undefined && Object.keys(table.defaults).length > 0) {
+        return false;
+    }
+    if (key === null || key === '__proto__') return false;
+    // biome-ignore lint/suspicious/noPrototypeBuiltins: the auto-fix is Object.hasOwn, which is ES2022; this package's lib is ES2021.
+    return Object.prototype.hasOwnProperty.call(table.d, key);
+}
+
+/**
+ * Coerce one selection value under the tri-lane static contract: string,
+ * boolean, or safe-integer values only. Everything else — null and undefined
+ * included — returns null and takes the dynamic path, where the runtime picker
+ * applies the exact JS semantics without three engines re-implementing them.
+ *
+ * @param value - One statically evaluated selection value.
+ * @returns The value when parity-safe, null otherwise.
+ */
+export function coerceParitySafeSelectionValue(value: unknown): string | number | boolean | null {
+    if (typeof value === 'number') {
+        return isParitySafeNumber(value) ? value : null;
+    }
+    if (typeof value === 'string' || typeof value === 'boolean') return value;
+    return null;
+}
+
+/**
+ * Whether one analyzed szr argument is fully proven: the shape held and every
+ * factory candidate inside it was rewritten to a string.
+ *
+ * @param analysis - The argument's analysis.
+ * @param replaced - Node-identity set of rewritten factory calls.
+ * @returns True for a proven-string argument.
+ */
+export function szrArgumentProven<TCall>(
+    analysis: SzrArgumentAnalysisOf<TCall>,
+    replaced: ReadonlySet<unknown>,
+): boolean {
+    return analysis.shapeOk && analysis.factories.every(factory => replaced.has(factory));
+}
+
+/**
+ * Emit the deferred szr fallback diagnostics for arguments that stayed
+ * unproven after the precompile.
+ *
+ * @param pendingFallbacks - The lane's pending fallback records.
+ * @param szrArgumentAnalyses - Per-call argument analyses.
+ * @param replacedCalls - Node-identity set of rewritten factory calls.
+ * @param reportFallback - Lane-specific diagnostic sink (position resolution).
+ */
+export function emitUnprovenSzrFallbacks<TCall, TExpression>(
+    pendingFallbacks: readonly { call: TCall; expression: TExpression }[],
+    szrArgumentAnalyses: ReadonlyMap<TCall, SzrArgumentAnalysisOf<TCall>[]>,
+    replacedCalls: ReadonlySet<unknown>,
+    reportFallback: (expression: TExpression) => void,
+): void {
+    for (const pending of pendingFallbacks) {
+        const first = szrArgumentAnalyses.get(pending.call)?.[0];
+        if (first !== undefined && szrArgumentProven(first, replacedCalls)) {
+            continue;
+        }
+        reportFallback(pending.expression);
+    }
+}

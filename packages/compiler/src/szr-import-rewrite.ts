@@ -33,6 +33,8 @@
  * @module szr-import-rewrite
  */
 
+import { type SzrArgumentAnalysisOf, szrArgumentProven } from './szv-precompile.js';
+
 /**
  * Import sources eligible for the rewrite, mapped to their slim targets.
  *
@@ -123,4 +125,39 @@ export function szrRewriteApproved(
     sawUnsafeCall: boolean,
 ): boolean {
     return !sawUnsafeCall && wordOccurrences === 1 + provenCallCount;
+}
+
+/**
+ * The whole-file szr proof, shared by both TypeScript lanes.
+ *
+ * Every direct `szr(...)` call must have an analysis per argument, every
+ * argument must be proven (string shape, factories rewritten), and the
+ * reference accounting must balance. The lanes previously each carried this
+ * prologue inline, which is exactly the kind of decision logic a
+ * `build.parser` flip must not be able to change one-sidedly.
+ *
+ * @param szrCalls - Direct `szr(...)` calls collected by the lane.
+ * @param szrArgumentAnalyses - Per-call argument analyses.
+ * @param replacedCalls - Node-identity set of rewritten factory calls.
+ * @param source - Original file text.
+ * @param commentSpans - Comment spans, for comment-excluded accounting.
+ * @returns Whether the import may be rewritten to the core entry.
+ */
+export function szrRewriteProofHolds<TCall extends { arguments: { length: number } }>(
+    szrCalls: readonly TCall[],
+    szrArgumentAnalyses: ReadonlyMap<TCall, SzrArgumentAnalysisOf<TCall>[]>,
+    replacedCalls: ReadonlySet<unknown>,
+    source: string,
+    commentSpans: ReadonlyArray<{ start: number; end: number }>,
+): boolean {
+    let provenCalls = 0;
+    for (const call of szrCalls) {
+        const analyses = szrArgumentAnalyses.get(call) ?? [];
+        if (call.arguments.length !== analyses.length) return false;
+        const allSafe = analyses.every(analysis => szrArgumentProven(analysis, replacedCalls));
+        if (!allSafe) return false;
+        provenCalls += 1;
+    }
+    const occurrences = countSzrWordOccurrencesOutsideComments(source, commentSpans);
+    return szrRewriteApproved(occurrences, provenCalls, false);
 }
