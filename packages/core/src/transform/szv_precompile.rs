@@ -909,7 +909,7 @@ mod tests {
         assert!(decode_cross_module_statics(r#"[["./styles",[["cardSz","scalar"]]]]"#).is_empty());
         for malformed in [
             r#"["bad-entry"]"#,
-            r#"[[1,[]]]"#,
+            r"[[1,[]]]",
             r#"[["./styles",["bad-name-entry"]]]"#,
             r#"[["./styles",[[1,[]]]]]"#,
             r#"[["./styles",[["cardSz",[[1,true]]]]]]"#,

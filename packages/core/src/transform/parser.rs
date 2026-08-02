@@ -2250,9 +2250,7 @@ fn classify_szv_call_argument(call: &CallExpression<'_>) -> Option<SzvCallArg> {
     match call.arguments.len() {
         0 => Some(SzvCallArg::None),
         1 => {
-            let Some(expression) = call.arguments[0].as_expression() else {
-                return None;
-            };
+            let expression = call.arguments[0].as_expression()?;
             let unwrapped = unwrap_expression(expression);
             let single = if let Expression::ObjectExpression(object) = unwrapped {
                 if let Some(selection) = strict_static_selection(object) {
@@ -4202,9 +4200,9 @@ mod tests {
 
     #[test]
     fn parser_shell_covers_szr_proof_shape_matrix() {
-        let safe = r#"import { szr } from '@csszyx/runtime';
+        let safe = r"import { szr } from '@csszyx/runtime';
 export const a = szr(('p-4'), `m-${n}`, false, null, undefined);
-export const b = szr(on && 'x', 'a' || 'b', cond ? 'c' : 'd', ['e', false]);"#;
+export const b = szr(on && 'x', 'a' || 'b', cond ? 'c' : 'd', ['e', false]);";
         let parsed = parse_source_shell(&TransformFile {
             filename: "/repo/src/Safe.tsx".into(),
             source: safe.into(),
@@ -4234,7 +4232,7 @@ export const b = szr(on && 'x', 'a' || 'b', cond ? 'c' : 'd', ['e', false]);"#;
 
     #[test]
     fn parser_shell_covers_szv_candidate_guard_matrix_and_type_queries() {
-        let source = r#"import { szr, szv } from '@csszyx/runtime';
+        let source = r"import { szr, szv } from '@csszyx/runtime';
 const { destructured } = obj;
 const dynamic = szv({ base: { p: 1 } });
 let missing;
@@ -4250,7 +4248,7 @@ const card = szv({ variants: { pad: { sm: { p: 2 } } } });
 type CardSelection = Parameters<typeof card>[0];
 type CardSelectionAgain = Parameters<typeof card>[0];
 type ExternalSelection = typeof import('./types');
-export const cls = szr(card({ pad: 'sm' }));"#;
+export const cls = szr(card({ pad: 'sm' }));";
         let parsed = parse_source_shell(&TransformFile {
             filename: "/repo/src/Factories.tsx".into(),
             source: source.into(),
@@ -4357,13 +4355,13 @@ export const cls = szr(card({ pad: 'sm' }));"#;
                 ("overlap".into(), overlap),
             ],
         )];
-        let source = r#"import type { card as typed } from './styles';
+        let source = r"import type { card as typed } from './styles';
 import './styles';
 import { type card as typedSpecifier } from './styles';
 import def, { card as ignoredDefault } from './styles';
 import { missing, invalid, overlap, card as szv, card as localCard } from './styles';
 import { card as duplicate } from './styles';
-export const cls = szr(localCard({ pad: 'sm' }));"#;
+export const cls = szr(localCard({ pad: 'sm' }));";
         let parsed = parse_source_shell_with_budget_and_statics(
             &TransformFile {
                 filename: "/repo/src/Cross.tsx".into(),

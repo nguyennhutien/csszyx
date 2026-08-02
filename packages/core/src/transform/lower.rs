@@ -2758,13 +2758,17 @@ mod tests {
     }
 
     #[test]
-    fn lowers_complete_mask_slot_matrix() {
+    fn reads_a_bracketed_variant_string_prefix() {
         assert_eq!(
             variant_string_prefix("min-[40rem]").as_deref(),
             Some("min-[40rem]")
         );
         assert!(variant_string_prefix("unknown-[value]").is_none());
         assert!(variant_string_prefix("unknown-[value").is_none());
+    }
+
+    #[test]
+    fn builds_every_mask_stop_shape() {
         assert_eq!(
             build_mask_stop_classes("mask-from", None),
             Vec::<String>::new()
@@ -2833,7 +2837,10 @@ mod tests {
             ["mask-to-red-500"]
         );
         assert!(build_mask_stop_classes("mask-to", Some(&StaticSzValue::Boolean(true))).is_empty());
+    }
 
+    #[test]
+    fn builds_every_mask_slot_shape() {
         let radial = StaticSzObject {
             properties: vec![
                 property("at", StaticSzValue::String("top".into())),
@@ -2897,7 +2904,10 @@ mod tests {
             ),
             ["mask-conic-30"]
         );
+    }
 
+    #[test]
+    fn classifies_mask_layer_values_sizes_and_positions() {
         assert!(is_mask_layer_value("linear-from-20%"));
         assert!(is_mask_layer_value("-radial"));
         assert!(!is_mask_layer_value("linear-gradient(red,blue)"));
