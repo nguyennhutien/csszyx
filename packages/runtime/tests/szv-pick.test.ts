@@ -25,6 +25,7 @@ import { szv } from '../src/variants.js';
 afterEach(() => {
     setSzLowering(null);
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
 });
 
 /** One szv config under test, in the runtime's own shape. */
@@ -223,6 +224,16 @@ describe('dev warning parity', () => {
 });
 
 describe('picker hardening', () => {
+    it('skips advisory validation in production for both picker shapes', () => {
+        vi.stubEnv('NODE_ENV', 'production');
+        const warn = vi.spyOn(console, 'warn');
+        const table = compileTable({ variants: { pad: { sm: { p: 2 } } } });
+
+        expect(__szvPick(table, { pad: 'sm' })).toBe('p-2');
+        expect(__szvPick1(table, 'pad', 'sm')).toBe('p-2');
+        expect(warn).not.toHaveBeenCalled();
+    });
+
     it('ignores inherited selection properties, like the factory does', () => {
         const table = compileTable({ variants: { pad: { sm: { p: 2 } } } });
         const selection = Object.create({ pad: 'sm' }) as Record<string, unknown>;

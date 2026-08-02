@@ -115,8 +115,16 @@ const MASK_STOP_FORM: ObjectValueForm = {
             detail: 'gradient position',
             values: ['0%', '20%', '50%', '80%', '100%'],
         },
-        { name: 'color', detail: 'stop colour', values: VALUE_SUGGESTIONS.color ?? [] },
-        { name: 'op', detail: 'colour opacity', values: VALUE_SUGGESTIONS.opacity ?? [] },
+        {
+            name: 'color',
+            detail: 'stop colour',
+            values: VALUE_SUGGESTIONS.color as readonly string[],
+        },
+        {
+            name: 'op',
+            detail: 'colour opacity',
+            values: VALUE_SUGGESTIONS.opacity as readonly string[],
+        },
     ],
 };
 
@@ -267,7 +275,7 @@ function classifyStyleOwner(name: string, index: number): StyleChainKind | null 
  */
 function findLastFormOwner(namesInnerFirst: readonly string[]): number {
     for (let index = namesInnerFirst.length - 1; index >= 0; index -= 1) {
-        if (objectValueForm(namesInnerFirst[index] ?? '') !== null) return index;
+        if (objectValueForm(namesInnerFirst[index] as string) !== null) return index;
     }
     return -1;
 }
@@ -299,7 +307,7 @@ export function classifyStyleChain(namesInnerFirst: readonly string[]): StyleCha
     if (formOwner >= 0) {
         const inside = namesInnerFirst.slice(0, formOwner).reverse();
         const resolved = descendObjectForm(
-            objectValueForm(namesInnerFirst[formOwner] ?? ''),
+            objectValueForm(namesInnerFirst[formOwner] as string),
             inside,
         );
         if (resolved === null && inside.length > 0) return 'invalid';

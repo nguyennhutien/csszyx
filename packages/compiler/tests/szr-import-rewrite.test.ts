@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest';
 import {
     countSzrWordOccurrences,
     countSzrWordOccurrencesOutsideComments,
+    szrRewriteProofHolds,
 } from '../src/szr-import-rewrite.js';
 import { transformSourceCode } from '../src/transform.js';
 import { transformOxc } from '../src/transform-oxc.js';
@@ -192,6 +193,10 @@ describe('countSzrWordOccurrences', () => {
         expect(countSzrWordOccurrences("szr('a'); myszr(); szr2(); a.szr; 'szr'")).toBe(3);
     });
 
+    it('counts a word flush with both source boundaries', () => {
+        expect(countSzrWordOccurrences('szr')).toBe(1);
+    });
+
     it('treats non-ASCII neighbours as boundaries — the overcounting direction', () => {
         // `szrΩ` is one identifier, but counting it can only FAIL the proof.
         expect(countSzrWordOccurrences('const szrΩ = 1;')).toBe(1);
@@ -200,5 +205,15 @@ describe('countSzrWordOccurrences', () => {
     it('returns zero for an empty or unrelated source', () => {
         expect(countSzrWordOccurrences('')).toBe(0);
         expect(countSzrWordOccurrences('const sz = 1; const zr = 2;')).toBe(0);
+    });
+});
+
+describe('szrRewriteProofHolds', () => {
+    it('rejects missing or incomplete argument analyses', () => {
+        const call = { arguments: [{}] };
+        expect(szrRewriteProofHolds([call], new Map(), new Set(), 'szr(x)', [])).toBe(false);
+        expect(szrRewriteProofHolds([call], new Map([[call, []]]), new Set(), 'szr(x)', [])).toBe(
+            false,
+        );
     });
 });

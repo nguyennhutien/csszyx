@@ -70,6 +70,15 @@ describe('objectValueForm', () => {
         ]);
         expect(descendObjectForm(mask, ['angle'])).toBeNull();
         expect(descendObjectForm(mask, ['missing'])).toBeNull();
+        expect(descendObjectForm(null, ['missing'])).toBeNull();
+        expect(descendObjectForm(mask, ['angle', 'nested'])).toBeNull();
+    });
+
+    it('exposes every mask layer form', () => {
+        expect(objectValueForm('maskRadial')?.members.map(member => member.name)).toContain(
+            'shape',
+        );
+        expect(objectValueForm('maskConic')?.members.map(member => member.name)).toContain('angle');
     });
 });
 
@@ -94,6 +103,8 @@ describe('classifyStyleChain', () => {
     it('rejects a nested object under a plain or non-innermost utility property', () => {
         expect(classifyStyleChain(['p'])).toBe('invalid');
         expect(classifyStyleChain(['hover', 'bg'])).toBe('invalid');
+        expect(classifyStyleChain(['hover', 'maskLinear'])).toBe('invalid');
+        expect(classifyStyleChain(['missing', 'maskLinear', 'hover'])).toBe('invalid');
     });
 });
 
@@ -130,5 +141,6 @@ describe('metadata data surface', () => {
         expect(valueSuggestionsFor('definitely-missing')).toEqual([]);
         expect(negativeValueSuggestions('translateX', false)).toEqual([]);
         expect(negativeValueSuggestions('translateX', true)).toContain('-full');
+        expect(negativeValueSuggestions('definitely-missing', true)).toEqual([]);
     });
 });

@@ -754,6 +754,7 @@ describe('szcn — mask utilities key by the CSS variable they write', () => {
         expect(szcn('mask-radial-closest-side', 'mask-radial-farthest-corner')).toBe(
             'mask-radial-farthest-corner',
         );
+        expect(szcn('mask-radial-custom-a', 'mask-radial-custom-b')).toBe('mask-radial-custom-b');
     });
 
     it('leaves the non-gradient mask keys merging as before', () => {

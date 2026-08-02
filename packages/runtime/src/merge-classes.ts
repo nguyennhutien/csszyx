@@ -262,7 +262,6 @@ function classifyMaskToken(
     }
     const rest = norm.slice('mask-'.length);
     const [head, second] = rest.split('-', 2);
-    if (head === undefined) return null;
 
     if (MASK_SIDES.has(head) && (second === 'from' || second === 'to')) {
         const sides = MASK_SIDE_COVERAGE[head] ?? [head];

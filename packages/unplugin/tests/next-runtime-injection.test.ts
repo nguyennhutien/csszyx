@@ -100,4 +100,20 @@ describe('Next runtime import injection', () => {
         expect(result.code).toContain("import { _szcn, _szPart } from '@csszyx/runtime/merge';");
         expect(result.code).toContain("import { __szvPick, __szvPick1 } from '@csszyx/runtime';");
     });
+
+    it('supports each half of the slim split independently', () => {
+        const mergeOnly = injectNextRuntimeImports('export const x = 1;', {
+            usesSzPart: true,
+            szPartArgsProvable: true,
+        });
+        expect(mergeOnly.code).toContain("from '@csszyx/runtime/merge'");
+        expect(mergeOnly.code).not.toContain("from '@csszyx/runtime';");
+
+        const barrelOnly = injectNextRuntimeImports('export const x = 1;', {
+            usesSzvPick: true,
+            szPartArgsProvable: true,
+        });
+        expect(barrelOnly.code).toContain("from '@csszyx/runtime';");
+        expect(barrelOnly.code).not.toContain("from '@csszyx/runtime/merge'");
+    });
 });

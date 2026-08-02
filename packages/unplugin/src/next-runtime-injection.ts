@@ -69,13 +69,10 @@ export function injectNextRuntimeImports(
     if (slim) {
         const mergeHelpers = missing.filter(helper => helper === '_szcn' || helper === '_szPart');
         const barrelHelpers = missing.filter(helper => helper !== '_szcn' && helper !== '_szPart');
-        let next = code;
-        if (mergeHelpers.length > 0) {
-            next = insertRuntimeImport(
-                next,
-                `import { ${mergeHelpers.join(', ')} } from '@csszyx/runtime/merge';\n`,
-            );
-        }
+        let next = insertRuntimeImport(
+            code,
+            `import { ${mergeHelpers.join(', ')} } from '@csszyx/runtime/merge';\n`,
+        );
         if (barrelHelpers.length > 0) {
             next = insertRuntimeImport(
                 next,
