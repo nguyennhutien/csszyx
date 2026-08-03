@@ -10,6 +10,7 @@
  * ordering, options plumbing) is invisible to the unit nets and lands here.
  */
 import {
+    existsSync,
     mkdirSync,
     mkdtempSync,
     readdirSync,
@@ -197,7 +198,8 @@ const PACKAGE_FILES: Record<string, string> = {
     'app/index.html': FIXTURE_FILES['index.html'],
     'app/src/main.ts': `
 import { Flex } from '../../packages/vui/src/Flex.tsx';
-document.body.textContent = JSON.stringify(Flex({ dir: 'row' }));
+import { Card } from '../../packages/vui/src/Card.tsx';
+document.body.textContent = JSON.stringify([Flex({ dir: 'row' }), Card()]);
 `,
     'packages/vui/src/flexSzv.ts': `
 import { szv } from '@csszyx/runtime';
@@ -210,6 +212,11 @@ export const flexContainerSz = szv({
 import { szr } from '@csszyx/runtime';
 import { flexContainerSz } from './flexSzv';
 export const Flex = ({ dir }) => szr(flexContainerSz({ flexDir: dir }));
+`,
+    // A component whose classes come from an `sz` prop, so the safelist is the
+    // only way Tailwind can see them under `source(none)`.
+    'packages/vui/src/Card.tsx': `
+export const Card = () => <div sz={{ p: 7, rounded: 'xl' }} className="vui-card-raw" />;
 `,
 };
 
@@ -265,12 +272,22 @@ async function buildPackageFixture(optIn: boolean): Promise<{ js: string; warnin
     }
 
     const assetsDir = join(repo, 'app', 'dist', 'assets');
-    const js = readdirSync(assetsDir)
-        .filter(file => file.endsWith('.js'))
-        .map(file => readFileSync(join(assetsDir, file), 'utf8'))
-        .join('\n');
+    const emitted = (extension: string): string =>
+        readdirSync(assetsDir)
+            .filter(file => file.endsWith(extension))
+            .map(file => readFileSync(join(assetsDir, file), 'utf8'))
+            .join('\n');
+    const js = emitted('.js');
     expect(js.length).toBeGreaterThan(0);
-    return { js, warnings };
+    return {
+        js,
+        warnings,
+        // Absent when nothing was discovered, which is itself the answer for
+        // the not-opted-in case.
+        safelist: existsSync(join(repo, 'app', 'csszyx-classes.html'))
+            ? readFileSync(join(repo, 'app', 'csszyx-classes.html'), 'utf8')
+            : '',
+    };
 }
 
 describe('a vendored package beside the app root', () => {
@@ -283,8 +300,23 @@ describe('a vendored package beside the app root', () => {
         expect(warnings.join('\n')).not.toContain('skipped by ignore rules');
     });
 
+    it('safelists the package classes, so source(none) scoping is safe', async () => {
+        // Answers the question the field report asked before adopting
+        // `@import "tailwindcss" source(none)`: the auto-injected `@source`
+        // points at this file, and an opted-in package's classes are in it —
+        // both the sz-compiled ones and the raw className literals beside them.
+        const { safelist } = await buildPackageFixture(true);
+        expect(safelist).toContain('p-7');
+        expect(safelist).toContain('rounded-xl');
+        expect(safelist).toContain('vui-card-raw');
+        expect(safelist).toContain('flex-row');
+    }, 120_000);
+
     it('reports the skipped factory module when not opted in', { timeout: 120_000 }, async () => {
-        const { js, warnings } = await buildPackageFixture(false);
+        const { js, warnings, safelist } = await buildPackageFixture(false);
+        // And the same classes are missing from the safelist, which is what
+        // makes `source(none)` unsafe until the package is opted in.
+        expect(safelist).not.toContain('p-7');
         // The precompile is lost — the shape the field report hit.
         expect(js).not.toContain('__szvT_flexContainerSz');
         expect(js).toContain('flexContainerSz({');
