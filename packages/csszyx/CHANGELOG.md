@@ -1,5 +1,55 @@
 # csszyx
 
+## [0.12.0](https://github.com/nguyennhutien/csszyx/compare/v0.11.11...v0.12.0) (2026-08-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **unplugin:** production.mangle now defaults to false. Mangling is a name-obfuscation feature whose byte delta on a gzip-served app is flat to slightly negative — the runtime map costs more than the shortened class names save. Builds relying on the implicit default keep their original class names; set `production: { mangle: true }` to restore mangling.
+
+### Features
+
+* **compiler:** cross-module szv registry for imported factory precompile ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **compiler:** emit the sz fallback matrix on every engine ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **compiler:** model mask gradients as the three CSS layers they are ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **compiler:** precompile szv variant tables at qualifying szr call sites ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **compiler:** report unresolvable szr, szv and szs through a shared matrix ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **compiler:** rewrite proven string-only szr imports to the core entry ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **compiler:** split mixed import clauses when retargeting szr ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **core:** mirror the mask gradient slots in the Rust engine ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **runtime:** compiler-free core entry with opt-in object lowering ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **runtime:** route provable szPart helpers through a compiler-free entry ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **runtime:** szv table picker for build-precompiled variants ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **tooling-metadata:** suggest negative values where the utility allows them ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **ts-plugin:** assist the nested mask layer shapes ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **unplugin:** let a build choose where the mangle map ships ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **unplugin:** make class mangling opt-in ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+
+
+### Bug Fixes
+
+* **compiler:** bracket a gradient function used as a mask image ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **compiler:** join variant-key string values with a colon on every engine ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **compiler:** negative-selection parity, catalog idempotency, szv scan gate ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **compiler:** stop claiming an unknown sz key is ignored ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **compiler:** treat a gradient function as an arbitrary background image ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **compiler:** treat lowering fusions as conflicts in the szv precompile ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **core:** apply the mask layer merge rule in the Rust engine too ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **core:** mirror JS object key iteration order in szv table compilation ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **core:** stop reporting custom theme variant keys as typos ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **deps:** block yaml and glob denial-of-service paths ([#194](https://github.com/nguyennhutien/csszyx/issues/194)) ([c60a957](https://github.com/nguyennhutien/csszyx/commit/c60a9570c5495f2bcb74a373e03cca71965bb69f))
+* **runtime:** deep-merge adjacent sz objects in an array ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **runtime:** key mask utilities by the variable they write ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **types:** default production mangling off in the exported config ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+
+
+### Performance
+
+* **compiler:** add a single-dimension szv picker ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **compiler:** prove guarded factory calls and ignore comment mentions ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **core:** resolve diagnostic positions from a line table ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+* **runtime:** memoize szcn by argument and cache splitBox results ([fba3ff2](https://github.com/nguyennhutien/csszyx/commit/fba3ff2b110946f9a2a7cc040009226eb22ca5c6))
+
 ## [0.11.11](https://github.com/nguyennhutien/csszyx/compare/v0.11.10...v0.11.11) (2026-07-23)
 
 ### Features
