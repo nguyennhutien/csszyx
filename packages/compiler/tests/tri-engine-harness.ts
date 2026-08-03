@@ -49,6 +49,21 @@ export const ENGINES: ReadonlyArray<readonly [string, TriEngine]> = [
 ];
 
 /**
+ * Collapse whitespace runs so an emit can be substring-matched across engines.
+ *
+ * The babel lane re-prints the module from its AST — one property per line —
+ * while the span-based engines splice into the original text and keep the
+ * author's formatting. The emitted code is equivalent; only line breaks and
+ * indentation differ, so every cross-engine substring assertion needs this.
+ *
+ * @param code - One engine's emitted module.
+ * @returns The same code with every whitespace run collapsed to one space.
+ */
+export function normalizeEmit(code: string): string {
+    return code.replace(/\s+/g, ' ');
+}
+
+/**
  * Transform one sz literal on every engine and assert they agree.
  *
  * @param sz - The sz object source, as written in JSX.

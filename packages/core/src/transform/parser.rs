@@ -1074,6 +1074,13 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         )
     }
 
+    /// Whether a span sits inside an `sz` attribute the rewrite replaces.
+    fn span_inside_sz_attribute(&self, span: super::TextSpan) -> bool {
+        self.ir.sz_attributes.iter().any(|attribute| {
+            span.start >= attribute.attribute_span.start && span.end <= attribute.attribute_span.end
+        })
+    }
+
     /// Decide the szv precompile after the whole file was walked, writing the
     /// splices into the IR. Returns the spans of replaced factory calls so the
     /// szr proof can treat them as strings.
@@ -1102,6 +1109,17 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 .iter()
                 .all(|site| szr_factory_spans.contains(&site.span) && site.argument.is_some());
             if !accounted {
+                continue;
+            }
+            // Everything under an `sz` attribute is replaced by a generated
+            // expression, so a call nested in it cannot also be spliced: the
+            // rewrite buffer refuses to split a range it already replaced and
+            // aborts the process. Mirrors `callInsideRewrittenSpan` in the JS
+            // lanes, so all three keep the runtime path for this shape.
+            if calls
+                .iter()
+                .any(|site| self.span_inside_sz_attribute(site.span))
+            {
                 continue;
             }
             let type_queries = self

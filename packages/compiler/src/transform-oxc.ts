@@ -215,6 +215,7 @@ export function transformOxc(
                       parsed as unknown as { comments: Array<{ start: number; end: number }> }
                   ).comments.map(comment => ({ start: comment.start, end: comment.end }))
                 : [],
+        rewrittenSpans: [],
         usedPick: false,
         usedPick1: false,
     };
@@ -290,6 +291,12 @@ export function transformOxc(
         const openingNode = node as unknown as JsxOpeningElementNode;
         const openingAttributes = collectOxcOpeningAttributes(openingNode.attributes ?? []);
         const szAttrs = openingAttributes.sz;
+        // Everything under an `sz` attribute is about to be replaced by a
+        // generated expression, so a factory call nested in it cannot be
+        // spliced — see callInsideRewrittenSpan.
+        if (szvPrecompile.enabled) {
+            szvPrecompile.rewrittenSpans.push(...szAttrs);
+        }
         const szsAttrs = openingAttributes.szs;
         const classNameAttr = openingAttributes.className;
         const styleAttr = openingAttributes.style;
@@ -839,11 +846,11 @@ function transformOxcUnsupportedObject(
             // Merge the hoisted-conditional class expression with the existing
             // className, matching the Babel emit — this used to bail the whole
             // file to the Babel fallback (D2.5+).
-            const existing = classNameMergeArgument(context.classNameAttr, context.source);
-            context.edits.overwrite(
-                context.classNameAttr.start,
-                context.classNameAttr.end,
-                `className={_szMerge(${existing}, ${classExpression})}`,
+            wrapClassNameAttribute(
+                context.edits,
+                context.classNameAttr,
+                'className={_szMerge(',
+                `, ${classExpression})}`,
             );
             context.edits.remove(
                 whitespaceStart(context.source, context.szAttr.start),
@@ -926,13 +933,11 @@ function rewriteOxcPartialClassName(
     expressionClassName: boolean,
 ): void {
     if (expressionClassName && context.classNameAttr?.value) {
-        const classExpression = (context.classNameAttr.value as unknown as { expression: OxcNode })
-            .expression;
-        const classSource = context.source.slice(classExpression.start, classExpression.end);
-        context.edits.overwrite(
-            context.classNameAttr.start,
-            context.classNameAttr.end,
-            `className={_szMerge(${classSource}, ${partial.classExpression})}`,
+        wrapClassNameAttribute(
+            context.edits,
+            context.classNameAttr,
+            'className={_szMerge(',
+            `, ${partial.classExpression})}`,
         );
         context.edits.remove(
             whitespaceStart(context.source, context.szAttr.start),
@@ -1028,11 +1033,11 @@ function transformOxcStaticConditional(
         // Same emit as the Babel engine: the compiled ternary merges with the
         // existing className. This used to route to the runtime fallback,
         // whose className branch then bailed the whole file to Babel (D2.5+).
-        const existing = classNameMergeArgument(context.classNameAttr, context.source);
-        context.edits.overwrite(
-            context.classNameAttr.start,
-            context.classNameAttr.end,
-            `className={_szMerge(${existing}, ${classExpression})}`,
+        wrapClassNameAttribute(
+            context.edits,
+            context.classNameAttr,
+            'className={_szMerge(',
+            `, ${classExpression})}`,
         );
         context.edits.remove(
             whitespaceStart(context.source, context.szAttr.start),
@@ -1108,24 +1113,23 @@ function transformOxcArrayExpression(context: OxcArrayTransformContext): OxcArra
     // Authored className is the first argument so later sz array entries retain
     // the same override order as szcn. Compiled runtime parts use the unmemoized
     // helper because their per-render values should not evict authored szcn keys.
-    const existingExpression = context.classNameAttr
-        ? classNameMergeArgument(context.classNameAttr, context.source)
-        : null;
-    const call = existingExpression
-        ? `_szcn(${existingExpression}, ${composition.args})`
-        : `_szcn(${composition.args})`;
     if (context.classNameAttr) {
-        context.edits.overwrite(
-            context.classNameAttr.start,
-            context.classNameAttr.end,
-            `className={${call}}`,
+        wrapClassNameAttribute(
+            context.edits,
+            context.classNameAttr,
+            'className={_szcn(',
+            `, ${composition.args})}`,
         );
         context.edits.remove(
             whitespaceStart(context.source, context.szAttr.start),
             context.szAttr.end,
         );
     } else {
-        context.edits.overwrite(context.szAttr.start, context.szAttr.end, `className={${call}}`);
+        context.edits.overwrite(
+            context.szAttr.start,
+            context.szAttr.end,
+            `className={_szcn(${composition.args})}`,
+        );
     }
     return { kind: 'complete', usesSzPart: composition.usesSzPart };
 }
@@ -1172,14 +1176,12 @@ function mergeOxcStaticElementClasses(
         return { usesRuntime: false, usesMerge: false };
     }
 
-    const classNameValue = classNameAttr.value;
-    if (existingRaw === null && classNameValue?.type === 'JSXExpressionContainer') {
-        const exprNode = (classNameValue as unknown as { expression: OxcNode }).expression;
-        const exprSource = source.slice(exprNode.start, exprNode.end);
-        edits.overwrite(
-            classNameAttr.start,
-            classNameAttr.end,
-            `className={_szMerge(${exprSource}, ${JSON.stringify(szDerived.join(' '))})}`,
+    if (existingRaw === null && classNameExpressionNode(classNameAttr) !== null) {
+        wrapClassNameAttribute(
+            edits,
+            classNameAttr,
+            'className={_szMerge(',
+            `, ${JSON.stringify(szDerived.join(' '))})}`,
         );
         removeOxcAttributes(szAttrs, source, edits);
         return { usesRuntime: true, usesMerge: true };
@@ -1272,11 +1274,11 @@ function transformOxcRuntimeFallback(params: OxcRuntimeFallbackParams): boolean 
         // Formerly a D2.5+ bail to the Babel lane (one WARN per file — 25 on
         // one field report). Same emit as Babel and the rust engine: the
         // existing className merges with the runtime-resolved sz value.
-        const existing = classNameMergeArgument(classNameAttribute, source);
-        edits.overwrite(
-            classNameAttribute.start,
-            classNameAttribute.end,
-            `className={_szMerge(${existing}, _sz(${expressionSource}))}`,
+        wrapClassNameAttribute(
+            edits,
+            classNameAttribute,
+            'className={_szMerge(',
+            `, _sz(${expressionSource}))}`,
         );
         removeOxcAttributes(attributes, source, edits);
         return true;
@@ -2329,6 +2331,7 @@ function oxcSzvFactoryAccounted(
         source,
         state.commentSpans,
         state.typeQueryCounts,
+        state.rewrittenSpans,
     );
 }
 
@@ -3555,22 +3558,54 @@ function collectArrayCompositionClasses(value: string, classes: Set<string>): st
 }
 
 /**
- * Build the `_szMerge` argument that preserves an existing className attribute.
+ * Wrap an authored `className` attribute in a merge call, leaving the authored
+ * expression's own bytes untouched.
+ *
+ * The szv precompile splices its table picks over factory calls that can sit
+ * inside that expression — `className={szr(f({ v }))}` — and MagicString
+ * refuses to split a range another edit already replaced. Replacing only the
+ * text on either side of the expression keeps the inner range editable, so the
+ * merge and the precompile compose instead of throwing.
+ *
+ * @param edits MagicString over the source.
+ * @param attribute Existing `className` JSX attribute.
+ * @param prefix Text replacing everything before the authored expression.
+ * @param suffix Text replacing everything after the authored expression.
+ */
+function wrapClassNameAttribute(
+    edits: MagicString,
+    attribute: JsxAttributeNode,
+    prefix: string,
+    suffix: string,
+): void {
+    const expression = classNameExpressionNode(attribute);
+    if (expression === null) {
+        // A literal — or valueless — className has no authored range to
+        // preserve, so the whole attribute is replaced in one edit.
+        const literal = stringLiteralValue(attribute.value) ?? '';
+        edits.overwrite(
+            attribute.start,
+            attribute.end,
+            `${prefix}${JSON.stringify(literal)}${suffix}`,
+        );
+        return;
+    }
+    edits.overwrite(attribute.start, expression.start, prefix);
+    edits.overwrite(expression.end, attribute.end, suffix);
+}
+
+/**
+ * The authored expression inside `className={...}`, when there is one.
+ *
+ * Always present in a container here: `className={}` is a parse error, so an
+ * empty expression never reaches the rewrite.
  *
  * @param attribute Existing `className` JSX attribute.
- * @param source Original source for slicing expression values.
- * @returns A JS expression string for the existing className value.
+ * @returns The expression node, or null for a literal or valueless attribute.
  */
-function classNameMergeArgument(attribute: JsxAttributeNode, source: string): string {
-    const staticValue = stringLiteralValue(attribute.value);
-    if (staticValue !== null) {
-        return JSON.stringify(staticValue);
-    }
-    if (attribute.value?.type === 'JSXExpressionContainer') {
-        const expression = (attribute.value as unknown as { expression: OxcNode }).expression;
-        return source.slice(expression.start, expression.end);
-    }
-    return '""';
+function classNameExpressionNode(attribute: JsxAttributeNode): OxcNode | null {
+    if (attribute.value?.type !== 'JSXExpressionContainer') return null;
+    return (attribute.value as unknown as { expression: OxcNode }).expression;
 }
 
 /**

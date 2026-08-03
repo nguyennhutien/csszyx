@@ -838,12 +838,22 @@ function recordSzrImportCandidate(
  * @param call - The call expression node.
  * @param szrState - szr import-rewrite accumulator.
  * @param szvState - szv precompile accumulator.
+ * @param seen - Call nodes already recorded, by identity.
  */
 function recordIdentifierCall(
     call: t.CallExpression,
     szrState: SzrRewriteState,
     szvState: SzvPrecompileState,
+    seen: Set<t.CallExpression>,
 ): void {
+    // The sz rewrite assigns a new `path.node.value` that reuses the authored
+    // className expression, and Babel then descends into the replacement — so
+    // `className={szr(f(...))}` beside an `sz` attribute reaches this visitor
+    // twice for the same node. Counting it twice makes the reference
+    // accounting see one call too many and silently drops the precompile.
+    // The span-based engines walk once and never observe this.
+    if (seen.has(call)) return;
+    seen.add(call);
     const calleeName = t.isIdentifier(call.callee) ? call.callee.name : null;
     recordIdentifierCallByName(call, calleeName, szrState.szrCalls, szvState);
 }
@@ -1261,6 +1271,7 @@ function babelSzvFactoryAccounted(
         source,
         state.commentSpans,
         state.typeQueryCounts,
+        state.rewrittenSpans,
     );
 }
 
@@ -2210,9 +2221,13 @@ export function transformSourceCode(
         replacedCalls: new Set(),
         candidates: new Map(),
         identifierCalls: new Map(),
+        rewrittenSpans: [],
         usedPick: false,
         usedPick1: false,
     };
+    // Node identities already handed to recordIdentifierCall — see its comment
+    // for why one node can reach the visitor twice in this lane.
+    const recordedIdentifierCalls = new Set<t.CallExpression>();
     const collectedClasses = new Set<string>();
     // Classes discovered from `szs` slot values. Kept OUT of collectedClasses
     // until after the traversal so the discovery order is deterministic across
@@ -2358,6 +2373,15 @@ export function transformSourceCode(
                                 return;
                             }
 
+                            // Everything under this attribute is about to be
+                            // replaced by a generated expression, so a factory
+                            // call nested in it cannot be spliced. Recorded
+                            // before the rewrite, while the node still carries
+                            // its original offsets.
+                            if (szvPrecompile.enabled) {
+                                szvPrecompile.rewrittenSpans.push(path.node);
+                            }
+
                             // Point the dev-mode unknown-property warning at this
                             // sz prop. Cleared in the visitor's `exit` so it never
                             // leaks to an unrelated later transform.
@@ -2428,7 +2452,12 @@ export function transformSourceCode(
                                 filename,
                                 options?.rootDir,
                             );
-                            recordIdentifierCall(path.node, szrRewrite, szvPrecompile);
+                            recordIdentifierCall(
+                                path.node,
+                                szrRewrite,
+                                szvPrecompile,
+                                recordedIdentifierCalls,
+                            );
                         },
 
                         TSTypeQuery(path: babel.NodePath<t.TSTypeQuery>) {

@@ -15,6 +15,7 @@
  *    path would have produced for the same selection, to the byte.
  */
 import { describe, expect, it } from 'vitest';
+import type { MaybeSpan } from '../src/szv-precompile.js';
 import {
     coerceParitySafeSelectionValue,
     collectCanonicalLeafPaths,
@@ -513,6 +514,7 @@ describe('shared spec units', () => {
                 'const factory = factory(); type T = typeof factory;',
                 [],
                 typeQueries,
+                [],
             ),
         ).toBe(true);
         expect(
@@ -523,8 +525,46 @@ describe('shared spec units', () => {
                 'const factory = factory(); type T = typeof factory; const __szvT_factory = {};',
                 [],
                 typeQueries,
+                [],
             ),
         ).toBe(false);
+    });
+
+    it('rejects a call the sz rewrite will replace wholesale', () => {
+        const source = 'const factory = factory();';
+        const call = { arguments: [] as unknown[], start: 16, end: 25 };
+        const calls = [call];
+        const callSet = new Set<unknown>(calls);
+        const holds = (rewritten: readonly MaybeSpan[]): boolean =>
+            szvFactoryAccountingHolds('factory', calls, callSet, source, [], new Map(), rewritten);
+        expect(holds([])).toBe(true);
+        // Disjoint, then overlapping only one edge: neither encloses the call.
+        expect(holds([{ start: 0, end: 10 }])).toBe(true);
+        expect(holds([{ start: 17, end: 26 }])).toBe(true);
+        expect(holds([{ start: 16, end: 25 }])).toBe(false);
+        expect(holds([{ start: 10, end: 26 }])).toBe(false);
+        // An unknown offset on either side is not evidence of an overlap.
+        expect(holds([{ start: null, end: 26 }])).toBe(true);
+        expect(holds([{ start: 10, end: undefined }])).toBe(true);
+    });
+
+    it('leaves a call without source offsets accounted for', () => {
+        // Babel types `start`/`end` as nullable; a synthesized node has no
+        // offsets to compare, and losing the precompile for it would be a
+        // silent regression rather than a safety property.
+        const call = { arguments: [] as unknown[], start: null, end: null };
+        const calls = [call];
+        expect(
+            szvFactoryAccountingHolds(
+                'factory',
+                calls,
+                new Set<unknown>(calls),
+                'const factory = factory();',
+                [],
+                new Map(),
+                [{ start: 0, end: 100 }],
+            ),
+        ).toBe(true);
     });
 
     it('coerces only parity-safe primitive selection values', () => {

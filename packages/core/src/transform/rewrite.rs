@@ -219,15 +219,7 @@ fn rewrite_array_sz_attribute(
     }
     let attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
 
-    let mut arguments = Vec::with_capacity(
-        attribute.array_parts.len() + usize::from(element.class_attribute_index.is_some()),
-    );
-    if let Some(class_index) = element.class_attribute_index {
-        arguments.push(class_merge_argument(
-            source,
-            &ir.class_attributes[class_index],
-        ));
-    }
+    let mut arguments = Vec::with_capacity(attribute.array_parts.len());
     for part in &attribute.array_parts {
         // Dynamic elements resolve at runtime through `_szPart` (string
         // passthrough / sz-object compile); static and conditional parts are
@@ -256,32 +248,29 @@ fn rewrite_array_sz_attribute(
     }
     // `_szcn` = the unmemoized szcn twin: compiled arrays carry per-render
     // runtime parts, which would thrash (and evict) the authored-szcn memo.
-    let replacement = format!("className={{_szcn({})}}", arguments.join(", "));
+    let rest = arguments.join(", ");
 
     if let Some(class_index) = element.class_attribute_index {
-        let class_attribute = &ir.class_attributes[class_index];
-        magic.update_with(
-            class_attribute.attribute_span.start as usize,
-            class_attribute.attribute_span.end as usize,
-            replacement,
-            UpdateOptions {
-                overwrite: true,
-                ..UpdateOptions::default()
-            },
+        // Authored className is the first argument so later sz array entries
+        // retain the same override order as szcn. Every array part contributes
+        // at least one argument, and this lane runs only for a non-empty part
+        // list, so `rest` always has content.
+        wrap_class_attribute(
+            magic,
+            &ir.class_attributes[class_index],
+            "className={_szcn(",
+            &format!(", {rest})}}"),
         );
         magic.remove(
             whitespace_start(source, attribute.attribute_span.start as usize),
             attribute.attribute_span.end as usize,
         );
     } else {
-        magic.update_with(
+        replace_range(
+            magic,
             attribute.attribute_span.start as usize,
             attribute.attribute_span.end as usize,
-            replacement,
-            UpdateOptions {
-                overwrite: true,
-                ..UpdateOptions::default()
-            },
+            format!("className={{_szcn({rest})}}"),
         );
     }
     Ok(())
@@ -335,16 +324,12 @@ fn rewrite_static_sz_with_existing_class(
 ) {
     let class_attribute = &ir.class_attributes[class_index];
     if class_attribute.expression_span.is_some() {
-        let existing = class_merge_argument(source, class_attribute);
         let next = js_string_literal(&classes.join(" "));
-        magic.update_with(
-            class_attribute.attribute_span.start as usize,
-            class_attribute.attribute_span.end as usize,
-            format!("className={{_szMerge({existing}, {next})}}"),
-            UpdateOptions {
-                overwrite: true,
-                ..UpdateOptions::default()
-            },
+        wrap_class_attribute(
+            magic,
+            class_attribute,
+            "className={_szMerge(",
+            &format!(", {next})}}"),
         );
     } else {
         let existing_classes = class_attribute
@@ -439,24 +424,20 @@ fn rewrite_ternary_sz_attribute(
 
     if let Some(class_index) = element.class_attribute_index {
         let class_attribute = &ir.class_attributes[class_index];
-        let existing = class_merge_argument(source, class_attribute);
         // A companion-less single ternary merges bare; anything with static/var
         // classes merges the SAME template literal the Babel engine emits —
         // the old 3-arg form (existing, "statics", ternary) was functionally
         // equal but byte-different, breaking cross-producer transform-cache
         // reuse for this shape.
-        let merge_args = match (ternaries.as_slice(), static_classes.is_empty()) {
-            ([only_ternary], true) => format!("{existing}, {}", ternary_source(only_ternary)),
-            _ => format!("{existing}, {}", template_literal()),
+        let merged = match (ternaries.as_slice(), static_classes.is_empty()) {
+            ([only_ternary], true) => ternary_source(only_ternary),
+            _ => template_literal(),
         };
-        magic.update_with(
-            class_attribute.attribute_span.start as usize,
-            class_attribute.attribute_span.end as usize,
-            format!("className={{_szMerge({merge_args})}}"),
-            UpdateOptions {
-                overwrite: true,
-                ..UpdateOptions::default()
-            },
+        wrap_class_attribute(
+            magic,
+            class_attribute,
+            "className={_szMerge(",
+            &format!(", {merged})}}"),
         );
         magic.remove(
             whitespace_start(source, only_attribute.attribute_span.start as usize),
@@ -519,15 +500,11 @@ fn rewrite_runtime_fallback_sz_attribute(
 
     if let Some(class_index) = element.class_attribute_index {
         let class_attribute = &ir.class_attributes[class_index];
-        let existing = class_merge_argument(source, class_attribute);
-        magic.update_with(
-            class_attribute.attribute_span.start as usize,
-            class_attribute.attribute_span.end as usize,
-            format!("className={{_szMerge({existing}, _sz({expression_source}))}}"),
-            UpdateOptions {
-                overwrite: true,
-                ..UpdateOptions::default()
-            },
+        wrap_class_attribute(
+            magic,
+            class_attribute,
+            "className={_szMerge(",
+            &format!(", _sz({expression_source}))}}"),
         );
         magic.remove(
             whitespace_start(source, only_attribute.attribute_span.start as usize),
@@ -551,11 +528,55 @@ fn js_string_literal(value: &str) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
 }
 
-fn class_merge_argument(source: &str, class_attribute: &super::ClassAttributeIr) -> String {
-    class_attribute.expression_span.map_or_else(
-        || js_string_literal(&class_attribute.value),
-        |span| source[span.start as usize..span.end as usize].to_string(),
-    )
+/// Wrap an authored `className` attribute in a merge call, leaving the authored
+/// expression's own bytes untouched.
+///
+/// The szv precompile splices its table picks over factory calls that can sit
+/// inside that expression — `className={szr(f({ v }))}` — and the rewrite
+/// buffer refuses to split a range another edit already replaced, which aborted
+/// the whole process. Replacing only the text on either side of the expression
+/// keeps the inner range editable, so the merge and the precompile compose.
+fn wrap_class_attribute(
+    magic: &mut MagicString<'_>,
+    class_attribute: &super::ClassAttributeIr,
+    prefix: &str,
+    suffix: &str,
+) {
+    let span = class_attribute.attribute_span;
+    let Some(expression_span) = class_attribute.expression_span else {
+        let existing = js_string_literal(&class_attribute.value);
+        replace_range(
+            magic,
+            span.start as usize,
+            span.end as usize,
+            format!("{prefix}{existing}{suffix}"),
+        );
+        return;
+    };
+    replace_range(
+        magic,
+        span.start as usize,
+        expression_span.start as usize,
+        prefix.to_string(),
+    );
+    replace_range(
+        magic,
+        expression_span.end as usize,
+        span.end as usize,
+        suffix.to_string(),
+    );
+}
+
+fn replace_range(magic: &mut MagicString<'_>, start: usize, end: usize, replacement: String) {
+    magic.update_with(
+        start,
+        end,
+        replacement,
+        UpdateOptions {
+            overwrite: true,
+            ..UpdateOptions::default()
+        },
+    );
 }
 
 fn apply_dynamic_style_props(
