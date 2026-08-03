@@ -1,5 +1,56 @@
 # csszyx
 
+## [0.12.0](https://github.com/nguyennhutien/csszyx/compare/v0.11.11...v0.12.0) (2026-08-03)
+
+### ⚠ BREAKING CHANGES
+
+* compile-time variants, a compiler-free runtime entry, and opt-in mangling ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **unplugin:** production.mangle now defaults to false. Builds relying on the implicit default keep their original class names; set `production: { mangle: true }` to restore mangling. ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** one way to declare each mask gradient class ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+
+### Features
+
+* compile-time variants, a compiler-free runtime entry, and opt-in mangling ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **unplugin:** let a build choose where the mangle map ships ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **unplugin:** make class mangling opt-in ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** emit the sz fallback matrix on every engine, behind build.warn ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **tooling-metadata:** suggest negative values where the utility allows them ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** report unresolvable szr, szv and szs through the shared matrix ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **runtime:** compiler-free core entry with opt-in object lowering ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** rewrite proven string-only szr imports to the core entry ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **runtime:** szv table picker for build-precompiled variants ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** precompile szv variant tables at qualifying szr call sites ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** split mixed import clauses when retargeting szr ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** cross-module szv registry for imported factory precompile ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **runtime:** route provable szPart helpers through a compiler-free entry ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** model mask gradients as the three CSS layers they are ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **core:** mirror the mask gradient slots in the Rust engine ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** one way to declare each mask gradient class ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **ts-plugin:** assist the nested mask layer shapes ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+
+### Bug Fixes
+
+* **compiler:** join variant-key string values with a colon on every engine ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **core:** stop reporting custom theme variant keys as typos ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** negative-selection parity, catalog idempotency, szv scan gate ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **core:** mirror JS object key iteration order in szv table compilation ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** treat lowering fusions as conflicts in the szv precompile ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** stop claiming an unknown sz key is ignored ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **runtime:** deep-merge adjacent sz objects in an array ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **runtime:** key mask utilities by the variable they write ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **core:** apply the mask layer merge rule in the Rust engine too ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** bracket a gradient function used as a mask image ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** treat a gradient function as an arbitrary background image ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **types:** default production mangling off in the exported config ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **deps:** block yaml and glob denial-of-service paths ([#194](https://github.com/nguyennhutien/csszyx/issues/194))
+
+### Performance
+
+* **core:** resolve diagnostic positions from a line table ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** prove guarded factory calls and ignore comment mentions ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **runtime:** memoize szcn by argument and cache splitBox results ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** add a single-dimension szv picker ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+
 ## [0.11.11](https://github.com/nguyennhutien/csszyx/compare/v0.11.10...v0.11.11) (2026-07-23)
 
 ### Features
