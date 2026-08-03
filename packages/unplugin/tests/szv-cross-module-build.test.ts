@@ -20,7 +20,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { build } from 'vite';
+import { build, createServer } from 'vite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { vitePlugin } from '../src/unplugin.js';
 
@@ -296,4 +296,83 @@ describe('a vendored package beside the app root', () => {
         expect(logged).toContain('cross-module registry');
         expect(logged).toContain('compileSources');
     });
+});
+
+/**
+ * A dev server switches the cross-module registry off, so an imported factory
+ * cannot be resolved and every call site reports "result is unknown at build
+ * time" — advice the author has already followed, for code that compiles
+ * perfectly in a production build. The field report triaged fourteen of those
+ * before finding the seven that were real.
+ */
+const DEV_FIXTURE_FILES: Record<string, string> = {
+    'index.html': FIXTURE_FILES['index.html'],
+    'src/main.ts': FIXTURE_FILES['src/main.ts'],
+    'src/styles.ts': FIXTURE_FILES['src/styles.ts'],
+    // One imported factory, in the documented qualifying shape, plus one call
+    // that is genuinely unresolvable whatever the mode.
+    'src/App.tsx': `
+import { szr } from '@csszyx/runtime';
+import { cardSz } from './styles.ts';
+export const App = ({ sel }) => [szr(cardSz(sel)), szr(makeItUp(sel))];
+`,
+    // No relative import at all: nothing resolves against the registry, so the
+    // fallback is reported whatever the mode.
+    'src/Solo.tsx': `
+import { szr } from '@csszyx/runtime';
+export const Solo = ({ sel }) => szr(onItsOwn(sel));
+`,
+};
+
+/**
+ * Run one dev-server transform and collect the warnings it routed.
+ *
+ * @param modulePath Module to transform, root-relative.
+ * @returns Warnings the plugin routed for that module.
+ */
+async function devServerWarnings(modulePath: string): Promise<string[]> {
+    const root = mkdtempSync(join(realpathSync(tmpdir()), 'csszyx-szv-dev-'));
+    tempDirs.push(root);
+    mkdirSync(join(root, 'src'), { recursive: true });
+    for (const [file, source] of Object.entries(DEV_FIXTURE_FILES)) {
+        writeFileSync(join(root, file), source, 'utf8');
+    }
+
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+        warnings.push(args.map(String).join(' '));
+    };
+    const server = await createServer({
+        root,
+        logLevel: 'silent',
+        plugins: [vitePlugin({ build: { parser: 'rust', cache: false } })],
+        server: { middlewareMode: true },
+    });
+    try {
+        // The transform is what emits the diagnostics; the fixture's runtime
+        // import does not resolve inside a temp dir and that failure comes
+        // after, so it is not what this asserts.
+        await server.transformRequest(modulePath).catch(() => null);
+    } finally {
+        await server.close();
+        console.warn = originalWarn;
+    }
+    return warnings;
+}
+
+describe('dev server diagnostics', () => {
+    it('drops the fallback that only exists because the registry is off', async () => {
+        const warnings = (await devServerWarnings('/src/App.tsx')).join('\n');
+        // The imported factory is in qualifying shape; production precompiles
+        // it, so saying otherwise sends the author to rewrite working code.
+        expect(warnings).not.toContain('cardSz()');
+        // A genuinely unresolvable call still reports.
+        expect(warnings).toContain('makeItUp()');
+    }, 120_000);
+
+    it('keeps reporting a file with nothing to resolve against the registry', async () => {
+        const warnings = (await devServerWarnings('/src/Solo.tsx')).join('\n');
+        expect(warnings).toContain('onItsOwn()');
+    }, 120_000);
 });

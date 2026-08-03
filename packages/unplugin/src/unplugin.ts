@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
     ASTBudgetExceededError,
     type CssVariableMangleValue,
+    describeSzFallback,
     ensureRustTransformAvailable,
     isRustTransformAvailable,
     type SourceTransformResult,
@@ -2830,7 +2831,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             filename,
             source,
         );
-        if (crossModuleStatics !== undefined) {
+        // The registry is filled in every mode; only the REWRITE is gated, so
+        // an edited factory can never serve importers a stale table.
+        if (crossModuleRegistryEnabled && crossModuleStatics !== undefined) {
             compilerOptions.crossModuleStatics = crossModuleStatics;
         }
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
@@ -3478,7 +3481,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * @param content Source text.
          */
         function recordSzvRegistryEntries(filePath: string, content: string): void {
-            if (!crossModuleRegistryEnabled) return;
+            // Recorded even when the registry is disabled for rewriting. Only
+            // `transformConfiguredSource` gates on that flag; here the entries
+            // are what lets the diagnostics tell "this factory would have been
+            // precompiled, csszyx just turned the feature off for this build"
+            // apart from a genuine authoring problem. A stale entry cannot
+            // affect emitted code through that path.
             recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content);
         }
 
@@ -3940,18 +3948,62 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Names of imported szv factories the registry knows about for one file.
+     *
+     * Empty whenever the cross-module rewrite is active, because then a
+     * fallback naming one of these is a real authoring problem rather than a
+     * consequence of the feature being off.
+     *
+     * @param id Bundler module identifier.
+     * @param source Module source.
+     * @returns Factory names whose fallback is only a fallback in this mode.
+     */
+    function deferredCrossModuleFactories(id: string, source: string): readonly string[] {
+        if (crossModuleRegistryEnabled) return [];
+        const statics = resolveCrossModuleStaticsFor(szvCrossModuleRegistry, id, source);
+        return statics === undefined ? [] : Object.values(statics).flatMap(Object.keys);
+    }
+
+    /**
+     * Whether a diagnostic exists only because the cross-module rewrite is off.
+     *
+     * A dev server and a watch build both switch the registry off, so an
+     * imported factory cannot be resolved and every call site reports "result
+     * is unknown at build time" — advice the author has already followed, for
+     * code that compiles perfectly in a production build. A field report
+     * triaged fourteen of these before finding the seven that were real.
+     *
+     * The expected reason is rendered through the matrix that owns the
+     * wording, so this cannot drift into matching the wrong diagnostic.
+     *
+     * @param message Rendered diagnostic.
+     * @param factories Factory names from {@link deferredCrossModuleFactories}.
+     * @returns True when the diagnostic should not be shown.
+     */
+    function isDeferredCrossModuleFallback(message: string, factories: readonly string[]): boolean {
+        return factories.some(name => message.includes(describeSzFallback('call', name).reason));
+    }
+
+    /**
      * Surface compiler diagnostics through their production-safe channels.
      *
      * @param result Compiler transform result.
      * @param id Bundler module identifier.
      * @param warn Bundler warning callback.
+     * @param source Module source, for cross-module fallback classification.
      */
     function reportTransformDiagnostics(
         result: SourceTransformResult,
         id: string,
         warn: (message: string) => void,
+        source: string,
     ): void {
+        const deferred =
+            result.diagnostics.length === 0 ? [] : deferredCrossModuleFactories(id, source);
         for (const message of result.diagnostics) {
+            if (isDeferredCrossModuleFallback(message, deferred)) {
+                continue;
+            }
             if (message.includes('unresolvable sz spread')) {
                 state.spreadWarnings.add(`${id}\n  ${message}`);
                 continue;
@@ -3974,7 +4026,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (
                 message.includes('unresolvable sz spread') ||
                 message.includes('AST budget exceeded') ||
-                szFallbackConsequenceOf(message) === 'missing-css'
+                szFallbackConsequenceOf(message) === 'missing-css' ||
+                isDeferredCrossModuleFallback(message, deferred)
             ) {
                 continue;
             }
@@ -4035,7 +4088,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         traceBenchTiming('transform-hook', id, performance.now() - transformStarted);
         recordFileVarMangleEntries(state, id, cssVariableEntries(result));
         recordFileCSSVariableMetrics(state, id, result.code);
-        reportTransformDiagnostics(result, id, warn);
+        reportTransformDiagnostics(result, id, warn, code);
         for (const [token, data] of result.recoveryTokens) state.recoveryTokens.set(token, data);
         return compilerPreTransformOutput(result);
     }
