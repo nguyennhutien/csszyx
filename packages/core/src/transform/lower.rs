@@ -1909,13 +1909,20 @@ fn needs_brackets(value: &str) -> bool {
 /// emit a dead class on another. A `(` preceded by an identifier that starts
 /// with a letter is a function call, whatever its name.
 ///
-/// Tailwind's own `--spacing(4)` and the `(--x)` variable shorthand both fail
-/// that test by construction and keep their bare form. A single leading dash is
-/// a negative value, not a build-time call, so `-linear-gradient(…)` is still a
-/// function.
+/// Three shapes stay bare: Tailwind's `--spacing(4)`, the `(--x)` variable
+/// shorthand, and a utility value ending in that shorthand — `thumb-(--c)` puts
+/// a dash immediately before the paren and `--` immediately after it, which no
+/// function call ever does. A single leading dash is a negative value, not a
+/// build-time call, so `-linear-gradient(…)` is still a function.
 fn contains_css_function_call(value: &str) -> bool {
     let bytes = value.as_bytes();
     for (at, _) in value.match_indices('(') {
+        if at == 0 {
+            continue;
+        }
+        if bytes[at - 1] == b'-' && value[at + 1..].starts_with("--") {
+            continue;
+        }
         let mut start = at;
         while start > 0 && is_ascii_identifier_byte(bytes[start - 1]) {
             start -= 1;
@@ -2151,10 +2158,15 @@ mod tests {
         // A single leading dash is a negative value, not a build-time call.
         assert!(needs_brackets("-linear-gradient(black,transparent)"));
         // Tailwind's own call and the CSS-variable shorthand keep their bare
-        // form; so does anything with no call in it at all.
+        // form, as does a utility value ending in that shorthand; so does
+        // anything with no call in it at all.
         assert!(!needs_brackets("--spacing(4)"));
         assert!(!needs_brackets("(--gap)"));
+        assert!(!needs_brackets("thumb-(--c)"));
+        assert!(!needs_brackets("size-(--s)"));
         assert!(!needs_brackets("full"));
+        // The discriminator is the dash-then-double-dash pair around the paren.
+        assert!(needs_brackets("var(--x)"));
     }
 
     #[test]

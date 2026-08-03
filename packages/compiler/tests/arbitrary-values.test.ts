@@ -184,6 +184,16 @@ describe('arbitrary values — CSS function calls', () => {
         expect(t({ pt: '(--gap)' })).toBe('pt-(--gap)');
     });
 
+    it('leaves a utility value that ENDS in the variable shorthand bare', () => {
+        // `thumb-(--c)` is one utility value, not a call: the paren is preceded
+        // by the utility separator and followed by the custom-property dashes,
+        // which is exactly where `var(--x)` has a name character instead.
+        expect(t({ scrollbar: 'thumb-(--c)' })).toBe('scrollbar-thumb-(--c)');
+        expect(t({ mask: 'size-(--s)' })).toBe('mask-size-(--s)');
+        // The discriminator really is that pair of characters.
+        expect(t({ pt: 'var(--x)' })).toBe('pt-[var(--x)]');
+    });
+
     it('leaves a value with no function call alone', () => {
         expect(t({ bg: 'red-500' })).toBe('bg-red-500');
         expect(t({ m: '4' })).toBe('m-4');
@@ -199,6 +209,8 @@ describe('arbitrary values — CSS function calls agree across engines', () => {
         ["{ w: 'fit-content(200px)' }", 'w-[fit-content(200px)]'],
         ["{ p: '--spacing(4)' }", 'p-[--spacing(4)]'],
         ["{ pt: '(--gap)' }", 'pt-(--gap)'],
+        ["{ scrollbar: 'thumb-(--c)' }", 'scrollbar-thumb-(--c)'],
+        ["{ pt: 'var(--x)' }", 'pt-[var(--x)]'],
     ])('%s', (sz, expected) => {
         expectParity(sz, expected);
     });

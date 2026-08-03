@@ -1418,10 +1418,14 @@ function needsArbitraryBrackets(value: string): boolean {
  * serve while `pt: 'calc(…)'` compiled correctly. A `(` preceded by an
  * identifier that starts with a letter is a function call, whatever its name.
  *
- * The two shapes that must stay bare fail that test by construction: the
- * build-time call `--spacing(4)` has a `--` name head, and the CSS-variable
- * shorthand `(--x)` has no name at all. A single leading dash is a negative
- * value, not a build-time call, so `-linear-gradient(…)` is still a function.
+ * Three shapes must stay bare. The build-time call `--spacing(4)` has a `--`
+ * name head. The CSS-variable shorthand `(--x)` has no name at all. And a
+ * utility value ending in that shorthand — `thumb-(--c)`, `size-(--s)` — puts
+ * a dash immediately before the paren and `--` immediately after it, which no
+ * function call ever does: `var(--x)` has a name character there.
+ *
+ * A single leading dash is a negative value rather than a build-time call, so
+ * `-linear-gradient(…)` is still a function.
  *
  * The scan is linear and allocation-free. Identifier runs walked backwards
  * from two different `(` cannot overlap — a `(` is not an identifier
@@ -1432,6 +1436,9 @@ function needsArbitraryBrackets(value: string): boolean {
  */
 function containsCssFunctionCall(value: string): boolean {
     for (let at = value.indexOf('('); at > 0; at = value.indexOf('(', at + 1)) {
+        if (value.charCodeAt(at - 1) === 45 && value.startsWith('--', at + 1)) {
+            continue;
+        }
         let start = at;
         // charCodeAt, not codePointAt: the classifier only compares ASCII
         // ranges, and its in-range result needs no nullish fallback.
