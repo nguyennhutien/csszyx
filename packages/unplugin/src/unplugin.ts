@@ -732,25 +732,49 @@ export function unscopedMonorepoMessage(): string {
 }
 
 /**
- * Whether a csszyx build warning should be emitted. `quiet` mutes all of them;
- * `devOnly` additionally suppresses the warning in a production build (for usage
- * nudges that must not noise a host app's prod output). Pure so the gating policy
- * is unit-tested without the worker-based buildEnd wiring.
+ * The `quiet` option, normalized.
  *
- * @param quiet - The `quiet` option: mute every warning.
- * @param devOnly - This warning is a dev-only usage nudge.
+ * `'all'` is the blunt setting a plain `true` selects; `'nudges'` keeps every
+ * report that the build produced less output than it was asked for.
+ */
+export type QuietMode = 'off' | 'nudges' | 'all';
+
+/**
+ * Normalize the authored `quiet` value.
+ *
+ * @param quiet - Authored option value.
+ * @returns The mode the gates read.
+ */
+export function resolveQuietMode(quiet: boolean | 'nudges' | undefined): QuietMode {
+    if (quiet === true) return 'all';
+    if (quiet === 'nudges') return 'nudges';
+    return 'off';
+}
+
+/**
+ * Whether a csszyx build warning should be emitted.
+ *
+ * `devOnly` is already this plugin's marker for "usage nudge": it suppresses
+ * the warning in a production build so it cannot noise a host app's output.
+ * `'nudges'` mutes exactly that same set, which keeps one axis instead of
+ * inventing a second classification for the same distinction. `true` mutes
+ * everything. Pure so the gating policy is unit-tested without the
+ * worker-based buildEnd wiring.
+ *
+ * @param quiet - Resolved quiet mode.
+ * @param devOnly - This warning is a usage nudge.
  * @param isProduction - Whether this is a production build.
  * @returns true when the warning should be printed.
  */
 export function shouldEmitWarning(
-    quiet: boolean,
+    quiet: QuietMode,
     devOnly: boolean,
     isProduction: boolean,
 ): boolean {
-    if (quiet) {
+    if (quiet === 'all') {
         return false;
     }
-    if (devOnly && isProduction) {
+    if (devOnly && (isProduction || quiet === 'nudges')) {
         return false;
     }
     return true;
@@ -759,24 +783,29 @@ export function shouldEmitWarning(
 /**
  * Whether a transform diagnostic describes missing CSS and may be printed.
  *
- * @param quiet - Whether all build warnings are muted.
+ * Only the blunt mode hides these. A missing-CSS diagnostic says classes never
+ * reached the safelist, so the styles are absent from the output — a build
+ * result, not a style opinion, and `'nudges'` exists so a calmer log does not
+ * have to cost it.
+ *
+ * @param quiet - Resolved quiet mode.
  * @param message - Compiler diagnostic to classify.
  * @returns True when the diagnostic is an unsilenced missing-CSS failure.
  */
-export function shouldEmitMissingCssFallback(quiet: boolean, message: string): boolean {
-    return !quiet && szFallbackConsequenceOf(message) === 'missing-css';
+export function shouldEmitMissingCssFallback(quiet: QuietMode, message: string): boolean {
+    return quiet !== 'all' && szFallbackConsequenceOf(message) === 'missing-css';
 }
 
 /**
  * Emit one missing-CSS fallback through the caller's output channel.
  *
- * @param quiet - Whether all build warnings are muted.
+ * @param quiet - Resolved quiet mode.
  * @param message - Compiler diagnostic to classify and emit.
  * @param id - Bundler module identifier included in the warning.
  * @param emit - Warning output channel.
  */
 export function emitMissingCssFallback(
-    quiet: boolean,
+    quiet: QuietMode,
     message: string,
     id: string,
     emit: (message: string) => void,
@@ -2453,9 +2482,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // lazily once the project root is known (configResolved / beforeCompile),
     // because the entries resolve relative to that root.
     const compileSources = options.compileSources ?? [];
-    // `quiet` mutes every csszyx build warning (e.g. to focus on another tool's
+    // `quiet` mutes csszyx build warnings (e.g. to focus on another tool's
     // output). Errors that throw are unaffected — only warnings are silenced.
-    const quiet = options.quiet === true;
+    // `'nudges'` keeps the reports that say output is missing.
+    const quiet = resolveQuietMode(options.quiet);
     /**
      * Emit a csszyx build warning, unless `quiet` mutes all of them. `devOnly`
      * additionally suppresses it in production — for usage nudges that should not
@@ -4015,11 +4045,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // missing-css means the classes never reached the safelist — the
             // styles are simply absent, which is the failure class that must
             // surface in production builds too (same tier as the spread
-            // warning above). `quiet` still silences it: that flag is the
-            // documented way to mute every build warning.
+            // warning above). Only `quiet: true` silences it; `'nudges'` exists
+            // precisely so a calmer log does not have to cost this report.
             emitMissingCssFallback(quiet, message, id, console.warn);
         }
-        if (quiet || result.diagnostics.length === 0 || process.env.NODE_ENV === 'production') {
+        if (
+            quiet !== 'off' ||
+            result.diagnostics.length === 0 ||
+            process.env.NODE_ENV === 'production'
+        ) {
             return;
         }
         for (const message of result.diagnostics) {

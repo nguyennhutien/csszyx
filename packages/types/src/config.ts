@@ -643,14 +643,22 @@ export type PartialCsszyxConfig = {
     contentScopeCheck?: boolean;
 
     /**
-     * Silence ALL csszyx build warnings (the skipped-`sz`, missing-Tailwind-entry,
-     * unscoped-content, unresolvable-spread, and safelist-cap messages). For when
-     * the warnings are understood/intentional, or to keep csszyx quiet while
-     * focusing on another tool's output in the build log. Errors that throw
-     * (security / crash / build-break guards) are unaffected — only warnings are
-     * muted. Defaults to `false`.
+     * Silence csszyx build warnings.
+     *
+     * `true` silences ALL of them (the skipped-`sz`, missing-Tailwind-entry,
+     * unscoped-content, unresolvable-spread, and safelist-cap messages) —
+     * including the ones reporting that classes never reached the safelist, so
+     * the CSS for them is simply absent. Those are not style advice: they say
+     * the build produced less than it was asked for, and `true` hides them.
+     *
+     * `'nudges'` silences only the advisory half and keeps every
+     * integrity report. Reach for it when the goal is a calmer build log
+     * rather than accepting known-missing output.
+     *
+     * Errors that throw (security / crash / build-break guards) are unaffected
+     * in either mode — only warnings are muted. Defaults to `false`.
      */
-    quiet?: boolean;
+    quiet?: boolean | 'nudges';
 
     development?: Partial<DevelopmentConfig>;
     production?: Partial<ProductionConfig>;

@@ -73,12 +73,30 @@ export function recordSzvRegistryFile(
 const SPECIFIER_PROBES = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx'] as const;
 
 /**
+ * Source extensions a specifier written with its EMITTED extension resolves to.
+ *
+ * Under TypeScript's `node16`/`nodenext` module resolution the import is
+ * written as `./styles.js` and the file on disk is `styles.ts`. Probing the
+ * literal specifier alone missed every such module, so a whole project style
+ * silently lost the cross-module precompile with no way to tell from the
+ * outside. Order matters only in that the first hit wins; two source files
+ * differing solely in extension cannot both emit the same specifier.
+ */
+const EMITTED_EXTENSION_SOURCES: ReadonlyArray<readonly [string, readonly string[]]> = [
+    ['.js', ['.ts', '.tsx']],
+    ['.jsx', ['.tsx']],
+    ['.mjs', ['.mts']],
+    ['.cjs', ['.cts']],
+];
+
+/**
  * Resolve the registry entries visible to one file's relative imports.
  *
  * Relative specifiers only (v1): each is resolved against the importing
  * file's directory and probed with the usual extension set against registry
- * keys — no filesystem access, the prescan already walked it. Non-relative
- * specifiers (packages, tsconfig paths) are out of scope and skipped.
+ * keys — no filesystem access, the prescan already walked it. A specifier
+ * written with its emitted extension resolves to the source that produces it.
+ * Non-relative specifiers (packages, tsconfig paths) are out of scope.
  *
  * @param registry - The prescan-built registry.
  * @param filename - Importing file path.
@@ -97,14 +115,38 @@ export function resolveCrossModuleStaticsFor(
         const specifier = match[1];
         if (resolved?.[specifier] !== undefined) continue;
         const base = normalizePathSeparators(path.resolve(directory, specifier));
-        for (const probe of SPECIFIER_PROBES) {
-            const entries = registry.get(`${base}${probe}`);
-            if (entries !== undefined) {
-                resolved ??= {};
-                resolved[specifier] = entries;
-                break;
-            }
+        const entries = lookupRegistryKey(registry, base);
+        if (entries !== undefined) {
+            resolved ??= {};
+            resolved[specifier] = entries;
         }
     }
     return resolved;
+}
+
+/**
+ * Find the registry entry for one resolved specifier path.
+ *
+ * @param registry - The prescan-built registry.
+ * @param base - Specifier resolved against the importing file's directory.
+ * @returns The module's factories, or undefined when nothing matches.
+ */
+function lookupRegistryKey(
+    registry: SzvCrossModuleRegistry,
+    base: string,
+): Record<string, Record<string, unknown>> | undefined {
+    for (const probe of SPECIFIER_PROBES) {
+        const entries = registry.get(`${base}${probe}`);
+        if (entries !== undefined) return entries;
+    }
+    for (const [emitted, sources] of EMITTED_EXTENSION_SOURCES) {
+        if (!base.endsWith(emitted)) continue;
+        const stem = base.slice(0, -emitted.length);
+        for (const extension of sources) {
+            const entries = registry.get(`${stem}${extension}`);
+            if (entries !== undefined) return entries;
+        }
+        break;
+    }
+    return undefined;
 }

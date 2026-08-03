@@ -392,16 +392,24 @@ See [Monorepo & Content Scope](/docs/monorepo-content-scope/) for the full fix.
 
 Default `false`. Set `true` to silence **all** csszyx build warnings — the
 skipped-`sz`, missing-Tailwind-entry, unscoped-content, unresolvable-spread, and
-safelist-cap messages. Useful when those warnings are understood and intentional,
-or to keep csszyx quiet while you focus on another tool's output in the build log.
-Errors that abort the build (security / crash / build-break guards) still throw —
-only warnings are muted.
+safelist-cap messages. Errors that abort the build (security / crash /
+build-break guards) still throw — only warnings are muted.
+
+`true` is blunt, and worth being blunt about: it also hides the messages saying
+classes never reached the safelist, so the CSS for them is absent from the
+output. Those are not style advice — they report that the build produced less
+than you asked for.
 
 ```ts
 csszyx({
-  quiet: true, // silence every csszyx build warning
+  quiet: 'nudges', // calmer log, integrity reports kept
 });
 ```
+
+`'nudges'` silences the same warnings a production build already suppresses —
+the usage advice aimed at whoever is *writing* csszyx code — and keeps every
+report about missing output. Reach for `true` only when you have decided the
+missing output is acceptable.
 
 #### Theme Auto-Scan (`scanCss`)
 

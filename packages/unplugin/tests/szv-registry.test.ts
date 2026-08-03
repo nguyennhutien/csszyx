@@ -85,11 +85,43 @@ describe('resolveCrossModuleStaticsFor', () => {
         ['tsx module', './panel', '/app/src/panel.tsx'],
         ['parent traversal', '../shared/styles', '/app/shared/styles.ts'],
         ['index file', './tokens', '/app/src/tokens/index.ts'],
+        // Written with the EMITTED extension, which is how a `nodenext`
+        // project spells every relative import.
+        ['nodenext .js specifier', './styles.js', '/app/src/styles.ts'],
+        ['nodenext .js specifier on a tsx module', './panel.js', '/app/src/panel.tsx'],
+        ['nodenext .jsx specifier', './panel.jsx', '/app/src/panel.tsx'],
+        ['nodenext .mjs specifier', './styles.mjs', '/app/src/styles.mts'],
+        ['nodenext .cjs specifier', './styles.cjs', '/app/src/styles.cts'],
+        ['nodenext index import', './tokens/index.js', '/app/src/tokens/index.ts'],
     ])('probes: %s', (_name, specifier, registryPath) => {
         const registry = registryWith(registryPath);
         const source = `import { cardSz } from '${specifier}';\n`;
         const resolved = resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source);
         expect(resolved?.[specifier]).toBeDefined();
+    });
+
+    it('resolves a real .js module over its TypeScript twin', () => {
+        // A JavaScript project's `./styles.js` is a file, not an emitted name.
+        // The literal probe runs first, so the twin lookup never shadows it.
+        const registry: SzvCrossModuleRegistry = new Map();
+        recordSzvRegistryFile(registry, '/app/src/styles.js', STYLES_SOURCE);
+        recordSzvRegistryFile(
+            registry,
+            '/app/src/styles.ts',
+            "import { szv } from '@csszyx/runtime';\nexport const other = szv({ variants: { g: { a: { gap: 1 } } } });\n",
+        );
+        const resolved = resolveCrossModuleStaticsFor(
+            registry,
+            '/app/src/Card.tsx',
+            "import { cardSz } from './styles.js';\n",
+        );
+        expect(Object.keys(resolved?.['./styles.js'] ?? {})).toEqual(['cardSz', 'rowSz']);
+    });
+
+    it('leaves an unknown emitted extension unresolved', () => {
+        const registry = registryWith('/app/src/styles.ts');
+        const source = "import { cardSz } from './styles.wasm';\n";
+        expect(resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source)).toBeUndefined();
     });
 
     it('never resolves package or aliased specifiers', () => {
