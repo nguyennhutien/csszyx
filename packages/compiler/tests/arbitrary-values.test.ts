@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { transform } from '../src/transform.js';
+import { expectParity } from './tri-engine-harness.js';
 
 const t = (sz: Parameters<typeof transform>[0]): string => transform(sz).className;
 
@@ -135,5 +136,70 @@ describe('arbitrary values — negative units in before:/after: variants', () =>
         expect(result).toContain('before:left-[-1px]');
         expect(result).toContain('after:bottom-[-1px]');
         expect(result).toContain('after:right-[-1px]');
+    });
+});
+
+// ============================================================================
+// CSS function calls — any function, not a hand-kept list of names
+// ============================================================================
+
+/**
+ * The bracket rule used to enumerate function names, and the two engines had
+ * already drifted apart on which ones they knew. `env()` was in neither list,
+ * so `pt: 'env(safe-area-inset-top)'` compiled to `pt-env(safe-area-inset-top)`
+ * — not a class Tailwind serves — while `pt: 'calc(…)'` compiled correctly.
+ */
+describe('arbitrary values — CSS function calls', () => {
+    const bracketed: Array<[string, Record<string, unknown>, string]> = [
+        [
+            'env, the reported gap',
+            { pt: 'env(safe-area-inset-top)' },
+            'pt-[env(safe-area-inset-top)]',
+        ],
+        [
+            'oklch, known to one engine only',
+            { bg: 'oklch(0.7,0.1,200)' },
+            'bg-[oklch(0.7,0.1,200)]',
+        ],
+        ['lab, known to one engine only', { bg: 'lab(50%,40,59)' }, 'bg-[lab(50%,40,59)]'],
+        ['fit-content, in no list at all', { w: 'fit-content(200px)' }, 'w-[fit-content(200px)]'],
+        ['repeat, in no list at all', { gridCols: 'repeat(3,1fr)' }, 'grid-cols-[repeat(3,1fr)]'],
+        ['calc, the one that always worked', { pt: 'calc(1rem+2px)' }, 'pt-[calc(1rem+2px)]'],
+        [
+            'a negative gradient keeps its sign inside the brackets',
+            { mask: '-linear-gradient(black,transparent)' },
+            'mask-[-linear-gradient(black,transparent)]',
+        ],
+    ];
+    for (const [name, sz, expected] of bracketed) {
+        it(`brackets ${name}`, () => {
+            expect(t(sz as Parameters<typeof transform>[0])).toBe(expected);
+        });
+    }
+
+    it('leaves the Tailwind build-time call and the variable shorthand bare', () => {
+        // `--spacing(4)` is Tailwind's own call and `(--x)` is its CSS-variable
+        // shorthand; bracketing either would break the utility.
+        expect(t({ p: '--spacing(4)' })).toBe('p-[--spacing(4)]');
+        expect(t({ pt: '(--gap)' })).toBe('pt-(--gap)');
+    });
+
+    it('leaves a value with no function call alone', () => {
+        expect(t({ bg: 'red-500' })).toBe('bg-red-500');
+        expect(t({ m: '4' })).toBe('m-4');
+    });
+});
+
+describe('arbitrary values — CSS function calls agree across engines', () => {
+    // The name lists were per-engine, so the same value could bracket on one
+    // lane and emit a dead class on another. One rule, three engines.
+    it.each([
+        ["{ pt: 'env(safe-area-inset-top)' }", 'pt-[env(safe-area-inset-top)]'],
+        ["{ bg: 'oklch(0.7,0.1,200)' }", 'bg-[oklch(0.7,0.1,200)]'],
+        ["{ w: 'fit-content(200px)' }", 'w-[fit-content(200px)]'],
+        ["{ p: '--spacing(4)' }", 'p-[--spacing(4)]'],
+        ["{ pt: '(--gap)' }", 'pt-(--gap)'],
+    ])('%s', (sz, expected) => {
+        expectParity(sz, expected);
     });
 });

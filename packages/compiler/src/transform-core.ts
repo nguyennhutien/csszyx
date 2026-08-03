@@ -1402,26 +1402,47 @@ function needsArbitraryBrackets(value: string): boolean {
     return (
         isArbitraryLength(v) ||
         v.startsWith('#') || // Hex colors
-        v.startsWith('rgb') || // RGB colors
-        v.startsWith('hsl') || // HSL colors
-        v.includes('calc(') || // Calculations
-        v.includes('var(') || // CSS variables (old syntax)
-        v.includes('attr(') || // attr() function
-        v.includes('url(') || // URLs
-        v.includes('clamp(') || // Clamp
-        v.includes('min(') || // Min
-        v.includes('max(') || // Max
-        // Gradient functions. A mask or background taking one as a raw value
-        // needs brackets like every other CSS function; without them the class
-        // is `mask-linear-gradient(…)`, which Tailwind does not serve.
-        // One probe, not six: every gradient function name ends in
-        // `-gradient(`, and the three `repeating-*` spellings contain their
-        // base name anyway, so the extra checks only re-scanned the value on
-        // the common no-gradient path. The Rust lane already carries the
-        // three-check form with the same reasoning.
-        v.includes('-gradient(') ||
+        containsCssFunctionCall(v) ||
         v.includes(' ') // Values with spaces need brackets
     );
+}
+
+/**
+ * Whether a value contains a CSS function call, which cannot appear bare in a
+ * class name.
+ *
+ * This replaces a hand-kept list of function names, which had done what such
+ * lists do: the native engine carried `oklch()`, `lab()`, `lch()` and `hwb()`
+ * that this one did not, and `env()` was in neither, so
+ * `pt: 'env(safe-area-inset-top)'` compiled to a class Tailwind does not
+ * serve while `pt: 'calc(…)'` compiled correctly. A `(` preceded by an
+ * identifier that starts with a letter is a function call, whatever its name.
+ *
+ * The two shapes that must stay bare fail that test by construction: the
+ * build-time call `--spacing(4)` has a `--` name head, and the CSS-variable
+ * shorthand `(--x)` has no name at all. A single leading dash is a negative
+ * value, not a build-time call, so `-linear-gradient(…)` is still a function.
+ *
+ * The scan is linear and allocation-free. Identifier runs walked backwards
+ * from two different `(` cannot overlap — a `(` is not an identifier
+ * character, so each walk stops at or after the previous one.
+ *
+ * @param value - Candidate sz string value, outer brackets already stripped.
+ * @returns Whether a CSS function call appears anywhere in the value.
+ */
+function containsCssFunctionCall(value: string): boolean {
+    for (let at = value.indexOf('('); at > 0; at = value.indexOf('(', at + 1)) {
+        let start = at;
+        // charCodeAt, not codePointAt: the classifier only compares ASCII
+        // ranges, and its in-range result needs no nullish fallback.
+        while (start > 0 && isAsciiIdentifierCode(value.charCodeAt(start - 1))) {
+            start -= 1;
+        }
+        if (start < at && !value.startsWith('--', start)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -3543,6 +3564,7 @@ export function __resetSzWarnDedupForTests(): void {
     _warnedSpacingSteps.clear();
     _warnedOpacityTokens.clear();
     _warnedPropertyObjects.clear();
+    warnedRemovedSugar.clear();
 }
 
 /**
@@ -3622,12 +3644,25 @@ function collectNestedVariant(
     if (nestedResult.className) classes.push(nestedResult.className);
 }
 
-/** Suppresses a removed boolean shorthand and emits its migration warning. */
+/**
+ * Suppresses a removed boolean shorthand and emits its migration warning.
+ *
+ * Gated like {@link warnAlignmentValue} — on the build mode alone. The general
+ * dev gate also requires `typeof window === 'undefined'`, which silences the
+ * browser console, and a removed shorthand reaching a runtime sz object is
+ * exactly the case with no build log to read: the key is dropped and the
+ * element renders unstyled with nothing said anywhere.
+ *
+ * @param rawKey - The authored sz key.
+ * @param value - Its value; only `true` is the removed shorthand.
+ * @returns Whether the key was a removed shorthand and produced no class.
+ */
 function collectRemovedBooleanSugar(rawKey: string, value: unknown): boolean {
     if (value !== true) return false;
     const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
     if (!removed) return false;
-    if (szDevWarningsEnabled()) {
+    if (process.env.NODE_ENV !== 'production' && !warnedRemovedSugar.has(rawKey)) {
+        warnedRemovedSugar.add(rawKey);
         console.warn(
             `[csszyx] "${rawKey}" boolean sugar was removed. Use ` +
                 `{ ${removed.key}: '${removed.value}' } instead, or run \`csszyx migrate\`.`,
@@ -3635,6 +3670,9 @@ function collectRemovedBooleanSugar(rawKey: string, value: unknown): boolean {
     }
     return true;
 }
+
+/** Removed shorthands already warned about, so a re-render cannot spam. */
+const warnedRemovedSugar = new Set<string>();
 
 /** Collects string shortcuts that must run before property-name resolution. */
 function collectUnresolvedStringProperty(

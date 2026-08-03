@@ -1881,34 +1881,7 @@ fn needs_brackets(value: &str) -> bool {
         return false;
     }
 
-    if value.starts_with('#')
-        || value.starts_with("rgb")
-        || value.starts_with("hsl")
-        || value.starts_with("oklch")
-        || value.starts_with("color(")
-        || value.starts_with("hwb(")
-        || value.starts_with("lab(")
-        || value.starts_with("lch(")
-        || value.starts_with("oklab(")
-    {
-        return true;
-    }
-
-    if value.contains("calc(")
-        || value.contains("var(")
-        || value.contains("attr(")
-        || value.contains("url(")
-        || value.contains("clamp(")
-        || value.contains("min(")
-        || value.contains("max(")
-        // Gradient functions need brackets like every other CSS function;
-        // without them the class is `mask-linear-gradient(…)`, which Tailwind
-        // does not serve. Repeating variants are covered by the base names.
-        || value.contains("linear-gradient(")
-        || value.contains("radial-gradient(")
-        || value.contains("conic-gradient(")
-        || value.contains(' ')
-    {
+    if value.starts_with('#') || contains_css_function_call(value) || value.contains(' ') {
         return true;
     }
 
@@ -1926,6 +1899,34 @@ fn needs_brackets(value: &str) -> bool {
 }
 
 #[inline]
+/// Whether a value contains a CSS function call, which cannot appear bare in a
+/// class name.
+///
+/// Mirrors `containsCssFunctionCall` in `transform-core.ts`, which replaced the
+/// hand-kept name list both engines used to carry. The lists had drifted — this
+/// one knew `oklch()`, `lab()`, `lch()` and `hwb()` and the JS one did not, and
+/// neither knew `env()` — so the same value could bracket on one engine and
+/// emit a dead class on another. A `(` preceded by an identifier that starts
+/// with a letter is a function call, whatever its name.
+///
+/// Tailwind's own `--spacing(4)` and the `(--x)` variable shorthand both fail
+/// that test by construction and keep their bare form. A single leading dash is
+/// a negative value, not a build-time call, so `-linear-gradient(…)` is still a
+/// function.
+fn contains_css_function_call(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    for (at, _) in value.match_indices('(') {
+        let mut start = at;
+        while start > 0 && is_ascii_identifier_byte(bytes[start - 1]) {
+            start -= 1;
+        }
+        if start < at && !value[start..].starts_with("--") {
+            return true;
+        }
+    }
+    false
+}
+
 const fn is_ascii_identifier_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-'
 }
@@ -2136,6 +2137,24 @@ mod tests {
         assert!(!needs_brackets("red-500"));
         assert!(!needs_brackets("[#333]"));
         assert!(!needs_brackets("4"));
+    }
+
+    #[test]
+    fn needs_brackets_covers_any_css_function_not_a_name_list() {
+        // The name lists this replaced had drifted between engines, and `env()`
+        // was in none of them: `pt-env(safe-area-inset-top)` is not a class
+        // Tailwind serves.
+        assert!(needs_brackets("env(safe-area-inset-top)"));
+        assert!(needs_brackets("fit-content(200px)"));
+        assert!(needs_brackets("repeat(3,1fr)"));
+        assert!(needs_brackets("color-mix(in_srgb,red,blue)"));
+        // A single leading dash is a negative value, not a build-time call.
+        assert!(needs_brackets("-linear-gradient(black,transparent)"));
+        // Tailwind's own call and the CSS-variable shorthand keep their bare
+        // form; so does anything with no call in it at all.
+        assert!(!needs_brackets("--spacing(4)"));
+        assert!(!needs_brackets("(--gap)"));
+        assert!(!needs_brackets("full"));
     }
 
     #[test]
