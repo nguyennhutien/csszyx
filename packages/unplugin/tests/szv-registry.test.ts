@@ -10,6 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+    mayExportSzvFactories,
     recordSzvRegistryFile,
     resolveCrossModuleStaticsFor,
     type SzvCrossModuleRegistry,
@@ -31,6 +32,18 @@ function registryWith(filePath: string): SzvCrossModuleRegistry {
     recordSzvRegistryFile(registry, filePath, STYLES_SOURCE);
     return registry;
 }
+
+describe('mayExportSzvFactories', () => {
+    // The prescan gate and the skipped-file report must ask the same question,
+    // or the report claims a consequence the build did not have.
+    it('needs both an szv call and an export marker', () => {
+        expect(mayExportSzvFactories(STYLES_SOURCE)).toBe(true);
+        expect(
+            mayExportSzvFactories('const local = szv({ variants: { p: { a: { p: 1 } } } });'),
+        ).toBe(false);
+        expect(mayExportSzvFactories('export const x = 1;')).toBe(false);
+    });
+});
 
 describe('recordSzvRegistryFile', () => {
     it('records every qualifying exported factory under the normalized path', () => {

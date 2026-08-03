@@ -79,6 +79,7 @@ import {
 import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import {
+    mayExportSzvFactories,
     recordSzvRegistryFile,
     resolveCrossModuleStaticsFor,
     type SzvCrossModuleRegistry,
@@ -168,11 +169,21 @@ interface PluginState {
     /** Unresolvable-spread warnings surfaced to the build log in every mode. */
     spreadWarnings: Set<string>;
     /**
-     * Workspace-package files under `/packages/` that contain `sz` but were
+     * Workspace-package files under `/packages/` that use csszyx but were
      * skipped by the hard-ignore (not under any `compileSources` dir). Surfaced at
      * build end so the silent no-op (skipped `sz` → no CSS) becomes visible.
      */
     skippedSzFiles: Set<string>;
+    /**
+     * The subset of {@link skippedSzFiles} that may export szv factories.
+     *
+     * Skipping one of these does more than lose a file's own CSS: it keeps the
+     * module out of the cross-module registry, so every importer — compiled or
+     * not — silently falls back to the runtime path. That is dropped csszyx
+     * output rather than a usage nudge, so its presence promotes the warning
+     * out of dev-only.
+     */
+    skippedSzvExportFiles: Set<string>;
     /** Guards the skipped-sz-files warning so it fires at most once. */
     skipWarningEmitted: boolean;
     /**
@@ -1040,20 +1051,32 @@ export function isPackagesSkippedSource(id: string, sourceDirs: readonly string[
 }
 
 /**
- * Build the workspace-package skip warning. Lists the skipped files that contain
- * `sz` so the developer can add the package directory to `compileSources`
+ * Build the workspace-package skip warning. Lists the skipped files that use
+ * csszyx so the developer can add the package directory to `compileSources`
  * instead of silently shipping no CSS for them.
  *
- * @param files - skipped `/packages/` file paths that contain `sz`.
+ * @param files - skipped `/packages/` file paths that use csszyx.
+ * @param szvExportFiles - the subset that may export `szv` factories, whose
+ *   skip also costs every importer its cross-module precompile.
  * @returns the warning string.
  */
-export function skippedSzFilesMessage(files: readonly string[]): string {
+export function skippedSzFilesMessage(
+    files: readonly string[],
+    szvExportFiles: readonly string[] = [],
+): string {
     const list = files.map(file => `  - ${file}`).join('\n');
+    const registryClause =
+        szvExportFiles.length === 0
+            ? ''
+            : `\n${szvExportFiles.length} of them may export \`szv\` factories, so they stay ` +
+              'out of the cross-module registry and every importer falls back to the ' +
+              'runtime path.';
     return (
-        `[csszyx] ${files.length} file(s) under packages/ contain \`sz\` but were ` +
+        `[csszyx] ${files.length} file(s) under packages/ use csszyx but were ` +
         `skipped by ignore rules:\n${list}\n` +
         'Add the package directory to `compileSources` (or move the file out of ' +
-        'packages/) — otherwise their `sz` produces no CSS.'
+        'packages/) — otherwise their classes never reach the safelist.' +
+        registryClause
     );
 }
 
@@ -2522,6 +2545,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         contentScopeWarningEmitted: false,
         spreadWarnings: new Set<string>(),
         skippedSzFiles: new Set<string>(),
+        skippedSzvExportFiles: new Set<string>(),
         skipWarningEmitted: false,
         classesCapped: false,
         ownedClasses: new Set<string>(),
@@ -3317,15 +3341,27 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
     /**
      * Records a skipped file when it is workspace-package source under
-     * `/packages/` (not under any `compileSources` directory) that contains `sz`.
-     * These are the silent no-op cases — the file is never compiled, so its `sz`
-     * produces no CSS — surfaced once at build end. node_modules/.next are never
-     * scanned (handled by {@link isPackagesSkippedSource}).
+     * `/packages/` (not under any `compileSources` directory) that carries
+     * csszyx authoring surface. These are the silent no-op cases — the file is
+     * never prescanned, so its classes never reach the safelist and any szv
+     * factory it exports never reaches the cross-module registry — surfaced
+     * once at build end. node_modules/.next are never scanned (handled by
+     * {@link isPackagesSkippedSource}).
+     *
+     * The marker set is the prescan's own, not a subset: a module holding only
+     * `szv` factories carries no `sz=` or `sz:` at all, and that is exactly the
+     * module whose skip costs every importer its precompile.
      *
      * @param filePath - filesystem path of the file the prescan skipped.
      */
     function recordPackagesSkipIfSz(filePath: string): void {
-        if (!isPackagesSkippedSource(filePath, compileSourceDirs)) {
+        // Called per module from `transformInclude` as well as from the prescan
+        // walk, and a build with several environments resolves the same file
+        // more than once — never read it twice.
+        if (
+            state.skippedSzFiles.has(filePath) ||
+            !isPackagesSkippedSource(filePath, compileSourceDirs)
+        ) {
             return;
         }
         let content: string;
@@ -3334,8 +3370,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         } catch {
             return;
         }
-        if (content.includes('sz=') || content.includes('szs=') || content.includes('sz:')) {
-            state.skippedSzFiles.add(filePath);
+        if (!fileMayContainSafelistableSz(content)) {
+            return;
+        }
+        state.skippedSzFiles.add(filePath);
+        if (mayExportSzvFactories(content)) {
+            state.skippedSzvExportFiles.add(filePath);
         }
     }
 
@@ -4273,7 +4313,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     return true;
                 }
                 // Only handle source files in PRE phase
-                return shouldProcessSource(id);
+                if (shouldProcessSource(id)) {
+                    return true;
+                }
+                // The bundler resolved this module, so it is genuinely part of
+                // the build even when the prescan never walked its directory —
+                // which is the case for a package tree OUTSIDE the project
+                // root. Recording the skip here is the only way that layout can
+                // ever be reported; the prescan walk alone sees nothing.
+                recordPackagesSkipIfSz(id);
+                return false;
             },
 
             /**
@@ -4402,12 +4451,20 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Surface the skipped files once so the no-op is visible.
                 if (!state.skipWarningEmitted && state.skippedSzFiles.size > 0) {
                     state.skipWarningEmitted = true;
-                    // A usage nudge (add the package dir to compileSources), not a
-                    // csszyx-output defect — dev-only so it never noises a host
-                    // app's production build.
-                    emitWarning(skippedSzFilesMessage(sortStrings(state.skippedSzFiles)), {
-                        devOnly: true,
-                    });
+                    // Gated by consequence. A skipped file that only carries its
+                    // own `sz` is a usage nudge — dev-only, so it never noises a
+                    // host app's production build. A skipped file that may EXPORT
+                    // szv factories also drops every importer's precompile, which
+                    // is missing csszyx output rather than a nudge, and a field
+                    // report cost an afternoon of bisecting because the
+                    // production build said nothing.
+                    emitWarning(
+                        skippedSzFilesMessage(
+                            sortStrings(state.skippedSzFiles),
+                            sortStrings(state.skippedSzvExportFiles),
+                        ),
+                        { devOnly: state.skippedSzvExportFiles.size === 0 },
+                    );
                 }
                 // The safelist hit its hard cap; extra classes were dropped. This
                 // only happens on pathological/hostile class cardinality — surface

@@ -22,10 +22,25 @@ import { normalizePathSeparators } from './path-normalization.js';
 export type SzvCrossModuleRegistry = Map<string, Record<string, Record<string, unknown>>>;
 
 /**
+ * Whether a file could contribute factories to the registry at all.
+ *
+ * The cheap marker gate that runs before any parse. Also asked of files the
+ * prescan SKIPS, so a skip that costs importers their precompile can be
+ * reported as such — the two questions must use one predicate or the report
+ * drifts from the behaviour.
+ *
+ * @param content - Source text.
+ * @returns True when the file may export an szv factory.
+ */
+export function mayExportSzvFactories(content: string): boolean {
+    return content.includes('szv(') && content.includes('export');
+}
+
+/**
  * Record one file's exported szv factories into the registry.
  *
- * Cheap-gated on the szv call and export markers before parsing; a file with
- * no qualifying factory records nothing.
+ * Cheap-gated by {@link mayExportSzvFactories} before parsing; a file with no
+ * qualifying factory records nothing.
  *
  * @param registry - The registry to fill.
  * @param filePath - Absolute source path (any separator style).
@@ -37,8 +52,9 @@ export function recordSzvRegistryFile(
     content: string,
 ): void {
     const key = normalizePathSeparators(filePath);
-    const qualifies = content.includes('szv(') && content.includes('export');
-    const entries = qualifies ? extractSzvRegistryEntries(content, filePath) : [];
+    const entries = mayExportSzvFactories(content)
+        ? extractSzvRegistryEntries(content, filePath)
+        : [];
     if (entries.length === 0) {
         // Re-recording a file that STOPPED qualifying must evict its entry, or
         // importers keep compiling against a table the module no longer

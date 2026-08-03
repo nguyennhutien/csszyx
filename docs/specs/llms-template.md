@@ -763,8 +763,14 @@ ignored unless a path points into them:
 A non-`/packages/` lib INSIDE the build root needs no config (compiled + scanned
 automatically); `compileSources` is for `/packages/` or sources OUTSIDE the root.
 
-A `/packages/` file with `sz` that is not opted in is skipped silently (no CSS);
-csszyx warns at build end and lists those files.
+A `/packages/` file using csszyx that is not opted in is skipped (no CSS); csszyx
+warns at build end and lists those files.
+
+Opting in is also what makes the cross-module `szv` precompile work inside the
+package: the prescan is what records a module's exported factories, so a skipped
+module keeps them out of the registry and every importer — its own siblings
+included — falls back to the runtime path. That case warns in production builds
+too; a skip affecting only one file's own classes stays development-only.
 
 ## Theme Auto-Scan (Custom Tokens → TypeScript Types)
 

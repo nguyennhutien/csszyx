@@ -221,11 +221,20 @@ root (`config.root`, default the build cwd); absolute paths pass through;
 pnpm symlinks are matched after realpath resolution. Each entry exempts
 that directory from the ignore AND adds it as a pre-scan root.
 `node_modules` and `.next` stay ignored unless a listed path points into
-them. A `/packages/` file with `sz` not under any `compileSources`
-directory is skipped silently (no CSS); csszyx warns at build end listing
-those files. A path that does not resolve to a directory is reported in a
+them. A `/packages/` file using csszyx and not under any `compileSources`
+directory is skipped (no CSS); csszyx warns at build end listing those
+files. A path that does not resolve to a directory is reported in a
 build warning. A non-`/packages/` lib inside the build root needs no
 config — it is compiled and scanned automatically.
+
+Opting a package in is also what makes the cross-module `szv` precompile
+work inside it. The pre-scan is what records a module's exported
+factories, so a skipped module keeps its factories out of the registry
+and every importer — including its own siblings — falls back to the
+runtime path. That case is reported in production builds too, because
+the cost is not a style nudge but csszyx output the build did not
+produce; a skip that only affects one file's own classes stays
+development-only.
 
 ### Hydration
 

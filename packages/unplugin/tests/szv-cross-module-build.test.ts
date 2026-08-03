@@ -180,3 +180,120 @@ describe.each(['rust', 'oxc', 'babel'] as const)('%s build', parser => {
         expect(js).not.toContain('cardSz({');
     });
 });
+
+/**
+ * The field-report layout: a vendored component package beside the app root,
+ * with BOTH the factory module and its consumer inside the package.
+ *
+ * Reported as "the prescan registry never indexes the compileSources tree".
+ * It does — the walk covers opted-in directories outside the vite root, and
+ * the first case below proves it end to end. What is silent is the layout the
+ * report was actually built with: a package NOT opted in. The transform still
+ * runs on those files, so `sz` output looks correct, while the prescan skips
+ * them — their classes miss the safelist and their exported factories miss the
+ * registry, costing every importer its precompile.
+ */
+const PACKAGE_FILES: Record<string, string> = {
+    'app/index.html': FIXTURE_FILES['index.html'],
+    'app/src/main.ts': `
+import { Flex } from '../../packages/vui/src/Flex.tsx';
+document.body.textContent = JSON.stringify(Flex({ dir: 'row' }));
+`,
+    'packages/vui/src/flexSzv.ts': `
+import { szv } from '@csszyx/runtime';
+export const flexContainerSz = szv({
+    base: { rounded: 'lg' },
+    variants: { flexDir: { row: { flexDir: 'row' }, col: { flexDir: 'col' } } },
+});
+`,
+    'packages/vui/src/Flex.tsx': `
+import { szr } from '@csszyx/runtime';
+import { flexContainerSz } from './flexSzv';
+export const Flex = ({ dir }) => szr(flexContainerSz({ flexDir: dir }));
+`,
+};
+
+/**
+ * Build the vendored-package fixture and capture the plugin's warnings.
+ *
+ * @param optIn - Whether to pass the package directory in `compileSources`.
+ * @returns The emitted JS plus every warning the plugin logged.
+ */
+async function buildPackageFixture(optIn: boolean): Promise<{ js: string; warnings: string[] }> {
+    const repo = mkdtempSync(join(realpathSync(tmpdir()), `csszyx-vendored-${optIn}-`));
+    tempDirs.push(repo);
+    mkdirSync(join(repo, 'app/src'), { recursive: true });
+    mkdirSync(join(repo, 'packages/vui/src'), { recursive: true });
+    for (const [file, source] of Object.entries(PACKAGE_FILES)) {
+        writeFileSync(join(repo, file), source, 'utf8');
+    }
+
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+        warnings.push(args.map(String).join(' '));
+    };
+    // A real `vite build` runs in production, where dev-only warnings are
+    // suppressed. Vitest defaults NODE_ENV to `test`, which would let a
+    // dev-only regression pass this net unnoticed.
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+        await build({
+            root: join(repo, 'app'),
+            logLevel: 'silent',
+            plugins: [
+                vitePlugin({
+                    build: { parser: 'rust', cache: false },
+                    ...(optIn ? { compileSources: ['../packages/vui'] } : {}),
+                }),
+            ],
+            esbuild: {
+                jsx: 'transform',
+                jsxFactory: 'h',
+                jsxFragment: 'Fragment',
+                jsxInject: 'const h = (t, p, ...c) => ({ t, p, c }); const Fragment = "f";',
+            },
+            build: {
+                minify: false,
+                rollupOptions: { external: ['@csszyx/runtime', '@csszyx/runtime/core'] },
+            },
+        });
+    } finally {
+        console.warn = originalWarn;
+        process.env.NODE_ENV = originalNodeEnv;
+    }
+
+    const assetsDir = join(repo, 'app', 'dist', 'assets');
+    const js = readdirSync(assetsDir)
+        .filter(file => file.endsWith('.js'))
+        .map(file => readFileSync(join(assetsDir, file), 'utf8'))
+        .join('\n');
+    expect(js.length).toBeGreaterThan(0);
+    return { js, warnings };
+}
+
+describe('a vendored package beside the app root', () => {
+    it('precompiles across its own modules once opted in', { timeout: 120_000 }, async () => {
+        const { js, warnings } = await buildPackageFixture(true);
+        expect(js).toContain('__szvT_flexContainerSz');
+        expect(js).toContain('__szvPick1(');
+        expect(js).toContain('@csszyx/runtime/core');
+        expect(js).not.toContain('flexContainerSz({');
+        expect(warnings.join('\n')).not.toContain('skipped by ignore rules');
+    });
+
+    it('reports the skipped factory module when not opted in', { timeout: 120_000 }, async () => {
+        const { js, warnings } = await buildPackageFixture(false);
+        // The precompile is lost — the shape the field report hit.
+        expect(js).not.toContain('__szvT_flexContainerSz');
+        expect(js).toContain('flexContainerSz({');
+        // And that loss is now stated, in a production build, naming the module
+        // whose skip caused it. A module of pure szv factories carries no `sz=`
+        // or `sz:`, so the old marker set never saw it.
+        const logged = warnings.join('\n');
+        expect(logged).toContain('flexSzv.ts');
+        expect(logged).toContain('cross-module registry');
+        expect(logged).toContain('compileSources');
+    });
+});
