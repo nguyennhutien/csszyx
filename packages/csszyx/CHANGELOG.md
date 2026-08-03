@@ -13,7 +13,7 @@
 * compile-time variants, a compiler-free runtime entry, and opt-in mangling ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
 * **unplugin:** let a build choose where the mangle map ships ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
 * **unplugin:** make class mangling opt-in ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
-* **compiler:** emit the sz fallback matrix on every engine, behind build.warn ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
+* **compiler:** emit the sz fallback matrix on every engine ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
 * **tooling-metadata:** suggest negative values where the utility allows them ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
 * **compiler:** report unresolvable szr, szv and szs through the shared matrix ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
 * **runtime:** compiler-free core entry with opt-in object lowering ([#190](https://github.com/nguyennhutien/csszyx/issues/190))
