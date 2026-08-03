@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
     isRetryablePublishFailure,
     publishPackageSet,
+    usedOidcAuth,
     registryHasVersion,
     sortPackagesByWorkspaceDependencies,
 } from './publish-workspace.mjs';
@@ -198,4 +199,76 @@ test('surfaces non-404 registry responses for retry classification', async (cont
         registryHasVersion(pkg('core'), `http://127.0.0.1:${address.port}`),
         /npm registry query failed for core@1.2.3: HTTP 503/,
     );
+});
+
+const OIDC_FALLBACK_WARNING =
+    '[WARN] Skipped OIDC: ERR_PNPM_AUTH_TOKEN_EXCHANGE: Failed token exchange request ' +
+    'with body message: Unknown error (status code 404)';
+
+test('reads the auth path off the publish output', () => {
+    assert.equal(usedOidcAuth('+ csszyx@1.2.3'), true);
+    assert.equal(usedOidcAuth(OIDC_FALLBACK_WARNING), false);
+    // pnpm may word the warning either way; both mean the token carried it.
+    assert.equal(usedOidcAuth('ERR_PNPM_AUTH_TOKEN_EXCHANGE'), false);
+});
+
+test('reports which auth path each package used', async () => {
+    const lines = [];
+    let published = false;
+    await publishPackageSet([pkg('core')], {
+        isPublished: async () => published,
+        runPublish: async () => {
+            published = true;
+            return { code: 0, stdout: '', stderr: OIDC_FALLBACK_WARNING };
+        },
+        sleep: async () => {},
+        log: (line) => lines.push(line),
+        error: (line) => lines.push(line),
+    });
+
+    assert.ok(
+        lines.some((line) => line.includes('auth: token')),
+        lines.join('\n'),
+    );
+    assert.ok(
+        lines.some((line) => line.includes('[auth]') && line.includes('trusted publisher')),
+        lines.join('\n'),
+    );
+});
+
+test('fails the release when OIDC is required but the token carried it', async () => {
+    let published = false;
+    await assert.rejects(
+        publishPackageSet([pkg('core')], {
+            isPublished: async () => published,
+            runPublish: async () => {
+                published = true;
+                return { code: 0, stdout: '', stderr: OIDC_FALLBACK_WARNING };
+            },
+            sleep: async () => {},
+            log: () => {},
+            error: () => {},
+            requireOidc: true,
+        }),
+        /OIDC required but not used/,
+    );
+});
+
+test('stays silent about auth when every package used OIDC', async () => {
+    let published = false;
+    const lines = [];
+    await publishPackageSet([pkg('core')], {
+        isPublished: async () => published,
+        runPublish: async () => {
+            published = true;
+            return { code: 0, stdout: '+ core@1.2.3', stderr: '' };
+        },
+        sleep: async () => {},
+        log: (line) => lines.push(line),
+        error: (line) => lines.push(line),
+        requireOidc: true,
+    });
+
+    assert.ok(lines.some((line) => line.includes('auth: oidc')), lines.join('\n'));
+    assert.ok(lines.some((line) => line.includes('all 1 package(s) published through OIDC')));
 });
