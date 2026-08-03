@@ -76,7 +76,7 @@ function readTrailingPr(text) {
 /**
  * Parse one conventional subject after bullet decoration has been removed.
  * @param {string} line - Candidate conventional subject.
- * @returns {{ type: string, scope: string, desc: string } | null} Parsed entry.
+ * @returns {{ type: string, scope: string, desc: string, breaking: boolean } | null} Parsed entry.
  */
 function parseConventionalLine(line) {
     const colon = line.indexOf(':');
@@ -85,18 +85,25 @@ function parseConventionalLine(line) {
     let header = line.slice(0, colon);
     const desc = line.slice(colon + 1).trimStart();
     if (desc === '') return null;
-    if (header.endsWith('!')) header = header.slice(0, -1);
+    // The `!` is the marker, not decoration: strip it from the header so the
+    // type parses, but carry the fact forward — dropping it here is what made
+    // two `feat!` commits render as ordinary features in 0.12.0.
+    const breaking = header.endsWith('!');
+    if (breaking) header = header.slice(0, -1);
 
     const open = header.indexOf('(');
     const type = open === -1 ? header : header.slice(0, open);
     if (!CONVENTIONAL_TYPES.has(type)) return null;
-    if (open === -1) return { type, scope: '', desc };
+    if (open === -1) return { type, scope: '', desc, breaking };
     if (!header.endsWith(')')) return null;
 
     const scope = header.slice(open + 1, -1);
     if (scope === '' || scope.includes(')')) return null;
-    return { type, scope, desc };
+    return { type, scope, desc, breaking };
 }
+
+/** Footer that opens a breaking-change note, in both spellings the spec allows. */
+const BREAKING_FOOTER = /^BREAKING[ -]CHANGE:\s*/;
 
 /**
  * Extract deduped conventional-commit entries from a list of commit messages.
@@ -111,18 +118,47 @@ export function parseConventional(messages) {
     for (const message of messages) {
         const firstLine = message.split('\n', 1)[0] ?? '';
         const pr = readTrailingPr(firstLine).pr;
+        // A `BREAKING CHANGE:` footer sits in the body BELOW the bullet it
+        // belongs to, so notes attach to the most recently parsed entry and
+        // keep collecting until a blank line or the next bullet ends them.
+        let noteTarget = null;
+        let collecting = false;
         for (const raw of message.split('\n')) {
             const line = raw.trim().replace(/^[*-]\s+/, '');
             const parsed = parseConventionalLine(line);
-            if (!parsed) continue;
-            const { type, scope } = parsed;
-            const desc = readTrailingPr(parsed.desc).text.trim();
-            const key = `${type}|${scope}|${desc}`;
-            if (seen.has(key)) {
+            if (parsed) {
+                collecting = false;
+                const { type, scope, breaking } = parsed;
+                const desc = readTrailingPr(parsed.desc).text.trim();
+                const key = `${type}|${scope}|${desc}`;
+                if (seen.has(key)) {
+                    noteTarget =
+                        out.find(entry => `${entry.type}|${entry.scope}|${entry.desc}` === key) ??
+                        null;
+                    continue;
+                }
+                seen.add(key);
+                // A `!` with no footer still breaks; the description is then
+                // the only note the author gave us.
+                const entry = { type, scope, desc, pr, breaking, note: breaking ? desc : '' };
+                out.push(entry);
+                noteTarget = entry;
                 continue;
             }
-            seen.add(key);
-            out.push({ type, scope, desc, pr });
+            if (BREAKING_FOOTER.test(line)) {
+                collecting = true;
+                if (noteTarget) {
+                    noteTarget.breaking = true;
+                    noteTarget.note = line.replace(BREAKING_FOOTER, '').trim();
+                }
+                continue;
+            }
+            if (!collecting) continue;
+            if (line === '') {
+                collecting = false;
+                continue;
+            }
+            if (noteTarget) noteTarget.note = `${noteTarget.note} ${line}`.trim();
         }
     }
     return out;
@@ -152,6 +188,20 @@ export function buildSection(header, entries, sectionMap, repoUrl) {
         bySection.get(section).push(e);
     }
     let md = `${header}\n`;
+    // Breaking changes lead, the way conventional-changelog renders them: a
+    // reader deciding whether to upgrade must not have to scan a 30-line
+    // feature list to find out what broke.
+    const breaking = entries.filter(entry => entry.breaking && sectionMap.has(entry.type));
+    if (breaking.length > 0) {
+        md += '\n\n### ⚠ BREAKING CHANGES\n\n';
+        md += breaking
+            .map(entry => {
+                const scope = entry.scope ? `**${entry.scope}:** ` : '';
+                const link = entry.pr ? ` ([#${entry.pr}](${repoUrl}/issues/${entry.pr}))` : '';
+                return `* ${scope}${entry.note || entry.desc}${link}`;
+            })
+            .join('\n');
+    }
     for (const section of order) {
         const list = bySection.get(section);
         if (!list?.length) {

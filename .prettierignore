@@ -1,0 +1,13 @@
+# Generated files — the tool that writes them owns their formatting.
+#
+# CHANGELOG.md is written by release-please and by
+# scripts/enrich-release-changelog.mjs, both of which emit `*` list markers.
+# Prettier normalizes those to `-`, so without this entry the file churns:
+# CI regenerates with `*`, the next local commit that stages the file flips
+# every line back to `-`, and the real change hides inside a few hundred
+# marker-only diffs. .markdownlintignore already excludes it for the same
+# reason; this is the matching half.
+CHANGELOG.md
+
+# Machine-written, and huge.
+pnpm-lock.yaml
