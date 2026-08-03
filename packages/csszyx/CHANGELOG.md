@@ -164,6 +164,13 @@
 
 ## [0.11.0](https://github.com/nguyennhutien/csszyx/compare/v0.10.12...v0.11.0) (2026-07-05)
 
+### ⚠ BREAKING CHANGES
+
+* sz array later-wins, szs slots on szsc, Tailwind 4.3.2 ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+* **compiler,core,runtime:** components must read slot styles from the new szsc prop (type both faces with SzsProps<Slots>) instead of narrowing szs values through szsClass, which no longer exists — change `szsClass(szs?.title)` to `szsc?.title`. Consumer call sites are unaffected: they keep writing `szs={{ ... }}`. ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+* **compiler,core,runtime:** array elements that touch the same property no longer keep both classes — the later element wins, at build time for static arrays and via szcn group merge at runtime otherwise. Code that relied on stylesheet order to resolve the old keep-both output now gets the later element deterministically. The transform cache schema version is bumped, so existing caches rebuild once. ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+* **compiler,core,runtime,unplugin:** compiled sz arrays merge through unmemoized _szcn ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+
 ### Features
 
 * sz array later-wins, szs slots on szsc, Tailwind 4.3.2 ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
@@ -357,6 +364,10 @@
 * **runtime:** partition an sz object with splitBoxSz ([#83](https://github.com/nguyennhutien/csszyx/issues/83))
 
 ## [0.10.0](https://github.com/nguyennhutien/csszyx/compare/v0.9.10...v0.10.0) (2026-06-21)
+
+### ⚠ BREAKING CHANGES
+
+* `fontWeight`→`weight`, `fontSize`→`text`, boolean value-sugar (`flex:true`/`absolute:true`/…)→value-keyed form, `_szIf`/`_szSwitch` removed (use plain JS), and the `sz` prop type is now closed (unknown keys are tsc errors). ([#66](https://github.com/nguyennhutien/csszyx/issues/66))
 
 ### Features
 
