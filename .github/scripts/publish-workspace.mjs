@@ -99,6 +99,23 @@ export function isRetryablePublishFailure(output) {
 }
 
 /**
+ * Whether a publish authenticated through OIDC rather than the long-lived token.
+ *
+ * pnpm attempts trusted publishing first and falls back to `NODE_AUTH_TOKEN`
+ * when npm has no trusted publisher for the package, printing a warning as it
+ * does. The fallback is silent in every other respect: the publish succeeds
+ * either way, so a repo mid-migration cannot tell from the outcome whether OIDC
+ * is actually carrying the release. Absence of a warning is exactly the kind of
+ * signal that rots unnoticed, so the caller asserts on this instead.
+ *
+ * @param {string} output - Combined publish stdout and stderr.
+ * @returns {boolean} True when no OIDC fallback warning was printed.
+ */
+export function usedOidcAuth(output) {
+    return !/Skipped OIDC|ERR_PNPM_AUTH_TOKEN_EXCHANGE/i.test(output);
+}
+
+/**
  * Publish all public packages while safely resuming a partial release.
  *
  * @param {Array<WorkspacePackage>} packages - Dependency-ordered packages.
@@ -114,9 +131,11 @@ export async function publishPackageSet(packages, options) {
         error = console.error,
         publishAttempts = DEFAULT_PUBLISH_ATTEMPTS,
         visibilityDelaysMs = VISIBILITY_DELAYS_MS,
+        requireOidc = false,
     } = options;
     const published = [];
     const skipped = [];
+    const tokenFallbacks = [];
 
     for (const pkg of packages) {
         const spec = `${pkg.name}@${pkg.version}`;
@@ -130,6 +149,7 @@ export async function publishPackageSet(packages, options) {
         for (let attempt = 1; attempt <= publishAttempts; attempt++) {
             log(`PUBLISH ${spec} (attempt ${attempt}/${publishAttempts})`);
             const result = await runPublish(pkg);
+            const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
             const visible = await waitForPublished(
                 pkg,
                 isPublished,
@@ -138,13 +158,16 @@ export async function publishPackageSet(packages, options) {
             );
 
             if (visible) {
-                log(`OK ${spec} is visible on npm`);
+                const viaOidc = usedOidcAuth(output);
+                if (!viaOidc) {
+                    tokenFallbacks.push(spec);
+                }
+                log(`OK ${spec} is visible on npm (auth: ${viaOidc ? 'oidc' : 'token'})`);
                 published.push(spec);
                 completed = true;
                 break;
             }
 
-            const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
             if (result.code !== 0 && !isRetryablePublishFailure(output)) {
                 throw new Error(
                     `Permanent publish failure for ${spec}:\n${output.trim()}`,
@@ -178,6 +201,24 @@ export async function publishPackageSet(packages, options) {
         throw new Error(
             `Final npm audit found missing packages:\n- ${missing.join('\n- ')}`,
         );
+    }
+
+    // Report the auth path every release, so the token-to-OIDC migration has a
+    // positive signal rather than the absence of a warning. Once every package
+    // has a trusted publisher on npm, set requireOidc to turn a silent fallback
+    // into a failed release — the gate to flip before NODE_AUTH_TOKEN is
+    // removed, and before the ~Jan 2027 deadline removes it for us.
+    if (tokenFallbacks.length > 0) {
+        const summary =
+            `${tokenFallbacks.length}/${published.length} package(s) published through ` +
+            `NODE_AUTH_TOKEN because npm had no trusted publisher for them:\n- ` +
+            tokenFallbacks.join('\n- ');
+        if (requireOidc) {
+            throw new Error(`OIDC required but not used.\n${summary}`);
+        }
+        error(`[auth] ${summary}`);
+    } else if (published.length > 0) {
+        log(`[auth] all ${published.length} package(s) published through OIDC`);
     }
 
     return { published, skipped };
@@ -318,6 +359,9 @@ async function main() {
     const result = await publishPackageSet(packages, {
         isPublished: (pkg) => registryHasVersion(pkg, registry),
         runPublish: runPnpmPublish,
+        // Opt-in until every package has a trusted publisher configured on
+        // npm; flipping it is the last step of the token-to-OIDC migration.
+        requireOidc: process.env.CSSZYX_REQUIRE_OIDC === '1',
     });
     console.log(
         `npm publish complete: ${result.published.length} published, ${result.skipped.length} already present.`,
