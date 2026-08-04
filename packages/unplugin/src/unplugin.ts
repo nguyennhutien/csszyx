@@ -7,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 import {
     ASTBudgetExceededError,
     type CssVariableMangleValue,
-    describeSzFallback,
     ensureRustTransformAvailable,
     isRustTransformAvailable,
     type SourceTransformResult,
@@ -2425,12 +2424,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // (configResolved), so dev always uses readable class names that match the
     // dev CSS. `let` because the command is only known at configResolved.
     let manglingEnabled = options.production?.mangle === true;
-    // Cross-module szv registry: built once during prescan, resolved per file.
-    // PRODUCTION ONLY (v1): a dev server would need registry-dependency
-    // invalidation (module A's config edit must re-transform module B), a
-    // whole failure class this cut removes — dev keeps today's exact behavior.
-    // Forced off for `command === 'serve'` below, like mangling.
-    let crossModuleRegistryEnabled = process.env.NODE_ENV !== 'development';
+    // Cross-module szv registry: filled by the prescan, refreshed per edit by
+    // `refreshSzvRegistryEntry`, resolved per file. Watch lanes used to switch
+    // this off because a one-shot prescan left an edited factory serving its
+    // startup table; refreshing the entry removes that staleness at the source,
+    // so the precompile now runs in a dev server too.
+    const crossModuleRegistryEnabled = true;
     /** absPath (separator-normalized) → exported factory configs. */
     const szvCrossModuleRegistry: SzvCrossModuleRegistry = new Map();
     // Class names the mangler must never produce as a token, so a short alias
@@ -3483,6 +3482,52 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Refresh one file's registry entry after a watch-mode edit.
+     *
+     * The prescan fills the registry once, so without this an edited factory
+     * keeps serving importers the table it had at startup. That is why the
+     * cross-module precompile used to be switched off entirely outside a
+     * one-shot production build.
+     *
+     * Invalidating the importers is the bundler's job and it already does it:
+     * the rewrite replaces the factory CALL but leaves the `import` statement
+     * standing, so the module graph keeps the edge and every importer
+     * re-transforms on its own. The transform cache keys on the resolved
+     * statics, so a changed table cannot be served from cache either. Refreshing
+     * the entry before those re-transforms run is the whole fix.
+     *
+     * @param filePath - Absolute path of the changed or deleted file.
+     * @param content - New source text, or null when the file was deleted.
+     */
+    function refreshSzvRegistryEntry(filePath: string, content: string | null): void {
+        if (!shouldProcessSource(filePath)) return;
+        if (content === null) {
+            szvCrossModuleRegistry.delete(normalizePathSeparators(filePath));
+            return;
+        }
+        recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content);
+    }
+
+    /**
+     * Read a changed file and refresh its registry entry.
+     *
+     * @param filePath - Absolute path of the changed file.
+     */
+    function refreshSzvRegistryEntryFromDisk(filePath: string): void {
+        if (!shouldProcessSource(filePath)) return;
+        let content: string;
+        try {
+            content = fs.readFileSync(filePath, 'utf-8');
+        } catch {
+            // Read failures are the delete race; drop the entry rather than
+            // keep one nothing can refresh.
+            refreshSzvRegistryEntry(filePath, null);
+            return;
+        }
+        refreshSzvRegistryEntry(filePath, content);
+    }
+
+    /**
      * Pre-scans source files to discover class names before Tailwind CSS runs.
      * Tailwind v4 reads source files from disk and can't detect classes generated
      * by the csszyx transform (e.g. `sz={{ hover: { bg: 'gray-700' } }}` → `hover:bg-gray-700`).
@@ -4002,62 +4047,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Names of imported szv factories the registry knows about for one file.
-     *
-     * Empty whenever the cross-module rewrite is active, because then a
-     * fallback naming one of these is a real authoring problem rather than a
-     * consequence of the feature being off.
-     *
-     * @param id Bundler module identifier.
-     * @param source Module source.
-     * @returns Factory names whose fallback is only a fallback in this mode.
-     */
-    function deferredCrossModuleFactories(id: string, source: string): readonly string[] {
-        if (crossModuleRegistryEnabled) return [];
-        const statics = resolveCrossModuleStaticsFor(szvCrossModuleRegistry, id, source);
-        return statics === undefined ? [] : Object.values(statics).flatMap(Object.keys);
-    }
-
-    /**
-     * Whether a diagnostic exists only because the cross-module rewrite is off.
-     *
-     * A dev server and a watch build both switch the registry off, so an
-     * imported factory cannot be resolved and every call site reports "result
-     * is unknown at build time" — advice the author has already followed, for
-     * code that compiles perfectly in a production build. A field report
-     * triaged fourteen of these before finding the seven that were real.
-     *
-     * The expected reason is rendered through the matrix that owns the
-     * wording, so this cannot drift into matching the wrong diagnostic.
-     *
-     * @param message Rendered diagnostic.
-     * @param factories Factory names from {@link deferredCrossModuleFactories}.
-     * @returns True when the diagnostic should not be shown.
-     */
-    function isDeferredCrossModuleFallback(message: string, factories: readonly string[]): boolean {
-        return factories.some(name => message.includes(describeSzFallback('call', name).reason));
-    }
-
-    /**
      * Surface compiler diagnostics through their production-safe channels.
      *
      * @param result Compiler transform result.
      * @param id Bundler module identifier.
      * @param warn Bundler warning callback.
-     * @param source Module source, for cross-module fallback classification.
      */
     function reportTransformDiagnostics(
         result: SourceTransformResult,
         id: string,
         warn: (message: string) => void,
-        source: string,
     ): void {
-        const deferred =
-            result.diagnostics.length === 0 ? [] : deferredCrossModuleFactories(id, source);
         for (const message of result.diagnostics) {
-            if (isDeferredCrossModuleFallback(message, deferred)) {
-                continue;
-            }
             if (message.includes('unresolvable sz spread')) {
                 state.spreadWarnings.add(`${id}\n  ${message}`);
                 continue;
@@ -4084,8 +4085,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (
                 message.includes('unresolvable sz spread') ||
                 message.includes('AST budget exceeded') ||
-                szFallbackConsequenceOf(message) === 'missing-css' ||
-                isDeferredCrossModuleFallback(message, deferred)
+                szFallbackConsequenceOf(message) === 'missing-css'
             ) {
                 continue;
             }
@@ -4146,7 +4146,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         traceBenchTiming('transform-hook', id, performance.now() - transformStarted);
         recordFileVarMangleEntries(state, id, cssVariableEntries(result));
         recordFileCSSVariableMetrics(state, id, result.code);
-        reportTransformDiagnostics(result, id, warn, code);
+        reportTransformDiagnostics(result, id, warn);
         for (const [token, data] of result.recoveryTokens) state.recoveryTokens.set(token, data);
         return compilerPreTransformOutput(result);
     }
@@ -4615,7 +4615,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     recordGlobalVarSourceFile(state, id, null);
                     recordFileVarMangleEntries(state, id, []);
                     recordFileCSSVariableMetrics(state, id, null);
+                    refreshSzvRegistryEntry(id, null);
+                    return;
                 }
+                // The rollup-family lanes: `vite build --watch` and `rollup -w`,
+                // where `handleHotUpdate` never fires. Runs before the rebuild,
+                // so importers re-transform against the refreshed table rather
+                // than the one from startup.
+                refreshSzvRegistryEntryFromDisk(id);
             },
 
             /**
@@ -4634,13 +4641,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (compiler.options?.mode === 'development') {
                     manglingEnabled = false;
                 }
-                // `webpack --watch` (any mode) rebuilds against the ONE prescan
-                // registry — the beforeCompile guard below even skips the
-                // prescan on rebuilds — so an edited factory module keeps its
-                // stale table. Same v1 cut as the vite/rollup watch guards.
-                if (compiler.watchMode === true || compiler.options?.watch === true) {
-                    crossModuleRegistryEnabled = false;
-                }
                 // Delivery is decided by the vite/rollup hooks (module
                 // injection + transformIndexHtml); this lane ships the map the
                 // way it always did, so a narrowed value would silently not
@@ -4658,6 +4658,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     evictTransformCacheOnce();
                     if (state.classes.size === 0) {
                         prescanAndWriteClasses();
+                    }
+                    // A rebuild skips the prescan above, so an edited factory
+                    // would keep serving importers its startup table. webpack
+                    // hands the watcher's changed set straight to this hook;
+                    // refresh those entries before any module re-transforms.
+                    for (const changed of compiler.modifiedFiles ?? []) {
+                        refreshSzvRegistryEntryFromDisk(changed);
+                    }
+                    for (const removed of compiler.removedFiles ?? []) {
+                        refreshSzvRegistryEntry(removed, null);
                     }
                     // Generate theme type augmentation from @theme CSS blocks
                     state.parsedTheme =
@@ -4687,10 +4697,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // watch mode — `rollup -w` here, and vite build --watch
                     // through the same rollup context.
                     activeFramework = 'rollup';
-                    const meta = (this as unknown as { meta?: { watchMode?: boolean } }).meta;
-                    if (meta?.watchMode) {
-                        crossModuleRegistryEnabled = false;
-                    }
                 },
             },
 
@@ -4709,15 +4715,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // not match the un-mangled dev CSS. See `manglingEnabled` above.
                     if (config.command === 'serve') {
                         manglingEnabled = false;
-                        crossModuleRegistryEnabled = false;
-                    }
-                    // `vite build --watch` is a production-mode build with the
-                    // dev server's staleness problem: the registry is recorded
-                    // once at prescan and never re-recorded, so a factory edit
-                    // would compile importers against the old table on every
-                    // rebuild. Same v1 cut as `serve`.
-                    if (config.build?.watch) {
-                        crossModuleRegistryEnabled = false;
                     }
                     evictTransformCacheOnce();
                     // Pre-scan source files so Tailwind can discover classes
@@ -4782,8 +4779,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     try {
                         fileContent = fs.readFileSync(ctx.file, 'utf-8');
                     } catch {
+                        refreshSzvRegistryEntry(ctx.file, null);
                         return;
                     }
+
+                    // Before the importers re-transform: an edited factory must
+                    // not serve them the table it had at server start. Reuses
+                    // the read above, and runs ahead of the `sz` marker gate
+                    // below because a module of pure `szv` factories carries
+                    // none of those markers.
+                    //
+                    // Vite also calls `watchChange` in dev, so in THIS version
+                    // either path alone would do — verified by disabling each
+                    // in turn. They are kept because their lane coverage
+                    // differs, not for redundancy: `handleHotUpdate` never
+                    // fires for `vite build --watch` or `rollup -w`, and a
+                    // bundler version that stops calling one must not silently
+                    // bring the staleness back.
+                    refreshSzvRegistryEntry(ctx.file, fileContent);
 
                     if (
                         !fileContent.includes('sz=') &&

@@ -354,15 +354,37 @@ export const App = ({ sel }) => [szr(cardSz(sel)), szr(makeItUp(sel))];
 import { szr } from '@csszyx/runtime';
 export const Solo = ({ sel }) => szr(onItsOwn(sel));
 `,
+    // A dev server resolves imports for real, and the workspace runtime is not
+    // reachable from a temp dir. Only the transform output is under test, so a
+    // stub with the right export names is enough.
+    'src/runtime-stub.ts': `
+export const szr = (v) => v;
+export const szv = (c) => () => c;
+export const __szvPick = (t, s) => t;
+export const __szvPick1 = (t, d, v) => t;
+`,
 };
 
+/** One dev-server transform: the emitted code plus the warnings it routed. */
+interface DevRun {
+    code: string;
+    warnings: string[];
+}
+
 /**
- * Run one dev-server transform and collect the warnings it routed.
+ * Run dev-server transforms against a live server, optionally editing a file
+ * between them the way a developer would.
  *
  * @param modulePath Module to transform, root-relative.
- * @returns Warnings the plugin routed for that module.
+ * @param edit Optional file rewrite applied before a second transform.
+ * @param edit.file Root-relative path of the file to rewrite.
+ * @param edit.source Its new contents.
+ * @returns One run per transform, in order.
  */
-async function devServerWarnings(modulePath: string): Promise<string[]> {
+async function devServerRuns(
+    modulePath: string,
+    edit?: { file: string; source: string },
+): Promise<DevRun[]> {
     const root = mkdtempSync(join(realpathSync(tmpdir()), 'csszyx-szv-dev-'));
     tempDirs.push(root);
     mkdirSync(join(root, 'src'), { recursive: true });
@@ -370,7 +392,7 @@ async function devServerWarnings(modulePath: string): Promise<string[]> {
         writeFileSync(join(root, file), source, 'utf8');
     }
 
-    const warnings: string[] = [];
+    let warnings: string[] = [];
     const originalWarn = console.warn;
     console.warn = (...args: unknown[]) => {
         warnings.push(args.map(String).join(' '));
@@ -380,31 +402,80 @@ async function devServerWarnings(modulePath: string): Promise<string[]> {
         logLevel: 'silent',
         plugins: [vitePlugin({ build: { parser: 'rust', cache: false } })],
         server: { middlewareMode: true },
+        resolve: {
+            alias: {
+                '@csszyx/runtime/core': join(root, 'src/runtime-stub.ts'),
+                '@csszyx/runtime': join(root, 'src/runtime-stub.ts'),
+            },
+        },
     });
-    try {
+    const runs: DevRun[] = [];
+    /**
+     * Transform the module under test and capture this run's output.
+     */
+    const runOnce = async (): Promise<void> => {
+        warnings = [];
         // The transform is what emits the diagnostics; the fixture's runtime
         // import does not resolve inside a temp dir and that failure comes
         // after, so it is not what this asserts.
-        await server.transformRequest(modulePath).catch(() => null);
+        const result = await server.transformRequest(modulePath).catch(() => null);
+        runs.push({ code: result?.code ?? '', warnings });
+    };
+    try {
+        await runOnce();
+        if (edit) {
+            const absolute = join(root, edit.file);
+            writeFileSync(absolute, edit.source, 'utf8');
+            // What a file watcher would do: tell the server, then ask for the
+            // importer again. The rewrite leaves the `import` statement
+            // standing, so vite's own graph invalidates the importer.
+            await server.watcher.emit('change', absolute);
+            const module = server.moduleGraph.getModuleById(join(root, modulePath.slice(1)));
+            if (module) server.moduleGraph.invalidateModule(module);
+            await runOnce();
+        }
     } finally {
         await server.close();
         console.warn = originalWarn;
     }
-    return warnings;
+    return runs;
 }
 
-describe('dev server diagnostics', () => {
-    it('drops the fallback that only exists because the registry is off', async () => {
-        const warnings = (await devServerWarnings('/src/App.tsx')).join('\n');
-        // The imported factory is in qualifying shape; production precompiles
-        // it, so saying otherwise sends the author to rewrite working code.
-        expect(warnings).not.toContain('cardSz()');
+describe('dev server', () => {
+    it('precompiles an imported factory, so nothing is reported for it', async () => {
+        const [run] = await devServerRuns('/src/App.tsx');
+        // The registry is live in a dev server now, so this is not merely
+        // unreported — it is compiled away.
+        expect(run.code).toContain('__szvT_cardSz');
+        expect(run.code).not.toContain('cardSz(sel)');
+        expect(run.warnings.join('\n')).not.toContain('cardSz()');
         // A genuinely unresolvable call still reports.
-        expect(warnings).toContain('makeItUp()');
+        expect(run.warnings.join('\n')).toContain('makeItUp()');
     }, 120_000);
 
     it('keeps reporting a file with nothing to resolve against the registry', async () => {
-        const warnings = (await devServerWarnings('/src/Solo.tsx')).join('\n');
-        expect(warnings).toContain('onItsOwn()');
+        const [run] = await devServerRuns('/src/Solo.tsx');
+        expect(run.warnings.join('\n')).toContain('onItsOwn()');
+    }, 120_000);
+
+    it('serves the edited factory table, not the one from server start', async () => {
+        // The staleness this feature was switched off for: the prescan fills
+        // the registry once, so without a per-edit refresh the importer keeps
+        // compiling against the table the factory had at startup.
+        const [before, after] = await devServerRuns('/src/App.tsx', {
+            file: 'src/styles.ts',
+            // Same module, one leaf value changed.
+            source: `
+import { szv } from '@csszyx/runtime';
+export const cardSz = szv({
+    base: { rounded: 'lg' },
+    variants: { pad: { sm: { p: 5 }, lg: { p: 8 } } },
+});
+export const rowSz = szv({ variants: { gap: { tight: { gap: 1 } } } });
+`,
+        });
+        expect(before.code).toContain('"p-2"');
+        expect(after.code).toContain('"p-5"');
+        expect(after.code).not.toContain('"p-2"');
     }, 120_000);
 });

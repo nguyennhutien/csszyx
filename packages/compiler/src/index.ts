@@ -57,7 +57,6 @@ export { parseStaticObjectLiteral } from './static-object-parser.js';
 // Export the fallback-consequence classifier so the bundler routes
 // diagnostics through the module that renders their labels.
 export {
-    describeSzFallback,
     type SzFallbackConsequence,
     szFallbackConsequenceOf,
 } from './sz-fallback-matrix.js';
