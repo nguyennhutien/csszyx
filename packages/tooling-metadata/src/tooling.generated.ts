@@ -452,6 +452,19 @@ export const KNOWN_VARIANTS = [
     "visited",
     "xl"
 ] as const;
+/** Variants that take a nested KEY rather than a value: `group: { hover: … }`,
+ * `data: { active: … }`. They live outside KNOWN_VARIANTS because the compiler
+ * resolves them by descending, so a consumer that validates top-level keys
+ * against KNOWN_VARIANTS alone reports every one of them as an unknown prop. */
+export const SPECIAL_VARIANTS = [
+    "aria",
+    "data",
+    "group",
+    "has",
+    "not",
+    "peer",
+    "supports"
+] as const;
 export const SUGGESTION_MAP = {
     "backgroundColor": "bg",
     "backgroundImage": "bgImg",

@@ -9,6 +9,7 @@ import {
     MIGRATION_NOTES,
     NEGATIVE_ALLOWED,
     PROPERTY_MAP,
+    SPECIAL_VARIANTS,
     SUGGESTION_MAP,
 } from '../../compiler/src/transform-core.ts';
 
@@ -59,6 +60,11 @@ export const METADATA_SCHEMA_VERSION = 1 as const;
 export const PROPERTY_MAP = ${serialize(PROPERTY_MAP)} as const;
 export const BOOLEAN_SHORTHANDS = ${serialize([...BOOLEAN_SHORTHANDS].sort())} as const;
 export const KNOWN_VARIANTS = ${serialize([...KNOWN_VARIANTS].sort())} as const;
+/** Variants that take a nested KEY rather than a value: \`group: { hover: … }\`,
+ * \`data: { active: … }\`. They live outside KNOWN_VARIANTS because the compiler
+ * resolves them by descending, so a consumer that validates top-level keys
+ * against KNOWN_VARIANTS alone reports every one of them as an unknown prop. */
+export const SPECIAL_VARIANTS = ${serialize([...SPECIAL_VARIANTS].sort())} as const;
 export const SUGGESTION_MAP = ${serialize(SUGGESTION_MAP)} as const;
 /** Removed keys whose replacement is a SHAPE, not another key name — rendered
  * as "was removed: <note>", never through the did-you-mean template. */
