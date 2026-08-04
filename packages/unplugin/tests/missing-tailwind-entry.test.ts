@@ -29,21 +29,23 @@ describe('resolveQuietMode', () => {
     });
 });
 
-describe('the gates keep accepting the authored boolean', () => {
-    // Narrowing these to the resolved form would break the published types,
-    // and a plain JavaScript caller passing `true` would silently fall through
-    // to the `off` behaviour — the exact failure class this release removes.
+describe('the gates survive an untyped boolean caller', () => {
+    // The types now take the resolved mode, which is the honest signature. But
+    // these are exported from the package entry, and a JavaScript caller has no
+    // compiler to stop it passing `true` — which must not mean `off`, or quiet
+    // would be set with warnings still printing.
     const missingCss = 'szv catalog at 1:1: factory config cannot be resolved at build time';
+    const untyped = <T>(value: unknown): T => value as T;
 
     it('treats true exactly as all', () => {
-        expect(shouldEmitWarning(true, false, false)).toBe(false);
-        expect(shouldEmitMissingCssFallback(true, missingCss)).toBe(false);
+        expect(shouldEmitWarning(untyped('true' && true), false, false)).toBe(false);
+        expect(shouldEmitMissingCssFallback(untyped(true), missingCss)).toBe(false);
     });
 
     it('treats false and undefined exactly as off', () => {
-        expect(shouldEmitWarning(false, false, false)).toBe(true);
-        expect(shouldEmitWarning(undefined, false, false)).toBe(true);
-        expect(shouldEmitMissingCssFallback(false, missingCss)).toBe(true);
+        expect(shouldEmitWarning(untyped(false), false, false)).toBe(true);
+        expect(shouldEmitWarning(untyped(undefined), false, false)).toBe(true);
+        expect(shouldEmitMissingCssFallback(untyped(false), missingCss)).toBe(true);
     });
 });
 
