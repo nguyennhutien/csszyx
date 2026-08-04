@@ -254,6 +254,52 @@ test('keys still complete when the object spans several lines', () => {
         "const A = () => (\n    <div\n        sz={{\n            p: 4,\n            /*|*/\n        }}\n    />\n);",
     );
     assert.ok(entries.map(entry => entry.name).includes('bg'));
+    // Nothing to repair, so the entry inserts its label and nothing else.
+    assert.strictEqual(entries.find(entry => entry.name === 'bg')?.insertText, undefined);
+});
+
+// A key slot whose previous property has no comma yet. Invalid JS, and the
+// state anyone typing a multi-line object passes through — the dropdown used to
+// stay shut until the author remembered the comma unaided.
+test('a key slot with no preceding comma completes and supplies the comma', () => {
+    const entries = entriesAtMarker(
+        "const A = () => (\n    <div\n        sz={{\n            p: 4\n            /*|*/\n        }}\n    />\n);",
+    );
+    const bg = entries.find(entry => entry.name === 'bg');
+    // The author's own indentation, verbatim, after the comma the object needed.
+    assert.strictEqual(bg?.insertText, ',\n            bg');
+    // The replacement covers exactly the gap after the previous value, so
+    // accepting the entry rewrites it rather than duplicating it.
+    assert.strictEqual(bg?.replacementSpan.length, '\n            '.length);
+});
+
+test('the same repair works one line, mid-word, and inside an object value', () => {
+    // Single line: the missing comma is not a multi-line phenomenon.
+    const single = entriesAtMarker('const A = () => <div sz={{ p: 4 /*|*/ }} />;');
+    assert.strictEqual(single.find(entry => entry.name === 'bg')?.insertText, ', bg');
+    // A typed prefix is replaced along with the gap, not appended to it.
+    const typed = entriesAtMarker('const A = () => <div sz={{ p: 4 b/*|*/ }} />;');
+    assert.strictEqual(typed.find(entry => entry.name === 'bg')?.insertText, ', bg');
+    // Structured object values take the same repair.
+    const form = entriesAtMarker(
+        "const A = () => <div sz={{ bg: { color: 'red-500' /*|*/ } }} />;",
+    );
+    assert.strictEqual(form.find(entry => entry.name === 'op')?.insertText, ', op');
+});
+
+// A cursor that is NOT after a finished value must stay unanswered: offering
+// keys mid-expression would insert a comma into the middle of one.
+test('an unfinished value does not turn into a key slot', () => {
+    for (const source of [
+        'const A = () => <div sz={{ p: 4 + /*|*/ }} />;',
+        'const A = () => <div sz={{ p: /*|*/ }} />;',
+    ]) {
+        const entries = entriesAtMarker(source);
+        assert.ok(
+            !entries.some(entry => entry.insertText?.startsWith(',')),
+            `no comma repair for: ${source}`,
+        );
+    }
 });
 
 // Regression: a mid-word key prefix must offer keys and replace the typed text.

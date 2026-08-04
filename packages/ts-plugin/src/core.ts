@@ -70,6 +70,7 @@ export function computeSzEntries(
             context.form,
             context.replacementSpan,
             new Set(context.siblings),
+            context.prefix,
         );
     }
     return buildSzKeyEntries(
@@ -78,5 +79,6 @@ export function computeSzEntries(
         context.replacementSpan,
         shouldStop,
         new Set(context.siblings),
+        context.prefix,
     );
 }
