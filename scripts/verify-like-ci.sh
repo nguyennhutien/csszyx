@@ -87,6 +87,13 @@ echo "[verify-like-ci] Rust gates (rustfmt, clippy x3 feature sets, native check
     cargo test --features native-engine
 )
 
+# The Coverage workflow runs this and verify-like-ci did not, so a PR could be
+# green locally and red on a gate the author never saw. It re-runs the same
+# tests under instrumentation — about 13s on a warm target dir, which buys back
+# the round trip through CI that a coverage miss otherwise costs.
+echo "[verify-like-ci] Rust coverage gate (mirrors the Coverage workflow)..."
+pnpm cov:rust
+
 echo "[verify-like-ci] Running unit tests through turbo (catches missing build deps)..."
 pnpm test:unit
 
