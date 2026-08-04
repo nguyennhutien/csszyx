@@ -102,17 +102,52 @@ StrictMode's double-mount cycle — cleanup only fires if the component is truly
 unmounting, not during the dev-mode teardown/remount.
 :::
 
-## Preloading the manifest
+## The manifest, and why it is off by default
 
-`@csszyx/dynamic` fetches `/csszyx-manifest.json` (written by the build plugin) to
-check which classes are already in the pre-built stylesheet. Without preloading,
-the manifest is lazy-fetched on the first `dynamic()` call.
+`@csszyx/dynamic` can fetch `/csszyx-manifest.json` to check which classes are
+already in the pre-built stylesheet and skip injecting duplicates. The build does
+**not** emit that file unless asked:
+
+```ts
+// vite.config.ts
+...csszyx({ build: { emitManifest: true } })
+```
+
+Leaving it off is safe. A missing manifest means `dynamic()` treats nothing as
+pre-built and generates its own rules, so the rendered styles are identical —
+what changes is bytes.
+
+And bytes are the reason for the default. The manifest lists the **whole** class
+census, while `dynamic()` only asks about the classes it actually renders.
+Measured on a 668-class census (`pnpm bench:dynamic-manifest`), the file costs
+about 2 kB gzipped no matter what, while injecting the classes a
+10%-runtime app renders costs about 500 B. It only comes out ahead once most of
+the app is styled at runtime.
+
+:::caution[If you enable it, preload it]
+`dynamic()` is synchronous and the fetch is not. An app that enables the manifest
+without awaiting `preloadManifest()` renders its first paint against a manifest
+that has not arrived, injects everything anyway, and pays for the file too —
+strictly worse than leaving it off.
 
 ```tsx
 import { preloadManifest } from '@csszyx/dynamic';
 
-// In your app entry — preload before first render for zero-latency inject
-await preloadManifest('/csszyx-manifest.json');
+// In your app entry — before the first render
+await preloadManifest();
+```
+
+:::
+
+Not sure which side your app is on? Measure it:
+
+```tsx
+import { dynamicReport } from '@csszyx/dynamic';
+
+// after the app has exercised the paths that matter
+console.log(dynamicReport().summary);
+// "Manifest cost 2078 B and spared only 340 B of injected CSS —
+//  set build.emitManifest to false."
 ```
 
 ## Delta injection — only missing CSS
@@ -120,9 +155,10 @@ await preloadManifest('/csszyx-manifest.json');
 On each `dynamic()` call:
 
 1. `transform(szProps)` → Tailwind class string (same logic as the build-time compiler)
-2. Each class is looked up in the manifest:
+2. Each class is looked up in the manifest, when one was loaded:
    - **In manifest** → use the resolved name (mangled in production builds)
-   - **Not in manifest** → generate CSS rule + inject into a `CSSStyleSheet` tier
+   - **Not in manifest, or no manifest** → generate CSS rule + inject into a
+     `CSSStyleSheet` tier
 3. Return the final class string
 
 This means a `<div className={sz({ p: 4 })} />` inside a form renderer widget that is
@@ -169,8 +205,10 @@ export default defineConfig({
 });
 ```
 
-The manifest file (`csszyx-manifest.json`) is output to the `public/` directory so
-it is served as a static asset.
+With `build: { emitManifest: true }`, the manifest file
+(`csszyx-manifest.json`) is written to the build output so it is served as a
+static asset. Without it — the default — nothing is emitted and `dynamic()`
+injects its own rules.
 
 ## Use with form renderers (RJSF, Formily, etc.)
 

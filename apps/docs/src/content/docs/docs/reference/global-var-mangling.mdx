@@ -70,8 +70,9 @@ reports.
 
 `emitMap` controls only the standalone `.csszyx/global-var-map.json` tooling
 asset. Leave it enabled when external tools need a dedicated original-to-alias
-map. Set `emitMap: false` to avoid that extra file; `csszyx-manifest.json`
-still includes `globalVarAliases`.
+map. Set `emitMap: false` to avoid that extra file. `csszyx-manifest.json` also
+carries `globalVarAliases`, but only when `build.emitManifest` is on — it is off
+by default, so this dedicated map is normally the only place they appear.
 
 ## When to Use
 
