@@ -20,6 +20,31 @@ describe('resolveQuietMode', () => {
         expect(resolveQuietMode(false)).toBe('off');
         expect(resolveQuietMode(undefined)).toBe('off');
     });
+
+    it('passes an already-resolved mode through unchanged', () => {
+        // The gates are exported from the package entry and accept either
+        // form, so normalization has to be idempotent.
+        expect(resolveQuietMode('all')).toBe('all');
+        expect(resolveQuietMode('off')).toBe('off');
+    });
+});
+
+describe('the gates keep accepting the authored boolean', () => {
+    // Narrowing these to the resolved form would break the published types,
+    // and a plain JavaScript caller passing `true` would silently fall through
+    // to the `off` behaviour — the exact failure class this release removes.
+    const missingCss = 'szv catalog at 1:1: factory config cannot be resolved at build time';
+
+    it('treats true exactly as all', () => {
+        expect(shouldEmitWarning(true, false, false)).toBe(false);
+        expect(shouldEmitMissingCssFallback(true, missingCss)).toBe(false);
+    });
+
+    it('treats false and undefined exactly as off', () => {
+        expect(shouldEmitWarning(false, false, false)).toBe(true);
+        expect(shouldEmitWarning(undefined, false, false)).toBe(true);
+        expect(shouldEmitMissingCssFallback(false, missingCss)).toBe(true);
+    });
 });
 
 describe('shouldEmitWarning', () => {

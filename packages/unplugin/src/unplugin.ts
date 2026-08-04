@@ -732,6 +732,18 @@ export function unscopedMonorepoMessage(): string {
 }
 
 /**
+ * The `quiet` option as authored, or already normalized.
+ *
+ * Every gate below accepts either. These helpers are exported from the package
+ * entry, so narrowing them to the normalized form alone would be a breaking
+ * change to the public types for a distinction callers do not care about —
+ * and a plain JavaScript caller still passing `true` would silently get the
+ * `off` behaviour, which is the exact failure class this release exists to
+ * remove.
+ */
+export type QuietInput = boolean | 'nudges' | QuietMode | undefined;
+
+/**
  * The `quiet` option, normalized.
  *
  * `'all'` is the blunt setting a plain `true` selects; `'nudges'` keeps every
@@ -740,13 +752,14 @@ export function unscopedMonorepoMessage(): string {
 export type QuietMode = 'off' | 'nudges' | 'all';
 
 /**
- * Normalize the authored `quiet` value.
+ * Normalize the authored `quiet` value. Idempotent, so a already-normalized
+ * mode passes through unchanged.
  *
- * @param quiet - Authored option value.
+ * @param quiet - Authored option value, or an already-resolved mode.
  * @returns The mode the gates read.
  */
-export function resolveQuietMode(quiet: boolean | 'nudges' | undefined): QuietMode {
-    if (quiet === true) return 'all';
+export function resolveQuietMode(quiet: QuietInput): QuietMode {
+    if (quiet === true || quiet === 'all') return 'all';
     if (quiet === 'nudges') return 'nudges';
     return 'off';
 }
@@ -761,20 +774,21 @@ export function resolveQuietMode(quiet: boolean | 'nudges' | undefined): QuietMo
  * everything. Pure so the gating policy is unit-tested without the
  * worker-based buildEnd wiring.
  *
- * @param quiet - Resolved quiet mode.
+ * @param quiet - The `quiet` option, authored or resolved.
  * @param devOnly - This warning is a usage nudge.
  * @param isProduction - Whether this is a production build.
  * @returns true when the warning should be printed.
  */
 export function shouldEmitWarning(
-    quiet: QuietMode,
+    quiet: QuietInput,
     devOnly: boolean,
     isProduction: boolean,
 ): boolean {
-    if (quiet === 'all') {
+    const mode = resolveQuietMode(quiet);
+    if (mode === 'all') {
         return false;
     }
-    if (devOnly && (isProduction || quiet === 'nudges')) {
+    if (devOnly && (isProduction || mode === 'nudges')) {
         return false;
     }
     return true;
@@ -788,24 +802,24 @@ export function shouldEmitWarning(
  * result, not a style opinion, and `'nudges'` exists so a calmer log does not
  * have to cost it.
  *
- * @param quiet - Resolved quiet mode.
+ * @param quiet - The `quiet` option, authored or resolved.
  * @param message - Compiler diagnostic to classify.
  * @returns True when the diagnostic is an unsilenced missing-CSS failure.
  */
-export function shouldEmitMissingCssFallback(quiet: QuietMode, message: string): boolean {
-    return quiet !== 'all' && szFallbackConsequenceOf(message) === 'missing-css';
+export function shouldEmitMissingCssFallback(quiet: QuietInput, message: string): boolean {
+    return resolveQuietMode(quiet) !== 'all' && szFallbackConsequenceOf(message) === 'missing-css';
 }
 
 /**
  * Emit one missing-CSS fallback through the caller's output channel.
  *
- * @param quiet - Resolved quiet mode.
+ * @param quiet - The `quiet` option, authored or resolved.
  * @param message - Compiler diagnostic to classify and emit.
  * @param id - Bundler module identifier included in the warning.
  * @param emit - Warning output channel.
  */
 export function emitMissingCssFallback(
-    quiet: QuietMode,
+    quiet: QuietInput,
     message: string,
     id: string,
     emit: (message: string) => void,
