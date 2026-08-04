@@ -679,19 +679,35 @@ unset"; same-file `const` references and `const` object spreads are followed.
 For styles from JSON / API / CMS / form renderer schemas:
 
 ```tsx
-import { dynamic, preloadManifest } from "@csszyx/dynamic";
+import { dynamic } from "@csszyx/dynamic";
 // or: import { dynamic } from 'csszyx/dynamic';
 
-// Optional: preload at app startup for zero-latency first inject
-await preloadManifest("/csszyx-manifest.json");
-
-// Apply runtime sz object — CSS injected only for missing classes
+// Apply runtime sz object — CSS is injected for classes not already built
 const cls = dynamic({
   p: 4,
   bg: "white",
   hover: { bg: "gray-50" },
   dark: { bg: "gray-900" },
 });
+```
+
+**The manifest is opt-in.** `csszyx-manifest.json` lets `dynamic()` skip injecting
+rules the built CSS already has, but it carries the WHOLE class census to answer
+questions about the few classes `dynamic()` renders — measured on a 668-class
+census it costs ~2 kB gz to spare a few hundred bytes of injection, and only wins
+once most of the app is styled at runtime. `build.emitManifest` defaults to
+`false`; a missing manifest is not an error, `dynamic()` just injects its own
+rules and the styles are identical.
+
+If you enable it, preload it — `dynamic()` is synchronous and the fetch is not,
+so an unawaited manifest arrives after the first paint has already injected
+everything and the build pays both costs:
+
+```tsx
+import { dynamicReport, preloadManifest } from "@csszyx/dynamic";
+
+await preloadManifest(); // before the first render
+console.log(dynamicReport().summary); // development: did it pay off here?
 ```
 
 **Build-time extraction (Layer-1 prescan):** When `dynamic()` receives a static literal or

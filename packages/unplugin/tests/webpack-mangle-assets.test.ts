@@ -67,7 +67,7 @@ async function runWebpack(root: string): Promise<void> {
             webpackPlugin({
                 // scanCss registers the CSS as a watched theme dependency,
                 // exercising the theme-deps compilation tap.
-                build: { cache: false, scanCss: ['src/style.css'] },
+                build: { emitManifest: true, cache: false, scanCss: ['src/style.css'] },
                 production: { mangle: true },
             }) as webpack.WebpackPluginInstance,
         ],

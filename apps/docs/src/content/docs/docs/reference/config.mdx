@@ -308,6 +308,7 @@ Controls the build pipeline.
 ```ts
 interface BuildConfig {
   buildId?: string; // Build identifier (auto-generated if omitted)
+  emitManifest?: boolean; // Emit csszyx-manifest.json for @csszyx/dynamic
   tailwindConfig?: string; // Path to Tailwind config file
   outputDir?: string; // Output directory
   cacheDir?: string; // Cache directory
@@ -321,6 +322,7 @@ interface BuildConfig {
 | Option           | Default                | Description                                                                                                                                                                                                                                                                                                                                                                |
 | ---------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `buildId`        | Auto                   | Unique build identifier                                                                                                                                                                                                                                                                                                                                                    |
+| `emitManifest`   | `false`                | Emit `csszyx-manifest.json`. Only `@csszyx/dynamic` reads it, to skip injecting rules the built CSS already has. See below before enabling. |
 | `tailwindConfig` | `'tailwind.config.js'` | Tailwind configuration path                                                                                                                                                                                                                                                                                                                                                |
 | `outputDir`      | `'.csszyx'`            | Plugin output directory                                                                                                                                                                                                                                                                                                                                                    |
 | `cacheDir`       | `'.csszyx/cache'`      | Incremental build cache                                                                                                                                                                                                                                                                                                                                                    |
@@ -481,6 +483,55 @@ merging works with zero config. All `@theme` option keywords (`inline`,
 only** — `.csszyx/theme.d.ts` type generation still requires an explicit
 `scanCss`, and setting one turns the auto-scan off in favor of exactly the
 files you listed.
+
+#### Dynamic manifest (`emitManifest`)
+
+Default `false`. `csszyx-manifest.json` lists every class the build emitted, and
+`@csszyx/dynamic` fetches it to answer one question per class: is this already in
+the built CSS? A yes means `dynamic()` reuses the existing rule instead of
+injecting one.
+
+The catch is the asymmetry. The file carries the **whole** census, while
+`dynamic()` only asks about the handful of classes it renders. Measured on a
+668-class census (`pnpm bench:dynamic-manifest`):
+
+| Share of the app rendered through `dynamic()` | Manifest | Injecting instead |
+| --- | --- | --- |
+| 1% | 2078 B gz | **162 B gz** |
+| 10% | 2078 B gz | **501 B gz** |
+| 50% | 2078 B gz | **1990 B gz** |
+| 75% | **2078 B gz** | 3030 B gz |
+| 100% | **2078 B gz** | 4109 B gz |
+
+It only comes out ahead once most of the app is styled at runtime. Numbers from
+one synthetic census — treat the shape as the lesson, not the constants.
+
+:::caution[Enabling it without preloading costs more than leaving it off]
+`dynamic()` is synchronous and the fetch is not. An app that never awaits
+`preloadManifest()` renders its first paint against a manifest that has not
+arrived, injects everything anyway, and then pays for the file too.
+
+```ts
+import { preloadManifest } from "@csszyx/dynamic";
+await preloadManifest(); // before the first render
+```
+
+:::
+
+Turning it off is safe in every case: a missing manifest means `dynamic()` treats
+nothing as pre-built and injects its own rules, so the rendered styles are
+identical. What changes is bytes and one-time work.
+
+To find out which side your app is on, measure it:
+
+```ts
+import { dynamicReport } from "@csszyx/dynamic";
+
+// after the app has exercised the paths that matter
+console.log(dynamicReport().summary);
+// "Manifest cost 2078 B and spared only 340 B of injected CSS —
+//  set build.emitManifest to false."
+```
 
 ### `hydration`
 

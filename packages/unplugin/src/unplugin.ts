@@ -5166,7 +5166,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             collectRollupGlobalVarCssAssets(bundle),
         );
         const shouldMangle = manglingEnabled && Object.keys(state.mangleMap).length > 0;
-        emitAsset('csszyx-manifest.json', JSON.stringify(createBundleManifest(shouldMangle)));
+        // Opt-in: only `@csszyx/dynamic` reads this, and only to skip injecting
+        // rules the built CSS already has. The file carries the whole class
+        // census to answer questions about the few classes `dynamic()` renders,
+        // so on a measured 668-class census it costs ~2 kB gz to spare a few
+        // hundred bytes of injection. A missing manifest is not a failure —
+        // `dynamic()` injects instead, and the styles are identical.
+        if (options.build?.emitManifest === true) {
+            emitAsset('csszyx-manifest.json', JSON.stringify(createBundleManifest(shouldMangle)));
+        }
         if (shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) {
             const globalVarMap = createGlobalVarMapAssetSource(
                 state.varMangleMap,

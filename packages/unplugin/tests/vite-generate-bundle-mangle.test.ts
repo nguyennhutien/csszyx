@@ -61,7 +61,7 @@ describe('vite generateBundle mangle pass', () => {
     it('rewrites CSS selectors and JS class strings for discovered classes', async () => {
         const h = await boot({
             production: { mangle: true },
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
         });
         await h.transform(
             'export const App = () => <div sz={{ m: 3 }} />;',
@@ -102,7 +102,7 @@ describe('vite generateBundle mangle pass', () => {
     it('swallows a CSS syntax error while mangling a malformed CSS asset', async () => {
         const h = await boot({
             production: { mangle: true },
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
         });
         await h.transform(
             'export const App = () => <div sz={{ m: 3 }} />;',
@@ -121,7 +121,7 @@ describe('vite generateBundle mangle pass', () => {
     it('replaces the checksum placeholder in JS chunks even when mangling is disabled', async () => {
         const h = await boot({
             production: { mangle: false },
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
         });
         await h.transform(
             'export const App = () => <div sz={{ m: 3 }} />;',
@@ -142,7 +142,7 @@ describe('vite generateBundle mangle pass', () => {
     it('replaces checksum, mangle-map and var-map placeholders in a plain chunk', async () => {
         const h = await boot({
             production: { mangle: false },
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
         });
         await h.transform(
             'export const App = () => <div sz={{ m: 3 }} />;',
@@ -166,7 +166,7 @@ describe('vite generateBundle mangle pass', () => {
     it('double-escapes the placeholder maps inside an eval-wrapped chunk', async () => {
         const h = await boot({
             production: { mangle: false },
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
         });
         await h.transform(
             'export const App = () => <div sz={{ m: 3 }} />;',
@@ -193,7 +193,7 @@ describe('vite generateBundle mangle pass', () => {
     it('keeps the map raw in a production chunk that merely CALLS eval', async () => {
         const h = await boot({
             production: { mangle: false },
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
         });
         await h.transform(
             'export const App = () => <div sz={{ m: 3 }} />;',

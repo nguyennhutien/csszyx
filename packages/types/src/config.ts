@@ -423,6 +423,33 @@ export interface BuildConfig {
     buildId?: string;
 
     /**
+     * Emit `csszyx-manifest.json` next to the build output.
+     *
+     * Only `@csszyx/dynamic` reads it, to answer "is this class already in the
+     * built CSS?" and skip injecting a duplicate rule. A build that emits it
+     * therefore pays for the WHOLE class census to answer questions about the
+     * handful of classes `dynamic()` renders — measured on a 668-class census,
+     * the file costs about 2 kB gzipped while a typical `dynamic()` surface
+     * saves a few hundred bytes of injection. It only comes out ahead once most
+     * of the app is rendered at runtime.
+     *
+     * Turning it off is safe: `dynamic()` treats a missing manifest as "nothing
+     * is pre-built" and injects rules itself, so styles are identical either
+     * way. What changes is bytes and one-time work.
+     *
+     * Turning it ON only pays if the app calls `preloadManifest()` and awaits it
+     * before its first render — `dynamic()` is synchronous and the fetch is not,
+     * so an unawaited manifest arrives after the first paint has already
+     * injected everything, and the build pays both costs.
+     *
+     * Run `dynamicReport()` from `@csszyx/dynamic` in development to measure
+     * which side your app is on.
+     *
+     * @default false
+     */
+    emitManifest?: boolean;
+
+    /**
      * Path to Tailwind config file.
      *
      * @default "tailwind.config.js"
@@ -695,6 +722,7 @@ export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
  * Default build configuration.
  */
 export const DEFAULT_BUILD_CONFIG: BuildConfig = {
+    emitManifest: false,
     tailwindConfig: 'tailwind.config.js',
     outputDir: '.csszyx',
     cacheDir: '.csszyx/cache',

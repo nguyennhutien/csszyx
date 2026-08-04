@@ -7,6 +7,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { build } from 'vite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { vitePlugin } from '../src/unplugin.js';
@@ -64,6 +65,55 @@ describe('compileSources resolution warning', () => {
         expect(message).toContain('did not resolve to a');
         expect(message).toContain('does-not-exist');
     });
+});
+
+describe('manifest emission', () => {
+    /**
+     * Build the fixture and list what landed in the output directory.
+     *
+     * @param emitManifest - The option under test, or undefined for the default.
+     * @returns Emitted asset file names.
+     */
+    const buildAssets = async (emitManifest?: boolean): Promise<string[]> => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-manifest-'));
+        tempDirs.push(root);
+        fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+        fs.writeFileSync(
+            path.join(root, 'index.html'),
+            '<!doctype html><html><body><script type="module" src="/src/main.ts"></script></body></html>',
+            'utf8',
+        );
+        fs.writeFileSync(
+            path.join(root, 'src/main.ts'),
+            "export const A = () => ({ cls: 'x' });\ndocument.body.textContent = String(A().cls);\n",
+            'utf8',
+        );
+        await build({
+            root,
+            logLevel: 'silent',
+            plugins: [
+                vitePlugin(
+                    emitManifest === undefined
+                        ? { build: { parser: 'oxc', cache: false } }
+                        : { build: { emitManifest, parser: 'oxc', cache: false } },
+                ),
+            ],
+            build: { minify: false },
+        });
+        return fs.readdirSync(path.join(root, 'dist'));
+    };
+
+    it('does not emit the manifest by default', async () => {
+        // Only `@csszyx/dynamic` reads it, and it carries the whole class census
+        // to answer questions about the few classes `dynamic()` renders — on a
+        // measured 668-class census that is ~2 kB gz against a few hundred bytes
+        // of injection spared. Off unless asked for.
+        expect(await buildAssets()).not.toContain('csszyx-manifest.json');
+    }, 120_000);
+
+    it('emits it when the build asks for it', async () => {
+        expect(await buildAssets(true)).toContain('csszyx-manifest.json');
+    }, 120_000);
 });
 
 describe('unknown option reporting', () => {
