@@ -222,6 +222,40 @@ test('a fresh quote at a value slot offers unquoted value text', () => {
     }
 });
 
+// The same slot, one key per line — the layout anyone writing more than two
+// props uses. Every fixture above happened to keep the quote at end of file or
+// with text after it on the same line, and both of those reach the value slot
+// by a different route than an unterminated quote at end of LINE does. A JS
+// string cannot cross a newline, so this shape is unreachable single-line and
+// the whole family went untested.
+test('a fresh quote offers values when the object spans several lines', () => {
+    for (const source of [
+        // Top level, and the reported spelling.
+        "const A = () => (\n    <div\n        sz={{\n            p: 4,\n            bg: '/*|*/\n        }}\n    />\n);",
+        // Nested variant.
+        "const A = () => (\n    <div\n        sz={{\n            hover: {\n                bg: '/*|*/\n            },\n        }}\n    />\n);",
+        // Object value form.
+        "const A = () => (\n    <div\n        sz={{\n            bg: {\n                color: '/*|*/\n            },\n        }}\n    />\n);",
+        // Slot map.
+        "const X = () => (\n    <Card\n        szs={{\n            header: {\n                color: '/*|*/\n            },\n        }}\n    />\n);",
+        // Double quotes, and a typed prefix after the quote.
+        'const A = () => (\n    <div\n        sz={{\n            p: 4,\n            bg: "/*|*/\n        }}\n    />\n);',
+        "const A = () => (\n    <div\n        sz={{\n            p: 4,\n            bg: 'red-/*|*/\n        }}\n    />\n);",
+    ]) {
+        const red = entriesAtMarker(source).find(entry => entry.name === 'red-500');
+        assert.strictEqual(red?.insertText, 'red-500', `bare insert for: ${source}`);
+    }
+});
+
+// The key slot was never affected — it lands on `{` or `,`, which the scan
+// already recognized. Pinned so a fix aimed at values cannot regress it.
+test('keys still complete when the object spans several lines', () => {
+    const entries = entriesAtMarker(
+        "const A = () => (\n    <div\n        sz={{\n            p: 4,\n            /*|*/\n        }}\n    />\n);",
+    );
+    assert.ok(entries.map(entry => entry.name).includes('bg'));
+});
+
 // Regression: a mid-word key prefix must offer keys and replace the typed text.
 test('a mid-word key prefix offers keys covering the prefix', () => {
     const entries = entriesAtMarker('const A = () => <div sz={{ b/*|*/ }} />;');

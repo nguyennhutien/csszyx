@@ -666,6 +666,36 @@ function nameBeforeColon(text: string, colon: number, objectStart: number): stri
     return text.slice(start, end);
 }
 
+/** Build the value context for a cursor sitting after a property colon.
+ * @param text - Full source text.
+ * @param colon - Offset of the property's colon.
+ * @param form - Resolved structured object form.
+ * @param position - UTF-16 cursor offset.
+ * @param objectStart - Lower scan boundary.
+ * @param quoted - Whether an opening quote is already typed.
+ * @returns A value context, otherwise null.
+ */
+function incompleteValueContext(
+    text: string,
+    colon: number,
+    form: ObjectValueForm | null,
+    position: number,
+    objectStart: number,
+    quoted: boolean,
+): SzContext | null {
+    const name = nameBeforeColon(text, colon, objectStart);
+    if (!name || !/[A-Z_$]/i.test(name[0] ?? '')) return null;
+    const member = formMember(form, name);
+    if (member === null) return null;
+    return {
+        kind: 'value',
+        property: name,
+        quoted,
+        replacementSpan: replacementSpan(text, position, true),
+        member,
+    };
+}
+
 /** Classify an incomplete key or value slot from bounded source text.
  * @param tsMod - TypeScript instance injected by the host.
  * @param sourceFile - Current parsed source.
@@ -688,17 +718,20 @@ function incompleteCursorContext(
     const scan = beforeCursorPrefix(text, prefixStart, objectStart);
     if (scan === undefined) return null;
     if (text[scan] === ':') {
-        const name = nameBeforeColon(text, scan, objectStart);
-        if (!name || !/[A-Z_$]/i.test(name[0] ?? '')) return null;
-        const member = formMember(form, name);
-        if (member === null) return null;
-        return {
-            kind: 'value',
-            property: name,
-            quoted: false,
-            replacementSpan: replacementSpan(text, position, true),
-            member,
-        };
+        return incompleteValueContext(text, scan, form, position, objectStart, false);
+    }
+    // An unterminated opening quote. A JS string cannot cross a newline, so
+    // `bg: '` followed by a line break leaves the cursor at a token boundary
+    // whose next token is on the NEXT line — the parser hands back that token,
+    // not the string, so the value slot was never recognized and the whole
+    // object went unanswered. The single-line spelling only worked by accident:
+    // either trailing text on the line gets swallowed into the string literal,
+    // or the quote sits at end of file and the EOF recovery path finds it.
+    const quote = text[scan];
+    if (quote === "'" || quote === '"' || quote === '`') {
+        const colon = beforeCursorPrefix(text, scan, objectStart);
+        if (colon === undefined || text[colon] !== ':') return null;
+        return incompleteValueContext(text, colon, form, position, objectStart, true);
     }
     if (text[scan] !== '{' && text[scan] !== ',') return null;
     return {
