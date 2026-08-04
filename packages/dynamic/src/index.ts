@@ -40,6 +40,8 @@ export type { Tier } from './css-generator.js';
 export type { CSSManifest } from './manifest.js';
 // Purify untrusted (e.g. JSON-driven) sz before runtime CSS injection.
 export { type PurifySzOptions, purifySz } from './purify.js';
+// Weigh the build-time manifest against what it actually spared this session.
+export { type DynamicReport, dynamicReport } from './report.js';
 
 /**
  * Transforms sz props at runtime and injects CSS only for classes not already

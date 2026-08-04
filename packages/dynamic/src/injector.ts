@@ -256,6 +256,19 @@ export function isInjected(className: string): boolean {
 }
 
 /**
+ * Every class this session had to inject, in first-seen order.
+ *
+ * The other half of the development report: these are the classes the manifest
+ * could NOT answer, either because the build did not emit them or because no
+ * manifest was served.
+ *
+ * @returns Injected class names.
+ */
+export function injectedClasses(): readonly string[] {
+    return [...injected];
+}
+
+/**
  * Releases all tier sheets and clears injected state.
  * Call on route unmount / component cleanup.
  */
