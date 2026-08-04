@@ -81,6 +81,7 @@
     "corpus:extract": "node --import tsx/esm scripts/extract-corpus.ts",
     "compiler:profile-hotpath": "node --import tsx/esm scripts/profile-compiler-hotpath.ts",
     "bench:transform-cache": "node --import tsx/esm scripts/bench-transform-cache.ts",
+    "bench:dynamic-manifest": "node --import tsx/esm scripts/bench-dynamic-manifest.ts",
     "bench:css-vars": "node --import tsx/esm scripts/bench-css-var-system.ts",
     "bench:cli-migrate": "node --import tsx/esm scripts/bench-cli-migrate.ts",
     "bench:global-vars": "node --import tsx/esm scripts/bench-global-var-mangling.ts",
