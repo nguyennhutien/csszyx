@@ -65,3 +65,23 @@ describe('compileSources resolution warning', () => {
         expect(message).toContain('does-not-exist');
     });
 });
+
+describe('unknown option reporting', () => {
+    it('warns when the plugin is handed an option it will never read', () => {
+        // The reported case: `compilePackages` became `compileSources` before
+        // 0.12.0, and passing the old name produced no CSS for the workspace
+        // package and not one word from the build.
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vitePlugin({ compilePackages: ['vui'] } as never);
+        const logged = warn.mock.calls.map(call => call.map(String).join(' ')).join('\n');
+        expect(logged).toContain('not recognized');
+        expect(logged).toContain('`compilePackages` was replaced by `compileSources`');
+    });
+
+    it('stays silent for a config that only uses real options', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vitePlugin({ compileSources: ['../packages/vui'], quiet: 'nudges' });
+        const logged = warn.mock.calls.map(call => call.map(String).join(' ')).join('\n');
+        expect(logged).not.toContain('not recognized');
+    });
+});

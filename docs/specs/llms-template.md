@@ -763,6 +763,11 @@ ignored unless a path points into them:
 A non-`/packages/` lib INSIDE the build root needs no config (compiled + scanned
 automatically); `compileSources` is for `/packages/` or sources OUTSIDE the root.
 
+The option used to be `compilePackages`, which took package NAMES. An old config
+still passing that name is never read, so every effect below silently does not
+happen. csszyx now warns on any plugin option it does not recognize, naming the
+replacement.
+
 A `/packages/` file using csszyx that is not opted in is skipped (no CSS); csszyx
 warns at build end and lists those files.
 

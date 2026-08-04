@@ -39,6 +39,7 @@ import type { PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
 import { babelFallbackReason } from './babel-fallback-reason.js';
+import { findUnknownConfigKeys, unknownConfigKeysMessage } from './config-keys.js';
 import { mangleCSSSync } from './css-mangler.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
@@ -2500,6 +2501,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // output). Errors that throw are unaffected — only warnings are silenced.
     // `'nudges'` keeps the reports that say output is missing.
     const quiet = resolveQuietMode(options.quiet);
+    // An option the plugin does not read is silent, so whatever it was set for
+    // simply does not happen — the renamed `compilePackages` cost a field user
+    // an afternoon exactly that way. Reported at the top, before any build
+    // output, because it explains everything that follows. NOT `devOnly`: a
+    // production build is where the missing behaviour actually costs something.
+    const unknownConfigKeys = findUnknownConfigKeys(options);
+    if (unknownConfigKeys.length > 0) {
+        emitWarning(unknownConfigKeysMessage(unknownConfigKeys));
+    }
     /**
      * Emit a csszyx build warning, unless `quiet` mutes all of them. `devOnly`
      * additionally suppresses it in production — for usage nudges that should not

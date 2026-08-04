@@ -3,7 +3,7 @@ title: Plugin Config
 description: Full reference for CSSzyx plugin configuration options.
 ---
 
-import { Tabs, TabItem } from "@astrojs/starlight/components";
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
 
 CSSzyx is configured by passing options directly to the plugin. There is no
 standalone `csszyx.config.ts` file — all config lives in your bundler config.
@@ -362,9 +362,18 @@ packages (pnpm) are matched after realpath resolution (relies on Vite's default
 `resolve.preserveSymlinks: false`).
 
 `node_modules` and `.next` stay ignored unless a listed path points into them. A
-`/packages/` file with `sz` that is not under any `compileSources` directory is
-skipped silently (no CSS) — csszyx warns at build end and lists those files. A
-path that does not resolve to a directory is reported in a build warning.
+`/packages/` file using csszyx that is not under any `compileSources` directory
+is skipped (no CSS) — csszyx warns at build end and lists those files, naming
+any that export `szv` factories, because those also cost every importer its
+cross-module precompile. A path that does not resolve to a directory is reported
+in a build warning.
+
+<Aside type="caution" title="This option was renamed">
+It used to be `compilePackages`, which took package **names**. If your config
+still says that, csszyx never reads it and every effect above silently does not
+happen. The plugin now warns on any option it does not recognize, naming the
+replacement.
+</Aside>
 
 A shared lib **outside** `/packages/` (e.g. `libs/ui`) that lives **inside** the
 build root needs no config — it is compiled and scanned automatically;
