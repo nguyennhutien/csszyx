@@ -86,19 +86,6 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
             ] as const,
     ) as ReadonlyArray<readonly [string, Baseline]>),
 
-    // ── known-dead: theme-conditional ───────────────────────────────────────
-    ...([100, 200, 300, 400, 500, 600, 700, 800, 900].map(
-        n =>
-            [
-                `font-${n}`,
-                {
-                    kind: 'known-dead',
-                    themeConditional: true,
-                    reason: `{ weight: ${n} } — dead unless the project declares --font-weight-${n}; Tailwind serves font-[${n}] or the named weights`,
-                },
-            ] as const,
-    ) as ReadonlyArray<readonly [string, Baseline]>),
-
     // ── known-dead: unknown sz key that still emits ─────────────────────────
     ...(['break-word', 'pointer-none'].map(
         c =>

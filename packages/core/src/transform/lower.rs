@@ -878,6 +878,18 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             if (key == "leading" || key == "lineHeight") && (value * 4.0).fract() != 0.0 {
                 return Some(format!("{prefix}leading-[{}]", format_abs_number(*value)));
             }
+            // Tailwind v4 spells font weights through the `--font-weight-*`
+            // theme namespace, so it serves no `font-<number>` at all — not
+            // even the nine standard steps. A numeric weight brackets the
+            // literal instead of emitting a class that styles nothing.
+            // Mirrors the TypeScript lanes.
+            if key == "weight" {
+                return Some(format!(
+                    "{prefix}{}-[{}]",
+                    class_key.as_ref(),
+                    format_number_literal(*value)
+                ));
+            }
             Some(format_number_class(class_key.as_ref(), *value, prefix))
         }
         StaticSzValue::String(value) => {
@@ -1741,14 +1753,22 @@ fn format_number_class(key: &str, value: f64, prefix: &str) -> String {
     }
 }
 
-fn format_abs_number(value: f64) -> String {
-    let abs_value = value.abs();
-    if abs_value.fract() == 0.0 {
+/// Render a number the way JavaScript prints it, sign kept.
+///
+/// The TypeScript lanes interpolate the value straight into the class string,
+/// so an engine only agrees with them by dropping the `.0` that Rust's default
+/// float formatting keeps.
+fn format_number_literal(value: f64) -> String {
+    if value.fract() == 0.0 {
         #[allow(clippy::cast_possible_truncation)]
-        (abs_value as i64).to_string()
+        (value as i64).to_string()
     } else {
-        abs_value.to_string()
+        value.to_string()
     }
+}
+
+fn format_abs_number(value: f64) -> String {
+    format_number_literal(value.abs())
 }
 
 const CSS_UNITS: &[&str] = &[

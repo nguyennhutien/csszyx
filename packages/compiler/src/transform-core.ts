@@ -3506,6 +3506,16 @@ function collectFallbackProperty(
         classes.push(`${prefix}leading-[${value}]`);
         return;
     }
+    // Tailwind v4 spells font weights through the `--font-weight-*` theme
+    // namespace, so the utility is always a NAME: it serves no `font-<number>`
+    // at all, not even the nine standard steps. Every numeric weight used to
+    // emit a bare class that styled nothing. The bracket carries the literal
+    // the author wrote, which is exactly what `{ weight: N }` asks for, and
+    // needs no theme declaration. Same reasoning as the leading ratio above.
+    if (rawKey === 'weight' && typeof value === 'number') {
+        classes.push(`${prefix}${key}-[${value}]`);
+        return;
+    }
     if (typeof value === 'number') {
         warnDeadSpacingStep(rawKey, value);
         classes.push(`${prefix}${formatNumericUtility(key, value)}`);
