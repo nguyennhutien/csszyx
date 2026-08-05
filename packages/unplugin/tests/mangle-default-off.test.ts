@@ -8,11 +8,10 @@
  * accidental flip back would be invisible in any test that passes an explicit
  * `production.mangle`.
  */
-import { homedir } from 'node:os';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { vitePlugin } from '../src/unplugin.js';
 import { MANGLE_RUNTIME_VIRTUAL_ID } from '../src/virtual-modules.js';
+import { freshFixtureRoot } from './fixture-root.js';
 
 const RUNTIME_CONSUMER = `import { szr } from '@csszyx/runtime';\nexport const c = szr({ p: 4 });\n`;
 const SZ_SOURCE = `export const App = <div sz={{ p: 4 }} className="raw-keep" />;\n`;
@@ -35,7 +34,7 @@ function harness(production?: Record<string, unknown>) {
             | undefined;
         return fn ? await fn.apply(ctx, args) : undefined;
     };
-    const root = resolve(homedir(), '.cache/csszyx-tests/mangle-default');
+    const root = freshFixtureRoot('mangle-default');
     return { call, root };
 }
 

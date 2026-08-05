@@ -7,7 +7,7 @@
  * and stay inert without a `window`.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
@@ -23,6 +23,7 @@ import {
     resolveVirtualModule,
     VAR_MANGLE_MAP_PLACEHOLDER,
 } from '../src/virtual-modules.js';
+import { freshFixtureRoot } from './fixture-root.js';
 
 interface InstalledRuntime {
     mangleMap: Record<string, string>;
@@ -128,7 +129,7 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
             ) as ((...a: unknown[]) => unknown) | undefined;
             return fn ? await fn.apply(ctx, args) : undefined;
         };
-        const root = resolve(homedir(), '.cache/csszyx-tests/mangle-runtime-inject');
+        const root = freshFixtureRoot('mangle-runtime-inject');
         return { call, root };
     }
 
@@ -207,7 +208,7 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
             webpack: (compiler: unknown) => void;
             transform: (this: unknown, code: string, id: string) => Promise<unknown> | unknown;
         };
-        const root = resolve(homedir(), '.cache/csszyx-tests/mangle-runtime-webpack-dev');
+        const root = freshFixtureRoot('mangle-runtime-webpack-dev');
         const ctx = { warn() {}, error() {} };
         // configResolved only prepares the root here; the webpack hook below
         // then records the lane, exactly as a real webpack build would before
