@@ -120,6 +120,24 @@ Optional parameters:
 Parse `@theme` CSS blocks and categorize custom design tokens (colors, spacings,
 fonts, radii, shadows).
 
+### `csszyx_compile_preview`
+
+Compile a whole source module and report what csszyx made of it: the rewritten
+code, the classes, the diagnostics, and the runtime helpers left over.
+
+Every other tool takes an `sz` object, which assumes the code around it already
+compiles. Reach for this one when the question is about that surrounding shape —
+whether a `szv` factory precompiles into a lookup, whether a value stays dynamic
+and falls back to a custom property, whether a key is unknown and ships a class
+that styles nothing.
+
+```json
+{ "source": "export const A = () => <div sz={{ p: 4 }} />;" }
+```
+
+Pass `filename` when the parser matters — the extension selects it, so JSX needs
+a `.tsx` name. It defaults to `preview.tsx`.
+
 ## Resources
 
 The server also exposes read-only resources that AI agents can load for context:

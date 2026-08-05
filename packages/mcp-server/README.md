@@ -53,15 +53,16 @@ The server speaks MCP over stdio, so any MCP-compatible client uses the same
 
 ## Tools
 
-| Tool              | Purpose                                                              |
-| ----------------- | -------------------------------------------------------------------- |
-| `csszyx_expand`   | Expand one `sz` object into a Tailwind class string                  |
-| `csszyx_batch`    | Expand many `sz` objects in one call                                 |
-| `csszyx_reverse`  | Convert a Tailwind class string back into an `sz` object             |
-| `csszyx_validate` | Validate an `sz` object; reports unknown props and CSS-name mistakes |
-| `csszyx_lookup`   | Look up how a CSS property/keyword maps to an `sz` key               |
-| `csszyx_migrate`  | Rewrite a JSX/TSX snippet's `className` attributes into `sz` props   |
-| `csszyx_theme`    | Parse `@theme` CSS blocks and categorize design tokens               |
+| Tool                     | Purpose                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------- |
+| `csszyx_expand`          | Expand one `sz` object into a Tailwind class string                                             |
+| `csszyx_batch`           | Expand many `sz` objects in one call                                                            |
+| `csszyx_reverse`         | Convert a Tailwind class string back into an `sz` object                                        |
+| `csszyx_validate`        | Validate an `sz` object; reports unknown props and CSS-name mistakes                            |
+| `csszyx_lookup`          | Look up how a CSS property/keyword maps to an `sz` key                                          |
+| `csszyx_migrate`         | Rewrite a JSX/TSX snippet's `className` attributes into `sz` props                              |
+| `csszyx_theme`           | Parse `@theme` CSS blocks and categorize design tokens                                          |
+| `csszyx_compile_preview` | Compile a whole source module and report the classes, diagnostics, and leftover runtime helpers |
 
 ## Resources
 

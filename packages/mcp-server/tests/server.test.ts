@@ -52,6 +52,16 @@ describe('MCP request handlers over an in-memory transport', () => {
         expect(tools.some(tool => tool.name === 'csszyx_lookup')).toBe(true);
     });
 
+    it('compiles a source module through the registered preview tool', async () => {
+        const result = await client.callTool({
+            name: 'csszyx_compile_preview',
+            arguments: { source: 'export const A = () => <div sz={{ p: 4 }} />;' },
+        });
+        expect(result.isError).toBeFalsy();
+        const content = result.content as Array<{ text: string }>;
+        expect(JSON.parse(content[0].text).classes).toEqual(['p-4']);
+    });
+
     it('calls a tool and returns its result', async () => {
         const result = await client.callTool({
             name: 'csszyx_lookup',
