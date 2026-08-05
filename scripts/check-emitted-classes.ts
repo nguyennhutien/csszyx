@@ -39,10 +39,13 @@ const CORPUS = path.join(REPO, 'packages/core/tests/fixtures/parity-corpus.json'
 /**
  * Why a dead class is tolerated. Anything NOT listed here fails the check.
  *
- * `accepted` — correct behaviour; the stock design system simply cannot see it.
+ * `accepted` — correct behaviour; the stock design system simply cannot see it,
+ *   or csszyx emits it on purpose and says so.
  * `known-dead` — a real defect: csszyx emits a name Tailwind does not serve.
  *   Listed so the gate can land without a mapping rewrite, and so a NEW one
  *   still fails. Each entry records the form Tailwind actually accepts.
+ *   Empty is the goal, and reaching it is not a reason to drop the kind: the
+ *   next mapping bug lands here before it is fixed.
  */
 interface Baseline {
     readonly kind: 'accepted' | 'known-dead';
@@ -86,14 +89,14 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
             ] as const,
     ) as ReadonlyArray<readonly [string, Baseline]>),
 
-    // ── known-dead: unknown sz key that still emits ─────────────────────────
+    // ── accepted: unknown sz key rides the kebab pass-through ───────────────
     ...(['break-word', 'pointer-none'].map(
         c =>
             [
                 c,
                 {
-                    kind: 'known-dead',
-                    reason: 'emitted from an UNKNOWN sz key — warned truthfully, but the dead class still ships (systemic; the drop-vs-emit decision is still open)',
+                    kind: 'accepted',
+                    reason: 'emitted from an UNKNOWN sz key through the kebab pass-through, which decision 0001 keeps on purpose so a utility newer than csszyx still reaches Tailwind; the warning says so and the author fixes it in place',
                 },
             ] as const,
     ) as ReadonlyArray<readonly [string, Baseline]>),
