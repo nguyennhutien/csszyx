@@ -21,7 +21,7 @@ mise trust /workspaces/csszyx/.mise.toml
 if [ "${CSSZYX_PERSONAL_DEVCONTAINER:-0}" = "1" ]; then
     mise install
 else
-    mise install node pnpm rust cargo:cocogitto
+    mise install node pnpm rust cargo:cocogitto github:cli/cli
 fi
 
 if [ "${CSSZYX_PERSONAL_DEVCONTAINER:-0}" = "1" ]; then
