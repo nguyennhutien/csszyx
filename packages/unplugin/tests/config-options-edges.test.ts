@@ -18,6 +18,25 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+/**
+ * Create a throwaway project root that survives being handed to a bundler.
+ *
+ * On macOS `os.tmpdir()` is `/var/folders/…`, a symlink to `/private/var/…`.
+ * Vite resolves the html entry to its real path but keeps the configured root
+ * as written, so the relative asset name it derives climbs out of the output
+ * directory and rolldown rejects it. Resolving the root once here keeps both
+ * halves on the same side of the symlink; on Linux, where the two already
+ * agree, this changes nothing.
+ *
+ * @param prefix - Directory name prefix for the temporary root.
+ * @returns Absolute, symlink-resolved root, registered for cleanup.
+ */
+function makeTempRoot(prefix: string): string {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+    tempDirs.push(root);
+    return root;
+}
+
 type PrePlugin = {
     configResolved?: (c: { root: string; command: string }) => void;
     transformInclude(id: string): boolean;
@@ -43,8 +62,7 @@ describe('production option validation', () => {
 
 describe('compileSources resolution warning', () => {
     it('warns once about entries that do not resolve to a directory', () => {
-        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-compilesrc-'));
-        tempDirs.push(root);
+        const root = makeTempRoot('csszyx-compilesrc-');
         fs.mkdirSync(path.join(root, 'src'), { recursive: true });
 
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -75,8 +93,7 @@ describe('manifest emission', () => {
      * @returns Emitted asset file names.
      */
     const buildAssets = async (emitManifest?: boolean): Promise<string[]> => {
-        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-manifest-'));
-        tempDirs.push(root);
+        const root = makeTempRoot('csszyx-manifest-');
         fs.mkdirSync(path.join(root, 'src'), { recursive: true });
         fs.writeFileSync(
             path.join(root, 'index.html'),
