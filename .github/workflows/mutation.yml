@@ -1,0 +1,113 @@
+name: Mutation Testing
+
+# Weekly full sweep of the Rust transform engine.
+#
+# Codecov's patch gate proves a changed line RAN under test; it cannot prove
+# the suite would go RED if that line were wrong. Mutation testing breaks each
+# line on purpose and checks a test notices. The first local run found a real
+# survivor in encoder.rs — a tier-5 boundary the suite never encoded, which
+# would have collapsed two distinct style indices onto one class name.
+#
+# REPORTS, DOES NOT GATE. Nobody knows the engine-wide survivor count yet, and
+# a gate switched on before that baseline exists would paint every PR red and
+# get turned off. Establish the number here first; promoting a diff-scoped
+# check to a required gate is a separate, later change.
+on:
+  schedule:
+    # Weekly Monday 04:00 UTC — after the daily fuzz batch (03:00), so the two
+    # long Rust jobs do not contend for runners.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-sweep
+  cancel-in-progress: true
+
+jobs:
+  sweep:
+    name: Shard ${{ matrix.shard }}/8
+    runs-on: ubuntu-latest
+    # ~2600 mutants at ~12s each is roughly nine hours sequentially; eight
+    # shards bring that to ~1.1h apiece. The ceiling is generous because a
+    # mutant that makes a loop non-terminating burns its full timeout.
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b # 1.97.1
+
+      - name: Cache cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-mutants-${{ hashFiles('**/Cargo.toml') }}
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2.85.2
+        with:
+          tool: cargo-mutants
+
+      # Called directly rather than through the local `pnpm mut:shard` wrapper:
+      # the shard only needs cargo, and installing the JS workspace to reach a
+      # script that shells straight back to cargo would add minutes per shard
+      # for nothing.
+      #
+      # --features is spelled out rather than left to .cargo/mutants.toml. The
+      # engine only exists behind native-engine; without it every mutant lands
+      # in a crate whose transform module is compiled out and reports back as
+      # unviable — a green run that measured nothing. Stating it here keeps the
+      # scheduled sweep correct even if that config file is absent or edited.
+      #
+      # --in-place matters even on a throwaway runner: without it cargo-mutants
+      # copies the whole workspace per build job.
+      - name: Run shard
+        run: cargo mutants --in-place --features native-engine --shard ${{ matrix.shard }}/8
+
+      - name: Upload shard outcomes
+        # Always: a shard that times out still carries the outcomes of every
+        # mutant it finished, and dropping them would silently shrink the score.
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: mutants-shard-${{ matrix.shard }}
+          path: mutants.out/outcomes.json
+          retention-days: 14
+
+  report:
+    name: Report
+    needs: sweep
+    # Runs even when a shard fails or times out, so a partial sweep still
+    # publishes what it learned instead of reporting nothing.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # The report script is stdlib-only, so no pnpm install — but it uses
+      # fs.globSync, which needs a Node new enough to have it. Pin rather than
+      # inherit whatever the runner image ships.
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: "24"
+
+      - name: Download shard outcomes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: mutants-shard-*
+          path: shards
+
+      - name: Merge into a step summary
+        run: node scripts/mutants-report.mjs shards >> "$GITHUB_STEP_SUMMARY"
