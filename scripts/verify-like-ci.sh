@@ -39,6 +39,12 @@ echo "[verify-like-ci] Wiping cached build artefacts so turbo and vitest start f
 find packages apps playground -name dist -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null || true
 find playground packages/e2e -name '.csszyx' -type d -exec rm -rf {} + 2>/dev/null || true
 rm -rf .turbo apps/docs/.astro apps/docs/dist apps/docs/.csszyx
+# The devcontainer mounts this repository at a different path, and target/ is the
+# same directory on disk for both. Objects built in one environment stay behind,
+# and llvm-cov folds them into the next run's report — mixing two source roots
+# into one coverage number and then failing on a path that does not exist here.
+# A clean tree costs about 25 seconds, and the native build below rebuilds anyway.
+rm -rf target/llvm-cov-target
 
 echo "[verify-like-ci] Tracked symlink guard..."
 pnpm check:tracked-symlinks

@@ -41,11 +41,37 @@ function summary(prefix, total, hit) {
     return [`${prefix}F:${total}`, `${prefix}H:${hit}`];
 }
 
+/**
+ * Read a source file the report claims coverage for, naming the real cause
+ * when it is not there.
+ *
+ * A report can only cover a file that does not exist if it was produced
+ * somewhere else. The repository is mounted at a different path inside the
+ * devcontainer, and `target/` is the SAME directory on disk for both, so
+ * object files built in one environment stay behind and llvm-cov folds them
+ * into the next run's report. A bare ENOENT sends the reader looking at this
+ * script instead of at the stale build tree.
+ */
+function readCoveredSource(sourceFile, readSource) {
+    try {
+        return readSource(sourceFile);
+    } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+        throw new Error(
+            `the coverage report covers ${sourceFile}, which does not exist. The report was ` +
+                'built somewhere else — most likely target/llvm-cov-target still holds objects ' +
+                'from a run in the other environment, host versus devcontainer, since both share ' +
+                'that directory. Remove target/llvm-cov-target and re-run the coverage gate.',
+            { cause: error },
+        );
+    }
+}
+
 function filterRecord(record, readSource) {
     const sourceFile = record.find(line => line.startsWith('SF:'))?.slice(3);
     if (!sourceFile?.includes('/packages/core/src/')) return [...record, 'end_of_record'];
 
-    const source = readSource(sourceFile);
+    const source = readCoveredSource(sourceFile, readSource);
     const cutoff = testModuleStart(source);
     const wasmRanges = wasmOnlyRanges(source);
     if (cutoff === undefined && wasmRanges.length === 0) return [...record, 'end_of_record'];

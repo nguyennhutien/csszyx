@@ -100,3 +100,22 @@ end_of_record
         input,
     );
 });
+
+test('names the stale-report cause when a covered source file is gone', () => {
+    const input = `SF:/elsewhere/csszyx/packages/core/src/example.rs
+DA:1,1
+LF:1
+LH:1
+end_of_record
+`;
+    const missing = () => {
+        throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    };
+
+    assert.throws(
+        () => filterRustLcov(input, missing),
+        error =>
+            /\/elsewhere\/csszyx\/packages\/core\/src\/example\.rs/.test(error.message) &&
+            /target\/llvm-cov-target/.test(error.message),
+    );
+});
