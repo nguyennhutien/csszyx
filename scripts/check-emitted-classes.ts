@@ -31,7 +31,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { __unstable__loadDesignSystem } from 'tailwindcss';
+import { createEmittedClassOracle } from '../packages/cli/src/scanner/emitted-class-oracle.ts';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CORPUS = path.join(REPO, 'packages/core/tests/fixtures/parity-corpus.json');
@@ -102,30 +102,6 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
     ) as ReadonlyArray<readonly [string, Baseline]>),
 ]);
 
-/**
- * Load a design system over stock Tailwind, resolving its own stylesheets.
- *
- * @returns The loaded design system.
- */
-async function loadStockDesignSystem() {
-    const twRoot = path.dirname(fileURLToPath(import.meta.resolve('tailwindcss/package.json')));
-    return __unstable__loadDesignSystem('@import "tailwindcss";', {
-        base: twRoot,
-        async loadStylesheet(id: string) {
-            const relative = id === 'tailwindcss' ? 'index.css' : id.replace(/^tailwindcss\//, '');
-            const file = path.join(
-                twRoot,
-                relative.endsWith('.css') ? relative : `${relative}.css`,
-            );
-            return {
-                path: file,
-                base: path.dirname(file),
-                content: await readFile(file, 'utf8'),
-            };
-        },
-    });
-}
-
 /** One corpus record: an sz input and the class string every engine emits. */
 interface CorpusRecord {
     sz: string;
@@ -176,20 +152,22 @@ async function main(): Promise<void> {
     const origins = collectTokens(records);
     const tokens = [...origins.keys()];
 
-    const designSystem = await loadStockDesignSystem();
-    // A deliberately bogus candidate rides along as a self-proof: if Tailwind
-    // ever stops reporting an unservable class as `null` (say `undefined` or
-    // `''` after an API change), every dead class would read as alive and the
-    // gate would pass vacuously. The probe fails loudly instead.
-    const selfProofToken = 'zz-not-a-class';
-    const css = designSystem.candidatesToCss([...tokens, selfProofToken]);
-    if (css[tokens.length] !== null) {
-        throw new Error(
-            `the oracle no longer detects dead classes: candidatesToCss("${selfProofToken}") ` +
-                `returned ${JSON.stringify(css[tokens.length])} instead of null`,
-        );
+    // Stock Tailwind on purpose: the corpus carries no project theme, so
+    // anything theme- or plugin-dependent is baselined rather than checked.
+    // The oracle degrades to a skip where a user project would carry on; this
+    // gate has no such freedom, so a skip is a hard failure here. That includes
+    // the self-proof — the oracle refuses to run once Tailwind stops reporting
+    // an unservable class as null, which would otherwise pass vacuously.
+    const twRoot = path.dirname(fileURLToPath(import.meta.resolve('tailwindcss/package.json')));
+    const oracle = await createEmittedClassOracle({
+        resolveFrom: REPO,
+        css: '@import "tailwindcss";',
+        cssBase: twRoot,
+    });
+    if (!oracle.ok) {
+        throw new Error(`check:emitted-classes cannot run: ${oracle.reason}`);
     }
-    const dead = tokens.filter((_, index) => css[index] === null);
+    const dead = oracle.findDead(tokens);
 
     const unbaselined = dead.filter(token => !BASELINE.has(token));
     const baselined = dead.filter(token => BASELINE.has(token));

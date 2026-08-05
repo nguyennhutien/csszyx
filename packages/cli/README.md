@@ -33,12 +33,24 @@ npx csszyx doctor
 
 ### `check`
 
-Scan the whole project for unknown or aliased `sz` keys — CI-friendly (non-zero
-exit on findings).
+Scan the whole project for unknown or aliased `sz` keys, then ask your own
+Tailwind whether every class csszyx emitted actually produces CSS — CI-friendly
+(non-zero exit on findings).
 
 ```bash
 npx csszyx check
 ```
+
+The second pass loads the stylesheet that imports Tailwind, so your `@theme`
+tokens, custom breakpoints and `@utility` definitions all count as real. That
+catches the mistakes a key check cannot see: a canonical key whose value has no
+utility behind it, or a breakpoint spelled `tablt:` instead of `tablet:`. Both
+ship a class that sits in the DOM and styles nothing.
+
+It needs Tailwind v4 resolvable from the project. Without it — no v4, no
+stylesheet importing Tailwind — the pass reports why it was skipped and the key
+check still runs. It never reports a class dead because it could not find the
+design system.
 
 ### `explain`
 

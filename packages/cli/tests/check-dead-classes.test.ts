@@ -1,0 +1,136 @@
+/**
+ * `csszyx check` asking Tailwind whether the classes it emitted are real.
+ *
+ * Each fixture gets its own `node_modules/tailwindcss`, because that is what
+ * the command resolves and what a real project has. Leaving it out is not a
+ * neutral simplification: resolution would walk up into whatever tree the
+ * fixture happens to sit in — inside this repository that finds the v3 copy
+ * `csszyx migrate` pins — and every case would pass as a skip.
+ */
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { check } from '../src/commands/check.js';
+
+const REPO = path.resolve(import.meta.dirname, '../../..');
+/** The v4 install a project of its own would carry. */
+const TAILWIND_V4 = path.dirname(
+    createRequire(path.join(REPO, 'package.json')).resolve('tailwindcss/package.json'),
+);
+const roots: string[] = [];
+
+/**
+ * Materialise a project that resolves Tailwind v4 the way a real one does.
+ *
+ * @param files - Project-relative paths mapped to their contents.
+ * @param options - Fixture switches.
+ * @param options.tailwind - False to model a project with Tailwind not installed.
+ * @returns Absolute project root.
+ */
+function projectWith(files: Record<string, string>, options: { tailwind?: boolean } = {}): string {
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'csszyx-check-')));
+    roots.push(root);
+    mkdirSync(path.join(root, 'node_modules'), { recursive: true });
+    if (options.tailwind !== false) {
+        symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'dir');
+    }
+    writeFileSync(path.join(root, 'package.json'), '{"name":"fixture"}\n', 'utf8');
+    for (const [relative, content] of Object.entries(files)) {
+        const file = path.join(root, relative);
+        mkdirSync(path.dirname(file), { recursive: true });
+        writeFileSync(file, content, 'utf8');
+    }
+    return root;
+}
+
+afterEach(() => {
+    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+    process.exitCode = undefined;
+    vi.restoreAllMocks();
+});
+
+/**
+ * Run the command over a project and return everything it printed.
+ *
+ * @param cwd - Project root.
+ * @returns Concatenated report text.
+ */
+async function reportFor(cwd: string): Promise<string> {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await check({ cwd });
+    return log.mock.calls.map(call => call.join(' ')).join('\n');
+}
+
+describe('csszyx check — classes that style nothing', () => {
+    it('reports a class the mapping emitted that Tailwind does not serve', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            // `pointer` is not an sz key, so the kebab pass-through ships
+            // `pointer-none` — a class Tailwind has never served.
+            'src/Bad.tsx': "export const Bad = () => <div sz={{ pointer: 'none' }} />;",
+        });
+
+        const report = await reportFor(cwd);
+
+        expect(report).toContain('pointer-none');
+        expect(report).toContain('Bad.tsx');
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('accepts a class the project theme makes real', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";\n@theme { --color-brand: #123456; }',
+            'src/Good.tsx': "export const Good = () => <div sz={{ bg: 'brand' }} />;",
+        });
+
+        const report = await reportFor(cwd);
+
+        expect(report).not.toContain('bg-brand');
+        expect(process.exitCode).not.toBe(1);
+    });
+
+    it('accepts a custom breakpoint and rejects a typo of it', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";\n@theme { --breakpoint-tablet: 900px; }',
+            'src/Ok.tsx': 'export const Ok = () => <div sz={{ tablet: { p: 4 } }} />;',
+            'src/Typo.tsx': 'export const Typo = () => <div sz={{ tablt: { p: 4 } }} />;',
+        });
+
+        const report = await reportFor(cwd);
+
+        expect(report).toContain('tablt');
+        expect(report).not.toContain('tablet:p-4');
+    });
+
+    it('says why it could not check when the project has no Tailwind installed', async () => {
+        const cwd = projectWith(
+            {
+                'src/app.css': '@import "tailwindcss";',
+                'src/Bad.tsx': "export const Bad = () => <div sz={{ pointer: 'none' }} />;",
+            },
+            { tailwind: false },
+        );
+
+        const report = await reportFor(cwd);
+
+        expect(report).toContain('skipped');
+        expect(report).toContain('could not resolve');
+        expect(report).not.toContain('pointer-none');
+    });
+
+    it('says why it could not check when the project has no Tailwind stylesheet', async () => {
+        const cwd = projectWith({
+            'src/Bad.tsx': "export const Bad = () => <div sz={{ pointer: 'none' }} />;",
+        });
+
+        const report = await reportFor(cwd);
+
+        expect(report).toMatch(/skipped|could not/i);
+        expect(report).not.toContain('pointer-none');
+    });
+});

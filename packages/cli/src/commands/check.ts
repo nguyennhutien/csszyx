@@ -16,6 +16,7 @@ import path from 'node:path';
 import { transformSourceCode } from '@csszyx/compiler';
 import fg from 'fast-glob';
 
+import { createEmittedClassOracle, findTailwindCssEntry } from '../scanner/emitted-class-oracle.js';
 import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
 
 /** Options for the `check` command. */
@@ -75,6 +76,63 @@ function groupIssuesByFile(issues: SzIssue[]): Map<string, string[]> {
 }
 
 /**
+ * Ask Tailwind which of the emitted classes produce no CSS, and report them.
+ *
+ * A class that styles nothing is the failure csszyx exists to prevent, and it
+ * is invisible in the source: the class is right there in the DOM. Only the
+ * project's own Tailwind can answer, because the answer depends on its theme,
+ * its custom breakpoints and its `@utility` definitions.
+ *
+ * Anything that stops the question being asked is reported as a skip, never as
+ * a finding — a project without Tailwind v4 is not a project full of dead
+ * classes.
+ *
+ * @param cwd - Project root.
+ * @param origins - Emitted class mapped to the file that first emitted it.
+ * @returns Whether anything dead was found.
+ */
+async function reportDeadClasses(cwd: string, origins: Map<string, string>): Promise<boolean> {
+    if (origins.size === 0) return false;
+
+    const entry = await findTailwindCssEntry(cwd);
+    if (entry === null) {
+        printInfo(
+            'Dead-class check skipped: no stylesheet in this project imports Tailwind, so ' +
+                'there is no design system to ask which classes are real.',
+        );
+        return false;
+    }
+
+    const oracle = await createEmittedClassOracle({
+        resolveFrom: cwd,
+        css: await readFile(entry, 'utf8'),
+        cssBase: path.dirname(entry),
+    });
+    if (!oracle.ok) {
+        printInfo(`Dead-class check skipped: ${oracle.reason}.`);
+        return false;
+    }
+
+    const dead = oracle.findDead([...origins.keys()]);
+    if (dead.length === 0) {
+        printSuccess(
+            `Every one of the ${origins.size} emitted class(es) produces CSS under this project's Tailwind.`,
+        );
+        return false;
+    }
+
+    printWarn('\nClasses that produce no CSS:');
+    for (const token of dead) {
+        printInfo(`  ${token.padEnd(28)} ${origins.get(token) ?? ''}`);
+    }
+    printWarn(
+        `\n✖ ${dead.length} emitted class(es) style nothing. Each is in the DOM and does ` +
+            'nothing: fix the sz key, or define the class with Tailwind’s @utility.',
+    );
+    return true;
+}
+
+/**
  * Print captured diagnostics and mark the process as failed.
  *
  * @param issues Captured compiler diagnostics.
@@ -127,6 +185,9 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     // `[csszyx]` and carrying `at <file>:<line>` once rootDir is set. Capture
     // those into a structured report instead of letting them stream one-by-one.
     const issues: SzIssue[] = [];
+    // One origin per class is enough to point at: the report answers "where did
+    // this come from", not "everywhere it appears".
+    const classOrigins = new Map<string, string>();
     let currentFile = '';
     const originalWarn = console.warn;
     console.warn = (...args: unknown[]): void => {
@@ -144,7 +205,10 @@ export async function check(options: CheckOptions = {}): Promise<void> {
             }
             currentFile = path.relative(cwd, file);
             try {
-                transformSourceCode(source, file, { rootDir: cwd });
+                const result = transformSourceCode(source, file, { rootDir: cwd });
+                for (const token of result.classes) {
+                    if (!classOrigins.has(token)) classOrigins.set(token, currentFile);
+                }
             } catch {
                 // A file the reference parser can't read yields no usable sz
                 // signal here; the bundler surfaces real parse errors at build.
@@ -161,8 +225,13 @@ export async function check(options: CheckOptions = {}): Promise<void> {
                 'only exist at runtime (an array or spread built from runtime data, a ' +
                 'dynamic() value) cannot be checked statically.',
         );
-        return;
+    } else {
+        reportIssues(issues);
     }
 
-    reportIssues(issues);
+    // Runs whichever way the key pass went: a canonical key can still lower to
+    // a class this project's Tailwind does not serve.
+    if (await reportDeadClasses(cwd, classOrigins)) {
+        process.exitCode = 1;
+    }
 }
