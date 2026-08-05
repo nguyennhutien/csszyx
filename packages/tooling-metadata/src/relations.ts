@@ -8,7 +8,7 @@
  * (Future conflict/affinity relations belong in this module too.)
  */
 
-import { BOOLEAN_SHORTHANDS, PROPERTY_MAP } from './tooling.generated';
+import { BOOLEAN_SHORTHANDS, MASK_SIDES, PROPERTY_MAP } from './tooling.generated';
 import { COLOR_VALUE_PROPS, VALUE_SUGGESTIONS } from './value-suggestions';
 
 /**
@@ -136,17 +136,27 @@ const MASK_EDGE_FORM: ObjectValueForm = {
     ],
 };
 
+/**
+ * What each linear-mask side covers. Only the PROSE lives here — the side
+ * names come from the compiler, so a side added there is offered immediately
+ * rather than waiting for someone to notice this list.
+ */
+const MASK_SIDE_DETAIL: Readonly<Record<string, string>> = {
+    t: 'top edge',
+    r: 'right edge',
+    b: 'bottom edge',
+    l: 'left edge',
+    x: 'left and right edges',
+    y: 'top and bottom edges',
+};
+
 /** Sides of the linear layer, each owning its own `--tw-mask-<side>`. */
-const MASK_SIDE_MEMBERS: readonly ObjectFormMember[] = (
-    [
-        ['t', 'top edge'],
-        ['r', 'right edge'],
-        ['b', 'bottom edge'],
-        ['l', 'left edge'],
-        ['x', 'left and right edges'],
-        ['y', 'top and bottom edges'],
-    ] as const
-).map(([name, detail]) => ({ name, detail, values: [], form: MASK_EDGE_FORM }));
+const MASK_SIDE_MEMBERS: readonly ObjectFormMember[] = MASK_SIDES.map(name => ({
+    name,
+    detail: MASK_SIDE_DETAIL[name] ?? `${name} edge`,
+    values: [],
+    form: MASK_EDGE_FORM,
+}));
 
 /**
  * `maskLinear: { angle, from, to }` OR `{ <side>: { from, to } }` — the angle

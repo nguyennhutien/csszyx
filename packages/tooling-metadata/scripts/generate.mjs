@@ -6,6 +6,7 @@ import ts from 'typescript';
 import {
     BOOLEAN_SHORTHANDS,
     KNOWN_VARIANTS,
+    MASK_SIDES,
     MIGRATION_NOTES,
     NEGATIVE_ALLOWED,
     PROPERTY_MAP,
@@ -66,6 +67,10 @@ export const KNOWN_VARIANTS = ${serialize([...KNOWN_VARIANTS].sort())} as const;
  * against KNOWN_VARIANTS alone reports every one of them as an unknown prop. */
 export const SPECIAL_VARIANTS = ${serialize([...SPECIAL_VARIANTS].sort())} as const;
 export const SUGGESTION_MAP = ${serialize(SUGGESTION_MAP)} as const;
+/** Sides of the linear mask slot, in the compiler's order. Editor tooling
+ * offers exactly these, so a side added to the compiler shows up without a
+ * second list to remember. */
+export const MASK_SIDES = ${serialize([...MASK_SIDES])} as const;
 /** Removed keys whose replacement is a SHAPE, not another key name — rendered
  * as "was removed: <note>", never through the did-you-mean template. */
 export const MIGRATION_NOTES = ${serialize(MIGRATION_NOTES)} as const;

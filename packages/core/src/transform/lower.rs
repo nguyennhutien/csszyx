@@ -300,17 +300,39 @@ pub(crate) fn collect_dead_spacing_steps(
     }
 }
 
-/// Collects PROPERTY keys whose value is an object that is not the
-/// Legal members of one mask slot. Mirrors the TypeScript
-/// `MASK_SLOT_MEMBERS` table; anything else emits nothing at lowering.
+/// Legal members of one mask slot, minus the linear sides.
+///
+/// `maskLinear` also accepts every entry in `MASK_SIDES`, reported by the
+/// second field so the side vocabulary is named once in this file rather than
+/// re-spelled per use. Mirrors the TypeScript `MASK_SLOT_MEMBERS` table;
+/// anything else emits nothing at lowering.
 #[cfg(feature = "native-engine")]
-fn mask_slot_members(slot: &str) -> Option<&'static [&'static str]> {
+fn mask_slot_members(slot: &str) -> Option<(&'static [&'static str], bool)> {
     match slot {
-        "maskLinear" => Some(&["angle", "from", "to", "t", "r", "b", "l", "x", "y"]),
-        "maskConic" => Some(&["angle", "from", "to"]),
-        "maskRadial" => Some(&["at", "size", "shape", "from", "to"]),
+        "maskLinear" => Some((&["angle", "from", "to"], true)),
+        "maskConic" => Some((&["angle", "from", "to"], false)),
+        "maskRadial" => Some((&["at", "size", "shape", "from", "to"], false)),
         _ => None,
     }
+}
+
+/// Whether one member name is legal in a slot with these base members.
+#[cfg(feature = "native-engine")]
+fn is_mask_slot_member(name: &str, base: &[&str], accepts_sides: bool) -> bool {
+    base.contains(&name) || (accepts_sides && MASK_SIDES.contains(&name))
+}
+
+/// Render the legal member list a diagnostic names, in the table's order.
+///
+/// Only runs when a member is already known to be wrong, so the allocation
+/// stays off the path every correct mask slot takes.
+#[cfg(feature = "native-engine")]
+fn mask_slot_member_list(base: &[&str], accepts_sides: bool) -> String {
+    let mut names: Vec<&str> = base.to_vec();
+    if accepts_sides {
+        names.extend(MASK_SIDES);
+    }
+    names.join(", ")
 }
 
 /// Legal members of one linear edge object. Mirrors `MASK_EDGE_MEMBERS`.
@@ -333,23 +355,21 @@ pub(crate) fn collect_unknown_mask_slot_members(
         let StaticSzValue::Object(nested) = &property.value else {
             continue;
         };
-        let Some(members) = mask_slot_members(&property.key) else {
+        let Some((base, accepts_sides)) = mask_slot_members(&property.key) else {
             collect_unknown_mask_slot_members(nested, out);
             continue;
         };
         for entry in &nested.properties {
-            if !members.contains(&entry.key.as_str()) {
+            if !is_mask_slot_member(&entry.key, base, accepts_sides) {
                 out.push((
                     property.key.clone(),
                     entry.key.clone(),
-                    members.join(", "),
+                    mask_slot_member_list(base, accepts_sides),
                     entry.span.start,
                 ));
                 continue;
             }
-            if property.key != "maskLinear"
-                || !matches!(entry.key.as_str(), "t" | "r" | "b" | "l" | "x" | "y")
-            {
+            if !accepts_sides || !MASK_SIDES.contains(&entry.key.as_str()) {
                 continue;
             }
             let StaticSzValue::Object(edge) = &entry.value else {

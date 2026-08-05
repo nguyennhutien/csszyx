@@ -59,8 +59,16 @@ export function deepMergeSzObjects(target: SzObject, source: SzObject): SzObject
     return result;
 }
 
-/** Sides of the linear mask slot; each writes its own `--tw-mask-<side>` variable. */
-const MASK_SIDES: readonly string[] = ['t', 'r', 'b', 'l', 'x', 'y'];
+/**
+ * Sides of the linear mask slot; each writes its own `--tw-mask-<side>`
+ * variable.
+ *
+ * Exported because the editor tooling has to offer the same six names, and a
+ * second hand-written copy there would drift: a side present in one list and
+ * absent from the other makes the completion and the compiler disagree about
+ * what is legal.
+ */
+export const MASK_SIDES: readonly string[] = ['t', 'r', 'b', 'l', 'x', 'y'];
 
 /**
  * Sub-keys of one property that write the SAME CSS custom property, so only one

@@ -564,6 +564,17 @@ export const SUGGESTION_MAP = {
     "flexWrapReverse": "flexWrap: 'wrap-reverse'",
     "flexNowrap": "flexWrap: 'nowrap'"
 } as const;
+/** Sides of the linear mask slot, in the compiler's order. Editor tooling
+ * offers exactly these, so a side added to the compiler shows up without a
+ * second list to remember. */
+export const MASK_SIDES = [
+    "t",
+    "r",
+    "b",
+    "l",
+    "x",
+    "y"
+] as const;
 /** Removed keys whose replacement is a SHAPE, not another key name — rendered
  * as "was removed: <note>", never through the did-you-mean template. */
 export const MIGRATION_NOTES = {
