@@ -44,6 +44,14 @@ apps/docs/public/csszyx.js
 coverage/
 .nyc_output/
 
+# cargo-mutants run output (mutants.out, plus the .old rotation it keeps).
+# ALWAYS run it with --in-place: without that flag cargo-mutants copies the
+# whole workspace tree per job, and this one is ~31G because .pnpm-store and
+# node_modules are copied too — reflink silently falls back to a real copy on
+# the container's overlayfs, which fills the disk.
+mutants.out/
+mutants.out.old/
+
 # Next.js
 .next/
 .next*/

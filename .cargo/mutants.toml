@@ -1,0 +1,39 @@
+# cargo-mutants configuration for the Rust transform engine.
+#
+# Mutation testing answers the one question line coverage cannot: would the
+# test suite go RED if this line were wrong? Codecov's patch=100% gate proves
+# a changed line RAN under test; it does not prove a loose assertion would
+# catch a defect in it. For an engine whose whole job is emitting the correct
+# class string, that gap is the expensive one.
+#
+# Run it through the wrapper, never bare:
+#
+#   pnpm mut:diff          # mutants in the current diff vs main (the PR gate)
+#   pnpm mut:file <path>   # every mutant in one file
+#
+# ---------------------------------------------------------------------------
+# WHY THE WRAPPER PASSES --in-place (do not drop it)
+#
+# Without --in-place, cargo-mutants copies the whole workspace tree for every
+# build job. On this repo that copy is ~31G: .pnpm-store alone is 24G and
+# node_modules another 5.7G. Worse, the container's overlayfs cannot reflink,
+# so the copy-on-write fast path degrades to a real byte-for-byte copy:
+#
+#   Reflink failed: Invalid cross-device link (os error 18), falling back to
+#   regular copy
+#
+# That fills the disk. The keys below shrink the copy if it ever happens
+# anyway, but --in-place is what actually prevents it.
+# ---------------------------------------------------------------------------
+
+# The engine only exists behind this feature; without it cargo-mutants would
+# mutate a crate whose transform module is compiled out and report everything
+# as unviable.
+features = ["native-engine"]
+
+# Safety net for a run that somehow skips --in-place: honour .gitignore so the
+# copy excludes node_modules, .pnpm-store, target/ and dist/ (all ignored),
+# and skip target/ and .git explicitly. Copy drops from ~31G to ~1G.
+gitignore = true
+copy_target = false
+copy_vcs = false
