@@ -92,7 +92,7 @@
     "pages:build": "bash scripts/build-cf-pages.sh"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.5",
+    "@biomejs/biome": "2.5.6",
     "@playwright/test": "^1.62.0",
     "@rollup/rollup-linux-arm64-gnu": "^4.62.3",
     "@tailwindcss/oxide-darwin-arm64": "4.3.3",
