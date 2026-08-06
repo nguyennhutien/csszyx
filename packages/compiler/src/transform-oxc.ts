@@ -6670,7 +6670,19 @@ function collectObjectBindings(
     constOnly = false,
 ): Map<string, ObjectExpressionNode> {
     const bindings = new Map<string, ObjectExpressionNode>();
+    // A name written to again does not still hold its initializer, so folding
+    // that initializer into classes would emit the value the binding no longer
+    // has. Collected during the same walk and applied afterwards, because the
+    // write can appear before the declaration in traversal order.
+    const reassigned = new Set<string>();
     walk(root, node => {
+        if (node.type === 'AssignmentExpression') {
+            const target = (node as unknown as { left?: OxcNode }).left;
+            if (target?.type === 'Identifier') {
+                reassigned.add(String((target as IdentifierNode).name));
+            }
+            return;
+        }
         if (node.type !== 'VariableDeclaration') {
             return;
         }
@@ -6703,6 +6715,9 @@ function collectObjectBindings(
             }
         }
     });
+    for (const name of reassigned) {
+        bindings.delete(name);
+    }
     return bindings;
 }
 

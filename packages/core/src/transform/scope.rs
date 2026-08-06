@@ -12,12 +12,13 @@
 //! extend [`DeclaratorScope`] without changing the public API.
 
 use oxc_ast::ast::{
-    BindingPattern, BlockStatement, Expression, FunctionBody, Program, VariableDeclaration,
-    VariableDeclarationKind,
+    AssignmentExpression, AssignmentTarget, BindingPattern, BlockStatement, Expression,
+    FunctionBody, Program, VariableDeclaration, VariableDeclarationKind,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_span::GetSpan;
 use std::cmp::Reverse;
+use std::collections::HashSet;
 
 use super::TextSpan;
 
@@ -44,6 +45,12 @@ pub struct BindingEntry {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DeclaratorScope {
     entries: Vec<(String, BindingEntry)>,
+    /// Names written to again somewhere in the file.
+    ///
+    /// Whole-file rather than scope-aware on purpose: a write anywhere is
+    /// enough to make folding the initializer unsound, and over-reporting only
+    /// costs an optimization while under-reporting costs correct output.
+    reassigned: HashSet<String>,
 }
 
 impl DeclaratorScope {
@@ -51,12 +58,23 @@ impl DeclaratorScope {
     pub fn from_program(program: &Program<'_>) -> Self {
         let mut collector = ScopeCollector {
             entries: Vec::new(),
+            reassigned: HashSet::new(),
             scope_stack: vec![text_span(program.span)],
         };
         collector.visit_program(program);
         Self {
             entries: collector.entries,
+            reassigned: collector.reassigned,
         }
+    }
+
+    /// Whether `name` is written to again anywhere in the file.
+    ///
+    /// A binding that is reassigned no longer holds its initializer, so a
+    /// caller that folds the initializer into emitted output would describe a
+    /// value the runtime has already replaced.
+    pub fn is_reassigned(&self, name: &str) -> bool {
+        self.reassigned.contains(name)
     }
 
     /// Returns the most recent binding for `name`, or `None` if absent.
@@ -134,6 +152,9 @@ impl DeclaratorScope {
         reference_start: u32,
         program: &'a Program<'a>,
     ) -> Option<&'a Expression<'a>> {
+        if self.is_reassigned(name) {
+            return None;
+        }
         let entry = self.resolve_before(name, reference_start)?;
         find_initializer_at_span(program, entry.initializer)
     }
@@ -198,6 +219,7 @@ impl<'a> Visit<'a> for InitializerFinder<'a> {
 
 struct ScopeCollector {
     entries: Vec<(String, BindingEntry)>,
+    reassigned: HashSet<String>,
     scope_stack: Vec<TextSpan>,
 }
 
@@ -226,6 +248,17 @@ impl<'a> Visit<'a> for ScopeCollector {
     fn visit_variable_declaration(&mut self, decl: &VariableDeclaration<'a>) {
         collect_var_declarations(decl, self.current_scope(), &mut self.entries);
         walk::walk_variable_declaration(self, decl);
+    }
+
+    fn visit_assignment_expression(&mut self, assignment: &AssignmentExpression<'a>) {
+        // Only a bare `name = ...` replaces what the binding holds. A member
+        // write (`s.p = 8`) mutates the object the binding still points at,
+        // which is the documented compile-time-value contract rather than a
+        // rebinding, and is not decidable here anyway.
+        if let AssignmentTarget::AssignmentTargetIdentifier(id) = &assignment.left {
+            self.reassigned.insert(id.name.to_string());
+        }
+        walk::walk_assignment_expression(self, assignment);
     }
 }
 
@@ -533,5 +566,57 @@ mod tests {
             scope.entries().map(|(name, _)| name).collect::<Vec<_>>(),
             ["BASE", "mutable", "App"]
         );
+    }
+
+    #[test]
+    fn refuses_the_initializer_of_a_binding_that_is_written_to_again() {
+        // The whole point: folding `{ p: 4 }` here would emit a class for a
+        // value the runtime has already replaced with `{ p: 8 }` — wrong
+        // output rather than absent output.
+        let source = "let s = { p: 4 };\ns = { p: 8 };\nconst App = () => <div sz={s} />;";
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
+        assert!(!parsed.panicked, "{:?}", parsed.diagnostics);
+        let scope = DeclaratorScope::from_program(&parsed.program);
+        let reference = offset_of(source, "s} />");
+
+        assert!(scope.is_reassigned("s"));
+        assert!(scope
+            .resolve_initializer_before("s", reference, &parsed.program)
+            .is_none());
+        // The binding itself is still recorded; only folding it is refused.
+        assert!(scope.resolve("s").is_some());
+    }
+
+    #[test]
+    fn keeps_folding_a_let_that_is_never_written_to_again() {
+        // The guard asks about writes, not about the keyword. Reading `let`
+        // as "unsupported" would be a larger claim than the defect needs.
+        let source = "let s = { p: 4 };\nconst App = () => <div sz={s} />;";
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
+        assert!(!parsed.panicked, "{:?}", parsed.diagnostics);
+        let scope = DeclaratorScope::from_program(&parsed.program);
+        let reference = offset_of(source, "s} />");
+
+        assert!(!scope.is_reassigned("s"));
+        assert!(scope
+            .resolve_initializer_before("s", reference, &parsed.program)
+            .is_some());
+    }
+
+    #[test]
+    fn treats_a_member_write_as_mutation_rather_than_rebinding() {
+        // `s.p = 8` leaves the binding pointing at the same object, so it is
+        // not a rebinding. It stays part of the documented compile-time-value
+        // contract, and reporting it here would need escape analysis this
+        // module deliberately does not carry.
+        let source = "const s = { p: 4 };\ns.p = 8;\nconst App = () => <div sz={s} />;";
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
+        assert!(!parsed.panicked, "{:?}", parsed.diagnostics);
+        let scope = DeclaratorScope::from_program(&parsed.program);
+
+        assert!(!scope.is_reassigned("s"));
     }
 }

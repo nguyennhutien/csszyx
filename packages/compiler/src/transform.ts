@@ -689,9 +689,9 @@ function resolveStaticSzExpression(
         return tryStaticTransformNode(expression, getBinding);
     }
     if (!t.isIdentifier(expression)) return null;
-    const binding = path.scope.getBinding(expression.name);
-    if (!binding?.path.isVariableDeclarator() || !binding.path.node.init) return null;
-    return tryStaticTransformNode(binding.path.node.init, getBinding);
+    const declarator = foldableDeclarator(path.scope.getBinding(expression.name));
+    if (declarator === null || !declarator.node.init) return null;
+    return tryStaticTransformNode(declarator.node.init, getBinding);
 }
 
 /** Runtime fallback reason and its actionable replacement guidance. */
@@ -2839,8 +2839,44 @@ function parseStyleStringToObjectExpr(styleStr: string): t.ObjectExpression {
     return t.objectExpression(objProps);
 }
 
+/** One resolved binding, narrowed to what folding needs to decide. */
+interface ResolvedBinding {
+    path: babel.NodePath;
+    /** Babel's "never written to again after its declaration". */
+    constant: boolean;
+}
+
 /** Scope binding resolver — wraps `path.scope.getBinding` for testability and optional use. */
-type GetBinding = (name: string) => { path: babel.NodePath } | null | undefined;
+type GetBinding = (name: string) => ResolvedBinding | null | undefined;
+
+/**
+ * Whether a binding's initializer may stand in for its value at render time.
+ *
+ * Folding reads the INITIALIZER, so it is sound only while that is still what
+ * the binding holds. Write to the binding again and it is not: the emitted
+ * class describes the first value while the runtime holds the second, which
+ * styles the element wrong rather than leaving it unstyled. `szv` refuses the
+ * same shape (`resolveToConstObjectExpression`), and the native engine says so
+ * outright on `resolve_const_initializer_before`.
+ *
+ * The question is reassignment, not the keyword: a `let` that is never written
+ * to again holds its initializer just as a `const` does, and folding it is a
+ * pinned behaviour. Property mutation (`s.p = 8`) is out of reach here and
+ * stays part of the documented compile-time-value contract.
+ *
+ * Class DISCOVERY does not use this. Over-collecting a class that never
+ * renders costs an unused rule; under-collecting costs the CSS, so that side
+ * stays deliberately generous.
+ *
+ * @param binding - Binding as the scope resolved it.
+ * @returns The declarator whose initializer may be folded, or null.
+ */
+function foldableDeclarator(
+    binding: ResolvedBinding | null | undefined,
+): babel.NodePath<t.VariableDeclarator> | null {
+    if (binding === null || binding === undefined || !binding.constant) return null;
+    return binding.path.isVariableDeclarator() ? binding.path : null;
+}
 
 /**
  * Whether a JSX opening-element name is a host (DOM) element — a plain
@@ -3122,9 +3158,9 @@ function tryResolveStaticSzObject(node: t.Node, getBinding?: GetBinding): SzObje
         return evaluateStaticObject(resolved);
     }
     if (t.isIdentifier(inner) && getBinding) {
-        const binding = getBinding(inner.name);
-        if (binding?.path.isVariableDeclarator()) {
-            const init = binding.path.node.init;
+        const declarator = foldableDeclarator(getBinding(inner.name));
+        if (declarator !== null) {
+            const init = declarator.node.init;
             if (init) {
                 return tryResolveStaticSzObject(init, getBinding);
             }
@@ -3202,9 +3238,9 @@ function tryStaticIdentifierTransform(
     node: t.Identifier,
     getBinding: GetBinding,
 ): t.Expression | null {
-    const binding = getBinding(node.name);
-    if (!binding?.path.isVariableDeclarator()) return null;
-    const initializer = binding.path.node.init;
+    const declarator = foldableDeclarator(getBinding(node.name));
+    if (declarator === null) return null;
+    const initializer = declarator.node.init;
     return initializer ? tryStaticTransformNode(initializer, getBinding) : null;
 }
 
@@ -4099,7 +4135,7 @@ function evaluateStaticObject(node: t.ObjectExpression): SzObject | null {
  */
 function resolveObjectSpreads(
     node: t.ObjectExpression,
-    getBinding: (name: string) => { path: babel.NodePath } | null | undefined,
+    getBinding: GetBinding,
 ): t.ObjectExpression | null {
     const newProps: t.ObjectExpression['properties'] = [];
     for (const prop of node.properties) {
@@ -4118,7 +4154,7 @@ function resolveObjectSpreads(
  */
 function resolveObjectSpreadProperty(
     prop: t.ObjectExpression['properties'][number],
-    getBinding: (name: string) => { path: babel.NodePath } | null | undefined,
+    getBinding: GetBinding,
 ): t.ObjectExpression['properties'] | null {
     if (!t.isSpreadElement(prop)) {
         if (!t.isObjectProperty(prop) || !t.isObjectExpression(prop.value)) return [prop];
@@ -4126,9 +4162,9 @@ function resolveObjectSpreadProperty(
         return value ? [t.objectProperty(prop.key, value, prop.computed, prop.shorthand)] : null;
     }
     if (!t.isIdentifier(prop.argument)) return null;
-    const binding = getBinding(prop.argument.name);
-    if (!binding?.path.isVariableDeclarator()) return null;
-    let init = binding.path.node.init;
+    const declarator = foldableDeclarator(getBinding(prop.argument.name));
+    if (declarator === null) return null;
+    let init = declarator.node.init;
     if (t.isTSAsExpression(init) || t.isTSSatisfiesExpression(init)) init = init.expression;
     if (!t.isObjectExpression(init)) return null;
     return resolveObjectSpreads(init, getBinding)?.properties ?? null;
