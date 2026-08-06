@@ -45,10 +45,18 @@ interface DesignSystem {
     candidatesToCss(candidates: readonly string[]): Array<string | null>;
 }
 
+/** A plugin or config module handed back to Tailwind's loader. */
+interface LoadedModule {
+    path: string;
+    base: string;
+    module: unknown;
+}
+
 /** Options Tailwind's design-system loader takes. */
 interface LoadDesignSystemOptions {
     base: string;
     loadStylesheet(id: string, base: string): Promise<LoadedStylesheet>;
+    loadModule(id: string, base: string, resourceHint: string): Promise<LoadedModule>;
 }
 
 /** The Tailwind installation a project resolves to. */
@@ -169,6 +177,28 @@ async function loadStylesheet(
 }
 
 /**
+ * Load a plugin or config module a stylesheet asked for with `@plugin`.
+ *
+ * Tailwind v4 pulls typography, forms and friends in this way, so a design
+ * system built without this cannot compile those stylesheets at all — the
+ * check would skip for a large share of real projects. Resolution is anchored
+ * to the PROJECT for the same reason Tailwind itself is: the plugin is the
+ * project's dependency, not this package's.
+ *
+ * @param id - Specifier as written in `@plugin`.
+ * @param base - Directory the importing stylesheet lives in.
+ * @param resolveFrom - Project directory whose `package.json` anchors packages.
+ * @returns The module Tailwind expects back.
+ */
+async function loadModule(id: string, base: string, resolveFrom: string): Promise<LoadedModule> {
+    const file = id.startsWith('.')
+        ? path.resolve(base, id)
+        : createRequire(path.join(resolveFrom, 'package.json')).resolve(id);
+    const loaded = (await import(pathToFileURL(file).href)) as { default?: unknown };
+    return { path: file, base: path.dirname(file), module: loaded.default ?? loaded };
+}
+
+/**
  * Map a `tailwindcss` / `tailwindcss/<name>` import onto a file in the package.
  *
  * @param id - Import specifier as written.
@@ -260,6 +290,7 @@ export async function createEmittedClassOracle(
         design = await load(options.css, {
             base: options.cssBase,
             loadStylesheet: (id, base) => loadStylesheet(id, base, tailwind.root),
+            loadModule: (id, base) => loadModule(id, base, options.resolveFrom),
         });
     } catch (error) {
         return {

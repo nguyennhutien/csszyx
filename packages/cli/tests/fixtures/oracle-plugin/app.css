@@ -1,0 +1,2 @@
+@import "tailwindcss";
+@plugin "./local-plugin.cjs";

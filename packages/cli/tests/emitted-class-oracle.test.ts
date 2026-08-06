@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -83,6 +84,33 @@ describe('createEmittedClassOracle — what Tailwind actually serves', () => {
 // `group` and `peer` carry no styles of their own: they mark an element so
 // `group-*` / `peer-*` variants on its descendants have something to match.
 // Tailwind reports them as producing no CSS, which is true and not a defect.
+// Tailwind v4 loads typography, forms and friends through `@plugin`. Without
+// a module loader the whole stylesheet fails to compile, so the check would
+// skip — silently doing nothing for a large share of real projects.
+describe('createEmittedClassOracle — stylesheets that load plugins', () => {
+    const PLUGIN_FIXTURE = path.join(REPO, 'packages/cli/tests/fixtures/oracle-plugin');
+
+    it('compiles a stylesheet that loads a plugin, and serves what the plugin adds', async () => {
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: REPO,
+            css: await readFile(path.join(PLUGIN_FIXTURE, 'app.css'), 'utf8'),
+            cssBase: PLUGIN_FIXTURE,
+        });
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+        expect(oracle.findDead(['plugin-made-this', 'p-4', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
+    it('skips with the plugin named when the stylesheet asks for one that is missing', async () => {
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: REPO,
+            css: '@import "tailwindcss";\n@plugin "./no-such-plugin.cjs";',
+            cssBase: PLUGIN_FIXTURE,
+        });
+        expect(oracle.ok).toBe(false);
+        expect(oracle.ok === false && oracle.reason).toContain('no-such-plugin');
+    });
+});
+
 describe('createEmittedClassOracle — markers are not dead classes', () => {
     it('keeps the bare markers', async () => {
         const oracle = await readyOracle();
