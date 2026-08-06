@@ -228,6 +228,7 @@ export function transformOxc(
     // (`mx: GUTTER` where `const GUTTER = 0`); the object-only map above cannot
     // hold scalar initializers.
     const constInitializers = collectConstInitializers(parsed.program as unknown as OxcNode);
+    const importedNames = collectImportedNames(parsed.program as unknown as OxcNode);
     const importedSzObjects = collectImportedSzObjects(
         parsed.program as unknown as OxcNode,
         options?.crossModuleSzObjects,
@@ -423,6 +424,7 @@ export function transformOxc(
                 classNameAttribute: classNameAttr,
                 filename: effectiveFilename,
                 bindings: objectBindings,
+                importedNames,
                 source,
                 edits,
                 classes,
@@ -1263,6 +1265,7 @@ function transformOxcRuntimeFallback(params: OxcRuntimeFallbackParams): boolean 
         classNameAttribute,
         filename,
         bindings,
+        importedNames,
         source,
         edits,
         classes,
@@ -1270,7 +1273,7 @@ function transformOxcRuntimeFallback(params: OxcRuntimeFallbackParams): boolean 
     } = params;
     if (!expression || !attribute) return false;
     if (expression.type !== 'ArrayExpression') {
-        diagnostics.push(buildRuntimeFallbackDiagnostic(expression, source));
+        diagnostics.push(buildRuntimeFallbackDiagnostic(expression, source, importedNames));
     }
     if (
         expression.type === 'ObjectExpression' &&
@@ -1314,6 +1317,8 @@ interface OxcRuntimeFallbackParams {
     readonly classNameAttribute: JsxAttributeNode | null;
     readonly filename: string;
     readonly bindings: Map<string, ObjectExpressionNode>;
+    /** Local names this module introduced with an import. */
+    readonly importedNames: ReadonlySet<string>;
     readonly source: string;
     readonly edits: MagicString;
     readonly classes: Set<string>;
@@ -2768,13 +2773,62 @@ function classifyFallbackExpression(rawExpression: OxcNode): {
 }
 
 /**
+ * The imported binding an unresolved expression roots in, when it has one.
+ *
+ * A member expression is judged by its ROOT object, so `S.cardSz` on a
+ * namespace import counts and `props.sz` does not.
+ *
+ * @param expression Unresolved sz expression, already unwrapped.
+ * @param importedNames Local names this module introduced with an import.
+ * @returns The imported binding's local name, or null.
+ */
+function importedRootName(expression: OxcNode, importedNames: ReadonlySet<string>): string | null {
+    let root = expression;
+    while (root.type === 'MemberExpression') {
+        const next = (root as unknown as { object?: OxcNode }).object;
+        if (!next) return null;
+        root = next;
+    }
+    if (root.type !== 'Identifier') return null;
+    const name = String((root as IdentifierNode).name);
+    return importedNames.has(name) ? name : null;
+}
+
+/**
+ * Every local name this module introduced with an import.
+ *
+ * Named, default and namespace alike: what matters is only that the binding
+ * comes from another module, not which form brought it in.
+ *
+ * @param root Program AST root.
+ * @returns The imported local names.
+ */
+function collectImportedNames(root: OxcNode): Set<string> {
+    const names = new Set<string>();
+    walk(root, node => {
+        if (node.type !== 'ImportDeclaration') return;
+        const declaration = node as unknown as { specifiers?: OxcNode[] };
+        for (const specifier of declaration.specifiers ?? []) {
+            const local = (specifier as unknown as { local?: { name?: string } }).local?.name;
+            if (local !== undefined) names.add(local);
+        }
+    });
+    return names;
+}
+
+/**
  * Build the same dev diagnostic Babel emits when sz falls back to runtime.
  *
  * @param rawExpression Runtime fallback expression, parentheses included.
  * @param source Original source.
+ * @param importedNames Local names this module introduced with an import.
  * @returns Diagnostic string.
  */
-function buildRuntimeFallbackDiagnostic(rawExpression: OxcNode, source: string): string {
+function buildRuntimeFallbackDiagnostic(
+    rawExpression: OxcNode,
+    source: string,
+    importedNames: ReadonlySet<string>,
+): string {
     // Babel's AST has no parenthesized-expression nodes, so its lane reports
     // the inner expression for `sz={(cfg.x)}`. Unwrap here or the same source
     // classifies as `other`/ParenthesizedExpression under oxc — wording AND
@@ -2804,6 +2858,15 @@ function buildRuntimeFallbackDiagnostic(rawExpression: OxcNode, source: string):
             );
         }
         ({ reason, suggestion } = describeSzFallback('call', name));
+    } else if (importedRootName(expression, importedNames) !== null) {
+        // An import is a module-level value this build tried to read and could
+        // not, so nothing collected its classes. Everything else here is
+        // usually a prop the caller supplies, collected where the caller
+        // writes it.
+        ({ reason, suggestion } = describeSzFallback(
+            'import',
+            importedRootName(expression, importedNames) ?? '',
+        ));
     } else if (expression.type === 'Identifier') {
         ({ reason, suggestion } = describeSzFallback(
             'identifier',

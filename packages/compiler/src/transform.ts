@@ -711,9 +711,13 @@ type RuntimeFallbackDescription = SzFallbackDescription;
  * the oxc and Rust lanes cannot drift from it.
  *
  * @param expression Unresolved sz expression.
+ * @param scope Scope the expression was written in, for binding lookup.
  * @returns Runtime fallback reason and suggestion.
  */
-function describeRuntimeFallback(expression: t.Expression): RuntimeFallbackDescription {
+function describeRuntimeFallback(
+    expression: t.Expression,
+    scope: babel.NodePath['scope'],
+): RuntimeFallbackDescription {
     if (t.isCallExpression(expression)) {
         const callee = expression.callee;
         let name: string = SZ_FALLBACK_UNKNOWN_CALLEE;
@@ -723,6 +727,10 @@ function describeRuntimeFallback(expression: t.Expression): RuntimeFallbackDescr
         }
         return describeSzFallback('call', name);
     }
+    const importedRoot = importedRootName(expression, scope);
+    if (importedRoot !== null) {
+        return describeSzFallback('import', importedRoot);
+    }
     if (t.isIdentifier(expression)) {
         return describeSzFallback('identifier', expression.name);
     }
@@ -730,6 +738,38 @@ function describeRuntimeFallback(expression: t.Expression): RuntimeFallbackDescr
         return describeSzFallback('member');
     }
     return describeSzFallback('other', expression.type);
+}
+
+/**
+ * The imported binding an unresolved expression roots in, when it has one.
+ *
+ * This is the whole basis for treating a fallback as lost CSS rather than as
+ * advice. An import names a module-level value the compiler went looking for
+ * and could not read, so nothing collected its classes anywhere. A bare
+ * identifier or member access usually names a prop the CALLER supplies, whose
+ * literal is collected where the caller writes it — forwarding `sz` through a
+ * wrapper is the documented pattern, and reporting it as a build failure would
+ * fire on working code.
+ *
+ * A member expression is judged by its ROOT object: `S.cardSz` on a namespace
+ * import is a module value, `props.sz` is not.
+ *
+ * @param expression Unresolved sz expression.
+ * @param scope Scope the expression was written in.
+ * @returns The imported binding's local name, or null.
+ */
+function importedRootName(expression: t.Expression, scope: babel.NodePath['scope']): string | null {
+    let root: t.Node = expression;
+    while (t.isMemberExpression(root)) root = root.object;
+    if (!t.isIdentifier(root)) return null;
+    const binding = scope.getBinding(root.name);
+    const declaration = binding?.path;
+    if (declaration === undefined) return null;
+    const isImport =
+        declaration.isImportSpecifier() ||
+        declaration.isImportDefaultSpecifier() ||
+        declaration.isImportNamespaceSpecifier();
+    return isImport ? root.name : null;
 }
 
 /**
@@ -1621,7 +1661,7 @@ function transformRuntimeSzFallback(
     const lineColumn = expression.loc
         ? `${expression.loc.start.line}:${expression.loc.start.column + 1}`
         : '?';
-    const description = describeRuntimeFallback(expression);
+    const description = describeRuntimeFallback(expression, path.scope);
     diagnostics.push(
         `sz fallback at ${lineColumn}: ${description.reason}.\n  Suggestion: ${description.suggestion}`,
     );

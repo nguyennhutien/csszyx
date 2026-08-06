@@ -23,12 +23,13 @@
  * node type into one of these, so the matrix stays free of Babel/oxc/oxc-rust
  * node vocabulary.
  */
-export type SzFallbackKind = 'call' | 'identifier' | 'member' | 'other';
+export type SzFallbackKind = 'call' | 'identifier' | 'import' | 'member' | 'other';
 
 /** Every kind, in the order the generated Rust match arms are emitted. */
 export const SZ_FALLBACK_KINDS: readonly SzFallbackKind[] = [
     'call',
     'identifier',
+    'import',
     'member',
     'other',
 ];
@@ -63,6 +64,11 @@ export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTempl
         reason: 'identifier `{detail}` could not be resolved to a static value',
         suggestion:
             "Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().",
+    },
+    import: {
+        reason: 'imported binding `{detail}` could not be read at build time',
+        suggestion:
+            'Set build.importedStaticSz to compile a static object another module exports. For variant-based styling → szv(). For true runtime values → dynamic().',
     },
     member: {
         reason: 'member expression is not statically resolvable',
@@ -166,20 +172,26 @@ export type SzFallbackConsequence = 'missing-css' | 'nudge';
  * The `sz` kinds whose fallback also cost the classes.
  *
  * An unreadable `szr` argument or `szv` config always means the classes never
- * reached the safelist, so those sites need no split. The `sz` site does: it
- * keeps a runtime fallback either way, but what that fallback receives differs
- * by kind. An identifier or member names a value the compiler never sees, so
- * nothing was collected from it — measurably zero classes — and the browser
- * asks for utilities no build step was told to generate. A call and an `other`
- * are not in that position: `dynamic()` is a call and compiles correctly, and
- * an object literal behind `as const` still hands its classes over on the way
- * to the fallback. Reporting those as an integrity failure would fire on
- * working code, which is the one thing a production diagnostic may not do.
+ * reached the safelist, so those sites need no split. The `sz` site does, and
+ * the line runs between "a value this build tried to read" and "a value
+ * somebody else supplies".
+ *
+ * An IMPORT is the first. The compiler went looking for a module-level value
+ * and could not read it, so nothing collected its classes — here or anywhere —
+ * and the markup ends up naming utilities no build step was told to generate.
+ *
+ * A bare identifier or member access is usually the second: a prop the CALLER
+ * passes, whose literal is collected where the caller writes it. Forwarding
+ * `sz` through a wrapper is the documented pattern, so a production error on
+ * it would fire on working code — the one thing this channel may not do. A
+ * call and an `other` are not in that position either: `dynamic()` is a call
+ * and compiles correctly, and an object literal behind an assertion hands its
+ * classes over on the way to the fallback.
+ *
+ * The cost of drawing the line here is under-reporting: an unresolvable
+ * module-level const reads as advisory. That is the safe direction.
  */
-const SZ_SITE_MISSING_CSS_KINDS: ReadonlySet<SzFallbackKind> = new Set<SzFallbackKind>([
-    'identifier',
-    'member',
-]);
+const SZ_SITE_MISSING_CSS_KINDS: ReadonlySet<SzFallbackKind> = new Set<SzFallbackKind>(['import']);
 
 /**
  * Each kind's reason text up to the point the detail is substituted.

@@ -504,6 +504,7 @@ fn site_fallback_diagnostics(
             let kind = match fallback.kind {
                 RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
                 RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
+                RuntimeFallbackKindIr::Import => SzFallbackKind::Import,
                 RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
                 RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
             };
@@ -544,6 +545,7 @@ fn runtime_fallback_diagnostics(
         let kind = match diagnostic.kind {
             RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
             RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
+            RuntimeFallbackKindIr::Import => SzFallbackKind::Import,
             RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
             RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
         };
@@ -964,6 +966,58 @@ mod tests {
         assert!(diagnostics.contains("member expression"), "{diagnostics}");
         assert!(diagnostics.contains("AwaitExpression"), "{diagnostics}");
         assert!(diagnostics.contains("szv catalog at 5:"), "{diagnostics}");
+    }
+
+    #[test]
+    fn static_engine_names_an_imported_binding_apart_from_a_forwarded_prop() {
+        // These two read alike in the AST and mean opposite things. An import
+        // is a module-level value this build tried to read and could not, so
+        // nothing collected its classes; a forwarded prop belongs to the
+        // caller, whose literal is collected where the caller writes it. The
+        // wording has to separate them, because the bundler routes production
+        // reporting on exactly that difference.
+        let file = TransformFile {
+            filename: "/repo/src/Imports.tsx".to_string(),
+            source: [
+                "import { cardSz } from './styles';",
+                "import fallbackSz from './fallback';",
+                "import * as S from './all';",
+                "export const A = () => <div sz={cardSz} />;",
+                "export const B = () => <div sz={fallbackSz} />;",
+                "export const C = () => <div sz={S.cardSz} />;",
+                "export const D = ({ sz }) => <div sz={sz} />;",
+                // Parentheses, a computed member, and an szr argument: the
+                // same question asked through three more shapes, because each
+                // reaches the classifier by its own arm.
+                "export const E = () => <div sz={(cardSz)} />;",
+                "export const F = () => <div sz={S['cardSz']} />;",
+                "export const G = szr(cardSz);",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        for name in ["cardSz", "fallbackSz", "S"] {
+            assert!(
+                diagnostics.contains(&format!("imported binding `{name}`")),
+                "{diagnostics}"
+            );
+        }
+        assert!(
+            diagnostics.contains("Set build.importedStaticSz"),
+            "{diagnostics}"
+        );
+        // The forwarded prop keeps the plain wording, and must not be reported
+        // as an import just because it is also an unresolved identifier.
+        assert!(diagnostics.contains("identifier `sz`"), "{diagnostics}");
+        assert!(
+            !diagnostics.contains("imported binding `sz`"),
+            "{diagnostics}"
+        );
+        // The szr site renders through its own mapping, so an import reaching
+        // it has to be named there too.
+        assert!(diagnostics.contains("szr fallback at "), "{diagnostics}");
     }
 
     #[test]

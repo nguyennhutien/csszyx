@@ -113,35 +113,32 @@ describe('szFallbackConsequenceOf', () => {
         expect(szFallbackConsequenceOf(formatSzFallbackDiagnostic('szv', '1:1', 'call', 'f'))).toBe(
             'missing-css',
         );
-        expect(szFallbackConsequenceOf(formatSzFallbackDiagnostic('sz', '1:1', 'member'))).toBe(
-            'missing-css',
-        );
+        expect(
+            szFallbackConsequenceOf(formatSzFallbackDiagnostic('sz', '1:1', 'import', 'c')),
+        ).toBe('missing-css');
         expect(szFallbackConsequenceOf(szsUnsupportedDiagnostic('/p/t.tsx'))).toBe('missing-css');
     });
 
-    it('splits the sz site by kind, because only some kinds collected nothing', () => {
-        // A value the compiler cannot see contributes no class to the safelist,
-        // so nothing downstream can generate the CSS the browser will ask for —
-        // the same integrity failure `szr` and `szv` already report.
+    it('splits the sz site by kind, on what the fallback actually cost', () => {
+        // Only an IMPORT names a value the compiler tried to read and could
+        // not: nothing collected it, here or anywhere, so the classes exist in
+        // no output. That is the integrity failure `szr` and `szv` report.
         expect(
-            szFallbackConsequenceOf(
-                formatSzFallbackDiagnostic('sz', '1:1', 'identifier', 'cardSz'),
-            ),
+            szFallbackConsequenceOf(formatSzFallbackDiagnostic('sz', '1:1', 'import', 'cardSz')),
         ).toBe('missing-css');
-        expect(szFallbackConsequenceOf(formatSzFallbackDiagnostic('sz', '1:1', 'member'))).toBe(
-            'missing-css',
-        );
-        // The other two kinds do not share it, so they must stay advisory:
-        // `dynamic()` is a call and compiles correctly, and an object literal
-        // behind `as const` hands its classes over on the way to the fallback.
-        expect(
-            szFallbackConsequenceOf(formatSzFallbackDiagnostic('sz', '1:1', 'call', 'makeSz')),
-        ).toBe('nudge');
-        expect(
-            szFallbackConsequenceOf(
-                formatSzFallbackDiagnostic('sz', '1:1', 'other', 'TemplateLiteral'),
-            ),
-        ).toBe('nudge');
+
+        // Every other kind stays advisory, and the reason is the same one each
+        // time: the classes were not lost. A bare identifier or a member access
+        // is usually a prop the CALLER supplies, and the caller's literal is
+        // collected where it is written — `<Card sz={{ p: 4 }} />`. Forwarding
+        // `sz` is what the docs teach; a production error on it would fire on
+        // working code, which is the one thing this channel may not do.
+        for (const kind of ['identifier', 'member', 'call', 'other'] as const) {
+            expect(
+                szFallbackConsequenceOf(formatSzFallbackDiagnostic('sz', '1:1', kind, 'x')),
+                kind,
+            ).toBe('nudge');
+        }
     });
 
     it('classifies a kind it cannot recover as advisory rather than as a failure', () => {
@@ -216,8 +213,29 @@ describe('engine parity for sz fallback diagnostics', () => {
 // words its diagnostic differently is caught by the routing that depends on it.
 describe('engine parity for the sz consequence split', () => {
     const CONSEQUENCE_SOURCES: ReadonlyArray<readonly [string, string, SzFallbackConsequence]> = [
-        ['identifier', 'export const A = ({ v }) => <div sz={v} />;', 'missing-css'],
-        ['member', 'export const A = () => <div sz={cfg.card} />;', 'missing-css'],
+        // An imported binding: a module-level value the compiler tried to read
+        // and could not. Nothing collected its classes, so the CSS is absent.
+        [
+            'named import',
+            "import { cardSz } from './styles';\nexport const A = () => <div sz={cardSz} />;",
+            'missing-css',
+        ],
+        [
+            'default import',
+            "import cardSz from './styles';\nexport const A = () => <div sz={cardSz} />;",
+            'missing-css',
+        ],
+        [
+            'namespace import member',
+            "import * as S from './styles';\nexport const A = () => <div sz={S.cardSz} />;",
+            'missing-css',
+        ],
+        // A forwarded prop. The value belongs to the CALLER, whose literal is
+        // collected where it is written, and forwarding `sz` is the documented
+        // wrapper pattern — advisory, never a build error.
+        ['forwarded prop', 'export const A = ({ sz }) => <div sz={sz} />;', 'nudge'],
+        ['forwarded props member', 'export const A = props => <div sz={props.sz} />;', 'nudge'],
+        ['unbound member', 'export const A = () => <div sz={cfg.card} />;', 'nudge'],
         ['call', 'export const A = () => <div sz={makeSz()} />;', 'nudge'],
         ['other', 'export const A = ({ v }) => <div sz={`${v}`} />;', 'nudge'],
     ];

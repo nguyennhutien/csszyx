@@ -14,6 +14,7 @@ use oxc_ast::{
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_span::{GetSpan, SourceType, Span};
+use std::collections::HashSet;
 use std::time::Instant;
 
 use super::{
@@ -121,6 +122,7 @@ pub fn parse_source_shell_with_registries(
         timings.scope_ns = elapsed_ns(scope_start);
         let imported_sz_objects =
             collect_imported_sz_objects(&parsed.program, registries.sz_objects);
+        let imported_names = collect_imported_names(&parsed.program);
         let mut visitor = CsszyxIrVisitor {
             source: &file.source,
             ir: &mut ir,
@@ -139,6 +141,7 @@ pub fn parse_source_shell_with_registries(
             szv_gate: file.source.contains("szv(") || !cross_module.is_empty(),
             cross_module,
             imported_sz_objects: &imported_sz_objects,
+            imported_names: &imported_names,
         };
         let ir_start = Instant::now();
         visitor.visit_program(&parsed.program);
@@ -249,6 +252,8 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     /// binding names, so identifier lowering is one lookup and a file that
     /// imports none of them pays nothing.
     imported_sz_objects: &'p [(String, StaticSzObject)],
+    /// Local names this module introduced with an import, any form.
+    imported_names: &'p HashSet<String>,
 }
 
 /// One qualifying szr import clause, recorded for the deferred rewrite.
@@ -790,7 +795,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         runtime_fallback_span_from_jsx_expression(&container.expression)?;
                     let candidate_classes =
                         candidate_classes_from_jsx_expression(&container.expression, ctx);
-                    runtime_fallback_diagnostic = classify_runtime_fallback(&container.expression);
+                    runtime_fallback_diagnostic =
+                        classify_runtime_fallback(&container.expression, self.imported_names);
                     (
                         StaticSzObject::empty(),
                         value_span,
@@ -895,7 +901,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     // finalize.
                     if callee.name == "szr" {
                         if let Some(expression) = argument.as_expression() {
-                            let (kind, detail) = classify_expression_fallback(expression);
+                            let (kind, detail) =
+                                classify_expression_fallback(expression, self.imported_names);
                             self.pending_szr_fallbacks.push(PendingSzrFallback {
                                 call_span: text_span(call.span()),
                                 fallback: super::SiteFallbackIr {
@@ -1324,7 +1331,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         let Some(expression) = argument.as_expression() else {
             return;
         };
-        let (kind, detail) = classify_expression_fallback(expression);
+        let (kind, detail) = classify_expression_fallback(expression, self.imported_names);
         self.ir.site_fallbacks.push(super::SiteFallbackIr {
             site,
             kind,
@@ -2217,10 +2224,11 @@ fn split_class_tokens(value: &str) -> Vec<String> {
 ///   `computed`, and that shared quirk is pinned by the parity suite.
 fn classify_runtime_fallback(
     expression: &JSXExpression<'_>,
+    imported: &HashSet<String>,
 ) -> Option<super::RuntimeFallbackDiagnosticIr> {
     use super::RuntimeFallbackDiagnosticIr;
 
-    let (kind, detail) = classify_expression_fallback(expression.as_expression()?);
+    let (kind, detail) = classify_expression_fallback(expression.as_expression()?, imported);
     Some(RuntimeFallbackDiagnosticIr { kind, detail })
 }
 
@@ -2596,15 +2604,71 @@ fn is_provably_non_object_argument(expression: &Expression<'_>) -> bool {
 /// Classify an expression into the shared matrix vocabulary.
 ///
 /// Parentheses are seen through (Babel's AST has no node for them); TS wrappers
+/// Every local name this module introduced with an import, any form.
+///
+/// Named, default and namespace alike: what decides the diagnostic is only
+/// that the binding comes from another module, not which form brought it in.
+fn collect_imported_names(program: &Program<'_>) -> HashSet<String> {
+    let mut names = HashSet::new();
+    for statement in &program.body {
+        let Statement::ImportDeclaration(declaration) = statement else {
+            continue;
+        };
+        let Some(specifiers) = &declaration.specifiers else {
+            continue;
+        };
+        for specifier in specifiers {
+            let local = match specifier {
+                ImportDeclarationSpecifier::ImportSpecifier(entry) => &entry.local.name,
+                ImportDeclarationSpecifier::ImportDefaultSpecifier(default) => &default.local.name,
+                ImportDeclarationSpecifier::ImportNamespaceSpecifier(namespace) => {
+                    &namespace.local.name
+                }
+            };
+            names.insert(local.to_string());
+        }
+    }
+    names
+}
+
+/// The imported binding an unresolved expression roots in, when it has one.
+///
+/// A member expression is judged by its ROOT object, so `S.cardSz` on a
+/// namespace import counts while `props.sz` does not. Parentheses are already
+/// gone by the time this is asked: the caller unwraps them so that its own
+/// position reporting matches Babel's, which has no such node.
+fn imported_root_name(expression: &Expression<'_>, imported: &HashSet<String>) -> Option<String> {
+    let mut current = expression;
+    loop {
+        current = match current {
+            Expression::StaticMemberExpression(member) => &member.object,
+            Expression::ComputedMemberExpression(member) => &member.object,
+            Expression::Identifier(identifier) => {
+                let name = identifier.name.as_str();
+                return imported.contains(name).then(|| name.to_string());
+            }
+            _ => return None,
+        };
+    }
+}
+
 /// are NOT, because Babel classifies those as `other`.
 fn classify_expression_fallback(
     expression: &Expression<'_>,
+    imported: &HashSet<String>,
 ) -> (super::RuntimeFallbackKindIr, String) {
     use super::RuntimeFallbackKindIr;
 
     let mut expression = expression;
     while let Expression::ParenthesizedExpression(inner) = expression {
         expression = &inner.expression;
+    }
+
+    if let Some(name) = imported_root_name(expression, imported) {
+        // An import names a module-level value this build tried to read and
+        // could not, so nothing collected its classes. Everything below is
+        // usually a prop the caller supplies, collected where it is written.
+        return (RuntimeFallbackKindIr::Import, name);
     }
 
     let (kind, detail) = match expression {

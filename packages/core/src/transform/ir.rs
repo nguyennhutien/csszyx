@@ -306,6 +306,10 @@ pub enum RuntimeFallbackKindIr {
     Call,
     /// A bare identifier; `detail` carries its name.
     Identifier,
+    /// An expression rooted in an imported binding; `detail` carries the local
+    /// name. Kept apart from `Identifier` because only this one means the
+    /// build tried to read a module-level value and could not.
+    Import,
     /// A member expression; `detail` is unused.
     Member,
     /// Anything else; `detail` carries the Babel-compatible node type name.
