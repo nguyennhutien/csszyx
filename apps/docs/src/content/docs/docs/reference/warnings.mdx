@@ -1,0 +1,524 @@
+---
+title: Warnings & Troubleshooting
+description: Every warning and error csszyx can print — the exact wording, whether it fires in production, what it costs you, and the fix. Covers sz, szv, szr, szs/szsc, szcn, dynamic(), the plugin, mangling, hydration, and the CLI.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every message csszyx prints is listed here with its exact wording, so you can
+paste a line from your terminal or console into <kbd>Ctrl</kbd>+<kbd>F</kbd> and
+land on the row that explains it.
+
+Placeholders are written the way the source writes them — `{filename}`,
+`{key}`, `{n}` — and are filled in at emit time.
+
+## How to read a csszyx message
+
+Every message starts with `[csszyx]`. Two things decide where it shows up and
+whether you can ignore it:
+
+- **Where it runs.** *Build* messages come from the bundler plugin, the
+  compiler, or the CLI, and appear in the terminal. *Runtime* messages come from
+  the runtime helpers and appear in the browser console (or the SSR terminal).
+- **What it costs.** Some messages report that **CSS is missing** from the
+  output. Others are **usage advice** — the styles are fine, the code could be
+  better. csszyx treats those two very differently.
+
+### Anatomy of a fallback line
+
+The most common build message has a fixed shape:
+
+```text
+[csszyx] /src/components/Card.tsx
+  sz fallback at 12:9: identifier `cardStyles` could not be resolved to a static value.
+  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().
+```
+
+| Part | Meaning |
+| --- | --- |
+| `sz fallback` | The site. One of `sz fallback`, `szr fallback`, `szv catalog`. |
+| `12:9` | Line and column of the expression, 1-based. |
+| reason | *What* could not be read — the expression shape. |
+| `Suggestion:` | The way out, chosen by the expression shape. |
+
+## The two classes of build warning
+
+This is the single most useful distinction in this page.
+
+| Class | Means | Dev build | Production build | `quiet: 'nudges'` | `quiet: true` |
+| --- | --- | --- | --- | --- | --- |
+| **missing output** | Classes never reached the safelist, so no build step was told to generate their CSS. The markup names utilities that do not exist. | prints | **prints** | prints | silent |
+| **usage nudge** | The classes *were* collected. The message is advice for whoever writes csszyx code. | prints | silent | silent | silent |
+
+<Aside type="caution" title="`quiet: true` hides missing output too">
+`quiet: 'nudges'` mutes exactly the set a production build already mutes, and
+keeps every report that the build produced less than you asked for. `true` is
+blunt: it also hides the missing-output reports. Reach for it only once you
+have decided the missing CSS is acceptable.
+</Aside>
+
+A separate group of build messages goes straight to `console.warn` and is
+**not** gated by `quiet` at all — parser fallbacks, prescan skips, mangle
+reports, and the native-binary notice. Each is marked in its table below.
+
+## Every silencing switch
+
+| Switch | Silences | Where |
+| --- | --- | --- |
+| `quiet: 'nudges'` | Usage nudges, keeps missing-output reports | Plugin option |
+| `quiet: true` | All plugin warnings (errors still throw) | Plugin option |
+| `contentScopeCheck: false` | The unscoped-monorepo warning only | Plugin option |
+| `CSSZYX_QUIET_SZ_WARNINGS=1` | The `sz` key/value dev warnings (§ [sz key and value warnings](#sz--key-and-value-warnings)) | Environment |
+| `CSSZYX_NO_PROJECT_SCAN_HINT=1` | The one-time `csszyx check` tip | Environment |
+| `csszyx.enableDiagnostics: false` | VS Code squiggles | Editor setting |
+| `NODE_ENV=production` | Every runtime dev warning (they are dead-code-eliminated) | Environment |
+
+See [Plugin Config → Quiet](/docs/reference/config/#quiet-quiet) for the option
+itself.
+
+## Quick index
+
+| What you actually see | Start here |
+| --- | --- |
+| An element has no styling at all | [sz fallback](#sz--unresolved-expressions), [safelist and CSS entry](#build-pipeline) |
+| One property does nothing, the rest works | [sz key and value warnings](#sz--key-and-value-warnings) |
+| `sz="[object Object]"` in the DOM | [szr and the string helpers](#szr--the-string-helpers) |
+| `class="[object Object]"` | [szv runtime](#szv--runtime) |
+| Styles work in dev, break in production | [Mangling](#mangling), [SSR and hydration](#ssr--hydration) |
+| A variant (`hover:`, `md:`) never applies | [sz key and value warnings](#sz--key-and-value-warnings) |
+| Slots on a component are unstyled | [szs and szsc](#szs--szsc) |
+| Merging two class strings keeps both | [szcn](#szcn) |
+| The build got slower or bigger | [Mangling](#mangling) |
+| Only *some* files are styled | [Build pipeline](#build-pipeline) |
+
+## sz — unresolved expressions
+
+These fire when the compiler cannot read the value you put in `sz={…}`. All
+three engines emit identical wording.
+
+**What each kind means:**
+
+| Kind | Triggered by | Classes still collected? | Fires in production? |
+| --- | --- | --- | --- |
+| `call` | `sz={makeSz()}` | Yes — `dynamic()` and friends compile correctly | No (nudge) |
+| `identifier` | `sz={styles}` where `styles` is not a readable const | Yes, when a caller supplies it | No (nudge) |
+| `import` | `sz={imported}` from another module | **No** | **Yes** |
+| `member` | `sz={theme.card}` | Yes, when a caller supplies it | No (nudge) |
+| `other` | anything else — a template literal, a conditional | Yes | No (nudge) |
+
+<Aside type="note" title="Why forwarding a prop is only a nudge">
+`({ sz }) => <div sz={sz} />` is the documented wrapper pattern — the literal
+lives at the *call site*, where it is collected normally. Making that a
+production error would fire on working code, so `identifier` and `member` stay
+advisory. An **import** is different: the compiler went looking for a
+module-level value and could not read it, so nothing collected those classes
+anywhere.
+</Aside>
+
+**Exact wording** — `{detail}` is the callee name, identifier name, or node
+type:
+
+| Kind | Reason | Suggestion |
+| --- | --- | --- |
+| `call` | ``function call `{detail}()` result is unknown at build time`` | `If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().` |
+| `identifier` | ``identifier `{detail}` could not be resolved to a static value`` | `Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().` |
+| `import` | ``imported binding `{detail}` could not be read at build time`` | `Set build.importedStaticSz to compile a static object another module exports. For variant-based styling → szv(). For true runtime values → dynamic().` |
+| `member` | `member expression is not statically resolvable` | `Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().` |
+| `other` | ``expression of type `{detail}` is not statically analyzable`` | `Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().` |
+
+When the callee has no readable name — `sz={obj[key]()}` — `{detail}` is `?`.
+
+The `szv catalog` site replaces the suggestion with one of its own:
+
+```text
+Pass the config inline, or as a module-level const object literal. A computed or spread config cannot be read at build time, so none of its variant classes are safelisted and they generate no CSS.
+```
+
+<Aside type="tip" title="The import case has a real fix">
+`build.importedStaticSz` lets a static object exported by another module be
+read at build time. See
+[Reusing Styles](/docs/reusing-styles/) and
+[Plugin Config](/docs/reference/config/).
+</Aside>
+
+## sz — other build diagnostics
+
+| Message | Class | Fix |
+| --- | --- | --- |
+| `[csszyx] unresolvable sz spread at {line}:{col}: sz={{ ...x }} cannot be resolved at build time and falls back to runtime; it may render no styles in production. Use array form: sz={[x, { ... }]}.` | missing output | Use the array form. |
+| `sz array element at {line}:{col}: this object literal contains a runtime value, so the whole element is deferred to _szPart at runtime (its classes are still safelisted best-effort).` — suggestion: `use finite literal ternary branches when possible, or move truly runtime values to dynamic().` | nudge | Optional. Prefer literal ternary branches. |
+| `[csszyx] possible style override at {filename}: this element spreads props that may contain style, while sz emits an explicit style attribute. Move the spread style to an explicit style prop so csszyx can merge both values.` | nudge | Pass `style` explicitly so both values merge. |
+| `[csszyx] szRecover at {filename}: only string-literal values ("csr" \| "dev-only") are supported. Dynamic values disable token emission for this element.` | nudge | Use a literal. |
+| `[csszyx] szRecover at {filename}: unknown mode "{value}" — expected "csr" or "dev-only". Token emission skipped.` | nudge | Use `"csr"` or `"dev-only"`. |
+| `[csszyx] AST transform failed, falling back to original code:` | ungated | A bug — the file ships untransformed. Please report it. |
+
+`{filename}` is `<anonymous>` when the compiler was called without one.
+
+## sz — key and value warnings
+
+These come from the shared lowering core, so the **same message** appears
+whether the value was lowered at build time or by the runtime.
+
+`{ at LOC}` below is an optional ` at src/Card.tsx:12` suffix — present when a
+build engine knew the location, absent on the runtime path.
+
+<Aside type="caution" title="Most of these are terminal-only">
+The main gate is: development **and** not a browser. That means they appear in
+your dev-server terminal (build and SSR), not in the browser console. Set
+`CSSZYX_QUIET_SZ_WARNINGS=1` to mute them, or run `npx @csszyx/cli check` for a
+whole-project pass. The rows marked **browser too** use only the `NODE_ENV`
+half of that gate and do reach the console.
+</Aside>
+
+### Keys
+
+| Message | Notes |
+| --- | --- |
+| `[csszyx] Unknown property "{key}" in sz prop{ at LOC}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility.` | The class *is* in the DOM — grep for it. |
+| `[csszyx] "{key}" was removed{ at LOC}: {note}.` | Migration note per key. |
+| `[csszyx] Use the canonical key "{suggestion}" instead of "{key}"{ at LOC}.` | An alias still works; the canonical name is preferred. |
+| `[csszyx] sz received a numeric key "{key}"{ at LOC}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored.` | You probably passed an array to `sz={{ … }}`. |
+| `[csszyx] "{rawKey}" boolean sugar was removed. Use { {key}: '{value}' } instead, or run ``csszyx migrate``.` | **browser too** |
+
+When a warning has no source location, csszyx appends a traceability tail so
+you can find it:
+
+```text
+  sz object was {"p":4,"bgg":"red-500"}  ·  from at Card (/src/Card.tsx:8:5)
+```
+
+And once per process, a pointer at the whole-project scan:
+
+```text
+[csszyx] Tip: run `npx @csszyx/cli check` to scan every file for sz key issues at once (dev warnings only surface files as you open them).
+```
+
+The parenthetical is `this warning has no source location — the scan reports
+which file and key triggered it` when the warning was unlocated.
+
+### Values that generate no CSS
+
+| Message | Notes |
+| --- | --- |
+| `[csszyx] "{key}: {value}"{ at LOC}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value ("{value}rem").` | |
+| `[csszyx] "{key}" is a property, not a variant, but received an object { … }{ at LOC}. This compiles to "{key}:*" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use { color: '...', op: ... }.` | The classic `p: { bg: … }` mistake. |
+| `[csszyx] {rawKey}: '{value}' is a CSS value — use the short form '{hint}' (e.g. { {rawKey}: '{hint}' }). '{rawKey}-{value}' has no Tailwind utility and renders nothing.` | **browser too**. `flex-start → start`, `space-between → between`, … |
+| `[csszyx] "{className}"{ at LOC}: the /{opacity} opacity applies only if the "{color}" theme token is alpha-capable (oklch or space-separated RGB). A comma-separated RGB triplet, or a token that resolves through its own alpha variable, silently ignores the modifier — verify the emitted rule.` | |
+| `[csszyx] fontSmoothing: '{value}' is not supported — use 'grayscale' or 'subpixel'.` | |
+| `[csszyx] fontStyle: '{value}' is not supported — Tailwind only models 'italic' and 'normal'. For oblique, use css: { fontStyle: '{value}' }.` | |
+
+### Colors
+
+Both messages exist on two paths with identical text — the value is dropped
+either way.
+
+| Message |
+| --- |
+| `[csszyx] "{key}: '{value}'" is not a recognized color value and will be ignored. Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).` |
+| `[csszyx] "{key}: '{value}'" — string slash opacity is not supported. Use object form: { color: '{color}', op: {opacity} }.` |
+
+### Mask layers
+
+| Message | Notes |
+| --- | --- |
+| `[csszyx] {owner}: unknown field "{member}"{ at LOC} — nothing is emitted for it. {owner} takes { {allowed} }.` | **browser too**. Catches `maskLinear: { form: … }` for `from`. |
+| ``[csszyx] mask: '{value}'{ at LOC} — gradient layers moved to "{key}". Tailwind composites mask-image from one variable per layer, so each layer is its own key. `mask` now takes a direct mask-image only: none, a url(), or a CSS variable.`` | **browser too**. See [Effects & Filters](/docs/reference/effects/). |
+
+## szv
+
+### szv — build
+
+An `szv()` config the compiler cannot read is reported as `szv catalog at …`
+using the [fallback matrix](#sz--unresolved-expressions) reasons and the
+szv-specific suggestion. It is always **missing output**: an unreadable config
+means the variant catalogue is never extracted, so none of its classes are
+safelisted.
+
+### szv — runtime
+
+All of these are dev-only, deduplicated, and removed entirely from a production
+bundle. The `[csszyx] ` prefix is added by the shared helper.
+
+| Message |
+| --- |
+| `szv(config): config must be an object, got {value}. Ignoring.` |
+| `szv(config): base must be an sz object, got {value}.` |
+| `szv(config): variants must be an object when present, got {value}. Ignoring.` |
+| `szv(config): defaultVariants must be an object, got {value}.` |
+| `szv(config): variants.{dimension} must be an object of values, got {value}.` |
+| `szv(config): variants.{dimension}.{token} must be an sz object, got {value}. It will be skipped.` |
+| `szv(config): {where} nests deeper than {max} levels; it will be rejected at render.` |
+| `szv(config): {where} has a forbidden key "{key}"; it will be skipped.` |
+| `szv()(selection): unknown variant "{key}" — not declared in config.variants.` |
+| `szv()(selection): "{value}" is not a value of variant "{key}" — it has no styles.` |
+
+The last two also fire from the precompiled fast path, with identical wording.
+
+**If you see `[object Object]` in `class`:**
+
+```text
+[csszyx] szv() returned an sz OBJECT that was used as a string (e.g. className={someSzv({...})}) — this renders "[object Object]". Pass it to an sz= prop, or resolve it with szr(...) first.
+```
+
+`szv()` returns an sz object, not a class string. Either pass it to `sz=`, or
+wrap it: `className={szr(someSzv({ … }))}`.
+
+## szr & the string helpers
+
+| Message | When |
+| --- | --- |
+| **Thrown.** `[csszyx] {fn}() received a plain object — the compiler could not resolve this sz prop at build time.` followed by `Common cause:   sz={{ ...(cond ? varA : varB), key: 'val' }}` / `Fix:            sz={[cond ? varA : varB, { key: 'val' }]}` / `Received: {json}` | A spread the compiler could not fold reached the runtime. |
+| **Thrown.** `[csszyx] a string helper received an sz OBJECT but the object-lowering module is not loaded, so it cannot be turned into class names.` … `add once at startup:` / `    import '@csszyx/runtime/lowering';` | Running outside the bundler plugin — unit tests, scripts. |
+
+An unreadable `szr()` argument is reported at build time as `szr fallback at …`
+and is **always missing output**.
+
+## szs & szsc
+
+You author `szs={{ slot: { … } }}`; the compiler rewrites the attribute to
+`szsc={{ slot: "class string" }}`, which is what the component reads. Every
+slot must resolve at build time — there is no runtime path.
+
+| Message | Class |
+| --- | --- |
+| `[csszyx] szs at {filename}: a slot value could not be read at build time, so no slot classes were compiled. Attribute left unchanged.` + suggestion `Every slot must be an identifier key with a static object literal (or class string) value. For a value only known at runtime, use dynamic() and pass the resulting class string.` | missing output |
+| `[csszyx] szs at {filename}: szs has no effect on a host element — it maps slot names of a custom component. Attribute left unchanged.` | missing output |
+
+"Attribute left unchanged" is literal: the component receives `szs`, not
+`szsc`, and the slots are unstyled.
+
+See [Styling Component Parts](/docs/compound-components/).
+
+## szcn
+
+`szcn` merges class strings and drops the losing side of a conflict. It can
+only do that for classes it can classify — when a **theme token** makes a class
+ambiguous, it falls back to keeping both, and says so once.
+
+| Message |
+| --- |
+| `[csszyx] theme token "{name}" shadows a built-in {kind} — szcn will not group classes built from it (they keep the safe keep-both behaviour). Rename the token to enable precise merging.` |
+| ``[csszyx] theme token "{name}" is defined as BOTH a color and a text size — szcn cannot classify `text-{name}` and will keep-both instead of merging.`` |
+| ``[csszyx] theme token "{name}" is defined as BOTH a font family and a font weight — szcn cannot classify `font-{name}` and will keep-both instead of merging.`` |
+
+The fix in all three cases is renaming the token in your `@theme` block. Keep-both
+is not a bug — it is the safe answer when the token is genuinely ambiguous.
+
+## dynamic()
+
+| Message | Production? |
+| --- | --- |
+| `[csszyx] dynamic value on "{key}" is a {type} and cannot be resolved to CSS — the property is omitted. Pass a number, token, or CSS length (for responsive objects, use dynamic()).` | **Yes** — this one is deliberately kept in production, because the property is dropped. |
+| `[csszyx] dropped an arbitrary value that could inject CSS: "{utility}". Arbitrary values from untrusted data are not emitted at runtime.` | No — dev only. See [Security](/docs/security/). |
+| ``[csszyx] dynamic() has injected {n}+ unique classes this session. Injected CSS rules are never removed, so continuously varying values (e.g. w-[`${x}px`] per animation frame) grow the CSSOM and slow style recalc. Drive continuously changing values through a CSS variable instead.`` | No — dev only, once. |
+| **Thrown.** `csszyx: manifest fetch failed {status}` | Yes |
+
+## Plugin configuration
+
+| Message | Kind |
+| --- | --- |
+| `[csszyx] {n} plugin option(s) are not recognized and have no effect:` followed by one line per key — ``  - `{key}` ``, ``  - `{key}` was replaced by `{renamedTo}` ``, or ``  - `{key}` — did you mean `{suggestion}`? `` — and closing with `An unread option is silent, so whatever you configured it for is not happening.` | Warning, fires in production |
+| **Thrown.** `[csszyx] production.mangleMapDelivery must be 'both', 'html' or 'bundle'; got {value}.` | Error |
+| `[csszyx] production.mangleMapDelivery: '{value}' has no effect on the webpack lane — map delivery only narrows on vite/rollup builds.` | Ungated warning |
+| **Thrown.** `[csszyx] Invalid production.mangleGlobalVars config:` + errors | Error |
+| **Thrown.** `[csszyx] production.mangleGlobalVars.enabled requires explicit tokens in Phase H v1.` | Error |
+| **Thrown.** `[csszyx] production.mangleGlobalVars.autoPrefix requires CSS pre-scan support and is not enabled in Phase H v1.` | Error |
+| **Thrown.** `[csszyx] production.mangleGlobalVars validation failed:` + one line per finding | Error |
+| **Thrown.** `[csszyx] CSS variable mangle map is {size} bytes, which exceeds the {max} byte safety cap. Reduce production.mangleVars usage, split the bundle, or raise CSSZYX_VAR_MANGLE_MAP_MAX_BYTES if this payload size is intentional.` | Error |
+| `[csszyx] compileSources: {n} path(s) did not resolve to a directory (relative to {rootDir}): {list}. Their ``sz``/``szv`` will not be compiled or safelisted.` | Warning |
+| `[csszyx] Transform cache disabled because package versions could not be resolved.` | Ungated, once |
+| `[csszyx] production.mangle is not supported by the esbuild adapter; class mangling is disabled so emitted JS and CSS keep matching names.` | Ungated |
+| `⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript isn't configured. Run "npx @csszyx/cli init" to fix.` | Ungated |
+
+The unrecognized-option check is worth its own note: csszyx does not silently
+accept a key it does not read, and it suggests the nearest real key for a typo.
+
+## Build pipeline
+
+Everything that decides **which files** get compiled and **whether the CSS gets
+generated**.
+
+### No CSS at all
+
+```text
+[csszyx] generated {n} sz class(es) but found no CSS entry importing "tailwindcss" — those classes will produce no CSS. Import "tailwindcss" in a CSS file (csszyx auto-injects @source for the generated classes) so Tailwind emits their styles.
+```
+
+### Some files skipped
+
+| Message | Notes |
+| --- | --- |
+| `[csszyx] {n} file(s) under packages/ use csszyx but were skipped by ignore rules:` + the list + ``Add the package directory to `compileSources` (or move the file out of packages/) — otherwise their classes never reach the safelist.`` | Normally a nudge. When any skipped file may export `szv` factories it fires in **production** too, and adds: `{m} of them may export ``szv`` factories, so they stay out of the cross-module registry and every importer falls back to the runtime path.` |
+| `[csszyx] prescan skipped {file}: the file exceeds the AST node budget, so NONE of its classes reached the safelist and their CSS will not be generated. Raise ``build.astBudgetLimit`` in the csszyx plugin options, or split the file.` | Ungated |
+| `[csszyx] prescan skipped {file}: transform failed, so none of its classes reached the safelist. {error}` | Ungated |
+| `[csszyx] prescan skipped {file}: the file failed to parse, so none of its classes reached the safelist. Fix the syntax error (or check the file extension matches its contents).` | Ungated |
+| `[csszyx] safelist exceeded {max} classes; additional classes were dropped. This usually means an unbounded set of arbitrary values reached an sz prop.` | Warning |
+
+### Monorepo content scope
+
+```text
+[csszyx] Tailwind content detection is UNSCOPED in a monorepo. Tailwind v4 climbs to the workspace root and scans sibling packages + docs (.md/.mdx/.txt are not ignored), which can generate phantom or broken url() classes and fail the build. Scope it in your Tailwind CSS entry:
+    @import "tailwindcss" source(none);
+    @source ".";   /* this package, relative to the CSS file */
+csszyx auto-injects @source for its generated classes, so only your own templates need listing. Guide: https://csszyx.com/docs/monorepo-content-scope/
+Silence (if a broad scan is intentional): csszyx({ contentScopeCheck: false }).
+```
+
+Full fix: [Monorepo & Content Scope](/docs/monorepo-content-scope/).
+
+### Which parser ran
+
+These are informational and always print to stderr, once.
+
+| Message |
+| --- |
+| `[csszyx] active parser: rust (native engine)` · `[csszyx] active parser: oxc (degraded from default ``rust``: no native binary for this platform)` |
+| `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, so the default ``rust`` parser fell back to ``oxc``. Output classes are identical (parity-tested); only parse speed differs. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
+| `[csszyx] oxc parser fell back to Babel for {filename}: {reason} ({n} file(s) so far). Output is still correct; this usually means the file uses a syntax the oxc lane does not yet handle.` |
+| `[csszyx] parse error in {filename}: the native engine could not fully scan this file ({n} syntax error(s))` |
+
+<Aside type="note" title="A parser fallback is not a correctness problem">
+The three engines are parity-tested against each other. A fallback costs parse
+speed, not classes.
+</Aside>
+
+### Budgets and limits
+
+| Message | Kind |
+| --- | --- |
+| **Thrown.** ``[csszyx] AST budget exceeded: {filename} has more than {budget} nodes (traversal aborted at {n}). Files this large are almost always machine-generated and should be excluded from sz transformation. Either exclude the file from the plugin (Vite: `csszyx({ exclude: [/large-data\.ts$/] })`), or raise the limit globally with `csszyx({ build: { astBudgetLimit: 100_000 } })`.`` | Caught and printed by the plugin in every mode |
+| **Thrown.** `[csszyx] sz nesting exceeded the maximum depth of {depth}. This usually means untrusted/looping data reached an sz prop.` | Error |
+| `[csszyx] {filename}: source nesting exceeded {max} levels (found {n}) — this usually means accidentally or programmatically over-nested sz/JSX. Flatten the structure. (This guard prevents a parser stack overflow.)` | Native engine |
+| ``[csszyx] AST budget exceeded in {filename}: the IR walk stopped mid-file, so the file was left unchanged and contributes NO classes to the safelist. Raise `build.astBudgetLimit` or split the file.`` | Native engine |
+
+## Mangling
+
+Mangling replaces class names with short tokens. It is an **obfuscation**
+feature — see [Plugin Config](/docs/reference/config/#mangle-mangle). Two
+reports exist, both ungated.
+
+### Hybrid hazards
+
+Printed when mangled tokens collide with class names in CSS csszyx does not
+own, or when a mangled class has no emitted rule:
+
+```text
+[csszyx] production mangle found hybrid hazards: {n} mangled token(s) collide with class names in non-csszyx CSS (e.g. …) — those tokens will cross-contaminate external ".x" elements. HOTFIX: pass `production: { mangle: false }` to the csszyx plugin to ship now. THEN fix it: if these short names are in your OWN CSS, rename them to something specific (e.g. `.x` → `.resize-handle-x`) — short/common names also clash on specificity with other libraries. Only for names in a third-party stylesheet you cannot edit, list them in `production.mangleExclude` instead. Run `npx @csszyx/cli scan-collisions` to find every offending name.
+```
+
+The orphan clause reads `{n} mangled class(es) have no emitted CSS rule (e.g.
+…) — those elements lose styling.` and, when there are no collisions, closes
+with a different remedy pointing at the CSS pipeline instead.
+
+### Mangling made the build bigger
+
+```text
+[csszyx] production.mangle is making this build BIGGER: +{n} B gzipped. The runtime mangle map costs {n} B via {channels}, while the mangled CSS saves {n} B. Mangling is a name-obfuscation feature; over a compressed response it does not reduce payload, because utility class names compress far better than the map they need. If you enabled it for size, set `production.mangle: false`. If you enabled it to hide class names, this is the expected price and you can ignore this. Narrowing `production.mangleMapDelivery` removes a map copy when only one channel is needed. (Measured on CSS and the map; class shortening inside JS chunks is not counted, so the real net is slightly better than this figure.)
+```
+
+The CSS clause flips to `the mangled CSS COSTS {n} B (short tokens compress
+worse than the names they replaced)` when shortening lost.
+
+Also: `[csszyx] mangleVars skipped component CSS variable hoist for {name}
+across {n} usages: {reason}` where `reason` is `no-lca`, `non-host-ancestor`,
+or `max-depth`.
+
+## SSR & hydration
+
+| Message | Notes |
+| --- | --- |
+| `[csszyx] No checksum found in HTML` | The mangle map was not delivered. |
+| `[csszyx] Mangle map script not found` | |
+| `[csszyx] Mangle map failed schema validation (not a plain string→string map); ignoring it.` | |
+| `[csszyx] Mangle map failed schema validation; treating integrity as invalid.` | |
+| `[csszyx] WASM core not loaded — mangle map checksum is unverified (schema-validated only). This is detection, not authentication.` | Dev only. |
+| `[csszyx] Failed to verify mangle map:` / `Failed to parse mangle map:` | |
+| `[csszyx] Hydration aborted at {tag}:` + reason | |
+| `[csszyx] CSR recovery requires explicit szRecover directive` | Add `szRecover="csr"`. |
+| `[csszyx] szRecover="dev-only" is disabled in production` | By design. |
+| `[csszyx] Hydration mismatch recovered via CSR. Fix root cause before production.` | The page renders, but you have a real mismatch. |
+| `[csszyx] Stripped {n} szRecover="dev-only" token(s) from the production manifest. Recovery for these elements is disabled in production by design. Sites: {paths}` | Build-time, informational. |
+| `[csszyx] A raw ``sz`` object reached the runtime and was dropped before it could leak to the DOM as sz="[object Object]".` + ``This means the file was not compiled — its `sz` produces no CSS. If it lives in a workspace package, add that package directory to `compileSources`; otherwise check that the bundler is not skipping the file.`` | Dev only, once. The most direct "this file was never compiled" signal there is. |
+
+See [SSR & Hydration](/docs/ssr/) and the
+[Hydration API](/docs/reference/hydration/).
+
+## CLI
+
+`npx @csszyx/cli check` runs the same lowering warnings across every file at
+once and groups them by file — it is the answer to "the dev server only warns
+about files I happen to open".
+
+| Line | Meaning |
+| --- | --- |
+| `No sz issues found across {n} files.` | Clean. |
+| `✖ {n} sz issue(s) in {m} file(s).` | The grouped report follows. |
+| `Scope: static sz props and szv()/szr() catalog definitions. Keys that only exist at runtime (an array or spread built from runtime data, a dynamic() value) cannot be checked statically.` | Printed with every clean run, so the scope is never implied to be wider than it is. |
+| `Every one of the {n} emitted class(es) produces CSS under this project's Tailwind{, {m} accepted}.` | The dead-class check passed. The trailing clause appears only when the baseline accepts known exceptions. |
+| `✖ {n} emitted class(es) style nothing. Each is in the DOM and does nothing: fix the sz key, or define the class with Tailwind’s @utility.` | Each offender is listed above it, with the sz key that produced it. |
+| `Dead-class check skipped: no stylesheet in this project imports Tailwind, so there is no design system to ask which classes are real.` | The check needs a Tailwind entry to ask. |
+| `Dead-class check skipped: {reason}.` | |
+
+`npx @csszyx/cli scan-collisions` finds class names that would collide with a
+mangled token:
+
+```text
+No collision-prone class names found — mangling is safe to enable.
+```
+
+```text
+{n} class name(s) could collide with a mangled token:
+  .{name}  (in {where})
+
+Preferred: rename these in your own CSS to something specific
+  (e.g. `.x` → `.resize-handle-x`) — short names also clash on
+  specificity with other libraries.
+
+For names in a third-party stylesheet you cannot edit, reserve them:
+  production: { mangle: true, mangleExclude: ["{name}"] }
+```
+
+`npx @csszyx/cli doctor` checks the install itself: `✨ No issues found! Your
+setup looks good.`, `Found {n} issue(s)`, `Tailwind CSS not found`, `No build
+output found - run build first`, `Checksum not found in HTML`, and similar.
+
+## Editor diagnostics
+
+The VS Code extension reports key problems as squiggles, with its own shorter
+wording. Turn them off with `csszyx.enableDiagnostics: false`.
+
+| Message |
+| --- |
+| `'{key}' was removed: {note}.` |
+| `Unknown sz prop '{key}'. Did you mean '{suggestion}'?` |
+| `Unknown sz prop '{key}'. See https://csszyx.com/docs/sz-props for valid props.` |
+
+The TypeScript plugin emits no diagnostics — it provides completions and hover
+only. See [TypeScript Autocomplete](/docs/typescript-plugin/) and
+[VS Code Extension](/docs/vscode/).
+
+## Framework adapters
+
+The Svelte and Vue adapters print a parse failure only when `debug` is enabled:
+
+- `[csszyx/svelte] Failed to parse sz object: {source}`
+- `[csszyx/vue] Failed to parse sz object: {source}`
+
+## Where the engines differ
+
+csszyx has three compile engines — the native Rust engine (default), oxc, and
+Babel — selected by `build.parser`. Their **classes** are parity-tested, and
+almost all wording is byte-identical. Two known wording differences:
+
+| Case | Babel / oxc | Native engine |
+| --- | --- | --- |
+| `szRecover` with an unsupported value | Two distinct messages (non-literal vs unknown mode) | One combined message: `only static string-literal values "csr" or "dev-only" are supported. Token emission skipped.` |
+| AST budget exceeded | Thrown error naming `exclude` and `astBudgetLimit` | A diagnostic naming ``build.astBudgetLimit`` and noting the file contributes no classes |
+
+Both are recognised by the plugin and reported the same way.
+
+<Aside type="tip" title="Still stuck?">
+Run `npx @csszyx/cli check` first — it turns "some element is unstyled" into a
+file, a line, and a key. If a class is emitted but styles nothing, the same
+command's dead-class pass tells you which one.
+</Aside>

@@ -141,6 +141,7 @@ export default defineConfig({
                     items: [
                         { label: 'Runtime Helpers', slug: 'docs/reference/runtime' },
                         { label: 'Plugin Config', slug: 'docs/reference/config' },
+                        { label: 'Warnings & Troubleshooting', slug: 'docs/reference/warnings' },
                         { label: 'Global Variable Mangling', slug: 'docs/reference/global-var-mangling' },
                         { label: 'SSR Hydration API', slug: 'docs/reference/hydration' },
                     ],
