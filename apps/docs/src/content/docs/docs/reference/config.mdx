@@ -330,6 +330,41 @@ interface BuildConfig {
 | `astBudgetLimit` | `50000`                | Max AST nodes per file before the transform gives up on it — guards against pathologically large generated files. A file past the cap is left unrewritten, contributes no classes to the safelist, and is warned about by every parser engine (the native `rust` engine included). The safelist prescan runs with a 10× cap by default so real page files keep their CSS; setting this applies your value to both lanes. Raise (e.g. `100_000`) when a warning names a legitimate file, or exclude generated files via top-level `exclude`.               |
 | `parser`         | `'rust'`               | Source parser for JSX/TSX sz transforms. Default uses the native Rust engine through the matching optional `@csszyx/core-*` platform package; csszyx fails loudly when the package is missing. Set `'oxc'` to opt into the previous JavaScript oxc-parser path on unsupported platforms or for parser-edge-case triage; `'babel'` is the final compatibility escape hatch. |
 | `scanCss`        | `undefined`            | CSS files to scan for `@theme` blocks. Literal paths and simple globs are supported.                                                                                                                                                                                                                                                                                       |
+| `importedStaticSz` | `false`              | Compile a static sz object a component imports from another module. Opt-in, default `false` — see below.                                                                                                                                                                                                                                                                    |
+
+#### Imported Static sz Objects (`importedStaticSz`)
+
+Off by default. When on, the prescan records exported static sz objects and
+every importer compiles them as if the literal were written locally:
+
+```ts
+// card.styles.ts
+export const cardSz = { p: 4, rounded: 'lg' };
+
+// Card.tsx
+import { cardSz } from './card.styles';
+<article sz={cardSz} />        // → className="p-4 rounded-lg"
+```
+
+Without it, `sz={cardSz}` falls back to the runtime and — this is the part
+that costs more than a helper call — contributes **no classes**. The class
+text then appears in no output at all, so nothing tells Tailwind to generate
+it and the element renders naming a rule that does not exist.
+
+It is opt-in because it changes emitted output for code that already builds. A
+project that mutates an exported style object after declaring it is relying on
+that runtime fallback; compiling the declared value is correct by the
+[shared-style-object contract](/docs/reusing-styles/) and is still a change to
+notice. Turn it on, build, and check the diff once.
+
+**What v1 covers:** a direct `sz={binding}` from a relative named import,
+including a renamed one (`import { cardSz as card }`). The provider must be a
+`const` whose value is a fully static object literal.
+
+**What still falls back** — and keeps reporting that it did: barrels and
+re-exports, package specifiers, tsconfig path aliases, namespace
+(`import * as S`) and default imports, any nested position such as
+`sz={[cardSz, …]}` or `sz={{ ...cardSz }}`, and the Next.js Turbopack lane.
 
 ### File Filters
 

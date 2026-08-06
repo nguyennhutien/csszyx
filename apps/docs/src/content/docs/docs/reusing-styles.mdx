@@ -25,6 +25,16 @@ const card = { p: 6, rounded: 'xl', shadow: 'md', bg: 'white' } as const;
 `as const` is optional — the compiler resolves annotated and plain objects alike,
 declared with either `const` or `let`.
 
+:::tip[Sharing across files]
+The examples above declare the object in the file that uses it. Move it to its
+own module and the compiler can no longer see through the import: `sz={cardSz}`
+falls back to the runtime and contributes no classes, so the CSS goes missing.
+
+Turn on [`build.importedStaticSz`](/docs/reference/config/#imported-static-sz-objects-importedstaticsz)
+and a relative named import compiles exactly like the local declaration. Until
+then, csszyx reports each one it had to leave to the runtime.
+:::
+
 :::caution[A shared style object is a build-time value]
 The compiler reads the object where it is **declared**, so that is the value it
 compiles. Change the object afterwards and the class no longer describes it:

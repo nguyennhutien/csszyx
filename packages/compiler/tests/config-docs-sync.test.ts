@@ -34,6 +34,30 @@ describe('config docs sync', () => {
         expect(unpluginReadme).toContain(`The default \`${parserDefault}\` path`);
     });
 
+    it('keeps the documented build.importedStaticSz default in sync with shared config', () => {
+        // A feature that changes emitted output must not be able to become
+        // default-on in the config while the docs still call it opt-in —
+        // whichever a reader believes, one of them would be lying.
+        const configDocs = readFileSync(
+            join(REPO_ROOT, 'apps/docs/src/content/docs/docs/reference/config.mdx'),
+            'utf8',
+        );
+        const typesConfig = readFileSync(join(REPO_ROOT, 'packages/types/src/config.ts'), 'utf8');
+
+        const defaultMatch = typesConfig.match(
+            /export const DEFAULT_BUILD_CONFIG[^}]*importedStaticSz:\s*(true|false)/,
+        );
+        expect(
+            defaultMatch,
+            'DEFAULT_BUILD_CONFIG.importedStaticSz must be a boolean literal',
+        ).not.toBeNull();
+
+        expect(defaultMatch?.[1]).toBe('false');
+        expect(typesConfig).toContain('* @default false');
+        expect(configDocs).toContain('| `importedStaticSz` | `false`');
+        expect(configDocs).toContain('Opt-in, default `false`');
+    });
+
     it('keeps the documented production.mangle default in sync with shared config', () => {
         // The breaking flip to opt-in landed in the plugin first and missed
         // this exported default, so consumers merging DEFAULT_PRODUCTION_CONFIG
