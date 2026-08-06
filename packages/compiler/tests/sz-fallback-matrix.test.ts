@@ -15,6 +15,7 @@ import {
     SZ_FALLBACK_KINDS,
     SZ_FALLBACK_MATRIX,
     SZ_FALLBACK_UNKNOWN_CALLEE,
+    type SzFallbackConsequence,
     type SzFallbackKind,
     szFallbackConsequenceOf,
     szsUnsupportedDiagnostic,
@@ -22,6 +23,7 @@ import {
 import { transformSourceCode } from '../src/transform.js';
 import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { captureWarnings, ENGINES } from './tri-engine-harness.js';
 
 /** Sources that drive each classification arm through a real transform. */
 const FALLBACK_SOURCES: ReadonlyArray<readonly [string, string]> = [
@@ -112,9 +114,43 @@ describe('szFallbackConsequenceOf', () => {
             'missing-css',
         );
         expect(szFallbackConsequenceOf(formatSzFallbackDiagnostic('sz', '1:1', 'member'))).toBe(
-            'nudge',
+            'missing-css',
         );
         expect(szFallbackConsequenceOf(szsUnsupportedDiagnostic('/p/t.tsx'))).toBe('missing-css');
+    });
+
+    it('splits the sz site by kind, because only some kinds collected nothing', () => {
+        // A value the compiler cannot see contributes no class to the safelist,
+        // so nothing downstream can generate the CSS the browser will ask for —
+        // the same integrity failure `szr` and `szv` already report.
+        expect(
+            szFallbackConsequenceOf(
+                formatSzFallbackDiagnostic('sz', '1:1', 'identifier', 'cardSz'),
+            ),
+        ).toBe('missing-css');
+        expect(szFallbackConsequenceOf(formatSzFallbackDiagnostic('sz', '1:1', 'member'))).toBe(
+            'missing-css',
+        );
+        // The other two kinds do not share it, so they must stay advisory:
+        // `dynamic()` is a call and compiles correctly, and an object literal
+        // behind `as const` hands its classes over on the way to the fallback.
+        expect(
+            szFallbackConsequenceOf(formatSzFallbackDiagnostic('sz', '1:1', 'call', 'makeSz')),
+        ).toBe('nudge');
+        expect(
+            szFallbackConsequenceOf(
+                formatSzFallbackDiagnostic('sz', '1:1', 'other', 'TemplateLiteral'),
+            ),
+        ).toBe('nudge');
+    });
+
+    it('classifies a kind it cannot recover as advisory rather than as a failure', () => {
+        // Recovering the kind means reading rendered text. If a future wording
+        // change makes a message unreadable here, the safe reading is the one
+        // that cannot invent a production error out of a parsing miss.
+        expect(szFallbackConsequenceOf('sz fallback at 1:1: something new entirely.')).toBe(
+            'nudge',
+        );
     });
 
     it('leaves messages outside the matrix unclassified', () => {
@@ -172,6 +208,33 @@ describe('engine parity for sz fallback diagnostics', () => {
         expect(transformSourceCode(source, '/p/t.tsx').diagnostics ?? []).toEqual([]);
         expect(transformOxc(source, '/p/t.tsx').diagnostics ?? []).toEqual([]);
     });
+});
+
+// The classifier reads rendered text, and each engine renders it from its own
+// call site. Asserting against a hand-written message would prove only that the
+// classifier parses that string — these run the real transforms, so a lane that
+// words its diagnostic differently is caught by the routing that depends on it.
+describe('engine parity for the sz consequence split', () => {
+    const CONSEQUENCE_SOURCES: ReadonlyArray<readonly [string, string, SzFallbackConsequence]> = [
+        ['identifier', 'export const A = ({ v }) => <div sz={v} />;', 'missing-css'],
+        ['member', 'export const A = () => <div sz={cfg.card} />;', 'missing-css'],
+        ['call', 'export const A = () => <div sz={makeSz()} />;', 'nudge'],
+        ['other', 'export const A = ({ v }) => <div sz={`${v}`} />;', 'nudge'],
+    ];
+
+    for (const [label, source, expected] of CONSEQUENCE_SOURCES) {
+        for (const [name, engine] of ENGINES) {
+            it(`${name} routes a ${label} fallback to ${expected}`, () => {
+                const fallbacks = captureWarnings(engine, source).warnings.filter(message =>
+                    message.includes('sz fallback at '),
+                );
+                expect(fallbacks.length).toBeGreaterThan(0);
+                for (const message of fallbacks) {
+                    expect(szFallbackConsequenceOf(message)).toBe(expected);
+                }
+            });
+        }
+    }
 });
 
 // The Rust integration suite (sz_fallback_parity.rs) pins the same wording

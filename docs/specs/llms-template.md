@@ -350,7 +350,7 @@ sz={{ scale: shrunk ? 75 : 100 }}            // inline prop ternary — both lit
 - `sz={{ key: cond ? a : b }}` — both literal branches compile to static classes; a runtime branch uses a CSS variable. An opposite `undefined`, `null`, `false`, or `''` branch omits the utility and variable value (`0` remains valid)
 - When runtime `sz` values emit inline CSS variables beside one direct object-literal JSX spread, or one conditional whose branches are object literals, the compiler injects the variables into every spread branch's `style` so both authored and generated values survive. Keep unresolved or multiple spreads' style explicit; csszyx warns when it cannot prove a single-evaluation merge is safe
 - `sz={{ ...(cond ? a : b), static: val }}` — conditional spread hoist: compiler resolves both branches at build time
-- Imported variables / function call results fall back to `_sz()` runtime — dev mode emits a build-time compiler warning explaining the fallback reason and suggesting `szv()` or `dynamic()`
+- Imported variables / function call results fall back to `_sz()` runtime — a build-time compiler warning explains the fallback reason and suggests `szv()` or `dynamic()`. An unresolvable identifier or member access collects no classes at all, so that warning is kept in production builds and survives `quiet: 'nudges'`; an unresolvable call or template expression stays dev-only advice
 
 Full guide: `/docs/reusing-styles`
 

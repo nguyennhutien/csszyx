@@ -150,24 +150,65 @@ const SITE_LABEL: Readonly<Record<SzFallbackSite, string>> = {
 /**
  * What the reader of one diagnostic must fear.
  *
- * `missing-css`: classes were never collected, so under Tailwind
- * `source(none)` the CSS is simply absent — an integrity failure that must
- * surface in production builds too. `nudge`: the runtime lane still resolves
- * the styles; the diagnostic is advisory and stays dev-only.
+ * `missing-css`: classes were never collected, so nothing downstream was told
+ * to generate the CSS the runtime will ask for — an integrity failure that
+ * must surface in production builds too. `nudge`: the classes were collected
+ * even though the expression itself fell back, so the diagnostic is advisory
+ * and stays dev-only.
+ *
+ * The distinction is what was COLLECTED, not whether a runtime fallback
+ * remains — both kinds keep one. A per-file compiler cannot see the project's
+ * stylesheet, so neither label may be read as a claim about the final CSS.
  */
 export type SzFallbackConsequence = 'missing-css' | 'nudge';
 
 /**
- * Consequence per site. `sz` keeps a runtime fallback (the expression
- * resolves in the browser), so it nudges; an unreadable `szr` argument or
- * `szv` config means the classes never reached the safelist.
+ * The `sz` kinds whose fallback also cost the classes.
+ *
+ * An unreadable `szr` argument or `szv` config always means the classes never
+ * reached the safelist, so those sites need no split. The `sz` site does: it
+ * keeps a runtime fallback either way, but what that fallback receives differs
+ * by kind. An identifier or member names a value the compiler never sees, so
+ * nothing was collected from it — measurably zero classes — and the browser
+ * asks for utilities no build step was told to generate. A call and an `other`
+ * are not in that position: `dynamic()` is a call and compiles correctly, and
+ * an object literal behind `as const` still hands its classes over on the way
+ * to the fallback. Reporting those as an integrity failure would fire on
+ * working code, which is the one thing a production diagnostic may not do.
  */
-export const SZ_FALLBACK_SITE_CONSEQUENCE: Readonly<Record<SzFallbackSite, SzFallbackConsequence>> =
-    {
-        sz: 'nudge',
-        szr: 'missing-css',
-        szv: 'missing-css',
-    };
+const SZ_SITE_MISSING_CSS_KINDS: ReadonlySet<SzFallbackKind> = new Set<SzFallbackKind>([
+    'identifier',
+    'member',
+]);
+
+/**
+ * Each kind's reason text up to the point the detail is substituted.
+ *
+ * Derived from the matrix rather than written out, so recovering a kind from a
+ * rendered message stays tied to the wording that produced it.
+ */
+const REASON_PREFIXES: ReadonlyArray<readonly [SzFallbackKind, string]> = SZ_FALLBACK_KINDS.map(
+    kind =>
+        [kind, SZ_FALLBACK_MATRIX[kind].reason.split(SZ_FALLBACK_DETAIL_PLACEHOLDER)[0]] as const,
+);
+
+/**
+ * Recover which kind produced a rendered reason.
+ *
+ * @param message - One raw diagnostic line, site label included.
+ * @returns The kind, or undefined when the reason matches no matrix entry.
+ */
+function szFallbackKindOf(message: string): SzFallbackKind | undefined {
+    // The position (`1:1`) carries a colon of its own but never a space, so
+    // the first colon-space is the boundary between it and the reason.
+    const boundary = message.indexOf(': ');
+    if (boundary === -1) return undefined;
+    const reason = message.slice(boundary + 2);
+    for (const [kind, prefix] of REASON_PREFIXES) {
+        if (reason.startsWith(prefix)) return kind;
+    }
+    return undefined;
+}
 
 /**
  * Classify a rendered diagnostic back to its consequence.
@@ -184,7 +225,13 @@ export const SZ_FALLBACK_SITE_CONSEQUENCE: Readonly<Record<SzFallbackSite, SzFal
 export function szFallbackConsequenceOf(message: string): SzFallbackConsequence | undefined {
     for (const site of Object.keys(SITE_LABEL) as SzFallbackSite[]) {
         if (message.startsWith(`${SITE_LABEL[site]} at `)) {
-            return SZ_FALLBACK_SITE_CONSEQUENCE[site];
+            if (site !== 'sz') return 'missing-css';
+            const kind = szFallbackKindOf(message);
+            // An unreadable reason falls to the advisory side on purpose: a
+            // parsing miss must not be able to invent a production error.
+            return kind !== undefined && SZ_SITE_MISSING_CSS_KINDS.has(kind)
+                ? 'missing-css'
+                : 'nudge';
         }
     }
     // szs renders through its own builder; an unresolved slot map means no
