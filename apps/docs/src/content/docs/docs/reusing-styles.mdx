@@ -22,7 +22,31 @@ const card = { p: 6, rounded: 'xl', shadow: 'md', bg: 'white' } as const;
 // → className="p-6 rounded-xl shadow-md bg-white"
 ```
 
-`as const` is optional — the compiler resolves both annotated and plain const/let objects.
+`as const` is optional — the compiler resolves annotated and plain objects alike,
+declared with either `const` or `let`.
+
+:::caution[A shared style object is a build-time value]
+The compiler reads the object where it is **declared**, so that is the value it
+compiles. Change the object afterwards and the class no longer describes it:
+
+```tsx
+// ❌ reassigned — csszyx stops resolving it and reports the fallback
+let card = { p: 6 };
+card = { p: 10 };
+<div sz={card} />        // compiles to _sz(card) at runtime
+
+// ❌ mutated — the compiler cannot see this, and compiles p-6
+const card = { p: 6 };
+card.p = 10;
+<div sz={card} />        // renders p-6, not p-10
+```
+
+A reassignment is caught and falls back to the runtime, which is safe but costs
+the build-time resolution. A **property write is not caught** — proving one never
+happens would need whole-program analysis csszyx does not do. Treat a shared sz
+object as declared once and never written to; build the variations with
+[spread overrides](#override-with-spread) or [`szv()`](/docs/szv) instead.
+:::
 
 ## Override with Spread
 
