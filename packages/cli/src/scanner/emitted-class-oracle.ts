@@ -103,6 +103,17 @@ export type EmittedClassOracle =
 const SELF_PROOF = 'zz-csszyx-not-a-class';
 
 /**
+ * `group` and `peer`, bare or with a scope name — `group//sidebar` style.
+ *
+ * These carry no styles of their own: they mark an element so that `group-*`
+ * and `peer-*` variants on its descendants have something to match. Tailwind
+ * reports them as producing no CSS, which is true and is not a defect, so they
+ * can never be dead. The scope name must be non-empty, which keeps `group/`
+ * and every misspelling reportable.
+ */
+const MARKER = /^(?:group|peer)(?:\/[^/\s]+)?$/;
+
+/**
  * Resolve the Tailwind a project would load, without importing it here.
  *
  * @param resolveFrom - Directory whose `package.json` anchors resolution.
@@ -274,9 +285,13 @@ export async function createEmittedClassOracle(
     return {
         ok: true,
         findDead(classes) {
-            if (classes.length === 0) return [];
-            const css = design.candidatesToCss(classes);
-            return classes.filter((_, index) => css[index] === null);
+            // Markers are excluded before the question is asked, not filtered
+            // out of the answer: Tailwind's verdict on them is "no CSS", which
+            // is correct and means something different from dead.
+            const asked = classes.filter(token => !MARKER.test(token));
+            if (asked.length === 0) return [];
+            const css = design.candidatesToCss(asked);
+            return asked.filter((_, index) => css[index] === null);
         },
     };
 }

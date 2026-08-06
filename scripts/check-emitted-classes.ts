@@ -78,17 +78,6 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
             reason: 'custom theme colour; resolves once the project @theme declares --color-mint-500',
         },
     ],
-    ...(['group/item', 'peer/form'].map(
-        c =>
-            [
-                c,
-                {
-                    kind: 'accepted',
-                    reason: 'named group/peer MARKER — emits no CSS by design, consumed by group-*/peer-* variants',
-                },
-            ] as const,
-    ) as ReadonlyArray<readonly [string, Baseline]>),
-
     // ── accepted: unknown sz key rides the kebab pass-through ───────────────
     ...(['break-word', 'pointer-none'].map(
         c =>

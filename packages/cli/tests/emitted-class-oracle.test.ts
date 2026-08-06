@@ -80,6 +80,38 @@ describe('createEmittedClassOracle — what Tailwind actually serves', () => {
     });
 });
 
+// `group` and `peer` carry no styles of their own: they mark an element so
+// `group-*` / `peer-*` variants on its descendants have something to match.
+// Tailwind reports them as producing no CSS, which is true and not a defect.
+describe('createEmittedClassOracle — markers are not dead classes', () => {
+    it('keeps the bare markers', async () => {
+        const oracle = await readyOracle();
+        expect(oracle.findDead(['group', 'peer', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
+    it('keeps a named marker scope', async () => {
+        const oracle = await readyOracle();
+        expect(oracle.findDead(['group/sidebar', 'peer/search', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
+    it('still reports a misspelled marker', async () => {
+        const oracle = await readyOracle();
+        expect(oracle.findDead(['grou', 'peerr'])).toEqual(['grou', 'peerr']);
+    });
+
+    it('still reports a marker whose scope name is missing', async () => {
+        const oracle = await readyOracle();
+        expect(oracle.findDead(['group/'])).toEqual(['group/']);
+    });
+
+    it('leaves the variants that consume a marker alone', async () => {
+        const oracle = await readyOracle();
+        expect(
+            oracle.findDead(['group-hover:bg-red-500', 'peer-checked:flex', 'zz-probe']),
+        ).toEqual(['zz-probe']);
+    });
+});
+
 describe('createEmittedClassOracle — degrading instead of failing', () => {
     const loaderOf =
         (module: TailwindModule | null): TailwindLoader =>
