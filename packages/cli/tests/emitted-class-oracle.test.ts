@@ -84,6 +84,46 @@ describe('createEmittedClassOracle — what Tailwind actually serves', () => {
 // `group` and `peer` carry no styles of their own: they mark an element so
 // `group-*` / `peer-*` variants on its descendants have something to match.
 // Tailwind reports them as producing no CSS, which is true and not a defect.
+// A variant class carries its rule inside a media or state wrapper, so it
+// applies at some viewports and not others. That is the author's intent, not a
+// dead class: "produces no CSS" and "does not apply right now" are different
+// questions, and only the first one is answerable here.
+describe('createEmittedClassOracle — variants are judged on the CSS they produce', () => {
+    const withDesktop = '@import "tailwindcss";\n@theme { --breakpoint-desktop: 1280px; }';
+
+    it('keeps a responsive class that has no base counterpart', async () => {
+        const oracle = await readyOracle(withDesktop);
+        expect(oracle.findDead(['desktop:p-4', 'lg:p-4', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
+    // The pair is the point: alive only BECAUSE the theme declares the
+    // breakpoint. If the project stylesheet ever stopped reaching the design
+    // system, the first half would fail and the second would still pass.
+    it('reports the same class when the project never declared that breakpoint', async () => {
+        const oracle = await readyOracle();
+        expect(oracle.findDead(['desktop:p-4'])).toEqual(['desktop:p-4']);
+    });
+
+    it('reports a misspelled breakpoint rather than waving every variant through', async () => {
+        const oracle = await readyOracle(withDesktop);
+        expect(oracle.findDead(['desktp:p-4', 'deskop:p-4'])).toEqual(['desktp:p-4', 'deskop:p-4']);
+    });
+
+    it('keeps range, arbitrary and container variants', async () => {
+        const oracle = await readyOracle(withDesktop);
+        expect(oracle.findDead(['max-lg:p-4', 'min-[900px]:p-4', '@lg:p-4', 'zz-probe'])).toEqual([
+            'zz-probe',
+        ]);
+    });
+
+    it('keeps state and media variants that never apply at rest', async () => {
+        const oracle = await readyOracle();
+        expect(
+            oracle.findDead(['dark:p-4', 'hover:p-4', 'print:p-4', 'motion-safe:p-4', 'zz-probe']),
+        ).toEqual(['zz-probe']);
+    });
+});
+
 // Tailwind v4 loads typography, forms and friends through `@plugin`. Without
 // a module loader the whole stylesheet fails to compile, so the check would
 // skip — silently doing nothing for a large share of real projects.
