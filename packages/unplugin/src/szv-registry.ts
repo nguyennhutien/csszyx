@@ -15,7 +15,7 @@
  */
 
 import * as path from 'node:path';
-import { extractSzvRegistryEntries } from '@csszyx/compiler';
+import { extractCrossModuleRegistryEntries } from '@csszyx/compiler';
 import { normalizePathSeparators } from './path-normalization.js';
 
 /** Separator-normalized absolute path → exported factory configs by name. */
@@ -53,7 +53,7 @@ export function recordSzvRegistryFile(
 ): void {
     const key = normalizePathSeparators(filePath);
     const entries = mayExportSzvFactories(content)
-        ? extractSzvRegistryEntries(content, filePath)
+        ? extractCrossModuleRegistryEntries(content, filePath)
         : [];
     if (entries.length === 0) {
         // Re-recording a file that STOPPED qualifying must evict its entry, or
@@ -64,7 +64,10 @@ export function recordSzvRegistryFile(
     }
     const byName: Record<string, Record<string, unknown>> = {};
     for (const entry of entries) {
-        byName[entry.exportName] = entry.config;
+        // szv configs only for now: the extractor also reads plain exported sz
+        // objects, but nothing resolves those yet, and a registry carrying
+        // entries no consumer reads is weight in the cache key for nothing.
+        if (entry.kind === 'szv-config') byName[entry.exportName] = entry.value;
     }
     registry.set(key, byName);
 }

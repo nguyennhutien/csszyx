@@ -82,9 +82,9 @@ export {
     SUGGESTION_MAP,
 } from './transform-core.js';
 export {
-    extractSzvRegistryEntries,
+    type CrossModuleRegistryEntry,
+    extractCrossModuleRegistryEntries,
     OxcNotImplementedError,
-    type SzvRegistryEntry,
     type TransformOxcResult,
     transformOxc,
 } from './transform-oxc.js';

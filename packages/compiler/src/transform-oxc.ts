@@ -6866,12 +6866,62 @@ function walk(node: unknown, visit: (node: OxcNode) => void): void {
     }
 }
 
-/** One exported szv factory found by the registry extractor. */
-export interface SzvRegistryEntry {
+/**
+ * What one recorded export IS, because the two are not interchangeable.
+ *
+ * `szv-config` is a variant TABLE the consumer compiles and then picks from.
+ * `sz-object` is a VALUE the consumer lowers exactly as it would the same
+ * literal written locally. Carrying them untagged would leave every reader —
+ * including the native decoder — guessing which machinery applies.
+ */
+export type CrossModuleExportKind = 'szv-config' | 'sz-object';
+
+/** One exported value found by the cross-module registry extractor. */
+export interface CrossModuleRegistryEntry {
+    /** What the value is, and therefore how a consumer must treat it. */
+    kind: CrossModuleExportKind;
     /** The exported binding name. */
     exportName: string;
-    /** Statically evaluated, qualification-passing config. */
-    config: Record<string, unknown>;
+    /** Statically evaluated payload: an szv config, or the sz object itself. */
+    value: Record<string, unknown>;
+}
+
+/**
+ * Read one exported declarator into a registry entry, or refuse it.
+ *
+ * An szv factory is tried first: `szv(<config>)` is a call, so it can never
+ * also read as a plain object, and the order only fixes which check runs.
+ *
+ * `const` is required for the plain-object kind. A `let` export is a live
+ * binding that the module can rebind after any importer has already been
+ * compiled against its first value, and nothing in a per-file transform could
+ * see that happen. This is the same answer the local path gives a reassigned
+ * binding, one step more conservative because the write would be in another
+ * file entirely.
+ *
+ * @param declarator - One declarator of an exported variable declaration.
+ * @param isConst - Whether the declaration was written with `const`.
+ * @returns The entry to record, or null when the export does not qualify.
+ */
+function readCrossModuleDeclarator(
+    declarator: VariableDeclaratorNode,
+    isConst: boolean,
+): CrossModuleRegistryEntry | null {
+    const factory = readSzvFactoryDeclaratorOxc(declarator);
+    if (factory !== null) {
+        if (factory.config == null || qualifyStaticSzvConfig(factory.config) === null) return null;
+        return { kind: 'szv-config', exportName: factory.name, value: factory.config };
+    }
+    if (!isConst || declarator.id?.type !== 'Identifier' || !declarator.init) return null;
+    const name = declarator.id.name;
+    if (name === undefined || SZV_RESERVED_FACTORY_NAMES.has(name)) return null;
+    const init = unwrapExpression(declarator.init);
+    if (init.type !== 'ObjectExpression') return null;
+    // The SAME evaluation the local literal path runs. A narrower predicate
+    // here would mean an object qualifies in one file and not in another, which
+    // is the subset-predicate failure this repo has already shipped once.
+    const value = evaluateStaticObjectOxc(init);
+    return value === null ? null : { kind: 'sz-object', exportName: name, value };
 }
 
 /**
@@ -6888,8 +6938,11 @@ export interface SzvRegistryEntry {
  * @param filename - Module filename, for parser dialect detection.
  * @returns The exported factories, declaration order preserved.
  */
-export function extractSzvRegistryEntries(source: string, filename: string): SzvRegistryEntry[] {
-    if (!source.includes('szv(') || !source.includes('export')) {
+export function extractCrossModuleRegistryEntries(
+    source: string,
+    filename: string,
+): CrossModuleRegistryEntry[] {
+    if (!source.includes('export')) {
         return [];
     }
     let program: { body: OxcNode[] };
@@ -6901,18 +6954,16 @@ export function extractSzvRegistryEntries(source: string, filename: string): Szv
         /* v8 ignore next -- oxc reports syntax errors in-band; only native/parser failures throw. */
         return [];
     }
-    const out: SzvRegistryEntry[] = [];
+    const out: CrossModuleRegistryEntry[] = [];
     for (const statement of program.body) {
         if (statement.type !== 'ExportNamedDeclaration') continue;
         const declaration = (statement as unknown as { declaration?: OxcNode }).declaration;
         if (declaration?.type !== 'VariableDeclaration') continue;
         const declarators = (declaration as unknown as VariableDeclarationNode).declarations;
+        const isConst = (declaration as unknown as { kind?: string }).kind === 'const';
         for (const declarator of declarators) {
-            const factory = readSzvFactoryDeclaratorOxc(declarator);
-            if (factory?.config == null || qualifyStaticSzvConfig(factory.config) === null) {
-                continue;
-            }
-            out.push({ exportName: factory.name, config: factory.config });
+            const entry = readCrossModuleDeclarator(declarator, isConst);
+            if (entry !== null) out.push(entry);
         }
     }
     return out;
