@@ -124,6 +124,7 @@ export type {
     SpacingScale,
     SpacingValue,
     SvgProps,
+    SzArrayElement,
     SzProps,
     SzPropsBase,
     SzPropValue,
