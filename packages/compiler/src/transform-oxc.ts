@@ -612,8 +612,14 @@ function transformOxcSzExpression(
     if (expression.type === 'ArrayExpression') {
         return transformOxcSzArrayResult(expression as ArrayExpressionNode, context);
     }
-    if (expression.type !== 'ObjectExpression') return { kind: 'fallback', expression };
-    return transformOxcObjectExpression(expression as ObjectExpressionNode, context);
+    // `as const` / `satisfies` / `as T` are erased before anything runs, so an
+    // object wearing one is the same object. Strip it for the dispatch, the way
+    // the babel lane does, or the identical literal compiles or falls back
+    // depending on which parser the build happens to be using. The fallback
+    // still carries the expression as authored, so its wording is unchanged.
+    const dispatched = unwrapExpression(expression);
+    if (dispatched.type !== 'ObjectExpression') return { kind: 'fallback', expression };
+    return transformOxcObjectExpression(dispatched as ObjectExpressionNode, context);
 }
 
 /**

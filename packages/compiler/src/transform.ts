@@ -1692,10 +1692,17 @@ function transformSzAttributeValue(
     if (!t.isJSXExpressionContainer(value)) return unchangedSzValueResult();
 
     const expression = value.expression;
-    if (t.isObjectExpression(expression)) {
+    // `as const` / `satisfies` / `as T` are erased before anything runs, so an
+    // object wearing one is the same object — and the binding path already
+    // reads it that way. Strip here too, or the identical literal compiles or
+    // falls back depending on where it was written. Only the dispatch sees the
+    // unwrapped node: the fallback classifier below keeps reporting the
+    // expression as authored, which is what the engines agree on.
+    const dispatched = unwrapTsExpression(expression);
+    if (t.isObjectExpression(dispatched)) {
         const objectResult = transformSzObjectExpression(
             path,
-            expression,
+            dispatched,
             existing,
             classMergeUsage,
             classes,
