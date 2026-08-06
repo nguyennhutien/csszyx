@@ -92,13 +92,13 @@ describe('what the registry refuses to carry', () => {
 
 describe('the two kinds stay apart', () => {
     it('tags an szv factory and a plain object differently in one module', () => {
-        const source = [
+        const tsx = [
             "import { szv } from '@csszyx/runtime';",
             "export const table = szv({ base: { p: 4 }, variants: { tone: { a: { bg: 'red-500' } } } });",
             'export const plain = { m: 2 };',
         ].join('\n');
         const kinds = Object.fromEntries(
-            extractCrossModuleRegistryEntries(source, '/p/styles.ts').map(entry => [
+            extractCrossModuleRegistryEntries(tsx, '/p/styles.ts').map(entry => [
                 entry.exportName,
                 entry.kind,
             ]),
@@ -107,8 +107,8 @@ describe('the two kinds stay apart', () => {
     });
 
     it('does not record an szv call as a plain object', () => {
-        const source =
+        const tsx =
             "import { szv } from '@csszyx/runtime';\nexport const t = szv({ base: { p: 4 } });";
-        expect(szObjects(source)).toEqual({});
+        expect(szObjects(tsx)).toEqual({});
     });
 });

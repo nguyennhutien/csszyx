@@ -82,6 +82,7 @@ export {
     SUGGESTION_MAP,
 } from './transform-core.js';
 export {
+    type CrossModuleExportKind,
     type CrossModuleRegistryEntry,
     extractCrossModuleRegistryEntries,
     OxcNotImplementedError,

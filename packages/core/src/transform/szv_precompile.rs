@@ -483,6 +483,13 @@ const fn is_identifier_byte(byte: u8) -> bool {
 /// One decoded cross-module registry: specifier → (exported name → config).
 pub(crate) type CrossModuleStatics = Vec<(String, Vec<(String, StaticSzObject)>)>;
 
+/// The bundler's registry of static sz OBJECTS an importer may lower.
+///
+/// The transport is identical to the szv registry, so it decodes through the
+/// same reader; the alias exists because the two carry different meanings and
+/// a signature naming the wrong one would be silently accepted.
+pub(crate) type CrossModuleSzObjects = CrossModuleStatics;
+
 /// Decode the ordered cross-module payload the bundler serialized.
 ///
 /// The transport is generic ordered pairs — arrays survive every JSON library

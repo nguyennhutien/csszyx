@@ -516,6 +516,34 @@ export interface BuildConfig {
      * @example ['src/styles/theme.css', 'src/styles/tokens.css']
      */
     scanCss?: string | string[];
+
+    /**
+     * Compile a static sz object that a component imports from another module.
+     *
+     * `export const cardSz = { p: 4 }` in one file and `sz={cardSz}` in another
+     * is an ordinary way to share a fixed style, but the compiler reads one file
+     * at a time: the imported binding is a name it cannot see through, so the
+     * element falls back to the runtime AND contributes no classes. The class
+     * text then exists in no output at all, so nothing tells Tailwind to
+     * generate the CSS the browser will ask for.
+     *
+     * With this on, the prescan records those exports and each importer lowers
+     * them exactly as it would the same literal written locally.
+     *
+     * Off by default because it changes emitted output for code that already
+     * builds. A project that MUTATES an exported style object after declaring
+     * it is relying on the runtime fallback, and compiling the declared value
+     * would be correct by the contract while still being a change that project
+     * has to notice. See the shared-style-object contract in the docs.
+     *
+     * v1 covers a direct `sz={binding}` from a relative named import. A
+     * barrel, a package specifier, a tsconfig alias, a namespace or default
+     * import, and the Next.js Turbopack lane all keep the runtime path they
+     * have today, and keep reporting it.
+     *
+     * @default false
+     */
+    importedStaticSz?: boolean;
 }
 
 /**
@@ -729,6 +757,7 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     cache: true,
     astBudgetLimit: 50000,
     parser: 'rust',
+    importedStaticSz: false,
 };
 
 /**

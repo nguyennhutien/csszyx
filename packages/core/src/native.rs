@@ -36,6 +36,8 @@ pub struct NativeTransformOptions {
     pub ast_budget: Option<u32>,
     /// Cross-module szv registry payload (ordered-pair JSON).
     pub cross_module_statics_json: Option<String>,
+    /// Cross-module static sz OBJECT registry payload (ordered-pair JSON).
+    pub cross_module_sz_objects_json: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -194,6 +196,7 @@ pub fn transform_batch_native(
             root_dir: options.root_dir,
             ast_budget: options.ast_budget.map(|budget| budget as usize),
             cross_module_statics_json: options.cross_module_statics_json,
+            cross_module_sz_objects_json: options.cross_module_sz_objects_json,
         },
     )
     .map(|results| {

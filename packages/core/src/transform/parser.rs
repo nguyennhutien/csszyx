@@ -5,8 +5,9 @@ use oxc_ast::{
         Expression, ImportDeclaration, ImportDeclarationSpecifier, JSXAttribute, JSXAttributeItem,
         JSXAttributeName, JSXAttributeValue, JSXElement, JSXElementName, JSXExpression,
         JSXFragment, JSXMemberExpression, JSXMemberExpressionObject, JSXOpeningElement,
-        JSXSpreadAttribute, ObjectExpression, ObjectProperty, ObjectPropertyKind, PropertyKey,
-        TSTypeQuery, TSTypeQueryExprName, UnaryOperator, VariableDeclaration,
+        JSXSpreadAttribute, ObjectExpression, ObjectProperty, ObjectPropertyKind, Program,
+        PropertyKey, Statement, TSTypeQuery, TSTypeQueryExprName, UnaryOperator,
+        VariableDeclaration,
     },
     AstKind,
 };
@@ -70,6 +71,36 @@ pub fn parse_source_shell_with_budget_and_statics(
     ast_budget: usize,
     cross_module: &super::szv_precompile::CrossModuleStatics,
 ) -> ParsedSourceShell {
+    parse_source_shell_with_registries(
+        file,
+        ast_budget,
+        CrossModuleRegistries {
+            szv_factories: cross_module,
+            sz_objects: &Vec::new(),
+        },
+    )
+}
+
+/// The bundler-supplied cross-module registries one parse may consult.
+///
+/// They travel as a named pair rather than two positional arguments because
+/// they decode to the same Rust type: a swap would compile and quietly apply
+/// the wrong machinery to each.
+#[derive(Clone, Copy)]
+pub struct CrossModuleRegistries<'a> {
+    /// Imported szv factory configs: specifier → (exported name → config).
+    pub szv_factories: &'a super::szv_precompile::CrossModuleStatics,
+    /// Imported static sz objects: specifier → (exported name → object).
+    pub sz_objects: &'a super::szv_precompile::CrossModuleSzObjects,
+}
+
+/// [`parse_source_shell_with_budget`] with both cross-module registries.
+pub fn parse_source_shell_with_registries(
+    file: &TransformFile,
+    ast_budget: usize,
+    registries: CrossModuleRegistries<'_>,
+) -> ParsedSourceShell {
+    let cross_module = registries.szv_factories;
     let allocator = Allocator::default();
     let source_type = source_type_for_path(&file.filename);
     let parse_start = Instant::now();
@@ -88,6 +119,8 @@ pub fn parse_source_shell_with_budget_and_statics(
         let scope_start = Instant::now();
         let scope = super::scope::DeclaratorScope::from_program(&parsed.program);
         timings.scope_ns = elapsed_ns(scope_start);
+        let imported_sz_objects =
+            collect_imported_sz_objects(&parsed.program, registries.sz_objects);
         let mut visitor = CsszyxIrVisitor {
             source: &file.source,
             ir: &mut ir,
@@ -105,6 +138,7 @@ pub fn parse_source_shell_with_budget_and_statics(
             szv_type_query_counts: Vec::new(),
             szv_gate: file.source.contains("szv(") || !cross_module.is_empty(),
             cross_module,
+            imported_sz_objects: &imported_sz_objects,
         };
         let ir_start = Instant::now();
         visitor.visit_program(&parsed.program);
@@ -211,6 +245,10 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     szv_gate: bool,
     /// Bundler-resolved imported factories: specifier → (name → config).
     cross_module: &'p super::szv_precompile::CrossModuleStatics,
+    /// Imported static sz objects already narrowed to this file's LOCAL
+    /// binding names, so identifier lowering is one lookup and a file that
+    /// imports none of them pays nothing.
+    imported_sz_objects: &'p [(String, StaticSzObject)],
 }
 
 /// One qualifying szr import clause, recorded for the deferred rewrite.
@@ -555,6 +593,8 @@ fn safe_style_spread_object(object: &ObjectExpression<'_>) -> Option<SafeStyleSp
 struct ResolveContext<'p> {
     scope: &'p super::scope::DeclaratorScope,
     program: &'p oxc_ast::ast::Program<'p>,
+    /// Static sz objects this file imported, by LOCAL binding name.
+    imported_sz_objects: &'p [(String, StaticSzObject)],
 }
 
 impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
@@ -562,6 +602,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         ResolveContext {
             scope: self.scope,
             program: self.program,
+            imported_sz_objects: self.imported_sz_objects,
         }
     }
 
@@ -3101,6 +3142,75 @@ fn static_object_candidate_from_expression(
     }
 }
 
+/// Narrow the bundler's sz-object registry to this file's LOCAL binding names.
+///
+/// Resolved once per file rather than per reference: identifier lowering is
+/// then a single lookup, and a file importing nothing the registry carries
+/// pays one pass over the module's top level.
+///
+/// The registry is keyed by EXPORT name while the code writes the LOCAL one,
+/// so every specifier must be read through. Matching a local name against the
+/// registry would resolve the wrong entry the moment an alias makes the two
+/// differ.
+///
+/// v1 accepts a named value import and nothing else — a namespace, default or
+/// type-only import keeps the runtime path it has today rather than being
+/// guessed at.
+fn collect_imported_sz_objects(
+    program: &Program<'_>,
+    registry: &super::szv_precompile::CrossModuleSzObjects,
+) -> Vec<(String, StaticSzObject)> {
+    let mut out = Vec::new();
+    if registry.is_empty() {
+        return out;
+    }
+    for statement in &program.body {
+        let Statement::ImportDeclaration(declaration) = statement else {
+            continue;
+        };
+        if declaration.import_kind.is_type() {
+            continue;
+        }
+        let source_value = declaration.source.value.as_str();
+        let Some((_, entries)) = registry
+            .iter()
+            .find(|(specifier, _)| specifier == source_value)
+        else {
+            continue;
+        };
+        let Some(specifiers) = &declaration.specifiers else {
+            continue;
+        };
+        for entry in specifiers {
+            let ImportDeclarationSpecifier::ImportSpecifier(specifier) = entry else {
+                continue;
+            };
+            if specifier.import_kind.is_type() {
+                continue;
+            }
+            let imported = specifier.imported.name();
+            let Some((_, object)) = entries.iter().find(|(name, _)| name.as_str() == imported)
+            else {
+                continue;
+            };
+            out.push((specifier.local.name.as_str().to_string(), object.clone()));
+        }
+    }
+    out
+}
+
+/// The imported static sz object a local binding name stands for, if the
+/// bundler's registry carried one for this file.
+fn imported_sz_object<'a>(
+    imports: &'a [(String, StaticSzObject)],
+    name: &str,
+) -> Option<&'a StaticSzObject> {
+    imports
+        .iter()
+        .find(|(local, _)| local == name)
+        .map(|(_, object)| object)
+}
+
 fn static_object_from_jsx_expression(
     expression: &JSXExpression<'_>,
     ctx: ResolveContext<'_>,
@@ -3134,13 +3244,20 @@ fn static_object_from_jsx_expression(
         // what the rewrite phase replaces; identifier resolution is a
         // semantic enhancement, not a span change.
         JSXExpression::Identifier(identifier) => {
-            let initializer = ctx.scope.resolve_initializer_before(
+            // The same-file binding is asked first, so a local declaration of
+            // the name wins over an import of it without the two needing to be
+            // ordered by hand — a local const is what the code refers to.
+            if let Some(initializer) = ctx.scope.resolve_initializer_before(
                 &identifier.name,
                 identifier.span.start,
                 ctx.program,
-            )?;
-            let (object, _, rewrites_empty_class) =
-                static_object_from_expression(initializer, ctx)?;
+            ) {
+                let (object, _, rewrites_empty_class) =
+                    static_object_from_expression(initializer, ctx)?;
+                return Some((object, text_span(identifier.span), rewrites_empty_class));
+            }
+            let object = imported_sz_object(ctx.imported_sz_objects, &identifier.name)?.clone();
+            let rewrites_empty_class = object.is_empty();
             Some((object, text_span(identifier.span), rewrites_empty_class))
         }
         _ => None,
@@ -4185,8 +4302,8 @@ fn string_value_span(span: Span, source: &str) -> TextSpan {
 mod tests {
     use super::{
         escape_json_string, parse_source_shell, parse_source_shell_with_budget,
-        parse_source_shell_with_budget_and_statics, source_type_for_path, string_value_span,
-        MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
+        parse_source_shell_with_budget_and_statics, parse_source_shell_with_registries,
+        source_type_for_path, string_value_span, MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
     };
     use crate::transform::{lower::lower_source_ir_classes, TransformFile};
     use oxc_span::Span;
@@ -4389,6 +4506,120 @@ export const cls = szr(localCard({ pad: 'sm' }));";
             &statics,
         );
         assert_eq!(parsed.ir.szv_replacements.len(), 1);
+    }
+
+    /// `{ p: 4 }` as the exporter would have written it, in the decoded form
+    /// the bundler's registry arrives in.
+    fn cross_module_card() -> super::StaticSzObject {
+        super::StaticSzObject {
+            properties: vec![super::StaticSzProperty {
+                key: "p".into(),
+                value: super::StaticSzValue::Number(4.0),
+                span: super::TextSpan { start: 0, end: 0 },
+            }],
+        }
+    }
+
+    fn parse_with_sz_objects(
+        source: &str,
+        registry: &super::super::szv_precompile::CrossModuleSzObjects,
+    ) -> super::ParsedSourceShell {
+        parse_source_shell_with_registries(
+            &TransformFile {
+                filename: "/repo/src/Card.tsx".into(),
+                source: source.into(),
+            },
+            usize::MAX,
+            super::CrossModuleRegistries {
+                szv_factories: &Vec::new(),
+                sz_objects: registry,
+            },
+        )
+    }
+
+    #[test]
+    fn parser_lowers_an_imported_sz_object_like_a_local_literal() {
+        let registry = vec![(
+            "./styles".into(),
+            vec![("cardSz".into(), cross_module_card())],
+        )];
+
+        for source in [
+            "import { cardSz } from './styles';\nexport const A = () => <div sz={cardSz} />;",
+            // The registry is keyed by EXPORT name while the code writes the
+            // local one, so an alias must still find the entry.
+            "import { cardSz as card } from './styles';\nexport const A = () => <div sz={card} />;",
+        ] {
+            let parsed = parse_with_sz_objects(source, &registry);
+            let attribute = &parsed.ir.sz_attributes[0];
+            assert!(!attribute.runtime_fallback, "{source}");
+            assert_eq!(attribute.object.properties[0].key, "p");
+            assert_eq!(
+                attribute.object.properties[0].value,
+                super::StaticSzValue::Number(4.0)
+            );
+        }
+    }
+
+    #[test]
+    fn parser_prefers_a_local_declaration_over_the_imported_name() {
+        let registry = vec![(
+            "./styles".into(),
+            vec![("cardSz".into(), cross_module_card())],
+        )];
+        let source = "import { cardSz } from './styles';\nexport const A = () => { const cardSz = { m: 2 }; return <div sz={cardSz} />; };";
+
+        let parsed = parse_with_sz_objects(source, &registry);
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(attribute.object.properties[0].key, "m");
+    }
+
+    #[test]
+    fn parser_refuses_imports_outside_the_named_value_form() {
+        let registry = vec![(
+            "./styles".into(),
+            vec![("cardSz".into(), cross_module_card())],
+        )];
+        let cases = [
+            "import type { cardSz } from './styles';",
+            "import { type cardSz } from './styles';",
+            "import cardSz from './styles';",
+            // An export the registry does not carry, and a specifier it does
+            // not carry: both must leave today's runtime path untouched.
+            "import { cardSz } from './elsewhere';",
+            "import { otherSz as cardSz } from './styles';",
+        ];
+
+        for import in cases {
+            let source = format!("{import}\nexport const A = () => <div sz={{cardSz}} />;");
+            let parsed = parse_with_sz_objects(&source, &registry);
+            assert!(parsed.ir.sz_attributes[0].runtime_fallback, "{import}");
+        }
+
+        // A namespace import is referenced through a member expression, which
+        // never reached the identifier path in the first place.
+        let namespace =
+            "import * as S from './styles';\nexport const A = () => <div sz={S.cardSz} />;";
+        let parsed = parse_with_sz_objects(namespace, &registry);
+        assert!(parsed.ir.sz_attributes[0].runtime_fallback);
+
+        // An absent registry must mean exactly what an empty one means.
+        let direct =
+            "import { cardSz } from './styles';\nexport const A = () => <div sz={cardSz} />;";
+        assert!(parse_with_sz_objects(direct, &Vec::new()).ir.sz_attributes[0].runtime_fallback);
+    }
+
+    #[test]
+    fn imported_sz_object_answers_by_local_binding_name() {
+        let imports = vec![("card".to_string(), cross_module_card())];
+
+        assert_eq!(
+            super::imported_sz_object(&imports, "card"),
+            Some(&cross_module_card())
+        );
+        // The EXPORT name is not a binding this file has, so it must miss.
+        assert!(super::imported_sz_object(&imports, "cardSz").is_none());
     }
 
     #[test]

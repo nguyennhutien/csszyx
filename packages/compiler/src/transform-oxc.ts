@@ -228,6 +228,10 @@ export function transformOxc(
     // (`mx: GUTTER` where `const GUTTER = 0`); the object-only map above cannot
     // hold scalar initializers.
     const constInitializers = collectConstInitializers(parsed.program as unknown as OxcNode);
+    const importedSzObjects = collectImportedSzObjects(
+        parsed.program as unknown as OxcNode,
+        options?.crossModuleSzObjects,
+    );
     const conditionalBindings = collectConditionalBindings(parsed.program as unknown as OxcNode);
     const reservedCSSVariableNames = options?.mangleVars
         ? collectStaticStyleCustomPropertyNames(parsed.program as unknown as OxcNode)
@@ -379,6 +383,7 @@ export function transformOxc(
                 source,
                 options,
                 bindings: objectBindings,
+                importedSzObjects,
                 conditionalBindings,
                 componentHoists,
                 reservedCSSVariableNames,
@@ -494,6 +499,8 @@ interface OxcSzAttributeContext {
     source: string;
     options: TransformSourceCodeOptions | undefined;
     bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    /** Local name to the static sz object its module exports. */
+    importedSzObjects: ReadonlyMap<string, Record<string, unknown>>;
     conditionalBindings: ReadonlyMap<string, ConditionalExpressionNode>;
     componentHoists: OxcComponentHoistAnalysis | null;
     reservedCSSVariableNames: ReadonlySet<string> | undefined;
@@ -634,14 +641,16 @@ function transformOxcIdentifierExpression(
     context: OxcSzAttributeContext,
 ): OxcSzAttributeResult | null {
     if (expression.type !== 'Identifier') return null;
-    const bound = context.bindings.get(String((expression as IdentifierNode).name));
-    if (!bound) return null;
+    const name = String((expression as IdentifierNode).name);
+    // A local binding is asked first, so a local declaration of the same name
+    // wins over an import without the two needing to be ordered by hand.
+    const bound = context.bindings.get(name);
+    const object = bound
+        ? astObjectToSzObject(bound, context.filename, context.bindings)
+        : (context.importedSzObjects.get(name) as SzObject | undefined);
+    if (object === undefined) return null;
     const result = compileSzObject(
-        applyGlobalVarAliasesToSzObject(
-            astObjectToSzObject(bound, context.filename, context.bindings),
-            context.globalVarAliases,
-            context.cssVariableMap,
-        ),
+        applyGlobalVarAliasesToSzObject(object, context.globalVarAliases, context.cssVariableMap),
     );
     collectOxcClassTokens(result.className, context.classes, context.szDerived);
     return { kind: 'continue' };
@@ -6656,6 +6665,62 @@ function astValueToSzValue(
         'D2.1',
         `unsupported value node type ${node.type} at ${filename}:${node.start}`,
     );
+}
+
+/**
+ * Map each locally-bound import name to the static sz object it refers to.
+ *
+ * Resolved once per file rather than per reference: the identifier path then
+ * answers with one map lookup, and a file that imports nothing the registry
+ * carries pays a single walk.
+ *
+ * The registry is keyed by EXPORT name while the code uses the LOCAL one, so
+ * `import { cardSz as card }` has to be read through its specifier. Matching
+ * the local name against the registry would resolve the wrong entry the moment
+ * the two differ.
+ *
+ * v1 accepts a named value import only. Namespace, default and type-only
+ * imports fall through to the runtime path they have today.
+ *
+ * @param root - Program AST root.
+ * @param registry - Cross-module sz objects visible to this file.
+ * @returns Local binding name to its exported object.
+ */
+function collectImportedSzObjects(
+    root: OxcNode,
+    registry: Readonly<Record<string, Readonly<Record<string, unknown>>>> | undefined,
+): Map<string, Record<string, unknown>> {
+    const out = new Map<string, Record<string, unknown>>();
+    if (registry === undefined) return out;
+    walk(root, node => {
+        if (node.type !== 'ImportDeclaration') return;
+        const declaration = node as unknown as {
+            source?: { value?: string };
+            importKind?: string;
+            specifiers?: OxcNode[];
+        };
+        if (declaration.importKind === 'type') return;
+        const exported = registry[declaration.source?.value ?? ''];
+        if (exported === undefined) return;
+        for (const specifierNode of declaration.specifiers ?? []) {
+            if (specifierNode.type !== 'ImportSpecifier') continue;
+            const specifier = specifierNode as unknown as {
+                importKind?: string;
+                imported?: { type: string; name?: string; value?: unknown };
+                local?: { name?: string };
+            };
+            if (specifier.importKind === 'type') continue;
+            const imported = specifier.imported;
+            const exportName =
+                imported?.type === 'Identifier' ? imported.name : String(imported?.value ?? '');
+            const local = specifier.local?.name;
+            const value = exportName === undefined ? undefined : exported[exportName];
+            if (local !== undefined && value !== null && typeof value === 'object') {
+                out.set(local, value as Record<string, unknown>);
+            }
+        }
+    });
+    return out;
 }
 
 /**

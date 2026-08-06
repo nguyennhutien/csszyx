@@ -39,6 +39,15 @@ import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } f
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
 import { babelFallbackReason } from './babel-fallback-reason.js';
 import { findUnknownConfigKeys, unknownConfigKeysMessage } from './config-keys.js';
+import {
+    mayExportSzvFactories,
+    recordSzObjectRegistryFile,
+    recordSzvRegistryFile,
+    relativeSpecifiersIn,
+    resolveCrossModuleStaticsFor,
+    resolveProviderPath,
+    type SzvCrossModuleRegistry,
+} from './cross-module-registry.js';
 import { mangleCSSSync } from './css-mangler.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
@@ -79,12 +88,6 @@ import {
 } from './rsc-boundary.js';
 import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
-import {
-    mayExportSzvFactories,
-    recordSzvRegistryFile,
-    resolveCrossModuleStaticsFor,
-    type SzvCrossModuleRegistry,
-} from './szv-registry.js';
 import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
@@ -2878,8 +2881,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         );
         // The registry is filled in every mode; only the REWRITE is gated, so
         // an edited factory can never serve importers a stale table.
-        if (crossModuleRegistryEnabled && crossModuleStatics !== undefined) {
-            compilerOptions.crossModuleStatics = crossModuleStatics;
+        if (crossModuleRegistryEnabled && crossModuleStatics.szvConfigs !== undefined) {
+            compilerOptions.crossModuleStatics = crossModuleStatics.szvConfigs;
+        }
+        if (crossModuleStatics.szObjects !== undefined) {
+            compilerOptions.crossModuleSzObjects = crossModuleStatics.szObjects;
         }
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
 
@@ -3088,6 +3094,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 compilerOptions.crossModuleStatics === undefined
                     ? undefined
                     : JSON.stringify(compilerOptions.crossModuleStatics),
+            crossModuleSzObjects:
+                compilerOptions.crossModuleSzObjects === undefined
+                    ? undefined
+                    : JSON.stringify(compilerOptions.crossModuleSzObjects),
             filename: effectiveFilename,
             source,
         };
@@ -3498,6 +3508,47 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return;
         }
         recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content);
+        // A provider edited during a watch has to lose its stale value the same
+        // way an edited factory does. Re-reading the changed file for both kinds
+        // costs one parse of one file; deciding whether it is still demanded
+        // would cost the import graph, and a recorded export nothing imports
+        // resolves for nobody anyway.
+        if (options.build?.importedStaticSz === true) {
+            recordSzObjectRegistryFile(szvCrossModuleRegistry, filePath, content);
+        }
+    }
+
+    /**
+     * Read every module an sz-authoring file imports from, and record what it
+     * exports.
+     *
+     * Runs after the walk because the demand is only complete once every
+     * sz-authoring file has been seen. Reading from disk rather than keeping
+     * every file's text in memory: the demanded set is small, and holding the
+     * project's sources to serve it would not be.
+     *
+     * @param seenSourcePaths - Paths the prescan walked.
+     * @param demand - Specifier bases imported by files that author sz.
+     */
+    function recordDemandedSzObjectProviders(
+        seenSourcePaths: ReadonlySet<string>,
+        demand: ReadonlySet<string>,
+    ): void {
+        for (const base of demand) {
+            const providerPath = resolveProviderPath(seenSourcePaths, base);
+            // A specifier resolving to nothing the walk saw is ordinary — a
+            // package, a tsconfig alias, a file outside the compiled roots. It
+            // costs the optimization and the importer keeps the runtime path,
+            // which is exactly what v1 promises for those.
+            if (providerPath === undefined) continue;
+            let content: string;
+            try {
+                content = fs.readFileSync(providerPath, 'utf-8');
+            } catch {
+                continue;
+            }
+            recordSzObjectRegistryFile(szvCrossModuleRegistry, providerPath, content);
+        }
     }
 
     /**
@@ -3537,6 +3588,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // ownership set, but never become csszyx-owned by themselves.
         const rawDiscoveredClasses = new Set<string>();
         const prescanSources: PrescanSourceFile[] = [];
+        // Paths the walk saw, so the second pass can turn a specifier into the
+        // file a consumer meant without going back to the filesystem to guess.
+        const seenSourcePaths = new Set<string>();
+        // Specifier bases imported by files that author sz, filled during the
+        // walk and read once it finishes.
+        const szObjectDemand = new Set<string>();
 
         /**
          * Read one processable source into the prescan queue.
@@ -3559,8 +3616,31 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // need the expensive sz parser pass.
             recordAuthoredClasses(content);
             recordSzvRegistryEntries(filePath, content);
+            seenSourcePaths.add(normalizePathSeparators(filePath));
             if (fileMayContainSafelistableSz(content)) {
                 prescanSources.push({ filePath, content });
+                recordSzObjectDemand(filePath, content);
+            }
+        }
+
+        /**
+         * Note every relative module an sz-authoring file imports from.
+         *
+         * This is what keeps the sz-object pass demand-driven. `szv(` is a
+         * cheap marker a provider carries in its own text; a plain exported
+         * object has none, and `export const` is far too common to gate on —
+         * asking every module in a project would parse code with nothing to do
+         * with styling, on every build. What a file that USES sz imports is a
+         * small set, and it is the only set that can matter.
+         *
+         * @param filePath Importing file path.
+         * @param content Importing file text.
+         */
+        function recordSzObjectDemand(filePath: string, content: string): void {
+            if (options.build?.importedStaticSz !== true) return;
+            const directory = path.dirname(filePath);
+            for (const specifier of relativeSpecifiersIn(content)) {
+                szObjectDemand.add(normalizePathSeparators(path.resolve(directory, specifier)));
             }
         }
 
@@ -3618,6 +3698,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
             scanDir(sourceDir);
         }
+
+        recordDemandedSzObjectProviders(seenSourcePaths, szObjectDemand);
 
         const prescanContentByPath = new Map(
             prescanSources.map(file => [file.filePath, file.content]),

@@ -678,18 +678,25 @@ function transformSzObjectExpression(
  *
  * @param path sz attribute path.
  * @param expression Expression to resolve.
+ * @param crossModuleSzObjects Static sz objects this file's imports resolve to.
  * @returns Compiled class expression, or null when unresolved.
  */
 function resolveStaticSzExpression(
     path: babel.NodePath<t.JSXAttribute>,
     expression: t.Expression | t.JSXEmptyExpression,
+    crossModuleSzObjects?: CrossModuleSzObjects,
 ): t.Expression | null {
     const getBinding: GetBinding = name => path.scope.getBinding(name);
     if (t.isConditionalExpression(expression)) {
         return tryStaticTransformNode(expression, getBinding);
     }
     if (!t.isIdentifier(expression)) return null;
-    const declarator = foldableDeclarator(path.scope.getBinding(expression.name));
+    // One binding lookup answers both questions, so a local declaration wins
+    // over an import of the same name without anything having to order them.
+    const binding = path.scope.getBinding(expression.name);
+    const imported = importedSzObject(binding, crossModuleSzObjects);
+    if (imported !== null) return t.stringLiteral(transform(imported).className);
+    const declarator = foldableDeclarator(binding);
     if (declarator === null || !declarator.node.init) return null;
     return tryStaticTransformNode(declarator.node.init, getBinding);
 }
@@ -1674,6 +1681,7 @@ function unchangedSzValueResult(): SzValueTransformResult {
  * @param classes Tailwind discovery set.
  * @param diagnostics Compiler diagnostics.
  * @param filename Source filename.
+ * @param crossModuleSzObjects Static sz objects this file's imports resolve to.
  * @returns Transform status and runtime helper usage.
  */
 function transformSzAttributeValue(
@@ -1683,6 +1691,7 @@ function transformSzAttributeValue(
     classes: Set<string>,
     diagnostics: string[],
     filename: string,
+    crossModuleSzObjects?: CrossModuleSzObjects,
 ): SzValueTransformResult {
     const value = path.node.value;
     if (t.isStringLiteral(value)) {
@@ -1714,7 +1723,7 @@ function transformSzAttributeValue(
         }
     }
 
-    const staticExpression = resolveStaticSzExpression(path, expression);
+    const staticExpression = resolveStaticSzExpression(path, expression, crossModuleSzObjects);
     if (staticExpression !== null) {
         applyCompiledClassExpression(path, staticExpression, existing, classMergeUsage, classes);
         return { ...unchangedSzValueResult(), transformed: true };
@@ -2093,6 +2102,17 @@ export interface TransformSourceCodeOptions {
     crossModuleStatics?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 
     /**
+     * Static sz OBJECTS a module imports, keyed by import specifier then by
+     * EXPORT name — the bundler's registry, filtered to what this file can see.
+     *
+     * Separate from {@link crossModuleStatics} because the two are not the same
+     * thing: an szv config is a variant table the engine compiles and picks
+     * from, an sz object is a value it lowers. One untagged map would leave
+     * every reader guessing which machinery applies.
+     */
+    crossModuleSzObjects?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+
+    /**
      * Opt into tiered CSS custom property names for parser paths that support
      * the CSS variable system. Unsupported parser paths must preserve existing
      * `--_sz-*` output until they explicitly port this option.
@@ -2414,6 +2434,7 @@ export function transformSourceCode(
                                 collectedClasses,
                                 diagnostics,
                                 filename ?? 'file.tsx',
+                                options?.crossModuleSzObjects,
                             );
                             transformed ||= valueResult.transformed;
                             usesColorVar ||= valueResult.usesColorVar;
@@ -2855,6 +2876,44 @@ interface ResolvedBinding {
 
 /** Scope binding resolver — wraps `path.scope.getBinding` for testability and optional use. */
 type GetBinding = (name: string) => ResolvedBinding | null | undefined;
+
+/** Cross-module sz objects, keyed by import specifier then by EXPORT name. */
+type CrossModuleSzObjects = Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+
+/**
+ * Resolve one binding to the static sz object its module exports.
+ *
+ * Resolution is by BINDING, never by matching a text name against the
+ * registry: a local declaration of the same name is what the code refers to,
+ * and reading the name would silently prefer the import. For the same reason
+ * the registry is keyed by the EXPORT name while the code uses the local one —
+ * `import { cardSz as card }` must find `cardSz`.
+ *
+ * v1 accepts a named value import and nothing else. A namespace or default
+ * import, and a type-only one, all fall through to the runtime path they have
+ * today rather than being guessed at.
+ *
+ * @param binding - Binding as the scope resolved it.
+ * @param registry - Cross-module sz objects visible to this file.
+ * @returns The exported object, or null when this is not one.
+ */
+function importedSzObject(
+    binding: ResolvedBinding | null | undefined,
+    registry: CrossModuleSzObjects | undefined,
+): SzObject | null {
+    if (registry === undefined || binding === null || binding === undefined) return null;
+    const specifier = binding.path;
+    if (!specifier.isImportSpecifier()) return null;
+    const declaration = specifier.parentPath;
+    if (declaration === null || !declaration.isImportDeclaration()) return null;
+    if (declaration.node.importKind === 'type' || specifier.node.importKind === 'type') return null;
+    const imported = specifier.node.imported;
+    const exportName = t.isIdentifier(imported) ? imported.name : imported.value;
+    const value = registry[declaration.node.source.value]?.[exportName];
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? (value as SzObject)
+        : null;
+}
 
 /**
  * Whether a binding's initializer may stand in for its value at render time.

@@ -11,10 +11,13 @@
 import { describe, expect, it } from 'vitest';
 import {
     mayExportSzvFactories,
+    recordSzObjectRegistryFile,
     recordSzvRegistryFile,
+    relativeSpecifiersIn,
     resolveCrossModuleStaticsFor,
+    resolveProviderPath,
     type SzvCrossModuleRegistry,
-} from '../src/szv-registry.js';
+} from '../src/cross-module-registry.js';
 
 const STYLES_SOURCE =
     "import { szv } from '@csszyx/runtime';\n" +
@@ -77,7 +80,7 @@ describe('resolveCrossModuleStaticsFor', () => {
         const source = "import { cardSz } from './styles';\n";
         const resolved = resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source);
         expect(resolved).toBeDefined();
-        expect(Object.keys(resolved?.['./styles'] ?? {})).toEqual(['cardSz', 'rowSz']);
+        expect(Object.keys(resolved.szvConfigs?.['./styles'] ?? {})).toEqual(['cardSz', 'rowSz']);
     });
 
     it.each([
@@ -97,7 +100,7 @@ describe('resolveCrossModuleStaticsFor', () => {
         const registry = registryWith(registryPath);
         const source = `import { cardSz } from '${specifier}';\n`;
         const resolved = resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source);
-        expect(resolved?.[specifier]).toBeDefined();
+        expect(resolved.szvConfigs?.[specifier]).toBeDefined();
     });
 
     it('resolves a real .js module over its TypeScript twin', () => {
@@ -115,25 +118,34 @@ describe('resolveCrossModuleStaticsFor', () => {
             '/app/src/Card.tsx',
             "import { cardSz } from './styles.js';\n",
         );
-        expect(Object.keys(resolved?.['./styles.js'] ?? {})).toEqual(['cardSz', 'rowSz']);
+        expect(Object.keys(resolved.szvConfigs?.['./styles.js'] ?? {})).toEqual([
+            'cardSz',
+            'rowSz',
+        ]);
     });
 
     it('leaves an unknown emitted extension unresolved', () => {
         const registry = registryWith('/app/src/styles.ts');
         const source = "import { cardSz } from './styles.wasm';\n";
-        expect(resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source)).toBeUndefined();
+        expect(
+            resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source).szvConfigs,
+        ).toBeUndefined();
     });
 
     it('never resolves package or aliased specifiers', () => {
         const registry = registryWith('/app/node_modules/pkg/styles.ts');
         const source = "import { cardSz } from 'pkg/styles';\nimport { x } from '@alias/styles';\n";
-        expect(resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source)).toBeUndefined();
+        expect(
+            resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source).szvConfigs,
+        ).toBeUndefined();
     });
 
     it('returns undefined when nothing matches, not an empty object', () => {
         const registry = registryWith('/app/src/styles.ts');
         const source = "import { other } from './elsewhere';\n";
-        expect(resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source)).toBeUndefined();
+        expect(
+            resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source).szvConfigs,
+        ).toBeUndefined();
     });
 
     it('resolves each specifier once and keeps distinct modules apart', () => {
@@ -148,15 +160,15 @@ describe('resolveCrossModuleStaticsFor', () => {
             "import { cardSz as again } from './styles';\n" +
             "import { rowsOnly } from './rows';\n";
         const resolved = resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source);
-        expect(Object.keys(resolved ?? {}).sort()).toEqual(['./rows', './styles']);
-        expect(Object.keys(resolved?.['./rows'] ?? {})).toEqual(['rowsOnly']);
+        expect(Object.keys(resolved.szvConfigs ?? {}).sort()).toEqual(['./rows', './styles']);
+        expect(Object.keys(resolved.szvConfigs?.['./rows'] ?? {})).toEqual(['rowsOnly']);
     });
 
     it('short-circuits on an empty registry', () => {
         const registry: SzvCrossModuleRegistry = new Map();
         expect(
             resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', "import x from './y';"),
-        ).toBeUndefined();
+        ).toEqual({});
     });
 });
 
@@ -175,7 +187,7 @@ describe('registry staleness', () => {
                 '/app/src/Card.tsx',
                 "import { cardSz } from './styles';\n",
             ),
-        ).toBeUndefined();
+        ).toEqual({});
     });
 
     it('resolves mutually importing modules without recursing', () => {
@@ -196,10 +208,14 @@ describe('registry staleness', () => {
         recordSzvRegistryFile(registry, '/app/src/b.ts', bSource);
 
         expect(
-            Object.keys(resolveCrossModuleStaticsFor(registry, '/app/src/a.ts', aSource) ?? {}),
+            Object.keys(
+                resolveCrossModuleStaticsFor(registry, '/app/src/a.ts', aSource).szvConfigs ?? {},
+            ),
         ).toEqual(['./b']);
         expect(
-            Object.keys(resolveCrossModuleStaticsFor(registry, '/app/src/b.ts', bSource) ?? {}),
+            Object.keys(
+                resolveCrossModuleStaticsFor(registry, '/app/src/b.ts', bSource).szvConfigs ?? {},
+            ),
         ).toEqual(['./a']);
     });
 
@@ -211,5 +227,88 @@ describe('registry staleness', () => {
             "import { szv } from '@csszyx/runtime';\nexport const cardSz = szv(makeConfig());\n",
         );
         expect(registry.size).toBe(0);
+    });
+});
+
+describe('the sz-object arm of the registry', () => {
+    const PLAIN_SOURCE =
+        "export const cardSz = { p: 4, rounded: 'lg' };\nexport const rowSz = { gap: 2 };\n";
+
+    it('records exported static objects under the normalized path', () => {
+        const registry: SzvCrossModuleRegistry = new Map();
+        recordSzObjectRegistryFile(registry, '/app/src/styles.ts', PLAIN_SOURCE);
+        expect(Object.keys(registry.get('/app/src/styles.ts') ?? {})).toEqual(['cardSz', 'rowSz']);
+    });
+
+    it('resolves the two kinds into their own channels', () => {
+        // One module can export both. They must arrive apart, because an szv
+        // config is a table to compile and an sz object is a value to lower —
+        // handing either to the other's machinery would compile nonsense.
+        const registry: SzvCrossModuleRegistry = new Map();
+        recordSzvRegistryFile(registry, '/app/src/styles.ts', STYLES_SOURCE);
+        recordSzObjectRegistryFile(
+            registry,
+            '/app/src/styles.ts',
+            `${STYLES_SOURCE}export const plainSz = { m: 2 };\n`,
+        );
+        const resolved = resolveCrossModuleStaticsFor(
+            registry,
+            '/app/src/Card.tsx',
+            "import { cardSz, plainSz } from './styles';\n",
+        );
+        expect(Object.keys(resolved.szvConfigs?.['./styles'] ?? {})).toEqual(['cardSz', 'rowSz']);
+        expect(resolved.szObjects?.['./styles']).toEqual({ plainSz: { m: 2 } });
+    });
+
+    it('lets each pass evict only its own kind', () => {
+        // The two are recorded at different times, so neither may clear the
+        // other: a factory that stops qualifying must lose its entry without
+        // taking the module's plain objects with it.
+        const registry: SzvCrossModuleRegistry = new Map();
+        recordSzvRegistryFile(registry, '/app/src/styles.ts', STYLES_SOURCE);
+        recordSzObjectRegistryFile(registry, '/app/src/styles.ts', PLAIN_SOURCE);
+        expect(Object.keys(registry.get('/app/src/styles.ts') ?? {})).toEqual(['cardSz', 'rowSz']);
+
+        recordSzvRegistryFile(registry, '/app/src/styles.ts', 'export const nothing = 1;\n');
+        const left = registry.get('/app/src/styles.ts') ?? {};
+        expect(Object.keys(left)).toEqual(['cardSz', 'rowSz']);
+        expect(Object.values(left).every(entry => entry.kind === 'sz-object')).toBe(true);
+    });
+
+    it('drops the file only when both kinds are gone', () => {
+        const registry: SzvCrossModuleRegistry = new Map();
+        recordSzObjectRegistryFile(registry, '/app/src/styles.ts', PLAIN_SOURCE);
+        expect(registry.size).toBe(1);
+        recordSzObjectRegistryFile(registry, '/app/src/styles.ts', 'export const nothing = 1;\n');
+        expect(registry.size).toBe(0);
+    });
+});
+
+describe('the demand-driven provider lookup', () => {
+    it('reads the relative specifiers a file imports from', () => {
+        const source =
+            "import { a } from './styles';\nimport b from '../shared/tokens.js';\n" +
+            "import c from 'react';\n";
+        // Package specifiers are absent on purpose: they are out of v1 scope,
+        // and a demand set that carried them would ask the walk for files it
+        // never saw.
+        expect(relativeSpecifiersIn(source)).toEqual(['./styles', '../shared/tokens.js']);
+        expect(relativeSpecifiersIn('const x = 1;')).toEqual([]);
+    });
+
+    it('lands on the same file the registry lookup would', () => {
+        // Both walk one probe list. If they disagreed, a provider would be
+        // recorded under a path no consumer ever probes — the optimization
+        // would go missing with nothing to show for it.
+        const seen = new Set([
+            '/app/src/styles.ts',
+            '/app/src/panel.tsx',
+            '/app/src/tokens/index.ts',
+        ]);
+        expect(resolveProviderPath(seen, '/app/src/styles')).toBe('/app/src/styles.ts');
+        expect(resolveProviderPath(seen, '/app/src/styles.js')).toBe('/app/src/styles.ts');
+        expect(resolveProviderPath(seen, '/app/src/panel')).toBe('/app/src/panel.tsx');
+        expect(resolveProviderPath(seen, '/app/src/tokens')).toBe('/app/src/tokens/index.ts');
+        expect(resolveProviderPath(seen, '/app/src/missing')).toBeUndefined();
     });
 });
