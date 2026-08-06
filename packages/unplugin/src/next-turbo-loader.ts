@@ -108,6 +108,15 @@ export function runNextTurboLoader(
 
     assertProductionManifestReady(context, options);
 
+    // No cross-module registry on this lane, deliberately. The generic plugin
+    // builds one during a whole-project prescan; this loader is handed one file
+    // at a time by Turbopack and has no such pass. Feeding it a registry would
+    // also need `addDependency` on every provider it resolved, or an edited
+    // style module would leave its importers compiled against the old value —
+    // stale output being worse than the fallback. So `sz={importedBinding}`
+    // keeps the runtime path here even when `build.importedStaticSz` is on, and
+    // keeps reporting that it did. Closing this needs a provider resolver plus
+    // the dependency registration, tracked as its own piece of work.
     const transform = transformNextSource({
         source,
         filename: loaderContext.resourcePath,

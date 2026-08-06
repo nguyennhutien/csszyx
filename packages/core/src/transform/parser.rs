@@ -4585,6 +4585,11 @@ export const cls = szr(localCard({ pad: 'sm' }));";
             "import type { cardSz } from './styles';",
             "import { type cardSz } from './styles';",
             "import cardSz from './styles';",
+            // A side-effect import binds no name at all. It still names a
+            // module the registry carries, so the collector has to walk past
+            // it rather than read specifiers that are not there.
+            "import './styles';",
+            "import './styles';\nimport { unrelated } from './other';",
             // An export the registry does not carry, and a specifier it does
             // not carry: both must leave today's runtime path untouched.
             "import { cardSz } from './elsewhere';",
