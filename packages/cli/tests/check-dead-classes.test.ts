@@ -57,12 +57,13 @@ afterEach(() => {
  * Run the command over a project and return everything it printed.
  *
  * @param cwd - Project root.
+ * @param allow - Classes to accept even when they produce no CSS.
  * @returns Concatenated report text.
  */
-async function reportFor(cwd: string): Promise<string> {
+async function reportFor(cwd: string, allow?: string[]): Promise<string> {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await check({ cwd });
+    await check({ cwd, allow });
     return log.mock.calls.map(call => call.join(' ')).join('\n');
 }
 
@@ -132,5 +133,35 @@ describe('csszyx check — classes that style nothing', () => {
 
         expect(report).toMatch(/skipped|could not/i);
         expect(report).not.toContain('pointer-none');
+    });
+
+    // Without a way to accept a known finding, the only lever a project has is
+    // to stop running the check at all.
+    it('accepts a class the project vouched for, and keeps reporting the rest', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Bad.tsx':
+                "export const Bad = () => <div sz={{ pointer: 'none', breakWord: true }} />;",
+        });
+
+        const report = await reportFor(cwd, ['pointer-none']);
+
+        expect(report).not.toContain('pointer-none');
+        expect(report).toContain('break-word');
+        expect(process.exitCode).toBe(1);
+    });
+
+    // `bg` is a real key, so the key pass stays silent and the run's exit code
+    // reflects the dead-class pass alone.
+    it('passes once every remaining finding is vouched for', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Bad.tsx': "export const Bad = () => <div sz={{ bg: 'brnad' }} />;",
+        });
+
+        const report = await reportFor(cwd, ['bg-brnad']);
+
+        expect(report).toContain('1 accepted');
+        expect(process.exitCode).not.toBe(1);
     });
 });

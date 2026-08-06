@@ -27,6 +27,15 @@ export interface CheckOptions {
     pattern?: string;
     /** Extra ignore globs appended to the defaults. */
     ignore?: string[];
+    /**
+     * Emitted classes to accept even when they produce no CSS.
+     *
+     * A project can hold a class the design system cannot see — one a later
+     * build step defines, or one emitted for a consumer that supplies its own
+     * stylesheet. Without a way to say so, the only lever left is to stop
+     * running the check, which costs every other finding too.
+     */
+    allow?: string[];
 }
 
 /** One captured sz diagnostic, with the project-relative file it came from. */
@@ -89,9 +98,14 @@ function groupIssuesByFile(issues: SzIssue[]): Map<string, string[]> {
  *
  * @param cwd - Project root.
  * @param origins - Emitted class mapped to the file that first emitted it.
+ * @param allow - Classes the project vouched for.
  * @returns Whether anything dead was found.
  */
-async function reportDeadClasses(cwd: string, origins: Map<string, string>): Promise<boolean> {
+async function reportDeadClasses(
+    cwd: string,
+    origins: Map<string, string>,
+    allow: readonly string[],
+): Promise<boolean> {
     if (origins.size === 0) return false;
 
     const entry = await findTailwindCssEntry(cwd);
@@ -113,10 +127,17 @@ async function reportDeadClasses(cwd: string, origins: Map<string, string>): Pro
         return false;
     }
 
-    const dead = oracle.findDead([...origins.keys()]);
+    const vouched = new Set(allow);
+    const found = oracle.findDead([...origins.keys()]);
+    const accepted = found.filter(token => vouched.has(token));
+    const dead = found.filter(token => !vouched.has(token));
+    // Say how many were waved through even on a clean run: an allow list that
+    // silently covers a growing pile is the failure mode of every such list.
+    const acceptedNote = accepted.length > 0 ? `, ${accepted.length} accepted` : '';
+
     if (dead.length === 0) {
         printSuccess(
-            `Every one of the ${origins.size} emitted class(es) produces CSS under this project's Tailwind.`,
+            `Every one of the ${origins.size} emitted class(es) produces CSS under this project's Tailwind${acceptedNote}.`,
         );
         return false;
     }
@@ -231,7 +252,7 @@ export async function check(options: CheckOptions = {}): Promise<void> {
 
     // Runs whichever way the key pass went: a canonical key can still lower to
     // a class this project's Tailwind does not serve.
-    if (await reportDeadClasses(cwd, classOrigins)) {
+    if (await reportDeadClasses(cwd, classOrigins, options.allow ?? [])) {
         process.exitCode = 1;
     }
 }
