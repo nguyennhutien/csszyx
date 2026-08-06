@@ -852,8 +852,36 @@ fn object_children(object: &StaticSzObject) -> impl Iterator<Item = (&str, &Stat
         })
 }
 
-#[allow(clippy::too_many_lines)]
 fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
+    // The important modifier belongs to the CLASS, not to the value. Every
+    // decision below reads the value itself — whether it needs brackets,
+    // whether it is a fraction, where a leading minus goes — and a trailing
+    // `!` made a unit stop looking like one: `14px!` matched no CSS unit, so
+    // `text-14px!` shipped without brackets and Tailwind has no such utility.
+    // Values that bracket for another reason had the opposite problem, closing
+    // the bracket after the bang (`bg-[#fff!]`). Split it off first and put it
+    // back on the finished class, mirroring `handleImportant` in the
+    // TypeScript core. Only a TRAILING bang is the modifier; one inside an
+    // arbitrary value belongs to the value.
+    if let StaticSzValue::String(text) = value {
+        if let Some(base) = text.strip_suffix('!') {
+            // Exactly one bang, never a loop: the TypeScript core strips one
+            // and so must this, or `14px!!` would lower differently per engine.
+            let without_bang = StaticSzValue::String(base.to_string());
+            return format_static_class_value(key, &without_bang, prefix)
+                .map(|class_name| format!("{class_name}!"));
+        }
+    }
+    format_static_class_value(key, value, prefix)
+}
+
+/// Lower one key/value pair, with the important modifier already accounted for.
+///
+/// Split from [`format_static_class`] so the bang is removed exactly once. The
+/// value reaching here never carries one, which is what lets every decision
+/// below read the value as written.
+#[allow(clippy::too_many_lines)]
+fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
     if key == "animationDelay" {
         let ms = match value {
             StaticSzValue::Number(num) => format!("{}ms", format_abs_number(*num)),
