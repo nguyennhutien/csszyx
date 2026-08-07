@@ -98,7 +98,7 @@ describe('theme groups auto-wiring (real vite build, zero app wiring)', () => {
     }, 60_000);
 
     it('the registration call ships inside the bundle', () => {
-        expect(bundle).toContain('registerSzcnGroups');
+        expect(bundle).toContain('setSzcnGroups');
     });
 
     it('every theme category reaches its group, weights not mis-filed as families', () => {
@@ -170,7 +170,7 @@ export const slotOverride = szcn('text-sub', 'text-danger');
         const distDir = join(root, 'dist');
         const files = readdirSync(distDir).filter(f => f.endsWith('.js') || f.endsWith('.mjs'));
         const bundle = files.map(f => readFileSync(join(distDir, f), 'utf8')).join('\n');
-        expect(bundle).toContain('registerSzcnGroups');
+        expect(bundle).toContain('setSzcnGroups');
         expect(bundle).toMatch(/"colors":\s*\[\s*"danger",\s*"sub"\s*\]/);
 
         const entryFile = files.find(f => f.startsWith('bundle')) ?? files[0];

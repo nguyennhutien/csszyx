@@ -3,7 +3,7 @@ title: Runtime Helpers
 description: szr (sz-resolve), szcn merge, szDecode, _szMerge, szv() composition and variant helpers, plus splitBox, classify/has/pick/omit, stripSzProps, and verifyMangleChecksumAsync.
 ---
 
-import { Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
+import { Aside, Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
 
 The runtime package provides helpers for composing `className` strings
 dynamically. For static sz props, no helpers are needed — the compiler
@@ -215,7 +215,7 @@ on HMR. The plugin discovers every stylesheet in the project, so this does not
 depend on `build.scanCss`: that option chooses which CSS drives the generated
 *types*, and narrowing it never narrows merging. For utility-shaped classes
 written in plain CSS outside `@theme`, register them once with
-[`registerSzcnGroups`](#registerszcngroupsgroups).
+[the theme group registry](#theme-group-registry).
 
 **Next.js with Turbopack** reaches the same result by a different route: that
 lane compiles one file at a time and cannot resolve a virtual module, so csszyx
@@ -245,11 +245,12 @@ In dev, or on a build without mangling, the encode step is an identity.
 Code that **inspects** a className for a utility by its original spelling must
 decode first — see [`szDecode`](#szdecodetoken).
 
-## `registerSzcnGroups(groups)`
+## Theme group registry
 
-Registers custom token names so `szcn` can classify classes built from them.
-Idempotent and additive; the build plugin calls it automatically from the
-app's `@theme` blocks — call it manually only for hand-written CSS utilities.
+Custom token names have to be declared before `szcn` can classify classes built
+from them. The build plugin does this automatically from your `@theme` blocks —
+these functions are for hand-written CSS utilities, and for reading back what
+is in effect.
 
 ```ts
 interface SzcnThemeGroups {
@@ -259,8 +260,22 @@ interface SzcnThemeGroups {
   fontWeights?: readonly string[];   // 'chunky' → font-chunky
 }
 
-function registerSzcnGroups(groups: SzcnThemeGroups): void
+function registerSzcnGroups(groups: SzcnThemeGroups, source?: string): void
+function setSzcnGroups(groups: SzcnThemeGroups, source?: string): void
+function clearSzcnGroups(source?: string): void
+function getSzcnGroups(): Record<'colors' | 'textSizes' | 'fontFamilies' | 'fontWeights', string[]>
 ```
+
+Declarations are kept **per source**, defaulting to `'app'`. That is what lets a
+rebuild replace everything it scanned without touching what your code
+registered by hand — the build uses the source `'build'`.
+
+| Function | Does |
+| --- | --- |
+| `registerSzcnGroups` | Adds names, keeping what the source already declared. The default for hand-written CSS. |
+| `setSzcnGroups` | Replaces the source's whole declaration. A category left out is cleared. |
+| `clearSzcnGroups` | Drops one source, or every source when called with no argument. |
+| `getSzcnGroups` | Reads the names currently **in effect** — what survived the guard rails, sorted and copied. For tests and diagnostics, not a hot path. |
 
 ```ts
 import { registerSzcnGroups } from '@csszyx/runtime';
@@ -269,16 +284,24 @@ import { registerSzcnGroups } from '@csszyx/runtime';
 registerSzcnGroups({ colors: ['brand', 'tag-blue-bg'], fontFamilies: ['display'] });
 ```
 
+<Aside type="tip" title="Why replacing needs a source">
+Adding is enough while a build runs once. A dev server re-runs it, and then a
+deleted or renamed `@theme` token has to stop grouping — which an add-only
+registry cannot express. Scoping the replace to a source is what keeps that
+from wiping an app's own registration on every rebuild.
+</Aside>
+
 Guard rails — both fall back to keep-both with a one-time dev warning, never a
 wrong merge:
 
 - A name that **shadows a built-in value keyword** of an affected prefix is
   rejected: a color named `cover` would make `szcn` misread `bg-cover`
   (background-size) as a color and merge it wrongly.
-- A name registered in **two conflicting categories** (both a color and a text
-  size — `text-huge` becomes unclassifiable) is dropped from both, and the drop
-  is remembered: later registrations of either side are rejected too, so
-  registration order can never resurrect an ambiguous name into one category.
+- A name declared in **two conflicting categories** (both a color and a text
+  size — `text-huge` becomes unclassifiable) is dropped from both, for as long
+  as both declarations exist. The effective sets are recomputed from every
+  source on each change, so neither guard rail depends on the order things were
+  declared in.
 
 ## `szDecode(token)`
 

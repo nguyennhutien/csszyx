@@ -4,7 +4,7 @@
  * Every other bundler gets this through the `virtual:csszyx/theme-groups`
  * module the plugin resolves. A Turbopack/webpack loader cannot: it is handed
  * one file at a time and has no way to resolve a `virtual:` specifier. Without
- * it, an app's custom `@theme` tokens never reach `registerSzcnGroups`, so
+ * it, an app's custom `@theme` tokens never reach `setSzcnGroups`, so
  * `szcn` keeps both classes on a token collision and the stylesheet order picks
  * the winner instead of the author — silently, and only on this lane.
  *

@@ -13,18 +13,22 @@
  * toward `null` = keep-both. A value that matches no group — or matches more
  * than one — is never merged away.
  *
- * Custom `@theme` tokens: the build plugin auto-registers theme token names via
- * `registerSzcnGroups` (see `virtual:csszyx/theme-groups`); apps can call it
- * directly for hand-written CSS classes. Registration is guarded: a name that
- * collides with a static value keyword of an affected prefix (e.g. a color
- * token named `cover` — `bg-cover` is background-size) or that is registered in
- * two conflicting categories is dropped with a dev warning, falling back to
- * keep-both rather than guessing. The ambiguity drop is remembered across
- * registration batches, so a later batch re-registering only one side cannot
- * resurrect the name into a single category.
+ * Custom `@theme` tokens: the build plugin declares theme token names through
+ * `setSzcnGroups` (see `virtual:csszyx/theme-groups`); apps can register their
+ * own for hand-written CSS classes. Declarations are kept PER SOURCE so a
+ * rebuild can replace its own set — a token deleted from a stylesheet has to
+ * stop grouping — without touching what the app registered by hand.
+ *
+ * Both are guarded, and both guard rails fall back to keep-both rather than
+ * guessing: a name that collides with a static value keyword of an affected
+ * prefix (e.g. a color token named `cover` — `bg-cover` is background-size) is
+ * rejected, and a name declared in two conflicting categories is dropped from
+ * both. The effective sets are recomputed from every source on each change, so
+ * neither answer depends on the order things were registered in.
  *
  * @module
  */
+import { sortStrings } from './sort.js';
 
 /** Tailwind palette shades — `{name}-{shade}` is the standard color shape. */
 const PALETTE_SHADES = new Set([
@@ -139,44 +143,58 @@ const customTokens = {
     fontWeights: new Set<string>(),
 };
 
-/** A pair of categories whose token names collide on one utility prefix. */
+/** Theme categories, in the order reads report them. */
+const CATEGORIES = ['colors', 'textSizes', 'fontFamilies', 'fontWeights'] as const;
+
+/** One theme category name. */
+type ThemeCategory = (typeof CATEGORIES)[number];
+
+/** Two categories whose token names collide on one utility prefix. */
 interface AmbiguityPair {
-    /** Names dropped from both categories — the ambiguity is permanent. */
-    dropped: Set<string>;
+    first: ThemeCategory;
+    second: ThemeCategory;
     /** Builds the keep-both warning for a name in this pair. */
     message: (name: string) => string;
 }
 
 /**
- * Cross-category ambiguity memory. A name dropped from both categories of a
- * pair must STAY unclassifiable regardless of registration order: the theme
- * still defines both meanings, so a later batch re-registering only one side
- * (split manual calls, or an HMR re-execution replaying a partial batch) must
- * not silently resurrect the name in a single category and start merging
- * classes the other meaning still owns.
+ * Category pairs that share class syntax, so one name in both is unreadable.
+ *
+ * The effective sets are recomputed from every source on each change, so the
+ * answer here never depends on the order things were registered in — which is
+ * why no name has to be remembered as permanently dropped. A token that stops
+ * being declared in one of the two categories simply stops being ambiguous.
  */
-const AMBIGUITY_PAIRS: { colorTextSize: AmbiguityPair; fontFamilyWeight: AmbiguityPair } = {
-    colorTextSize: {
-        dropped: new Set<string>(),
+const AMBIGUITY_PAIRS: readonly AmbiguityPair[] = [
+    {
+        first: 'colors',
+        second: 'textSizes',
         message: name =>
             `theme token "${name}" is defined as BOTH a color and a text size — ` +
             `szcn cannot classify \`text-${name}\` and will keep-both instead of merging.`,
     },
-    fontFamilyWeight: {
-        dropped: new Set<string>(),
+    {
+        first: 'fontFamilies',
+        second: 'fontWeights',
         message: name =>
             `theme token "${name}" is defined as BOTH a font family and a font weight — ` +
             `szcn cannot classify \`font-${name}\` and will keep-both instead of merging.`,
     },
-};
+];
 
-/** The ambiguity pair each category participates in. */
-const AMBIGUITY_PAIR_BY_CATEGORY: Record<keyof typeof customTokens, AmbiguityPair> = {
-    colors: AMBIGUITY_PAIRS.colorTextSize,
-    textSizes: AMBIGUITY_PAIRS.colorTextSize,
-    fontFamilies: AMBIGUITY_PAIRS.fontFamilyWeight,
-    fontWeights: AMBIGUITY_PAIRS.fontFamilyWeight,
-};
+/**
+ * What each source declared, before the guard rails run.
+ *
+ * Two producers write here — the build's `@theme` scan and an app registering
+ * hand-written CSS — and a rebuild must be able to replace ITS OWN set without
+ * touching the other's. Keeping the raw declarations per source is what makes
+ * that possible; {@link customTokens} stays the flattened result the hot
+ * classification path reads, so grouping a class costs the same as before.
+ */
+const sourceDeclarations = new Map<string, Record<ThemeCategory, Set<string>>>();
+
+/** Source a call is attributed to when it does not name one. */
+const DEFAULT_SOURCE = 'app';
 
 /** Custom token categories accepted by {@link registerSzcnGroups}. */
 export interface SzcnThemeGroups {
@@ -232,115 +250,153 @@ function warnOnce(message: string): void {
 const _warned = new Set<string>();
 
 /**
- * Register custom theme token names so szcn can dedupe classes built from them
- * (`text-brand` + `text-accent` → last wins). Idempotent and additive; called
- * automatically by the build plugin from the app's `@theme` blocks, or manually
- * for hand-written CSS utilities.
+ * Add token names to a source's declaration, keeping what it already declared.
+ *
+ * The default for hand-written CSS utilities: call it once per group of
+ * classes, in any order. The build plugin uses {@link setSzcnGroups} instead,
+ * because a rebuild has to be able to drop tokens the stylesheet lost.
  *
  * Guard rails (both fall back to keep-both, never a wrong merge):
  * - a name colliding with a static utility keyword of an affected prefix is
  *   rejected (e.g. a color named `cover`);
- * - a name registered in two conflicting categories (e.g. both a color and a
- *   text size — `text-huge` would be unclassifiable) is removed from both,
- *   and STAYS removed: later batches re-registering only one side are
- *   rejected too, so registration order can never resurrect an ambiguous
- *   name into a single category.
+ * - a name declared in two conflicting categories (e.g. both a color and a
+ *   text size — `text-huge` would be unclassifiable) is dropped from both, for
+ *   as long as both declarations exist.
  *
  * @param groups - Custom token names per theme category.
+ * @param source - Owner these names belong to.
  */
-export function registerSzcnGroups(groups: SzcnThemeGroups): void {
-    // Classification only changes when a set gains or loses a name. Bumping
-    // the generation on a no-op re-registration (idempotent boot code, an HMR
-    // re-execution of the generated registration module, or a misplaced call
-    // inside a component) would needlessly flush szcn's merge memo.
-    let changed = false;
-    const entries: ReadonlyArray<[keyof typeof customTokens, readonly string[] | undefined]> = [
-        ['colors', groups.colors],
-        ['textSizes', groups.textSizes],
-        ['fontFamilies', groups.fontFamilies],
-        ['fontWeights', groups.fontWeights],
-    ];
-    for (const [category, names] of entries) {
-        if (registerThemeCategory(category, names)) changed = true;
-    }
-    // Cross-category ambiguity: `--color-huge` + `--text-huge` makes `text-huge`
-    // mean two different properties. Drop from both — keep-both over guessing.
-    if (dropAmbiguousThemeTokens('colors', 'textSizes', AMBIGUITY_PAIRS.colorTextSize))
-        changed = true;
-    if (dropAmbiguousThemeTokens('fontFamilies', 'fontWeights', AMBIGUITY_PAIRS.fontFamilyWeight))
-        changed = true;
-    if (changed) {
-        _generation++;
-    }
+export function registerSzcnGroups(groups: SzcnThemeGroups, source: string = DEFAULT_SOURCE): void {
+    writeDeclarations(source, groups, false);
 }
 
 /**
- * Register one theme category, rejecting collisions and prior ambiguities.
- * @param category - Theme token category.
- * @param names - Candidate token names.
- * @returns Whether the registry changed.
+ * Replace everything one source declared.
+ *
+ * This is the operation a re-running build needs: the generated registration
+ * carries the COMPLETE scanned set, so replacing is what makes a deleted or
+ * renamed `@theme` token stop grouping without restarting the process. Other
+ * sources are untouched, so a rebuild cannot wipe an app's own registration.
+ *
+ * @param groups - The source's complete token set; a category left out is
+ * cleared, because the declaration is exactly what is passed.
+ * @param source - Owner whose declaration is replaced.
  */
-function registerThemeCategory(
-    category: keyof typeof customTokens,
-    names: readonly string[] | undefined,
-): boolean {
-    let changed = false;
-    for (const name of names ?? []) {
-        if (!name || typeof name !== 'string') continue;
-        if (rejectThemeToken(category, name)) continue;
-        if (!customTokens[category].has(name)) {
-            customTokens[category].add(name);
-            changed = true;
+export function setSzcnGroups(groups: SzcnThemeGroups, source: string = DEFAULT_SOURCE): void {
+    writeDeclarations(source, groups, true);
+}
+
+/**
+ * Drop a source's declaration, or every source's.
+ *
+ * @param source - Owner to forget; omit to clear the whole registry.
+ */
+export function clearSzcnGroups(source?: string): void {
+    if (source === undefined) sourceDeclarations.clear();
+    else if (!sourceDeclarations.delete(source)) return;
+    recomputeEffectiveTokens();
+}
+
+/**
+ * Read the token names currently in effect, per category.
+ *
+ * Reports what survived the guard rails, not what was declared — a name that
+ * was rejected or is ambiguous is absent, because that is what classification
+ * actually sees. Intended for tests and diagnostics; it copies and sorts, so
+ * it is not a hot-path call.
+ *
+ * @returns Sorted copies of the effective sets.
+ */
+export function getSzcnGroups(): Record<ThemeCategory, string[]> {
+    return {
+        colors: sortStrings(customTokens.colors),
+        textSizes: sortStrings(customTokens.textSizes),
+        fontFamilies: sortStrings(customTokens.fontFamilies),
+        fontWeights: sortStrings(customTokens.fontWeights),
+    };
+}
+
+/**
+ * Write one source's declaration and refresh the effective sets.
+ *
+ * @param source - Owner of the declaration.
+ * @param groups - Token names per category.
+ * @param replace - Whether to drop what the source declared before.
+ */
+function writeDeclarations(source: string, groups: SzcnThemeGroups, replace: boolean): void {
+    let bucket = sourceDeclarations.get(source);
+    if (!bucket) {
+        bucket = {
+            colors: new Set<string>(),
+            textSizes: new Set<string>(),
+            fontFamilies: new Set<string>(),
+            fontWeights: new Set<string>(),
+        };
+        sourceDeclarations.set(source, bucket);
+    }
+    for (const category of CATEGORIES) {
+        if (replace) bucket[category].clear();
+        for (const name of groups[category] ?? []) {
+            if (name && typeof name === 'string') bucket[category].add(name);
         }
     }
-    return changed;
+    recomputeEffectiveTokens();
 }
 
 /**
- * Warn and reject a theme token that cannot be grouped safely.
- * @param category - Theme token category.
- * @param name - Candidate token name.
- * @returns Whether the token must be rejected.
+ * Rebuild the effective sets from every source and apply the guard rails.
+ *
+ * Recomputing rather than mutating in place is what lets a declaration shrink:
+ * an incremental registry can only ever grow, which is why a deleted token used
+ * to keep merging until the process restarted.
  */
-function rejectThemeToken(category: keyof typeof customTokens, name: string): boolean {
-    if (COLLISION_BLOCKLIST[category].has(name)) {
-        const builtInKind = category === 'colors' ? 'utility keyword' : 'value';
-        warnOnce(
-            `theme token "${name}" shadows a built-in ${builtInKind} — ` +
-                'szcn will not group classes built from it (they keep the safe keep-both behaviour). ' +
-                'Rename the token to enable precise merging.',
-        );
-        return true;
+function recomputeEffectiveTokens(): void {
+    const next: Record<ThemeCategory, Set<string>> = {
+        colors: new Set<string>(),
+        textSizes: new Set<string>(),
+        fontFamilies: new Set<string>(),
+        fontWeights: new Set<string>(),
+    };
+    for (const bucket of sourceDeclarations.values()) {
+        for (const category of CATEGORIES) {
+            for (const name of bucket[category]) {
+                if (COLLISION_BLOCKLIST[category].has(name)) {
+                    const builtInKind = category === 'colors' ? 'utility keyword' : 'value';
+                    warnOnce(
+                        `theme token "${name}" shadows a built-in ${builtInKind} — ` +
+                            'szcn will not group classes built from it (they keep the safe keep-both behaviour). ' +
+                            'Rename the token to enable precise merging.',
+                    );
+                    continue;
+                }
+                next[category].add(name);
+            }
+        }
+    }
+    for (const pair of AMBIGUITY_PAIRS) {
+        for (const name of next[pair.first]) {
+            if (!next[pair.second].has(name)) continue;
+            next[pair.first].delete(name);
+            next[pair.second].delete(name);
+            warnOnce(pair.message(name));
+        }
     }
 
-    const pair = AMBIGUITY_PAIR_BY_CATEGORY[category];
-    if (!pair.dropped.has(name)) return false;
-    warnOnce(pair.message(name));
-    return true;
-}
-
-/**
- * Drop names registered into two categories that share class syntax.
- * @param first - First conflicting category.
- * @param second - Second conflicting category.
- * @param pair - Ambiguity state shared by the categories.
- * @returns Whether any token was dropped.
- */
-function dropAmbiguousThemeTokens(
-    first: keyof typeof customTokens,
-    second: keyof typeof customTokens,
-    pair: (typeof AMBIGUITY_PAIRS)[keyof typeof AMBIGUITY_PAIRS],
-): boolean {
+    // Classification only changes when a set gains or loses a name. Bumping the
+    // generation on a no-op re-registration (idempotent boot code, or an HMR
+    // re-execution of the generated module) would needlessly flush szcn's memo.
     let changed = false;
-    for (const name of customTokens[first]) {
-        if (!customTokens[second].has(name)) continue;
-        customTokens[first].delete(name);
-        customTokens[second].delete(name);
-        pair.dropped.add(name);
-        warnOnce(pair.message(name));
+    for (const category of CATEGORIES) {
+        const current = customTokens[category];
+        const replacement = next[category];
+        if (current.size === replacement.size && [...replacement].every(n => current.has(n))) {
+            continue;
+        }
+        current.clear();
+        for (const name of replacement) current.add(name);
         changed = true;
     }
-    return changed;
+    if (changed) _generation++;
 }
 
 /**
@@ -364,8 +420,7 @@ export function _resetSzcnGroups(): void {
     for (const set of Object.values(customTokens)) {
         set.clear();
     }
-    AMBIGUITY_PAIRS.colorTextSize.dropped.clear();
-    AMBIGUITY_PAIRS.fontFamilyWeight.dropped.clear();
+    sourceDeclarations.clear();
     _warned.clear();
     _generation++;
 }

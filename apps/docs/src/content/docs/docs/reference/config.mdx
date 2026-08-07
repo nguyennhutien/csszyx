@@ -512,7 +512,7 @@ the scan, szcn cannot tell `warning` is a color and safely keeps both.
 (Shade-shaped names like `brand-500` classify by their `{name}-{shade}` shape
 alone and dedupe even unscanned.) Tokens from hand-written CSS outside `@theme`
 can be registered manually with
-[`registerSzcnGroups`](/docs/reference/runtime/#registerszcngroupsgroups).
+[`registerSzcnGroups`](/docs/reference/runtime/#theme-group-registry).
 
 When `scanCss` is **unset**, the plugin still discovers `@theme` blocks on its
 own: it walks the project (and any `compileSources` packages) for CSS files
