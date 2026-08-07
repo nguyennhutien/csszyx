@@ -455,7 +455,7 @@ about files I happen to open".
 | `✖ {n} sz issue(s) in {m} file(s).` | The grouped report follows. |
 | `Scope: static sz props and szv()/szr() catalog definitions. Keys that only exist at runtime (an array or spread built from runtime data, a dynamic() value) cannot be checked statically.` | Printed with every clean run, so the scope is never implied to be wider than it is. |
 | `Every one of the {n} emitted class(es) produces CSS under this project's Tailwind{, {m} accepted}.` | The dead-class check passed. The trailing clause appears only when the baseline accepts known exceptions. |
-| `✖ {n} emitted class(es) style nothing. Each is in the DOM and does nothing: fix the sz key, or define the class with Tailwind’s @utility.` | Each offender is listed above it, with the sz key that produced it. |
+| `✖ {n} emitted class(es) style nothing. Each is in the DOM and does nothing: fix the sz key, or define the class with Tailwind's @utility.` | Each offender is listed above it, with the sz key that produced it. |
 | `Dead-class check skipped: no stylesheet in this project imports Tailwind, so there is no design system to ask which classes are real.` | The check needs a Tailwind entry to ask. |
 | `Dead-class check skipped: {reason}.` | |
 
@@ -508,14 +508,20 @@ The Svelte and Vue adapters print a parse failure only when `debug` is enabled:
 
 csszyx has three compile engines — the native Rust engine (default), oxc, and
 Babel — selected by `build.parser`. Their **classes** are parity-tested, and
-almost all wording is byte-identical. Two known wording differences:
+the wording is byte-identical, with one exception:
 
 | Case | Babel / oxc | Native engine |
 | --- | --- | --- |
-| `szRecover` with an unsupported value | Two distinct messages (non-literal vs unknown mode) | One combined message: `only static string-literal values "csr" or "dev-only" are supported. Token emission skipped.` |
 | AST budget exceeded | Thrown error naming `exclude` and `astBudgetLimit` | A diagnostic naming ``build.astBudgetLimit`` and noting the file contributes no classes |
 
 Both are recognised by the plugin and reported the same way.
+
+One case is deliberately unspecified: when you call the compiler API directly
+with **no filename**, each lane substitutes its own stand-in. Babel and oxc say
+`<anonymous>`; the native lane is reached through a batch wrapper that
+substitutes `file-<index>.tsx`, and that stand-in also seeds recovery-token
+generation. A real build always passes a path, so this only shows up in direct
+API use.
 
 <Aside type="tip" title="Still stuck?">
 Run `npx @csszyx/cli check` first — it turns "some element is unstyled" into a

@@ -148,7 +148,7 @@ async function reportDeadClasses(
     }
     printWarn(
         `\n✖ ${dead.length} emitted class(es) style nothing. Each is in the DOM and does ` +
-            'nothing: fix the sz key, or define the class with Tailwind’s @utility.',
+            "nothing: fix the sz key, or define the class with Tailwind's @utility.",
     );
     return true;
 }
