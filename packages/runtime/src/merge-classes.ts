@@ -51,6 +51,14 @@ const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
     'ring', // ring-2 (width) vs ring-red-500 (color)
     'outline', // outline-2 (width) vs outline-red-500 (color)
     'font', // font-sans (font-family) vs font-bold (font-weight)
+    'shadow', // shadow-lg (size) vs shadow-red-500 (shadow colour)
+    'drop-shadow', // drop-shadow-lg (size) vs drop-shadow-red-500 (colour)
+    'inset-shadow', // inset-shadow-sm (size) vs inset-shadow-red-500 (colour)
+    'decoration', // decoration-2 (thickness) vs -solid (style) vs -red-500 (colour)
+    'stroke', // stroke-2 (width) vs stroke-red-500 (paint)
+    'from', // from-10% (stop position) vs from-red-500 (stop colour)
+    'via', // via-40% (stop position) vs via-red-500 (stop colour)
+    'to', // to-90% (stop position) vs to-red-500 (stop colour)
 ]);
 
 /**

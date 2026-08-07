@@ -103,6 +103,24 @@ const BG_REPEATS = new Set([
 const BG_ATTACHMENTS = new Set(['fixed', 'local', 'scroll']);
 
 const BORDER_STYLES = new Set(['solid', 'dashed', 'dotted', 'double', 'hidden', 'none']);
+
+/**
+ * Shadow scale, shared by `shadow-*`, `inset-shadow-*` and `drop-shadow-*`.
+ *
+ * One set for all three: a keyword only one of them accepts still is not a
+ * colour, so classifying it as a size on the others costs nothing — those
+ * classes do not exist to collide with.
+ */
+const SHADOW_SIZES = new Set(['2xs', 'xs', 'sm', 'md', 'lg', 'xl', '2xl', 'none']);
+
+/** `text-decoration-style` keywords. */
+const DECORATION_STYLES = new Set(['solid', 'double', 'dotted', 'dashed', 'wavy']);
+
+/** Non-numeric `text-decoration-thickness` keywords. */
+const DECORATION_THICKNESSES = new Set(['auto', 'from-font']);
+
+/** A gradient stop position: `from-10%`, `via-33.3%`. */
+const GRADIENT_STOP_POSITION = /^\d+(?:\.\d+)?%$/;
 const FLEX_DIRECTIONS = new Set(['row', 'row-reverse', 'col', 'col-reverse']);
 const FLEX_WRAPS = new Set(['wrap', 'wrap-reverse', 'nowrap']);
 const FLEX_SHORTHANDS = new Set(['auto', 'initial', 'none']);
@@ -190,6 +208,9 @@ const COLLISION_BLOCKLIST: Record<keyof typeof customTokens, ReadonlySet<string>
         ...BG_REPEATS,
         ...BG_ATTACHMENTS,
         ...BORDER_STYLES,
+        ...SHADOW_SIZES,
+        ...DECORATION_STYLES,
+        ...DECORATION_THICKNESSES,
     ]),
     textSizes: new Set([...TEXT_ALIGNS, ...TEXT_WRAPS, ...TEXT_OVERFLOWS, ...NAMED_COLORS]),
     fontFamilies: new Set(FONT_WEIGHTS),
@@ -407,9 +428,83 @@ export function classifyAmbiguousValue(prefix: string, value: string): string | 
             return classifyBorderValue(prefix, value);
         case 'flex':
             return classifyFlexValue(value);
+        case 'shadow':
+        case 'drop-shadow':
+        case 'inset-shadow':
+            return classifyShadowValue(prefix, value);
+        case 'decoration':
+            return classifyDecorationValue(value);
+        case 'stroke':
+            return classifyStrokeValue(value);
+        case 'from':
+        case 'via':
+        case 'to':
+            return classifyGradientStopValue(prefix, value);
         default:
             return null;
     }
+}
+
+/**
+ * Classifies a shadow-family value as the shadow itself or its colour.
+ *
+ * `shadow-lg shadow-red-500` is how Tailwind documents setting both, so the
+ * two must never share a group.
+ *
+ * @param prefix - `shadow`, `drop-shadow`, or `inset-shadow`.
+ * @param value - The value after the utility prefix.
+ * @returns The shadow property group, or `null` when uncertain.
+ */
+function classifyShadowValue(prefix: string, value: string): string | null {
+    if (isColorValue(value)) return `${prefix}:color`;
+    // The bare prefix (`shadow`) is the default size, not a colour.
+    if (value === '' || SHADOW_SIZES.has(value) || isLengthArbitrary(value)) {
+        return `${prefix}:size`;
+    }
+    return null;
+}
+
+/**
+ * Classifies a `decoration-*` value across its three properties.
+ * @param value - The value after the utility prefix.
+ * @returns The decoration property group, or `null` when uncertain.
+ */
+function classifyDecorationValue(value: string): string | null {
+    if (isColorValue(value)) return 'decoration:color';
+    if (DECORATION_STYLES.has(value)) return 'decoration:style';
+    if (DECORATION_THICKNESSES.has(value) || /^\d+$/.test(value) || isLengthArbitrary(value)) {
+        return 'decoration:thickness';
+    }
+    return null;
+}
+
+/**
+ * Classifies a `stroke-*` value as paint or width.
+ *
+ * `stroke-none` stays unclassified: it sets the paint to none, which conflicts
+ * with a colour but not with a width, and keep-both is the safe reading.
+ *
+ * @param value - The value after the utility prefix.
+ * @returns The stroke property group, or `null` when uncertain.
+ */
+function classifyStrokeValue(value: string): string | null {
+    if (isColorValue(value)) return 'stroke:color';
+    if (/^\d+$/.test(value) || isLengthArbitrary(value)) return 'stroke:width';
+    return null;
+}
+
+/**
+ * Classifies a gradient stop value as its colour or its position.
+ * @param prefix - `from`, `via`, or `to`.
+ * @param value - The value after the utility prefix.
+ * @returns The gradient stop group, or `null` when uncertain.
+ */
+function classifyGradientStopValue(prefix: string, value: string): string | null {
+    if (isColorValue(value)) return `${prefix}:color`;
+    if (GRADIENT_STOP_POSITION.test(value) || isLengthArbitrary(value)) {
+        return `${prefix}:position`;
+    }
+    return null;
 }
 
 /**
