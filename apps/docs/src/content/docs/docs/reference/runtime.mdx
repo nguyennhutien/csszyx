@@ -217,12 +217,12 @@ depend on `build.scanCss`: that option chooses which CSS drives the generated
 written in plain CSS outside `@theme`, register them once with
 [`registerSzcnGroups`](#registerszcngroupsgroups).
 
-**Next.js with Turbopack is the exception.** That lane compiles one file at a
-time through a loader and never injects the generated registration, so custom
-tokens do not join their groups there — `szcn` keeps both classes and the
-stylesheet order decides. Call
-[`registerSzcnGroups`](#registerszcngroupsgroups) once at app startup, or use
-Next's Webpack mode for full parity.
+**Next.js with Turbopack** reaches the same result by a different route: that
+lane compiles one file at a time and cannot resolve a virtual module, so csszyx
+writes the registration to `.csszyx/theme-groups.mjs` and imports it from the
+modules that call `szcn`. The one difference is refresh — the file is generated
+once per compiler process, so a `@theme` edit lands on the next build rather
+than on the current dev server.
 :::
 
 ### Production encode of runtime-resolved classes

@@ -88,6 +88,7 @@ import {
 } from './rsc-boundary.js';
 import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
+import { discoverProjectTheme } from './theme-discovery.js';
 import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
@@ -2773,54 +2774,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function runAutoThemeScan(rootDir: string): void {
         refreshCompileSourceDirs();
-        const cssFiles: string[] = [];
-        const walk = (dir: string): void => {
-            let entries: fs.Dirent[];
-            try {
-                entries = fs.readdirSync(dir, { withFileTypes: true });
-            } catch {
-                return;
-            }
-            for (const entry of entries) {
-                if (entry.isDirectory()) {
-                    if (!IGNORE_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
-                        walk(path.join(dir, entry.name));
-                    }
-                    continue;
-                }
-                if (entry.name.endsWith('.css')) {
-                    cssFiles.push(path.join(dir, entry.name));
-                }
-            }
-        };
-        walk(rootDir);
-        const normRoot = normalizeForMatch(rootDir);
-        for (const sourceDir of compileSourceDirs) {
-            if (sourceDir === normRoot || sourceDir.startsWith(`${normRoot}/`)) {
-                continue;
-            }
-            walk(sourceDir);
-        }
-        const themes: ParsedTheme[] = [];
-        const themeFiles: string[] = [];
-        for (const file of cssFiles) {
-            let content: string;
-            try {
-                content = fs.readFileSync(file, 'utf-8');
-            } catch {
-                continue;
-            }
-            if (!content.includes('@theme')) {
-                continue;
-            }
-            themes.push(parseThemeBlocks(content));
-            themeFiles.push(file);
-        }
-        state.autoThemeCssFiles = themeFiles;
+        const discovered = discoverProjectTheme(rootDir, [...compileSourceDirs]);
+        state.autoThemeCssFiles = discovered.files;
         // Recomputed from both sources every time rather than merged into the
         // previous value: a token deleted from a stylesheet must disappear, and
         // accumulating into `state.parsedTheme` would keep it registered.
-        const sources = [state.scanCssTheme, themes.length > 0 ? mergeThemes(themes) : null].filter(
+        const sources = [state.scanCssTheme, discovered.theme].filter(
             (theme): theme is ParsedTheme => theme !== null,
         );
         if (sources.length > 0) {

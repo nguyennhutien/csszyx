@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import type { TransformSourceCodeOptions } from '@csszyx/compiler';
 
+import { insertAfterUseDirective } from './directive-prologue.js';
 import type { JsonLike } from './next-cache-identity.js';
 import {
     readNextGenerationManifest,
@@ -18,6 +19,7 @@ import {
     transformNextSource,
 } from './next-source-transformer.js';
 import { createNextStateContext, type NextStateContext } from './next-state-context.js';
+import { ensureNextThemeGroupsModule, themeGroupsSpecifier } from './next-theme-groups.js';
 import {
     collectNextTransformMetadata,
     createNextSafelistShardFromMetadata,
@@ -135,6 +137,21 @@ export function runNextTurboLoader(
         allowBabelFallback: options.allowBabelFallback,
     });
     const injected = injectNextRuntimeImports(transform.result.code, transform.result);
+    // szcn theme groups. The other lanes import a virtual module the plugin
+    // resolves; a loader cannot, so a real file is written once per project and
+    // imported by path. Only modules that can call szcn pay for it, and the
+    // import goes AFTER any `use client` directive, which must stay first.
+    const callsSzcn = transform.result.usesSzcn || /\bszcn\s*\(/.test(source);
+    const themeGroupsFile = callsSzcn
+        ? ensureNextThemeGroupsModule(context.root, path.join(context.root, '.csszyx'))
+        : null;
+    const code =
+        themeGroupsFile === null
+            ? injected.code
+            : insertAfterUseDirective(
+                  injected.code,
+                  `import '${themeGroupsSpecifier(loaderContext.resourcePath, themeGroupsFile)}';\n`,
+              );
     const metadata = collectNextTransformMetadata(
         transform.result,
         source,
@@ -180,7 +197,7 @@ export function runNextTurboLoader(
     // intentionally register no dependencies and let Tailwind v4's PostCSS
     // `@source` watcher pick up the safelist file independently.
     return {
-        code: injected.code,
+        code,
         context,
         transform,
         shardPath,
