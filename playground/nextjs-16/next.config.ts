@@ -30,6 +30,25 @@ if (enableTurboLoaderProbe) {
 }
 
 if (enableTurboCsszyxLoader) {
+    // The theme-groups fixture needs the csszyx loader for the same reason the
+    // route below does: without it nothing injects the generated registration,
+    // so szcn never learns the @theme tokens and the spec's first assertion
+    // (the merged form) cannot hold.
+    turbopackRules['./app/turbo-theme-groups/page.tsx'] = {
+        loaders: [
+            {
+                loader: '@csszyx/unplugin/next-turbo-loader',
+                options: {
+                    parserMode: 'rust',
+                    safelistOutputFile: '.csszyx/next-loader-classes.html',
+                    config: {
+                        mangleVars: false,
+                    },
+                },
+            },
+        ],
+        as: '*.tsx',
+    };
     turbopackRules['./app/turbo-csszyx/page.tsx'] = {
         loaders: [
             {

@@ -12,7 +12,7 @@
  * that needs a real page and lives in the Playwright suite. This is the half
  * csszyx owns.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -60,7 +60,10 @@ async function readGeneratedModule(server: ViteDevServer): Promise<string> {
 describe('editing @theme on a running Vite dev server', () => {
     it('regenerates the registration without a restart', async () => {
         loadNativeBinding();
-        const root = mkdtempSync(join(tmpdir(), 'csszyx-vite-live-'));
+        // realpath: on macOS `tmpdir()` is a symlink (`/var` → `/private/var`)
+        // and Vite resolves its root through it, so an un-resolved root makes
+        // every module request miss.
+        const root = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-vite-live-')));
         roots.push(root);
         mkdirSync(join(root, 'src'), { recursive: true });
         const stylesheet = join(root, 'src/theme.css');

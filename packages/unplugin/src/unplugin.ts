@@ -121,6 +121,7 @@ import {
     RESOLVED_VIRTUAL_MODULE_ID,
     resolveVirtualModule,
     THEME_GROUPS_VIRTUAL_ID,
+    type ThemeGroupTokens,
     VAR_MANGLE_MAP_PLACEHOLDER,
 } from './virtual-modules.js';
 
@@ -4287,6 +4288,25 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * The theme token names the registration module carries.
+     *
+     * One source for the module's payload and for the hot-update comparison
+     * that decides whether a stylesheet edit changed anything — building the
+     * shape twice is how the two would drift and the reload stop firing.
+     *
+     * @returns Token names per szcn merge-group category.
+     */
+    function themeGroupTokens(): ThemeGroupTokens {
+        const theme = state.parsedTheme;
+        return {
+            colors: theme?.colors ?? [],
+            textSizes: theme?.textSizes ?? [],
+            fontFamilies: theme?.fonts ?? [],
+            fontWeights: theme?.fontWeights ?? [],
+        };
+    }
+
+    /**
      * Inject theme-group registration into modules that can call szcn.
      *
      * @param code Original source used for authored szcn detection.
@@ -4471,13 +4491,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     return createMangleRuntimeModule(globalVarAliasPrefix);
                 }
                 if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
-                    const theme = state.parsedTheme;
-                    return createThemeGroupsModule({
-                        colors: theme?.colors ?? [],
-                        textSizes: theme?.textSizes ?? [],
-                        fontFamilies: theme?.fonts ?? [],
-                        fontWeights: theme?.fontWeights ?? [],
-                    });
+                    return createThemeGroupsModule(themeGroupTokens());
                 }
                 return null;
             },
@@ -4829,11 +4843,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // A file that IS listed additionally refreshes the typing
                         // scan, which is what rewrites `.csszyx/theme.d.ts`.
                         const root = ctx.server.config.root || process.cwd();
+                        const before = createThemeGroupsModule(themeGroupTokens());
                         if (scanCss && matchesAnyPattern(ctx.file, scanCss, root)) {
                             state.scanCssTheme = runThemeScan(root, scanCss) ?? state.scanCssTheme;
                         }
                         runAutoThemeScan(root);
                         reloadThemeGroupsModule();
+                        // Invalidating is not enough. A stylesheet edit is a CSS
+                        // hot update: Vite swaps the styles and never re-executes
+                        // a JS module, so the registration the page booted with
+                        // stays in memory and a DELETED token keeps grouping
+                        // classes the stylesheet no longer defines. Only a reload
+                        // re-runs it — and only when the tokens actually changed,
+                        // so ordinary CSS edits keep the hot update they should.
+                        if (createThemeGroupsModule(themeGroupTokens()) !== before) {
+                            ctx.server.ws.send({ type: 'full-reload' });
+                        }
                     }
 
                     // Incremental sz class discovery: when a source file changes, scan it
