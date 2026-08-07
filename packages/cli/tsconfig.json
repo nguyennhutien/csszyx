@@ -15,8 +15,8 @@
         "declarationMap": true,
         "noUnusedLocals": false,
         "noUnusedParameters": false,
-        "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
-        "outDir": "./dist",
+        "tsBuildInfoFile": "./.tsout/tsconfig.tsbuildinfo",
+        "outDir": "./.tsout",
         "rootDir": "./src",
         "resolveJsonModule": true
     },

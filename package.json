@@ -77,7 +77,7 @@
     "verify:ci:fast": "bash scripts/verify-like-ci.sh --no-e2e",
     "verify:pre-push": "bash scripts/verify-pre-push.sh",
     "pr:ready": "pnpm verify:ci && echo '\\n✓ Full CI mirror green locally. Push the branch then run `gh pr create` when ready.'",
-    "clean": "node scripts/clean-host-native.mjs && rm -rf node_modules .turbo packages/*/node_modules packages/*/dist packages/*/.csszyx playground/*/node_modules playground/*/dist playground/*/out playground/*/.next playground/*/.next-turbo* playground/*/.astro playground/*/.csszyx playground/.csszyx apps/*/dist apps/*/.astro apps/*/.csszyx csszyx-classes.html csszyx-classes.js playground/*/csszyx-classes.html apps/*/csszyx-classes.html .csszyx-todo.json playground/*/.csszyx-todo.json",
+    "clean": "node scripts/clean-host-native.mjs && rm -rf node_modules .turbo packages/*/node_modules packages/*/dist packages/*/.tsout packages/*/.csszyx playground/*/node_modules playground/*/dist playground/*/out playground/*/.next playground/*/.next-turbo* playground/*/.astro playground/*/.csszyx playground/.csszyx apps/*/dist apps/*/.astro apps/*/.csszyx csszyx-classes.html csszyx-classes.js playground/*/csszyx-classes.html apps/*/csszyx-classes.html .csszyx-todo.json playground/*/.csszyx-todo.json",
     "reset": "pnpm clean && pnpm install && node scripts/ensure-host-native.mjs && turbo run build --filter='./packages/*'",
     "check:emitted-classes": "node --import tsx/esm scripts/check-emitted-classes.ts",
     "corpus:check": "node --import tsx/esm scripts/check-corpus.ts",

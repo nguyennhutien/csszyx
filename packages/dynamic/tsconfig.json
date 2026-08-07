@@ -5,9 +5,9 @@
         "incremental": true,
         "isolatedDeclarations": true,
         "declaration": true,
-        "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
+        "tsBuildInfoFile": "./.tsout/tsconfig.tsbuildinfo",
         "rootDir": "./src",
-        "outDir": "./dist",
+        "outDir": "./.tsout",
         "types": ["vitest/globals", "node"]
     },
     "references": [{ "path": "../compiler" }],

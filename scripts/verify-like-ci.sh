@@ -37,6 +37,7 @@ cd "$REPO"
 
 echo "[verify-like-ci] Wiping cached build artefacts so turbo and vitest start fresh..."
 find packages apps playground -name dist -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null || true
+find packages -name .tsout -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null || true
 find playground packages/e2e -name '.csszyx' -type d -exec rm -rf {} + 2>/dev/null || true
 rm -rf .turbo apps/docs/.astro apps/docs/dist apps/docs/.csszyx
 # The devcontainer mounts this repository at a different path, and target/ is the

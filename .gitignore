@@ -17,6 +17,10 @@ pnpm-store/
 # Build outputs
 dist/
 lib/
+# tsc -b emit for the composite graph. Kept OUT of dist/ on purpose: dist/ is
+# the bundler's (published via `files: ["dist"]`), and tsc writing into it made
+# the npm tarball 2.4x larger whenever type-check was the last tool to run.
+.tsout/
 # A broken workspace-style link with this path was accidentally committed in
 # the initial repository import. The core package is the parent directory;
 # there is no valid nested artifact with the same name.
