@@ -109,6 +109,17 @@ export default defineConfig({
             },
         },
         {
+            // The theme-group registration is a generated module the loader
+            // writes, so this shares the Turbopack dev server the other
+            // csszyx-loader specs use.
+            name: 'nextjs-16-turbo-theme-groups',
+            testMatch: /nextjs-16-turbo-theme-groups/,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:3018',
+            },
+        },
+        {
             name: 'edge-cases',
             testMatch: /edge-cases/,
             use: {
