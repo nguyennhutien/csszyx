@@ -48,6 +48,7 @@
     "check:key-corpus": "node scripts/check-key-corpus-consistency.mjs",
     "check:tracked-symlinks": "node --test scripts/validate-tracked-symlinks.test.mjs && node scripts/validate-tracked-symlinks.mjs",
     "check:no-nul-bytes": "node --test scripts/validate-no-nul-bytes.test.mjs && node scripts/validate-no-nul-bytes.mjs",
+    "check:package-size": "node --test scripts/check-package-size.test.mjs && node scripts/check-package-size.mjs",
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run dev --parallel",
     "test": "turbo run test",

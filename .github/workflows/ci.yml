@@ -769,6 +769,18 @@ jobs:
           pnpm run gen:llms
           pnpm exec turbo run build ${{ needs.detect-changes.outputs.turbo_affected == 'true' && '--affected' || '' }}
 
+      # Absolute gzip budgets for the JS that reaches user bundles (runtime,
+      # dynamic, the compiler browser entry closure). Bytes are deterministic,
+      # so unlike timing this can be a hard gate with zero flake risk. The
+      # gated packages are built explicitly first: the workspace build above
+      # may scope them away via --affected, and the check treats a missing
+      # dist as a failure rather than a pass — turbo serves already-built
+      # packages from cache, so the extra build is seconds, not minutes.
+      - name: Package size gate
+        run: |
+          pnpm exec turbo run build --filter=@csszyx/runtime --filter=@csszyx/dynamic --filter=@csszyx/compiler
+          pnpm check:package-size
+
   # Aggregator. Always runs. Branch protection should require this single
   # check rather than the individual jobs above — those may be legitimately
   # skipped (no relevant changes), and gating each separately would block
