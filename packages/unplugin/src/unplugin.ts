@@ -89,6 +89,11 @@ import {
 import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { discoverProjectTheme } from './theme-discovery.js';
+import {
+    ensureThemeGroupsFile,
+    THEME_GROUPS_FILE_MARKER,
+    themeGroupsSpecifier,
+} from './theme-groups-file.js';
 import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
@@ -4299,9 +4304,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (
             (!usesSzcn && !/\bszcn\s*\(/.test(code)) ||
             transformedCode.includes(THEME_GROUPS_VIRTUAL_ID) ||
+            transformedCode.includes(THEME_GROUPS_FILE_MARKER) ||
             !shouldProcessSource(id)
         ) {
             return null;
+        }
+        // webpack reads the colon in `virtual:` as a URI scheme and fails the
+        // build before any resolve plugin runs — the same reason the
+        // mangle-runtime injection is lane-gated. Gating this one off instead
+        // would silently cost the lane its theme merge groups, so it gets the
+        // registration as a real file, exactly like the Turbopack loader does.
+        if (activeFramework === 'webpack') {
+            const groups = ensureThemeGroupsFile(
+                state.rootDir,
+                path.join(state.rootDir, '.csszyx'),
+            );
+            if (groups.file === null) return null;
+            const from = id.split('?')[0] ?? id;
+            return `import '${themeGroupsSpecifier(from, groups.file)}';\n${transformedCode}`;
         }
         return `import '${THEME_GROUPS_VIRTUAL_ID}';\n${transformedCode}`;
     }

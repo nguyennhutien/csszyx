@@ -19,13 +19,13 @@ import {
     transformNextSource,
 } from './next-source-transformer.js';
 import { createNextStateContext, type NextStateContext } from './next-state-context.js';
-import { ensureNextThemeGroupsModule, themeGroupsSpecifier } from './next-theme-groups.js';
 import {
     collectNextTransformMetadata,
     createNextSafelistShardFromMetadata,
 } from './next-transform-metadata.js';
 import { runNextWatcherCycle } from './next-watcher-cycle.js';
 import { normalizePathSeparators } from './path-normalization.js';
+import { ensureThemeGroupsFile, themeGroupsSpecifier } from './theme-groups-file.js';
 import { resolveTransformCacheDir } from './transform-cache.js';
 
 /** Serializable options accepted by the Next Turbopack csszyx loader. */
@@ -143,7 +143,7 @@ export function runNextTurboLoader(
     // import goes AFTER any `use client` directive, which must stay first.
     const callsSzcn = transform.result.usesSzcn || /\bszcn\s*\(/.test(source);
     const themeGroups = callsSzcn
-        ? ensureNextThemeGroupsModule(context.root, path.join(context.root, '.csszyx'))
+        ? ensureThemeGroupsFile(context.root, path.join(context.root, '.csszyx'))
         : { file: null, watch: [] };
     // Turbopack forwards a loader's file dependencies to its watcher (its
     // webpack-loader bridge reports `fileDependencies` back over IPC), so

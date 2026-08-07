@@ -1,12 +1,15 @@
 /**
- * `szcn` theme-group registration for the Next loader lanes.
+ * `szcn` theme-group registration as a real file on disk.
  *
- * Every other bundler gets this through the `virtual:csszyx/theme-groups`
- * module the plugin resolves. A Turbopack/webpack loader cannot: it is handed
- * one file at a time and has no way to resolve a `virtual:` specifier. Without
- * it, an app's custom `@theme` tokens never reach `setSzcnGroups`, so
- * `szcn` keeps both classes on a token collision and the stylesheet order picks
- * the winner instead of the author — silently, and only on this lane.
+ * Vite and rollup get this through the `virtual:csszyx/theme-groups` module the
+ * plugin resolves. Two lanes cannot use that specifier at all: a Turbopack
+ * loader is handed one file at a time and has no way to resolve it, and webpack
+ * reads the colon as a URI scheme and fails the build before any resolve plugin
+ * runs — the same reason the mangle-runtime injection is lane-gated.
+ *
+ * Without a registration an app's custom `@theme` tokens never reach
+ * `setSzcnGroups`, so `szcn` keeps both classes on a token collision and the
+ * stylesheet order picks the winner instead of the author — silently.
  *
  * So this writes a REAL module next to the other generated csszyx files and
  * hands back its path for the loader to import, plus the stylesheets to watch.
@@ -24,8 +27,16 @@ import { createThemeGroupsModule } from './virtual-modules.js';
 /** File name inside the project's generated-output directory. */
 const THEME_GROUPS_FILE = 'theme-groups.mjs';
 
+/**
+ * Substring that identifies an already-injected file import.
+ *
+ * Re-entrant transforms must not stack a second registration import, and the
+ * specifier is relative so it cannot be matched by a fixed string.
+ */
+export const THEME_GROUPS_FILE_MARKER: string = `.csszyx/${THEME_GROUPS_FILE}`;
+
 /** What one project's stylesheets currently say. */
-export interface NextThemeGroups {
+export interface ThemeGroupsFile {
     /** Module to import, or null when there is nothing worth registering. */
     file: string | null;
     /** Stylesheets whose edits must regenerate the module. */
@@ -33,7 +44,7 @@ export interface NextThemeGroups {
 }
 
 /** Cached answer plus the stylesheet state it was computed from. */
-interface CachedGroups extends NextThemeGroups {
+interface CachedGroups extends ThemeGroupsFile {
     /** Size and mtime of every watched stylesheet, in `watch` order. */
     signature: string;
 }
@@ -76,7 +87,7 @@ function signatureOf(files: readonly string[]): string {
  * @param outputDir - Directory generated csszyx files live in.
  * @returns The module to import and the stylesheets to watch.
  */
-export function ensureNextThemeGroupsModule(root: string, outputDir: string): NextThemeGroups {
+export function ensureThemeGroupsFile(root: string, outputDir: string): ThemeGroupsFile {
     const cached = cacheByRoot.get(root);
     if (cached && signatureOf(cached.watch) === cached.signature) {
         return { file: cached.file, watch: cached.watch };
@@ -123,7 +134,7 @@ export function ensureNextThemeGroupsModule(root: string, outputDir: string): Ne
  * hazard.
  *
  * @param fromFile - Module being transformed.
- * @param themeGroupsFile - Path returned by {@link ensureNextThemeGroupsModule}.
+ * @param themeGroupsFile - Path returned by {@link ensureThemeGroupsFile}.
  * @returns A specifier that resolves from `fromFile`.
  */
 export function themeGroupsSpecifier(fromFile: string, themeGroupsFile: string): string {
@@ -139,7 +150,7 @@ export function themeGroupsSpecifier(fromFile: string, themeGroupsFile: string):
  *
  * @param root - Project root to drop, or omit to clear everything.
  */
-export function _resetNextThemeGroupsCache(root?: string): void {
+export function _resetThemeGroupsFileCache(root?: string): void {
     if (root === undefined) cacheByRoot.clear();
     else cacheByRoot.delete(root);
 }

@@ -13,8 +13,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { readNextGenerationManifest } from '../src/next-generation-manifest.js';
-import { _resetNextThemeGroupsCache } from '../src/next-theme-groups.js';
 import { type NextTurboLoaderContext, runNextTurboLoader } from '../src/next-turbo-loader.js';
+import { _resetThemeGroupsFileCache } from '../src/theme-groups-file.js';
 
 const tempDirs: string[] = [];
 
@@ -217,7 +217,7 @@ describe('szcn theme groups on the Turbopack lane', () => {
     const roots: string[] = [];
 
     afterEach(() => {
-        _resetNextThemeGroupsCache();
+        _resetThemeGroupsFileCache();
         for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true });
     });
 
