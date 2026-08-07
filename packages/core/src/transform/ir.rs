@@ -72,8 +72,8 @@ pub struct SourceIr {
     pub style_attributes: Vec<StyleAttributeIr>,
     /// Static `szRecover` attributes found in source order.
     pub recovery_attributes: Vec<RecoveryAttributeIr>,
-    /// `szRecover` attribute spans that could not emit a token.
-    pub unsupported_recovery_attribute_spans: Vec<TextSpan>,
+    /// `szRecover` attributes that could not emit a token, and why.
+    pub unsupported_recovery_attributes: Vec<UnsupportedRecoveryIr>,
     /// JSX opening elements that contain csszyx-relevant static attributes.
     pub jsx_opening_elements: Vec<JsxOpeningElementIr>,
     /// JSX `szs` slot-map attributes found in source order.
@@ -133,7 +133,7 @@ impl SourceIr {
             uses_szv_pick1: false,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
-            unsupported_recovery_attribute_spans: Vec::new(),
+            unsupported_recovery_attributes: Vec::new(),
             jsx_opening_elements: Vec::new(),
             szs_attributes: Vec::new(),
             szs_diagnostics: Vec::new(),
@@ -146,7 +146,7 @@ impl SourceIr {
             && self.unsupported_sz_attribute_spans.is_empty()
             && self.class_attributes.is_empty()
             && self.recovery_attributes.is_empty()
-            && self.unsupported_recovery_attribute_spans.is_empty()
+            && self.unsupported_recovery_attributes.is_empty()
             && self.szs_attributes.is_empty()
             && self.szs_diagnostics.is_empty()
     }
@@ -490,6 +490,19 @@ pub enum DynamicCssVarCategory {
     Passthrough,
 }
 
+/// Why a `szRecover` attribute emitted no recovery token.
+///
+/// The two cases carry different advice — one says the value shape is wrong,
+/// the other names a mode csszyx does not have — so the parser records which
+/// one it saw instead of leaving the engine to collapse both into one line.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UnsupportedRecoveryIr {
+    /// The attribute value was not a string literal.
+    NonLiteral,
+    /// A string literal naming a mode that is not `csr` or `dev-only`.
+    UnknownMode(String),
+}
+
 /// Static `szRecover` attribute.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecoveryAttributeIr {
@@ -661,7 +674,7 @@ mod tests {
             uses_szv_pick1: false,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
-            unsupported_recovery_attribute_spans: Vec::new(),
+            unsupported_recovery_attributes: Vec::new(),
             jsx_opening_elements: vec![JsxOpeningElementIr {
                 opening_span: TextSpan::new(1, 73).expect("valid span"),
                 parent_element_index: None,

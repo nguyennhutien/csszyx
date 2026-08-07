@@ -12,7 +12,7 @@ use super::{
     recovery::{generate_inline_recovery_token, offset_to_line_column, LineIndex},
     rewrite::rewrite_static_sz_attributes,
     DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile, TransformMetadata,
-    TransformOptions, TransformProducer, TransformResult, TransformTimings,
+    TransformOptions, TransformProducer, TransformResult, TransformTimings, UnsupportedRecoveryIr,
 };
 use std::time::Instant;
 
@@ -723,14 +723,24 @@ fn deferred_array_object_diagnostics(file: &TransformFile, ir: &super::SourceIr)
         .collect()
 }
 
+/// Renders the `szRecover` diagnostics, byte-identical to the Babel and oxc
+/// lanes.
+///
+/// The two cases stay separate on purpose: a dynamic value and a misspelled
+/// mode need different fixes, and a build that switches `build.parser` must not
+/// change the text it prints.
 fn unsupported_recovery_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
-    ir.unsupported_recovery_attribute_spans
+    ir.unsupported_recovery_attributes
         .iter()
-        .map(|span| {
-            format!(
-                "[csszyx] szRecover at {}:{}: only static string-literal values \"csr\" or \"dev-only\" are supported. Token emission skipped.",
-                file.filename, span.start
-            )
+        .map(|reason| match reason {
+            UnsupportedRecoveryIr::NonLiteral => format!(
+                "[csszyx] szRecover at {}: only string-literal values (\"csr\" | \"dev-only\") are supported. Dynamic values disable token emission for this element.",
+                file.filename
+            ),
+            UnsupportedRecoveryIr::UnknownMode(mode) => format!(
+                "[csszyx] szRecover at {}: unknown mode \"{mode}\" — expected \"csr\" or \"dev-only\". Token emission skipped.",
+                file.filename
+            ),
         })
         .collect()
 }

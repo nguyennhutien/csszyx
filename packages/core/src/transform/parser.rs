@@ -24,6 +24,7 @@ use super::{
     SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr, StaticArrayPartIr, StaticSzObject,
     StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr,
     SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings,
+    UnsupportedRecoveryIr,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -438,15 +439,10 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
                             style_attribute_index = Some(index);
                         }
                     }
-                    "szRecover" => {
-                        if let Some(index) = self.collect_recovery_attribute(attr) {
-                            recovery_attribute_index = Some(index);
-                        } else {
-                            self.ir
-                                .unsupported_recovery_attribute_spans
-                                .push(text_span(attr.span));
-                        }
-                    }
+                    "szRecover" => match self.collect_recovery_attribute(attr) {
+                        Ok(index) => recovery_attribute_index = Some(index),
+                        Err(reason) => self.ir.unsupported_recovery_attributes.push(reason),
+                    },
                     "data-sz-recovery-token" => {
                         has_recovery_token_attribute = true;
                     }
@@ -1340,14 +1336,17 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         });
     }
 
-    fn collect_recovery_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
+    fn collect_recovery_attribute(
+        &mut self,
+        attr: &JSXAttribute<'_>,
+    ) -> Result<usize, UnsupportedRecoveryIr> {
         let Some(JSXAttributeValue::StringLiteral(value)) = &attr.value else {
-            return None;
+            return Err(UnsupportedRecoveryIr::NonLiteral);
         };
         let mode = match value.value.as_str() {
             "csr" => RecoveryMode::Csr,
             "dev-only" => RecoveryMode::DevOnly,
-            _ => return None,
+            other => return Err(UnsupportedRecoveryIr::UnknownMode(other.to_string())),
         };
 
         let index = self.ir.recovery_attributes.len();
@@ -1355,7 +1354,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             attribute_span: text_span(attr.span),
             mode,
         });
-        Some(index)
+        Ok(index)
     }
 }
 
@@ -4369,7 +4368,7 @@ mod tests {
         parse_source_shell_with_budget_and_statics, parse_source_shell_with_registries,
         source_type_for_path, string_value_span, MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
     };
-    use crate::transform::{lower::lower_source_ir_classes, TransformFile};
+    use crate::transform::{lower::lower_source_ir_classes, TransformFile, UnsupportedRecoveryIr};
     use oxc_span::Span;
 
     #[test]
@@ -5869,7 +5868,12 @@ export const cls = szr(localCard({ pad: 'sm' }));";
             source: "const Invalid = () => <Panel szRecover='sometimes' />;".to_string(),
         });
         assert!(invalid.ir.recovery_attributes.is_empty());
-        assert_eq!(invalid.ir.unsupported_recovery_attribute_spans.len(), 1);
+        // The mode NAME is carried through so the diagnostic can quote the typo
+        // back, the way the Babel and oxc lanes do.
+        assert_eq!(
+            invalid.ir.unsupported_recovery_attributes,
+            vec![UnsupportedRecoveryIr::UnknownMode("sometimes".to_string())]
+        );
     }
 
     #[test]
@@ -5883,7 +5887,12 @@ export const cls = szr(localCard({ pad: 'sm' }));";
 
         assert!(parsed.diagnostics.is_empty());
         assert!(parsed.ir.recovery_attributes.is_empty());
-        assert_eq!(parsed.ir.unsupported_recovery_attribute_spans.len(), 1);
+        // A dynamic value is a different failure from a misspelled mode, and the
+        // two must stay distinguishable this far down.
+        assert_eq!(
+            parsed.ir.unsupported_recovery_attributes,
+            vec![UnsupportedRecoveryIr::NonLiteral]
+        );
     }
 
     #[test]

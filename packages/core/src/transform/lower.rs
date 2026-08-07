@@ -3493,7 +3493,7 @@ mod tests {
             uses_szv_pick1: false,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
-            unsupported_recovery_attribute_spans: Vec::new(),
+            unsupported_recovery_attributes: Vec::new(),
             jsx_opening_elements: Vec::new(),
             szs_attributes: Vec::new(),
             szs_diagnostics: Vec::new(),

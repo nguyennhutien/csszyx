@@ -332,6 +332,11 @@ export function transformOxc(
                 lastAttribute: lastAttr,
                 openingNode,
                 filename: effectiveFilename,
+                // `effectiveFilename` substitutes `file.tsx` so oxc detects JSX,
+                // which is a parser input, not a fact about the caller. Naming a
+                // file the caller never passed would send a reader looking for
+                // it, so the diagnostics say what Babel says instead.
+                reportedFilename: filename ?? '<anonymous>',
                 source,
                 edits,
                 diagnostics,
@@ -1571,6 +1576,7 @@ function transformOxcRecoveryAttribute(params: OxcRecoveryAttributeParams): bool
         lastAttribute,
         openingNode,
         filename,
+        reportedFilename,
         source,
         edits,
         diagnostics,
@@ -1580,7 +1586,7 @@ function transformOxcRecoveryAttribute(params: OxcRecoveryAttributeParams): bool
     const recoveryValue = stringLiteralValue(attribute.value);
     if (recoveryValue === null) {
         diagnostics.push(
-            `[csszyx] szRecover at ${filename}: ` +
+            `[csszyx] szRecover at ${reportedFilename}: ` +
                 'only string-literal values ("csr" | "dev-only") are supported. ' +
                 'Dynamic values disable token emission for this element.',
         );
@@ -1588,7 +1594,7 @@ function transformOxcRecoveryAttribute(params: OxcRecoveryAttributeParams): bool
     }
     if (!isValidInlineRecoveryMode(recoveryValue)) {
         diagnostics.push(
-            `[csszyx] szRecover at ${filename}: ` +
+            `[csszyx] szRecover at ${reportedFilename}: ` +
                 `unknown mode "${recoveryValue}" — expected "csr" or "dev-only". ` +
                 'Token emission skipped.',
         );
@@ -1616,6 +1622,8 @@ interface OxcRecoveryAttributeParams {
     readonly lastAttribute: JsxAttributeNode | null;
     readonly openingNode: JsxOpeningElementNode;
     readonly filename: string;
+    /** Filename as the diagnostics name it, without the JSX-detection stand-in. */
+    readonly reportedFilename: string;
     readonly source: string;
     readonly edits: MagicString;
     readonly diagnostics: string[];
