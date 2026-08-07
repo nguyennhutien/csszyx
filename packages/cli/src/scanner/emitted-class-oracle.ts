@@ -231,19 +231,39 @@ const IGNORED_CSS_DIRS = [
  * @returns Absolute path to the entry, or null when the project has none.
  */
 export async function findTailwindCssEntry(cwd: string): Promise<string | null> {
+    return (await findTailwindCssEntries(cwd))[0] ?? null;
+}
+
+/**
+ * Find every stylesheet that pulls Tailwind into the project.
+ *
+ * A project may have more than one — a design system plus a page theme is an
+ * ordinary shape, not an exotic one — and each compiles to its OWN design
+ * system with its own `@theme` tokens and `@utility` definitions. Asking only
+ * the first would report every token of the others as producing no CSS, which
+ * is the one thing this check may never do.
+ *
+ * Shallowest first, then alphabetical, so the order does not depend on how the
+ * filesystem happens to enumerate directories.
+ *
+ * @param cwd - Project root to search.
+ * @returns Absolute paths to the entries, nearest the root first.
+ */
+export async function findTailwindCssEntries(cwd: string): Promise<string[]> {
     const files = await fg('**/*.css', { cwd, ignore: IGNORED_CSS_DIRS, absolute: true });
     const byDepth = files.sort((a, b) => {
         const depth = a.split(path.sep).length - b.split(path.sep).length;
         return depth === 0 ? a.localeCompare(b) : depth;
     });
+    const entries: string[] = [];
     for (const file of byDepth) {
         try {
-            if (IMPORTS_TAILWIND.test(await readFile(file, 'utf8'))) return file;
+            if (IMPORTS_TAILWIND.test(await readFile(file, 'utf8'))) entries.push(file);
         } catch {
             // A stylesheet that cannot be read cannot be the entry point.
         }
     }
-    return null;
+    return entries;
 }
 
 /** `@import "tailwindcss"` in either quoting style, with optional layer parts. */

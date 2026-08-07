@@ -216,6 +216,13 @@ depend on `build.scanCss`: that option chooses which CSS drives the generated
 *types*, and narrowing it never narrows merging. For utility-shaped classes
 written in plain CSS outside `@theme`, register them once with
 [`registerSzcnGroups`](#registerszcngroupsgroups).
+
+**Next.js with Turbopack is the exception.** That lane compiles one file at a
+time through a loader and never injects the generated registration, so custom
+tokens do not join their groups there — `szcn` keeps both classes and the
+stylesheet order decides. Call
+[`registerSzcnGroups`](#registerszcngroupsgroups) once at app startup, or use
+Next's Webpack mode for full parity.
 :::
 
 ### Production encode of runtime-resolved classes

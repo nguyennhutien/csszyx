@@ -165,3 +165,37 @@ describe('csszyx check — classes that style nothing', () => {
         expect(process.exitCode).not.toBe(1);
     });
 });
+
+describe('projects with more than one Tailwind entry', () => {
+    it('accepts a token declared in the entry that is not the shallowest one', async () => {
+        // Two stylesheets each import Tailwind — a design system plus a page
+        // theme, which is an ordinary shape. Picking one and asking only that
+        // one reports every token of the other as dead: the class is real, it
+        // is served, and the report says to go delete it.
+        const cwd = projectWith({
+            'src/design-system.css': '@import "tailwindcss";',
+            'src/landing.css': '@import "tailwindcss";\n@theme { --color-primary: #2dd597; }',
+            'src/Landing.tsx': "export const Landing = () => <div sz={{ bg: 'primary' }} />;",
+        });
+
+        const report = await reportFor(cwd);
+
+        expect(report).not.toContain('bg-primary');
+        expect(process.exitCode).not.toBe(1);
+    });
+
+    it('still reports a class no entry serves', async () => {
+        // The union must not become a way to pass: a class none of the design
+        // systems can produce is still dead.
+        const cwd = projectWith({
+            'src/design-system.css': '@import "tailwindcss";',
+            'src/landing.css': '@import "tailwindcss";\n@theme { --color-primary: #2dd597; }',
+            'src/Bad.tsx': "export const Bad = () => <div sz={{ pointer: 'none' }} />;",
+        });
+
+        const report = await reportFor(cwd);
+
+        expect(report).toContain('pointer-none');
+        expect(process.exitCode).toBe(1);
+    });
+});

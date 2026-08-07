@@ -16,7 +16,11 @@ import path from 'node:path';
 import { transformSourceCode } from '@csszyx/compiler';
 import fg from 'fast-glob';
 
-import { createEmittedClassOracle, findTailwindCssEntry } from '../scanner/emitted-class-oracle.js';
+import {
+    createEmittedClassOracle,
+    type EmittedClassOracle,
+    findTailwindCssEntries,
+} from '../scanner/emitted-class-oracle.js';
 import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
 
 /** Options for the `check` command. */
@@ -108,8 +112,8 @@ async function reportDeadClasses(
 ): Promise<boolean> {
     if (origins.size === 0) return false;
 
-    const entry = await findTailwindCssEntry(cwd);
-    if (entry === null) {
+    const entries = await findTailwindCssEntries(cwd);
+    if (entries.length === 0) {
         printInfo(
             'Dead-class check skipped: no stylesheet in this project imports Tailwind, so ' +
                 'there is no design system to ask which classes are real.',
@@ -117,18 +121,30 @@ async function reportDeadClasses(
         return false;
     }
 
-    const oracle = await createEmittedClassOracle({
-        resolveFrom: cwd,
-        css: await readFile(entry, 'utf8'),
-        cssBase: path.dirname(entry),
-    });
-    if (!oracle.ok) {
-        printInfo(`Dead-class check skipped: ${oracle.reason}.`);
+    const oracles: Array<Extract<EmittedClassOracle, { ok: true }>> = [];
+    let firstReason: string | null = null;
+    for (const entry of entries) {
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: cwd,
+            css: await readFile(entry, 'utf8'),
+            cssBase: path.dirname(entry),
+        });
+        if (oracle.ok) oracles.push(oracle);
+        else firstReason ??= oracle.reason;
+    }
+    if (oracles.length === 0) {
+        printInfo(`Dead-class check skipped: ${firstReason ?? 'no design system could be built'}.`);
         return false;
     }
 
     const vouched = new Set(allow);
-    const found = oracle.findDead([...origins.keys()]);
+    // Dead means dead under EVERY design system the project has. One that
+    // serves the class is enough for it to be real — the project ships that
+    // stylesheet too, and this command has no page-to-stylesheet mapping to
+    // narrow it further. Erring the other way would report live classes.
+    const emitted = [...origins.keys()];
+    const deadPerOracle = oracles.map(oracle => new Set(oracle.findDead(emitted)));
+    const found = emitted.filter(token => deadPerOracle.every(dead => dead.has(token)));
     const accepted = found.filter(token => vouched.has(token));
     const dead = found.filter(token => !vouched.has(token));
     // Say how many were waved through even on a clean run: an allow list that
