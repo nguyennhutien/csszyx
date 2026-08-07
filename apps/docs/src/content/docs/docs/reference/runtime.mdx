@@ -220,9 +220,10 @@ written in plain CSS outside `@theme`, register them once with
 **Next.js with Turbopack** reaches the same result by a different route: that
 lane compiles one file at a time and cannot resolve a virtual module, so csszyx
 writes the registration to `.csszyx/theme-groups.mjs` and imports it from the
-modules that call `szcn`. The one difference is refresh — the file is generated
-once per compiler process, so a `@theme` edit lands on the next build rather
-than on the current dev server.
+modules that call `szcn`. Your stylesheets are declared as loader dependencies,
+so editing a `@theme` block regenerates it during the dev session — same live
+behaviour as the other bundlers. See the
+[Turbopack capability table](/docs/installation/#what-the-turbopack-lane-can-and-cannot-use).
 :::
 
 ### Production encode of runtime-resolved classes

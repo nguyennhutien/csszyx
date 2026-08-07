@@ -36,6 +36,14 @@ export interface ThemeDiscovery {
     theme: ParsedTheme | null;
     /** The stylesheets tokens came from, for watch/HMR wiring. */
     files: string[];
+    /**
+     * EVERY stylesheet the walk read, not only the ones with tokens.
+     *
+     * Watching just the token-carrying files would miss a plain stylesheet
+     * that later gains an `@theme` block — the edit that most needs to be
+     * noticed, because it adds tokens the merge groups do not have yet.
+     */
+    scanned: string[];
 }
 
 /**
@@ -111,5 +119,9 @@ export function discoverProjectTheme(
         files.push(file);
     }
 
-    return { theme: themes.length > 0 ? mergeThemes(themes) : null, files };
+    return {
+        theme: themes.length > 0 ? mergeThemes(themes) : null,
+        files,
+        scanned: cssFiles,
+    };
 }

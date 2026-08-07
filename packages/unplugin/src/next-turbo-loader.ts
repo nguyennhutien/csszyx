@@ -142,15 +142,22 @@ export function runNextTurboLoader(
     // imported by path. Only modules that can call szcn pay for it, and the
     // import goes AFTER any `use client` directive, which must stay first.
     const callsSzcn = transform.result.usesSzcn || /\bszcn\s*\(/.test(source);
-    const themeGroupsFile = callsSzcn
+    const themeGroups = callsSzcn
         ? ensureNextThemeGroupsModule(context.root, path.join(context.root, '.csszyx'))
-        : null;
+        : { file: null, watch: [] };
+    // Turbopack forwards a loader's file dependencies to its watcher (its
+    // webpack-loader bridge reports `fileDependencies` back over IPC), so
+    // declaring the project's stylesheets here is what makes a `@theme` edit
+    // regenerate the registration DURING a dev session instead of at the next
+    // build. Only author-owned stylesheets are declared — never the generated
+    // module, which the loader itself writes.
+    for (const stylesheet of themeGroups.watch) loaderContext.addDependency?.(stylesheet);
     const code =
-        themeGroupsFile === null
+        themeGroups.file === null
             ? injected.code
             : insertAfterUseDirective(
                   injected.code,
-                  `import '${themeGroupsSpecifier(loaderContext.resourcePath, themeGroupsFile)}';\n`,
+                  `import '${themeGroupsSpecifier(loaderContext.resourcePath, themeGroups.file)}';\n`,
               );
     const metadata = collectNextTransformMetadata(
         transform.result,
@@ -193,16 +200,20 @@ export function runNextTurboLoader(
     // materialization cycle. Registering them as Turbopack dependencies would
     // make every loader call invalidate every other loader call's cache as
     // soon as the cycle rewrites them, producing a re-run cascade that only
-    // converges because Turbopack content-hash-dedupes the loader output. We
-    // intentionally register no dependencies and let Tailwind v4's PostCSS
-    // `@source` watcher pick up the safelist file independently.
+    // converges because Turbopack content-hash-dedupes the loader output. None
+    // of them is registered; Tailwind v4's PostCSS `@source` watcher picks up
+    // the safelist file independently.
+    //
+    // The stylesheets above are the opposite case and ARE registered: they are
+    // author-owned INPUTS the emitted code genuinely depends on, not outputs
+    // this loader rewrites, so watching them converges instead of cascading.
     return {
         code,
         context,
         transform,
         shardPath,
         materialized,
-        dependencies: [],
+        dependencies: themeGroups.watch,
     };
 }
 

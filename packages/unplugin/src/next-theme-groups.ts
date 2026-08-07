@@ -9,9 +9,9 @@
  * the winner instead of the author — silently, and only on this lane.
  *
  * So this writes a REAL module next to the other generated csszyx files and
- * hands back its path for the loader to import. The path is stable for a given
- * project, which keeps it out of the loader's cache identity: only the file's
- * contents change when the theme does.
+ * hands back its path for the loader to import, plus the stylesheets to watch.
+ * The path is stable for a given project, which keeps it out of the loader's
+ * cache identity: only the file's contents change when the theme does.
  *
  * @module
  */
@@ -24,31 +24,65 @@ import { createThemeGroupsModule } from './virtual-modules.js';
 /** File name inside the project's generated-output directory. */
 const THEME_GROUPS_FILE = 'theme-groups.mjs';
 
-/**
- * Resolved path per project root, or null when the project has no tokens
- * worth registering. Computed once per process: the answer needs a full
- * stylesheet walk, which must not run per transformed module.
- */
-const resolvedByRoot = new Map<string, string | null>();
+/** What one project's stylesheets currently say. */
+export interface NextThemeGroups {
+    /** Module to import, or null when there is nothing worth registering. */
+    file: string | null;
+    /** Stylesheets whose edits must regenerate the module. */
+    watch: string[];
+}
+
+/** Cached answer plus the stylesheet state it was computed from. */
+interface CachedGroups extends NextThemeGroups {
+    /** Size and mtime of every watched stylesheet, in `watch` order. */
+    signature: string;
+}
+
+const cacheByRoot = new Map<string, CachedGroups>();
 
 /**
- * Write the registration module for a project and return its path.
+ * Fingerprint the stylesheets a previous scan read.
  *
- * Returns null when no stylesheet declares tokens in a category `szcn` groups
- * by. Nothing is written and nothing should be imported in that case — an
- * empty registration would be a module every szcn-using file pays for and no
- * merge would change.
+ * Cheap enough to run per transformed module — a handful of `stat` calls —
+ * where re-walking the project would not be. A file that vanished contributes
+ * a marker rather than throwing, so deleting a stylesheet also invalidates.
+ *
+ * @param files - Stylesheets from the previous scan.
+ * @returns A string that changes whenever any of them does.
+ */
+function signatureOf(files: readonly string[]): string {
+    return files
+        .map(file => {
+            try {
+                const stat = fs.statSync(file);
+                return `${file}:${stat.size}:${stat.mtimeMs}`;
+            } catch {
+                return `${file}:gone`;
+            }
+        })
+        .join('|');
+}
+
+/**
+ * Write the registration module for a project and return it with its watch set.
+ *
+ * Returns a null `file` when no stylesheet declares tokens in a category `szcn`
+ * groups by. Nothing is written and nothing should be imported in that case —
+ * an empty registration would be a module every szcn-using file pays for and no
+ * merge would change. The watch set is still returned, so adding the first
+ * token to a project later is noticed.
  *
  * @param root - Project root the loader is running under.
  * @param outputDir - Directory generated csszyx files live in.
- * @returns Absolute path to the written module, or null when there is nothing
- * to register.
+ * @returns The module to import and the stylesheets to watch.
  */
-export function ensureNextThemeGroupsModule(root: string, outputDir: string): string | null {
-    const cached = resolvedByRoot.get(root);
-    if (cached !== undefined) return cached;
+export function ensureNextThemeGroupsModule(root: string, outputDir: string): NextThemeGroups {
+    const cached = cacheByRoot.get(root);
+    if (cached && signatureOf(cached.watch) === cached.signature) {
+        return { file: cached.file, watch: cached.watch };
+    }
 
-    const { theme } = discoverProjectTheme(root);
+    const { theme, scanned } = discoverProjectTheme(root);
     const tokens = {
         colors: theme?.colors ?? [],
         textSizes: theme?.textSizes ?? [],
@@ -56,24 +90,29 @@ export function ensureNextThemeGroupsModule(root: string, outputDir: string): st
         fontWeights: theme?.fontWeights ?? [],
     };
     const hasTokens = Object.values(tokens).some(names => names.length > 0);
-    if (!hasTokens) {
-        resolvedByRoot.set(root, null);
-        return null;
+
+    let file: string | null = null;
+    if (hasTokens) {
+        const target = path.join(outputDir, THEME_GROUPS_FILE);
+        try {
+            fs.mkdirSync(outputDir, { recursive: true });
+            fs.writeFileSync(target, createThemeGroupsModule(tokens), 'utf8');
+            file = target;
+        } catch {
+            // A read-only or unwritable output directory is not worth failing a
+            // build over: without the file the app merges exactly as it did
+            // before this existed, which is under-merging, not wrong styling.
+            file = null;
+        }
     }
 
-    const file = path.join(outputDir, THEME_GROUPS_FILE);
-    let written: string | null = file;
-    try {
-        fs.mkdirSync(outputDir, { recursive: true });
-        fs.writeFileSync(file, createThemeGroupsModule(tokens), 'utf8');
-    } catch {
-        // A read-only or unwritable output directory is not worth failing a
-        // build over: without the file the app merges exactly as it did before
-        // this existed, which is under-merging, not wrong styling.
-        written = null;
-    }
-    resolvedByRoot.set(root, written);
-    return written;
+    // Signature is taken AFTER the write, from the stylesheets only — the
+    // generated module is never in the watch set. Watching a file this function
+    // writes would invalidate the modules that import it on every regeneration,
+    // which is the re-run cascade the loader avoids everywhere else.
+    const result: CachedGroups = { file, watch: scanned, signature: signatureOf(scanned) };
+    cacheByRoot.set(root, result);
+    return { file, watch: scanned };
 }
 
 /**
@@ -101,6 +140,6 @@ export function themeGroupsSpecifier(fromFile: string, themeGroupsFile: string):
  * @param root - Project root to drop, or omit to clear everything.
  */
 export function _resetNextThemeGroupsCache(root?: string): void {
-    if (root === undefined) resolvedByRoot.clear();
-    else resolvedByRoot.delete(root);
+    if (root === undefined) cacheByRoot.clear();
+    else cacheByRoot.delete(root);
 }
