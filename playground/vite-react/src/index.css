@@ -1,1 +1,10 @@
 @import "tailwindcss";
+
+@theme {
+    --color-vite-base: #2563eb;
+    /* Removed and restored at runtime by vite-react-theme-groups.spec.ts, which
+       checks that szcn stops grouping a token the stylesheet no longer
+       declares. Keep it on its own line so the spec can drop it
+       deterministically. */
+    --color-vite-live: #16a34a;
+}

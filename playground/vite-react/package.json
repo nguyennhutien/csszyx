@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@csszyx/dynamic": "workspace:*",
+    "@csszyx/runtime": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "csszyx": "workspace:*",
     "react": "^18.3.1",
