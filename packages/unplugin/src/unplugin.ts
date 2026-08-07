@@ -128,12 +128,21 @@ interface PluginState {
      * Drives the `@source` safelist; NOT the mangle map.
      */
     classes: Set<string>;
-    /** Merged @theme scan result — feeds the theme-groups virtual module. */
+    /**
+     * Merged @theme scan result — the ONLY consumer is the theme-groups virtual
+     * module, so this is a merge-correctness input, not a typing one.
+     */
     parsedTheme: import('./theme-scanner.js').ParsedTheme | null;
     /**
-     * CSS files the zero-config @theme auto-scan found tokens in (only when
-     * `build.scanCss` is unset). Dev HMR re-scans when one of these — or any
-     * other .css file — changes, mirroring the explicit scanCss reload path.
+     * Tokens from the files `build.scanCss` lists, kept apart from the
+     * project-wide discovery so a token deleted from either source disappears
+     * from the merged result instead of lingering across a re-scan.
+     */
+    scanCssTheme: import('./theme-scanner.js').ParsedTheme | null;
+    /**
+     * CSS files the project-wide @theme scan found tokens in. Dev HMR re-scans
+     * when one of these — or any other .css file — changes, mirroring the
+     * explicit scanCss reload path.
      */
     autoThemeCssFiles: string[];
     /**
@@ -2586,6 +2595,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const state: PluginState = {
         classes: new Set<string>(),
         parsedTheme: null,
+        scanCssTheme: null,
         autoThemeCssFiles: [],
         sawTailwindEntry: false,
         sawAnyCss: false,
@@ -2746,21 +2756,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Zero-config @theme discovery. Runs ONLY when `build.scanCss` is unset:
-     * walks the project root (plus opted-in compileSources dirs outside it) for
-     * .css files carrying an @theme block and merges their tokens into
-     * `state.parsedTheme`, so szcn's custom-token groups work without wiring.
-     * An explicit `scanCss` stays fully authoritative — this never runs then,
-     * and unlike runThemeScan it does NOT write .csszyx/theme.d.ts (type
-     * augmentation remains the scanCss opt-in; this only feeds runtime merge
-     * correctness, where a missed token silently breaks last-wins).
+     * Project-wide @theme discovery. Walks the project root (plus opted-in
+     * compileSources dirs outside it) for .css files carrying an @theme block
+     * and merges their tokens into `state.parsedTheme`, so szcn's custom-token
+     * groups work without wiring.
+     *
+     * Runs whether or not `build.scanCss` is set. That option says which CSS
+     * drives `.csszyx/theme.d.ts` — a TYPING scope, and this scan writes no
+     * .d.ts. Letting it also narrow the merge groups meant a project that
+     * listed one stylesheet silently lost last-wins for every token declared in
+     * another: both classes survive and the STYLESHEET order picks the winner
+     * instead of the author's. A missing type is an autocomplete gap; a missing
+     * merge group is wrong output.
      *
      * @param rootDir - project root directory to walk.
      */
     function runAutoThemeScan(rootDir: string): void {
-        if (options.build?.scanCss) {
-            return;
-        }
         refreshCompileSourceDirs();
         const cssFiles: string[] = [];
         const walk = (dir: string): void => {
@@ -2806,8 +2817,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             themeFiles.push(file);
         }
         state.autoThemeCssFiles = themeFiles;
-        if (themes.length > 0) {
-            state.parsedTheme = mergeThemes(themes);
+        // Recomputed from both sources every time rather than merged into the
+        // previous value: a token deleted from a stylesheet must disappear, and
+        // accumulating into `state.parsedTheme` would keep it registered.
+        const sources = [state.scanCssTheme, themes.length > 0 ? mergeThemes(themes) : null].filter(
+            (theme): theme is ParsedTheme => theme !== null,
+        );
+        if (sources.length > 0) {
+            state.parsedTheme = mergeThemes(sources);
         }
     }
 
@@ -4744,9 +4761,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         refreshSzvRegistryEntry(removed, null);
                     }
                     // Generate theme type augmentation from @theme CSS blocks
-                    state.parsedTheme =
-                        runThemeScan(root, options.build?.scanCss) ?? state.parsedTheme;
-                    // Zero-config fallback: no scanCss → discover @theme CSS automatically.
+                    state.scanCssTheme =
+                        runThemeScan(root, options.build?.scanCss) ?? state.scanCssTheme;
+                    // Always: project-wide @theme discovery feeds merge groups.
                     runAutoThemeScan(root);
                 });
                 // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes
@@ -4794,9 +4811,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // Pre-scan source files so Tailwind can discover classes
                     prescanAndWriteClasses();
                     // Generate theme type augmentation from @theme CSS blocks
-                    state.parsedTheme =
-                        runThemeScan(root, options.build?.scanCss) ?? state.parsedTheme;
-                    // Zero-config fallback: no scanCss → discover @theme CSS automatically.
+                    state.scanCssTheme =
+                        runThemeScan(root, options.build?.scanCss) ?? state.scanCssTheme;
+                    // Always: project-wide @theme discovery feeds merge groups.
                     runAutoThemeScan(root);
                 },
 
@@ -4826,17 +4843,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
                         }
                     };
-                    if (scanCss) {
+                    if (ctx.file.endsWith('.css')) {
+                        // ANY css edit may add or remove @theme tokens, including
+                        // in a file `scanCss` does not list and one the scan has
+                        // not seen yet — so re-discover project-wide either way.
+                        // A file that IS listed additionally refreshes the typing
+                        // scan, which is what rewrites `.csszyx/theme.d.ts`.
                         const root = ctx.server.config.root || process.cwd();
-                        if (matchesAnyPattern(ctx.file, scanCss, root)) {
-                            state.parsedTheme = runThemeScan(root, scanCss) ?? state.parsedTheme;
-                            reloadThemeGroupsModule();
+                        if (scanCss && matchesAnyPattern(ctx.file, scanCss, root)) {
+                            state.scanCssTheme = runThemeScan(root, scanCss) ?? state.scanCssTheme;
                         }
-                    } else if (ctx.file.endsWith('.css')) {
-                        // Zero-config mode: any CSS edit may add or remove @theme
-                        // tokens (including in a file the auto-scan has not seen
-                        // yet), so re-discover and reload the registration.
-                        runAutoThemeScan(ctx.server.config.root || process.cwd());
+                        runAutoThemeScan(root);
                         reloadThemeGroupsModule();
                     }
 

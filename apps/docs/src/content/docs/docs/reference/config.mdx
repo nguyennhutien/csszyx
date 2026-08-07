@@ -464,6 +464,10 @@ When set, the plugin parses `@theme` blocks in your CSS entry point and generate
 in `@csszyx/compiler`. This surfaces custom design tokens (colors, spacing, fonts,
 radii, shadows) in `sz` prop IntelliSense without any manual type declarations.
 
+This option scopes **types only**. `szcn`'s theme merge groups are discovered
+from every stylesheet in the project either way, so listing one entry here never
+costs you merging in another.
+
 ```ts
 // vite.config.ts
 ...csszyx({

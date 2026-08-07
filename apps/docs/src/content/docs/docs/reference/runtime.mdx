@@ -159,7 +159,7 @@ RTL — those stay keep-both (still cascade-correct).
 
 ### Property groups for ambiguous prefixes
 
-Eight prefixes span more than one CSS property (`text-sm` is font-size,
+Sixteen prefixes span more than one CSS property (`text-sm` is font-size,
 `text-red-500` is color). For these, `szcn` classifies the token **value** into
 a property group: same group → last wins, different group → co-exist,
 unclassifiable → keep-both.
@@ -184,18 +184,38 @@ szcn('border-2', 'border-4');      // → 'border-4'
 // flex: shorthand / direction / wrap
 szcn('flex-row', 'flex-col');      // → 'flex-col'
 szcn('flex', 'flex-1');            // → 'flex flex-1'   bare flex is display
+
+// shadow / drop-shadow / inset-shadow: size vs shadow color
+szcn('shadow-sm', 'shadow-lg');       // → 'shadow-lg'
+szcn('shadow-lg', 'shadow-red-500');  // → 'shadow-lg shadow-red-500'
+
+// decoration: thickness / style / color
+szcn('decoration-2', 'decoration-red-500'); // → 'decoration-2 decoration-red-500'
+
+// stroke: width vs paint
+szcn('stroke-2', 'stroke-red-500'); // → 'stroke-2 stroke-red-500'
+
+// from / via / to: gradient stop position vs stop color
+szcn('from-10%', 'from-red-500');   // → 'from-10% from-red-500'
 ```
+
+Setting a shadow's size and its color together is the documented Tailwind way
+to write one, so those two never share a group — the same reasoning that keeps
+`border-2` and `border-red-500` apart.
 
 Still keep-both by design: directional/axis forms of border-family prefixes
 (`border-t-2` vs `border-2`, `divide-x-2` vs `divide-y-2`), CSS-variable values
 (`text-(--brand)` — the type is unknown), and any value csszyx cannot classify.
 
 :::tip[Custom `@theme` tokens join automatically]
-With `build.scanCss` configured, tokens from your `@theme` blocks
-(`--color-brand`, `--text-huge`, …) are registered into their groups by the
-build plugin — `szcn('text-brand', 'text-accent')` → `'text-accent'` with zero
-wiring, updated on HMR. For utility-shaped classes written in plain CSS outside
-`@theme`, register them once with [`registerSzcnGroups`](#registerszcngroupsgroups).
+Tokens from your `@theme` blocks (`--color-brand`, `--text-huge`, …) are
+registered into their groups by the build plugin —
+`szcn('text-brand', 'text-accent')` → `'text-accent'` with zero wiring, updated
+on HMR. The plugin discovers every stylesheet in the project, so this does not
+depend on `build.scanCss`: that option chooses which CSS drives the generated
+*types*, and narrowing it never narrows merging. For utility-shaped classes
+written in plain CSS outside `@theme`, register them once with
+[`registerSzcnGroups`](#registerszcngroupsgroups).
 :::
 
 ### Production encode of runtime-resolved classes
