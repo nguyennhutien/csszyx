@@ -35,7 +35,15 @@ export default defineBuildConfig({
                 minify: true,
                 platform: 'browser',
                 format: 'iife',
-                define: { 'process.env.NODE_ENV': '"production"' },
+                define: {
+                    'process.env.NODE_ENV': '"production"',
+                    // A page loading this over a CDN has no `process`, so any
+                    // surviving read is a ReferenceError waiting for whoever
+                    // makes that path reachable. The hint it guards tells you to
+                    // run the project scanner, which a script-tag page has no
+                    // project for — so the honest substitution is "silenced".
+                    'process.env.CSSZYX_NO_PROJECT_SCAN_HINT': '"1"',
+                },
             });
 
             // Prepend the JSX type reference to the umbrella .d.mts files so
