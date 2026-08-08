@@ -27,6 +27,12 @@ export default [
             // samples that are not part of any tsconfig project.
             '.agent/**',
             '**/dist/**',
+            // Where `tsc -b` emits, since it stopped sharing dist with the
+            // bundler. Declaration output belongs to no tsconfig project, so
+            // the type-aware parser rejects every file: leaving it out of this
+            // list makes `eslint .` pass or fail on whether a type-check has
+            // run yet.
+            '**/.tsout/**',
             '**/build/**',
             '**/.next/**',
             '**/.astro/**',
