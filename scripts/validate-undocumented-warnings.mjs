@@ -44,10 +44,13 @@ const EMPTY_BASELINE = { count: 0, messages: [] };
  *
  * Deliberately a list of SINKS, not of files: a message is identified by where
  * it goes, so a new warning in a package nobody thought of is still found. The
- * Rust engine pushes onto a diagnostics vector rather than printing.
+ * Rust engine pushes onto a diagnostics vector rather than printing, and config
+ * validation collects into an error array that the plugin throws — that last one
+ * was missing at first, which hid four messages a user can only meet by hitting
+ * them.
  */
 const SINK_PATTERN =
-    /\b(?:console\.(?:warn|error)|devWarn|warnOnce|reportDiagnostic|diagnostics\.push|push_diagnostic)\s*\(/g;
+    /\b(?:console\.(?:warn|error)|devWarn|warnOnce|reportDiagnostic|(?:diagnostics|errors)\.push|push_diagnostic)\s*\(/g;
 
 /** Words a sink argument needs before it counts as a message worth documenting. */
 const MIN_MESSAGE_WORDS = 8;
