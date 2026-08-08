@@ -36,6 +36,16 @@ produces plain strings at build time.
   </TabItem>
 </Tabs>
 
+<Aside type="note" title="What the umbrella gives browser code">
+Bundlers resolve `csszyx` in client code through its `browser` condition, which
+carries the runtime helpers and types only. The compiler and the bundler
+plugins are Node-only — `transform`, `vitePlugin`, `webpackPlugin` and friends
+stay available when the same import runs in Node (a config file, a script, an
+SSR build), and plugins have their own entries: `csszyx/vite`,
+`csszyx/webpack`. Asking for a build-time name from client code is a bundler
+error naming the missing export, not a silent `undefined`.
+</Aside>
+
 ## `szr(...classes)`
 
 Resolves multiple class strings or SzObjects into a single mangle-aware className.

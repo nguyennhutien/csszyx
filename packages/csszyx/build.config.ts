@@ -4,6 +4,7 @@ export default defineBuildConfig({
     failOnWarn: false,
     entries: [
         './src/index',
+        './src/index.browser',
         './src/lite',
         './src/vite',
         './src/webpack',
@@ -37,18 +38,22 @@ export default defineBuildConfig({
                 define: { 'process.env.NODE_ENV': '"production"' },
             });
 
-            // Prepend the JSX type reference to dist/index.d.mts so
-            // consumers picking up types via the umbrella package see
-            // the JSX intrinsic element declarations.
-            const dtsPath = path.resolve(ctx.options.outDir, 'index.d.mts');
-            try {
-                const existing = await fs.readFile(dtsPath, 'utf-8');
-                const reference = '/// <reference types="@csszyx/types/jsx" />\n';
-                if (!existing.startsWith(reference)) {
-                    await fs.writeFile(dtsPath, reference + existing);
+            // Prepend the JSX type reference to the umbrella .d.mts files so
+            // consumers picking up types via the umbrella package see the JSX
+            // intrinsic element declarations. Both entries need it: a consumer
+            // resolving under the `browser` condition gets the browser
+            // declarations and would otherwise lose the `sz` prop.
+            const reference = '/// <reference types="@csszyx/types/jsx" />\n';
+            for (const name of ['index.d.mts', 'index.browser.d.mts']) {
+                const dtsPath = path.resolve(ctx.options.outDir, name);
+                try {
+                    const existing = await fs.readFile(dtsPath, 'utf-8');
+                    if (!existing.startsWith(reference)) {
+                        await fs.writeFile(dtsPath, reference + existing);
+                    }
+                } catch {
+                    // The .d.mts files may not exist if declarations are off.
                 }
-            } catch {
-                // index.d.mts may not exist if declarations are off.
             }
         },
     },

@@ -33,6 +33,26 @@
       "outputs": ["coverage/**"],
       "inputs": ["src/**", "tests/**", "test/**", "*.config.js", "*.config.ts"]
     },
+    // The umbrella's browser-entry test bundles the `csszyx` specifier itself,
+    // so it reads this package's own dist through its `exports` map — hence the
+    // extra `build` edge, which the generic `^build` above does not cover. The
+    // map is what the test pins, so package.json joins the inputs; without it a
+    // condition could be dropped and turbo would replay a stale pass.
+    //
+    // KEEP outputs AND inputs IN SYNC WITH `test` ABOVE. A package-specific task
+    // config REPLACES the generic one rather than merging into it.
+    "csszyx#test": {
+      "dependsOn": ["^build", "build"],
+      "outputs": ["coverage/**"],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "test/**",
+        "package.json",
+        "*.config.js",
+        "*.config.ts"
+      ]
+    },
     "test:watch": {
       "cache": false,
       "persistent": true

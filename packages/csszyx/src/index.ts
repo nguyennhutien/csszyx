@@ -7,6 +7,13 @@
  * - Compiler logic (transform, manifest, recovery)
  * - Unplugin (Vite, Webpack, Rollup, esbuild)
  * - TypeScript types
+ *
+ * Everything below the runtime layer is Node-only, so bundlers resolving under
+ * the `browser` condition get `index.browser.ts` instead. That file owns the
+ * app-facing names and is re-exported here, which is what makes this entry a
+ * strict superset of it — a second copy of the list would drift, and once did:
+ * `szr`/`szcn` were documented as importable from `csszyx` while missing from
+ * this file for several releases.
  */
 
 // === Compiler ===
@@ -24,37 +31,6 @@ export {
     transform_sz,
     verify_mangle_checksum,
 } from '@csszyx/core';
-// === Runtime Helpers ===
-// === Variant Authoring ===
-// === Hydration & SSR ===
-export {
-    _sz,
-    _sz2,
-    _sz3,
-    _szMerge,
-    abortHydration,
-    endHydration,
-    getSSRContext,
-    isHydrating,
-    isSSREnvironment,
-    startHydration,
-    szcn,
-    szr,
-    szv,
-    verifyMangleMapIntegrity,
-} from '@csszyx/runtime';
-// === Runtime Lite (minimal bundle) ===
-export { _sz as _szLite } from '@csszyx/runtime/lite';
-// === Types ===
-export type {
-    CsszyxConfig,
-    DevelopmentConfig,
-    PartialCsszyxConfig,
-    ProductionConfig,
-    RecoveryManifest,
-    SzProp,
-    SzProps,
-} from '@csszyx/types';
 // === Unplugin ===
 export {
     esbuildPlugin,
@@ -63,6 +39,8 @@ export {
     vitePlugin,
     webpackPlugin,
 } from '@csszyx/unplugin';
+// === Runtime helpers, hydration, variant authoring, types ===
+export * from './index.browser.js';
 
 // === JSX Type Augmentation ===
 // Triple-slash reference: extends React.HTMLAttributes and React.SVGAttributes

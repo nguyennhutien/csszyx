@@ -32,6 +32,10 @@
   "jsdelivr": "./dist/browser.iife.js",
   "exports": {
     ".": {
+      "browser": {
+        "types": "./dist/index.browser.d.mts",
+        "import": "./dist/index.browser.mjs"
+      },
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
     },

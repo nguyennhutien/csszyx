@@ -1,7 +1,8 @@
-// The runtime package directly, not the `csszyx` umbrella: the umbrella's
-// main entry re-exports the COMPILER, which pulls the native binding and
-// cannot resolve under browser conditions.
-import { szcn } from '@csszyx/runtime';
+// Deliberately the `csszyx` umbrella rather than `@csszyx/runtime`: the docs
+// teach this import for app code, and it once could not be bundled at all
+// because the main entry reaches the compiler. Keeping the playground on it
+// means a real Vite production build re-proves the browser entry every run.
+import { szcn } from 'csszyx';
 
 /**
  * Prints what `szcn` does with two custom `@theme` colour tokens.
