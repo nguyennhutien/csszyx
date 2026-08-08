@@ -46,7 +46,6 @@ export type {
     GlobalVarUnsafeUsageMode,
     HydrationConfig,
     PartialCsszyxConfig,
-    PerformanceConfig,
     ProductionConfig,
 } from './config.js';
 export {
@@ -54,7 +53,6 @@ export {
     DEFAULT_CSSZYX_CONFIG,
     DEFAULT_DEVELOPMENT_CONFIG,
     DEFAULT_HYDRATION_CONFIG,
-    DEFAULT_PERFORMANCE_CONFIG,
     DEFAULT_PRODUCTION_CONFIG,
     getCurrentEnvironment,
     validateGlobalVarMangleConfig,

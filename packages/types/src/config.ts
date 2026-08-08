@@ -139,25 +139,11 @@ export interface ProductionConfig {
     mangleGlobalVars?: GlobalVarMangleConfig;
 
     /**
-     * Enable content hashing for immutable caching.
-     *
-     * @default true
-     */
-    contentHashing: boolean;
-
-    /**
      * Inject checksum for SSR hydration validation.
      *
      * @default true
      */
     injectChecksum: boolean;
-
-    /**
-     * Enable incremental build caching.
-     *
-     * @default true
-     */
-    incrementalBuild: boolean;
 
     /**
      * Minify output (class names and attributes).
@@ -450,13 +436,6 @@ export interface BuildConfig {
     emitManifest?: boolean;
 
     /**
-     * Path to Tailwind config file.
-     *
-     * @default "tailwind.config.js"
-     */
-    tailwindConfig?: string;
-
-    /**
      * Output directory for generated files.
      *
      * @default ".csszyx"
@@ -566,52 +545,6 @@ export interface HydrationConfig {
      * @default true
      */
     strict: boolean;
-
-    /**
-     * Default recovery mode for components without explicit szRecover.
-     *
-     * @default null (no recovery)
-     */
-    defaultRecoveryMode?: 'csr' | 'dev-only' | null;
-
-    /**
-     * Enable hydration audit logging.
-     *
-     * @default true
-     */
-    auditLog: boolean;
-}
-
-/**
- * Performance optimization configuration.
- */
-export interface PerformanceConfig {
-    /**
-     * Enable parallel processing during build.
-     *
-     * @default true
-     */
-    parallel: boolean;
-
-    /**
-     * Number of worker threads for parallel processing.
-     * Auto-detected if not provided.
-     */
-    workers?: number;
-
-    /**
-     * Enable CSS variable optimization.
-     *
-     * @default true
-     */
-    optimizeVariables: boolean;
-
-    /**
-     * Enable zero-runtime optimization for static cases.
-     *
-     * @default true
-     */
-    zeroRuntime: boolean;
 }
 
 /**
@@ -637,11 +570,6 @@ export interface CsszyxConfig {
      * Hydration safety configuration.
      */
     hydration: HydrationConfig;
-
-    /**
-     * Performance optimization configuration.
-     */
-    performance: PerformanceConfig;
 }
 
 /**
@@ -719,7 +647,6 @@ export type PartialCsszyxConfig = {
     production?: Partial<ProductionConfig>;
     build?: Partial<BuildConfig>;
     hydration?: Partial<HydrationConfig>;
-    performance?: Partial<PerformanceConfig>;
 };
 
 /**
@@ -740,9 +667,7 @@ export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
     mangle: false,
     mangleVars: false,
     mangleVarHoistMaxDepth: 5,
-    contentHashing: true,
     injectChecksum: true,
-    incrementalBuild: true,
     minify: true,
 };
 
@@ -751,7 +676,6 @@ export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
  */
 export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     emitManifest: false,
-    tailwindConfig: 'tailwind.config.js',
     outputDir: '.csszyx',
     cacheDir: '.csszyx/cache',
     cache: true,
@@ -765,17 +689,6 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
  */
 export const DEFAULT_HYDRATION_CONFIG: HydrationConfig = {
     strict: true,
-    defaultRecoveryMode: null,
-    auditLog: true,
-};
-
-/**
- * Default performance configuration.
- */
-export const DEFAULT_PERFORMANCE_CONFIG: PerformanceConfig = {
-    parallel: true,
-    optimizeVariables: true,
-    zeroRuntime: true,
 };
 
 /**
@@ -786,7 +699,6 @@ export const DEFAULT_CSSZYX_CONFIG: CsszyxConfig = {
     production: DEFAULT_PRODUCTION_CONFIG,
     build: DEFAULT_BUILD_CONFIG,
     hydration: DEFAULT_HYDRATION_CONFIG,
-    performance: DEFAULT_PERFORMANCE_CONFIG,
 };
 
 /**

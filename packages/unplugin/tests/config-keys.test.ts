@@ -29,9 +29,18 @@ describe('findUnknownConfigKeys', () => {
                 production: {},
                 build: {},
                 hydration: {},
-                performance: {},
             }),
         ).toEqual([]);
+    });
+
+    it('reports the removed performance group', () => {
+        // Every option it held described work the build never did, so the group
+        // went with them. Reporting it is the point: a project still passing it
+        // is passing something that has not done anything for a long time, and
+        // silence would leave that believable.
+        expect(findUnknownConfigKeys({ performance: { parallel: true } })).toEqual([
+            { key: 'performance' },
+        ]);
     });
 
     it('names the replacement for a renamed option', () => {

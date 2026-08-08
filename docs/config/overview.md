@@ -114,9 +114,7 @@ Controls production build behavior:
 ```ts
 interface ProductionConfig {
   mangle: boolean; // Obfuscate class names (z, y, x, ...) — opt-in, default false
-  contentHashing: boolean; // Hash for immutable caching
   injectChecksum: boolean; // Add hydration checksum to HTML
-  incrementalBuild: boolean; // Enable build caching
   minify: boolean; // Minify output
 }
 ```
@@ -124,9 +122,7 @@ interface ProductionConfig {
 **Defaults:**
 
 - `mangle`: `false`
-- `contentHashing`: `true`
 - `injectChecksum`: `true`
-- `incrementalBuild`: `true`
 - `minify`: `true`
 
 ### Build
@@ -136,7 +132,6 @@ Controls build pipeline:
 ```ts
 interface BuildConfig {
   buildId?: string; // Build identifier (auto-generated if omitted)
-  tailwindConfig?: string; // Path to Tailwind config file
   outputDir?: string; // Output directory
   cacheDir?: string; // Cache directory
   astBudgetLimit?: number; // Max AST nodes per file before the transform skips it (warned; safelist prescan runs at 10x)
@@ -148,7 +143,6 @@ interface BuildConfig {
 **Defaults:**
 
 - `buildId`: Auto-generated timestamp
-- `tailwindConfig`: `'tailwind.config.js'`
 - `outputDir`: `'.csszyx'`
 - `cacheDir`: `'.csszyx/cache'`
 - `astBudgetLimit`: `50000`
@@ -243,36 +237,12 @@ Controls SSR hydration behavior:
 ```ts
 interface HydrationConfig {
   strict: boolean; // Enable strict checks
-  defaultRecoveryMode?: "csr" | "dev-only"; // Default recovery mode
-  auditLog: boolean; // Log hydration events
 }
 ```
 
 **Defaults:**
 
 - `strict`: `true`
-- `defaultRecoveryMode`: `null` (no recovery)
-- `auditLog`: `true`
-
-### Performance
-
-Controls performance optimizations:
-
-```ts
-interface PerformanceConfig {
-  parallel: boolean; // Parallel processing during build
-  workers?: number; // Worker thread count (auto-detected)
-  optimizeVariables: boolean; // CSS variable optimization
-  zeroRuntime: boolean; // Static optimization for zero-runtime cases
-}
-```
-
-**Defaults:**
-
-- `parallel`: `true`
-- `workers`: Auto-detected (CPU cores)
-- `optimizeVariables`: `true`
-- `zeroRuntime`: `true`
 
 ## See Also
 

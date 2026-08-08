@@ -30,7 +30,6 @@ const KNOWN_TOP_LEVEL_KEYS: ReadonlySet<string> = new Set([
     'production',
     'build',
     'hydration',
-    'performance',
 ]);
 
 /**
