@@ -4715,6 +4715,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              */
             webpack(compiler: WebpackCompiler) {
                 activeFramework = 'webpack';
+                // Write the szcn theme-group registration now, not when the
+                // first module that imports it is transformed. webpack caches
+                // transformed modules across builds, so a rebuild can replay an
+                // already-injected import WITHOUT running the transform that
+                // creates the file — and if anything removed the generated
+                // directory in between (a clean script that spares webpack's own
+                // cache is enough), the build fails on a module nobody touched.
+                // Producing it at lane entry makes its existence a property of
+                // the build rather than of what happened to be recompiled.
+                compiler.hooks?.beforeCompile?.tap?.('csszyx:theme-groups', () => {
+                    // The compiler's own context, not `state.rootDir`: that is
+                    // assigned by another hook on this same event, and tap order
+                    // follows registration order, so reading it here would
+                    // depend on which of the two was wired first.
+                    const root = compiler.context || process.cwd();
+                    ensureThemeGroupsFile(root, path.join(root, '.csszyx'));
+                });
                 // Never mangle in a development-mode webpack build — the same
                 // reason as the `vite serve` guard: dev CSS is unmangled, so a
                 // delivered runtime map would encode classes to tokens no dev
