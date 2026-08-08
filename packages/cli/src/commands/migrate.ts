@@ -1,8 +1,7 @@
 /**
  * csszyx migrate - Convert Tailwind className to sz prop.
  *
- * Phase 2: Babel AST for JSX/TSX (static + dynamic classNames).
- * Regex for HTML files.
+ * Babel AST for JSX/TSX (static + dynamic classNames), regex for HTML files.
  * Supports --dry-run, --ignore patterns.
  */
 

@@ -1,26 +1,20 @@
 /**
- * Phase D production transform — `transformOxc()` is the oxc-parser +
- * magic-string replacement for `transformSourceCode()` (Babel). The
- * port lands incrementally across slices D2.1 (extract only),
- * D2.2 (magic-string rewrite), D2.3 (szRecover), D2.4 (runtime calls),
- * D2.5 (spread/conditional hoisting). The parity harness at
- * `tests/oxc-parity.test.ts` tracks which slices have landed.
+ * The oxc production transform — `transformOxc()` is the oxc-parser +
+ * magic-string counterpart to `transformSourceCode()` (Babel), selected by
+ * `build.parser`. Both must emit the same classes for the same source; the
+ * parity harness at `tests/oxc-parity.test.ts` is what holds them together.
  *
- * **Current slice: D2.1.** Read-only class extraction. Walks the AST
- * for JSXAttribute name="sz" with a static `ObjectExpression` value,
- * converts each property tree into a plain {@link SzObject}, and runs
- * the browser-pure `transform()` (`transform-core.ts`) to derive the
- * Tailwind class names. The source string is returned untouched —
- * `code === source` and `transformed === false`. D2.2 will replace
- * the matched JSXAttribute ranges via magic-string.
+ * It walks the AST for `sz` attributes, converts each static property tree into
+ * a plain {@link SzObject}, derives class names through the browser-pure
+ * `transform()` (`transform-core.ts`), and rewrites the matched ranges with
+ * magic-string — folding the result into an existing `className` where there is
+ * one. Spread, conditionals, `szRecover`, and the runtime helper calls are all
+ * handled here.
  *
- * Anything D2.1 cannot handle statically (variables, spread, ternary,
- * template literals, runtime helper calls) throws
- * {@link OxcNotImplementedError} so the parity harness records the
- * fixture as `pending` rather than reporting silent divergence.
- *
- * See `.agent/planning/babel-to-oxc-mapping.md` for the Babel → oxc
- * API mapping referenced throughout this file.
+ * A construct this lane cannot read statically throws
+ * {@link OxcNotImplementedError}. The parity harness records that fixture as
+ * `pending`, and the plugin falls back to the Babel lane for the file rather
+ * than emitting something the two engines would disagree about.
  */
 
 import MagicString from 'magic-string';
@@ -90,25 +84,26 @@ import {
 export type TransformOxcResult = SourceTransformResult;
 
 /**
- * Thrown when a caller hits a code path the current slice does not yet
- * implement. The parity harness catches this and reports the fixture
- * as `pending` rather than failing the suite.
+ * Thrown when this lane meets a construct it cannot read statically. The parity
+ * harness catches it and records the fixture as `pending` rather than failing
+ * the suite; the plugin catches it and falls back to the Babel lane.
  */
 export class OxcNotImplementedError extends Error {
     /**
-     * User-facing description of the unimplemented construct, without the
-     * internal slice label. Fallback warnings must print THIS, not `message` —
-     * the slice codes are planning shorthand and leaked verbatim into build
-     * logs ("D2.5+ not implemented yet", field-reported as baffling).
+     * Description of the construct, on its own terms.
+     *
+     * Fallback warnings print THIS rather than `message`. The message used to
+     * carry an internal label naming which slice of the port was expected to
+     * cover the case, and it reached build logs verbatim, where a reader could
+     * only report it as baffling.
      */
     readonly detail: string;
 
     /**
-     * @param slice The Phase D slice expected to implement this path.
-     * @param detail What the caller asked for that is not yet wired.
+     * @param detail What the caller asked for that this lane cannot read.
      */
-    constructor(slice: string, detail: string) {
-        super(`transformOxc: ${slice} not implemented yet — ${detail}`);
+    constructor(detail: string) {
+        super(`transformOxc: not implemented — ${detail}`);
         this.name = 'OxcNotImplementedError';
         this.detail = detail;
     }
@@ -557,7 +552,6 @@ function transformOxcSzAttribute(context: OxcSzAttributeContext): OxcSzAttribute
     const value = context.szAttr.value;
     if (!value) {
         throw new OxcNotImplementedError(
-            'D3',
             `sz attribute without value at ${context.filename}:${context.szAttr.start}`,
         );
     }
@@ -568,7 +562,6 @@ function transformOxcSzAttribute(context: OxcSzAttributeContext): OxcSzAttribute
     }
     if (value.type !== 'JSXExpressionContainer') {
         throw new OxcNotImplementedError(
-            'D3',
             `unsupported sz attribute value ${value.type} at ${context.filename}:${context.szAttr.start}`,
         );
     }
@@ -867,7 +860,7 @@ function transformOxcUnsupportedObject(
         if (context.classNameAttr) {
             // Merge the hoisted-conditional class expression with the existing
             // className, matching the Babel emit — this used to bail the whole
-            // file to the Babel fallback (D2.5+).
+            // file to the Babel fallback.
             wrapClassNameAttribute(
                 context.edits,
                 context.classNameAttr,
@@ -1054,7 +1047,7 @@ function transformOxcStaticConditional(
     if (context.classNameAttr) {
         // Same emit as the Babel engine: the compiled ternary merges with the
         // existing className. This used to route to the runtime fallback,
-        // whose className branch then bailed the whole file to Babel (D2.5+).
+        // whose className branch then bailed the whole file to Babel.
         wrapClassNameAttribute(
             context.edits,
             context.classNameAttr,
@@ -1294,7 +1287,7 @@ function transformOxcRuntimeFallback(params: OxcRuntimeFallbackParams): boolean 
     collectCandidateClassesFromExpression(expression, filename, bindings, classes, '');
     const expressionSource = source.slice(expression.start, expression.end);
     if (classNameAttribute) {
-        // Formerly a D2.5+ bail to the Babel lane (one WARN per file — 25 on
+        // This used to bail to the Babel lane (one WARN per file — 25 on
         // one field report). Same emit as Babel and the rust engine: the
         // existing className merges with the runtime-resolved sz value.
         wrapClassNameAttribute(
@@ -3173,7 +3166,6 @@ function resolveSzObjectSpread(
         }
     }
     throw new OxcNotImplementedError(
-        'D5',
         `unsupported object spread in sz object at ${filename}:${spread.start}`,
     );
 }
@@ -3181,8 +3173,8 @@ function resolveSzObjectSpread(
 /**
  * Convert an oxc `ObjectExpression` AST node into a plain {@link SzObject}
  * the browser-pure `transform()` helper can consume. Throws
- * {@link OxcNotImplementedError} on any pattern D2.1 does not handle
- * (identifiers, spreads, ternaries, template literals, methods).
+ * {@link OxcNotImplementedError} on any pattern that is not statically
+ * readable here (identifiers, spreads, ternaries, template literals, methods).
  *
  * @param node The oxc ObjectExpression node.
  * @param filename Filename for diagnostic offsets.
@@ -3207,21 +3199,18 @@ function astObjectToSzObject(
         }
         if (propRaw.type !== 'Property') {
             throw new OxcNotImplementedError(
-                'D5',
                 `non-Property in sz object (e.g. SpreadElement) at ${filename}:${propRaw.start}`,
             );
         }
         const prop = propRaw as PropertyNode;
         if (prop.computed) {
             throw new OxcNotImplementedError(
-                'D2.1',
                 `computed key in sz object at ${filename}:${prop.key.start}`,
             );
         }
         const key = extractKeyName(prop.key);
         if (key === null) {
             throw new OxcNotImplementedError(
-                'D2.1',
                 `unsupported key shape ${prop.key.type} at ${filename}:${prop.key.start}`,
             );
         }
@@ -6663,7 +6652,7 @@ function extractKeyName(key: OxcNode): string | null {
 /**
  * Convert an oxc value AST node into a plain {@link SzValue}.
  * Handles string/number/boolean literals and nested objects. Anything
- * else throws {@link OxcNotImplementedError} for D2.1.
+ * else throws {@link OxcNotImplementedError}.
  *
  * @param node The value AST node.
  * @param filename Filename for diagnostic offsets.
@@ -6697,7 +6686,6 @@ function astValueToSzValue(
             return value;
         }
         throw new OxcNotImplementedError(
-            'D2.1',
             `unsupported literal value type at ${filename}:${node.start}`,
         );
     }
@@ -6713,7 +6701,6 @@ function astValueToSzValue(
             }
         }
         throw new OxcNotImplementedError(
-            'D2.1',
             `unsupported unary expression at ${filename}:${node.start}`,
         );
     }
@@ -6722,18 +6709,15 @@ function astValueToSzValue(
     }
     if (node.type === 'Identifier' || node.type === 'MemberExpression') {
         throw new OxcNotImplementedError(
-            'D2.1',
             `identifier reference in sz object — scope resolution lands in a later slice (${filename}:${node.start})`,
         );
     }
     if (node.type === 'ConditionalExpression' || node.type === 'LogicalExpression') {
         throw new OxcNotImplementedError(
-            'D2.5',
             `conditional/logical expression in sz object at ${filename}:${node.start}`,
         );
     }
     throw new OxcNotImplementedError(
-        'D2.1',
         `unsupported value node type ${node.type} at ${filename}:${node.start}`,
     );
 }
@@ -6973,10 +6957,9 @@ function isAstMetadataKey(key: string): boolean {
 }
 
 /**
- * Hand-rolled depth-first AST walker. Replaces a Babel `traverse` call
- * for the read-only D2.1 scope — D2.2+ may upgrade to a parent-tracking
- * walker once magic-string edits need parent ranges (see
- * `.agent/planning/babel-to-oxc-mapping.md` § 4.1).
+ * Hand-rolled depth-first AST walker, in place of a Babel `traverse` call.
+ * It reports nodes without their parents, which is enough for every edit this
+ * lane makes; an edit that needs a parent range would have to upgrade it.
  *
  * @param node Root AST node.
  * @param visit Function called for every visited node.

@@ -1,5 +1,5 @@
 /**
- * Dynamic Pattern Handlers for Migration CLI Phase 2.
+ * Dynamic pattern handlers for the migration CLI.
  *
  * Handles dynamic className expressions:
  * - clsx/cn/cx/twMerge/classNames calls

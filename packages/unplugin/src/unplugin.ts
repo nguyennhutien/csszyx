@@ -2839,7 +2839,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
     /**
      * Runs the configured source transform. Rust is the default parser after
-     * the Phase E max-speed pass and routes through the native engine. Oxc is
+     * the max-speed pass and routes through the native engine. Oxc is
      * the documented JavaScript fallback for native-unavailable platforms, and
      * Babel remains the final compatibility safety net for unexpected
      * parser/compiler failures on either engine.
