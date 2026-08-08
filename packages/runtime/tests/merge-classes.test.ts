@@ -736,6 +736,21 @@ describe('szcn — mask utilities key by the CSS variable they write', () => {
         expect(szcn('mask-b-from-0%', 'mask-b-from-40%')).toBe('mask-b-from-40%');
     });
 
+    it('keeps a layer gradient and its own stops apart', () => {
+        // `mask-linear-45` writes the layer's gradient; `mask-linear-from-*` and
+        // `mask-linear-to-*` write stops inside it. Classifying a stop as the
+        // layer itself makes the stop delete the gradient — the same shape as
+        // the colour-deletes-size defect, and reachable through any masked
+        // element that sets both.
+        expect(szcn('mask-linear-45', 'mask-linear-to-80%')).toBe(
+            'mask-linear-45 mask-linear-to-80%',
+        );
+        expect(szcn('mask-linear-45', 'mask-linear-from-20%')).toBe(
+            'mask-linear-45 mask-linear-from-20%',
+        );
+        expect(szcn('mask-conic-90', 'mask-conic-to-80%')).toBe('mask-conic-90 mask-conic-to-80%');
+    });
+
     it('treats x and y as shorthands over their sides, like px over pl', () => {
         // A later shorthand subsumes the sides it writes; a later side only
         // refines one of them, so the shorthand survives for the other.
