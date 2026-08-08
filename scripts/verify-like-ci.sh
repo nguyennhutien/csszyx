@@ -53,6 +53,9 @@ pnpm check:tracked-symlinks
 echo "[verify-like-ci] Raw NUL byte guard (binary-flipped source files)..."
 pnpm check:no-nul-bytes
 
+echo "[verify-like-ci] Checking the documented warning messages still exist in source..."
+pnpm check:warning-docs
+
 echo "[verify-like-ci] Biome preflight (strict — no auto-fix, no unsafe-skip)..."
 pnpm lint:fast
 

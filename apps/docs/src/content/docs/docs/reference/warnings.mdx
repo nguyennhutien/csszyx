@@ -403,7 +403,7 @@ Printed when mangled tokens collide with class names in CSS csszyx does not
 own, or when a mangled class has no emitted rule:
 
 ```text
-[csszyx] production mangle found hybrid hazards: {n} mangled token(s) collide with class names in non-csszyx CSS (e.g. …) — those tokens will cross-contaminate external ".x" elements. HOTFIX: pass `production: { mangle: false }` to the csszyx plugin to ship now. THEN fix it: if these short names are in your OWN CSS, rename them to something specific (e.g. `.x` → `.resize-handle-x`) — short/common names also clash on specificity with other libraries. Only for names in a third-party stylesheet you cannot edit, list them in `production.mangleExclude` instead. Run `npx @csszyx/cli scan-collisions` to find every offending name.
+[csszyx] production mangle found hybrid hazards: {n} mangled token(s) collide with class names in non-csszyx CSS (e.g. …) — those tokens will cross-contaminate external ".{token}" elements. HOTFIX: pass `production: { mangle: false }` to the csszyx plugin to ship now. THEN fix it: if these short names are in your OWN CSS, rename them to something specific (e.g. `.x` → `.resize-handle-x`) — short/common names also clash on specificity with other libraries. Only for names in a third-party stylesheet you cannot edit, list them in `production.mangleExclude` instead. Run `npx @csszyx/cli scan-collisions` to find every offending name.
 ```
 
 The orphan clause reads `{n} mangled class(es) have no emitted CSS rule (e.g.

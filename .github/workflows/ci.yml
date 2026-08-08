@@ -274,6 +274,16 @@ jobs:
         run: |
           node --test scripts/validate-no-nul-bytes.test.mjs
           node scripts/validate-no-nul-bytes.mjs
+      # The warning reference page quotes build and runtime messages verbatim so
+      # a reader can match what their terminal printed. Rewording a message is a
+      # one-line change in any of nine packages, and nothing else notices that
+      # the page now describes a message the code no longer prints. Deliberately
+      # in this unfiltered job: the docs and the messages live in different path
+      # groups, so a filtered job would skip exactly the changes that break it.
+      - name: Check documented warnings still exist in source
+        run: |
+          node --test scripts/validate-warning-docs.test.mjs
+          node scripts/validate-warning-docs.mjs
       - name: Validate native package metadata
         run: node packages/core/scripts/validate-native-packages.mjs
 
