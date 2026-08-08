@@ -284,6 +284,14 @@ jobs:
         run: |
           node --test scripts/validate-warning-docs.test.mjs
           node scripts/validate-warning-docs.mjs
+      # The reverse direction: messages nobody documented. Reported, not
+      # enforced — some are genuinely internal, and gating from a standing start
+      # would fail every pull request at once and get switched off. The baseline
+      # is meant to ratchet down until the check can be promoted.
+      - name: Report undocumented warnings
+        run: |
+          node --test scripts/report-undocumented-warnings.test.mjs
+          node scripts/report-undocumented-warnings.mjs
       - name: Validate native package metadata
         run: node packages/core/scripts/validate-native-packages.mjs
 

@@ -132,14 +132,7 @@ export function extractDocumentedMessages(mdx) {
             return;
         }
 
-        // Double-backtick spans first: they exist precisely because the message
-        // contains a backtick, so the single-backtick pass would split them.
-        const spans = [
-            ...line.matchAll(/``(.+?)``/g),
-            ...line.replace(/``.+?``/g, '').matchAll(/`([^`]+)`/g),
-        ];
-        for (const span of spans) {
-            const text = span[1];
+        for (const text of extractCodeSpans(line)) {
             const words = wordCount(normalizeMessage(text));
             const required = text.includes('[csszyx]')
                 ? MIN_INLINE_WORDS
@@ -151,6 +144,59 @@ export function extractDocumentedMessages(mdx) {
     });
 
     return found;
+}
+
+/**
+ * Pull the code spans from one Markdown line, following CommonMark's rule that
+ * a span closes on a backtick run of the SAME length that opened it.
+ *
+ * The doubled backtick does two different jobs on this page, and a regex cannot
+ * tell them apart. It marks a whole message whose text contains code
+ * (``function call `{detail}()` result is unknown``), and it marks code inside a
+ * message that is already a span (`… the default ``rust`` parser …`). Treating
+ * every doubled run the first way splits the second kind in half; treating them
+ * all the second way drops the fallback table's reasons entirely. Both mistakes
+ * were measured here.
+ *
+ * @param line One line of Markdown.
+ * @returns The text inside each top-level code span.
+ */
+export function extractCodeSpans(line) {
+    const spans = [];
+    let i = 0;
+    while (i < line.length) {
+        if (line[i] !== '`') {
+            i++;
+            continue;
+        }
+        let openLength = 0;
+        while (line[i + openLength] === '`') openLength++;
+        const start = i + openLength;
+
+        let j = start;
+        let content = '';
+        while (j < line.length) {
+            if (line[j] !== '`') {
+                content += line[j];
+                j++;
+                continue;
+            }
+            let runLength = 0;
+            while (line[j + runLength] === '`') runLength++;
+            if (runLength === openLength) break;
+            // A different run length is literal text inside this span, so the
+            // markers are dropped and the words they wrap are kept.
+            j += runLength;
+        }
+        if (j >= line.length) {
+            // Unterminated: not a span, so do not swallow the rest of the line.
+            i = start;
+            continue;
+        }
+        spans.push(content);
+        i = j + openLength;
+    }
+    return spans;
 }
 
 /**

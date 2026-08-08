@@ -50,6 +50,7 @@
     "check:no-nul-bytes": "node --test scripts/validate-no-nul-bytes.test.mjs && node scripts/validate-no-nul-bytes.mjs",
     "check:package-size": "node --test scripts/check-package-size.test.mjs && node scripts/check-package-size.mjs",
     "check:warning-docs": "node --test scripts/validate-warning-docs.test.mjs && node scripts/validate-warning-docs.mjs",
+    "report:undocumented-warnings": "node --test scripts/report-undocumented-warnings.test.mjs && node scripts/report-undocumented-warnings.mjs",
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run dev --parallel",
     "test": "turbo run test",

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+    extractCodeSpans,
     extractDocumentedMessages,
     extractSourceLiterals,
     findMissingMessages,
@@ -301,4 +302,33 @@ test('ignores a fence line that is only illustration', () => {
         ),
     );
     assert.deepEqual(found, []);
+});
+
+/**
+ * The doubled backtick does two different jobs on this page and a regex cannot
+ * tell them apart. Handling only one of them was measured twice: treating every
+ * doubled run as a span split the messages that merely quote code inside
+ * themselves, and unwrapping all of them dropped the fallback table's reasons.
+ */
+
+test('reads a doubled span as one message when it quotes code inside', () => {
+    const spans = extractCodeSpans('| ``function call `{detail}()` result is unknown`` | nudge |');
+    // Inner markers are dropped either way; what matters is that the reason
+    // stays ONE message instead of being split at the nested backticks.
+    assert.deepEqual(spans, ['function call {detail}() result is unknown']);
+});
+
+test('keeps inner code as part of the message that encloses it', () => {
+    const spans = extractCodeSpans('| `[csszyx] the default ``rust`` parser fell back` |');
+    // Dropping the markers but keeping "rust" — losing it made the documented
+    // copy read shorter than the message source prints.
+    assert.deepEqual(spans, ['[csszyx] the default rust parser fell back']);
+});
+
+test('reads two separate spans on one line', () => {
+    assert.deepEqual(extractCodeSpans('use `a` or `b` here'), ['a', 'b']);
+});
+
+test('does not swallow the line when a span is left open', () => {
+    assert.deepEqual(extractCodeSpans('an unterminated `span runs to the end'), []);
 });
