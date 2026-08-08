@@ -17,6 +17,13 @@
       "outputs": ["coverage/**"],
       "inputs": ["src/**", "tests/**", "test/**", "*.config.js", "*.config.ts"]
     },
+    // Tests that read files OUTSIDE their own package need those paths declared
+    // here. `inputs` is package-scoped, so a cross-package read is invisible to
+    // the cache key: measured on the docs sync suite, a wrong value injected
+    // into a reference table replayed as 4583 passed while a direct vitest run
+    // failed on it — and CI restores this cache, so the hole sat on the merge
+    // gate. `$TURBO_ROOT$` anchors a path at the workspace root.
+    //
     // The compiler's szv oracle test imports @csszyx/runtime to compare emitted
     // strings against the real factory path, but runtime is NOT a dependency of
     // compiler, so the generic ^build above never builds it. Declaring it in
@@ -31,7 +38,16 @@
     "@csszyx/compiler#test": {
       "dependsOn": ["^build", "@csszyx/runtime#build"],
       "outputs": ["coverage/**"],
-      "inputs": ["src/**", "tests/**", "test/**", "*.config.js", "*.config.ts"]
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "test/**",
+        "*.config.js",
+        "*.config.ts",
+        "$TURBO_ROOT$/apps/docs/src/content/docs/docs/reference/*.mdx",
+        "$TURBO_ROOT$/packages/types/src/config.ts",
+        "$TURBO_ROOT$/packages/unplugin/README.md"
+      ]
     },
     // The umbrella's browser-entry test bundles the `csszyx` specifier itself,
     // so it reads this package's own dist through its `exports` map — hence the
