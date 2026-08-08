@@ -6,8 +6,14 @@
  * like hover, focus, etc.
  */
 
-import { hasSlashOpacity, isValidColorString } from './color-validation.js';
+import {
+    hasSlashOpacity,
+    isValidColorString,
+    warnStringColorOpacity,
+    warnUnrecognizedColor,
+} from './color-validation.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
+import { szDevWarningsEnabled } from './sz-dev-warnings.js';
 import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 
 // Re-exported so the runtime (which imports from `@csszyx/compiler/browser`,
@@ -2024,24 +2030,6 @@ let szTransformDepth = 0;
 let szWarnLocation: string | undefined;
 
 /**
- * Whether dev-mode sz diagnostics should be printed. True in development, in a
- * Node/SSR context only (never the browser client — the warnings would double a
- * server-side render), and unless `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them. The
- * opt-out lets a team that prefers a quiet dev loop rely on `csszyx check`
- * instead; the default stays ON because an unknown/aliased key is a
- * dropped-class correctness signal, not a style nudge.
- *
- * @returns Whether a dev-mode sz warning should be printed.
- */
-function szDevWarningsEnabled(): boolean {
-    return (
-        process.env.NODE_ENV !== 'production' &&
-        typeof window === 'undefined' &&
-        process.env.CSSZYX_QUIET_SZ_WARNINGS !== '1'
-    );
-}
-
-/**
  * Whether the one-time "run a full project scan" hint has been shown. Build-time
  * unknown-key warnings are lazy (a file warns only when its route is requested),
  * so the first one points the developer at `csszyx check` for a complete pass.
@@ -2399,24 +2387,8 @@ function validateColorPropertyString(key: string, value: string): boolean {
         return false;
     }
     if (isValidColorString(value)) return true;
-    if (szDevWarningsEnabled()) {
-        console.warn(
-            `[csszyx] "${key}: '${value}'" is not a recognized color value and will be ignored. ` +
-                'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
-                'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
-        );
-    }
+    warnUnrecognizedColor(key, value);
     return false;
-}
-
-/** Warns that slash opacity requires color-object syntax. */
-function warnStringColorOpacity(key: string, value: string): void {
-    if (!szDevWarningsEnabled()) return;
-    const slash = value.indexOf('/');
-    console.warn(
-        `[csszyx] "${key}: '${value}'" — string slash opacity is not supported. ` +
-            `Use object form: { color: '${value.slice(0, slash)}', op: ${value.slice(slash + 1)} }.`,
-    );
 }
 
 /** Collects direct, named, and arbitrary container-query variants. */

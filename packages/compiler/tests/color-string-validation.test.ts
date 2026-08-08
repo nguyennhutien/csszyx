@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { hasSlashOpacity, isValidColorString } from '../src/color-validation.js';
+import {
+    hasSlashOpacity,
+    isValidColorString,
+    stripInvalidColorStrings,
+} from '../src/color-validation.js';
 import { transform } from '../src/transform-core.js';
 
 /**
@@ -203,5 +207,48 @@ describe('transform() — color string validation (JS path)', () => {
             expect(result.className).toBe('w-1/2');
             expect(console.warn).not.toHaveBeenCalled();
         });
+    });
+});
+
+describe('CSSZYX_QUIET_SZ_WARNINGS on the WASM pre-validation path', () => {
+    let warn: ReturnType<typeof vi.spyOn>;
+    const previous = process.env.CSSZYX_QUIET_SZ_WARNINGS;
+
+    beforeEach(() => {
+        warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        warn.mockRestore();
+        if (previous === undefined) {
+            delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
+        } else {
+            process.env.CSSZYX_QUIET_SZ_WARNINGS = previous;
+        }
+    });
+
+    /**
+     * The env switch is documented as silencing the sz key and value warnings,
+     * and it does on the JS transform path. `stripInvalidColorStrings` runs
+     * instead when the WASM core is loaded, and it warns about the same values
+     * — so honouring the switch on only one of the two paths makes the
+     * documented behaviour depend on which engine happens to be active.
+     */
+    it('silences the invalid-color warning', () => {
+        process.env.CSSZYX_QUIET_SZ_WARNINGS = '1';
+        stripInvalidColorStrings({ color: '!!!' });
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('silences the slash-opacity warning', () => {
+        process.env.CSSZYX_QUIET_SZ_WARNINGS = '1';
+        stripInvalidColorStrings({ color: 'blue-500/50' });
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('still warns when the switch is unset', () => {
+        delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
+        stripInvalidColorStrings({ color: '!!!' });
+        expect(warn).toHaveBeenCalledTimes(1);
     });
 });
