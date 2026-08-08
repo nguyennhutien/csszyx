@@ -91,6 +91,7 @@ describe('runtime import scanner malformed inputs', () => {
             code: "'use server';\nconst reimportx = 1;\nimport { _sz } from '@csszyx/runtime';",
             symbol: '_sz',
         },
+
         {
             label: 'a malformed import before a real import',
             code: "'use server';\nimport foo;\nimport { _szMerge } from '@csszyx/runtime';",
@@ -138,6 +139,17 @@ describe('runtime import scanner malformed inputs', () => {
         const code = "'use server';\nimport { type _sz2, _sz } from '@csszyx/runtime';";
         const violation = findRSCBoundaryViolation(code, '/repo/app/x.ts');
         expect(violation?.symbol).toBe('_sz');
+    });
+
+    it('does not read an import clause that continues an identifier ending in a digit', () => {
+        // Identifiers may contain digits, so a digit before the keyword means
+        // the text continues a name rather than starting a statement. The row
+        // above only covers the LETTER half of that test; without the digit
+        // half, source that embeds example code — a template literal, a
+        // generated fixture — reads as a real import and fails a build that
+        // contains no violation at all.
+        const code = "'use server';\nconst a0import { szr } from '@csszyx/runtime/core';\n";
+        expect(findRSCBoundaryViolation(code, '/repo/app/x.ts')).toBeNull();
     });
 });
 
