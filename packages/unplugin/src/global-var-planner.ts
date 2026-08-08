@@ -181,7 +181,9 @@ function validateCandidates(
                 code: 'registered-property',
                 severity: 'error',
                 name,
-                message: `Registered custom property ${name} is not aliasable in Phase H v1.`,
+                message:
+                    `Registered custom property ${name} cannot be aliased: @property gives ` +
+                    'it a type and inheritance behaviour that an alias would not carry.',
                 location: registeredDefinition,
             });
         }

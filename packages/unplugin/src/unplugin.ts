@@ -1224,8 +1224,8 @@ export function shouldTrackGlobalVarSources(config?: { enabled?: boolean }): boo
 }
 
 /**
- * Records source text available before bundling/minification for Phase H
- * global-var diagnostics.
+ * Records source text available before bundling/minification for global-var
+ * diagnostics.
  *
  * @param state Plugin state to update.
  * @param filename Source filename that owns the text.
@@ -1319,7 +1319,7 @@ function collectRollupGlobalVarCssAssets(
 }
 
 /**
- * Reads configured source CSS files for Phase H validation.
+ * Reads configured source CSS files for global-variable validation.
  *
  * Some framework pipelines, notably Astro prerender builds, can invoke an
  * output hook before all user CSS is visible as a Rollup/Webpack asset. The
@@ -1502,7 +1502,7 @@ function buildVarMangleMap(
 }
 
 /**
- * Extracts Phase H global custom-property aliases for manifest/debug tooling.
+ * Extracts global custom-property aliases for manifest/debug tooling.
  *
  * The legacy `varMangleMap` also carries dynamic s/c-tier CSS variables. This
  * helper keeps manifest consumers from guessing tiers by exposing only aliases
@@ -2386,7 +2386,7 @@ function mangleQuotedStringLiterals(body: string, mangle: (inner: string) => str
 }
 
 /**
- * Validates the planned Phase H global-variable alias config before plugin
+ * Validates the planned global-variable alias config before plugin
  * state is created.
  *
  * @param options User plugin options.
@@ -2402,12 +2402,14 @@ function assertGlobalVarMangleConfig(options: PartialCsszyxConfig): void {
     if (config?.enabled === true) {
         if (!config.tokens || config.tokens.length === 0) {
             throw new Error(
-                '[csszyx] production.mangleGlobalVars.enabled requires explicit tokens in Phase H v1.',
+                '[csszyx] production.mangleGlobalVars.enabled requires explicit tokens. Aliasing ' +
+                    'a property csszyx was not told about would rename references it cannot see.',
             );
         }
         if (config.autoPrefix !== undefined && config.autoPrefix !== '') {
             throw new Error(
-                '[csszyx] production.mangleGlobalVars.autoPrefix requires CSS pre-scan support and is not enabled in Phase H v1.',
+                '[csszyx] production.mangleGlobalVars.autoPrefix is not available: choosing tokens ' +
+                    'by prefix needs a CSS pre-scan that does not exist yet. List the tokens instead.',
             );
         }
     }

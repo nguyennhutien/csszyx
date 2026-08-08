@@ -5,12 +5,12 @@ description: Alias-only config for app-owned global CSS custom properties.
 
 :::caution[Opt-in]
 `production.mangleGlobalVars` is default-off and only supports explicit
-`tokens` in Phase H v1. `autoPrefix` remains blocked until CSS pre-scan support
+`tokens` you list. `autoPrefix` remains blocked until CSS pre-scan support
 exists.
 :::
 
 Global variable mangling is an opt-in way to shorten repeated app-owned CSS
-custom property references. Phase H v1 is **alias-only**: original public
+custom property references. Aliasing is the only mode: original public
 custom-property names remain defined, and csszyx-owned references may use short
 `---g*` aliases.
 
@@ -30,7 +30,7 @@ csszyx({
 });
 ```
 
-Phase H v1 must preserve original variables:
+Aliasing must preserve the original variables:
 
 ```css
 :root {
@@ -39,7 +39,7 @@ Phase H v1 must preserve original variables:
 }
 ```
 
-Full rename mode is not part of Phase H. It requires a separate spec after
+Full rename mode does not exist. It requires a separate spec after
 real-app validation proves csszyx can safely own all declarations and usages.
 
 ## Reserved Names
@@ -63,7 +63,7 @@ Builds fail closed when a token is missing from emitted CSS, when unsafe
 out-of-band JS usage is detected, or when CSS validation produces a different
 alias plan than source transforms used.
 
-Runtime fallback `sz={expr}` shapes are not aliased in Phase H v1. They remain
+Runtime fallback `sz={expr}` shapes are not aliased. They remain
 correct because alias mode keeps the original custom properties defined, but
 they should not be counted as optimized references in size or performance
 reports.
@@ -76,7 +76,7 @@ by default, so this dedicated map is normally the only place they appear.
 
 ## When to Use
 
-Use Phase H v1 only when all of these are true:
+Use global-variable aliasing only when all of these are true:
 
 - The variables are app-owned public tokens, not Tailwind `@theme` namespaces.
 - The full token list is explicit in `tokens`.

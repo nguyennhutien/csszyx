@@ -128,7 +128,7 @@ export interface ProductionConfig {
     /**
      * Alias stable app-owned global CSS custom properties.
      *
-     * This is the opt-in gate for the `g` tier. Phase H v1 is alias-only:
+     * This is the opt-in gate for the `g` tier. Aliasing is the only mode:
      * original public custom-property declarations remain defined, and
      * csszyx-owned references may use short generated aliases. Explicit
      * `tokens` are supported first; `autoPrefix` remains blocked until CSS
@@ -180,7 +180,7 @@ export interface GlobalVarMangleConfig {
     enabled: boolean;
 
     /**
-     * Phase H v1 only supports alias mode.
+     * Aliasing is the only mode implemented; a full rename is not.
      *
      * @default "alias"
      */
@@ -209,7 +209,7 @@ export interface GlobalVarMangleConfig {
     /**
      * Prefix used for generated global aliases.
      *
-     * Phase H v1 defaults to `---g`, then appends csszyx's z-y-x encoder
+     * Defaults to `---g`, then appends csszyx's z-y-x encoder
      * output: `---gz`, `---gy`, `---gx`, ...
      *
      * @default "---g"
@@ -217,7 +217,7 @@ export interface GlobalVarMangleConfig {
     aliasPrefix?: string;
 
     /**
-     * Unsafe usage handling. Phase H v1 keeps this as error-only.
+     * Unsafe usage handling. Failing the build is the only behaviour today.
      *
      * @default "error"
      */
@@ -293,7 +293,7 @@ function validateAliasPrefix(config: GlobalVarMangleConfig): string | null {
 }
 
 /**
- * Validates the Phase H global variable alias config shape.
+ * Validates the global variable alias config shape.
  *
  * @param config User-provided global variable alias config.
  * @returns Validation errors. Empty means the config shape is valid.
@@ -305,11 +305,16 @@ export function validateGlobalVarMangleConfig(config: GlobalVarMangleConfig | un
 
     const errors: string[] = [];
     if (config.mode !== undefined && config.mode !== 'alias') {
-        errors.push("production.mangleGlobalVars.mode only supports 'alias' in Phase H v1.");
+        errors.push(
+            "production.mangleGlobalVars.mode only supports 'alias'. A full rename needs " +
+                'every reference rewritten, including the ones csszyx cannot see.',
+        );
     }
     if (config.onUnsafeUsage !== undefined && config.onUnsafeUsage !== 'error') {
         errors.push(
-            "production.mangleGlobalVars.onUnsafeUsage only supports 'error' in Phase H v1.",
+            "production.mangleGlobalVars.onUnsafeUsage only supports 'error'. An unsafe " +
+                'usage means a token would be aliased where the rename cannot be proven ' +
+                'complete, so there is nothing safe to downgrade it to.',
         );
     }
     const prefixErrors = [validateAutoPrefix(config), validateAliasPrefix(config)];

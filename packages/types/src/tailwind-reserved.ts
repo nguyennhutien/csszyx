@@ -22,7 +22,7 @@ export const TAILWIND_RESERVED_PREFIXES = [
     '--animate-',
 ] as const;
 
-/** Default csszyx Phase H generated global-alias namespace. */
+/** Namespace csszyx generates global-variable aliases into. */
 export const CSSZYX_GLOBAL_ALIAS_PREFIX = '---g';
 
 /**

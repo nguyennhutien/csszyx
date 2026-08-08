@@ -1,5 +1,5 @@
 /**
- * Phase H global variable alias surface.
+ * Global variable alias surface.
  *
  * Public re-export barrel. The implementation is split across sibling files:
  *

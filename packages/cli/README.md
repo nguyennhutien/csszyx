@@ -129,7 +129,7 @@ npx csszyx generate-types --output ./src/csszyx.d.ts
 
 ### `migrate`
 
-Convert Tailwind `className="..."` to CSSzyx `sz={...}` props. Phase 1 supports static string classNames.
+Convert Tailwind `className="..."` to CSSzyx `sz={...}` props. Static string classNames are supported.
 Display utilities migrate to canonical `display` props (`flex` →
 `{ display: 'flex' }`) instead of boolean sugar, and conflicting display
 utilities in the same variant scope stay unresolved for manual review.

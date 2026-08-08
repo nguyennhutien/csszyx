@@ -1,6 +1,6 @@
 //! Global custom-property alias application for static sz IR.
 //!
-//! Phase H keeps this as an IR-level transform so class lowering and source
+//! Kept as an IR-level transform so class lowering and source
 //! rewrite read the same aliased view of static `sz` values.
 
 use std::collections::BTreeMap;

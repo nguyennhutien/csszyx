@@ -98,7 +98,7 @@ describe('csszyx parser selection', () => {
                     },
                 },
             }),
-        ).toThrow('production.mangleGlobalVars.autoPrefix requires CSS pre-scan support');
+        ).toThrow('production.mangleGlobalVars.autoPrefix is not available');
     });
 
     it('threads explicit global variable aliases into source transforms', () => {

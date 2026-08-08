@@ -321,8 +321,12 @@ is not a bug — it is the safe answer when the token is genuinely ambiguous.
 | **Thrown.** `[csszyx] production.mangleMapDelivery must be 'both', 'html' or 'bundle'; got {value}.` | Error |
 | `[csszyx] production.mangleMapDelivery: '{value}' has no effect on the webpack lane — map delivery only narrows on vite/rollup builds.` | Ungated warning |
 | **Thrown.** `[csszyx] Invalid production.mangleGlobalVars config:` + errors | Error |
-| **Thrown.** `[csszyx] production.mangleGlobalVars.enabled requires explicit tokens in Phase H v1.` | Error |
-| **Thrown.** `[csszyx] production.mangleGlobalVars.autoPrefix requires CSS pre-scan support and is not enabled in Phase H v1.` | Error |
+| **Thrown.** `production.mangleGlobalVars.mode only supports 'alias'. A full rename needs every reference rewritten, including the ones csszyx cannot see.` | Error, listed under the line above |
+| **Thrown.** `production.mangleGlobalVars.onUnsafeUsage only supports 'error'. An unsafe usage means a token would be aliased where the rename cannot be proven complete, so there is nothing safe to downgrade it to.` | Error, listed under the line above |
+| **Thrown.** `production.mangleGlobalVars.tokens cannot include Tailwind reserved namespace token {name}` | Error, listed under the line above |
+| **Thrown.** `production.mangleGlobalVars.tokens cannot include csszyx reserved namespace token {name}` | Error, listed under the line above |
+| **Thrown.** `[csszyx] production.mangleGlobalVars.enabled requires explicit tokens. Aliasing a property csszyx was not told about would rename references it cannot see.` | Error |
+| **Thrown.** `[csszyx] production.mangleGlobalVars.autoPrefix is not available: choosing tokens by prefix needs a CSS pre-scan that does not exist yet. List the tokens instead.` | Error |
 | **Thrown.** `[csszyx] production.mangleGlobalVars validation failed:` + one line per finding | Error |
 | **Thrown.** `[csszyx] CSS variable mangle map is {size} bytes, which exceeds the {max} byte safety cap. Reduce production.mangleVars usage, split the bundle, or raise CSSZYX_VAR_MANGLE_MAP_MAX_BYTES if this payload size is intentional.` | Error |
 | `[csszyx] compileSources: {n} path(s) did not resolve to a directory (relative to {rootDir}): {list}. Their ``sz``/``szv`` will not be compiled or safelisted.` | Warning |
@@ -459,7 +463,7 @@ silently unstyle whatever else reads it. They arrive together under one error:
 | `Global variable token {name} is reserved and cannot be aliased.` | Tailwind owns the name, or your own `reserved` list claims it | Drop it from `tokens` |
 | `Global variable token {name} uses csszyx reserved namespace {prefix}* and cannot be aliased.` | The name collides with the prefix csszyx allocates aliases from | Rename the property in your CSS |
 | `Global variable token {name} is declared inside @theme and cannot be aliased.` | Tailwind generates utilities from `@theme` tokens, so renaming one breaks them | Move it out of `@theme`, or drop it from `tokens` |
-| `Registered custom property {name} is not aliasable in Phase H v1.` | `@property` gives the name a type and inheritance behaviour an alias would not carry | Drop it from `tokens` |
+| `Registered custom property {name} cannot be aliased: @property gives it a type and inheritance behaviour that an alias would not carry.` | `@property` gives the name a type and inheritance behaviour an alias would not carry | Drop it from `tokens` |
 
 ## SSR & hydration
 
