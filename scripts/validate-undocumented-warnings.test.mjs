@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { extractSinkCallRegions, extractSinkMessages } from './report-undocumented-warnings.mjs';
+import { extractSinkCallRegions, extractSinkMessages } from './validate-undocumented-warnings.mjs';
 
 /**
  * The report finds messages by where they GO, not by which file declares them,

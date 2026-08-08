@@ -333,6 +333,18 @@ is not a bug — it is the safe answer when the token is genuinely ambiguous.
 The unrecognized-option check is worth its own note: csszyx does not silently
 accept a key it does not read, and it suggests the nearest real key for a typo.
 
+### Theme auto-scan without the TypeScript wiring
+
+```text
+⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript isn't configured. Run "npx @csszyx/cli init" to fix.
+```
+
+Printed once per process, and the one message on this page with no `[csszyx]`
+prefix. Nothing is wrong with your CSS: the scan works, but `tsconfig.json`
+does not include the generated `.csszyx` types, so the theme tokens it finds
+never reach editor completion or type-checking. Styling is unaffected either
+way.
+
 ## Build pipeline
 
 Everything that decides **which files** get compiled and **whether the CSS gets
@@ -376,6 +388,12 @@ These are informational and always print to stderr, once.
 | `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, so the default ``rust`` parser fell back to ``oxc``. Output classes are identical (parity-tested); only parse speed differs. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
 | `[csszyx] oxc parser fell back to Babel for {filename}: {reason} ({n} file(s) so far). Output is still correct; this usually means the file uses a syntax the oxc lane does not yet handle.` |
 | `[csszyx] parse error in {filename}: the native engine could not fully scan this file ({n} syntax error(s))` |
+
+One more engine report comes from the browser runtime rather than the build:
+`[csszyx] Failed to initialize WASM core, falling back to JavaScript transformer`,
+followed by the underlying error. The JavaScript transformer produces the same
+classes, so this costs speed only. Its success counterpart,
+`[csszyx] WASM Core initialized (v{version})`, prints through `console.info`.
 
 <Aside type="note" title="A parser fallback is not a correctness problem">
 The three engines are parity-tested against each other. A fallback costs parse
@@ -422,6 +440,26 @@ worse than the names they replaced)` when shortening lost.
 Also: `[csszyx] mangleVars skipped component CSS variable hoist for {name}
 across {n} usages: {reason}` where `reason` is `no-lca`, `non-host-ancestor`,
 or `max-depth`.
+
+### Global variable aliasing
+
+`production.mangleGlobalVars` renames custom properties you list, so csszyx
+refuses any token it cannot prove is yours to rename. Every check below
+**fails the build** rather than warning — aliasing the wrong property would
+silently unstyle whatever else reads it. They arrive together under one error:
+
+```text
+[csszyx] production.mangleGlobalVars validation failed:
+[{code}] {token} ({file}:{line}:{col}): {message}
+```
+
+| Message | Means | Fix |
+| --- | --- | --- |
+| `Global variable token {name} is not defined in scanned CSS.` | The token was listed but no scanned stylesheet declares it — usually a typo, or a file outside the scanned set | Correct the name, or widen the CSS the plugin scans |
+| `Global variable token {name} is reserved and cannot be aliased.` | Tailwind owns the name, or your own `reserved` list claims it | Drop it from `tokens` |
+| `Global variable token {name} uses csszyx reserved namespace {prefix}* and cannot be aliased.` | The name collides with the prefix csszyx allocates aliases from | Rename the property in your CSS |
+| `Global variable token {name} is declared inside @theme and cannot be aliased.` | Tailwind generates utilities from `@theme` tokens, so renaming one breaks them | Move it out of `@theme`, or drop it from `tokens` |
+| `Registered custom property {name} is not aliasable in Phase H v1.` | `@property` gives the name a type and inheritance behaviour an alias would not carry | Drop it from `tokens` |
 
 ## SSR & hydration
 

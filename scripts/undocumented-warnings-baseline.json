@@ -1,35 +1,6 @@
 {
     "recorded": "2026-08-08",
-    "count": 7,
-    "note": "Messages a warning sink prints that the reference page does not describe. Report-only: lower this, do not raise it. Re-record only when a message is genuinely internal.",
-    "messages": [
-        {
-            "file": "packages/compiler/src/compiler.ts",
-            "message": "failed to initialize wasm core falling back to javascript transformer"
-        },
-        {
-            "file": "packages/unplugin/src/global-var-planner.ts",
-            "message": "global variable token is declared inside theme and cannot be aliased"
-        },
-        {
-            "file": "packages/unplugin/src/global-var-planner.ts",
-            "message": "global variable token is not defined in scanned css"
-        },
-        {
-            "file": "packages/unplugin/src/global-var-planner.ts",
-            "message": "global variable token is reserved and cannot be aliased"
-        },
-        {
-            "file": "packages/unplugin/src/global-var-planner.ts",
-            "message": "global variable token uses csszyx reserved namespace and cannot be aliased"
-        },
-        {
-            "file": "packages/unplugin/src/global-var-planner.ts",
-            "message": "registered custom property is not aliasable in phase h v1"
-        },
-        {
-            "file": "packages/unplugin/src/unplugin.ts",
-            "message": "n x1b 33m csszyx theme auto scan enabled but typescript isn t configured run npx csszyx cli init to fix x1b 0m n"
-        }
-    ]
+    "count": 0,
+    "note": "Messages a warning sink prints that the reference page deliberately does not describe. Empty: every message is documented. Adding an entry here is an exemption — prefer documenting the message.",
+    "messages": []
 }

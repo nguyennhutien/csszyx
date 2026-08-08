@@ -332,3 +332,42 @@ test('reads two separate spans on one line', () => {
 test('does not swallow the line when a span is left open', () => {
     assert.deepEqual(extractCodeSpans('an unterminated `span runs to the end'), []);
 });
+
+test('reads a fence message that uses the other csszyx marker', () => {
+    // One message predates the bracketed prefix and writes `CSSzyx:` instead.
+    // The marker is what identifies a line as our output, so both spellings
+    // have to count or that message can never be documented.
+    const found = extractDocumentedMessages(
+        [
+            '```text',
+            '⚠️ CSSzyx: Theme Auto-Scan enabled, but TypeScript is not configured. Run init to fix.',
+            '```',
+        ].join('\n'),
+    );
+    assert.equal(found.length, 1);
+});
+
+test('still ignores an unmarked fence line', () => {
+    const found = extractDocumentedMessages(
+        ['```text', '  sz object was {"p":4} from at Card in the example above', '```'].join('\n'),
+    );
+    assert.deepEqual(found, []);
+});
+
+test('drops ANSI colour codes and escaped newlines', () => {
+    // One message paints itself yellow. Written as escapes in source, those
+    // bytes turn into words (`x1b 33m`) that no documented copy can contain —
+    // colour is presentation, not part of the sentence.
+    const source = normalizeMessage('\\n\\x1b[33m CSSzyx: theme auto-scan is enabled\\x1b[0m\\n');
+    const doc = normalizeMessage('CSSzyx: theme auto-scan is enabled');
+    assert.equal(source, doc);
+});
+
+test('drops a real escape character too', () => {
+    assert.equal(
+        normalizeMessage(
+            'ESC[33mtheme auto-scan is enabledESC[0m'.replaceAll('ESC', String.fromCharCode(27)),
+        ),
+        normalizeMessage('theme auto-scan is enabled'),
+    );
+});

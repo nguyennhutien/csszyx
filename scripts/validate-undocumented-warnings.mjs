@@ -20,11 +20,14 @@ import {
  * internal, and enforcing it from a standing start would fail every pull
  * request at once and simply get switched off.
  *
- * So this reports instead of blocking, and writes a baseline. The number is
- * meant to ratchet down; when it reaches something small enough to defend, the
- * check can be promoted to a gate. The repo already took this route for
- * mutation testing, for the same reason: a required check without a baseline
- * first is a check that gets disabled.
+ * It started as a report with a baseline of seven, to be ratcheted down before
+ * being enforced. The seven were documented in the same session, so the
+ * baseline is zero and the check blocks: with nothing outstanding, allowing a
+ * new undocumented message would just rebuild the backlog it cleared.
+ *
+ * The baseline file stays as the escape hatch. A message that is genuinely
+ * internal can be recorded there instead of documented — deliberately, in a
+ * diff someone reviews, rather than by the check quietly not noticing.
  *
  * @module
  */
@@ -32,6 +35,9 @@ import {
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
 const DOC_PATH = 'apps/docs/src/content/docs/docs/reference/warnings.mdx';
 const BASELINE_PATH = 'scripts/undocumented-warnings-baseline.json';
+
+/** Baseline shape when the file is missing, so a deleted file cannot pass. */
+const EMPTY_BASELINE = { count: 0, messages: [] };
 
 /**
  * Calls whose string arguments reach a developer as a message.
@@ -123,59 +129,70 @@ export function findUndocumentedMessages(repositoryRoot) {
 }
 
 /**
- * Read the recorded count, or null when no baseline exists yet.
+ * Read the recorded allowances.
+ *
+ * A missing or unreadable file reads as zero allowances rather than as "no
+ * baseline": deleting it must not turn the gate off.
  *
  * @param repositoryRoot Absolute path to the repository root.
- * @returns The baseline count, or null.
+ * @returns The baseline record.
  */
 export function readBaseline(repositoryRoot) {
     try {
-        return JSON.parse(readFileSync(path.join(repositoryRoot, BASELINE_PATH), 'utf8')).count;
+        const parsed = JSON.parse(readFileSync(path.join(repositoryRoot, BASELINE_PATH), 'utf8'));
+        return { count: parsed.count ?? 0, messages: parsed.messages ?? [] };
     } catch {
-        return null;
+        return EMPTY_BASELINE;
     }
 }
 
 /**
- * Report undocumented messages and compare against the baseline.
+ * Drop the messages the baseline records as knowingly undocumented.
  *
- * @returns Process exit code. Always 0 — this reports, it does not gate.
+ * Matched on the message rather than the file so moving one between modules
+ * does not silently re-allow it under a stale entry.
+ *
+ * @param undocumented Messages found in source.
+ * @param baseline The baseline record.
+ * @returns Messages that are neither documented nor allowed.
+ */
+export function subtractBaseline(undocumented, baseline) {
+    const allowed = new Set(baseline.messages.map(entry => entry.message));
+    return undocumented.filter(entry => !allowed.has(entry.message.slice(0, 120)));
+}
+
+/**
+ * Fail when a warning message has no entry on the reference page.
+ *
+ * @returns Process exit code: 0 when every message is documented or allowed.
  */
 export function main() {
-    const undocumented = findUndocumentedMessages(REPO_ROOT);
     const baseline = readBaseline(REPO_ROOT);
+    const offenders = subtractBaseline(findUndocumentedMessages(REPO_ROOT), baseline);
 
-    console.log(`[undocumented-warnings] ${undocumented.length} message(s) not in ${DOC_PATH}`);
-    if (baseline !== null) {
-        const delta = undocumented.length - baseline;
-        const direction = delta === 0 ? 'unchanged from' : delta < 0 ? 'down from' : 'UP from';
-        console.log(`[undocumented-warnings] ${direction} the baseline of ${baseline}`);
-        if (delta > 0) {
-            console.log(
-                '[undocumented-warnings] A new message was added without a reference entry. ' +
-                    'This does not fail the build yet — document it, or re-record the baseline ' +
-                    'if it is genuinely internal.',
-            );
+    if (offenders.length > 0) {
+        console.error(
+            `[undocumented-warnings] ${offenders.length} message(s) reach a developer with no ` +
+                `entry in ${DOC_PATH}:\n`,
+        );
+        for (const entry of offenders) {
+            console.error(`  ${entry.file}`);
+            console.error(`    ${entry.message.slice(0, 150)}\n`);
         }
+        console.error(
+            'Add each to the reference page — the reader matching terminal output against it ' +
+                'has no other way to find out what the message means. If one is genuinely ' +
+                `internal, record it in ${BASELINE_PATH} instead, so the exemption is a diff ` +
+                'someone reviews rather than a gap nobody sees.',
+        );
+        return 1;
     }
 
-    const byPackage = new Map();
-    for (const entry of undocumented) {
-        const pkg = entry.file.split('/').slice(0, 2).join('/');
-        byPackage.set(pkg, (byPackage.get(pkg) ?? 0) + 1);
-    }
-    console.log('');
-    for (const [pkg, count] of [...byPackage].sort((a, b) => b[1] - a[1])) {
-        console.log(`  ${String(count).padStart(3)}  ${pkg}`);
-    }
-
-    if (process.argv.includes('--list')) {
-        console.log('');
-        for (const entry of undocumented) {
-            console.log(`  ${entry.file}`);
-            console.log(`    ${entry.message.slice(0, 150)}\n`);
-        }
-    }
+    const allowed = baseline.messages.length;
+    console.log(
+        `[undocumented-warnings] Every warning message is documented` +
+            `${allowed > 0 ? ` (${allowed} allowed by baseline)` : ''}.`,
+    );
     return 0;
 }
 

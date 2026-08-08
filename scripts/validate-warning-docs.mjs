@@ -43,6 +43,16 @@ const MIN_UNPREFIXED_INLINE_WORDS = 8;
 /** Minimum normalized word count for a line inside a text fence. */
 const MIN_FENCE_WORDS = 6;
 
+/**
+ * How a line announces itself as csszyx output.
+ *
+ * Almost every message carries the bracketed prefix, which the warn helpers
+ * add. One predates it and writes `CSSzyx:` instead. Both count: the marker is
+ * what separates a real message from the surrounding illustration in a fence,
+ * so recognising only one spelling leaves that message impossible to document.
+ */
+const MESSAGE_MARKER = /\[csszyx\]|CSSzyx:/;
+
 /** Words a fragment must reach to count toward a composed message. */
 const MIN_RUN_WORDS = 2;
 
@@ -62,6 +72,12 @@ const MIN_RUN_WORDS = 2;
 export function normalizeMessage(text) {
     let s = String(text);
 
+    // Colour codes and layout escapes are presentation, not words. Stripped
+    // both as written in source (`\\x1b[33m`) and as the byte itself.
+    s = s.replace(/\\x1b\[[0-9;]*m/g, ' ');
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: matching the escape byte is the point — a message that colours itself carries a real ESC here
+    s = s.replace(/\u001b\[[0-9;]*m/g, ' ');
+    s = s.replace(/\\[nrt]/g, ' ');
     // Rust breaks a long literal with a trailing backslash before the newline.
     s = s.replace(/\\\r?\n\s*/g, '');
     // TypeScript breaks one by closing a literal and reopening the next.
@@ -126,7 +142,7 @@ export function extractDocumentedMessages(mdx) {
             // A fence renders a whole terminal block, including a filename
             // header and indented detail lines built from example data. Only the
             // prefixed line is a message; the rest illustrates the layout.
-            if (line.includes('[csszyx]') && wordCount(normalizeMessage(line)) >= MIN_FENCE_WORDS) {
+            if (MESSAGE_MARKER.test(line) && wordCount(normalizeMessage(line)) >= MIN_FENCE_WORDS) {
                 found.push({ text: line.trim(), line: index + 1 });
             }
             return;

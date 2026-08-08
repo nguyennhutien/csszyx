@@ -56,8 +56,8 @@ pnpm check:no-nul-bytes
 echo "[verify-like-ci] Checking the documented warning messages still exist in source..."
 pnpm check:warning-docs
 
-echo "[verify-like-ci] Reporting warning messages with no reference entry (never blocks)..."
-pnpm report:undocumented-warnings
+echo "[verify-like-ci] Checking every warning message has a reference entry..."
+pnpm check:undocumented-warnings
 
 echo "[verify-like-ci] Biome preflight (strict — no auto-fix, no unsafe-skip)..."
 pnpm lint:fast
