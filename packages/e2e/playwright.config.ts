@@ -120,6 +120,17 @@ export default defineConfig({
             },
         },
         {
+            // Shares the Turbopack dev server the other csszyx-loader specs
+            // use, because the chain it exercises only exists while both the
+            // loader and `csszyx next watch` are live.
+            name: 'nextjs-16-turbo-cross-module',
+            testMatch: /nextjs-16-turbo-cross-module/,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:3018',
+            },
+        },
+        {
             name: 'edge-cases',
             testMatch: /edge-cases/,
             use: {

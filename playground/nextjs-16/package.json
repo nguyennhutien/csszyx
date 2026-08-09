@@ -8,7 +8,7 @@
         "dev": "pnpm run ensure:sources && next dev --webpack -p 3016",
         "dev:turbo": "pnpm run ensure:sources && concurrently --kill-others-on-fail -n csszyx,next -c cyan,green \"pnpm run watch:turbo\" \"pnpm run dev:turbo:next\"",
         "dev:turbo:next": "cross-env CSSZYX_NEXT16_TURBO_SOURCE=1 CSSZYX_NEXT16_TURBO_LOADER=1 CSSZYX_NEXT16_TURBO_CSSZYX=1 next dev --turbo -p 3018",
-        "watch:turbo": "node node_modules/@csszyx/cli/dist/bin.mjs next watch --root . --output-file .csszyx/next-loader-classes.html",
+        "watch:turbo": "node node_modules/@csszyx/cli/dist/bin.mjs next watch --root . --output-file .csszyx/next-loader-classes.html --imported-static-sz",
         "dev:source": "pnpm run ensure:sources && cross-env CSSZYX_NEXT16_TURBO_SOURCE=1 next dev --turbo -p 3018",
         "dev:loader": "pnpm run ensure:sources && cross-env CSSZYX_NEXT16_TURBO_SOURCE=1 CSSZYX_NEXT16_TURBO_LOADER=1 next dev --turbo -p 3019",
         "dev:csszyx-loader": "pnpm run ensure:sources && cross-env CSSZYX_NEXT16_TURBO_SOURCE=1 CSSZYX_NEXT16_TURBO_CSSZYX=1 next dev --turbo -p 3020",
