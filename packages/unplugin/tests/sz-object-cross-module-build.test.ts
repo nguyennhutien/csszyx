@@ -35,7 +35,15 @@ const FIXTURE_FILES: Record<string, string> = {
 `,
     'src/main.ts': `
 import { App } from './App.tsx';
-document.body.textContent = JSON.stringify(App());
+import { Other } from './Other.tsx';
+document.body.textContent = JSON.stringify([App(), Other()]);
+`,
+    // A second sz-authoring file, which is what makes the prescan take its
+    // BATCH path on the rust lane. One shared options object serves a whole
+    // batch, so a file needing its own registry entries has to leave it — with
+    // a single authoring file the fixture never reached that code at all.
+    'src/Other.tsx': `
+export const Other = () => <div sz={{ m: 3 }} />;
 `,
     // The design-system module: a plain exported object, no marker of any kind
     // in its text. Nothing but the importer's `from './styles'` says it matters.

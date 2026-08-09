@@ -3099,6 +3099,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     /**
      * Transforms prescan files, batching Rust cache misses in one native call.
      *
+     * The batch carries ONE options object for every file in it, so a file
+     * whose imports resolve to registry entries cannot ride in it — its
+     * `crossModuleStatics` are its own. Those files take the per-file path and
+     * the rest still batch, which keeps the native round-trip saving where it
+     * came from: in a real project almost nothing imports a style module.
+     *
      * @param files Source files discovered during prescan.
      * @returns Transform results for files that compiled successfully.
      */
@@ -3107,21 +3113,47 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return transformPrescanSourcesIndividually(files);
         }
 
+        const perFile: PrescanSourceFile[] = [];
+        const batchable: PrescanSourceFile[] = [];
+        for (const file of files) {
+            (hasCrossModuleStatics(file) ? perFile : batchable).push(file);
+        }
+        const individual = transformPrescanSourcesIndividually(perFile);
+
         const compilerOptions = createCompilerOptions(prescanAstBudget);
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
         const results = new Map<string, SourceTransformResult>();
 
         if (cacheEnabled) evictTransformCacheOnce();
         ensureRustTransformAvailable();
-        const misses = collectRustPrescanMisses(files, compilerOptions, cacheRoot, results);
-        if (misses.length === 0) return orderPrescanResults(files, results);
-
-        try {
-            runRustPrescanBatch(misses, compilerOptions, cacheRoot, results);
-        } catch {
-            runRustPrescanFallback(misses, results);
+        const misses = collectRustPrescanMisses(batchable, compilerOptions, cacheRoot, results);
+        if (misses.length > 0) {
+            try {
+                runRustPrescanBatch(misses, compilerOptions, cacheRoot, results);
+            } catch {
+                runRustPrescanFallback(misses, results);
+            }
         }
-        return orderPrescanResults(files, results);
+        return [...individual, ...orderPrescanResults(batchable, results)];
+    }
+
+    /**
+     * Whether one prescan file's imports resolve to anything in the registry.
+     *
+     * Asked with the same function the transform uses, so a file routed to the
+     * batch is one the transform would also have given no statics.
+     *
+     * @param file - Source file discovered during prescan.
+     * @returns True when the file has per-file cross-module options.
+     */
+    function hasCrossModuleStatics(file: PrescanSourceFile): boolean {
+        const resolved = resolveCrossModuleStaticsFor(
+            szvCrossModuleRegistry,
+            file.filePath,
+            file.content,
+            specifierAliases,
+        );
+        return resolved.szvConfigs !== undefined || resolved.szObjects !== undefined;
     }
 
     /**
