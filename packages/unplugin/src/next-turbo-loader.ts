@@ -7,6 +7,12 @@ import type { TransformSourceCodeOptions } from '@csszyx/compiler';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import type { JsonLike } from './next-cache-identity.js';
 import {
+    configWithImportedStaticSz,
+    normalizeProviderPaths,
+    resolveNextCrossModule,
+    withCrossModuleStatics,
+} from './next-cross-module.js';
+import {
     readNextGenerationManifest,
     validateNextGenerationManifest,
 } from './next-generation-manifest.js';
@@ -48,6 +54,15 @@ export interface NextTurboLoaderOptions {
     allowProductionMangling?: boolean;
     materializeSafelist?: boolean;
     writeOptions?: AtomicWriteOptions;
+    /**
+     * Whether a plain exported sz object may be compiled into its importers.
+     *
+     * The same opt-in the other lanes spell `build.importedStaticSz`, and it
+     * has to be given to `csszyx next prebuild` too — the prebuild is what
+     * safelists the classes the loader then emits, so a lane that resolves
+     * more than the other would emit class names with no rule behind them.
+     */
+    importedStaticSz?: boolean;
 }
 
 /** Minimal Webpack-compatible loader context used by Turbopack. */
@@ -95,7 +110,7 @@ export function runNextTurboLoader(
         loaderContext: loaderContext.context,
         cacheDir: options.cacheDir,
         safelistOutputFile: options.safelistOutputFile,
-        config: options.config ?? {},
+        config: configWithImportedStaticSz(options.config ?? {}, options.importedStaticSz),
         env: options.env ?? process.env,
         envKeys: options.envKeys,
         nextVersion: options.nextVersion ?? 'unknown-next',
@@ -110,20 +125,21 @@ export function runNextTurboLoader(
 
     assertProductionManifestReady(context, options);
 
-    // No cross-module registry on this lane, deliberately. The generic plugin
-    // builds one during a whole-project prescan; this loader is handed one file
-    // at a time by Turbopack and has no such pass. Feeding it a registry would
-    // also need `addDependency` on every provider it resolved, or an edited
-    // style module would leave its importers compiled against the old value —
-    // stale output being worse than the fallback. So `sz={importedBinding}`
-    // keeps the runtime path here even when `build.importedStaticSz` is on, and
-    // keeps reporting that it did. Closing this needs a provider resolver plus
-    // the dependency registration, tracked as its own piece of work.
+    // Cross-module resolution, inverted for this lane: no prescan hands the
+    // loader a registry, so it reads each provider from disk itself. Every one
+    // it read is declared below — an edited style module has to invalidate its
+    // importers, or they keep compiling against the value it used to have.
+    const crossModule = resolveNextCrossModule({
+        filename: loaderContext.resourcePath,
+        source,
+        root: context.root,
+        importedStaticSz: options.importedStaticSz,
+    });
     const transform = transformNextSource({
         source,
         filename: loaderContext.resourcePath,
         parserMode: options.parserMode ?? 'rust',
-        compilerOptions: options.compilerOptions,
+        compilerOptions: withCrossModuleStatics(options.compilerOptions, crossModule.statics),
         cacheRoot: resolveTransformCacheDir(
             context.root,
             path.relative(context.root, context.cacheDir),
@@ -152,6 +168,12 @@ export function runNextTurboLoader(
     // build. Only author-owned stylesheets are declared — never the generated
     // module, which the loader itself writes.
     for (const stylesheet of themeGroups.watch) loaderContext.addDependency?.(stylesheet);
+    // The other half of cross-module resolution. Turbopack forwards these the
+    // same way it forwards the stylesheets above, so editing a style module
+    // re-runs the loader for every file that read it.
+    for (const provider of normalizeProviderPaths(crossModule.providers)) {
+        loaderContext.addDependency?.(provider);
+    }
     const code =
         themeGroups.file === null
             ? injected.code

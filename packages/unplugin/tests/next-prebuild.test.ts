@@ -52,6 +52,42 @@ describe('Next Turbopack prebuild core', () => {
         };
     }
 
+    it('safelists a class the loader will only emit from an imported style object', () => {
+        // The loader compiles `sz={cardSz}` into a class name; this pass is
+        // what puts that name where Tailwind reads it. Resolve differently
+        // here and the page ships a class whose rule was never generated —
+        // strictly worse than neither of them compiling it, which is why the
+        // two share one resolver and one opt-in.
+        const root = tempRoot();
+        writeSource(root, 'app/styles.ts', 'export const cardSz = { p: 7 };\n');
+        const page = writeSource(
+            root,
+            'app/page.tsx',
+            "import { cardSz } from './styles';\nexport default () => <div sz={cardSz} />;\n",
+        );
+
+        const result = runNextPrebuild({
+            ...baseOptions(root, [page]),
+            importedStaticSz: true,
+        });
+
+        expect(readFileSync(result.safelistOutputPath, 'utf8')).toContain('p-7');
+    });
+
+    it('leaves the class out when the opt-in is absent', () => {
+        const root = tempRoot();
+        writeSource(root, 'app/styles.ts', 'export const cardSz = { p: 7 };\n');
+        const page = writeSource(
+            root,
+            'app/page.tsx',
+            "import { cardSz } from './styles';\nexport default () => <div sz={cardSz} />;\n",
+        );
+
+        const result = runNextPrebuild(baseOptions(root, [page]));
+
+        expect(readFileSync(result.safelistOutputPath, 'utf8')).not.toContain('p-7');
+    });
+
     it('transforms each file, writes per-file shards, and materializes a completed manifest', () => {
         const root = tempRoot();
         const fileA = writeSource(

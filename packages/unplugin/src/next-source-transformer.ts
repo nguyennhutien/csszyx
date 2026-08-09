@@ -303,6 +303,18 @@ function createNextSourceTransformCacheInput(
         globalVarAliases: normalizeGlobalVarAliasesForCache(
             input.compilerOptions?.globalVarAliases,
         ),
+        // The registry slice this file was compiled against is part of its
+        // identity. Without it an edited provider serves its importers the
+        // cached output built from the value it used to have — the one failure
+        // this lane refused to risk before it resolved anything at all.
+        crossModuleStatics:
+            input.compilerOptions?.crossModuleStatics === undefined
+                ? undefined
+                : JSON.stringify(input.compilerOptions.crossModuleStatics),
+        crossModuleSzObjects:
+            input.compilerOptions?.crossModuleSzObjects === undefined
+                ? undefined
+                : JSON.stringify(input.compilerOptions.crossModuleSzObjects),
         filename,
         source: input.source,
     };

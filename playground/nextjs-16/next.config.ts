@@ -44,6 +44,11 @@ if (enableTurboCsszyxLoader) {
                     config: {
                         mangleVars: false,
                     },
+                    // Set on EVERY csszyx rule, not just the one that needs it:
+                    // the flag is part of the project's generation identity, so
+                    // a rule missing it computes a different config hash and the
+                    // readiness gate rejects the build.
+                    importedStaticSz: true,
                 },
             },
         ],
@@ -59,6 +64,11 @@ if (enableTurboCsszyxLoader) {
                     config: {
                         mangleVars: false,
                     },
+                    // Matches `prebuild:turbo`'s --imported-static-sz. The two
+                    // must agree: this loader emits the class, that pass
+                    // safelists it, and the manifest hash gate fails loudly if
+                    // they drift.
+                    importedStaticSz: true,
                     // csszyxVersion / compilerVersion / nativeVersion / nextVersion are
                     // intentionally omitted so the loader resolves them from the
                     // installed @csszyx/unplugin and @csszyx/compiler package.json

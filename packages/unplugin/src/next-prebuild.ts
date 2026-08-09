@@ -6,6 +6,11 @@ import * as path from 'node:path';
 import type { TransformSourceCodeOptions } from '@csszyx/compiler';
 
 import type { JsonLike } from './next-cache-identity.js';
+import {
+    configWithImportedStaticSz,
+    resolveNextCrossModule,
+    withCrossModuleStatics,
+} from './next-cross-module.js';
 import { readPackageVersion } from './next-package-version.js';
 import { type AtomicWriteOptions, writeNextSafelistShard } from './next-safelist-state.js';
 import {
@@ -34,6 +39,13 @@ export interface NextPrebuildOptions {
     safelistOutputFile?: string;
     parserMode?: NextSourceParserMode;
     compilerOptions?: TransformSourceCodeOptions;
+    /**
+     * Whether a plain exported sz object may be compiled into its importers.
+     *
+     * Must match what the Turbopack loader is given: this pass writes the
+     * safelist the loader's emitted classes rely on.
+     */
+    importedStaticSz?: boolean;
     config?: JsonLike;
     env?: Record<string, string | undefined>;
     envKeys?: readonly string[];
@@ -101,7 +113,7 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
         cwd: options.cwd,
         cacheDir: options.cacheDir,
         safelistOutputFile: options.safelistOutputFile,
-        config: options.config ?? {},
+        config: configWithImportedStaticSz(options.config ?? {}, options.importedStaticSz),
         env: options.env ?? process.env,
         envKeys: options.envKeys,
         nextVersion,
@@ -128,11 +140,21 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
         }
 
         const source = readFileSync(filename, 'utf8');
+        // Resolved the same way the loader resolves it, from the same module.
+        // The prebuild is what puts these classes in the safelist; if the two
+        // disagreed, the loader would emit a class name whose rule was never
+        // generated — worse than neither of them compiling it.
+        const crossModule = resolveNextCrossModule({
+            filename,
+            source,
+            root: context.root,
+            importedStaticSz: options.importedStaticSz,
+        });
         const transform = transformNextSource({
             source,
             filename,
             parserMode: options.parserMode ?? 'rust',
-            compilerOptions: options.compilerOptions,
+            compilerOptions: withCrossModuleStatics(options.compilerOptions, crossModule.statics),
             cacheRoot,
             pluginVersion: csszyxVersion,
             compilerVersion,

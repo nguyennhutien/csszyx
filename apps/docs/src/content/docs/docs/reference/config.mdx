@@ -381,10 +381,28 @@ the second, so both are consulted. An alias csszyx cannot express as a literal
 prefix (a RegExp `find`, or a `paths` pattern with text after the `*`) is
 skipped, and its importers keep the runtime path.
 
+**On the Next.js Turbopack lane** the option lives on the loader, because the
+plugin never runs there. Pass it in both places — the loader emits the class
+and the prebuild is what safelists it, so one without the other ships a class
+name with no rule behind it:
+
+```js
+// next.config.mjs
+turbopack: csszyxTurbopack({}, { importedStaticSz: true })
+```
+
+```bash
+csszyx next prebuild --imported-static-sz
+```
+
+A mismatch is not silent: the flag is part of the generation identity, so the
+build fails with "csszyx config hash changed" rather than shipping classes with
+no CSS. Set it on **every** csszyx loader rule if you declare more than one.
+
 **What still falls back** — and keeps reporting that it did: barrels and
 re-exports, package specifiers, absolute specifiers, namespace
-(`import * as S`) and default imports, any nested position such as
-`sz={[cardSz, …]}` or `sz={{ ...cardSz }}`, and the Next.js Turbopack lane.
+(`import * as S`) and default imports, and any nested position such as
+`sz={[cardSz, …]}` or `sz={{ ...cardSz }}`.
 
 ### File Filters
 

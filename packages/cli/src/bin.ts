@@ -90,6 +90,7 @@ interface CacNextPrebuildOptions {
     outputFile?: string;
     cacheDir?: string;
     ignore?: string;
+    importedStaticSz?: boolean;
     json?: boolean;
 }
 
@@ -100,6 +101,7 @@ interface CacNextWatchOptions {
     outputFile?: string;
     cacheDir?: string;
     ignore?: string;
+    importedStaticSz?: boolean;
     debounceMs?: number | string;
 }
 
@@ -116,6 +118,7 @@ async function runNextPrebuildCommand(
         cacheDir: options.cacheDir,
         pattern,
         extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
+        importedStaticSz: options.importedStaticSz,
         json: options.json,
     });
     if (code !== 0) {
@@ -135,6 +138,7 @@ async function runNextWatchCommand(
         cacheDir: options.cacheDir,
         pattern,
         extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
+        importedStaticSz: options.importedStaticSz,
         debounceMs: options.debounceMs,
     });
     process.exitCode = code;
@@ -289,6 +293,10 @@ cli.command(
     )
     .option('--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)')
     .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
+    .option(
+        '--imported-static-sz',
+        'Compile a plain exported sz object into the modules that import it',
+    )
     .option('--json', 'Emit a single JSON result instead of formatted text')
     .action(runNextPrebuildCommand);
 
@@ -303,6 +311,10 @@ cli.command('next-watch [pattern]', 'Maintain the Next.js Turbopack csszyx safel
     )
     .option('--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)')
     .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
+    .option(
+        '--imported-static-sz',
+        'Compile a plain exported sz object into the modules that import it',
+    )
     .option('--debounce-ms <ms>', 'Safelist materialization debounce (default: 50)')
     .action(runNextWatchCommand);
 

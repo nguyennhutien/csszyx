@@ -33,6 +33,14 @@ export interface CsszyxTurbopackOptions {
     config?: Record<string, unknown>;
     /** Glob the loader applies to. Defaults to `'*.tsx'` (whole app). */
     glob?: string;
+    /**
+     * Compile a plain exported sz object into the modules that import it.
+     *
+     * Pass the SAME value to `csszyx next prebuild --imported-static-sz`: the
+     * prebuild writes the safelist for the classes the loader emits, so a lane
+     * that resolves more than the other emits class names with no rule.
+     */
+    importedStaticSz?: boolean;
 }
 
 /** Minimal shape of a Next.js `turbopack` config block (only what we touch). */
@@ -70,6 +78,9 @@ export function csszyxTurbopack(
     const config = options.config ?? { mangleVars: false };
 
     const loaderOptions: Record<string, unknown> = { parserMode, config };
+    if (options.importedStaticSz !== undefined) {
+        loaderOptions.importedStaticSz = options.importedStaticSz;
+    }
     if (safelistOutputFile !== undefined) {
         loaderOptions.safelistOutputFile = safelistOutputFile;
     }

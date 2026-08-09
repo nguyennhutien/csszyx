@@ -262,7 +262,26 @@ export function resolveProviderPath(
     seenPaths: ReadonlySet<string>,
     base: string,
 ): string | undefined {
-    return probeSpecifier(base, candidate => (seenPaths.has(candidate) ? candidate : undefined));
+    return resolveProviderPathWith(base, candidate => seenPaths.has(candidate));
+}
+
+/**
+ * Resolve one specifier base against an arbitrary existence test.
+ *
+ * The prescan lanes answer from the paths their walk saw; the Turbopack loader
+ * has no walk and answers from the filesystem. Both must land on the SAME file
+ * for the same specifier, so the probe order lives here once and each caller
+ * supplies only what "exists" means to it.
+ *
+ * @param base - Specifier resolved against the importing file's directory.
+ * @param exists - Whether one candidate path is a readable provider.
+ * @returns The provider path, or undefined when nothing matches.
+ */
+export function resolveProviderPathWith(
+    base: string,
+    exists: (candidate: string) => boolean,
+): string | undefined {
+    return probeSpecifier(base, candidate => (exists(candidate) ? candidate : undefined));
 }
 
 /**

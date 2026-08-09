@@ -42,4 +42,27 @@ test.describe('Next.js 16 Turbopack csszyx Loader', () => {
             )
             .toBe(true);
     });
+
+    test('compiles a style object imported through the tsconfig alias', async ({ page }) => {
+        // This lane has no whole-project prescan: the loader is handed one file
+        // and reads the provider from disk itself, then declares it so an edit
+        // to the style module invalidates its importers. A real Turbopack build
+        // is where that arrangement exists as itself.
+        await page.goto('/turbo-csszyx');
+
+        const target = page.getByTestId('next16-csszyx-cross-module');
+        await expect(target).toBeVisible();
+
+        // The class ships either way — the runtime fallback applies it too.
+        // Only a build that compiled the attribute puts the class where the
+        // prebuild could safelist it, so the rule is what tells them apart.
+        await expect
+            .poll(async () =>
+                target.evaluate(element => {
+                    const computed = getComputedStyle(element);
+                    return computed.paddingTop === '28px' && computed.letterSpacing !== 'normal';
+                }),
+            )
+            .toBe(true);
+    });
 });

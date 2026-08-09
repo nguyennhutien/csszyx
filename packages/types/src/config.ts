@@ -523,9 +523,13 @@ export interface BuildConfig {
      * v1 covers a direct `sz={binding}` from a named import, written either
      * relative or through a project alias — the bundler's `resolve.alias` and
      * `compilerOptions.paths` in `tsconfig.json` are both read. A barrel, a
-     * package specifier, a namespace or default import, and the Next.js
-     * Turbopack lane all keep the runtime path they have today, and keep
-     * reporting it.
+     * package specifier, and a namespace or default import keep the runtime
+     * path they have today, and keep reporting it.
+     *
+     * On the Next.js Turbopack lane this option lives on the loader instead:
+     * pass `importedStaticSz` to `csszyxTurbopack` AND
+     * `--imported-static-sz` to `csszyx next prebuild`. Both are required —
+     * the loader emits the class and the prebuild safelists it.
      *
      * @default false
      */
