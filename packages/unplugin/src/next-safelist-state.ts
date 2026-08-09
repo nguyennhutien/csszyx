@@ -378,9 +378,21 @@ export function atomicRenameWithRetry(
 }
 
 /**
+ * Whether the shard already on disk says the same thing as the one to write.
  *
- * @param filePath
- * @param shard
+ * The class list is compared, not just the source identity. A file's classes
+ * used to be a pure function of its own text, so matching `sourceHash` was
+ * enough to skip the write; cross-module resolution ended that. An importer
+ * whose style module changed recompiles to different classes from byte-identical
+ * source, and a check that stopped at the hash would keep the old shard — the
+ * emitted class would then name a rule the safelist never mentioned.
+ *
+ * `timestamp` and `pid` are deliberately excluded: they differ on every write
+ * and describe who wrote the shard, not what it says.
+ *
+ * @param filePath - Shard path.
+ * @param shard - Shard about to be written.
+ * @returns Whether writing would change nothing.
  */
 function isExistingShardEquivalent(filePath: string, shard: ShardFile): boolean {
     try {
@@ -388,11 +400,30 @@ function isExistingShardEquivalent(filePath: string, shard: ShardFile): boolean 
         return (
             parsed.version === 1 &&
             parsed.sourcePath === shard.sourcePath &&
-            parsed.sourceHash === shard.sourceHash
+            parsed.sourceHash === shard.sourceHash &&
+            sameClasses(parsed.classes, shard.classes)
         );
     } catch {
         return false;
     }
+}
+
+/**
+ * Compare two normalized class lists.
+ *
+ * Both sides come from {@link normalizeShardInput}, which sorts and dedupes, so
+ * position-wise equality is equality.
+ *
+ * @param left - Classes read from disk.
+ * @param right - Classes about to be written.
+ * @returns Whether the lists hold the same names.
+ */
+function sameClasses(left: readonly string[] | undefined, right: readonly string[]): boolean {
+    return (
+        Array.isArray(left) &&
+        left.length === right.length &&
+        left.every((value, index) => value === right[index])
+    );
 }
 
 /**
