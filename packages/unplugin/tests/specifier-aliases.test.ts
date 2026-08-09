@@ -120,6 +120,38 @@ describe('tsconfig paths', () => {
         expect(aliasesFromTsconfig(root)[0]?.replacement).toBe(`${root}/sr/c/`);
     });
 
+    it('does not let an escaped quote end a string early', () => {
+        // The escape is the other half of what a regex sweep gets wrong: after
+        // `\"` the string is still open, so a `//` that follows is content and
+        // not a comment. Cutting there would truncate the path being declared.
+        const root = projectWith({
+            'tsconfig.json':
+                '{ "compilerOptions": { "paths": { "@/*": ["./s\\"//rc/*"] } }, "x": "y" }\n',
+        });
+        expect(aliasesFromTsconfig(root)[0]?.replacement).toBe(`${root}/s"/rc/`);
+    });
+
+    it('reads a config whose block comment is never closed', () => {
+        // Malformed, and the scan must not invent a terminator: everything from
+        // the opener on is comment, and `JSON.parse` reports the truncation.
+        // Throwing from the scan instead would blame the wrong thing.
+        const root = projectWith({
+            'tsconfig.json':
+                '{ "compilerOptions": { "paths": { "@/*": ["./src/*"] } } }\n/* trailing\n',
+        });
+        expect(aliasesFromTsconfig(root)[0]?.find).toBe('@/');
+    });
+
+    it('gives up on a config whose slash is neither a comment nor content', () => {
+        // A lone `/` outside a string starts no comment, so it survives the
+        // strip and `JSON.parse` rejects the file. Treating it as a comment
+        // opener instead would silently swallow the rest of the config.
+        const root = projectWith({
+            'tsconfig.json': '{ "compilerOptions": { "paths": {} } } / stray\n',
+        });
+        expect(aliasesFromTsconfig(root)).toEqual([]);
+    });
+
     it('follows a relative extends to the config that declares paths', () => {
         const root = projectWith({
             'tsconfig.base.json': JSON.stringify({
