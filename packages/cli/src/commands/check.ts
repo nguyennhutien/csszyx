@@ -186,6 +186,83 @@ function reportIssues(issues: SzIssue[]): void {
     process.exitCode = 1;
 }
 
+/** What one scan pass learned about a project. */
+interface SzDiagnostics {
+    issues: SzIssue[];
+    /** Class name to the first file that produced it. */
+    classOrigins: Map<string, string>;
+}
+
+/**
+ * Lower every candidate file once, capturing diagnostics and class origins.
+ *
+ * The compiler reports unknown and aliased sz keys through `console.warn`,
+ * tagged `[csszyx]` and carrying `at <file>:<line>` once `rootDir` is set.
+ * They are captured into a structured report here rather than streaming one by
+ * one, which is also why the swap is undone in a `finally`: leaving a project
+ * scan's console patched behind would silence every later warning.
+ *
+ * @param files - Absolute paths to scan.
+ * @param cwd - Project root, for relative reporting.
+ * @returns The diagnostics and the class origins found.
+ */
+async function collectSzDiagnostics(files: string[], cwd: string): Promise<SzDiagnostics> {
+    const issues: SzIssue[] = [];
+    // One origin per class is enough to point at: the report answers "where did
+    // this come from", not "everywhere it appears".
+    const classOrigins = new Map<string, string>();
+    let currentFile = '';
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]): void => {
+        const message = args.map(String).join(' ');
+        if (message.startsWith('[csszyx]')) {
+            issues.push({ file: currentFile, message: message.replace(/^\[csszyx\]\s*/, '') });
+        }
+    };
+
+    try {
+        for (const file of files) {
+            const source = await readSzSource(file);
+            if (source === null) continue;
+            currentFile = path.relative(cwd, file);
+            recordFileClasses(source, file, cwd, currentFile, classOrigins);
+        }
+    } finally {
+        console.warn = originalWarn;
+    }
+    return { issues, classOrigins };
+}
+
+/**
+ * Lower one file and note which classes it was the first to produce.
+ *
+ * A file the reference parser cannot read yields no usable sz signal here; the
+ * bundler surfaces real parse errors at build time, so it is skipped rather
+ * than failing a whole-project scan.
+ *
+ * @param source - File contents.
+ * @param file - Absolute path, for diagnostics.
+ * @param cwd - Project root.
+ * @param relativePath - Path as reported to the user.
+ * @param classOrigins - Origins map, extended in place.
+ */
+function recordFileClasses(
+    source: string,
+    file: string,
+    cwd: string,
+    relativePath: string,
+    classOrigins: Map<string, string>,
+): void {
+    try {
+        const result = transformSourceCode(source, file, { rootDir: cwd });
+        for (const token of result.classes) {
+            if (!classOrigins.has(token)) classOrigins.set(token, relativePath);
+        }
+    } catch {
+        // Unreadable by the reference parser; see the note above.
+    }
+}
+
 /**
  * Scan the project for unknown/aliased `sz` keys and report them in one pass.
  *
@@ -218,42 +295,7 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     }
     s.succeed(`Found ${files.length} files`);
 
-    // The compiler reports unknown/aliased sz keys through console.warn, tagged
-    // `[csszyx]` and carrying `at <file>:<line>` once rootDir is set. Capture
-    // those into a structured report instead of letting them stream one-by-one.
-    const issues: SzIssue[] = [];
-    // One origin per class is enough to point at: the report answers "where did
-    // this come from", not "everywhere it appears".
-    const classOrigins = new Map<string, string>();
-    let currentFile = '';
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]): void => {
-        const message = args.map(String).join(' ');
-        if (message.startsWith('[csszyx]')) {
-            issues.push({ file: currentFile, message: message.replace(/^\[csszyx\]\s*/, '') });
-        }
-    };
-
-    try {
-        for (const file of files) {
-            const source = await readSzSource(file);
-            if (source === null) {
-                continue;
-            }
-            currentFile = path.relative(cwd, file);
-            try {
-                const result = transformSourceCode(source, file, { rootDir: cwd });
-                for (const token of result.classes) {
-                    if (!classOrigins.has(token)) classOrigins.set(token, currentFile);
-                }
-            } catch {
-                // A file the reference parser can't read yields no usable sz
-                // signal here; the bundler surfaces real parse errors at build.
-            }
-        }
-    } finally {
-        console.warn = originalWarn;
-    }
+    const { issues, classOrigins } = await collectSzDiagnostics(files, cwd);
 
     if (issues.length === 0) {
         printSuccess(`No sz issues found across ${files.length} files.`);

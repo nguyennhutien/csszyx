@@ -191,20 +191,56 @@ export function resolveCrossModuleStaticsFor(
     for (const specifier of importedSpecifiersIn(source)) {
         if (seen.has(specifier)) continue;
         seen.add(specifier);
-        for (const base of specifierBases(specifier, directory, aliases)) {
-            const entries = lookupRegistryKey(registry, base);
-            if (entries === undefined) continue;
-            for (const [name, recorded] of Object.entries(entries)) {
-                const channel = recorded.kind === 'szv-config' ? 'szvConfigs' : 'szObjects';
-                resolved[channel] ??= {};
-                const bySpecifier = resolved[channel];
-                bySpecifier[specifier] ??= {};
-                bySpecifier[specifier][name] = recorded.value;
-            }
-            break;
-        }
+        const entries = firstRegistryHit(registry, specifier, directory, aliases);
+        if (entries !== undefined) fileUnderSpecifier(resolved, specifier, entries);
     }
     return resolved;
+}
+
+/**
+ * The first registry entry any of a specifier's candidate paths answers with.
+ *
+ * Stops at the first hit: the probe order is the resolution order, so a later
+ * candidate matching too would mean the specifier denotes two modules.
+ *
+ * @param registry - The prescan-built registry.
+ * @param specifier - Specifier as written in the import.
+ * @param directory - Importing file's directory.
+ * @param aliases - Project alias table.
+ * @returns The module's exports, or undefined when nothing matches.
+ */
+function firstRegistryHit(
+    registry: SzvCrossModuleRegistry,
+    specifier: string,
+    directory: string,
+    aliases: readonly SpecifierAlias[],
+): Record<string, CrossModuleRegistryValue> | undefined {
+    for (const base of specifierBases(specifier, directory, aliases)) {
+        const entries = lookupRegistryKey(registry, base);
+        if (entries !== undefined) return entries;
+    }
+    return undefined;
+}
+
+/**
+ * File one module's exports under the specifier that named it, split by kind.
+ *
+ * @param resolved - Resolution being built.
+ * @param specifier - Specifier as written in the import.
+ * @param entries - The module's recorded exports.
+ */
+function fileUnderSpecifier(
+    resolved: ResolvedCrossModuleEntries,
+    specifier: string,
+    entries: Record<string, CrossModuleRegistryValue>,
+): void {
+    for (const [name, recorded] of Object.entries(entries)) {
+        const channel = recorded.kind === 'szv-config' ? 'szvConfigs' : 'szObjects';
+        resolved[channel] ??= {};
+        const bySpecifier = resolved[channel];
+        bySpecifier[specifier] ??= {};
+        bySpecifier[specifier][name] = recorded.value;
+    }
 }
 
 /**

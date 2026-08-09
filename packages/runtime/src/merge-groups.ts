@@ -351,7 +351,21 @@ function writeDeclarations(source: string, groups: SzcnThemeGroups, replace: boo
  * to keep merging until the process restarted.
  */
 function recomputeEffectiveTokens(): void {
-    const next: Record<ThemeCategory, Set<string>> = {
+    const next = collectDeclaredTokens();
+    dropAmbiguousTokens(next);
+    if (commitEffectiveTokens(next)) _generation++;
+}
+
+/** Effective token names per category, mid-recompute. */
+type TokensByCategory = Record<ThemeCategory, Set<string>>;
+
+/**
+ * Union every source's declarations, minus the tokens that shadow built-ins.
+ *
+ * @returns The declared tokens, one set per category.
+ */
+function collectDeclaredTokens(): TokensByCategory {
+    const next: TokensByCategory = {
         colors: new Set<string>(),
         textSizes: new Set<string>(),
         fontFamilies: new Set<string>(),
@@ -360,19 +374,41 @@ function recomputeEffectiveTokens(): void {
     for (const bucket of sourceDeclarations.values()) {
         for (const category of CATEGORIES) {
             for (const name of bucket[category]) {
-                if (COLLISION_BLOCKLIST[category].has(name)) {
-                    const builtInKind = category === 'colors' ? 'utility keyword' : 'value';
-                    warnOnce(
-                        `theme token "${name}" shadows a built-in ${builtInKind} — ` +
-                            'szcn will not group classes built from it (they keep the safe keep-both behaviour). ' +
-                            'Rename the token to enable precise merging.',
-                    );
-                    continue;
-                }
-                next[category].add(name);
+                if (!shadowsBuiltIn(category, name)) next[category].add(name);
             }
         }
     }
+    return next;
+}
+
+/**
+ * Whether a declared token collides with a built-in, reporting it once if so.
+ *
+ * @param category - Category the token was declared in.
+ * @param name - Token name.
+ * @returns True when the token must be left out of the effective set.
+ */
+function shadowsBuiltIn(category: ThemeCategory, name: string): boolean {
+    if (!COLLISION_BLOCKLIST[category].has(name)) return false;
+    const builtInKind = category === 'colors' ? 'utility keyword' : 'value';
+    warnOnce(
+        `theme token "${name}" shadows a built-in ${builtInKind} — ` +
+            'szcn will not group classes built from it (they keep the safe keep-both behaviour). ' +
+            'Rename the token to enable precise merging.',
+    );
+    return true;
+}
+
+/**
+ * Remove names a project declared in two categories that cannot be told apart.
+ *
+ * Dropped from BOTH sides rather than assigned to one: the classifier would
+ * otherwise merge classes the author meant to keep, which is the one outcome
+ * worse than not grouping them.
+ *
+ * @param next - Token sets being computed, mutated in place.
+ */
+function dropAmbiguousTokens(next: TokensByCategory): void {
     for (const pair of AMBIGUITY_PAIRS) {
         for (const name of next[pair.first]) {
             if (!next[pair.second].has(name)) continue;
@@ -381,10 +417,19 @@ function recomputeEffectiveTokens(): void {
             warnOnce(pair.message(name));
         }
     }
+}
 
-    // Classification only changes when a set gains or loses a name. Bumping the
-    // generation on a no-op re-registration (idempotent boot code, or an HMR
-    // re-execution of the generated module) would needlessly flush szcn's memo.
+/**
+ * Replace the live sets, reporting whether anything actually moved.
+ *
+ * Classification only changes when a set gains or loses a name. Bumping the
+ * generation on a no-op re-registration (idempotent boot code, or an HMR
+ * re-execution of the generated module) would needlessly flush szcn's memo.
+ *
+ * @param next - The computed token sets.
+ * @returns True when at least one category changed.
+ */
+function commitEffectiveTokens(next: TokensByCategory): boolean {
     let changed = false;
     for (const category of CATEGORIES) {
         const current = customTokens[category];
@@ -396,7 +441,7 @@ function recomputeEffectiveTokens(): void {
         for (const name of replacement) current.add(name);
         changed = true;
     }
-    if (changed) _generation++;
+    return changed;
 }
 
 /**

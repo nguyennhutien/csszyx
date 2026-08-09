@@ -125,22 +125,33 @@ describe('resolveCrossModuleStaticsFor', () => {
         ]);
     });
 
-    it('leaves an unknown emitted extension unresolved', () => {
-        const registry = registryWith('/app/src/styles.ts');
-        const source = "import { cardSz } from './styles.wasm';\n";
+    it.each([
+        {
+            shape: 'an unknown emitted extension',
+            provider: '/app/src/styles.ts',
+            source: "import { cardSz } from './styles.wasm';\n",
+        },
+        {
+            // The table is what makes a bare specifier mean anything. Absent
+            // one, `pkg/styles` denotes no path at all rather than being
+            // resolved against the importing file as if it were relative.
+            shape: 'a non-relative specifier with no alias table',
+            provider: '/app/node_modules/pkg/styles.ts',
+            source: "import { cardSz } from 'pkg/styles';\nimport { x } from '@alias/styles';\n",
+        },
+        {
+            shape: 'a relative specifier naming no recorded module',
+            provider: '/app/src/styles.ts',
+            source: "import { other } from './elsewhere';\n",
+        },
+    ])('resolves nothing for $shape', ({ provider, source }) => {
+        // Undefined rather than an empty object, for all three: an empty
+        // channel would still be serialized into the compiler options and the
+        // transform cache key, making a file that resolved nothing look
+        // different from one that was never asked.
         expect(
-            resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source).szvConfigs,
-        ).toBeUndefined();
-    });
-
-    it('resolves no non-relative specifier without an alias table', () => {
-        // The table is what makes a bare specifier mean anything. Absent one,
-        // `pkg/styles` denotes no path at all rather than being resolved
-        // against the importing file as if it were relative.
-        const registry = registryWith('/app/node_modules/pkg/styles.ts');
-        const source = "import { cardSz } from 'pkg/styles';\nimport { x } from '@alias/styles';\n";
-        expect(
-            resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source).szvConfigs,
+            resolveCrossModuleStaticsFor(registryWith(provider), '/app/src/Card.tsx', source)
+                .szvConfigs,
         ).toBeUndefined();
     });
 
@@ -212,14 +223,6 @@ describe('resolveCrossModuleStaticsFor', () => {
                 "import { useState } from '@/react';\n",
                 [{ find: '@/', replacement: '/app/src/', exact: false }],
             ).szvConfigs,
-        ).toBeUndefined();
-    });
-
-    it('returns undefined when nothing matches, not an empty object', () => {
-        const registry = registryWith('/app/src/styles.ts');
-        const source = "import { other } from './elsewhere';\n";
-        expect(
-            resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source).szvConfigs,
         ).toBeUndefined();
     });
 

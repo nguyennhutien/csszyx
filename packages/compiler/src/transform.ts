@@ -697,7 +697,7 @@ function resolveStaticSzExpression(
     const imported = importedSzObject(binding, crossModuleSzObjects);
     if (imported !== null) return t.stringLiteral(transform(imported).className);
     const declarator = foldableDeclarator(binding);
-    if (declarator === null || !declarator.node.init) return null;
+    if (!declarator?.node.init) return null;
     return tryStaticTransformNode(declarator.node.init, getBinding);
 }
 
@@ -2945,7 +2945,7 @@ function importedSzObject(
     const specifier = binding.path;
     if (!specifier.isImportSpecifier()) return null;
     const declaration = specifier.parentPath;
-    if (declaration === null || !declaration.isImportDeclaration()) return null;
+    if (!declaration?.isImportDeclaration()) return null;
     if (declaration.node.importKind === 'type' || specifier.node.importKind === 'type') return null;
     const imported = specifier.node.imported;
     const exportName = t.isIdentifier(imported) ? imported.name : imported.value;
@@ -2980,7 +2980,7 @@ function importedSzObject(
 function foldableDeclarator(
     binding: ResolvedBinding | null | undefined,
 ): babel.NodePath<t.VariableDeclarator> | null {
-    if (binding === null || binding === undefined || !binding.constant) return null;
+    if (!binding?.constant) return null;
     return binding.path.isVariableDeclarator() ? binding.path : null;
 }
 

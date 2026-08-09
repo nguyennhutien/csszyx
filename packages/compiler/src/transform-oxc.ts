@@ -6723,6 +6723,19 @@ function astValueToSzValue(
 }
 
 /**
+ * The export name an import specifier names, or `''` for any other shape.
+ *
+ * @param imported - The specifier's `imported` node, if it has one.
+ * @returns The export name, empty when the node is neither shape.
+ */
+function importedExportName(
+    imported: { type: string; name?: string; value?: unknown } | undefined,
+): string {
+    const named = imported?.type === 'Identifier' ? imported.name : imported?.value;
+    return typeof named === 'string' ? named : '';
+}
+
+/**
  * Map each locally-bound import name to the static sz object it refers to.
  *
  * Resolved once per file rather than per reference: the identifier path then
@@ -6766,8 +6779,11 @@ function collectImportedSzObjects(
             };
             if (specifier.importKind === 'type') continue;
             const imported = specifier.imported;
-            const exportName =
-                imported?.type === 'Identifier' ? imported.name : String(imported?.value ?? '');
+            // Narrowed rather than coerced: an import specifier's `imported` is
+            // either an identifier or a string literal, and `String()` over the
+            // second would render any other shape as `[object Object]` — a name
+            // that matches no export, silently, instead of being rejected.
+            const exportName = importedExportName(imported);
             const local = specifier.local?.name;
             const value = exportName === undefined ? undefined : exported[exportName];
             if (local !== undefined && value !== null && typeof value === 'object') {

@@ -53,7 +53,7 @@ export interface ThemeDiscovery {
  * @returns The path with POSIX separators and no trailing slash.
  */
 function normalize(value: string): string {
-    const posix = value.replace(/\\/g, '/');
+    const posix = value.replaceAll('\\', '/');
     return posix.endsWith('/') ? posix.slice(0, -1) : posix;
 }
 

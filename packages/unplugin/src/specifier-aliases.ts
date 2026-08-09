@@ -182,19 +182,32 @@ function loadPathsConfig(configPath: string, depth: number): PathsConfig | undef
  * @returns Aliases, each target kept as its own probe in declared order.
  */
 function pathsToAliases(base: string, paths: Record<string, unknown>): SpecifierAlias[] {
-    const aliases: SpecifierAlias[] = [];
-    for (const [pattern, targets] of Object.entries(paths)) {
-        const wildcard = pattern.indexOf('*');
-        if (wildcard !== -1 && wildcard !== pattern.length - 1) continue;
-        const exact = wildcard === -1;
-        const find = exact ? pattern : pattern.slice(0, -1);
-        for (const target of Array.isArray(targets) ? targets : [targets]) {
-            if (typeof target !== 'string') continue;
-            const body = target.endsWith('*') ? target.slice(0, -1) : target;
-            aliases.push({ find, replacement: absolute(base, body), exact });
-        }
-    }
-    return aliases;
+    return Object.entries(paths).flatMap(([pattern, targets]) =>
+        patternToAliases(base, pattern, targets),
+    );
+}
+
+/**
+ * Translate one `paths` pattern into an alias per declared target.
+ *
+ * @param base - Directory the targets resolve against.
+ * @param pattern - The pattern as written, wildcard included.
+ * @param targets - Its declared target or targets.
+ * @returns Aliases in declared order, empty when the pattern is inexpressible.
+ */
+function patternToAliases(base: string, pattern: string, targets: unknown): SpecifierAlias[] {
+    const wildcard = pattern.indexOf('*');
+    if (wildcard !== -1 && wildcard !== pattern.length - 1) return [];
+    const exact = wildcard === -1;
+    const find = exact ? pattern : pattern.slice(0, -1);
+    const declared = Array.isArray(targets) ? targets : [targets];
+    return declared
+        .filter((target): target is string => typeof target === 'string')
+        .map(target => ({
+            find,
+            replacement: absolute(base, target.endsWith('*') ? target.slice(0, -1) : target),
+            exact,
+        }));
 }
 
 /**
@@ -266,42 +279,86 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
  * @returns The parsed object.
  */
 function parseJsonc(text: string): Record<string, unknown> {
-    let out = '';
-    let inString = false;
+    const parsed: unknown = JSON.parse(stripComments(text).replace(/,(\s*[}\]])/g, '$1'));
+    return asRecord(parsed) ?? {};
+}
+
+/** A run of input consumed as one unit, and what of it survives. */
+interface ConsumedRun {
+    keep: string;
+    next: number;
+}
+
+/**
+ * Drop comments from JSON text, leaving string contents untouched.
+ *
+ * The scan is a loop over three cases rather than one state machine so each
+ * case can be read on its own: a string is copied whole, a comment is dropped
+ * whole, and anything else is one character.
+ *
+ * @param text - File contents.
+ * @returns The same text with comments removed.
+ */
+function stripComments(text: string): string {
+    const out: string[] = [];
     let index = 0;
     while (index < text.length) {
-        const char = text[index];
-        if (inString) {
-            if (char === '\\') {
-                out += char + (text[index + 1] ?? '');
-                index += 2;
-                continue;
-            }
-            if (char === '"') inString = false;
-            out += char;
-            index++;
+        const run = consumeString(text, index) ?? consumeComment(text, index);
+        if (run === undefined) {
+            out.push(text[index]);
+            index += 1;
             continue;
         }
-        if (char === '"') {
-            inString = true;
-            out += char;
-            index++;
-            continue;
-        }
-        if (char === '/' && text[index + 1] === '/') {
-            while (index < text.length && text[index] !== '\n') index++;
-            continue;
-        }
-        if (char === '/' && text[index + 1] === '*') {
-            index += 2;
-            while (index < text.length && !(text[index] === '*' && text[index + 1] === '/'))
-                index++;
-            index += 2;
-            continue;
-        }
-        out += char;
-        index++;
+        out.push(run.keep);
+        index = run.next;
     }
-    const parsed: unknown = JSON.parse(out.replace(/,(\s*[}\]])/g, '$1'));
-    return asRecord(parsed) ?? {};
+    return out.join('');
+}
+
+/**
+ * Consume a double-quoted string, escapes included, when one starts here.
+ *
+ * Copied verbatim: a `//` inside a string is not a comment, and an escaped
+ * quote does not end one — the two things a pattern sweep gets wrong.
+ *
+ * @param text - File contents.
+ * @param start - Index to read from.
+ * @returns The run, or undefined when no string starts here.
+ */
+function consumeString(text: string, start: number): ConsumedRun | undefined {
+    if (text[start] !== '"') return undefined;
+    let index = start + 1;
+    while (index < text.length) {
+        const char = text[index];
+        if (char === '\\') {
+            index += 2;
+            continue;
+        }
+        index += 1;
+        if (char === '"') break;
+    }
+    return { keep: text.slice(start, index), next: index };
+}
+
+/**
+ * Consume a line or block comment when one starts here.
+ *
+ * An unterminated block comment consumes the rest of the file, which leaves
+ * `JSON.parse` to report the truncation rather than this scan inventing one.
+ *
+ * @param text - File contents.
+ * @param start - Index to read from.
+ * @returns The run, or undefined when no comment starts here.
+ */
+function consumeComment(text: string, start: number): ConsumedRun | undefined {
+    if (text[start] !== '/') return undefined;
+    if (text[start + 1] === '/') {
+        const end = text.indexOf('\n', start);
+        return { keep: '', next: end === -1 ? text.length : end };
+    }
+    if (text[start + 1] === '*') {
+        const end = text.indexOf('*/', start + 2);
+        return { keep: '', next: end === -1 ? text.length : end + 2 };
+    }
+    return undefined;
 }

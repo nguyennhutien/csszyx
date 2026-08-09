@@ -9,7 +9,6 @@ import {
     SUGGESTION_MAP as GENERATED_SUGGESTION_MAP,
     KNOWN_VARIANTS,
     PROPERTY_MAP,
-    SPECIAL_VARIANTS,
     valueSuggestionsFor,
 } from '@csszyx/tooling-metadata';
 import * as vscode from 'vscode';
@@ -119,6 +118,9 @@ export function getValueCompletions(key: string): vscode.CompletionItem[] {
     });
 }
 
+// Only re-exported, never read here, so it travels straight through rather
+// than being imported into this module's scope first.
+export { SPECIAL_VARIANTS } from '@csszyx/tooling-metadata';
 // Export compiler data for use by diagnostic-provider and hover-provider
 // Re-export for use by diagnostic-provider (avoids a second import of compiler/browser)
-export { BOOLEAN_SHORTHANDS, KNOWN_VARIANTS, PROPERTY_MAP, SPECIAL_VARIANTS };
+export { BOOLEAN_SHORTHANDS, KNOWN_VARIANTS, PROPERTY_MAP };

@@ -1450,13 +1450,14 @@ function needsArbitraryBrackets(value: string): boolean {
  */
 function containsCssFunctionCall(value: string): boolean {
     for (let at = value.indexOf('('); at > 0; at = value.indexOf('(', at + 1)) {
-        if (value.charCodeAt(at - 1) === 45 && value.startsWith('--', at + 1)) {
+        if (value.codePointAt(at - 1) === 45 && value.startsWith('--', at + 1)) {
             continue;
         }
         let start = at;
-        // charCodeAt, not codePointAt: the classifier only compares ASCII
-        // ranges, and its in-range result needs no nullish fallback.
-        while (start > 0 && isAsciiIdentifierCode(value.charCodeAt(start - 1))) {
+        // `?? -1` matches the scan below: the index is in range here, and a
+        // sentinel outside every ASCII range keeps the predicate total rather
+        // than asserting that.
+        while (start > 0 && isAsciiIdentifierCode(value.codePointAt(start - 1) ?? -1)) {
             start -= 1;
         }
         if (start < at && !value.startsWith('--', start)) {

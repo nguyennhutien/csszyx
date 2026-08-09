@@ -75,6 +75,21 @@ function signatureOf(files: readonly string[]): string {
 }
 
 /**
+ * Whether a cached entry still describes the stylesheets on disk.
+ *
+ * A predicate rather than an inline condition because the two halves answer
+ * different questions — was anything cached, and has it gone stale — and only
+ * the second one costs a filesystem read.
+ *
+ * @param cached - Entry for this root, if one was stored.
+ * @returns True when the entry may be returned as is.
+ */
+function isCacheUsable(cached: CachedGroups | undefined): cached is CachedGroups {
+    if (cached === undefined) return false;
+    return signatureOf(cached.watch) === cached.signature;
+}
+
+/**
  * Write the registration module for a project and return it with its watch set.
  *
  * Returns a null `file` when no stylesheet declares tokens in a category `szcn`
@@ -89,7 +104,7 @@ function signatureOf(files: readonly string[]): string {
  */
 export function ensureThemeGroupsFile(root: string, outputDir: string): ThemeGroupsFile {
     const cached = cacheByRoot.get(root);
-    if (cached && signatureOf(cached.watch) === cached.signature) {
+    if (isCacheUsable(cached)) {
         return { file: cached.file, watch: cached.watch };
     }
 
@@ -138,7 +153,7 @@ export function ensureThemeGroupsFile(root: string, outputDir: string): ThemeGro
  * @returns A specifier that resolves from `fromFile`.
  */
 export function themeGroupsSpecifier(fromFile: string, themeGroupsFile: string): string {
-    const relative = path.relative(path.dirname(fromFile), themeGroupsFile).replace(/\\/g, '/');
+    const relative = path.relative(path.dirname(fromFile), themeGroupsFile).replaceAll('\\', '/');
     // `startsWith('.')` is NOT the test: the generated file lives in a DOT
     // directory, so a sibling import reads `.csszyx/theme-groups.mjs`, which a
     // bundler resolves as a package name rather than a path.

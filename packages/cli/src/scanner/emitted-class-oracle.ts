@@ -251,7 +251,11 @@ export async function findTailwindCssEntry(cwd: string): Promise<string | null> 
  */
 export async function findTailwindCssEntries(cwd: string): Promise<string[]> {
     const files = await fg('**/*.css', { cwd, ignore: IGNORED_CSS_DIRS, absolute: true });
-    const byDepth = files.sort((a, b) => {
+    // Sorted as its own statement over a copy: the ordering is what the rest of
+    // this function reads, and reordering the glob result in place would leave
+    // that dependency invisible at the call site.
+    const byDepth = [...files];
+    byDepth.sort((a, b) => {
         const depth = a.split(path.sep).length - b.split(path.sep).length;
         return depth === 0 ? a.localeCompare(b) : depth;
     });
