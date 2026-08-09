@@ -112,6 +112,13 @@ const nextConfig: NextConfig = {
 
         config.plugins.push(
             csszyxWebpack({
+                build: {
+                    // The alias-import route imports its style object from a
+                    // module named through `@/`, which Next maps in tsconfig
+                    // rather than in the webpack alias table. Opted in here so
+                    // the suite covers that resolution on a real Next build.
+                    importedStaticSz: true,
+                },
                 development: {
                     debug: true,
                 },

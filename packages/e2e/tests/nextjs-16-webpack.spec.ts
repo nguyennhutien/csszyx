@@ -40,4 +40,25 @@ test.describe('Next.js 16 Webpack Playground', () => {
         expect(checksum).toBeTruthy();
         expect(checksum).toHaveLength(16);
     });
+
+    test('compiles a style object imported through the tsconfig alias', async ({ page }) => {
+        // Next maps `@/*` with a resolver plugin, so the alias table webpack
+        // hands its plugins says nothing about it — csszyx has to read
+        // tsconfig to resolve the provider. A real Next build is the only
+        // place that arrangement exists as itself rather than as a fixture.
+        await page.goto('/alias-import');
+        const card = page.getByTestId('alias-card');
+        await expect(card).toBeVisible();
+
+        // The class is present either way: the runtime fallback applies it too.
+        // What separates compiled from fallen-back is whether anything told
+        // Tailwind the class exists, and that shows up as the rule itself.
+        const styles = await card.evaluate(element => {
+            const computed = getComputedStyle(element);
+            return { paddingTop: computed.paddingTop, letterSpacing: computed.letterSpacing };
+        });
+
+        expect(Number.parseFloat(styles.paddingTop)).toBeGreaterThan(0);
+        expect(styles.letterSpacing).not.toBe('normal');
+    });
 });
