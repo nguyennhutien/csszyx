@@ -74,7 +74,10 @@ describe('Next Turbopack prebuild core', () => {
         expect(readFileSync(result.safelistOutputPath, 'utf8')).toContain('p-7');
     });
 
-    it('leaves the class out when the opt-in is absent', () => {
+    it('leaves the class out when the setting is turned off', () => {
+        // Turning it off is the supported way back to file-local behaviour, so
+        // it has to actually withdraw the class from the safelist — not merely
+        // stop the loader compiling it.
         const root = tempRoot();
         writeSource(root, 'app/styles.ts', 'export const cardSz = { p: 7 };\n');
         const page = writeSource(
@@ -83,7 +86,10 @@ describe('Next Turbopack prebuild core', () => {
             "import { cardSz } from './styles';\nexport default () => <div sz={cardSz} />;\n",
         );
 
-        const result = runNextPrebuild(baseOptions(root, [page]));
+        const result = runNextPrebuild({
+            ...baseOptions(root, [page]),
+            importedStaticSz: false,
+        });
 
         expect(readFileSync(result.safelistOutputPath, 'utf8')).not.toContain('p-7');
     });

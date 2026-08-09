@@ -92,9 +92,9 @@ describe('the Turbopack loader and an imported style object', () => {
         expect(ctx.dependencies).toContain(join(root, 'app/styles.ts'));
     });
 
-    it('keeps the runtime path without the opt-in', () => {
+    it('keeps the runtime path when the setting is turned off', () => {
         const { ctx } = project();
-        const result = runNextTurboLoader(IMPORTER, ctx, OPTIONS);
+        const result = runNextTurboLoader(IMPORTER, ctx, { ...OPTIONS, importedStaticSz: false });
 
         expect(result.code).toContain('_sz(cardSz)');
         expect(result.code).not.toContain('className="p-7"');

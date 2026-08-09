@@ -295,7 +295,11 @@ cli.command(
     .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
     .option(
         '--imported-static-sz',
-        'Compile a plain exported sz object into the modules that import it',
+        'Compile a plain exported sz object into the modules that import it (default)',
+    )
+    .option(
+        '--no-imported-static-sz',
+        'Leave imported sz objects to the runtime; pass the same to the loader',
     )
     .option('--json', 'Emit a single JSON result instead of formatted text')
     .action(runNextPrebuildCommand);
@@ -313,7 +317,11 @@ cli.command('next-watch [pattern]', 'Maintain the Next.js Turbopack csszyx safel
     .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
     .option(
         '--imported-static-sz',
-        'Compile a plain exported sz object into the modules that import it',
+        'Compile a plain exported sz object into the modules that import it (default)',
+    )
+    .option(
+        '--no-imported-static-sz',
+        'Leave imported sz objects to the runtime; pass the same to the loader',
     )
     .option('--debounce-ms <ms>', 'Safelist materialization debounce (default: 50)')
     .action(runNextWatchCommand);

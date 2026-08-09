@@ -24,6 +24,7 @@ import {
     extractCrossModuleRegistryEntries,
     type TransformSourceCodeOptions,
 } from '@csszyx/compiler';
+import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
 
 import {
     importedSpecifiersIn,
@@ -54,6 +55,21 @@ export interface NextCrossModuleInput {
     root: string;
     /** Whether plain exported sz objects may be compiled. */
     importedStaticSz?: boolean;
+}
+
+/**
+ * Resolve the opt-in against the shared default.
+ *
+ * Every Next entry point takes it as an optional boolean, and each one has to
+ * land on the same answer for an unset value: the loader emits the classes and
+ * the prebuild safelists them, so two lanes disagreeing about the default
+ * would ship class names with no rule behind them.
+ *
+ * @param value - The option as configured, if it was set at all.
+ * @returns Whether imported static sz objects are compiled.
+ */
+export function resolveImportedStaticSz(value: boolean | undefined): boolean {
+    return value ?? DEFAULT_BUILD_CONFIG.importedStaticSz ?? false;
 }
 
 /**
@@ -147,7 +163,9 @@ function recordEntries(
     input: NextCrossModuleInput,
 ): void {
     for (const entry of entries) {
-        if (entry.kind === 'sz-object' && input.importedStaticSz !== true) continue;
+        if (entry.kind === 'sz-object' && !resolveImportedStaticSz(input.importedStaticSz)) {
+            continue;
+        }
         const channel = entry.kind === 'szv-config' ? 'szvConfigs' : 'szObjects';
         statics[channel] ??= {};
         const bySpecifier = statics[channel];
@@ -187,19 +205,24 @@ export function withCrossModuleStatics(
  * gate already catches config drift between the two — putting the flag in that
  * config is what makes THIS drift loud instead of silent.
  *
- * Absent or false adds nothing, so a project that never opts in keeps the
- * hash it has today.
+ * The RESOLVED value is folded in, never the raw option. Recording only the
+ * `true` case would make "off" and "unset" hash alike, which was harmless
+ * while unset meant off and became a silent trap once it stopped meaning that:
+ * a loader turned off against a prebuild left on would agree on the hash and
+ * disagree on the output.
  *
  * @param config - Config as given.
  * @param importedStaticSz - The opt-in, if set.
- * @returns Config carrying the opt-in when it is on.
+ * @returns Config carrying the resolved opt-in.
  */
 export function configWithImportedStaticSz(
     config: JsonLike,
     importedStaticSz: boolean | undefined,
 ): JsonLike {
-    if (importedStaticSz !== true) return config;
-    return { ...(config as Record<string, unknown>), importedStaticSz: true } as JsonLike;
+    return {
+        ...(config as Record<string, unknown>),
+        importedStaticSz: resolveImportedStaticSz(importedStaticSz),
+    } as JsonLike;
 }
 
 /**

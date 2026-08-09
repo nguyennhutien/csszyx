@@ -36,9 +36,11 @@ export interface CsszyxTurbopackOptions {
     /**
      * Compile a plain exported sz object into the modules that import it.
      *
-     * Pass the SAME value to `csszyx next prebuild --imported-static-sz`: the
-     * prebuild writes the safelist for the classes the loader emits, so a lane
-     * that resolves more than the other emits class names with no rule.
+     * On unless set. Whatever it is here, the prebuild must resolve it the
+     * same way — it writes the safelist for the classes the loader emits, so a
+     * lane that resolves more than the other emits class names with no rule.
+     * To turn it off, pass `false` here AND `--no-imported-static-sz` to
+     * `csszyx next prebuild` and `csszyx next watch`.
      */
     importedStaticSz?: boolean;
 }

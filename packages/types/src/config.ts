@@ -514,11 +514,13 @@ export interface BuildConfig {
      * With this on, the prescan records those exports and each importer lowers
      * them exactly as it would the same literal written locally.
      *
-     * Off by default because it changes emitted output for code that already
-     * builds. A project that MUTATES an exported style object after declaring
-     * it is relying on the runtime fallback, and compiling the declared value
-     * would be correct by the contract while still being a change that project
-     * has to notice. See the shared-style-object contract in the docs.
+     * On by default, because the alternative default is a build that reports
+     * missing CSS and names this option as the way out — guidance, not a
+     * setting. Turning it OFF is still supported and is the reason it remains
+     * a setting at all: resolving across modules means a file's output is no
+     * longer a pure function of its own text, and a project that hits a
+     * cross-file resolution problem needs a one-line way back to the
+     * file-local behaviour rather than a downgrade.
      *
      * v1 covers a direct `sz={binding}` from a named import, written either
      * relative or through a project alias — the bundler's `resolve.alias` and
@@ -526,12 +528,16 @@ export interface BuildConfig {
      * package specifier, and a namespace or default import keep the runtime
      * path they have today, and keep reporting it.
      *
-     * On the Next.js Turbopack lane this option lives on the loader instead:
-     * pass `importedStaticSz` to `csszyxTurbopack` AND
-     * `--imported-static-sz` to `csszyx next prebuild`. Both are required —
-     * the loader emits the class and the prebuild safelists it.
+     * On the Next.js Turbopack lane this option lives on the loader instead,
+     * and the loader and the prebuild must resolve it the SAME way — the
+     * loader emits the class and the prebuild safelists it, so a lane running
+     * with it against one without it ships class names with no rule. Both
+     * default to on; to turn it off, pass `importedStaticSz: false` to
+     * `csszyxTurbopack` AND `--no-imported-static-sz` to `csszyx next
+     * prebuild` and `csszyx next watch`. A mismatch fails the build on the
+     * config hash rather than shipping the broken output.
      *
-     * @default false
+     * @default true
      */
     importedStaticSz?: boolean;
 }
@@ -692,7 +698,7 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     cache: true,
     astBudgetLimit: 50000,
     parser: 'rust',
-    importedStaticSz: false,
+    importedStaticSz: true,
 };
 
 /**

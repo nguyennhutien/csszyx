@@ -10,10 +10,14 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
+import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { clearNextAliasCache, resolveNextCrossModule } from '../src/next-cross-module.js';
+import {
+    clearNextAliasCache,
+    configWithImportedStaticSz,
+    resolveNextCrossModule,
+} from '../src/next-cross-module.js';
 
 const roots: string[] = [];
 
@@ -46,6 +50,35 @@ beforeEach(() => {
 
 afterEach(() => {
     for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+describe('the setting an unset lane resolves to', () => {
+    it('compiles an imported object when nothing configures it', () => {
+        // The default is what almost every project runs, and it is the one
+        // configuration no explicit-value test can cover. Left unpinned, a lane
+        // that forgot the shared fallback would read `undefined` as off and
+        // quietly stop compiling for everyone who never set it.
+        const root = projectWith({ 'app/styles.ts': SZ_OBJECT });
+        const resolved = resolveNextCrossModule({
+            filename: join(root, 'app/page.tsx'),
+            source: "import { cardSz } from './styles';\n",
+            root,
+        });
+
+        expect(resolved.statics.szObjects?.['./styles']).toBeDefined();
+    });
+
+    it('folds the resolved value into the identity config, not the raw option', () => {
+        // The loader and the prebuild reach this from different processes. If
+        // an unset option contributed nothing, one lane turned off and one
+        // left alone would hash the SAME and emit different output — the exact
+        // drift the hash gate exists to catch.
+        expect(configWithImportedStaticSz({}, undefined)).toEqual({
+            importedStaticSz: DEFAULT_BUILD_CONFIG.importedStaticSz,
+        });
+        expect(configWithImportedStaticSz({}, false)).toEqual({ importedStaticSz: false });
+        expect(configWithImportedStaticSz({}, true)).toEqual({ importedStaticSz: true });
+    });
 });
 
 describe('resolving one file against the disk', () => {
@@ -84,16 +117,16 @@ describe('resolving one file against the disk', () => {
         expect(Object.keys(resolved.statics.szObjects?.['@/app/styles'] ?? {})).toEqual(['cardSz']);
     });
 
-    it('resolves an szv factory without the opt-in', () => {
+    it('resolves an szv factory even with sz objects turned off', () => {
         // Two kinds, two rules. A variant factory is an explicit csszyx call in
-        // the provider's own text, so compiling it changes nothing a project
-        // did not ask for; a plain object could be anything, which is why only
-        // that one waits for the flag.
+        // the provider's own text, so the setting has nothing to say about it;
+        // turning the setting off withdraws plain objects only.
         const root = projectWith({ 'app/styles.ts': `${SZV_FACTORY}${SZ_OBJECT}` });
         const resolved = resolveNextCrossModule({
             filename: join(root, 'app/page.tsx'),
             source: "import { rowSz, cardSz } from './styles';\n",
             root,
+            importedStaticSz: false,
         });
 
         expect(Object.keys(resolved.statics.szvConfigs?.['./styles'] ?? {})).toEqual(['rowSz']);

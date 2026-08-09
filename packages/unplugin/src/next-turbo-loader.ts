@@ -57,10 +57,11 @@ export interface NextTurboLoaderOptions {
     /**
      * Whether a plain exported sz object may be compiled into its importers.
      *
-     * The same opt-in the other lanes spell `build.importedStaticSz`, and it
-     * has to be given to `csszyx next prebuild` too — the prebuild is what
-     * safelists the classes the loader then emits, so a lane that resolves
-     * more than the other would emit class names with no rule behind them.
+     * The same setting the other lanes spell `build.importedStaticSz`, on
+     * unless given, and `csszyx next prebuild` has to resolve it identically —
+     * the prebuild is what safelists the classes the loader then emits, so a
+     * lane that resolves more than the other would emit class names with no
+     * rule behind them.
      */
     importedStaticSz?: boolean;
 }

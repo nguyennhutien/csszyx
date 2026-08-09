@@ -44,11 +44,10 @@ if (enableTurboCsszyxLoader) {
                     config: {
                         mangleVars: false,
                     },
-                    // Set on EVERY csszyx rule, not just the one that needs it:
-                    // the flag is part of the project's generation identity, so
-                    // a rule missing it computes a different config hash and the
-                    // readiness gate rejects the build.
-                    importedStaticSz: true,
+                    // Imported static sz objects are left at their default
+                    // here on purpose: the loader and the prebuild resolve it
+                    // independently, and the default is the one value no
+                    // explicit test can prove they agree on.
                 },
             },
         ],
@@ -64,11 +63,10 @@ if (enableTurboCsszyxLoader) {
                     config: {
                         mangleVars: false,
                     },
-                    // Matches `prebuild:turbo`'s --imported-static-sz. The two
-                    // must agree: this loader emits the class, that pass
-                    // safelists it, and the manifest hash gate fails loudly if
-                    // they drift.
-                    importedStaticSz: true,
+                    // Left at its default like the rule above. Were the two
+                    // rules to resolve it differently they would compute
+                    // different config hashes, and the readiness gate would
+                    // reject the build rather than ship the mismatch.
                     // csszyxVersion / compilerVersion / nativeVersion / nextVersion are
                     // intentionally omitted so the loader resolves them from the
                     // installed @csszyx/unplugin and @csszyx/compiler package.json
@@ -125,9 +123,9 @@ const nextConfig: NextConfig = {
                 build: {
                     // The alias-import route imports its style object from a
                     // module named through `@/`, which Next maps in tsconfig
-                    // rather than in the webpack alias table. Opted in here so
-                    // the suite covers that resolution on a real Next build.
-                    importedStaticSz: true,
+                    // rather than in the webpack alias table. Left at its
+                    // default so the suite covers that resolution as a real
+                    // Next build meets it, unconfigured.
                 },
                 development: {
                     debug: true,

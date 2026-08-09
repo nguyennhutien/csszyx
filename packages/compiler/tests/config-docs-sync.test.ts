@@ -35,9 +35,13 @@ describe('config docs sync', () => {
     });
 
     it('keeps the documented build.importedStaticSz default in sync with shared config', () => {
-        // A feature that changes emitted output must not be able to become
-        // default-on in the config while the docs still call it opt-in —
+        // A setting that changes emitted output must not be able to move in the
+        // config while the docs still describe the value it used to have —
         // whichever a reader believes, one of them would be lying.
+        //
+        // Deliberately agnostic about WHICH default is right: it reads the
+        // literal and requires the other two sources to say the same thing, so
+        // changing the default stays a two-file edit and cannot land half done.
         const configDocs = readFileSync(
             join(REPO_ROOT, 'apps/docs/src/content/docs/docs/reference/config.mdx'),
             'utf8',
@@ -51,11 +55,14 @@ describe('config docs sync', () => {
             defaultMatch,
             'DEFAULT_BUILD_CONFIG.importedStaticSz must be a boolean literal',
         ).not.toBeNull();
+        const configured = defaultMatch?.[1];
 
-        expect(defaultMatch?.[1]).toBe('false');
-        expect(typesConfig).toContain('* @default false');
-        expect(configDocs).toContain('| `importedStaticSz` | `false`');
-        expect(configDocs).toContain('Opt-in, default `false`');
+        expect(typesConfig, 'the JSDoc @default must match the exported default').toContain(
+            `* @default ${configured}`,
+        );
+        expect(configDocs, 'the config reference table must match the exported default').toContain(
+            `| \`importedStaticSz\` | \`${configured}\``,
+        );
     });
 
     it('keeps the documented production.mangle default in sync with shared config', () => {
