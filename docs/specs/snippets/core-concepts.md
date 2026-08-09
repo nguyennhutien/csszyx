@@ -90,14 +90,15 @@ value position — `p`, `bg`, `m`, `w`, `text`, …, not just font-size):
 
 Handling `group-*`, `peer-*`, and arbitrary variants.
 
-| Concept                | CSS Rule                              | Tailwind v4 Class         | `sz` Prop (Object Syntax)                   | Note                                                          |
-| :--------------------- | :------------------------------------ | :------------------------ | :------------------------------------------ | :------------------------------------------------------------ |
-| **Group Hover**        | `.group:hover .group-hover:text-blue` | `group-hover:text-blue`   | `{ group: { hover: { color: 'blue' } } }`   | **Sugar**: Nested `group` key acts as modifier scope.         |
-| **Peer Focus**         | `.peer:focus ~ .peer-focus:text-blue` | `peer-focus:text-blue`    | `{ peer: { focus: { color: 'blue' } } }`    | **Sugar**: Nested `peer` key.                                 |
-| **Data Attribute**     | `&[data-active] (etc)`                | `data-[active]:text-blue` | `{ data: { active: { color: 'blue' } } }`   | **Sugar**: Maps to `data-[key]`.                              |
-| **ARIA Attribute**     | `&[aria-expanded="true"] (etc)`       | `aria-expanded:text-blue` | `{ aria: { expanded: { color: 'blue' } } }` | **Sugar**: Maps to `aria-[key]`.                              |
-| **Arbitrary Variant**  | `& > span`                            | `[&>span]:text-blue`      | `{ '[& > span]': { color: 'blue' } }`       |                                                               |
-| **Important Modifier** | `color: red !important`               | `text-red-500!`           | `{ color: 'red-500!' }`                     | **New**: Trailing `!` in value maps to trailing `!` in class. |
+| Concept                         | CSS Rule                              | Tailwind v4 Class         | `sz` Prop (Object Syntax)                   | Note                                                                                                                                               |
+| :------------------------------ | :------------------------------------ | :------------------------ | :------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Group Hover**                 | `.group:hover .group-hover:text-blue` | `group-hover:text-blue`   | `{ group: { hover: { color: 'blue' } } }`   | **Sugar**: Nested `group` key acts as modifier scope.                                                                                              |
+| **Peer Focus**                  | `.peer:focus ~ .peer-focus:text-blue` | `peer-focus:text-blue`    | `{ peer: { focus: { color: 'blue' } } }`    | **Sugar**: Nested `peer` key.                                                                                                                      |
+| **Data Attribute**              | `&[data-active] (etc)`                | `data-[active]:text-blue` | `{ data: { active: { color: 'blue' } } }`   | **Sugar**: Maps to `data-[key]`.                                                                                                                   |
+| **ARIA Attribute**              | `&[aria-expanded="true"] (etc)`       | `aria-expanded:text-blue` | `{ aria: { expanded: { color: 'blue' } } }` | **Sugar**: Maps to `aria-[key]`.                                                                                                                   |
+| **Arbitrary Variant**           | `& > span`                            | `[&>span]:text-blue`      | `{ '[& > span]': { color: 'blue' } }`       |                                                                                                                                                    |
+| **Important Modifier**          | `color: red !important`               | `text-red-500!`           | `{ color: 'red-500!' }`                     | **New**: Trailing `!` in value maps to trailing `!` in class.                                                                                      |
+| **Important + arbitrary value** | `font-size: 14px !important`          | `text-[14px]!`            | `{ text: '14px!' }`                         | The `!` sits **outside** the brackets. A value that needs brackets is decided without the `!` attached, so `14px` is still recognised as a length. |
 
 ## Style Conflict Management
 

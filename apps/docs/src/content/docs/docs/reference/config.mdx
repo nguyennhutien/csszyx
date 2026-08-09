@@ -392,12 +392,18 @@ turbopack: csszyxTurbopack({}, { importedStaticSz: true })
 ```
 
 ```bash
+# build
 csszyx next prebuild --imported-static-sz
+# dev
+csszyx next watch --imported-static-sz
 ```
 
-A mismatch is not silent: the flag is part of the generation identity, so the
-build fails with "csszyx config hash changed" rather than shipping classes with
-no CSS. Set it on **every** csszyx loader rule if you declare more than one.
+All three have to agree — the loader, the prebuild, and the watcher. A mismatch
+is not silent in a production build: the flag is part of the generation
+identity, so it fails with "csszyx config hash changed" rather than shipping
+classes with no CSS. In a dev session it is quieter, and a watcher left without
+the flag maintains a second identity beside the loader's. Set it on **every**
+csszyx loader rule too, if you declare more than one.
 
 **What still falls back** — and keeps reporting that it did: barrels and
 re-exports, package specifiers, absolute specifiers, namespace
