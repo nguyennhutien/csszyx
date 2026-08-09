@@ -10,13 +10,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+    importedSpecifiersIn,
     mayExportSzvFactories,
     recordSzObjectRegistryFile,
     recordSzvRegistryFile,
-    relativeSpecifiersIn,
     resolveCrossModuleStaticsFor,
     resolveProviderPath,
     type SzvCrossModuleRegistry,
+    specifierBases,
 } from '../src/cross-module-registry.js';
 
 const STYLES_SOURCE =
@@ -132,11 +133,85 @@ describe('resolveCrossModuleStaticsFor', () => {
         ).toBeUndefined();
     });
 
-    it('never resolves package or aliased specifiers', () => {
+    it('resolves no non-relative specifier without an alias table', () => {
+        // The table is what makes a bare specifier mean anything. Absent one,
+        // `pkg/styles` denotes no path at all rather than being resolved
+        // against the importing file as if it were relative.
         const registry = registryWith('/app/node_modules/pkg/styles.ts');
         const source = "import { cardSz } from 'pkg/styles';\nimport { x } from '@alias/styles';\n";
         expect(
             resolveCrossModuleStaticsFor(registry, '/app/src/Card.tsx', source).szvConfigs,
+        ).toBeUndefined();
+    });
+
+    it('resolves an aliased specifier through the same probes', () => {
+        const registry = registryWith('/app/src/styles.ts');
+        const aliases = [{ find: '@/', replacement: '/app/src/', exact: false }];
+        const resolved = resolveCrossModuleStaticsFor(
+            registry,
+            '/app/src/ui/Card.tsx',
+            "import { cardSz } from '@/styles';\n",
+            aliases,
+        );
+        // Keyed by the specifier AS WRITTEN: the compiler looks the registry up
+        // by the import's own source text, so an entry filed under the resolved
+        // path would never be found.
+        expect(Object.keys(resolved.szvConfigs?.['@/styles'] ?? {})).toEqual(['cardSz', 'rowSz']);
+    });
+
+    it('takes the first alias that answers and stops', () => {
+        // Two candidates for one specifier is ordinary: tsconfig `paths` may
+        // list several targets. Probing past a hit would merge two modules'
+        // exports into one specifier's entry.
+        const registry = registryWith('/app/src/styles.ts');
+        recordSzvRegistryFile(
+            registry,
+            '/app/legacy/styles.ts',
+            "import { szv } from '@csszyx/runtime';\nexport const legacySz = szv({ variants: { g: { a: { gap: 1 } } } });\n",
+        );
+        const resolved = resolveCrossModuleStaticsFor(
+            registry,
+            '/app/src/Card.tsx',
+            "import { cardSz } from '@/styles';\n",
+            [
+                { find: '@/', replacement: '/app/src/', exact: false },
+                { find: '@/', replacement: '/app/legacy/', exact: false },
+            ],
+        );
+        expect(Object.keys(resolved.szvConfigs?.['@/styles'] ?? {})).toEqual(['cardSz', 'rowSz']);
+    });
+
+    it('honours an exact alias only on the whole specifier', () => {
+        const registry = registryWith('/app/src/styles.ts');
+        const aliases = [{ find: '@styles', replacement: '/app/src/styles', exact: true }];
+        const hit = resolveCrossModuleStaticsFor(
+            registry,
+            '/app/src/Card.tsx',
+            "import { cardSz } from '@styles';\n",
+            aliases,
+        );
+        const miss = resolveCrossModuleStaticsFor(
+            registry,
+            '/app/src/Card.tsx',
+            "import { cardSz } from '@styles/extra';\n",
+            aliases,
+        );
+        expect(hit.szvConfigs?.['@styles']).toBeDefined();
+        expect(miss.szvConfigs).toBeUndefined();
+    });
+
+    it('leaves an alias pointing nowhere as a miss, not an error', () => {
+        // An over-broad alias is the expected failure mode of prefix matching.
+        // It has to cost the optimization and nothing else — no throw, and no
+        // entry invented for a module the prescan never walked.
+        const registry = registryWith('/app/src/styles.ts');
+        expect(
+            resolveCrossModuleStaticsFor(
+                registry,
+                '/app/src/Card.tsx',
+                "import { useState } from '@/react';\n",
+                [{ find: '@/', replacement: '/app/src/', exact: false }],
+            ).szvConfigs,
         ).toBeUndefined();
     });
 
@@ -285,15 +360,16 @@ describe('the sz-object arm of the registry', () => {
 });
 
 describe('the demand-driven provider lookup', () => {
-    it('reads the relative specifiers a file imports from', () => {
+    it('reads every specifier a file imports from', () => {
         const source =
             "import { a } from './styles';\nimport b from '../shared/tokens.js';\n" +
             "import c from 'react';\n";
-        // Package specifiers are absent on purpose: they are out of v1 scope,
-        // and a demand set that carried them would ask the walk for files it
-        // never saw.
-        expect(relativeSpecifiersIn(source)).toEqual(['./styles', '../shared/tokens.js']);
-        expect(relativeSpecifiersIn('const x = 1;')).toEqual([]);
+        // Package specifiers are collected but denote nothing without an alias
+        // that claims them — the filtering happens in `specifierBases`, so that
+        // one rule serves both the demand pass and the lookup.
+        expect(importedSpecifiersIn(source)).toEqual(['./styles', '../shared/tokens.js', 'react']);
+        expect(importedSpecifiersIn('const x = 1;')).toEqual([]);
+        expect(specifierBases('react', '/app/src', [])).toEqual([]);
     });
 
     it('lands on the same file the registry lookup would', () => {

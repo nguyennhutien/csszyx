@@ -49,6 +49,12 @@ export const App = () => <div sz={cardSz} />;
 `,
 };
 
+/** The same importer, written the way a project with an `@` alias writes it. */
+const ALIASED_APP = `
+import { cardSz } from '@/styles.ts';
+export const App = () => <div sz={cardSz} />;
+`;
+
 const tempDirs: string[] = [];
 
 afterAll(() => {
@@ -62,11 +68,13 @@ afterAll(() => {
  *
  * @param parser - Engine under test.
  * @param importedStaticSz - Whether the feature is opted in.
+ * @param aliased - Whether the importer names the provider through `@`.
  * @returns Emitted bundle text and the safelist file contents.
  */
 async function buildFixture(
     parser: 'rust' | 'oxc' | 'babel',
     importedStaticSz: boolean,
+    aliased = false,
 ): Promise<{ js: string; safelist: string }> {
     const root = mkdtempSync(join(realpathSync(tmpdir()), `csszyx-szobj-${parser}-`));
     tempDirs.push(root);
@@ -74,10 +82,12 @@ async function buildFixture(
     for (const [file, source] of Object.entries(FIXTURE_FILES)) {
         writeFileSync(join(root, file), source, 'utf8');
     }
+    if (aliased) writeFileSync(join(root, 'src/App.tsx'), ALIASED_APP, 'utf8');
 
     await build({
         root,
         logLevel: 'silent',
+        resolve: aliased ? { alias: { '@': join(root, 'src') } } : undefined,
         plugins: [vitePlugin({ build: { parser, cache: false, importedStaticSz } })],
         esbuild: {
             jsx: 'transform',
@@ -131,6 +141,20 @@ describe('a plain exported style object, through a real build', () => {
             expect(js).not.toContain('p-7');
         }, 120_000);
     }
+
+    it('resolves the provider through the project alias, on every engine', async () => {
+        // The alias table has to be in place BEFORE the prescan, because the
+        // prescan is what decides to read `src/styles.ts` at all — an alias
+        // learned later would leave the demand recorded under a path nothing
+        // resolves, and the failure would look exactly like the feature being
+        // off. Building it is the only way to see that ordering.
+        for (const parser of PARSERS) {
+            const { js, safelist } = await buildFixture(parser, true, true);
+            expect(js).toContain('p-7');
+            expect(js).not.toContain('_sz(');
+            expect(safelist).toContain('p-7');
+        }
+    }, 240_000);
 
     it('reads a provider only because something imports it', async () => {
         // `unusedSz` lives in a module the prescan DID read, so it is recorded;

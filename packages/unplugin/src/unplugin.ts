@@ -40,13 +40,14 @@ import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class
 import { babelFallbackReason } from './babel-fallback-reason.js';
 import { findUnknownConfigKeys, unknownConfigKeysMessage } from './config-keys.js';
 import {
+    importedSpecifiersIn,
     mayExportSzvFactories,
     recordSzObjectRegistryFile,
     recordSzvRegistryFile,
-    relativeSpecifiersIn,
     resolveCrossModuleStaticsFor,
     resolveProviderPath,
     type SzvCrossModuleRegistry,
+    specifierBases,
 } from './cross-module-registry.js';
 import { mangleCSSSync } from './css-mangler.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
@@ -87,6 +88,7 @@ import {
     type RSCModuleRecord,
 } from './rsc-boundary.js';
 import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
+import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { discoverProjectTheme } from './theme-discovery.js';
 import {
@@ -2445,6 +2447,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const crossModuleRegistryEnabled = true;
     /** absPath (separator-normalized) → exported factory configs. */
     const szvCrossModuleRegistry: SzvCrossModuleRegistry = new Map();
+    // What a non-relative specifier stands for, read from the bundler's own
+    // resolve config and the project's tsconfig. Assigned before the prescan
+    // runs on each lane that has one: the prescan decides which modules to read
+    // using this table, and the transform looks them up using the same table,
+    // so a late assignment would collect a demand nothing later resolves.
+    let specifierAliases: SpecifierAlias[] = [];
     // Class names the mangler must never produce as a token, so a short alias
     // can't collide with a literal class in non-csszyx CSS (hybrid builds). Comes
     // from config, so it is available identically at every finalizeMangleMap call
@@ -2862,6 +2870,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             szvCrossModuleRegistry,
             filename,
             source,
+            specifierAliases,
         );
         // The registry is filled in every mode; only the REWRITE is gated, so
         // an edited factory can never serve importers a stale table.
@@ -3608,7 +3617,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
 
         /**
-         * Note every relative module an sz-authoring file imports from.
+         * Note every module an sz-authoring file imports from.
          *
          * This is what keeps the sz-object pass demand-driven. `szv(` is a
          * cheap marker a provider carries in its own text; a plain exported
@@ -3623,8 +3632,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         function recordSzObjectDemand(filePath: string, content: string): void {
             if (options.build?.importedStaticSz !== true) return;
             const directory = path.dirname(filePath);
-            for (const specifier of relativeSpecifiersIn(content)) {
-                szObjectDemand.add(normalizePathSeparators(path.resolve(directory, specifier)));
+            for (const specifier of importedSpecifiersIn(content)) {
+                for (const base of specifierBases(specifier, directory, specifierAliases)) {
+                    szObjectDemand.add(base);
+                }
             }
         }
 
@@ -4758,6 +4769,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
                     state.rootDir = root;
+                    // Next.js maps `@/*` with a resolver plugin rather than an
+                    // alias table, so webpack's own alias object is empty on the
+                    // framework that needs this most; `collectSpecifierAliases`
+                    // reads tsconfig for exactly that case.
+                    specifierAliases = collectSpecifierAliases(
+                        root,
+                        compiler.options?.resolve?.alias,
+                    );
                     evictTransformCacheOnce();
                     if (state.classes.size === 0) {
                         prescanAndWriteClasses();
@@ -4814,6 +4833,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = config.root || process.cwd();
                     state.rootDir = root;
+                    // Vite has already normalized `resolve.alias` into its array
+                    // form here, which is also the form this reads — taking it
+                    // from the RESOLVED config means an alias another plugin
+                    // added is honoured exactly as the build will resolve it.
+                    specifierAliases = collectSpecifierAliases(root, config.resolve?.alias);
                     // Never mangle in a dev server — the runtime mangle map would
                     // not match the un-mangled dev CSS. See `manglingEnabled` above.
                     if (config.command === 'serve') {

@@ -31,8 +31,9 @@ own module and the compiler can no longer see through the import: `sz={cardSz}`
 falls back to the runtime and contributes no classes, so the CSS goes missing.
 
 Turn on [`build.importedStaticSz`](/docs/reference/config/#imported-static-sz-objects-importedstaticsz)
-and a relative named import compiles exactly like the local declaration. Until
-then, csszyx reports each one it had to leave to the runtime.
+and a named import — relative or through a project alias — compiles exactly like
+the local declaration. Until then, csszyx reports each one it had to leave to the
+runtime.
 :::
 
 :::caution[A shared style object is a build-time value]

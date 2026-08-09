@@ -370,12 +370,19 @@ that runtime fallback; compiling the declared value is correct by the
 [shared-style-object contract](/docs/reusing-styles/) and is still a change to
 notice. Turn it on, build, and check the diff once.
 
-**What v1 covers:** a direct `sz={binding}` from a relative named import,
-including a renamed one (`import { cardSz as card }`). The provider must be a
-`const` whose value is a fully static object literal.
+**What v1 covers:** a direct `sz={binding}` from a named import, including a
+renamed one (`import { cardSz as card }`). The provider must be a `const` whose
+value is a fully static object literal.
+
+The specifier may be relative (`./styles`, `../shared/styles`, any depth) or an
+alias (`@/styles`). Aliases are read from the bundler's own `resolve.alias` and
+from `compilerOptions.paths` in `tsconfig.json` — Next.js declares `@/*` only in
+the second, so both are consulted. An alias csszyx cannot express as a literal
+prefix (a RegExp `find`, or a `paths` pattern with text after the `*`) is
+skipped, and its importers keep the runtime path.
 
 **What still falls back** — and keeps reporting that it did: barrels and
-re-exports, package specifiers, tsconfig path aliases, namespace
+re-exports, package specifiers, absolute specifiers, namespace
 (`import * as S`) and default imports, any nested position such as
 `sz={[cardSz, …]}` or `sz={{ ...cardSz }}`, and the Next.js Turbopack lane.
 

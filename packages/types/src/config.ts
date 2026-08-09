@@ -520,10 +520,12 @@ export interface BuildConfig {
      * would be correct by the contract while still being a change that project
      * has to notice. See the shared-style-object contract in the docs.
      *
-     * v1 covers a direct `sz={binding}` from a relative named import. A
-     * barrel, a package specifier, a tsconfig alias, a namespace or default
-     * import, and the Next.js Turbopack lane all keep the runtime path they
-     * have today, and keep reporting it.
+     * v1 covers a direct `sz={binding}` from a named import, written either
+     * relative or through a project alias — the bundler's `resolve.alias` and
+     * `compilerOptions.paths` in `tsconfig.json` are both read. A barrel, a
+     * package specifier, a namespace or default import, and the Next.js
+     * Turbopack lane all keep the runtime path they have today, and keep
+     * reporting it.
      *
      * @default false
      */
