@@ -21,7 +21,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
+import { OxcNotImplementedError, transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
 
 /** Cross-module sz objects, keyed by specifier then export name. */
@@ -177,6 +177,91 @@ describe('the local alias an import may carry', () => {
                 "import { cardSz as card } from './styles';\nexport const A = () => <div sz={card} />;";
             const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
             expect(/className="([^"]*)"/.exec(result.code ?? '')?.[1]).toBe('p-4 rounded-lg');
+        });
+    }
+});
+
+/**
+ * Every position the binding can appear in OTHER than a direct `sz={binding}`.
+ *
+ * The refusals above are about how the module is IMPORTED. These are about how
+ * the resolved binding is USED, and they were the untested half: v1 folds only
+ * the direct attribute, so each of these keeps the runtime path.
+ *
+ * Two properties are pinned per shape, and the second is the one that matters.
+ * The imported half contributes NO class — `p-4` appears in no output, so
+ * nothing tells Tailwind to generate that rule, and only the runtime knows the
+ * element wants it. That is the accepted cost of the v1 cut, but it is a cost
+ * with a visible shape, and a future change that starts folding one of these
+ * must not do it on one engine only. Locking the current answer on all three is
+ * what makes such a change show up as a diff instead of as a divergence.
+ */
+const USE_SHAPES: ReadonlyArray<readonly [string, string, string]> = [
+    ['a spread', 'export const A = () => <div sz={{ ...cardSz, m: 2 }} />;', 'm-2'],
+    ['a ternary branch', 'export const A = ({ x }) => <div sz={x ? cardSz : { m: 1 }} />;', 'm-1'],
+    ['an array element', 'export const A = () => <div sz={[cardSz, { m: 2 }]} />;', 'm-2'],
+];
+
+describe('where the resolved binding is used', () => {
+    for (const [name, engine] of ENGINES) {
+        for (const [shape, body, localClass] of USE_SHAPES) {
+            it(`${name} keeps the runtime path for ${shape}`, () => {
+                const out = run(engine, body);
+                expect(out.className).toBeUndefined();
+                // The local literal beside it still lowers. Only the part that
+                // came through the import is left to the runtime, which is what
+                // makes the missing class specific rather than total.
+                expect(out.classes).toEqual([localClass]);
+                expect(out.classes).not.toContain('p-4');
+            });
+        }
+
+        it(`${name} keeps the runtime path for a helper call`, () => {
+            // `szcn(cardSz)` is a runtime call, not an sz attribute — there is
+            // no attribute to fold into, so nothing is collected at all.
+            const tsx =
+                "import { szcn } from '@csszyx/runtime';\nimport { cardSz } from './styles';\n" +
+                'export const A = () => <div className={szcn(cardSz)} />;';
+            const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+            expect(result.code ?? '').toContain('szcn(cardSz)');
+            expect([...(result.classes ?? [])]).toEqual([]);
+        });
+    }
+
+    it('babel keeps the runtime path when a local const re-wraps the import', () => {
+        // Resolution is one hop: the registry answers for the IMPORTED binding,
+        // and `local` is a different binding whose initializer merely mentions
+        // it. Following that would mean folding arbitrary local dataflow.
+        const out = run(
+            transformSourceCode as Engine,
+            'const local = { ...cardSz };\nexport const A = () => <div sz={local} />;',
+        );
+        expect(out.code).toContain('_sz(local)');
+        expect(out.classes).toEqual([]);
+    });
+
+    it('oxc reports the same case as unsupported, so the plugin falls back', () => {
+        // Not a divergence: an object spread inside an sz object is a shape the
+        // oxc lane declines to read, and declining is how it hands the file to
+        // Babel — which produces the assertion above. Pinned so that a lane
+        // which starts ANSWERING here is noticed, since answering differently
+        // from Babel is the failure this contract exists to prevent.
+        const tsx =
+            "import { cardSz } from './styles';\nconst local = { ...cardSz };\n" +
+            'export const A = () => <div sz={local} />;';
+        expect(() => transformOxc(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY })).toThrow(
+            OxcNotImplementedError,
+        );
+    });
+
+    if (isRustTransformAvailable()) {
+        it('rust keeps the runtime path when a local const re-wraps the import', () => {
+            const out = run(
+                transformRust as Engine,
+                'const local = { ...cardSz };\nexport const A = () => <div sz={local} />;',
+            );
+            expect(out.code).toContain('_sz(local)');
+            expect(out.classes).toEqual([]);
         });
     }
 });

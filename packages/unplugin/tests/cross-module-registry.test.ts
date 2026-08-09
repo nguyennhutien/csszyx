@@ -350,6 +350,35 @@ describe('the sz-object arm of the registry', () => {
         expect(Object.values(left).every(entry => entry.kind === 'sz-object')).toBe(true);
     });
 
+    it('records nothing for a barrel that only re-exports', () => {
+        // A barrel is the shape most likely to be mistaken for support: the
+        // name IS exported from the module the importer names, just not
+        // declared there. Recording the specifier with no value would be worse
+        // than recording nothing — the importer would resolve an entry that
+        // describes no object. Following the chain is out of v1 scope, so the
+        // safe answer is an absent entry and the runtime path.
+        const registry: SzvCrossModuleRegistry = new Map();
+        recordSzObjectRegistryFile(
+            registry,
+            '/app/src/styles.ts',
+            'export const cardSz = { p: 4 };',
+        );
+        recordSzObjectRegistryFile(
+            registry,
+            '/app/src/index.ts',
+            "export { cardSz } from './styles';",
+        );
+        recordSzObjectRegistryFile(registry, '/app/src/star.ts', "export * from './styles';");
+        expect([...registry.keys()]).toEqual(['/app/src/styles.ts']);
+        expect(
+            resolveCrossModuleStaticsFor(
+                registry,
+                '/app/src/ui/Card.tsx',
+                "import { cardSz } from '../index';\n",
+            ),
+        ).toEqual({});
+    });
+
     it('drops the file only when both kinds are gone', () => {
         const registry: SzvCrossModuleRegistry = new Map();
         recordSzObjectRegistryFile(registry, '/app/src/styles.ts', PLAIN_SOURCE);
