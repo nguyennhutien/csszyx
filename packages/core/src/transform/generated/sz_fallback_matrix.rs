@@ -53,7 +53,7 @@ pub(crate) const fn sz_fallback_suggestion(kind: SzFallbackKind) -> &'static str
     match kind {
         SzFallbackKind::Call => "If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().",
         SzFallbackKind::Identifier => "Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().",
-        SzFallbackKind::Import => "Set build.importedStaticSz to compile a static object another module exports. For variant-based styling → szv(). For true runtime values → dynamic().",
+        SzFallbackKind::Import => "Export it as a const with a static object literal and import it by name — a barrel, a namespace import, or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().",
         SzFallbackKind::Member => "Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().",
         SzFallbackKind::Other => "Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().",
     }

@@ -1014,10 +1014,7 @@ mod tests {
                 "{diagnostics}"
             );
         }
-        assert!(
-            diagnostics.contains("Set build.importedStaticSz"),
-            "{diagnostics}"
-        );
+        assert!(diagnostics.contains("import it by name"), "{diagnostics}");
         // The forwarded prop keeps the plain wording, and must not be reported
         // as an import just because it is also an unresolved identifier.
         assert!(diagnostics.contains("identifier `sz`"), "{diagnostics}");

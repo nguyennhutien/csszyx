@@ -27,13 +27,14 @@ declared with either `const` or `let`.
 
 :::tip[Sharing across files]
 The examples above declare the object in the file that uses it. Move it to its
-own module and the compiler can no longer see through the import: `sz={cardSz}`
-falls back to the runtime and contributes no classes, so the CSS goes missing.
+own module and a named import — relative or through a project alias — still
+compiles exactly like the local declaration, because
+[`build.importedStaticSz`](/docs/reference/config/#imported-static-sz-objects-importedstaticsz)
+is on by default.
 
-Turn on [`build.importedStaticSz`](/docs/reference/config/#imported-static-sz-objects-importedstaticsz)
-and a named import — relative or through a project alias — compiles exactly like
-the local declaration. Until then, csszyx reports each one it had to leave to the
-runtime.
+An import it cannot read is reported rather than passed over: a barrel, a
+namespace or default import, or a value that is not a plain object literal
+falls back to the runtime and contributes no classes, so the CSS goes missing.
 :::
 
 :::caution[A shared style object is a build-time value]

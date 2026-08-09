@@ -68,7 +68,7 @@ export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTempl
     import: {
         reason: 'imported binding `{detail}` could not be read at build time',
         suggestion:
-            'Set build.importedStaticSz to compile a static object another module exports. For variant-based styling → szv(). For true runtime values → dynamic().',
+            'Export it as a const with a static object literal and import it by name — a barrel, a namespace import, or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().',
     },
     member: {
         reason: 'member expression is not statically resolvable',
