@@ -16,7 +16,7 @@
  * @module next-cross-module
  */
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 import {
@@ -33,6 +33,7 @@ import {
 } from './cross-module-registry.js';
 import type { JsonLike } from './next-cache-identity.js';
 import { normalizePathSeparators } from './path-normalization.js';
+import { isReadableProviderFile } from './provider-file.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 
 /** What one file's imports resolved to, plus the files that answered. */
@@ -99,7 +100,7 @@ export function resolveNextCrossModule(input: NextCrossModuleInput): NextCrossMo
         if (seen.has(specifier)) continue;
         seen.add(specifier);
         for (const base of specifierBases(specifier, directory, aliases)) {
-            const provider = resolveProviderPathWith(base, isReadableFile);
+            const provider = resolveProviderPathWith(base, isReadableProviderFile);
             if (provider === undefined) continue;
             // Declared even when it exports nothing csszyx can use: the answer
             // "this module contributes nothing" is only valid while the file
@@ -111,20 +112,6 @@ export function resolveNextCrossModule(input: NextCrossModuleInput): NextCrossMo
         }
     }
     return { statics, providers };
-}
-
-/**
- * Whether one candidate path is a file this lane may read as a provider.
- *
- * @param candidate - Path produced by the probe list.
- * @returns True when it is a readable regular file.
- */
-function isReadableFile(candidate: string): boolean {
-    try {
-        return existsSync(candidate) && statSync(candidate).isFile();
-    } catch {
-        return false;
-    }
 }
 
 /**

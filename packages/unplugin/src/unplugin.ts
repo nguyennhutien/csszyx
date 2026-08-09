@@ -46,6 +46,7 @@ import {
     recordSzvRegistryFile,
     resolveCrossModuleStaticsFor,
     resolveProviderPath,
+    resolveProviderPathWith,
     type SzvCrossModuleRegistry,
     specifierBases,
 } from './cross-module-registry.js';
@@ -80,6 +81,7 @@ import {
 import { runtimeHelperGroupsFromUsage } from './next-runtime-injection.js';
 import { resolveParserMode } from './parser-mode.js';
 import { normalizePathSeparators } from './path-normalization.js';
+import { isReadableProviderFile } from './provider-file.js';
 import {
     assertNoRSCBoundaryViolation,
     assertNoRSCGraphViolation,
@@ -2445,8 +2447,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // startup table; refreshing the entry removes that staleness at the source,
     // so the precompile now runs in a dev server too.
     const crossModuleRegistryEnabled = true;
+    // Resolved once: the shared default is not merged into plugin options, so
+    // every read site would otherwise have to remember the fallback, and one
+    // that forgot would run a different feature than the rest of the plugin.
+    const importedStaticSzEnabled =
+        options.build?.importedStaticSz ?? DEFAULT_BUILD_CONFIG.importedStaticSz ?? false;
     /** absPath (separator-normalized) → exported factory configs. */
     const szvCrossModuleRegistry: SzvCrossModuleRegistry = new Map();
+    // Provider paths already read for sz objects this session. A module that
+    // exports nothing usable is absent from the registry, so the registry alone
+    // cannot answer "have I looked at this?" — without the set, every edit of a
+    // file would re-read and re-parse each of its relative imports.
+    const szObjectProvidersExamined = new Set<string>();
     // What a non-relative specifier stands for, read from the bundler's own
     // resolve config and the project's tsconfig. Assigned before the prescan
     // runs on each lane that has one: the prescan decides which modules to read
@@ -3538,9 +3550,66 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // costs one parse of one file; deciding whether it is still demanded
         // would cost the import graph, and a recorded export nothing imports
         // resolves for nobody anyway.
-        if (options.build?.importedStaticSz === true) {
+        if (importedStaticSzEnabled) {
             recordSzObjectRegistryFile(szvCrossModuleRegistry, filePath, content);
+            szObjectProvidersExamined.add(normalizePathSeparators(filePath));
+            recordProvidersDemandedBy(filePath, content);
         }
+    }
+
+    /**
+     * Read the providers one changed file newly imports from.
+     *
+     * The prescan collects demand from a whole-project walk, so it only knows
+     * the imports that existed when the server started. Adding a cross-file
+     * style import mid-session named a module nothing had demanded: it was
+     * absent from the registry, the importer fell back, and only touching the
+     * provider afterwards brought it in — a recovery step nothing tells the
+     * author about, at the moment they have just opted in and are least able
+     * to tell a limitation from a bug.
+     *
+     * Resolution goes through the same probe list the prescan uses, against
+     * the same disk predicate the Turbopack loader uses, so a specifier lands
+     * on one file whichever lane resolved it.
+     *
+     * @param filePath - Absolute path of the changed file.
+     * @param content - Its new source text.
+     */
+    function recordProvidersDemandedBy(filePath: string, content: string): void {
+        // Demand comes from files that author sz, matching the prescan's gate:
+        // an edited module that styles nothing imports nothing worth reading.
+        if (!fileMayContainSafelistableSz(content)) return;
+        const directory = path.dirname(filePath);
+        for (const specifier of importedSpecifiersIn(content)) {
+            for (const base of specifierBases(specifier, directory, specifierAliases)) {
+                const providerPath = resolveProviderPathWith(base, isReadableProviderFile);
+                if (providerPath === undefined) continue;
+                const key = normalizePathSeparators(providerPath);
+                // Already-seen providers are kept current by their own refresh,
+                // so re-reading here would buy nothing.
+                if (!szObjectProvidersExamined.has(key)) {
+                    szObjectProvidersExamined.add(key);
+                    readAndRecordSzObjectProvider(providerPath);
+                }
+                break;
+            }
+        }
+    }
+
+    /**
+     * Record one provider's exported sz objects, ignoring a file that cannot
+     * be read.
+     *
+     * @param providerPath - Absolute provider path.
+     */
+    function readAndRecordSzObjectProvider(providerPath: string): void {
+        let content: string;
+        try {
+            content = fs.readFileSync(providerPath, 'utf-8');
+        } catch {
+            return;
+        }
+        recordSzObjectRegistryFile(szvCrossModuleRegistry, providerPath, content);
     }
 
     /**
@@ -3566,13 +3635,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // costs the optimization and the importer keeps the runtime path,
             // which is exactly what v1 promises for those.
             if (providerPath === undefined) continue;
-            let content: string;
-            try {
-                content = fs.readFileSync(providerPath, 'utf-8');
-            } catch {
-                continue;
-            }
-            recordSzObjectRegistryFile(szvCrossModuleRegistry, providerPath, content);
+            // Marked seen so a later watch edit does not re-read what the walk
+            // already answered; the entry stays current through its own refresh.
+            szObjectProvidersExamined.add(normalizePathSeparators(providerPath));
+            readAndRecordSzObjectProvider(providerPath);
         }
     }
 
@@ -3607,6 +3673,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // exporting a qualifying factory would keep its old table through any
         // later prescan in the same process.
         szvCrossModuleRegistry.clear();
+        // Cleared with the registry it describes: a provider "already examined"
+        // against entries that no longer exist would never be read again.
+        szObjectProvidersExamined.clear();
         const prescanStarted = performance.now();
         const discoveredClasses = new Set<string>();
         // Raw className values feed both Tailwind safelisting and the authored
@@ -3662,7 +3731,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * @param content Importing file text.
          */
         function recordSzObjectDemand(filePath: string, content: string): void {
-            if (options.build?.importedStaticSz !== true) return;
+            if (!importedStaticSzEnabled) return;
             const directory = path.dirname(filePath);
             for (const specifier of importedSpecifiersIn(content)) {
                 for (const base of specifierBases(specifier, directory, specifierAliases)) {
