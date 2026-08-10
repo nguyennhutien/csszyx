@@ -26,6 +26,7 @@ import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@cssz
 import {
     CSSZYX_GLOBAL_ALIAS_PREFIX,
     DEFAULT_BUILD_CONFIG,
+    DEFAULT_IMPORTED_STATIC_SZ,
     type GlobalVarMangleConfig,
     type PartialCsszyxConfig,
     validateGlobalVarMangleConfig,
@@ -2450,8 +2451,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // Resolved once: the shared default is not merged into plugin options, so
     // every read site would otherwise have to remember the fallback, and one
     // that forgot would run a different feature than the rest of the plugin.
-    const importedStaticSzEnabled =
-        options.build?.importedStaticSz ?? DEFAULT_BUILD_CONFIG.importedStaticSz ?? false;
+    const importedStaticSzEnabled = options.build?.importedStaticSz ?? DEFAULT_IMPORTED_STATIC_SZ;
     /** absPath (separator-normalized) → exported factory configs. */
     const szvCrossModuleRegistry: SzvCrossModuleRegistry = new Map();
     // Provider paths already read for sz objects this session. A module that

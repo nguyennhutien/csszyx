@@ -162,6 +162,49 @@ describe('tsconfig paths', () => {
         expect(aliasesFromTsconfig(root)[0]?.replacement).toBe(`${root}/src/`);
     });
 
+    it('follows an extends written without its .json suffix', () => {
+        // TypeScript resolves `./base` to `./base.json`. Probing only the
+        // literal path would read the most common spelling of the chain as
+        // having no aliases at all.
+        const root = projectWith({
+            'tsconfig.base.json': JSON.stringify({
+                compilerOptions: { paths: { '@/*': ['./src/*'] } },
+            }),
+            'tsconfig.json': JSON.stringify({ extends: './tsconfig.base' }),
+        });
+        expect(aliasesFromTsconfig(root)[0]?.replacement).toBe(`${root}/src/`);
+    });
+
+    it('stops following an extends chain that points at itself', () => {
+        // Self-referential configs exist, and the depth cap is what keeps this
+        // from recursing until the stack gives out. Reaching the cap has to
+        // read as "no aliases", not as a crash on a config TypeScript itself
+        // would reject.
+        const root = projectWith({
+            'tsconfig.json': JSON.stringify({ extends: './tsconfig.json' }),
+        });
+        expect(aliasesFromTsconfig(root)).toEqual([]);
+    });
+
+    it('ignores a package-name extends rather than guessing a path for it', () => {
+        // `extends: "@tsconfig/node20"` resolves through node resolution, which
+        // this reader deliberately does not do — inventing a relative path for
+        // it would read some unrelated file as the project's config.
+        const root = projectWith({
+            'tsconfig.json': JSON.stringify({ extends: '@tsconfig/strictest' }),
+        });
+        expect(aliasesFromTsconfig(root)).toEqual([]);
+    });
+
+    it('reads a single target given as a bare string, not an array', () => {
+        // `paths` values are arrays in every scaffold, but the compiler accepts
+        // a lone string and projects in the wild carry it.
+        const root = projectWith({
+            'tsconfig.json': '{ "compilerOptions": { "paths": { "@/*": "./src/*" } } }\n',
+        });
+        expect(aliasesFromTsconfig(root)[0]?.replacement).toBe(`${root}/src/`);
+    });
+
     it('keeps every target of one pattern as its own probe', () => {
         const root = projectWith({
             'tsconfig.json': JSON.stringify({

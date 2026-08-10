@@ -10,13 +10,14 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
+import { DEFAULT_IMPORTED_STATIC_SZ } from '@csszyx/types';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
     clearNextAliasCache,
     configWithImportedStaticSz,
     resolveNextCrossModule,
+    withCrossModuleStatics,
 } from '../src/next-cross-module.js';
 
 const roots: string[] = [];
@@ -74,10 +75,29 @@ describe('the setting an unset lane resolves to', () => {
         // left alone would hash the SAME and emit different output — the exact
         // drift the hash gate exists to catch.
         expect(configWithImportedStaticSz({}, undefined)).toEqual({
-            importedStaticSz: DEFAULT_BUILD_CONFIG.importedStaticSz,
+            importedStaticSz: DEFAULT_IMPORTED_STATIC_SZ,
         });
         expect(configWithImportedStaticSz({}, false)).toEqual({ importedStaticSz: false });
         expect(configWithImportedStaticSz({}, true)).toEqual({ importedStaticSz: true });
+    });
+});
+
+describe('the shapes withCrossModuleStatics has to keep apart', () => {
+    it('leaves the options untouched when nothing resolved', () => {
+        const options = { rootDir: '/app' };
+        expect(withCrossModuleStatics(options, {})).toBe(options);
+    });
+
+    it.each([
+        ['szv configs only', { szvConfigs: { './s': { rowSz: {} } } }, 'crossModuleStatics'],
+        ['sz objects only', { szObjects: { './s': { cardSz: {} } } }, 'crossModuleSzObjects'],
+    ])('carries %s under its own key, and only that key', (_name, statics, expected) => {
+        // The two channels ride separately all the way to the engines, which do
+        // different things with them: a variant table to compile and pick from,
+        // a value to lower. Folding an absent one in as an empty object would
+        // put it in the cache key and tell the decoder to validate nothing.
+        const merged = withCrossModuleStatics(undefined, statics) as Record<string, unknown>;
+        expect(Object.keys(merged)).toEqual([expected]);
     });
 });
 
@@ -147,6 +167,43 @@ describe('resolving one file against the disk', () => {
 
         expect(resolved.statics).toEqual({});
         expect(resolved.providers).toEqual([join(root, 'app/util.ts')]);
+    });
+
+    it('resolves a specifier written twice only once', () => {
+        // The same module named by two imports is one lookup and one dependency
+        // declaration. Probing it again would double the loader's disk work per
+        // file and hand the watcher a duplicate to invalidate.
+        const root = projectWith({ 'app/styles.ts': SZ_OBJECT });
+        const resolved = resolveNextCrossModule({
+            filename: join(root, 'app/page.tsx'),
+            source:
+                "import { cardSz } from './styles';\n" +
+                "import { cardSz as again } from './styles';\n",
+            root,
+            importedStaticSz: true,
+        });
+
+        expect(resolved.providers).toEqual([join(root, 'app/styles.ts')]);
+    });
+
+    it('keeps looking when one alias candidate names nothing on disk', () => {
+        // Two targets for one pattern is ordinary tsconfig; the first is a
+        // fallback that need not exist. Stopping at it would cost the importer
+        // its precompile for a path the project deliberately listed second.
+        const root = projectWith({
+            'app/styles.ts': SZ_OBJECT,
+            'tsconfig.json': JSON.stringify({
+                compilerOptions: { paths: { '@/*': ['./missing/*', './app/*'] } },
+            }),
+        });
+        const resolved = resolveNextCrossModule({
+            filename: join(root, 'app/page.tsx'),
+            source: "import { cardSz } from '@/styles';\n",
+            root,
+            importedStaticSz: true,
+        });
+
+        expect(resolved.providers).toEqual([join(root, 'app/styles.ts')]);
     });
 
     it('reports nothing for a package specifier', () => {

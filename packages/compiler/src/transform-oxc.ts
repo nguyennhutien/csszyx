@@ -6785,7 +6785,9 @@ function collectImportedSzObjects(
             // that matches no export, silently, instead of being rejected.
             const exportName = importedExportName(imported);
             const local = specifier.local?.name;
-            const value = exportName === undefined ? undefined : exported[exportName];
+            // No guard on `exportName`: the reader above returns `''` for a
+            // shape it cannot name, and an empty key matches no export.
+            const value = exported[exportName];
             if (local !== undefined && value !== null && typeof value === 'object') {
                 out.set(local, value as Record<string, unknown>);
             }

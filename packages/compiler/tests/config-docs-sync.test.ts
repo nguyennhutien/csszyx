@@ -49,13 +49,15 @@ describe('config docs sync', () => {
         const typesConfig = readFileSync(join(REPO_ROOT, 'packages/types/src/config.ts'), 'utf8');
 
         const defaultMatch = typesConfig.match(
-            /export const DEFAULT_BUILD_CONFIG[^}]*importedStaticSz:\s*(true|false)/,
+            /export const DEFAULT_IMPORTED_STATIC_SZ = (true|false);/,
         );
-        expect(
-            defaultMatch,
-            'DEFAULT_BUILD_CONFIG.importedStaticSz must be a boolean literal',
-        ).not.toBeNull();
+        expect(defaultMatch, 'DEFAULT_IMPORTED_STATIC_SZ must be a boolean literal').not.toBeNull();
         const configured = defaultMatch?.[1];
+        // The config object must carry that constant rather than repeating the
+        // literal, or the two could drift and this gate would follow the wrong one.
+        expect(typesConfig).toMatch(
+            /export const DEFAULT_BUILD_CONFIG[^}]*importedStaticSz: DEFAULT_IMPORTED_STATIC_SZ/,
+        );
 
         expect(typesConfig, 'the JSDoc @default must match the exported default').toContain(
             `* @default ${configured}`,

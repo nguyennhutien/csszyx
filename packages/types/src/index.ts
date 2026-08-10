@@ -53,6 +53,7 @@ export {
     DEFAULT_CSSZYX_CONFIG,
     DEFAULT_DEVELOPMENT_CONFIG,
     DEFAULT_HYDRATION_CONFIG,
+    DEFAULT_IMPORTED_STATIC_SZ,
     DEFAULT_PRODUCTION_CONFIG,
     getCurrentEnvironment,
     validateGlobalVarMangleConfig,

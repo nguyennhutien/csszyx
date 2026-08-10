@@ -24,7 +24,7 @@ import {
     extractCrossModuleRegistryEntries,
     type TransformSourceCodeOptions,
 } from '@csszyx/compiler';
-import { DEFAULT_BUILD_CONFIG } from '@csszyx/types';
+import { DEFAULT_IMPORTED_STATIC_SZ } from '@csszyx/types';
 
 import {
     importedSpecifiersIn,
@@ -69,7 +69,7 @@ export interface NextCrossModuleInput {
  * @returns Whether imported static sz objects are compiled.
  */
 export function resolveImportedStaticSz(value: boolean | undefined): boolean {
-    return value ?? DEFAULT_BUILD_CONFIG.importedStaticSz ?? false;
+    return value ?? DEFAULT_IMPORTED_STATIC_SZ;
 }
 
 /**

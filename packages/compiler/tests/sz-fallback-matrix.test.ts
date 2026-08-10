@@ -119,6 +119,18 @@ describe('szFallbackConsequenceOf', () => {
         expect(szFallbackConsequenceOf(szsUnsupportedDiagnostic('/p/t.tsx'))).toBe('missing-css');
     });
 
+    it('falls to the advisory side when the reason cannot be read at all', () => {
+        // A message carrying the site label but no `": "` boundary — a wording
+        // change upstream, a truncated line — leaves the kind unknown. That has
+        // to read as advisory: a parsing miss must not be able to invent a
+        // production error on a build whose own source is fine.
+        // The position keeps its own colon, so the string still has one — what
+        // it lacks is the colon-SPACE that separates position from reason.
+        expect(szFallbackConsequenceOf('sz fallback at 1:1 malformed-with-no-boundary')).toBe(
+            'nudge',
+        );
+    });
+
     it('splits the sz site by kind, on what the fallback actually cost', () => {
         // Only an IMPORT names a value the compiler tried to read and could
         // not: nothing collected it, here or anywhere, so the classes exist in

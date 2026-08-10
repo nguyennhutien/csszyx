@@ -689,6 +689,16 @@ export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
 };
 
 /**
+ * Whether an imported static sz object is compiled, when nothing configures it.
+ *
+ * Named separately from {@link DEFAULT_BUILD_CONFIG} because every lane has to
+ * resolve an unset option through it, and reading it off the config object
+ * makes it `boolean | undefined` — which forces each reader to invent a second
+ * fallback for a case the config cannot produce.
+ */
+export const DEFAULT_IMPORTED_STATIC_SZ = true;
+
+/**
  * Default build configuration.
  */
 export const DEFAULT_BUILD_CONFIG: BuildConfig = {
@@ -698,7 +708,7 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     cache: true,
     astBudgetLimit: 50000,
     parser: 'rust',
-    importedStaticSz: true,
+    importedStaticSz: DEFAULT_IMPORTED_STATIC_SZ,
 };
 
 /**

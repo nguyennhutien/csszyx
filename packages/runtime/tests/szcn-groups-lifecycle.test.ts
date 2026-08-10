@@ -18,6 +18,7 @@ import {
     _resetSzcnGroups,
     clearSzcnGroups,
     getSzcnGroups,
+    getSzcnGroupsGeneration,
     registerSzcnGroups,
     setSzcnGroups,
 } from '../src/merge-groups.js';
@@ -94,5 +95,20 @@ describe('registering stays additive', () => {
         registerSzcnGroups({ colors: ['one'] });
         registerSzcnGroups({ colors: ['two'] });
         expect(getSzcnGroups().colors).toEqual(['one', 'two']);
+    });
+});
+
+describe('clearing a source that never registered', () => {
+    it('changes nothing and does not bump the generation', () => {
+        // The early return matters because the generation counter is what
+        // invalidates szcn's memo. Recomputing on a no-op clear would flush the
+        // cache of every merge on the page for a source that was never there.
+        registerSzcnGroups({ colors: ['brand'] }, 'build');
+        const generation = getSzcnGroupsGeneration();
+
+        clearSzcnGroups('a-source-nobody-registered');
+
+        expect(getSzcnGroupsGeneration()).toBe(generation);
+        expect(getSzcnGroups().colors).toContain('brand');
     });
 });

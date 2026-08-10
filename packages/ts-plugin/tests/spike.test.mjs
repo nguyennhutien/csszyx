@@ -544,3 +544,71 @@ test('mask layer keys appear in the top-level sz key list', () => {
         assert.ok(names.includes(key), `expected sz key "${key}"`);
     }
 });
+
+// The shallow classifier runs when the parser cannot hand back a usable node —
+// which is every state a half-typed object passes through. Each case below is a
+// distinct way the backward scan lands, and the branch it takes decides whether
+// the author gets values, keys, or silence.
+
+test('a double-quoted value slot is a value slot too', () => {
+    // The three JS quote characters are one branch each. Covering only `'`
+    // would let a rewrite drop the others and still look tested.
+    const names = namesAtMarker('const A = () => <div sz={{ bg: "/*|*/');
+    assert.ok(names.includes('red-500'), 'expected value suggestions after a double quote');
+});
+
+test('a template-quoted value slot is a value slot too', () => {
+    const names = namesAtMarker('const A = () => <div sz={{ bg: `/*|*/');
+    assert.ok(names.includes('red-500'), 'expected value suggestions after a backtick');
+});
+
+test('a quote that is not opening a value stays out of the value path', () => {
+    // A string sitting where a KEY belongs has no `property:` behind it, so it
+    // must not be read as a value slot — the discriminator is what precedes it.
+    const names = namesAtMarker("const A = () => <div sz={{ 'p/*|*/");
+    assert.ok(!names.includes('red-500'), 'a key-position string must not offer values');
+});
+
+test('a property name that cannot start an identifier is not a value slot', () => {
+    // The scan walks back over word characters, so a numeric label reaches this
+    // check. Answering there would offer values for a property sz cannot have.
+    assert.strictEqual(namesAtMarker('const A = () => <div sz={{ 4: /*|*/ }} />;').length, 0);
+});
+
+test('an unknown property name offers nothing rather than every value', () => {
+    assert.strictEqual(
+        namesAtMarker('const A = () => <div sz={{ notARealSzKey: /*|*/ }} />;').length,
+        0,
+    );
+});
+
+test('a key slot right after the opening brace offers keys', () => {
+    const names = namesAtMarker('const A = () => <div sz={{ /*|*/ p: 4 }} />;');
+    assert.ok(names.includes('rounded'), 'expected sz keys directly after `{`');
+});
+
+test('a key slot after a comma offers keys', () => {
+    const names = namesAtMarker('const A = () => <div sz={{ p: 4, /*|*/ }} />;');
+    assert.ok(names.includes('rounded'), 'expected sz keys after a comma');
+});
+
+test('a missing comma is repaired rather than refused', () => {
+    // `p: 4` then a newline is invalid JS and is the state every multi-line
+    // object passes through. The accepted entry supplies the comma itself.
+    const entries = entriesAtMarker('const A = () => <div sz={{ p: 4\n    /*|*/\n}} />;');
+    const rounded = entries.find(entry => entry.name === 'rounded');
+    assert.ok(rounded, 'expected keys where the previous property has no comma');
+    assert.ok(
+        String(rounded.insertText ?? '').startsWith(','),
+        'the entry must insert the comma the author has not typed',
+    );
+});
+
+test('a cursor after an operator is not a key slot', () => {
+    // `+` cannot end a property value, so the text before the cursor is an
+    // unfinished expression. Offering keys there would interrupt it.
+    assert.strictEqual(
+        namesAtMarker('const A = () => <div sz={{ p: 4 +/*|*/\n}} />;').length,
+        0,
+    );
+});
