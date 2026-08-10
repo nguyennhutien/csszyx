@@ -12,6 +12,10 @@ const files = [
         join(root, '.csszyx/next-loader-classes.html'),
         '<!-- Next 16 csszyx Turbopack loader safelist placeholder. -->\n',
     ],
+    [
+        join(root, '.csszyx/xmod/classes.html'),
+        '<!-- Isolated cross-module lane safelist placeholder. -->\n',
+    ],
 ];
 
 for (const [file, content] of files) {

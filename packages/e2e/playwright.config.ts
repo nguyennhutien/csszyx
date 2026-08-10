@@ -120,14 +120,17 @@ export default defineConfig({
             },
         },
         {
-            // Shares the Turbopack dev server the other csszyx-loader specs
-            // use, because the chain it exercises only exists while both the
-            // loader and `csszyx next watch` are live.
+            // Its own Turbopack dev server, over its own route, safelist and
+            // Tailwind entry. It used to share the one above, and the sharing
+            // was the whole problem: sibling specs rewrite that server's
+            // `@source` files while the suite runs, and the regeneration this
+            // chain ends in could not keep up with the churn. Nothing else
+            // touches port 3021 or anything it reads.
             name: 'nextjs-16-turbo-cross-module',
             testMatch: /nextjs-16-turbo-cross-module/,
             use: {
                 ...devices['Desktop Chrome'],
-                baseURL: 'http://localhost:3018',
+                baseURL: 'http://localhost:3021',
             },
         },
         {
@@ -188,6 +191,17 @@ export default defineConfig({
             command: 'pnpm run dev:turbo',
             cwd: '../../playground/nextjs-16',
             url: 'http://localhost:3018/tailwind-source',
+            reuseExistingServer: !process.env.CI,
+            stdout: 'pipe',
+            stderr: 'pipe',
+            timeout: 120000,
+        },
+        {
+            // The isolated cross-module lane: `csszyx next watch` scoped to one
+            // route, writing a safelist only that route's stylesheet reads.
+            command: 'pnpm run dev:xmod',
+            cwd: '../../playground/nextjs-16',
+            url: 'http://localhost:3021/turbo-xmod',
             reuseExistingServer: !process.env.CI,
             stdout: 'pipe',
             stderr: 'pipe',
