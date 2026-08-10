@@ -15,9 +15,13 @@ test.describe('Next.js 16 Turbopack csszyx Loader', () => {
         await writeFile(loaderSafelistPath, placeholderSource);
     });
 
-    test.afterAll(async () => {
-        await writeFile(loaderSafelistPath, placeholderSource);
-    });
+    // No afterAll counterpart on purpose. Emptying the file is what this spec
+    // needs BEFORE it runs — proof that the build filled it — but it restores
+    // nothing afterwards: the file is generated state shared with every other
+    // spec on this dev server, and only a shard change rebuilds it. Leaving it
+    // emptied hands the next spec a project whose classes have no CSS, which is
+    // both a false failure and, because Tailwind re-reads `@source` on each
+    // rewrite, a way to make its regeneration miss the change that matters.
 
     test('transforms sz and materializes Tailwind classes through @source', async ({ page }) => {
         await page.goto('/turbo-csszyx');
