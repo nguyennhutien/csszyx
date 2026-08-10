@@ -223,6 +223,24 @@ describe('Next Turbopack prebuild core', () => {
         ).toThrow(/does not support production CSS variable mangling/);
     });
 
+    it('runs with no csszyx config at all, the way an unconfigured app starts', () => {
+        // Every other case pins a config, so the shape a project gets before it
+        // has one goes untested — and that shape still has to reach the
+        // generation identity, or the loader and the prebuild disagree from the
+        // first build.
+        const root = tempRoot();
+        const filename = writeSource(
+            root,
+            'src/A.tsx',
+            'export const A = () => <div sz={{ p: 4 }} />;',
+        );
+        const { config: _config, ...withoutConfig } = baseOptions(root, [filename]);
+
+        const result = runNextPrebuild(withoutConfig);
+
+        expect(readFileSync(result.safelistOutputPath, 'utf8')).toContain('p-4');
+    });
+
     it('fails closed if the source still contains csszyx sz syntax after transform', () => {
         const root = tempRoot();
         // Force-fail by feeding the babel transformer an input that triggers a

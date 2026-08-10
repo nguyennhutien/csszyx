@@ -612,3 +612,20 @@ test('a cursor after an operator is not a key slot', () => {
         0,
     );
 });
+
+test('a colon with no property name before it offers nothing', () => {
+    // The backward scan can land on a colon whose name is empty — a half-typed
+    // line, or a stray colon. Answering there would attach value suggestions to
+    // a property that does not exist yet.
+    assert.strictEqual(namesAtMarker('const A = () => <div sz={{ :\n  /*|*/\n}} />;').length, 0);
+});
+
+test('a member the structured form does not declare offers nothing', () => {
+    // Inside `maskLinear` the legal members are a closed set. A name that
+    // passes the identifier check but is not one of them has no values to
+    // offer, and guessing would suggest an unrelated property's values.
+    assert.strictEqual(
+        namesAtMarker('const A = () => <div sz={{ maskLinear: { bogus:\n  /*|*/\n} }} />;').length,
+        0,
+    );
+});

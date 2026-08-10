@@ -240,6 +240,24 @@ describe('tsconfig paths', () => {
         expect(aliasesFromTsconfig(root)).toEqual([]);
     });
 
+    it('ignores a config whose top level is not an object', () => {
+        // `JSON.parse` happily returns an array or a number. Indexing that as a
+        // config would read `undefined` for every field and, for an array,
+        // silently treat its numeric keys as compiler options.
+        const root = projectWith({ 'tsconfig.json': '[1, 2, 3]\n' });
+        expect(aliasesFromTsconfig(root)).toEqual([]);
+    });
+
+    it('reads a config whose last line is a comment with no newline', () => {
+        // A file ending mid-comment has no `\n` to stop at. Treating the missing
+        // terminator as an error would reject a config that is perfectly valid.
+        const root = projectWith({
+            'tsconfig.json':
+                '{ "compilerOptions": { "paths": { "@/*": ["./src/*"] } } }\n// trailing',
+        });
+        expect(aliasesFromTsconfig(root)[0]?.replacement).toBe(`${root}/src/`);
+    });
+
     it('reports no aliases for a project without a readable config', () => {
         expect(aliasesFromTsconfig(projectWith({}))).toEqual([]);
         expect(aliasesFromTsconfig(projectWith({ 'tsconfig.json': '{ not json' }))).toEqual([]);

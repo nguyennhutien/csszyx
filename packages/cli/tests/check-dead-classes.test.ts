@@ -199,3 +199,39 @@ describe('projects with more than one Tailwind entry', () => {
         expect(process.exitCode).toBe(1);
     });
 });
+
+describe('csszyx check — what it does with nothing to check', () => {
+    it('skips the dead-class query when no file emitted a class', async () => {
+        // Building a design system costs a Tailwind compile. A project whose
+        // sources author no sz has nothing to ask about, and paying for the
+        // answer would slow every run that needed it least.
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Plain.tsx': 'export const Plain = () => <div className="static" />;',
+        });
+
+        const report = await reportFor(cwd);
+
+        expect(report).toContain('No sz issues found');
+        expect(report).not.toContain('emitted class(es)');
+        expect(process.exitCode).not.toBe(1);
+    });
+
+    it('attributes a class shared by two files to the first that emitted it', async () => {
+        // One origin per class is the contract: the report answers "where did
+        // this come from", not "everywhere it appears". Overwriting on each
+        // sighting would name whichever file the scan happened to reach last.
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/A.tsx': "export const A = () => <div sz={{ pointer: 'none' }} />;",
+            'src/B.tsx': "export const B = () => <div sz={{ pointer: 'none' }} />;",
+        });
+
+        const report = await reportFor(cwd);
+
+        // Matched as the dead-class ROW, not anywhere in the report: both files
+        // also appear above it, each carrying its own unknown-key diagnostic.
+        expect(report).toMatch(/pointer-none\s+src\/A\.tsx/);
+        expect(report).not.toMatch(/pointer-none\s+src\/B\.tsx/);
+    });
+});

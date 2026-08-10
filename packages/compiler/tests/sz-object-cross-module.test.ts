@@ -265,3 +265,66 @@ describe('where the resolved binding is used', () => {
         });
     }
 });
+
+describe('import shapes the oxc reader has to tell apart', () => {
+    it('ignores a specifier marked type-only inside a value import', () => {
+        // `import { type cardSz, other }` is a VALUE import carrying a type-only
+        // specifier. Reading it as a value would bind a name that does not exist
+        // at runtime, so the importer would compile against a table for an
+        // import the bundler erased.
+        const tsx =
+            "import { type cardSz } from './styles';\n" +
+            'export const A = () => <div sz={{ p: 1 }} />;';
+        const out = transformOxc(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+
+        expect(out.code).toContain('p-1');
+        expect(out.code).not.toContain('p-4');
+    });
+
+    it('records a reassignment through a plain binding, not through a member write', () => {
+        // `styles.cardSz = …` writes a PROPERTY; the binding itself still points
+        // at the object the module exported. Treating it as a reassignment would
+        // withdraw the precompile from every importer that merely mutates a
+        // field, which the shared-style contract already forbids for other
+        // reasons.
+        const tsx =
+            "import { cardSz } from './styles';\n" +
+            'const holder = { cardSz };\n' +
+            'holder.cardSz = { p: 9 };\n' +
+            'export const A = () => <div sz={cardSz} />;';
+        const out = transformOxc(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+
+        expect(out.code).toContain('p-4');
+    });
+
+    it('is read the same way by the oxc lane', () => {
+        // The two lanes read the specifier through different AST shapes, and a
+        // lane that fell back to the LOCAL name here would resolve a different
+        // entry than its sibling for the same source.
+        const tsx =
+            'import { "card-sz" as card } from \'./styles\';\n' +
+            'export const A = () => <div sz={card} />;';
+        const out = transformOxc(tsx, '/p/Card.tsx', {
+            crossModuleSzObjects: { './styles': { 'card-sz': { p: 4 } } },
+        });
+
+        expect(out.code).toContain('p-4');
+    });
+});
+
+describe('an export named by a string literal', () => {
+    it('is read through the specifier, not through the local binding', () => {
+        // `import { "card-sz" as card }` is valid ES2022 and the only spelling
+        // for an export whose name is not an identifier. The registry is keyed
+        // by the EXPORT name, so reading the local one looks up a key nothing
+        // ever put there.
+        const tsx =
+            'import { "card-sz" as card } from \'./styles\';\n' +
+            'export const A = () => <div sz={card} />;';
+        const out = transformSourceCode(tsx, '/p/Card.tsx', {
+            crossModuleSzObjects: { './styles': { 'card-sz': { p: 4 } } },
+        } as never);
+
+        expect(out.code).toContain('p-4');
+    });
+});

@@ -212,6 +212,45 @@ describe('createEmittedClassOracle — degrading instead of failing', () => {
         expect(oracle.ok === false && oracle.reason).toContain('__unstable__loadDesignSystem');
     });
 
+    it('reports a compile failure that threw something other than an Error', async () => {
+        // Tailwind's loader is third-party code reached through a dynamic
+        // import, and a rejected promise can carry anything. Reading `.message`
+        // off a string would put `undefined` in the reason and leave the user
+        // with a skip that explains nothing.
+        const oracle = await createEmittedClassOracle(
+            { resolveFrom: REPO, css: STOCK, cssBase: REPO },
+            loaderOf({
+                version: '4.3.3',
+                root: REPO,
+                loadDesignSystem: () => Promise.reject('a bare string, not an Error'),
+            }),
+        );
+
+        expect(oracle.ok).toBe(false);
+        expect(oracle.ok === false && oracle.reason).toContain('a bare string, not an Error');
+    });
+
+    it('reports a query failure that threw something other than an Error', async () => {
+        // The same hazard one step later: the design system loaded, and asking
+        // it about a class is what failed.
+        const oracle = await createEmittedClassOracle(
+            { resolveFrom: REPO, css: STOCK, cssBase: REPO },
+            loaderOf({
+                version: '4.3.3',
+                root: REPO,
+                loadDesignSystem: () =>
+                    Promise.resolve({
+                        candidatesToCss: () => {
+                            throw 'a bare string from the query';
+                        },
+                    }),
+            }),
+        );
+
+        expect(oracle.ok).toBe(false);
+        expect(oracle.ok === false && oracle.reason).toContain('a bare string from the query');
+    });
+
     it('skips when the stylesheet cannot be compiled', async () => {
         const oracle = await createEmittedClassOracle({
             resolveFrom: REPO,
@@ -321,5 +360,37 @@ describe('findTailwindCssEntry — locating the stylesheet to compile', () => {
         const root = tempRoot();
         write(root, { 'src/plain.css': 'body { margin: 0; }' });
         expect(await findTailwindCssEntry(root)).toBeNull();
+    });
+});
+
+describe('the import spellings a real stylesheet uses', () => {
+    it('resolves a package subpath given without its .css extension', async () => {
+        // `@import "tailwindcss/theme"` is how the docs spell it, and the file
+        // on disk is `theme.css`. Passing the id through unchanged asks for a
+        // file that is not there and degrades the whole check to a skip.
+        const oracle = await readyOracle(
+            '@import "tailwindcss/theme" layer(theme);\n' +
+                '@import "tailwindcss/utilities" layer(utilities);',
+        );
+        expect(oracle.findDead(['p-4', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
+    it('resolves a package subpath that already carries its extension', async () => {
+        const oracle = await readyOracle(
+            '@import "tailwindcss/theme.css" layer(theme);\n' +
+                '@import "tailwindcss/utilities.css" layer(utilities);',
+        );
+        expect(oracle.findDead(['p-4', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+});
+
+describe('asking about nothing', () => {
+    it('answers without consulting the design system at all', async () => {
+        // `group` and `peer` are marker classes: they define no rule by design,
+        // and Tailwind's verdict on them — "no CSS" — means something different
+        // from dead. With only markers to ask about there is nothing left to
+        // ask, and the query must not run on an empty list.
+        const oracle = await readyOracle();
+        expect(oracle.findDead(['group', 'peer', 'group/item'])).toEqual([]);
     });
 });

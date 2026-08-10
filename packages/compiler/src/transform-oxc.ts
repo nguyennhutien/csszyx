@@ -2859,24 +2859,27 @@ function buildRuntimeFallbackDiagnostic(
             );
         }
         ({ reason, suggestion } = describeSzFallback('call', name));
-    } else if (importedRootName(expression, importedNames) !== null) {
-        // An import is a module-level value this build tried to read and could
-        // not, so nothing collected its classes. Everything else here is
-        // usually a prop the caller supplies, collected where the caller
-        // writes it.
-        ({ reason, suggestion } = describeSzFallback(
-            'import',
-            importedRootName(expression, importedNames) ?? '',
-        ));
-    } else if (expression.type === 'Identifier') {
-        ({ reason, suggestion } = describeSzFallback(
-            'identifier',
-            (expression as IdentifierNode).name,
-        ));
-    } else if (expression.type === 'MemberExpression') {
-        ({ reason, suggestion } = describeSzFallback('member'));
     } else {
-        ({ reason, suggestion } = describeSzFallback('other', expression.type));
+        // Resolved once and reused: asking twice walked the member chain twice
+        // and left the second answer needing a fallback for a null the first
+        // one had already ruled out.
+        const importedName = importedRootName(expression, importedNames);
+        if (importedName !== null) {
+            // An import is a module-level value this build tried to read and
+            // could not, so nothing collected its classes. Everything else here
+            // is usually a prop the caller supplies, collected where the caller
+            // writes it.
+            ({ reason, suggestion } = describeSzFallback('import', importedName));
+        } else if (expression.type === 'Identifier') {
+            ({ reason, suggestion } = describeSzFallback(
+                'identifier',
+                (expression as IdentifierNode).name,
+            ));
+        } else if (expression.type === 'MemberExpression') {
+            ({ reason, suggestion } = describeSzFallback('member'));
+        } else {
+            ({ reason, suggestion } = describeSzFallback('other', expression.type));
+        }
     }
     return `sz fallback at ${lineCol}: ${reason}.\n  Suggestion: ${suggestion}`;
 }

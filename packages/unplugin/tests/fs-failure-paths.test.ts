@@ -53,11 +53,20 @@ const { vitePlugin } = await import('../src/unplugin.js');
  *
  * @param root - Project root.
  * @param hookName - Hook to invoke.
- * @param args - Arguments to pass.
+ * @param arg - First argument the hook takes, usually the changed path.
+ * @param change - Second argument, for hooks that take a change descriptor.
+ * @param options - Plugin options, for cases that turn a setting off.
  * @returns Whatever the hook returns.
  */
-async function invokeHook(root: string, hookName: string, ...args: unknown[]): Promise<unknown> {
-    const plugins = vitePlugin({});
+async function invokeHook(
+    root: string,
+    hookName: string,
+    arg: unknown,
+    change?: unknown,
+    options: Record<string, unknown> = {},
+): Promise<unknown> {
+    const args = change === undefined ? [arg] : [arg, change];
+    const plugins = vitePlugin(options);
     const context = { warn() {}, error() {} };
     const call = async (name: string, ...rest: unknown[]): Promise<unknown> => {
         const plugin = plugins.find(p => p && name in (p as Record<string, unknown>));
@@ -165,6 +174,79 @@ describe('a watched file that cannot be re-read', () => {
             importer,
             `import { cardSz } from './${UNREADABLE}';\n` +
                 'export const Card = () => <div sz={cardSz} />;\n',
+        );
+
+        await expect(
+            invokeHook(root, 'watchChange', importer, { event: 'update' }),
+        ).resolves.toBeUndefined();
+    });
+});
+
+describe('a watch change the registry has no business reading', () => {
+    it('ignores a file the plugin does not process at all', async () => {
+        // The watcher reports every file in the project, stylesheets and assets
+        // included. Parsing one as a source would cost a parse per edit for an
+        // answer that cannot exist.
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'), { recursive: true });
+        const stylesheet = join(root, 'src/app.css');
+        writeFileSync(stylesheet, '.a { color: red }\n');
+
+        await expect(
+            invokeHook(root, 'watchChange', stylesheet, { event: 'update' }),
+        ).resolves.toBeUndefined();
+    });
+
+    it('ignores the DELETE of a file the plugin does not process', async () => {
+        // A delete carries no content to gate on, so the path is reached with
+        // nothing but the name. Evicting by an unprocessed path would remove a
+        // registry key that another file legitimately owns.
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'), { recursive: true });
+        const stylesheet = join(root, 'src/gone.css');
+        writeFileSync(stylesheet, '.a { color: red }\n');
+
+        await expect(
+            invokeHook(root, 'watchChange', stylesheet, { event: 'delete' }),
+        ).resolves.toBeUndefined();
+    });
+
+    it('records no sz objects while the setting is turned off', async () => {
+        // With the feature off, the same edit must not read the file for plain
+        // objects or chase what it imports — the work exists only to serve a
+        // resolution this build has been told not to do.
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'), { recursive: true });
+        writeFileSync(join(root, 'src/styles.ts'), 'export const cardSz = { p: 7 };\n');
+        const importer = join(root, 'src/Card.tsx');
+        writeFileSync(
+            importer,
+            "import { cardSz } from './styles';\nexport const C = () => <div sz={cardSz} />;\n",
+        );
+
+        await expect(
+            invokeHook(
+                root,
+                'watchChange',
+                importer,
+                { event: 'update' },
+                { build: { importedStaticSz: false } },
+            ),
+        ).resolves.toBeUndefined();
+    });
+
+    it('passes over an import that resolves to no file on disk', async () => {
+        // A bare package specifier and a relative path pointing nowhere both
+        // reach the demand pass, and neither denotes a module this project can
+        // read. Recording either would put a phantom in the registry.
+        const root = tempRoot();
+        mkdirSync(join(root, 'src'), { recursive: true });
+        const importer = join(root, 'src/Card.tsx');
+        writeFileSync(
+            importer,
+            "import { useState } from 'react';\n" +
+                "import { gone } from './not-on-disk';\n" +
+                'export const C = () => <div sz={{ p: 4 }} />;\n',
         );
 
         await expect(
