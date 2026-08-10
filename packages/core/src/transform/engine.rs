@@ -1516,6 +1516,25 @@ mod tests {
     }
 
     #[test]
+    fn static_engine_names_the_unknown_recovery_mode_it_rejected() {
+        // A misspelled mode and a dynamic value both disable token emission, and
+        // they need different fixes — one is a typo, the other is a shape the
+        // engine cannot read. A shared message would send the author looking for
+        // the wrong problem, so the mode they actually wrote is quoted back.
+        let file = TransformFile {
+            filename: "src/App.tsx".to_string(),
+            source: "export const App = () => <div szRecover=\"csrr\">x</div>;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(result.recovery_tokens.is_empty());
+        let diagnostics = result.diagnostics.join("\n");
+        assert!(diagnostics.contains("csrr"), "{diagnostics}");
+        assert!(diagnostics.contains("unknown mode"), "{diagnostics}");
+    }
+
+    #[test]
     fn static_engine_skips_already_tagged_recovery() {
         let file = TransformFile {
             filename: "src/App.tsx".to_string(),
