@@ -131,7 +131,7 @@ function replaceEntriesOfKind(
     entries: readonly CrossModuleRegistryEntry[],
 ): void {
     const key = normalizePathSeparators(filePath);
-    const byName: Record<string, CrossModuleRegistryValue> = {};
+    const byName = emptyNameIndex<CrossModuleRegistryValue>();
     for (const [name, recorded] of Object.entries(registry.get(key) ?? {})) {
         if (recorded.kind !== kind) byName[name] = recorded;
     }
@@ -140,6 +140,28 @@ function replaceEntriesOfKind(
     }
     if (Object.keys(byName).length === 0) registry.delete(key);
     else registry.set(key, byName);
+}
+
+/**
+ * An empty map keyed by names read out of source text.
+ *
+ * Null-prototype on purpose. Every key here is an export name or an import
+ * specifier lifted from a file the build did not write, and two of those names
+ * are not ordinary keys on an ordinary object: assigning `__proto__` on a plain
+ * object REPLACES its prototype instead of adding a property, and reading it
+ * yields `Object.prototype` rather than nothing — so a `??=` guard sees a value
+ * that is already there and writes straight onto the shared prototype.
+ *
+ * A provider exporting `__proto__`, or an import specifier spelled that way, is
+ * therefore enough to reach every object in the process. Without a prototype
+ * there is no setter to trigger and no inherited value to mistake for an entry:
+ * the name becomes an ordinary key that resolves for nobody, which is what it
+ * should have been all along.
+ *
+ * @returns A fresh object with no prototype.
+ */
+export function emptyNameIndex<T>(): Record<string, T> {
+    return Object.create(null) as Record<string, T>;
 }
 
 /** Extension probes tried against the registry, resolution order fixed. */
@@ -236,9 +258,9 @@ function fileUnderSpecifier(
 ): void {
     for (const [name, recorded] of Object.entries(entries)) {
         const channel = recorded.kind === 'szv-config' ? 'szvConfigs' : 'szObjects';
-        resolved[channel] ??= {};
+        resolved[channel] ??= emptyNameIndex();
         const bySpecifier = resolved[channel];
-        bySpecifier[specifier] ??= {};
+        bySpecifier[specifier] ??= emptyNameIndex();
         bySpecifier[specifier][name] = recorded.value;
     }
 }

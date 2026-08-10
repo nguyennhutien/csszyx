@@ -27,6 +27,7 @@ import {
 import { DEFAULT_IMPORTED_STATIC_SZ } from '@csszyx/types';
 
 import {
+    emptyNameIndex,
     importedSpecifiersIn,
     type ResolvedCrossModuleEntries,
     resolveProviderPathWith,
@@ -167,9 +168,9 @@ function recordEntries(
             continue;
         }
         const channel = entry.kind === 'szv-config' ? 'szvConfigs' : 'szObjects';
-        statics[channel] ??= {};
+        statics[channel] ??= emptyNameIndex();
         const bySpecifier = statics[channel];
-        bySpecifier[specifier] ??= {};
+        bySpecifier[specifier] ??= emptyNameIndex();
         bySpecifier[specifier][entry.exportName] = entry.value;
     }
 }

@@ -2921,6 +2921,22 @@ type GetBinding = (name: string) => ResolvedBinding | null | undefined;
 type CrossModuleSzObjects = Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 
 /**
+ * Whether an object carries a key itself, rather than inheriting it.
+ *
+ * `registry['__proto__']` on an ordinary object answers with `Object.prototype`
+ * and `Object.prototype['toString']` answers with a function — either would be
+ * read as an entry from a table no module wrote.
+ *
+ * @param target - Object to inspect.
+ * @param key - Property name read out of source text.
+ * @returns True when the key is the object's own.
+ */
+function hasOwn(target: object, key: string): boolean {
+    // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; the toolchain lib is ES2021.
+    return Object.prototype.hasOwnProperty.call(target, key);
+}
+
+/**
  * Resolve one binding to the static sz object its module exports.
  *
  * Resolution is by BINDING, never by matching a text name against the
@@ -2949,7 +2965,16 @@ function importedSzObject(
     if (declaration.node.importKind === 'type' || specifier.node.importKind === 'type') return null;
     const imported = specifier.node.imported;
     const exportName = t.isIdentifier(imported) ? imported.name : imported.value;
-    const value = registry[declaration.node.source.value]?.[exportName];
+    // Own properties only. The registry is keyed by names read out of source
+    // text, and `registry['__proto__']` on an ordinary object answers with
+    // `Object.prototype` — an object that would then be lowered as if a module
+    // had exported it. The bundler builds these tables without a prototype for
+    // the same reason; this keeps a hand-built one from smuggling entries in.
+    const specifierKey = declaration.node.source.value;
+    if (!hasOwn(registry, specifierKey)) return null;
+    const exported = registry[specifierKey];
+    if (exported === undefined || !hasOwn(exported, exportName)) return null;
+    const value = exported[exportName];
     return value !== null && typeof value === 'object' && !Array.isArray(value)
         ? (value as SzObject)
         : null;

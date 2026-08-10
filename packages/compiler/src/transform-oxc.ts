@@ -6788,9 +6788,14 @@ function collectImportedSzObjects(
             // that matches no export, silently, instead of being rejected.
             const exportName = importedExportName(imported);
             const local = specifier.local?.name;
-            // No guard on `exportName`: the reader above returns `''` for a
-            // shape it cannot name, and an empty key matches no export.
-            const value = exported[exportName];
+            // Own properties only, and no guard needed on the name itself: the
+            // reader above returns `''` for a shape it cannot name. What the
+            // check is for is `__proto__`, which on an ordinary object answers
+            // with `Object.prototype` instead of nothing and would be lowered
+            // as though a module had exported it.
+            // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; the toolchain lib is ES2021.
+            const own = Object.prototype.hasOwnProperty.call(exported, exportName);
+            const value = own ? exported[exportName] : undefined;
             if (local !== undefined && value !== null && typeof value === 'object') {
                 out.set(local, value as Record<string, unknown>);
             }

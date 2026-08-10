@@ -328,3 +328,36 @@ describe('an export named by a string literal', () => {
         expect(out.code).toContain('p-4');
     });
 });
+
+describe('a registry key that is not an ordinary property name', () => {
+    it.each(ENGINES.filter(([name]) => name !== 'rust'))(
+        '%s lowers nothing for an import named __proto__',
+        (_name, engine) => {
+            // Reading `registry['__proto__']` off an ordinary object answers
+            // with `Object.prototype`, and reading a member off THAT answers
+            // with whatever the prototype carries. Either would be lowered as
+            // though a module had exported it — from a table no module wrote.
+            const tsx =
+                "import { toString } from '__proto__';\n" +
+                'export const A = () => <div sz={toString} />;';
+            const out = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: {} });
+
+            expect(out.code).toContain('_sz(toString)');
+        },
+    );
+
+    it.each(ENGINES.filter(([name]) => name !== 'rust'))(
+        '%s lowers nothing for an export named __proto__ it was not given',
+        (_name, engine) => {
+            const tsx =
+                "import { __proto__ } from './styles';\n" +
+                'export const A = () => <div sz={__proto__} />;';
+            const out = engine(tsx, '/p/Card.tsx', {
+                crossModuleSzObjects: { './styles': { cardSz: { p: 4 } } },
+            });
+
+            expect(out.code).toContain('_sz(__proto__)');
+            expect(out.code).not.toContain('p-4');
+        },
+    );
+});
