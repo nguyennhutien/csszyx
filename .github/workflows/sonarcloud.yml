@@ -17,17 +17,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect-changes:
+    uses: ./.github/workflows/detect-changes.yml
+
   sonarcloud:
+    needs: detect-changes
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Three reasons to sit out, and they are unrelated:
+    #
     # Fork PRs and Dependabot PRs cannot read SONAR_TOKEN — Dependabot runs
     # against a separate secrets store, so the scanner would fail 401 rather
     # than report anything. Neither touches analysed source, and the push runs
     # on main cover them.
+    #
+    # A diff with no TypeScript or Rust in it has no new code to analyse. The
+    # quality gate reads new code, and version bumps and markdown are not it.
     if: >-
-      ${{ github.event_name != 'pull_request' ||
+      ${{ (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
-      github.actor != 'dependabot[bot]') }}
+      github.actor != 'dependabot[bot]')) &&
+      (needs.detect-changes.outputs.code_ts == 'true' ||
+      needs.detect-changes.outputs.code_rust == 'true') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

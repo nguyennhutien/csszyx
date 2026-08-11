@@ -5,6 +5,12 @@ name: ClusterFuzzLite PR fuzzing
 # continuous workflow uploaded for the base branch as the crash baseline.
 on:
   pull_request:
+    # A coarse "could this possibly matter" pre-filter, not the decision. It
+    # costs nothing when it does not match, which is most pull requests. What it
+    # cannot do is tell a Rust change from a version bump — `packages/core/**`
+    # matches `packages/core/package.json`, so every release pull request used
+    # to spend five minutes fuzzing to learn that a version string had changed.
+    # The job below asks the shared gate that question instead.
     paths:
       - "packages/core/**"
       - ".clusterfuzzlite/**"
@@ -17,7 +23,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect-changes:
+    uses: ./.github/workflows/detect-changes.yml
+
   fuzzing:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.code_rust == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
