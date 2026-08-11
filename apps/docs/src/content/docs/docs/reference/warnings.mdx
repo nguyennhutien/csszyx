@@ -156,6 +156,31 @@ other cause is `build.importedStaticSz` being turned off. See
 
 `{filename}` is `<anonymous>` when the compiler was called without one.
 
+### Fallbacks a production build does not list
+
+A fallback at an `sz` prop is advisory: the runtime path works and the classes
+are still collected, so a production build does not print it. Only the kinds
+that mean **absent output** — `szr`, `szs`, spreads, budget bails — print in
+every mode.
+
+That makes the fallbacks a production log *does* list a lower bound, never a
+total. So the build closes with a count of what it held back:
+
+```text
+[csszyx] {n} advisory sz fallbacks not listed above. At an sz prop a fallback is advisory — the runtime path works and the classes are collected — so a production build keeps the list short. A development build prints each one with its file and position.
+```
+
+Run a development build to see each one with its file and position. Silenced by
+`quiet: true` (blunt mode) along with everything else; `quiet: 'nudges'` keeps
+it, because one line saying how much was left out is what stops a calm log from
+reading as a clean one.
+
+<Aside type="caution" title="Counting affected sites from a build log">
+Because the list is partial, counting how many places fall back by reading the
+log undercounts — a component that only ever falls back at an `sz` prop never
+appears in it. Read sources when you need the real number.
+</Aside>
+
 ## sz — key and value warnings
 
 These come from the shared lowering core, so the **same message** appears

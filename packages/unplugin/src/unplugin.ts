@@ -195,6 +195,14 @@ interface PluginState {
     /** Unresolvable-spread warnings surfaced to the build log in every mode. */
     spreadWarnings: Set<string>;
     /**
+     * Advisory sz fallbacks this build declined to list.
+     *
+     * Counted so the build can say the list is partial. Printing nothing is not
+     * the same as printing "nothing happened", and a log that names five
+     * fallbacks while holding three back reads as a total.
+     */
+    suppressedAdvisories: number;
+    /**
      * Workspace-package files under `/packages/` that use csszyx but were
      * skipped by the hard-ignore (not under any `compileSources` dir). Surfaced at
      * build end so the silent no-op (skipped `sz` → no CSS) becomes visible.
@@ -804,6 +812,53 @@ export function unscopedMonorepoMessage(): string {
         'one for the classes it generates, so only your own templates need listing. ' +
         'Guide: https://csszyx.com/docs/monorepo-content-scope/\n' +
         'Silence (if a broad scan is intentional): csszyx({ contentScopeCheck: false }).'
+    );
+}
+
+/**
+ * Whether a diagnostic is an advisory one — the class a build may hold back.
+ *
+ * Spread warnings, budget bails and `missing-css` fallbacks all describe absent
+ * output and print regardless. What is left says the runtime path was taken
+ * where a compiled one was possible: real, worth acting on, and not a failure.
+ *
+ * @param message - One raw diagnostic line as an engine emitted it.
+ * @returns True when the diagnostic is advisory rather than a build result.
+ */
+export function isAdvisoryDiagnostic(message: string): boolean {
+    return !(
+        message.includes('unresolvable sz spread') ||
+        message.includes('AST budget exceeded') ||
+        szFallbackConsequenceOf(message) === 'missing-css'
+    );
+}
+
+/**
+ * Build the one-line disclosure that the fallback list above is partial.
+ *
+ * Four of the five `sz`-site fallback kinds never print in a production build,
+ * so a log can list the `szr` fallbacks it found and silently hold every
+ * `sz={factory()}` beside them. A consumer counting affected sites from that
+ * log counts a lower bound and has no way to know it — one reported a site
+ * count that was short by half for exactly this reason, and only caught it by
+ * reading sources instead.
+ *
+ * Suppression is the right default; implying zero is not. One line costs
+ * nothing and keeps the difference visible.
+ *
+ * @param count - Advisory fallbacks the build declined to list.
+ * @returns The disclosure, or null when nothing was held back.
+ */
+export function suppressedAdvisoryMessage(count: number): string | null {
+    if (count <= 0) return null;
+    // Count and noun interpolate together so the sentence after them is one
+    // unbroken literal: the docs-sync gate matches verbatim runs, and a
+    // placeholder in the middle splits the run it is trying to match.
+    const held = count === 1 ? '1 advisory sz fallback' : `${count} advisory sz fallbacks`;
+    return (
+        `[csszyx] ${held} not listed above. At an sz prop a fallback is advisory — the ` +
+        'runtime path works and the classes are collected — so a production build keeps the ' +
+        'list short. A development build prints each one with its file and position.'
     );
 }
 
@@ -2684,6 +2739,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         tailwindEntryScoped: false,
         contentScopeWarningEmitted: false,
         spreadWarnings: new Set<string>(),
+        suppressedAdvisories: 0,
         skippedSzFiles: new Set<string>(),
         skippedSzvExportFiles: new Set<string>(),
         skipWarningEmitted: false,
@@ -4296,21 +4352,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // precisely so a calmer log does not have to cost this report.
             emitMissingCssFallback(quiet, message, id, console.warn);
         }
-        if (
-            quiet !== 'off' ||
-            result.diagnostics.length === 0 ||
-            process.env.NODE_ENV === 'production'
-        ) {
+        const advisories = result.diagnostics.filter(isAdvisoryDiagnostic);
+        if (advisories.length === 0) return;
+        if (quiet !== 'off' || process.env.NODE_ENV === 'production') {
+            // Held back, but counted. These are advisory by design — the
+            // runtime path works and the classes are collected — so a
+            // production build is right not to list them. It is not right to
+            // leave the reader believing the fallbacks it DID list are all of
+            // them, which is how a site that only ever falls back at an sz prop
+            // stays invisible to anyone reading the log.
+            state.suppressedAdvisories += advisories.length;
             return;
         }
-        for (const message of result.diagnostics) {
-            if (
-                message.includes('unresolvable sz spread') ||
-                message.includes('AST budget exceeded') ||
-                szFallbackConsequenceOf(message) === 'missing-css'
-            ) {
-                continue;
-            }
+        for (const message of advisories) {
             warn(`[csszyx] ${id}\n  ${message}`);
         }
     }
@@ -5327,16 +5381,35 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Tell the build what mangling actually cost, once every asset is weighed.
-     * Silent unless the map came out more expensive than the output it bought,
-     * so a build that got what it paid for stays quiet.
+     * Say what the build did, once, where a reader is looking.
      *
-     * Called from each lane's last moment rather than from the rewrite pass,
-     * because WHERE this lands decides whether anyone reads it. On the Vite
-     * lane the rewrite happens in `generateBundle`, which prints ahead of the
-     * asset table — so the one figure that answers "did mangling help" arrived
-     * before the table a reader compares to answer that question, wedged
-     * between other `[csszyx]` lines. `closeBundle` runs after the table.
+     * Called from each lane's last moment rather than from the passes that
+     * produce the numbers, because WHERE these land decides whether anyone
+     * reads them. On the Vite lane the rewrite happens in `generateBundle`,
+     * which prints ahead of the asset table — so the one figure that answers
+     * "did mangling help" arrived before the table a reader compares to answer
+     * that question, wedged between other `[csszyx]` lines. `closeBundle` runs
+     * after the table.
+     *
+     * Both halves stay quiet when there is nothing to disclose: a build that
+     * got what it paid for and held nothing back prints neither line.
+     */
+    function reportBuildSummary(): void {
+        reportMangleSize();
+        // Blunt mode asked for silence and gets it; `'nudges'` asked for a
+        // calmer log, and one line saying how much was left out is the opposite
+        // of noise — it is what stops the calm log from reading as a clean one.
+        if (resolveQuietMode(quiet) !== 'all') {
+            const message = suppressedAdvisoryMessage(state.suppressedAdvisories);
+            if (message) console.warn(message);
+        }
+        state.suppressedAdvisories = 0;
+    }
+
+    /**
+     * Tell the build what mangling actually cost, once every asset is weighed.
+     *
+     * @see reportBuildSummary for where this lands and why.
      */
     function reportMangleSize(): void {
         const verdict = computeMangleSizeVerdict(
@@ -5442,7 +5515,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Webpack has no post-write hook in this plugin and prints no asset
         // table of its own, so the reason the Vite lane defers does not apply:
         // here the end of asset processing IS the end of the build's output.
-        reportMangleSize();
+        reportBuildSummary();
     }
 
     /**
@@ -5574,7 +5647,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * the other diagnostics.
          */
         closeBundle() {
-            reportMangleSize();
+            reportBuildSummary();
         },
     }));
 
