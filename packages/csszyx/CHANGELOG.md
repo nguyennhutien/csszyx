@@ -2,14 +2,56 @@
 
 ## [0.13.0](https://github.com/nguyennhutien/csszyx/compare/v0.12.0...v0.13.0) (2026-08-11)
 
-
 ### ⚠ BREAKING CHANGES
 
-* `shouldEmitWarning`, `shouldEmitMissingCssFallback` and `emitMissingCssFallback` now type their first parameter as the resolved `QuietMode` rather than the authored option. TypeScript callers passing a boolean should pass `resolveQuietMode(value)` instead; the runtime still accepts a boolean, so JavaScript callers are unaffected.
+* compile sz objects a component imports from another module ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** `shouldEmitWarning`, `shouldEmitMissingCssFallback` and `emitMissingCssFallback` now type their first parameter as the resolved `QuietMode` rather than the authored option. TypeScript callers passing a boolean should pass `resolveQuietMode(value)` instead; the runtime still accepts a boolean, so JavaScript callers are unaffected. ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** `csszyx-manifest.json` is no longer emitted by default. An app using `@csszyx/dynamic` that relies on it must set `build: { emitManifest: true }` and await `preloadManifest()` before its first render; run `dynamicReport()` from `@csszyx/dynamic` to check whether the file earns its transfer on that app. Apps that do not use `dynamic()` need no change. ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
 
 ### Features
 
-* compile sz objects a component imports from another module ([#206](https://github.com/nguyennhutien/csszyx/issues/206)) ([ba51dec](https://github.com/nguyennhutien/csszyx/commit/ba51dec97683597978f4a663d403d5925632cc29))
+* compile sz objects a component imports from another module ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** let quiet keep the reports that matter ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** precompile imported szv factories in watch modes too ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **dynamic:** report whether the manifest paid for itself ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** type the quiet gates as the resolved mode ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** emit the dynamic manifest only when asked ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **mcp:** preview what csszyx compiles a whole module into ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **cli:** ask the project's own Tailwind which emitted classes are real ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **cli:** load the plugins a project stylesheet asks for ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **cli:** let a project vouch for a class the stylesheet cannot show ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **compiler:** read exported static sz objects into the registry extractor ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* compile a static sz object that a component imports ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** refresh szcn theme groups live on the Turbopack lane ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **runtime:** give the theme group registry a full lifecycle ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+
+### Bug Fixes
+
+* **compiler:** compose the sz merge with the szv precompile ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** report a package skip that costs the szv registry ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **compiler:** bracket any CSS function value, not a list of names ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** stop reporting fallbacks csszyx caused by design ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **compiler:** keep a trailing variable shorthand out of the bracket rule ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** keep the quiet gates accepting the authored boolean ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** warn on a plugin option that will never be read ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **ts-plugin:** complete values after a quote at end of line ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **vscode:** stop flagging the parametric variants as unknown props ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **ts-plugin:** complete a key slot whose comma is not typed yet, and add it ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **compiler:** bracket a numeric font weight so it styles something ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **cli:** stop calling the group and peer markers dead classes ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **compiler:** surface an sz fallback that collected no classes ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **compiler:** stop folding a binding that is written to again ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **compiler:** unwrap a TS assertion written at the sz site ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **types:** accept a readonly array as an sz value ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **compiler:** report a lost import, not a forwarded prop ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **core:** keep an important modifier outside the arbitrary brackets ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **core:** tell the two szRecover failures apart on every engine ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **cli:** quote the apostrophe the way the compiler quotes it ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **runtime:** stop a colour from deleting a size on eight more prefixes ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** keep theme merge groups whole when scanCss narrows typing ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **cli:** ask every Tailwind entry before calling a class dead ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** register szcn theme groups on the Turbopack lane ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
+* **unplugin:** register szcn theme groups on the webpack lane ([#206](https://github.com/nguyennhutien/csszyx/issues/206))
 
 ## [0.12.0](https://github.com/nguyennhutien/csszyx/compare/v0.11.11...v0.12.0) (2026-08-03)
 
