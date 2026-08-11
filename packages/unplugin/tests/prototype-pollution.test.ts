@@ -58,6 +58,31 @@ function projectExportingProto(): { root: string; page: string } {
     return { root, page: join(root, 'app/page.tsx') };
 }
 
+/**
+ * Assert a resolved channel carries the expected keys, on tables with no
+ * prototype.
+ *
+ * Both levels, because both are keyed by text the build did not write — the
+ * specifier as the importer spelled it, then the name the provider exported —
+ * and a table built plain at either one is a setter away from the prototype.
+ *
+ * @param channel - The resolved channel to inspect.
+ * @param specifiers - Specifiers the channel should carry.
+ * @param names - Export names the first specifier should carry.
+ */
+function expectPrototypeless(
+    channel: Record<string, Record<string, unknown>> | undefined,
+    specifiers: string[],
+    names: string[],
+): void {
+    expect(channel).toBeDefined();
+    expect(Object.keys(channel as object)).toEqual(specifiers);
+    expect(Object.getPrototypeOf(channel as object)).toBeNull();
+    const slice = (channel as Record<string, Record<string, unknown>>)[specifiers[0]];
+    expect(Object.keys(slice)).toEqual(names);
+    expect(Object.getPrototypeOf(slice)).toBeNull();
+}
+
 describe('a provider exporting __proto__', () => {
     it('does not reach Object.prototype through the Turbopack lane', () => {
         const { root, page } = projectExportingProto();
@@ -117,9 +142,31 @@ describe('a provider exporting __proto__', () => {
         );
 
         expect(({} as Record<string, unknown>)[CANARY]).toBeUndefined();
-        const slice = resolved.szObjects?.['./styles'];
-        expect(slice && Object.keys(slice)).toEqual(['cardSz']);
-        expect(slice && Object.getPrototypeOf(slice)).toBeNull();
+        expectPrototypeless(resolved.szObjects, ['./styles'], ['cardSz']);
+    });
+
+    // The other lane, on the same shape. Both write through one function, and
+    // the refusal above means a table built here never holds the hazardous name
+    // — which would leave the second defence pinned by nothing if these did not
+    // look at the tables a SURVIVING export is filed in.
+    it('builds prototypeless tables on the Turbopack lane too', () => {
+        const root = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-proto-both-')));
+        roots.push(root);
+        mkdirSync(join(root, 'app'), { recursive: true });
+        writeFileSync(
+            join(root, 'app/styles.ts'),
+            `export const __proto__ = { ${CANARY}: 'reached' };\nexport const cardSz = { p: 4 };\n`,
+        );
+
+        const resolved = resolveNextCrossModule({
+            filename: join(root, 'app/page.tsx'),
+            source: "import { cardSz } from './styles';\n",
+            root,
+            importedStaticSz: true,
+        });
+
+        expect(({} as Record<string, unknown>)[CANARY]).toBeUndefined();
+        expectPrototypeless(resolved.statics.szObjects, ['./styles'], ['cardSz']);
     });
 });
 
