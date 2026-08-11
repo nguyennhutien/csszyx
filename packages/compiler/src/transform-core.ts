@@ -1454,11 +1454,9 @@ function containsCssFunctionCall(value: string): boolean {
             continue;
         }
         let start = at;
-        // `charCodeAt` rather than `codePointAt` for the scan: it answers with a
-        // number for every index, so `start > 0` is the whole guard and there is
-        // no absent value to invent a sentinel for. The two differ only above
-        // the BMP, where neither answer is an identifier code.
-        while (start > 0 && isAsciiIdentifierCode(value.charCodeAt(start - 1))) {
+        // `start > 0` is what puts the index in range, so the read has no absent
+        // case: asserted rather than given a fallback arm no input can reach.
+        while (start > 0 && isAsciiIdentifierCode(value.codePointAt(start - 1) as number)) {
             start -= 1;
         }
         if (start < at && !value.startsWith('--', start)) {
