@@ -39,6 +39,15 @@ export default defineConfig({
                 '**/scripts/**',
                 'packages/e2e/**',
                 'packages/types/**', // type declarations only — erased at runtime
+                // packages/ts-plugin ships its own c8 run over the built dist,
+                // and that report is uploaded alongside this one. Measuring it
+                // here as well describes one source file twice, from two
+                // instrumenters that do not agree on where a branch begins —
+                // `a && b` lands on the declaration line in one and the return
+                // line in the other. A merger keyed by line then reads a branch
+                // covered in one report as uncovered in the other, and reports
+                // a gap in code that has none. One package, one report.
+                'packages/ts-plugin/**',
                 // packages/vscode IS measured: its suites mock the `vscode`
                 // module, so everything except the host-activation wiring in
                 // extension.ts runs headless under vitest.

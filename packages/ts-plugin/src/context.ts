@@ -688,7 +688,10 @@ function incompleteValueContext(
     quoted: boolean,
 ): SzContext | null {
     const name = nameBeforeColon(text, colon, objectStart);
-    if (!name || !/[A-Z_$]/i.test(name[0] ?? '')) return null;
+    // `!name` has already rejected both undefined and the empty string, so the
+    // first character is there to read: no fallback arm, because no input
+    // reaches one.
+    if (!name || !/[A-Z_$]/i.test(name[0])) return null;
     const member = formMember(form, name);
     if (member === null) return null;
     return {
