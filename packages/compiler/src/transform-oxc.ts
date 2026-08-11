@@ -6808,7 +6808,10 @@ function collectImportedSzObjects(
             // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; the toolchain lib is ES2021.
             const own = Object.prototype.hasOwnProperty.call(exported, exportName);
             const value = own ? exported[exportName] : undefined;
-            if (value !== null && typeof value === 'object') {
+            // An array is an object and has no sz keys — only indices, which
+            // would lower as though `0` were a variant name. The reference
+            // engine refuses it, so this one has to as well.
+            if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
                 out.set(specifier.local.name, value as Record<string, unknown>);
             }
         }

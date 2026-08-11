@@ -164,6 +164,22 @@ describe('what v1 refuses, and must keep refusing', () => {
             const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
             expect(result.code ?? '').toContain('_sz(');
         });
+
+        it(`${name} falls back for an entry that is not an sz object`, () => {
+            // The registry is built by reading somebody else's module, so an
+            // entry can be any exported value. Anything that is not a plain
+            // object has no keys to lower, and lowering it anyway would put
+            // whatever it stringifies to into a class name.
+            const tsx =
+                "import { cardSz } from './styles';\nexport const A = () => <div sz={cardSz} />;";
+            for (const value of ['p-4', 42, [{ p: 4 }]]) {
+                const result = engine(tsx, '/p/Card.tsx', {
+                    crossModuleSzObjects: { './styles': { cardSz: value } },
+                } as { crossModuleSzObjects: SzObjectRegistry });
+                expect(result.code ?? '').toContain('_sz(');
+                expect(result.code ?? '').not.toContain('p-4"');
+            }
+        });
     }
 });
 
