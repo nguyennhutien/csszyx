@@ -9,6 +9,15 @@
  * release-please ignores it. This re-builds the version's CHANGELOG section from
  * those bodies so a bundled PR still produces rich, grouped notes.
  *
+ * The bodies are read back from each PR rather than from the squash commit,
+ * because GitHub caps that commit's message at 64 KiB and silently truncates
+ * the rest. Measured on the v0.13.0 release: 108 commits went in, the message
+ * stopped mid-sentence at 65,539 bytes, and 48 commits — fifteen of them
+ * user-facing, three carrying a BREAKING CHANGE footer — were never written to
+ * main at all. Nothing reports that; the notes simply come out short. A pull
+ * request keeps its own commits after the squash, so asking it directly is the
+ * only source that survives.
+ *
  * Runs in release.yml after release-please, only when a release PR is open. It is
  * best-effort: any failure logs and exits 0 so a release is never broken — the
  * worst case is the thin release-please output.
@@ -104,6 +113,27 @@ function parseConventionalLine(line) {
 
 /** Footer that opens a breaking-change note, in both spellings the spec allows. */
 const BREAKING_FOOTER = /^BREAKING[ -]CHANGE:\s*/;
+
+/**
+ * Rebuild a squash commit's message from the pull request's own commits.
+ *
+ * The result is shaped the way GitHub writes a squash body — the subject, then
+ * one `* ` bullet per commit — so {@link parseConventional} reads it exactly as
+ * it reads a real one. That matters for more than tidiness: the PR reference is
+ * taken from the first line and applied to every entry below it, and a
+ * `BREAKING CHANGE:` footer is attached to whichever bullet precedes it.
+ *
+ * @param {string} firstLine - Squash subject, trailing `(#123)` included.
+ * @param {string[]} commitMessages - Full messages of the PR's own commits.
+ * @returns {string} A squash-shaped message carrying every commit.
+ */
+export function buildSquashBody(firstLine, commitMessages) {
+    const bullets = commitMessages
+        .map(message => message.trim())
+        .filter(message => message !== '')
+        .map(message => `* ${message}`);
+    return bullets.length === 0 ? firstLine : `${firstLine}\n\n${bullets.join('\n\n')}`;
+}
 
 /**
  * Extract deduped conventional-commit entries from a list of commit messages.
@@ -260,6 +290,73 @@ function gh(args) {
     return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 }
 
+/** Commits GitHub will list for one pull request, however many it really has. */
+const PR_COMMIT_CEILING = 250;
+
+/** Page size for the commit listing; the ceiling above is a multiple of it. */
+const PR_COMMIT_PAGE = 100;
+
+/**
+ * Every commit message on one pull request, paged to the end.
+ *
+ * Paged by hand rather than with `--paginate`: that flag emits one JSON array
+ * per page, which is not a document `JSON.parse` can read.
+ *
+ * @param {string} repo - `owner/name`.
+ * @param {string} pr - Pull request number.
+ * @returns {string[]} Full commit messages, oldest first.
+ */
+function prCommitMessages(repo, pr) {
+    const messages = [];
+    for (let page = 1; ; page += 1) {
+        const url = `repos/${repo}/pulls/${pr}/commits?per_page=${PR_COMMIT_PAGE}&page=${page}`;
+        const batch = JSON.parse(gh(['api', url]));
+        if (!Array.isArray(batch) || batch.length === 0) return messages;
+        for (const commit of batch) messages.push(commit.commit.message);
+        if (batch.length < PR_COMMIT_PAGE) return messages;
+    }
+}
+
+/**
+ * Replace each squash commit with the commits it flattened.
+ *
+ * Best-effort per commit: a subject with no PR reference is a direct push and
+ * is already its own message, and a reference that cannot be read — an issue
+ * number, a deleted PR, a rate limit — falls back to the squash body, which is
+ * what this read replaces rather than depends on.
+ *
+ * @param {string} repo - `owner/name`.
+ * @param {Array<{ commit: { message: string } }>} commits - Commits on main since the last release.
+ * @returns {string[]} One message per commit, squashes expanded.
+ */
+function expandSquashCommits(repo, commits) {
+    return commits.map(commit => {
+        const message = commit.commit.message;
+        const firstLine = message.split('\n', 1)[0] ?? '';
+        const { pr } = readTrailingPr(firstLine);
+        if (pr === null) return message;
+        let messages;
+        try {
+            messages = prCommitMessages(repo, pr);
+        } catch (err) {
+            console.log(
+                `[enrich] #${pr} commits unreadable (${err?.message || err}) — using the squash body`,
+            );
+            return message;
+        }
+        if (messages.length === 0) return message;
+        if (messages.length >= PR_COMMIT_CEILING) {
+            // The one hole this read cannot close. Said out loud because the
+            // failure it replaces was silent, and a silent replacement for a
+            // silent failure is no improvement.
+            console.log(
+                `[enrich] #${pr} lists ${messages.length} commits — GitHub stops at ${PR_COMMIT_CEILING}, so anything past that is missing from these notes`,
+            );
+        }
+        return buildSquashBody(firstLine, messages);
+    });
+}
+
 /**
  * Best-effort entry point. Reads the open release PR, rebuilds its CHANGELOG
  * section from the commit range since the last release, and updates both the
@@ -308,7 +405,7 @@ async function main() {
 
         const lastTag = JSON.parse(gh(['api', `repos/${repo}/releases/latest`])).tag_name;
         const compare = JSON.parse(gh(['api', `repos/${repo}/compare/${lastTag}...main`]));
-        const messages = (compare.commits ?? []).map(c => c.commit.message);
+        const messages = expandSquashCommits(repo, compare.commits ?? []);
         const entries = parseConventional(messages);
         if (!entries.some(e => sectionMap.has(e.type))) {
             console.log('[enrich] no visible entries — leaving release-please output as-is');
