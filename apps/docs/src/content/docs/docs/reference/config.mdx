@@ -471,9 +471,11 @@ build root.
 
 #### Content Scope Check (`contentScopeCheck`)
 
-Default `true`. In a monorepo, Tailwind v4's automatic content detection climbs to
-the workspace root and scans sibling packages + docs (`.md`/`.mdx`/`.txt` are not
-ignored), which can generate phantom or broken `url()` classes and fail the build.
+Default `true`. Tailwind v4's automatic content detection scans every file under its
+detection base — `.md`/`.mdx`/`.txt` are not ignored — so a doc or fixture holding
+class-shaped strings can generate phantom or broken `url()` classes and fail the
+build. How wide that base is depends on the build: a Vite build roots it at the Vite
+root, other setups at the workspace root, where sibling packages are scanned too.
 When your Tailwind entry imports `tailwindcss` without scoping it (no `source(none)`
 / `source(...)` / `@source not`), csszyx warns once at build end with the two-line
 fix. Set `false` to silence that warning when a broad scan is intentional.

@@ -773,18 +773,35 @@ export function shouldWarnUnscopedMonorepo(
 /**
  * Build the unscoped-monorepo warning message: what is wrong, why it matters,
  * the exact two-line fix, the guide link, and how to silence it.
+ *
+ * Describes the detection BASE rather than promising a climb to the workspace
+ * root. Measured on a workspace package built through the Vite plugin, the scan
+ * was rooted at the Vite root: files beside the entry were scanned, the sibling
+ * package and the workspace root were not. Naming a worse failure than the one
+ * that is happening is how an advisory gets discounted — a reader who checks
+ * for phantom classes from sibling packages finds none and stops believing the
+ * rest of the message.
+ *
+ * The suggested snippet carries no CSS comment on purpose. A block comment ends
+ * at the first `*` followed by `/`, which any recursive glob contains, so
+ * inviting the reader to annotate `@source` lines invites a stylesheet that
+ * stops parsing where they documented it.
+ *
  * @returns the warning string.
  */
 export function unscopedMonorepoMessage(): string {
     return (
         '[csszyx] Tailwind content detection is UNSCOPED in a monorepo. Tailwind v4 ' +
-        'climbs to the workspace root and scans sibling packages + docs (.md/.mdx/.txt ' +
-        'are not ignored), which can generate phantom or broken url() classes and fail ' +
-        'the build. Scope it in your Tailwind CSS entry:\n' +
+        'scans every file under its detection base — .md/.mdx/.txt included — so a doc ' +
+        'or fixture holding class-shaped strings becomes CSS, which can generate ' +
+        'phantom or broken url() classes and fail the build. That base is as wide as ' +
+        'the build makes it: a Vite build roots it at the Vite root, other setups at ' +
+        'the workspace root. Scope it in your Tailwind CSS entry:\n' +
         '    @import "tailwindcss" source(none);\n' +
-        '    @source ".";   /* this package, relative to the CSS file */\n' +
-        'csszyx auto-injects @source for its generated classes, so only your own ' +
-        'templates need listing. Guide: https://csszyx.com/docs/monorepo-content-scope/\n' +
+        '    @source ".";\n' +
+        'That @source is your package, relative to the CSS file; csszyx auto-injects ' +
+        'one for the classes it generates, so only your own templates need listing. ' +
+        'Guide: https://csszyx.com/docs/monorepo-content-scope/\n' +
         'Silence (if a broad scan is intentional): csszyx({ contentScopeCheck: false }).'
     );
 }

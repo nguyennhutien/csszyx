@@ -87,6 +87,23 @@ describe('unscopedMonorepoMessage', () => {
         expect(m).toContain('@source ".";');
         expect(m).toContain('contentScopeCheck: false');
     });
+
+    // A CSS block comment ends at the first `*` followed by `/`, which every
+    // recursive glob contains — so a snippet that models annotating `@source`
+    // lines hands the reader a stylesheet that stops parsing mid-comment.
+    it('suggests no CSS comment for the reader to paste', () => {
+        expect(unscopedMonorepoMessage()).not.toContain('/*');
+    });
+
+    // The scan is rooted at the build's detection base, which a Vite build puts
+    // at the Vite root. Promising a climb to the workspace root describes a
+    // worse failure than the one being detected, and a reader who checks for it
+    // and finds nothing discounts the whole message.
+    it('describes the detection base rather than promising a climb', () => {
+        const m = unscopedMonorepoMessage();
+        expect(m).toContain('detection base');
+        expect(m).not.toContain('climbs to the workspace root');
+    });
 });
 
 describe('isMonorepoPackage', () => {

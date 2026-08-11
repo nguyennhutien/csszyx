@@ -375,10 +375,10 @@ generated**.
 ### Monorepo content scope
 
 ```text
-[csszyx] Tailwind content detection is UNSCOPED in a monorepo. Tailwind v4 climbs to the workspace root and scans sibling packages + docs (.md/.mdx/.txt are not ignored), which can generate phantom or broken url() classes and fail the build. Scope it in your Tailwind CSS entry:
+[csszyx] Tailwind content detection is UNSCOPED in a monorepo. Tailwind v4 scans every file under its detection base — .md/.mdx/.txt included — so a doc or fixture holding class-shaped strings becomes CSS, which can generate phantom or broken url() classes and fail the build. That base is as wide as the build makes it: a Vite build roots it at the Vite root, other setups at the workspace root. Scope it in your Tailwind CSS entry:
     @import "tailwindcss" source(none);
-    @source ".";   /* this package, relative to the CSS file */
-csszyx auto-injects @source for its generated classes, so only your own templates need listing. Guide: https://csszyx.com/docs/monorepo-content-scope/
+    @source ".";
+That @source is your package, relative to the CSS file; csszyx auto-injects one for the classes it generates, so only your own templates need listing. Guide: https://csszyx.com/docs/monorepo-content-scope/
 Silence (if a broad scan is intentional): csszyx({ contentScopeCheck: false }).
 ```
 
