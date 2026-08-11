@@ -2786,9 +2786,9 @@ function classifyFallbackExpression(rawExpression: OxcNode): {
 function importedRootName(expression: OxcNode, importedNames: ReadonlySet<string>): string | null {
     let root = expression;
     while (root.type === 'MemberExpression') {
-        const next = (root as unknown as { object?: OxcNode }).object;
-        if (!next) return null;
-        root = next;
+        // A member expression always has an object to descend into — the node
+        // does not exist without one — so the walk cannot run out of ground.
+        root = (root as unknown as { object: OxcNode }).object;
     }
     if (root.type !== 'Identifier') return null;
     const name = String((root as IdentifierNode).name);
@@ -2808,10 +2808,12 @@ function collectImportedNames(root: OxcNode): Set<string> {
     const names = new Set<string>();
     walk(root, node => {
         if (node.type !== 'ImportDeclaration') return;
-        const declaration = node as unknown as { specifiers?: OxcNode[] };
-        for (const specifier of declaration.specifiers ?? []) {
-            const local = (specifier as unknown as { local?: { name?: string } }).local?.name;
-            if (local !== undefined) names.add(local);
+        // Both fields are structural rather than optional: a declaration always
+        // carries a specifier list, empty for a side-effect import, and every
+        // specifier shape — named, default, namespace — binds a local name.
+        const declaration = node as unknown as { specifiers: Array<{ local: { name: string } }> };
+        for (const specifier of declaration.specifiers) {
+            names.add(specifier.local.name);
         }
     });
     return names;
@@ -6726,16 +6728,36 @@ function astValueToSzValue(
 }
 
 /**
- * The export name an import specifier names, or `''` for any other shape.
+ * How a named import specifier spells the export it binds.
  *
- * @param imported - The specifier's `imported` node, if it has one.
- * @returns The export name, empty when the node is neither shape.
+ * The two shapes are the whole set: `import { a }` writes an identifier and
+ * `import { 'a-b' as ab }` writes a string literal. Narrowed rather than
+ * coerced — `String()` over an unexpected shape would render it as
+ * `[object Object]`, a name matching no export, silently.
  */
-function importedExportName(
-    imported: { type: string; name?: string; value?: unknown } | undefined,
-): string {
-    const named = imported?.type === 'Identifier' ? imported.name : imported?.value;
-    return typeof named === 'string' ? named : '';
+type ImportedExportNode = { type: 'Identifier'; name: string } | { type: 'Literal'; value: string };
+
+/**
+ * A named import specifier, in the fields this file reads.
+ *
+ * `imported` is required here where the node type says the specifier is a named
+ * one: default and namespace specifiers, which have no export name, are a
+ * different node type and never reach this shape.
+ */
+interface NamedImportSpecifierNode {
+    importKind?: string;
+    imported: ImportedExportNode;
+    local: { name: string };
+}
+
+/**
+ * The export name an import specifier names.
+ *
+ * @param imported - The specifier's `imported` node.
+ * @returns The export name, as written.
+ */
+function importedExportName(imported: ImportedExportNode): string {
+    return imported.type === 'Identifier' ? imported.name : imported.value;
 }
 
 /**
@@ -6765,39 +6787,29 @@ function collectImportedSzObjects(
     if (registry === undefined) return out;
     walk(root, node => {
         if (node.type !== 'ImportDeclaration') return;
+        // Structural, not optional: a declaration always names a source and
+        // always carries a specifier list, empty for a side-effect import.
         const declaration = node as unknown as {
-            source?: { value?: string };
+            source: { value: string };
             importKind?: string;
-            specifiers?: OxcNode[];
+            specifiers: OxcNode[];
         };
         if (declaration.importKind === 'type') return;
-        const exported = registry[declaration.source?.value ?? ''];
+        const exported = registry[declaration.source.value];
         if (exported === undefined) return;
-        for (const specifierNode of declaration.specifiers ?? []) {
+        for (const specifierNode of declaration.specifiers) {
             if (specifierNode.type !== 'ImportSpecifier') continue;
-            const specifier = specifierNode as unknown as {
-                importKind?: string;
-                imported?: { type: string; name?: string; value?: unknown };
-                local?: { name?: string };
-            };
+            const specifier = specifierNode as unknown as NamedImportSpecifierNode;
             if (specifier.importKind === 'type') continue;
-            const imported = specifier.imported;
-            // Narrowed rather than coerced: an import specifier's `imported` is
-            // either an identifier or a string literal, and `String()` over the
-            // second would render any other shape as `[object Object]` — a name
-            // that matches no export, silently, instead of being rejected.
-            const exportName = importedExportName(imported);
-            const local = specifier.local?.name;
-            // Own properties only, and no guard needed on the name itself: the
-            // reader above returns `''` for a shape it cannot name. What the
-            // check is for is `__proto__`, which on an ordinary object answers
-            // with `Object.prototype` instead of nothing and would be lowered
-            // as though a module had exported it.
+            const exportName = importedExportName(specifier.imported);
+            // Own properties only. What the check is for is `__proto__`, which
+            // on an ordinary object answers with `Object.prototype` instead of
+            // nothing and would be lowered as though a module had exported it.
             // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; the toolchain lib is ES2021.
             const own = Object.prototype.hasOwnProperty.call(exported, exportName);
             const value = own ? exported[exportName] : undefined;
-            if (local !== undefined && value !== null && typeof value === 'object') {
-                out.set(local, value as Record<string, unknown>);
+            if (value !== null && typeof value === 'object') {
+                out.set(specifier.local.name, value as Record<string, unknown>);
             }
         }
     });

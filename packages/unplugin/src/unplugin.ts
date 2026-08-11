@@ -4454,7 +4454,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 path.join(state.rootDir, '.csszyx'),
             );
             if (groups.file === null) return null;
-            const from = id.split('?')[0] ?? id;
+            // `split` always yields a first element, so there is nothing to
+            // fall back to: an id with no query answers with the whole id.
+            const [from] = id.split('?');
             return `import '${themeGroupsSpecifier(from, groups.file)}';\n${transformedCode}`;
         }
         return `import '${THEME_GROUPS_VIRTUAL_ID}';\n${transformedCode}`;

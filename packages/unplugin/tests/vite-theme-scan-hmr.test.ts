@@ -70,6 +70,34 @@ describe('vite theme scan on hot update', () => {
         expect(fs.existsSync(path.join(root, '.csszyx', 'theme.d.ts'))).toBe(false);
     });
 
+    it('keeps the theme it last scanned when the watched stylesheet is deleted', async () => {
+        const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-theme-gone-')));
+        tempDirs.push(root);
+        const themeCss = path.join(root, 'theme.css');
+        fs.writeFileSync(themeCss, '@theme {\n  --color-brand: #123456;\n}\n', 'utf8');
+
+        const plugins = vitePlugin({ build: { scanCss: ['theme.css'] } });
+        await invokeHook(plugins, 'configResolved', { root, command: 'serve' });
+        const server = {
+            config: { root },
+            watcher: { emit() {} },
+            moduleGraph: { getModuleById: () => null, invalidateModule() {} },
+        };
+        await invokeHook(plugins, 'handleHotUpdate', { file: themeCss, server, modules: [] });
+        const declared = fs.readFileSync(path.join(root, '.csszyx', 'theme.d.ts'), 'utf8');
+
+        // Deleting it is still a change to a file the pattern covers, so the
+        // rescan runs and finds nothing left to read. Taking that empty answer
+        // as the new theme would drop every token the project had — and a
+        // rename arrives as exactly this, one delete before the file reappears.
+        fs.rmSync(themeCss);
+        await expect(
+            invokeHook(plugins, 'handleHotUpdate', { file: themeCss, server, modules: [] }),
+        ).resolves.not.toThrow();
+
+        expect(fs.readFileSync(path.join(root, '.csszyx', 'theme.d.ts'), 'utf8')).toBe(declared);
+    });
+
     it('refreshes zero-config theme groups when any CSS file changes', async () => {
         const root = fs.realpathSync(
             fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-theme-auto-hmr-')),

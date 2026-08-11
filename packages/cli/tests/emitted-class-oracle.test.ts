@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
     createEmittedClassOracle,
+    designSystemEntry,
     findTailwindCssEntry,
     type TailwindLoader,
     type TailwindModule,
@@ -148,6 +149,34 @@ describe('createEmittedClassOracle — stylesheets that load plugins', () => {
         });
         expect(oracle.ok).toBe(false);
         expect(oracle.ok === false && oracle.reason).toContain('no-such-plugin');
+    });
+
+    // Importing a CommonJS plugin puts the exports under `default`; importing a
+    // real ESM one does not, and the namespace itself is then the `{ handler }`
+    // pair Tailwind wants. Reading only `default` would drop such a plugin's
+    // utilities and report every class it defines as dead.
+    it('serves what a plugin with no default export adds', async () => {
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: REPO,
+            css: '@import "tailwindcss";\n@plugin "./esm-plugin.mjs";',
+            cssBase: PLUGIN_FIXTURE,
+        });
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+        expect(oracle.findDead(['esm-plugin-made-this', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
+    // A plugin named without a leading `./` is a PACKAGE, and it is the
+    // project's dependency rather than this one's — resolving it from here
+    // would find whatever the CLI happens to ship and miss what the project
+    // installed.
+    it('resolves a plugin package from the project, and names it when absent', async () => {
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: REPO,
+            css: '@import "tailwindcss";\n@plugin "csszyx-absent-plugin-package";',
+            cssBase: PLUGIN_FIXTURE,
+        });
+        expect(oracle.ok).toBe(false);
+        expect(oracle.ok === false && oracle.reason).toContain('csszyx-absent-plugin-package');
     });
 });
 
@@ -304,6 +333,87 @@ describe('createEmittedClassOracle — degrading instead of failing', () => {
         );
         expect(oracle.ok).toBe(false);
         expect(oracle.ok === false && oracle.reason).toContain('no longer reports');
+    });
+});
+
+// The resolver every real project goes through, exercised without an injected
+// stand-in. `require.resolve` picks a package's `require` condition, and how
+// the entry point then arrives depends on how that build was written: at the
+// top level for ESM and for CommonJS whose exports Node can read statically,
+// one level down under `default` for CommonJS whose exports it cannot. Reading
+// only one shape would report a project whose Tailwind ships the other as
+// having no design system at all — a silent skip for every user of that build.
+describe('createEmittedClassOracle — reading the resolved Tailwind', () => {
+    const roots: string[] = [];
+    afterEach(() => {
+        for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    /** A design system serving `p-4` and nothing else, as module source text. */
+    const FAKE_DESIGN_SYSTEM =
+        '{ candidatesToCss: candidates =>' +
+        ' candidates.map(name => (name === "p-4" ? ".p-4 { padding: 1rem }" : null)) }';
+
+    /**
+     * A project whose installed Tailwind is the given module.
+     *
+     * @param manifest - Fields to add to the fake package's `package.json`.
+     * @param source - The package's main module.
+     * @returns The project root.
+     */
+    function projectWithTailwind(manifest: Record<string, string>, source: string): string {
+        const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-tw-')));
+        roots.push(root);
+        const installed = path.join(root, 'node_modules/tailwindcss');
+        fs.mkdirSync(installed, { recursive: true });
+        fs.writeFileSync(path.join(root, 'package.json'), '{ "name": "fake-tailwind-project" }');
+        fs.writeFileSync(
+            path.join(installed, 'package.json'),
+            JSON.stringify({
+                name: 'tailwindcss',
+                version: '4.9.9',
+                main: 'index.js',
+                ...manifest,
+            }),
+        );
+        fs.writeFileSync(path.join(installed, 'index.js'), source);
+        return root;
+    }
+
+    it('reads the entry point off a Tailwind whose exports are not under default', async () => {
+        const root = projectWithTailwind(
+            { type: 'module' },
+            `export async function __unstable__loadDesignSystem() { return ${FAKE_DESIGN_SYSTEM}; }\n`,
+        );
+
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: root,
+            css: STOCK,
+            cssBase: root,
+        });
+
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+        expect(oracle.findDead(['p-4', 'zz-not-a-class'])).toEqual(['zz-not-a-class']);
+    });
+});
+
+// Which shape a real installation produces depends on the build, on Node's
+// version and on any module interop in between — none of which a test can pin
+// down. The reading rule can be, and it is the part that has to hold for both.
+describe('designSystemEntry — the two shapes an import can arrive in', () => {
+    const load = async () => ({ candidatesToCss: () => [] });
+
+    it('reads an entry point sitting at the top level', () => {
+        expect(designSystemEntry({ __unstable__loadDesignSystem: load })).toBe(load);
+    });
+
+    it('reads an entry point sitting under default', () => {
+        expect(designSystemEntry({ default: { __unstable__loadDesignSystem: load } })).toBe(load);
+    });
+
+    it('answers with nothing for a module carrying neither', () => {
+        expect(designSystemEntry({})).toBeUndefined();
+        expect(designSystemEntry({ default: {} })).toBeUndefined();
     });
 });
 

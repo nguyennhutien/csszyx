@@ -15,16 +15,17 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import webpack from 'webpack';
 
 import { _resetThemeGroupsFileCache } from '../src/theme-groups-file.js';
-import { webpackPlugin } from '../src/unplugin.js';
+import { unplugin as rawInstance, webpackPlugin } from '../src/unplugin.js';
 
 const roots: string[] = [];
 
 afterEach(() => {
     _resetThemeGroupsFileCache();
+    vi.restoreAllMocks();
     for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -93,4 +94,29 @@ describe('the webpack lane writes the theme-group registration up front', () => 
 
         expect(existsSync(join(root, '.csszyx/theme-groups.mjs'))).toBe(false);
     }, 60_000);
+
+    // webpack itself always fills a context in, but this hook is also handed
+    // compilers the framework built — Next.js taps it with its own object, and
+    // every access around here is written for one that carries less than a real
+    // compiler does. Without somewhere to write, the registration silently does
+    // not happen and the build fails later on an import nobody touched.
+    it('writes it under the working directory for a compiler carrying no context', () => {
+        const root = project();
+        vi.spyOn(process, 'cwd').mockReturnValue(root);
+        const plugin = rawInstance.raw(
+            { build: { cache: false }, production: { mangle: false } },
+            { framework: 'webpack' },
+        ) as unknown as { webpack: (compiler: unknown) => void };
+
+        plugin.webpack({
+            options: { mode: 'production' },
+            // A tap that runs its callback, which is what a compilation does.
+            hooks: {
+                beforeCompile: { tap: (_name: string, run: () => void) => run() },
+                thisCompilation: { tap: () => undefined },
+            },
+        });
+
+        expect(existsSync(join(root, '.csszyx/theme-groups.mjs'))).toBe(true);
+    });
 });

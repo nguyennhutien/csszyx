@@ -1454,10 +1454,11 @@ function containsCssFunctionCall(value: string): boolean {
             continue;
         }
         let start = at;
-        // `?? -1` matches the scan below: the index is in range here, and a
-        // sentinel outside every ASCII range keeps the predicate total rather
-        // than asserting that.
-        while (start > 0 && isAsciiIdentifierCode(value.codePointAt(start - 1) ?? -1)) {
+        // `charCodeAt` rather than `codePointAt` for the scan: it answers with a
+        // number for every index, so `start > 0` is the whole guard and there is
+        // no absent value to invent a sentinel for. The two differ only above
+        // the BMP, where neither answer is an identifier code.
+        while (start > 0 && isAsciiIdentifierCode(value.charCodeAt(start - 1))) {
             start -= 1;
         }
         if (start < at && !value.startsWith('--', start)) {

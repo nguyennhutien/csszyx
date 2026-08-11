@@ -2960,8 +2960,9 @@ function importedSzObject(
     if (registry === undefined || binding === null || binding === undefined) return null;
     const specifier = binding.path;
     if (!specifier.isImportSpecifier()) return null;
-    const declaration = specifier.parentPath;
-    if (!declaration?.isImportDeclaration()) return null;
+    // An import specifier's parent is the declaration that introduced it —
+    // Babel builds no other arrangement — so this is read rather than re-tested.
+    const declaration = specifier.parentPath as babel.NodePath<t.ImportDeclaration>;
     if (declaration.node.importKind === 'type' || specifier.node.importKind === 'type') return null;
     const imported = specifier.node.imported;
     const exportName = t.isIdentifier(imported) ? imported.name : imported.value;

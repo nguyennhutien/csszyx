@@ -121,6 +121,33 @@ const SELF_PROOF = 'zz-csszyx-not-a-class';
  */
 const MARKER = /^(?:group|peer)(?:\/[^/\s]+)?$/;
 
+/** An imported Tailwind, in either of the shapes one can arrive in. */
+export interface ImportedTailwind {
+    __unstable__loadDesignSystem?: unknown;
+    default?: { __unstable__loadDesignSystem?: unknown };
+}
+
+/**
+ * Read the design-system entry point out of an imported Tailwind.
+ *
+ * `require.resolve` picks the package's `require` condition, so where the entry
+ * point lands depends on how that build was written: at the top level for ESM,
+ * and for CommonJS whose exports Node can read statically; one level down under
+ * `default` for CommonJS whose exports it cannot. Reading only one shape would
+ * report a project whose Tailwind ships the other as having no design system at
+ * all — a silent skip for an installation that was perfectly fine.
+ *
+ * Separate from the loader because which shape a real install produces depends
+ * on the build, on Node's version, and on any module interop in between. The
+ * rule for reading them does not, and it is the part worth pinning.
+ *
+ * @param entry - The imported module namespace.
+ * @returns The entry point, or undefined when the module carries none.
+ */
+export function designSystemEntry(entry: ImportedTailwind): unknown {
+    return entry.__unstable__loadDesignSystem ?? entry.default?.__unstable__loadDesignSystem;
+}
+
 /**
  * Resolve the Tailwind a project would load, without importing it here.
  *
@@ -137,21 +164,10 @@ const defaultLoader: TailwindLoader = async resolveFrom => {
         };
         // Import the resolved file rather than the bare specifier: the bare
         // one would resolve against THIS package, which pins v3.
-        //
-        // `require.resolve` picks the package's `require` condition, so the
-        // file is CommonJS and importing it puts the exports one level down
-        // under `default`. Read both shapes rather than assume either, so a
-        // package that later ships a real ESM main keeps working.
-        const entry = (await import(pathToFileURL(require.resolve('tailwindcss')).href)) as {
-            __unstable__loadDesignSystem?: unknown;
-            default?: { __unstable__loadDesignSystem?: unknown };
-        };
-        return {
-            version,
-            root,
-            loadDesignSystem:
-                entry.__unstable__loadDesignSystem ?? entry.default?.__unstable__loadDesignSystem,
-        };
+        const entry = (await import(
+            pathToFileURL(require.resolve('tailwindcss')).href
+        )) as ImportedTailwind;
+        return { version, root, loadDesignSystem: designSystemEntry(entry) };
     } catch {
         return null;
     }

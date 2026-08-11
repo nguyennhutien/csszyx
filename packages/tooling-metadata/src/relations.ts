@@ -137,11 +137,13 @@ const MASK_EDGE_FORM: ObjectValueForm = {
 };
 
 /**
- * What each linear-mask side covers. Only the PROSE lives here — the side
- * names come from the compiler, so a side added there is offered immediately
- * rather than waiting for someone to notice this list.
+ * What each linear-mask side covers. Only the PROSE lives here — which sides
+ * exist comes from the compiler, and the key type is the generated list itself
+ * so the two cannot drift: a side added there fails this file to compile until
+ * someone writes what it covers, rather than being offered under a generic
+ * fallback nobody would notice was generic.
  */
-const MASK_SIDE_DETAIL: Readonly<Record<string, string>> = {
+const MASK_SIDE_DETAIL: Readonly<Record<(typeof MASK_SIDES)[number], string>> = {
     t: 'top edge',
     r: 'right edge',
     b: 'bottom edge',
@@ -153,7 +155,7 @@ const MASK_SIDE_DETAIL: Readonly<Record<string, string>> = {
 /** Sides of the linear layer, each owning its own `--tw-mask-<side>`. */
 const MASK_SIDE_MEMBERS: readonly ObjectFormMember[] = MASK_SIDES.map(name => ({
     name,
-    detail: MASK_SIDE_DETAIL[name] ?? `${name} edge`,
+    detail: MASK_SIDE_DETAIL[name],
     values: [],
     form: MASK_EDGE_FORM,
 }));

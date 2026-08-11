@@ -194,6 +194,15 @@ describe('arbitrary values — CSS function calls', () => {
         expect(t({ pt: 'var(--x)' })).toBe('pt-[var(--x)]');
     });
 
+    it('reads a parenthesis with nothing in front of it as no call at all', () => {
+        // The variable shorthand can sit anywhere in a multi-part value, not
+        // only at its start, and there is no name in front of the paren to walk
+        // back over. Treating the scan's empty answer as a hit would call every
+        // such value a function.
+        expect(t({ shadow: '0 0 (--c)' })).toBe('shadow-[0_0_(--c)]');
+        expect(t({ pt: '1px (--gap)' })).toBe('pt-[1px_(--gap)]');
+    });
+
     it('leaves a value with no function call alone', () => {
         expect(t({ bg: 'red-500' })).toBe('bg-red-500');
         expect(t({ m: '4' })).toBe('m-4');

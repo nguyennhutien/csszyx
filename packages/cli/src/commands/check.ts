@@ -122,7 +122,7 @@ async function reportDeadClasses(
     }
 
     const oracles: Array<Extract<EmittedClassOracle, { ok: true }>> = [];
-    let firstReason: string | null = null;
+    const skipped: string[] = [];
     for (const entry of entries) {
         const oracle = await createEmittedClassOracle({
             resolveFrom: cwd,
@@ -130,10 +130,14 @@ async function reportDeadClasses(
             cssBase: path.dirname(entry),
         });
         if (oracle.ok) oracles.push(oracle);
-        else firstReason ??= oracle.reason;
+        else skipped.push(oracle.reason);
     }
     if (oracles.length === 0) {
-        printInfo(`Dead-class check skipped: ${firstReason ?? 'no design system could be built'}.`);
+        // Every reason, not the first: there was at least one entry and none of
+        // them produced an oracle, so each has something to say about why, and
+        // a project whose stylesheets fail for different reasons is exactly the
+        // one where hearing only the first sends the user to the wrong file.
+        printInfo(`Dead-class check skipped: ${skipped.join('; ')}.`);
         return false;
     }
 
@@ -144,9 +148,12 @@ async function reportDeadClasses(
     // narrow it further. Erring the other way would report live classes.
     const emitted = [...origins.keys()];
     const deadPerOracle = oracles.map(oracle => new Set(oracle.findDead(emitted)));
-    const found = emitted.filter(token => deadPerOracle.every(dead => dead.has(token)));
-    const accepted = found.filter(token => vouched.has(token));
-    const dead = found.filter(token => !vouched.has(token));
+    // Carried as class-with-origin from here on. Splitting them and looking the
+    // origin up again at print time asks a question the map cannot answer for
+    // sure, when the answer was in hand all along.
+    const found = [...origins].filter(([token]) => deadPerOracle.every(dead => dead.has(token)));
+    const accepted = found.filter(([token]) => vouched.has(token));
+    const dead = found.filter(([token]) => !vouched.has(token));
     // Say how many were waved through even on a clean run: an allow list that
     // silently covers a growing pile is the failure mode of every such list.
     const acceptedNote = accepted.length > 0 ? `, ${accepted.length} accepted` : '';
@@ -159,8 +166,8 @@ async function reportDeadClasses(
     }
 
     printWarn('\nClasses that produce no CSS:');
-    for (const token of dead) {
-        printInfo(`  ${token.padEnd(28)} ${origins.get(token) ?? ''}`);
+    for (const [token, origin] of dead) {
+        printInfo(`  ${token.padEnd(28)} ${origin}`);
     }
     printWarn(
         `\n✖ ${dead.length} emitted class(es) style nothing. Each is in the DOM and does ` +
