@@ -5324,13 +5324,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             collectMangleHybridHazards(state.mangleMap, mangledSources, externalClasses),
         );
         if (message) console.warn(message);
-        reportMangleSize();
     }
 
     /**
-     * Tell the build what mangling actually cost, once every CSS asset has been
-     * weighed. Silent unless the map came out more expensive than the CSS it
-     * bought, so a build that got what it paid for stays quiet.
+     * Tell the build what mangling actually cost, once every asset is weighed.
+     * Silent unless the map came out more expensive than the output it bought,
+     * so a build that got what it paid for stays quiet.
+     *
+     * Called from each lane's last moment rather than from the rewrite pass,
+     * because WHERE this lands decides whether anyone reads it. On the Vite
+     * lane the rewrite happens in `generateBundle`, which prints ahead of the
+     * asset table — so the one figure that answers "did mangling help" arrived
+     * before the table a reader compares to answer that question, wedged
+     * between other `[csszyx]` lines. `closeBundle` runs after the table.
      */
     function reportMangleSize(): void {
         const verdict = computeMangleSizeVerdict(
@@ -5433,6 +5439,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
         }
         reportOutputMangleHazards(shouldMangle, mangledSources, externalClasses);
+        // Webpack has no post-write hook in this plugin and prints no asset
+        // table of its own, so the reason the Vite lane defers does not apply:
+        // here the end of asset processing IS the end of the build's output.
+        reportMangleSize();
     }
 
     /**
@@ -5553,6 +5563,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             processRollupBundle(bundle, (fileName, source) => {
                 this.emitFile({ type: 'asset', fileName, source });
             });
+        },
+
+        /**
+         * Report what mangling cost, after the bundler has printed its assets.
+         *
+         * Vite's reporter prints the asset table from `writeBundle`, which runs
+         * before this hook — so the size verdict lands where a reader is
+         * already looking at sizes, instead of scrolling past mid-build among
+         * the other diagnostics.
+         */
+        closeBundle() {
+            reportMangleSize();
         },
     }));
 
