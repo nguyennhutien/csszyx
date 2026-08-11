@@ -18,6 +18,7 @@ concurrency:
 
 jobs:
   detect-changes:
+    name: Sonar gate
     uses: ./.github/workflows/detect-changes.yml
 
   sonarcloud:
