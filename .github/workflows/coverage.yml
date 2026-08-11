@@ -20,7 +20,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect-changes:
+    uses: ./.github/workflows/detect-changes.yml
+
   coverage:
+    needs: detect-changes
+    # Nothing to measure when neither language changed. Coverage of a diff with
+    # no source in it is the previous commit's number, recomputed for eight
+    # minutes — the v0.13.0 release pull request paid exactly that for 25
+    # version bumps and a changelog. Codecov carries the last upload forward for
+    # a flag that receives none, which is the case this produces.
+    if: needs.detect-changes.outputs.code_ts == 'true' || needs.detect-changes.outputs.code_rust == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
