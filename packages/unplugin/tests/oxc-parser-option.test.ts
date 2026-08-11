@@ -98,12 +98,12 @@ describe('csszyx parser selection', () => {
                     },
                 },
             }),
-        ).toThrow('production.mangleGlobalVars.autoPrefix requires CSS pre-scan support');
+        ).toThrow('production.mangleGlobalVars.autoPrefix is not available');
     });
 
     it('threads explicit global variable aliases into source transforms', () => {
         const [prePlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
             production: {
                 mangleGlobalVars: {
                     enabled: true,
@@ -125,7 +125,7 @@ describe('csszyx parser selection', () => {
     it('encodes custom global alias prefixes in injected layout scripts', () => {
         const hostilePrefix = '--</script>${globalThis.pwned=true}`';
         const [prePlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
             production: {
                 mangleGlobalVars: {
                     enabled: false,
@@ -149,7 +149,7 @@ describe('csszyx parser selection', () => {
 
     it('rewrites CSS assets with the validated explicit global variable alias plan', () => {
         const [prePlugin, postPlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
             production: {
                 mangleGlobalVars: {
                     enabled: true,
@@ -179,7 +179,7 @@ describe('csszyx parser selection', () => {
 
     it('fails closed when explicit global variable tokens are missing from emitted CSS', () => {
         const [, postPlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
             production: {
                 mangleGlobalVars: {
                     enabled: true,
@@ -209,7 +209,7 @@ describe('csszyx parser selection', () => {
         const cssPath = join(root, 'tokens.css');
         writeFileSync(cssPath, ':root{--brand-primary:red}.card{color:var(--brand-primary)}');
         const [, postPlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false, scanCss: cssPath },
+            build: { emitManifest: true, parser: 'oxc', cache: false, scanCss: cssPath },
             production: {
                 mangleGlobalVars: {
                     enabled: true,
@@ -243,7 +243,7 @@ describe('csszyx parser selection', () => {
 
     it('can skip the standalone global variable map asset', () => {
         const [prePlugin, postPlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
             production: {
                 mangleGlobalVars: {
                     enabled: true,
@@ -454,7 +454,7 @@ describe('csszyx parser selection', () => {
 
     it('passes production.mangleVars into the oxc compiler path', () => {
         const [prePlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
             production: { mangleVars: true },
         }) as TransformHook[];
         const result = prePlugin.transform.call(
@@ -470,7 +470,7 @@ describe('csszyx parser selection', () => {
 
     it('passes production.mangleVarHoistMaxDepth into the oxc compiler path', () => {
         const [prePlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
             production: { mangleVars: true, mangleVarHoistMaxDepth: 1 },
         }) as TransformHook[];
         const result = prePlugin.transform.call(
@@ -490,7 +490,7 @@ describe('csszyx parser selection', () => {
 
     it('preserves mixed scoped and hoisted CSS variable tiers in runtime metadata', () => {
         const [prePlugin, postPlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
             production: { mangleVars: true },
         }) as [TransformHook, GenerateBundleHook];
         const source =
@@ -520,7 +520,7 @@ describe('csszyx parser selection', () => {
 
     it('replaces per-file CSS variable metadata instead of append-only accumulation', () => {
         const [prePlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
             production: { mangleVars: true },
         }) as TransformHook[];
 
@@ -552,7 +552,7 @@ describe('csszyx parser selection', () => {
     it('fails loudly when CSS variable metadata exceeds the safety cap', () => {
         process.env.CSSZYX_VAR_MANGLE_MAP_MAX_BYTES = '16';
         const [prePlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
             production: { mangleVars: true },
         }) as TransformHook[];
 
@@ -569,7 +569,7 @@ describe('csszyx parser selection', () => {
 
     it('exposes CSS variable hoisting efficacy metrics', () => {
         const [prePlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'oxc', cache: false },
             production: { mangleVars: true },
         }) as TransformHook[];
 
@@ -587,7 +587,7 @@ describe('csszyx parser selection', () => {
 
     it('passes production.mangleVars into the Rust compiler path', () => {
         const [prePlugin] = vitePlugin({
-            build: { parser: 'rust', cache: false },
+            build: { emitManifest: true, parser: 'rust', cache: false },
             production: { mangleVars: true },
         }) as TransformHook[];
 

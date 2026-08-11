@@ -3,10 +3,29 @@ title: Plugin Config
 description: Full reference for CSSzyx plugin configuration options.
 ---
 
-import { Tabs, TabItem } from "@astrojs/starlight/components";
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
 
 CSSzyx is configured by passing options directly to the plugin. There is no
 standalone `csszyx.config.ts` file — all config lives in your bundler config.
+
+<Aside type="caution" title="Removed: options that never did anything">
+Nine options were listed here, typed, and given defaults while no part of the
+build ever read them. Setting one changed nothing, and the page said otherwise.
+They are gone rather than implemented, because their defaults were all `true` —
+implementing them would have switched on new behaviour for every existing
+project on upgrade, with no error to warn anyone.
+
+| Removed | Group | What to do |
+| --- | --- | --- |
+| `parallel`, `workers`, `optimizeVariables`, `zeroRuntime` | the whole `performance` group | Delete the `performance` block. csszyx already resolves static `sz` at build time; nothing was being turned on or off. |
+| `contentHashing`, `incrementalBuild` | `production` | Delete them. Your bundler owns output hashing; csszyx caches transforms unconditionally. |
+| `tailwindConfig` | `build` | Delete it. Tailwind v4 is configured from CSS with `@theme`, not a config file path. |
+| `auditLog`, `defaultRecoveryMode` | `hydration` | Delete them. `hydration.strict` is the one option that was ever read; set `szRecover` per element for recovery. |
+
+Only TypeScript notices: a config object naming one of these now fails to
+compile, which is the point — it is the first time anyone has been told. Builds
+behave exactly as before, because these never reached the build.
+</Aside>
 
 ## Quick Start
 
@@ -132,9 +151,7 @@ interface ProductionConfig {
   mangleVarHoistMaxDepth: number; // Max cascade depth for mangleVars hoisting
   mangleGlobalVars?: GlobalVarMangleConfig; // Explicit global token alias tier
   mangleMapDelivery?: 'both' | 'html' | 'bundle'; // Where the runtime map ships
-  contentHashing: boolean; // Hash for immutable caching
   injectChecksum: boolean; // Add hydration checksum to HTML
-  incrementalBuild: boolean; // Enable build caching
   minify: boolean; // Minify output
 }
 ```
@@ -282,10 +299,8 @@ interface GlobalVarMangleConfig {
 | `mangle`                 | `true`  | Replace class names with short encoded symbols                                                                                                            |
 | `mangleVars`             | `false` | Opt into shorter names and bounded hoisting for dynamic CSS variables generated from runtime `sz` values. Disabled builds keep existing `--_sz-*` output. |
 | `mangleVarHoistMaxDepth` | `5`     | Maximum DOM ancestor distance for component-tier CSS variable hoisting when `mangleVars` is enabled.                                                      |
-| `mangleGlobalVars`       | `undefined` | Opt-in alias gate for explicit app-owned global CSS custom properties. Phase H v1 is alias-only and keeps original public variables defined.          |
-| `contentHashing`         | `true`  | Hash CSS output for cache-busting                                                                                                                         |
+| `mangleGlobalVars`       | `undefined` | Opt-in alias gate for explicit app-owned global CSS custom properties. Aliasing is the only mode and keeps original public variables defined.          |
 | `injectChecksum`         | `true`  | Embed SHA-256 checksum in HTML                                                                                                                            |
-| `incrementalBuild`       | `true`  | Cache build artifacts for faster rebuilds                                                                                                                 |
 | `minify`                 | `true`  | Minify emitted CSS and JS                                                                                                                                 |
 
 `mangleVars` does not define global theme-token aliases. It only rewrites the
@@ -293,7 +308,7 @@ dynamic CSS variables csszyx emits for runtime `sz` values, such as `p: pad`,
 and keeps the feature opt-in while the global token tier remains a separate
 design surface.
 
-`mangleGlobalVars` enables the Phase H global token tier for explicit `tokens`.
+`mangleGlobalVars` enables the global token tier for explicit `tokens`.
 It is default-off, accepts only `mode: 'alias'`, and must not remove original
 CSS custom-property names. `autoPrefix` remains disabled until csszyx can build
 the same alias table before source transforms and CSS output validation.
@@ -308,7 +323,7 @@ Controls the build pipeline.
 ```ts
 interface BuildConfig {
   buildId?: string; // Build identifier (auto-generated if omitted)
-  tailwindConfig?: string; // Path to Tailwind config file
+  emitManifest?: boolean; // Emit csszyx-manifest.json for @csszyx/dynamic
   outputDir?: string; // Output directory
   cacheDir?: string; // Cache directory
   cache?: boolean; // Enable per-file transform cache
@@ -321,13 +336,87 @@ interface BuildConfig {
 | Option           | Default                | Description                                                                                                                                                                                                                                                                                                                                                                |
 | ---------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `buildId`        | Auto                   | Unique build identifier                                                                                                                                                                                                                                                                                                                                                    |
-| `tailwindConfig` | `'tailwind.config.js'` | Tailwind configuration path                                                                                                                                                                                                                                                                                                                                                |
+| `emitManifest`   | `false`                | Emit `csszyx-manifest.json`. Only `@csszyx/dynamic` reads it, to skip injecting rules the built CSS already has. See below before enabling. |
 | `outputDir`      | `'.csszyx'`            | Plugin output directory                                                                                                                                                                                                                                                                                                                                                    |
 | `cacheDir`       | `'.csszyx/cache'`      | Incremental build cache                                                                                                                                                                                                                                                                                                                                                    |
 | `cache`          | `true`                 | Enable the per-file transform cache. Set to `false` when debugging parser output or isolating cache-related issues.                                                                                                                                                                                                                                                        |
 | `astBudgetLimit` | `50000`                | Max AST nodes per file before the transform gives up on it — guards against pathologically large generated files. A file past the cap is left unrewritten, contributes no classes to the safelist, and is warned about by every parser engine (the native `rust` engine included). The safelist prescan runs with a 10× cap by default so real page files keep their CSS; setting this applies your value to both lanes. Raise (e.g. `100_000`) when a warning names a legitimate file, or exclude generated files via top-level `exclude`.               |
 | `parser`         | `'rust'`               | Source parser for JSX/TSX sz transforms. Default uses the native Rust engine through the matching optional `@csszyx/core-*` platform package; csszyx fails loudly when the package is missing. Set `'oxc'` to opt into the previous JavaScript oxc-parser path on unsupported platforms or for parser-edge-case triage; `'babel'` is the final compatibility escape hatch. |
 | `scanCss`        | `undefined`            | CSS files to scan for `@theme` blocks. Literal paths and simple globs are supported.                                                                                                                                                                                                                                                                                       |
+| `importedStaticSz` | `true`               | Compile a static sz object a component imports from another module. On by default; set `false` to leave those imports to the runtime — see below.                                                                                                                                                                                                                           |
+
+#### Imported Static sz Objects (`importedStaticSz`)
+
+On by default. The prescan records exported static sz objects and every
+importer compiles them as if the literal were written locally:
+
+```ts
+// card.styles.ts
+export const cardSz = { p: 4, rounded: 'lg' };
+
+// Card.tsx
+import { cardSz } from './card.styles';
+<article sz={cardSz} />        // → className="p-4 rounded-lg"
+```
+
+Turned off, `sz={cardSz}` falls back to the runtime and — this is the part
+that costs more than a helper call — contributes **no classes**. The class
+text then appears in no output at all, so nothing tells Tailwind to generate
+it and the element renders naming a rule that does not exist. That is why the
+default is on: the alternative is a build that reports missing CSS and names
+this setting as the way out, which is guidance rather than a setting.
+
+It remains a setting for a narrower reason. Resolving across modules means a
+file's compiled output is no longer a pure function of its own text, and a
+project that hits a cross-file resolution problem needs a one-line way back to
+the file-local behaviour rather than a version downgrade.
+
+Turning it off does not make a mutated style object safe. The compiler reads
+the object where it is **declared**, and a property write on a local `const` is
+already uncompensated — see the
+[shared-style-object contract](/docs/reusing-styles/). Treat a shared sz object
+as declared once and never written to, whichever way this setting is set.
+
+**What v1 covers:** a direct `sz={binding}` from a named import, including a
+renamed one (`import { cardSz as card }`). The provider must be a `const` whose
+value is a fully static object literal.
+
+The specifier may be relative (`./styles`, `../shared/styles`, any depth) or an
+alias (`@/styles`). Aliases are read from the bundler's own `resolve.alias` and
+from `compilerOptions.paths` in `tsconfig.json` — Next.js declares `@/*` only in
+the second, so both are consulted. An alias csszyx cannot express as a literal
+prefix (a RegExp `find`, or a `paths` pattern with text after the `*`) is
+skipped, and its importers keep the runtime path.
+
+**On the Next.js Turbopack lane** the option lives on the loader, because the
+plugin never runs there. Every lane defaults to on, so a project that wants it
+needs no wiring at all. Turning it OFF has to be done in every place — the
+loader emits the class and the prebuild is what safelists it, so one without
+the other ships a class name with no rule behind it:
+
+```js
+// next.config.mjs
+turbopack: csszyxTurbopack({}, { importedStaticSz: false })
+```
+
+```bash
+# build
+csszyx next prebuild --no-imported-static-sz
+# dev
+csszyx next watch --no-imported-static-sz
+```
+
+All three have to agree — the loader, the prebuild, and the watcher. A mismatch
+is not silent in a production build: the flag is part of the generation
+identity, so it fails with "csszyx config hash changed" rather than shipping
+classes with no CSS. In a dev session it is quieter, and a watcher left without
+the flag maintains a second identity beside the loader's. Set it on **every**
+csszyx loader rule too, if you declare more than one.
+
+**What still falls back** — and keeps reporting that it did: barrels and
+re-exports, package specifiers, absolute specifiers, namespace
+(`import * as S`) and default imports, and any nested position such as
+`sz={[cardSz, …]}` or `sz={{ ...cardSz }}`.
 
 ### File Filters
 
@@ -362,9 +451,18 @@ packages (pnpm) are matched after realpath resolution (relies on Vite's default
 `resolve.preserveSymlinks: false`).
 
 `node_modules` and `.next` stay ignored unless a listed path points into them. A
-`/packages/` file with `sz` that is not under any `compileSources` directory is
-skipped silently (no CSS) — csszyx warns at build end and lists those files. A
-path that does not resolve to a directory is reported in a build warning.
+`/packages/` file using csszyx that is not under any `compileSources` directory
+is skipped (no CSS) — csszyx warns at build end and lists those files, naming
+any that export `szv` factories, because those also cost every importer its
+cross-module precompile. A path that does not resolve to a directory is reported
+in a build warning.
+
+<Aside type="caution" title="This option was renamed">
+It used to be `compilePackages`, which took package **names**. If your config
+still says that, csszyx never reads it and every effect above silently does not
+happen. The plugin now warns on any option it does not recognize, naming the
+replacement.
+</Aside>
 
 A shared lib **outside** `/packages/` (e.g. `libs/ui`) that lives **inside** the
 build root needs no config — it is compiled and scanned automatically;
@@ -392,16 +490,24 @@ See [Monorepo & Content Scope](/docs/monorepo-content-scope/) for the full fix.
 
 Default `false`. Set `true` to silence **all** csszyx build warnings — the
 skipped-`sz`, missing-Tailwind-entry, unscoped-content, unresolvable-spread, and
-safelist-cap messages. Useful when those warnings are understood and intentional,
-or to keep csszyx quiet while you focus on another tool's output in the build log.
-Errors that abort the build (security / crash / build-break guards) still throw —
-only warnings are muted.
+safelist-cap messages. Errors that abort the build (security / crash /
+build-break guards) still throw — only warnings are muted.
+
+`true` is blunt, and worth being blunt about: it also hides the messages saying
+classes never reached the safelist, so the CSS for them is absent from the
+output. Those are not style advice — they report that the build produced less
+than you asked for.
 
 ```ts
 csszyx({
-  quiet: true, // silence every csszyx build warning
+  quiet: 'nudges', // calmer log, integrity reports kept
 });
 ```
+
+`'nudges'` silences the same warnings a production build already suppresses —
+the usage advice aimed at whoever is *writing* csszyx code — and keeps every
+report about missing output. Reach for `true` only when you have decided the
+missing output is acceptable.
 
 #### Theme Auto-Scan (`scanCss`)
 
@@ -409,6 +515,10 @@ When set, the plugin parses `@theme` blocks in your CSS entry point and generate
 `.csszyx/theme.d.ts` — a declaration file that augments the `CustomTheme` interface
 in `@csszyx/compiler`. This surfaces custom design tokens (colors, spacing, fonts,
 radii, shadows) in `sz` prop IntelliSense without any manual type declarations.
+
+This option scopes **types only**. `szcn`'s theme merge groups are discovered
+from every stylesheet in the project either way, so listing one entry here never
+costs you merging in another.
 
 ```ts
 // vite.config.ts
@@ -454,7 +564,7 @@ the scan, szcn cannot tell `warning` is a color and safely keeps both.
 (Shade-shaped names like `brand-500` classify by their `{name}-{shade}` shape
 alone and dedupe even unscanned.) Tokens from hand-written CSS outside `@theme`
 can be registered manually with
-[`registerSzcnGroups`](/docs/reference/runtime/#registerszcngroupsgroups).
+[`registerSzcnGroups`](/docs/reference/runtime/#theme-group-registry).
 
 When `scanCss` is **unset**, the plugin still discovers `@theme` blocks on its
 own: it walks the project (and any `compileSources` packages) for CSS files
@@ -465,6 +575,55 @@ only** — `.csszyx/theme.d.ts` type generation still requires an explicit
 `scanCss`, and setting one turns the auto-scan off in favor of exactly the
 files you listed.
 
+#### Dynamic manifest (`emitManifest`)
+
+Default `false`. `csszyx-manifest.json` lists every class the build emitted, and
+`@csszyx/dynamic` fetches it to answer one question per class: is this already in
+the built CSS? A yes means `dynamic()` reuses the existing rule instead of
+injecting one.
+
+The catch is the asymmetry. The file carries the **whole** census, while
+`dynamic()` only asks about the handful of classes it renders. Measured on a
+668-class census (`pnpm bench:dynamic-manifest`):
+
+| Share of the app rendered through `dynamic()` | Manifest | Injecting instead |
+| --- | --- | --- |
+| 1% | 2078 B gz | **162 B gz** |
+| 10% | 2078 B gz | **501 B gz** |
+| 50% | 2078 B gz | **1990 B gz** |
+| 75% | **2078 B gz** | 3030 B gz |
+| 100% | **2078 B gz** | 4109 B gz |
+
+It only comes out ahead once most of the app is styled at runtime. Numbers from
+one synthetic census — treat the shape as the lesson, not the constants.
+
+:::caution[Enabling it without preloading costs more than leaving it off]
+`dynamic()` is synchronous and the fetch is not. An app that never awaits
+`preloadManifest()` renders its first paint against a manifest that has not
+arrived, injects everything anyway, and then pays for the file too.
+
+```ts
+import { preloadManifest } from "@csszyx/dynamic";
+await preloadManifest(); // before the first render
+```
+
+:::
+
+Turning it off is safe in every case: a missing manifest means `dynamic()` treats
+nothing as pre-built and injects its own rules, so the rendered styles are
+identical. What changes is bytes and one-time work.
+
+To find out which side your app is on, measure it:
+
+```ts
+import { dynamicReport } from "@csszyx/dynamic";
+
+// after the app has exercised the paths that matter
+console.log(dynamicReport().summary);
+// "Manifest cost 2078 B and spared only 340 B of injected CSS —
+//  set build.emitManifest to false."
+```
+
 ### `hydration`
 
 Controls SSR hydration verification.
@@ -472,33 +631,9 @@ Controls SSR hydration verification.
 ```ts
 interface HydrationConfig {
   strict: boolean; // Enable strict checks
-  defaultRecoveryMode?: "csr" | "dev-only"; // Default recovery mode
-  auditLog: boolean; // Log hydration events
 }
 ```
 
 | Option                | Default | Description                                            |
 | --------------------- | ------- | ------------------------------------------------------ |
 | `strict`              | `true`  | Abort on any mismatch (non-configurable in production) |
-| `defaultRecoveryMode` | `null`  | No recovery by default                                 |
-| `auditLog`            | `true`  | Log all hydration events                               |
-
-### `performance`
-
-Controls performance optimizations.
-
-```ts
-interface PerformanceConfig {
-  parallel: boolean; // Parallel processing during build
-  workers?: number; // Worker thread count (auto-detected)
-  optimizeVariables: boolean; // CSS variable optimization
-  zeroRuntime: boolean; // Static optimization for zero-runtime cases
-}
-```
-
-| Option              | Default | Description                                    |
-| ------------------- | ------- | ---------------------------------------------- |
-| `parallel`          | `true`  | Process files in parallel using worker threads |
-| `workers`           | Auto    | Worker count (defaults to CPU cores)           |
-| `optimizeVariables` | `true`  | Deduplicate CSS custom properties              |
-| `zeroRuntime`       | `true`  | Optimize static sz props to literal strings    |

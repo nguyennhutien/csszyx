@@ -28,6 +28,10 @@ export type SzContext =
           /** When set, the object accepts ONLY this form's members (e.g. the
            * `{ color, op }` value of a color property). */
           readonly form?: ObjectValueForm;
+          /** Text to insert before the key so the object stays valid — the
+           * missing separator plus the author's own spacing, verbatim. Set only
+           * when the previous property has no trailing comma. */
+          readonly prefix?: string;
       }
     | {
           readonly kind: 'value';
@@ -666,6 +670,39 @@ function nameBeforeColon(text: string, colon: number, objectStart: number): stri
     return text.slice(start, end);
 }
 
+/** Build the value context for a cursor sitting after a property colon.
+ * @param text - Full source text.
+ * @param colon - Offset of the property's colon.
+ * @param form - Resolved structured object form.
+ * @param position - UTF-16 cursor offset.
+ * @param objectStart - Lower scan boundary.
+ * @param quoted - Whether an opening quote is already typed.
+ * @returns A value context, otherwise null.
+ */
+function incompleteValueContext(
+    text: string,
+    colon: number,
+    form: ObjectValueForm | null,
+    position: number,
+    objectStart: number,
+    quoted: boolean,
+): SzContext | null {
+    const name = nameBeforeColon(text, colon, objectStart);
+    // `!name` has already rejected both undefined and the empty string, so the
+    // first character is there to read: no fallback arm, because no input
+    // reaches one.
+    if (!name || !/[A-Z_$]/i.test(name[0])) return null;
+    const member = formMember(form, name);
+    if (member === null) return null;
+    return {
+        kind: 'value',
+        property: name,
+        quoted,
+        replacementSpan: replacementSpan(text, position, true),
+        member,
+    };
+}
+
 /** Classify an incomplete key or value slot from bounded source text.
  * @param tsMod - TypeScript instance injected by the host.
  * @param sourceFile - Current parsed source.
@@ -688,25 +725,71 @@ function incompleteCursorContext(
     const scan = beforeCursorPrefix(text, prefixStart, objectStart);
     if (scan === undefined) return null;
     if (text[scan] === ':') {
-        const name = nameBeforeColon(text, scan, objectStart);
-        if (!name || !/[A-Z_$]/i.test(name[0] ?? '')) return null;
-        const member = formMember(form, name);
-        if (member === null) return null;
+        return incompleteValueContext(text, scan, form, position, objectStart, false);
+    }
+    // An unterminated opening quote. A JS string cannot cross a newline, so
+    // `bg: '` followed by a line break leaves the cursor at a token boundary
+    // whose next token is on the NEXT line — the parser hands back that token,
+    // not the string, so the value slot was never recognized and the whole
+    // object went unanswered. The single-line spelling only worked by accident:
+    // either trailing text on the line gets swallowed into the string literal,
+    // or the quote sits at end of file and the EOF recovery path finds it.
+    //
+    // Only an OPENING quote counts, and the discriminator is what precedes it:
+    // a value slot has `property:` right behind. A closing quote — the end of
+    // `color: 'red-500'` — has the value's own characters there instead, and
+    // falls through to the key-repair path below, which is exactly where a
+    // finished value belongs.
+    const quote = text[scan];
+    if (quote === "'" || quote === '"' || quote === '`') {
+        const colon = beforeCursorPrefix(text, scan, objectStart);
+        if (colon !== undefined && text[colon] === ':') {
+            return incompleteValueContext(text, colon, form, position, objectStart, true);
+        }
+    }
+    if (text[scan] === '{' || text[scan] === ',') {
         return {
-            kind: 'value',
-            property: name,
-            quoted: false,
-            replacementSpan: replacementSpan(text, position, true),
-            member,
+            kind: 'key',
+            replacementSpan: replacementSpan(text, position, false),
+            siblings: siblingKeys(tsMod, object, position),
+            form: form ?? undefined,
         };
     }
-    if (text[scan] !== '{' && text[scan] !== ',') return null;
+    // A key slot whose previous property has no trailing comma. `p: 4` then a
+    // newline is invalid JS, but it is the state anyone typing a multi-line
+    // object passes through, and refusing to answer there means the dropdown
+    // only ever appears after the author remembers the comma themselves.
+    //
+    // The accepted entry supplies it: the replacement starts at the end of the
+    // previous value, and the insert text is a comma plus the author's own
+    // spacing, captured verbatim so their indentation survives.
+    if (!canEndPropertyValue(text[scan])) return null;
+    const key = replacementSpan(text, position, false);
+    // The gap is never empty: `beforeCursorPrefix` only leaves `scan` on a
+    // value character after skipping at least one space, and with no space the
+    // cursor is editing that value and took the `:` branch above.
+    const separatorStart = scan + 1;
     return {
         kind: 'key',
-        replacementSpan: replacementSpan(text, position, false),
+        replacementSpan: { start: separatorStart, length: key.start + key.length - separatorStart },
         siblings: siblingKeys(tsMod, object, position),
         form: form ?? undefined,
+        prefix: `,${text.slice(separatorStart, key.start)}`,
     };
+}
+
+/** Whether a character can be the last one of a complete property value.
+ *
+ * Deliberately narrow: an identifier or number character, a closing quote, or a
+ * closing bracket. Anything else — an operator, a stray colon, a comment edge —
+ * means the text before the cursor is not a finished value, and guessing there
+ * would offer keys in the middle of an expression.
+ *
+ * @param character - Character the backward scan landed on.
+ * @returns Whether it can terminate a property value.
+ */
+function canEndPropertyValue(character: string | undefined): boolean {
+    return character !== undefined && /[\w$'"`)\]}]/.test(character);
 }
 
 /** Classify a cursor without recursively traversing the source file.

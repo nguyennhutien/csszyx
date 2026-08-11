@@ -23,6 +23,10 @@ export interface CSSManifest {
 
 // Module-level state (lazy, reset by cleanup())
 let manifestClasses: Set<string> | null = null;
+/** Classes answered from the manifest — the injections it spared. */
+const manifestHits = new Set<string>();
+/** Transfer size of the manifest as received, for the development report. */
+let manifestBytes = 0;
 let mangleMap: Record<string, string> | null = null;
 let manifestUrl = '/csszyx-manifest.json';
 let fetchPromise: Promise<void> | null = null;
@@ -69,12 +73,24 @@ export function ensureManifest(): Promise<void> {
         .then((data: CSSManifest) => {
             manifestClasses = new Set(data.classes);
             mangleMap = data.mangleMap ?? null;
+            // Re-serializing is not the transfer size, but it is within a few
+            // bytes of it and needs no header plumbing; the report says so.
+            manifestBytes = JSON.stringify(data).length;
         })
         .catch(() => {
-            // Non-blocking: if manifest unavailable, all classes are treated as new.
+            // Non-blocking: if manifest unavailable, all classes are treated as
+            // new, so dynamic() injects and the page still renders correctly.
+            //
+            // Final for the session, despite clearing the in-flight promise:
+            // the guard above returns early once `manifestClasses` is set, so a
+            // later call reuses this empty result rather than re-fetching. That
+            // is deliberate — a missing manifest is the normal state when
+            // `build.emitManifest` is off, and retrying it per dynamic() call
+            // would put a failing request on the hot path. Call `resetManifest`
+            // to try again.
             manifestClasses = new Set();
             mangleMap = null;
-            fetchPromise = null; // allow retry
+            fetchPromise = null;
         });
 
     return fetchPromise;
@@ -113,10 +129,24 @@ export function lookupManifest(originalClass: string): string | null {
     } // not in built CSS
 
     // Class is in built CSS
+    manifestHits.add(originalClass);
     if (mangleMap && originalClass in mangleMap) {
         return mangleMap[originalClass]; // return mangled name
     }
     return originalClass; // non-mangled build
+}
+
+/**
+ * What the manifest has answered so far.
+ *
+ * Read by the development report, which weighs the file's transfer size against
+ * the injections it spared. Kept here rather than exported as raw state so the
+ * report cannot drift from the lookup that fills it.
+ *
+ * @returns Hit class names and the manifest's size in bytes.
+ */
+export function manifestSavings(): { hits: readonly string[]; bytes: number } {
+    return { hits: [...manifestHits], bytes: manifestBytes };
 }
 
 /**
@@ -128,4 +158,6 @@ export function resetManifest(): void {
     mangleMap = null;
     fetchPromise = null;
     manifestUrl = '/csszyx-manifest.json';
+    manifestHits.clear();
+    manifestBytes = 0;
 }

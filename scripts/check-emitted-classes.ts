@@ -31,7 +31,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { __unstable__loadDesignSystem } from 'tailwindcss';
+import { createEmittedClassOracle } from '../packages/cli/src/scanner/emitted-class-oracle.ts';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CORPUS = path.join(REPO, 'packages/core/tests/fixtures/parity-corpus.json');
@@ -39,10 +39,13 @@ const CORPUS = path.join(REPO, 'packages/core/tests/fixtures/parity-corpus.json'
 /**
  * Why a dead class is tolerated. Anything NOT listed here fails the check.
  *
- * `accepted` — correct behaviour; the stock design system simply cannot see it.
+ * `accepted` — correct behaviour; the stock design system simply cannot see it,
+ *   or csszyx emits it on purpose and says so.
  * `known-dead` — a real defect: csszyx emits a name Tailwind does not serve.
  *   Listed so the gate can land without a mapping rewrite, and so a NEW one
  *   still fails. Each entry records the form Tailwind actually accepts.
+ *   Empty is the goal, and reaching it is not a reason to drop the kind: the
+ *   next mapping bug lands here before it is fixed.
  */
 interface Baseline {
     readonly kind: 'accepted' | 'known-dead';
@@ -75,66 +78,18 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
             reason: 'custom theme colour; resolves once the project @theme declares --color-mint-500',
         },
     ],
-    ...(['group/item', 'peer/form'].map(
-        c =>
-            [
-                c,
-                {
-                    kind: 'accepted',
-                    reason: 'named group/peer MARKER — emits no CSS by design, consumed by group-*/peer-* variants',
-                },
-            ] as const,
-    ) as ReadonlyArray<readonly [string, Baseline]>),
-
-    // ── known-dead: theme-conditional ───────────────────────────────────────
-    ...([100, 200, 300, 400, 500, 600, 700, 800, 900].map(
-        n =>
-            [
-                `font-${n}`,
-                {
-                    kind: 'known-dead',
-                    themeConditional: true,
-                    reason: `{ weight: ${n} } — dead unless the project declares --font-weight-${n}; Tailwind serves font-[${n}] or the named weights`,
-                },
-            ] as const,
-    ) as ReadonlyArray<readonly [string, Baseline]>),
-
-    // ── known-dead: unknown sz key that still emits ─────────────────────────
+    // ── accepted: unknown sz key rides the kebab pass-through ───────────────
     ...(['break-word', 'pointer-none'].map(
         c =>
             [
                 c,
                 {
-                    kind: 'known-dead',
-                    reason: 'emitted from an UNKNOWN sz key — warned truthfully, but the dead class still ships (systemic; the drop-vs-emit decision is still open)',
+                    kind: 'accepted',
+                    reason: 'emitted from an UNKNOWN sz key through the kebab pass-through, which decision 0001 keeps on purpose so a utility newer than csszyx still reaches Tailwind; the warning says so and the author fixes it in place',
                 },
             ] as const,
     ) as ReadonlyArray<readonly [string, Baseline]>),
 ]);
-
-/**
- * Load a design system over stock Tailwind, resolving its own stylesheets.
- *
- * @returns The loaded design system.
- */
-async function loadStockDesignSystem() {
-    const twRoot = path.dirname(fileURLToPath(import.meta.resolve('tailwindcss/package.json')));
-    return __unstable__loadDesignSystem('@import "tailwindcss";', {
-        base: twRoot,
-        async loadStylesheet(id: string) {
-            const relative = id === 'tailwindcss' ? 'index.css' : id.replace(/^tailwindcss\//, '');
-            const file = path.join(
-                twRoot,
-                relative.endsWith('.css') ? relative : `${relative}.css`,
-            );
-            return {
-                path: file,
-                base: path.dirname(file),
-                content: await readFile(file, 'utf8'),
-            };
-        },
-    });
-}
 
 /** One corpus record: an sz input and the class string every engine emits. */
 interface CorpusRecord {
@@ -186,20 +141,22 @@ async function main(): Promise<void> {
     const origins = collectTokens(records);
     const tokens = [...origins.keys()];
 
-    const designSystem = await loadStockDesignSystem();
-    // A deliberately bogus candidate rides along as a self-proof: if Tailwind
-    // ever stops reporting an unservable class as `null` (say `undefined` or
-    // `''` after an API change), every dead class would read as alive and the
-    // gate would pass vacuously. The probe fails loudly instead.
-    const selfProofToken = 'zz-not-a-class';
-    const css = designSystem.candidatesToCss([...tokens, selfProofToken]);
-    if (css[tokens.length] !== null) {
-        throw new Error(
-            `the oracle no longer detects dead classes: candidatesToCss("${selfProofToken}") ` +
-                `returned ${JSON.stringify(css[tokens.length])} instead of null`,
-        );
+    // Stock Tailwind on purpose: the corpus carries no project theme, so
+    // anything theme- or plugin-dependent is baselined rather than checked.
+    // The oracle degrades to a skip where a user project would carry on; this
+    // gate has no such freedom, so a skip is a hard failure here. That includes
+    // the self-proof — the oracle refuses to run once Tailwind stops reporting
+    // an unservable class as null, which would otherwise pass vacuously.
+    const twRoot = path.dirname(fileURLToPath(import.meta.resolve('tailwindcss/package.json')));
+    const oracle = await createEmittedClassOracle({
+        resolveFrom: REPO,
+        css: '@import "tailwindcss";',
+        cssBase: twRoot,
+    });
+    if (!oracle.ok) {
+        throw new Error(`check:emitted-classes cannot run: ${oracle.reason}`);
     }
-    const dead = tokens.filter((_, index) => css[index] === null);
+    const dead = oracle.findDead(tokens);
 
     const unbaselined = dead.filter(token => !BASELINE.has(token));
     const baselined = dead.filter(token => BASELINE.has(token));

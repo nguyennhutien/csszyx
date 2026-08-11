@@ -144,6 +144,10 @@ export function transformRustBatch(
                 // `build.astBudgetLimit` has to apply to whichever engine trips.
                 astBudget: options?.astBudget,
                 crossModuleStaticsJson: encodeCrossModuleStatics(options?.crossModuleStatics),
+                // Its own field, not folded into the szv payload: the two
+                // registries share a transport but not a meaning, and the
+                // native side picks different machinery for each.
+                crossModuleSzObjectsJson: encodeCrossModuleStatics(options?.crossModuleSzObjects),
             },
         ).map(fromNativeResult);
     } catch (err) {

@@ -36,6 +36,8 @@ export interface NativeTransformOptions {
     astBudget?: number;
     /** Cross-module szv registry payload (ordered-pair JSON). */
     crossModuleStaticsJson?: string;
+    /** Cross-module static sz OBJECT registry payload (ordered-pair JSON). */
+    crossModuleSzObjectsJson?: string;
 }
 
 /** Native transform output shape returned per source file. */

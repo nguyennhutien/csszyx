@@ -613,10 +613,12 @@ sz={{ scale: shrunk ? 75 : 100 }}            // inline prop ternary — both lit
 - Use `sz={var}` when no override needed (simpler)
 - Use `sz={{ ...var, key: val }}` only when overriding/adding
 - Variables in array elements, ternary branches, and chained initializers all resolve at build time
+- `build.importedStaticSz` (default TRUE) compiles a static sz object imported from another module — v1 covers a direct `sz={binding}` from a NAMED import of an `export const` object literal, written relative or through a project alias (read from the bundler's `resolve.alias` and tsconfig `compilerOptions.paths`); barrels, package specifiers, absolute specifiers, namespace/default imports and nested positions keep the runtime fallback and report it; every lane defaults to on so nothing needs wiring, and turning it OFF must be done in all of them — `csszyxTurbopack({}, { importedStaticSz: false })` PLUS `csszyx next prebuild --no-imported-static-sz` PLUS `csszyx next watch --no-imported-static-sz` for dev — because a mismatch fails the production build on the config hash
+- A shared sz object is a build-time value: the compiler reads it where it is DECLARED. Reassigning the binding (`let s = {...}; s = {...}`) is detected and falls back to the runtime; a property write (`s.p = 8`) is NOT detected and the class still describes the declared value. Declare once, never write to it — vary with spread overrides or `szv()`
 - `sz={{ key: cond ? a : b }}` — both literal branches compile to static classes; a runtime branch uses a CSS variable. An opposite `undefined`, `null`, `false`, or `''` branch omits the utility and variable value (`0` remains valid)
 - When runtime `sz` values emit inline CSS variables beside one direct object-literal JSX spread, or one conditional whose branches are object literals, the compiler injects the variables into every spread branch's `style` so both authored and generated values survive. Keep unresolved or multiple spreads' style explicit; csszyx warns when it cannot prove a single-evaluation merge is safe
 - `sz={{ ...(cond ? a : b), static: val }}` — conditional spread hoist: compiler resolves both branches at build time
-- Imported variables / function call results fall back to `_sz()` runtime — dev mode emits a build-time compiler warning explaining the fallback reason and suggesting `szv()` or `dynamic()`
+- Imported variables / function call results fall back to `_sz()` runtime — a build-time compiler warning explains the fallback reason and suggests `szv()` or `dynamic()`. An expression rooted in an IMPORT collects no classes at all, so that warning is kept in production builds and survives `quiet: 'nudges'`; every other unresolved shape — including a forwarded `sz` prop, whose classes the caller contributes — stays dev-only advice
 
 Full guide: `/docs/reusing-styles`
 
@@ -679,19 +681,35 @@ unset"; same-file `const` references and `const` object spreads are followed.
 For styles from JSON / API / CMS / form renderer schemas:
 
 ```tsx
-import { dynamic, preloadManifest } from "@csszyx/dynamic";
+import { dynamic } from "@csszyx/dynamic";
 // or: import { dynamic } from 'csszyx/dynamic';
 
-// Optional: preload at app startup for zero-latency first inject
-await preloadManifest("/csszyx-manifest.json");
-
-// Apply runtime sz object — CSS injected only for missing classes
+// Apply runtime sz object — CSS is injected for classes not already built
 const cls = dynamic({
   p: 4,
   bg: "white",
   hover: { bg: "gray-50" },
   dark: { bg: "gray-900" },
 });
+```
+
+**The manifest is opt-in.** `csszyx-manifest.json` lets `dynamic()` skip injecting
+rules the built CSS already has, but it carries the WHOLE class census to answer
+questions about the few classes `dynamic()` renders — measured on a 668-class
+census it costs ~2 kB gz to spare a few hundred bytes of injection, and only wins
+once most of the app is styled at runtime. `build.emitManifest` defaults to
+`false`; a missing manifest is not an error, `dynamic()` just injects its own
+rules and the styles are identical.
+
+If you enable it, preload it — `dynamic()` is synchronous and the fetch is not,
+so an unawaited manifest arrives after the first paint has already injected
+everything and the build pays both costs:
+
+```tsx
+import { dynamicReport, preloadManifest } from "@csszyx/dynamic";
+
+await preloadManifest(); // before the first render
+console.log(dynamicReport().summary); // development: did it pay off here?
 ```
 
 **Build-time extraction (Layer-1 prescan):** When `dynamic()` receives a static literal or
@@ -1029,8 +1047,19 @@ ignored unless a path points into them:
 A non-`/packages/` lib INSIDE the build root needs no config (compiled + scanned
 automatically); `compileSources` is for `/packages/` or sources OUTSIDE the root.
 
-A `/packages/` file with `sz` that is not opted in is skipped silently (no CSS);
-csszyx warns at build end and lists those files.
+The option used to be `compilePackages`, which took package NAMES. An old config
+still passing that name is never read, so every effect below silently does not
+happen. csszyx now warns on any plugin option it does not recognize, naming the
+replacement.
+
+A `/packages/` file using csszyx that is not opted in is skipped (no CSS); csszyx
+warns at build end and lists those files.
+
+Opting in is also what makes the cross-module `szv` precompile work inside the
+package: the prescan is what records a module's exported factories, so a skipped
+module keeps them out of the registry and every importer — its own siblings
+included — falls back to the runtime path. That case warns in production builds
+too; a skip affecting only one file's own classes stays development-only.
 
 ## Theme Auto-Scan (Custom Tokens → TypeScript Types)
 

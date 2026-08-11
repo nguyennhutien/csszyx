@@ -29,6 +29,7 @@ export interface NextWatchCommandOptions {
     cacheDir?: string;
     pattern?: string;
     extraIgnore?: readonly string[];
+    importedStaticSz?: boolean;
     debounceMs?: number | string;
     silent?: boolean;
 }
@@ -91,6 +92,7 @@ export async function startNextWatch(
         parserMode,
         safelistOutputFile: options.outputFile,
         cacheDir: options.cacheDir,
+        importedStaticSz: options.importedStaticSz,
         config: { mangleVars: false },
     });
 

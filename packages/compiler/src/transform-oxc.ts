@@ -1,26 +1,20 @@
 /**
- * Phase D production transform — `transformOxc()` is the oxc-parser +
- * magic-string replacement for `transformSourceCode()` (Babel). The
- * port lands incrementally across slices D2.1 (extract only),
- * D2.2 (magic-string rewrite), D2.3 (szRecover), D2.4 (runtime calls),
- * D2.5 (spread/conditional hoisting). The parity harness at
- * `tests/oxc-parity.test.ts` tracks which slices have landed.
+ * The oxc production transform — `transformOxc()` is the oxc-parser +
+ * magic-string counterpart to `transformSourceCode()` (Babel), selected by
+ * `build.parser`. Both must emit the same classes for the same source; the
+ * parity harness at `tests/oxc-parity.test.ts` is what holds them together.
  *
- * **Current slice: D2.1.** Read-only class extraction. Walks the AST
- * for JSXAttribute name="sz" with a static `ObjectExpression` value,
- * converts each property tree into a plain {@link SzObject}, and runs
- * the browser-pure `transform()` (`transform-core.ts`) to derive the
- * Tailwind class names. The source string is returned untouched —
- * `code === source` and `transformed === false`. D2.2 will replace
- * the matched JSXAttribute ranges via magic-string.
+ * It walks the AST for `sz` attributes, converts each static property tree into
+ * a plain {@link SzObject}, derives class names through the browser-pure
+ * `transform()` (`transform-core.ts`), and rewrites the matched ranges with
+ * magic-string — folding the result into an existing `className` where there is
+ * one. Spread, conditionals, `szRecover`, and the runtime helper calls are all
+ * handled here.
  *
- * Anything D2.1 cannot handle statically (variables, spread, ternary,
- * template literals, runtime helper calls) throws
- * {@link OxcNotImplementedError} so the parity harness records the
- * fixture as `pending` rather than reporting silent divergence.
- *
- * See `.agent/planning/babel-to-oxc-mapping.md` for the Babel → oxc
- * API mapping referenced throughout this file.
+ * A construct this lane cannot read statically throws
+ * {@link OxcNotImplementedError}. The parity harness records that fixture as
+ * `pending`, and the plugin falls back to the Babel lane for the file rather
+ * than emitting something the two engines would disagree about.
  */
 
 import MagicString from 'magic-string';
@@ -90,25 +84,26 @@ import {
 export type TransformOxcResult = SourceTransformResult;
 
 /**
- * Thrown when a caller hits a code path the current slice does not yet
- * implement. The parity harness catches this and reports the fixture
- * as `pending` rather than failing the suite.
+ * Thrown when this lane meets a construct it cannot read statically. The parity
+ * harness catches it and records the fixture as `pending` rather than failing
+ * the suite; the plugin catches it and falls back to the Babel lane.
  */
 export class OxcNotImplementedError extends Error {
     /**
-     * User-facing description of the unimplemented construct, without the
-     * internal slice label. Fallback warnings must print THIS, not `message` —
-     * the slice codes are planning shorthand and leaked verbatim into build
-     * logs ("D2.5+ not implemented yet", field-reported as baffling).
+     * Description of the construct, on its own terms.
+     *
+     * Fallback warnings print THIS rather than `message`. The message used to
+     * carry an internal label naming which slice of the port was expected to
+     * cover the case, and it reached build logs verbatim, where a reader could
+     * only report it as baffling.
      */
     readonly detail: string;
 
     /**
-     * @param slice The Phase D slice expected to implement this path.
-     * @param detail What the caller asked for that is not yet wired.
+     * @param detail What the caller asked for that this lane cannot read.
      */
-    constructor(slice: string, detail: string) {
-        super(`transformOxc: ${slice} not implemented yet — ${detail}`);
+    constructor(detail: string) {
+        super(`transformOxc: not implemented — ${detail}`);
         this.name = 'OxcNotImplementedError';
         this.detail = detail;
     }
@@ -215,6 +210,7 @@ export function transformOxc(
                       parsed as unknown as { comments: Array<{ start: number; end: number }> }
                   ).comments.map(comment => ({ start: comment.start, end: comment.end }))
                 : [],
+        rewrittenSpans: [],
         usedPick: false,
         usedPick1: false,
     };
@@ -227,6 +223,11 @@ export function transformOxc(
     // (`mx: GUTTER` where `const GUTTER = 0`); the object-only map above cannot
     // hold scalar initializers.
     const constInitializers = collectConstInitializers(parsed.program as unknown as OxcNode);
+    const importedNames = collectImportedNames(parsed.program as unknown as OxcNode);
+    const importedSzObjects = collectImportedSzObjects(
+        parsed.program as unknown as OxcNode,
+        options?.crossModuleSzObjects,
+    );
     const conditionalBindings = collectConditionalBindings(parsed.program as unknown as OxcNode);
     const reservedCSSVariableNames = options?.mangleVars
         ? collectStaticStyleCustomPropertyNames(parsed.program as unknown as OxcNode)
@@ -290,6 +291,12 @@ export function transformOxc(
         const openingNode = node as unknown as JsxOpeningElementNode;
         const openingAttributes = collectOxcOpeningAttributes(openingNode.attributes ?? []);
         const szAttrs = openingAttributes.sz;
+        // Everything under an `sz` attribute is about to be replaced by a
+        // generated expression, so a factory call nested in it cannot be
+        // spliced — see callInsideRewrittenSpan.
+        if (szvPrecompile.enabled) {
+            szvPrecompile.rewrittenSpans.push(...szAttrs);
+        }
         const szsAttrs = openingAttributes.szs;
         const classNameAttr = openingAttributes.className;
         const styleAttr = openingAttributes.style;
@@ -320,6 +327,11 @@ export function transformOxc(
                 lastAttribute: lastAttr,
                 openingNode,
                 filename: effectiveFilename,
+                // `effectiveFilename` substitutes `file.tsx` so oxc detects JSX,
+                // which is a parser input, not a fact about the caller. Naming a
+                // file the caller never passed would send a reader looking for
+                // it, so the diagnostics say what Babel says instead.
+                reportedFilename: filename ?? '<anonymous>',
                 source,
                 edits,
                 diagnostics,
@@ -372,6 +384,7 @@ export function transformOxc(
                 source,
                 options,
                 bindings: objectBindings,
+                importedSzObjects,
                 conditionalBindings,
                 componentHoists,
                 reservedCSSVariableNames,
@@ -411,6 +424,7 @@ export function transformOxc(
                 classNameAttribute: classNameAttr,
                 filename: effectiveFilename,
                 bindings: objectBindings,
+                importedNames,
                 source,
                 edits,
                 classes,
@@ -487,6 +501,8 @@ interface OxcSzAttributeContext {
     source: string;
     options: TransformSourceCodeOptions | undefined;
     bindings: ReadonlyMap<string, ObjectExpressionNode>;
+    /** Local name to the static sz object its module exports. */
+    importedSzObjects: ReadonlyMap<string, Record<string, unknown>>;
     conditionalBindings: ReadonlyMap<string, ConditionalExpressionNode>;
     componentHoists: OxcComponentHoistAnalysis | null;
     reservedCSSVariableNames: ReadonlySet<string> | undefined;
@@ -536,7 +552,6 @@ function transformOxcSzAttribute(context: OxcSzAttributeContext): OxcSzAttribute
     const value = context.szAttr.value;
     if (!value) {
         throw new OxcNotImplementedError(
-            'D3',
             `sz attribute without value at ${context.filename}:${context.szAttr.start}`,
         );
     }
@@ -547,7 +562,6 @@ function transformOxcSzAttribute(context: OxcSzAttributeContext): OxcSzAttribute
     }
     if (value.type !== 'JSXExpressionContainer') {
         throw new OxcNotImplementedError(
-            'D3',
             `unsupported sz attribute value ${value.type} at ${context.filename}:${context.szAttr.start}`,
         );
     }
@@ -605,8 +619,14 @@ function transformOxcSzExpression(
     if (expression.type === 'ArrayExpression') {
         return transformOxcSzArrayResult(expression as ArrayExpressionNode, context);
     }
-    if (expression.type !== 'ObjectExpression') return { kind: 'fallback', expression };
-    return transformOxcObjectExpression(expression as ObjectExpressionNode, context);
+    // `as const` / `satisfies` / `as T` are erased before anything runs, so an
+    // object wearing one is the same object. Strip it for the dispatch, the way
+    // the babel lane does, or the identical literal compiles or falls back
+    // depending on which parser the build happens to be using. The fallback
+    // still carries the expression as authored, so its wording is unchanged.
+    const dispatched = unwrapExpression(expression);
+    if (dispatched.type !== 'ObjectExpression') return { kind: 'fallback', expression };
+    return transformOxcObjectExpression(dispatched as ObjectExpressionNode, context);
 }
 
 /**
@@ -621,14 +641,16 @@ function transformOxcIdentifierExpression(
     context: OxcSzAttributeContext,
 ): OxcSzAttributeResult | null {
     if (expression.type !== 'Identifier') return null;
-    const bound = context.bindings.get(String((expression as IdentifierNode).name));
-    if (!bound) return null;
+    const name = String((expression as IdentifierNode).name);
+    // A local binding is asked first, so a local declaration of the same name
+    // wins over an import without the two needing to be ordered by hand.
+    const bound = context.bindings.get(name);
+    const object = bound
+        ? astObjectToSzObject(bound, context.filename, context.bindings)
+        : (context.importedSzObjects.get(name) as SzObject | undefined);
+    if (object === undefined) return null;
     const result = compileSzObject(
-        applyGlobalVarAliasesToSzObject(
-            astObjectToSzObject(bound, context.filename, context.bindings),
-            context.globalVarAliases,
-            context.cssVariableMap,
-        ),
+        applyGlobalVarAliasesToSzObject(object, context.globalVarAliases, context.cssVariableMap),
     );
     collectOxcClassTokens(result.className, context.classes, context.szDerived);
     return { kind: 'continue' };
@@ -838,12 +860,12 @@ function transformOxcUnsupportedObject(
         if (context.classNameAttr) {
             // Merge the hoisted-conditional class expression with the existing
             // className, matching the Babel emit — this used to bail the whole
-            // file to the Babel fallback (D2.5+).
-            const existing = classNameMergeArgument(context.classNameAttr, context.source);
-            context.edits.overwrite(
-                context.classNameAttr.start,
-                context.classNameAttr.end,
-                `className={_szMerge(${existing}, ${classExpression})}`,
+            // file to the Babel fallback.
+            wrapClassNameAttribute(
+                context.edits,
+                context.classNameAttr,
+                'className={_szMerge(',
+                `, ${classExpression})}`,
             );
             context.edits.remove(
                 whitespaceStart(context.source, context.szAttr.start),
@@ -926,13 +948,11 @@ function rewriteOxcPartialClassName(
     expressionClassName: boolean,
 ): void {
     if (expressionClassName && context.classNameAttr?.value) {
-        const classExpression = (context.classNameAttr.value as unknown as { expression: OxcNode })
-            .expression;
-        const classSource = context.source.slice(classExpression.start, classExpression.end);
-        context.edits.overwrite(
-            context.classNameAttr.start,
-            context.classNameAttr.end,
-            `className={_szMerge(${classSource}, ${partial.classExpression})}`,
+        wrapClassNameAttribute(
+            context.edits,
+            context.classNameAttr,
+            'className={_szMerge(',
+            `, ${partial.classExpression})}`,
         );
         context.edits.remove(
             whitespaceStart(context.source, context.szAttr.start),
@@ -1027,12 +1047,12 @@ function transformOxcStaticConditional(
     if (context.classNameAttr) {
         // Same emit as the Babel engine: the compiled ternary merges with the
         // existing className. This used to route to the runtime fallback,
-        // whose className branch then bailed the whole file to Babel (D2.5+).
-        const existing = classNameMergeArgument(context.classNameAttr, context.source);
-        context.edits.overwrite(
-            context.classNameAttr.start,
-            context.classNameAttr.end,
-            `className={_szMerge(${existing}, ${classExpression})}`,
+        // whose className branch then bailed the whole file to Babel.
+        wrapClassNameAttribute(
+            context.edits,
+            context.classNameAttr,
+            'className={_szMerge(',
+            `, ${classExpression})}`,
         );
         context.edits.remove(
             whitespaceStart(context.source, context.szAttr.start),
@@ -1108,24 +1128,23 @@ function transformOxcArrayExpression(context: OxcArrayTransformContext): OxcArra
     // Authored className is the first argument so later sz array entries retain
     // the same override order as szcn. Compiled runtime parts use the unmemoized
     // helper because their per-render values should not evict authored szcn keys.
-    const existingExpression = context.classNameAttr
-        ? classNameMergeArgument(context.classNameAttr, context.source)
-        : null;
-    const call = existingExpression
-        ? `_szcn(${existingExpression}, ${composition.args})`
-        : `_szcn(${composition.args})`;
     if (context.classNameAttr) {
-        context.edits.overwrite(
-            context.classNameAttr.start,
-            context.classNameAttr.end,
-            `className={${call}}`,
+        wrapClassNameAttribute(
+            context.edits,
+            context.classNameAttr,
+            'className={_szcn(',
+            `, ${composition.args})}`,
         );
         context.edits.remove(
             whitespaceStart(context.source, context.szAttr.start),
             context.szAttr.end,
         );
     } else {
-        context.edits.overwrite(context.szAttr.start, context.szAttr.end, `className={${call}}`);
+        context.edits.overwrite(
+            context.szAttr.start,
+            context.szAttr.end,
+            `className={_szcn(${composition.args})}`,
+        );
     }
     return { kind: 'complete', usesSzPart: composition.usesSzPart };
 }
@@ -1172,14 +1191,12 @@ function mergeOxcStaticElementClasses(
         return { usesRuntime: false, usesMerge: false };
     }
 
-    const classNameValue = classNameAttr.value;
-    if (existingRaw === null && classNameValue?.type === 'JSXExpressionContainer') {
-        const exprNode = (classNameValue as unknown as { expression: OxcNode }).expression;
-        const exprSource = source.slice(exprNode.start, exprNode.end);
-        edits.overwrite(
-            classNameAttr.start,
-            classNameAttr.end,
-            `className={_szMerge(${exprSource}, ${JSON.stringify(szDerived.join(' '))})}`,
+    if (existingRaw === null && classNameExpressionNode(classNameAttr) !== null) {
+        wrapClassNameAttribute(
+            edits,
+            classNameAttr,
+            'className={_szMerge(',
+            `, ${JSON.stringify(szDerived.join(' '))})}`,
         );
         removeOxcAttributes(szAttrs, source, edits);
         return { usesRuntime: true, usesMerge: true };
@@ -1246,6 +1263,7 @@ function transformOxcRuntimeFallback(params: OxcRuntimeFallbackParams): boolean 
         classNameAttribute,
         filename,
         bindings,
+        importedNames,
         source,
         edits,
         classes,
@@ -1253,7 +1271,7 @@ function transformOxcRuntimeFallback(params: OxcRuntimeFallbackParams): boolean 
     } = params;
     if (!expression || !attribute) return false;
     if (expression.type !== 'ArrayExpression') {
-        diagnostics.push(buildRuntimeFallbackDiagnostic(expression, source));
+        diagnostics.push(buildRuntimeFallbackDiagnostic(expression, source, importedNames));
     }
     if (
         expression.type === 'ObjectExpression' &&
@@ -1269,14 +1287,14 @@ function transformOxcRuntimeFallback(params: OxcRuntimeFallbackParams): boolean 
     collectCandidateClassesFromExpression(expression, filename, bindings, classes, '');
     const expressionSource = source.slice(expression.start, expression.end);
     if (classNameAttribute) {
-        // Formerly a D2.5+ bail to the Babel lane (one WARN per file — 25 on
+        // This used to bail to the Babel lane (one WARN per file — 25 on
         // one field report). Same emit as Babel and the rust engine: the
         // existing className merges with the runtime-resolved sz value.
-        const existing = classNameMergeArgument(classNameAttribute, source);
-        edits.overwrite(
-            classNameAttribute.start,
-            classNameAttribute.end,
-            `className={_szMerge(${existing}, _sz(${expressionSource}))}`,
+        wrapClassNameAttribute(
+            edits,
+            classNameAttribute,
+            'className={_szMerge(',
+            `, _sz(${expressionSource}))}`,
         );
         removeOxcAttributes(attributes, source, edits);
         return true;
@@ -1297,6 +1315,8 @@ interface OxcRuntimeFallbackParams {
     readonly classNameAttribute: JsxAttributeNode | null;
     readonly filename: string;
     readonly bindings: Map<string, ObjectExpressionNode>;
+    /** Local names this module introduced with an import. */
+    readonly importedNames: ReadonlySet<string>;
     readonly source: string;
     readonly edits: MagicString;
     readonly classes: Set<string>;
@@ -1549,6 +1569,7 @@ function transformOxcRecoveryAttribute(params: OxcRecoveryAttributeParams): bool
         lastAttribute,
         openingNode,
         filename,
+        reportedFilename,
         source,
         edits,
         diagnostics,
@@ -1558,7 +1579,7 @@ function transformOxcRecoveryAttribute(params: OxcRecoveryAttributeParams): bool
     const recoveryValue = stringLiteralValue(attribute.value);
     if (recoveryValue === null) {
         diagnostics.push(
-            `[csszyx] szRecover at ${filename}: ` +
+            `[csszyx] szRecover at ${reportedFilename}: ` +
                 'only string-literal values ("csr" | "dev-only") are supported. ' +
                 'Dynamic values disable token emission for this element.',
         );
@@ -1566,7 +1587,7 @@ function transformOxcRecoveryAttribute(params: OxcRecoveryAttributeParams): bool
     }
     if (!isValidInlineRecoveryMode(recoveryValue)) {
         diagnostics.push(
-            `[csszyx] szRecover at ${filename}: ` +
+            `[csszyx] szRecover at ${reportedFilename}: ` +
                 `unknown mode "${recoveryValue}" — expected "csr" or "dev-only". ` +
                 'Token emission skipped.',
         );
@@ -1594,6 +1615,8 @@ interface OxcRecoveryAttributeParams {
     readonly lastAttribute: JsxAttributeNode | null;
     readonly openingNode: JsxOpeningElementNode;
     readonly filename: string;
+    /** Filename as the diagnostics name it, without the JSX-detection stand-in. */
+    readonly reportedFilename: string;
     readonly source: string;
     readonly edits: MagicString;
     readonly diagnostics: string[];
@@ -2329,6 +2352,7 @@ function oxcSzvFactoryAccounted(
         source,
         state.commentSpans,
         state.typeQueryCounts,
+        state.rewrittenSpans,
     );
 }
 
@@ -2750,13 +2774,64 @@ function classifyFallbackExpression(rawExpression: OxcNode): {
 }
 
 /**
+ * The imported binding an unresolved expression roots in, when it has one.
+ *
+ * A member expression is judged by its ROOT object, so `S.cardSz` on a
+ * namespace import counts and `props.sz` does not.
+ *
+ * @param expression Unresolved sz expression, already unwrapped.
+ * @param importedNames Local names this module introduced with an import.
+ * @returns The imported binding's local name, or null.
+ */
+function importedRootName(expression: OxcNode, importedNames: ReadonlySet<string>): string | null {
+    let root = expression;
+    while (root.type === 'MemberExpression') {
+        // A member expression always has an object to descend into — the node
+        // does not exist without one — so the walk cannot run out of ground.
+        root = (root as unknown as { object: OxcNode }).object;
+    }
+    if (root.type !== 'Identifier') return null;
+    const name = String((root as IdentifierNode).name);
+    return importedNames.has(name) ? name : null;
+}
+
+/**
+ * Every local name this module introduced with an import.
+ *
+ * Named, default and namespace alike: what matters is only that the binding
+ * comes from another module, not which form brought it in.
+ *
+ * @param root Program AST root.
+ * @returns The imported local names.
+ */
+function collectImportedNames(root: OxcNode): Set<string> {
+    const names = new Set<string>();
+    walk(root, node => {
+        if (node.type !== 'ImportDeclaration') return;
+        // Both fields are structural rather than optional: a declaration always
+        // carries a specifier list, empty for a side-effect import, and every
+        // specifier shape — named, default, namespace — binds a local name.
+        const declaration = node as unknown as { specifiers: Array<{ local: { name: string } }> };
+        for (const specifier of declaration.specifiers) {
+            names.add(specifier.local.name);
+        }
+    });
+    return names;
+}
+
+/**
  * Build the same dev diagnostic Babel emits when sz falls back to runtime.
  *
  * @param rawExpression Runtime fallback expression, parentheses included.
  * @param source Original source.
+ * @param importedNames Local names this module introduced with an import.
  * @returns Diagnostic string.
  */
-function buildRuntimeFallbackDiagnostic(rawExpression: OxcNode, source: string): string {
+function buildRuntimeFallbackDiagnostic(
+    rawExpression: OxcNode,
+    source: string,
+    importedNames: ReadonlySet<string>,
+): string {
     // Babel's AST has no parenthesized-expression nodes, so its lane reports
     // the inner expression for `sz={(cfg.x)}`. Unwrap here or the same source
     // classifies as `other`/ParenthesizedExpression under oxc — wording AND
@@ -2786,15 +2861,27 @@ function buildRuntimeFallbackDiagnostic(rawExpression: OxcNode, source: string):
             );
         }
         ({ reason, suggestion } = describeSzFallback('call', name));
-    } else if (expression.type === 'Identifier') {
-        ({ reason, suggestion } = describeSzFallback(
-            'identifier',
-            (expression as IdentifierNode).name,
-        ));
-    } else if (expression.type === 'MemberExpression') {
-        ({ reason, suggestion } = describeSzFallback('member'));
     } else {
-        ({ reason, suggestion } = describeSzFallback('other', expression.type));
+        // Resolved once and reused: asking twice walked the member chain twice
+        // and left the second answer needing a fallback for a null the first
+        // one had already ruled out.
+        const importedName = importedRootName(expression, importedNames);
+        if (importedName !== null) {
+            // An import is a module-level value this build tried to read and
+            // could not, so nothing collected its classes. Everything else here
+            // is usually a prop the caller supplies, collected where the caller
+            // writes it.
+            ({ reason, suggestion } = describeSzFallback('import', importedName));
+        } else if (expression.type === 'Identifier') {
+            ({ reason, suggestion } = describeSzFallback(
+                'identifier',
+                (expression as IdentifierNode).name,
+            ));
+        } else if (expression.type === 'MemberExpression') {
+            ({ reason, suggestion } = describeSzFallback('member'));
+        } else {
+            ({ reason, suggestion } = describeSzFallback('other', expression.type));
+        }
     }
     return `sz fallback at ${lineCol}: ${reason}.\n  Suggestion: ${suggestion}`;
 }
@@ -3084,7 +3171,6 @@ function resolveSzObjectSpread(
         }
     }
     throw new OxcNotImplementedError(
-        'D5',
         `unsupported object spread in sz object at ${filename}:${spread.start}`,
     );
 }
@@ -3092,8 +3178,8 @@ function resolveSzObjectSpread(
 /**
  * Convert an oxc `ObjectExpression` AST node into a plain {@link SzObject}
  * the browser-pure `transform()` helper can consume. Throws
- * {@link OxcNotImplementedError} on any pattern D2.1 does not handle
- * (identifiers, spreads, ternaries, template literals, methods).
+ * {@link OxcNotImplementedError} on any pattern that is not statically
+ * readable here (identifiers, spreads, ternaries, template literals, methods).
  *
  * @param node The oxc ObjectExpression node.
  * @param filename Filename for diagnostic offsets.
@@ -3118,21 +3204,18 @@ function astObjectToSzObject(
         }
         if (propRaw.type !== 'Property') {
             throw new OxcNotImplementedError(
-                'D5',
                 `non-Property in sz object (e.g. SpreadElement) at ${filename}:${propRaw.start}`,
             );
         }
         const prop = propRaw as PropertyNode;
         if (prop.computed) {
             throw new OxcNotImplementedError(
-                'D2.1',
                 `computed key in sz object at ${filename}:${prop.key.start}`,
             );
         }
         const key = extractKeyName(prop.key);
         if (key === null) {
             throw new OxcNotImplementedError(
-                'D2.1',
                 `unsupported key shape ${prop.key.type} at ${filename}:${prop.key.start}`,
             );
         }
@@ -3555,22 +3638,54 @@ function collectArrayCompositionClasses(value: string, classes: Set<string>): st
 }
 
 /**
- * Build the `_szMerge` argument that preserves an existing className attribute.
+ * Wrap an authored `className` attribute in a merge call, leaving the authored
+ * expression's own bytes untouched.
+ *
+ * The szv precompile splices its table picks over factory calls that can sit
+ * inside that expression — `className={szr(f({ v }))}` — and MagicString
+ * refuses to split a range another edit already replaced. Replacing only the
+ * text on either side of the expression keeps the inner range editable, so the
+ * merge and the precompile compose instead of throwing.
+ *
+ * @param edits MagicString over the source.
+ * @param attribute Existing `className` JSX attribute.
+ * @param prefix Text replacing everything before the authored expression.
+ * @param suffix Text replacing everything after the authored expression.
+ */
+function wrapClassNameAttribute(
+    edits: MagicString,
+    attribute: JsxAttributeNode,
+    prefix: string,
+    suffix: string,
+): void {
+    const expression = classNameExpressionNode(attribute);
+    if (expression === null) {
+        // A literal — or valueless — className has no authored range to
+        // preserve, so the whole attribute is replaced in one edit.
+        const literal = stringLiteralValue(attribute.value) ?? '';
+        edits.overwrite(
+            attribute.start,
+            attribute.end,
+            `${prefix}${JSON.stringify(literal)}${suffix}`,
+        );
+        return;
+    }
+    edits.overwrite(attribute.start, expression.start, prefix);
+    edits.overwrite(expression.end, attribute.end, suffix);
+}
+
+/**
+ * The authored expression inside `className={...}`, when there is one.
+ *
+ * Always present in a container here: `className={}` is a parse error, so an
+ * empty expression never reaches the rewrite.
  *
  * @param attribute Existing `className` JSX attribute.
- * @param source Original source for slicing expression values.
- * @returns A JS expression string for the existing className value.
+ * @returns The expression node, or null for a literal or valueless attribute.
  */
-function classNameMergeArgument(attribute: JsxAttributeNode, source: string): string {
-    const staticValue = stringLiteralValue(attribute.value);
-    if (staticValue !== null) {
-        return JSON.stringify(staticValue);
-    }
-    if (attribute.value?.type === 'JSXExpressionContainer') {
-        const expression = (attribute.value as unknown as { expression: OxcNode }).expression;
-        return source.slice(expression.start, expression.end);
-    }
-    return '""';
+function classNameExpressionNode(attribute: JsxAttributeNode): OxcNode | null {
+    if (attribute.value?.type !== 'JSXExpressionContainer') return null;
+    return (attribute.value as unknown as { expression: OxcNode }).expression;
 }
 
 /**
@@ -6542,7 +6657,7 @@ function extractKeyName(key: OxcNode): string | null {
 /**
  * Convert an oxc value AST node into a plain {@link SzValue}.
  * Handles string/number/boolean literals and nested objects. Anything
- * else throws {@link OxcNotImplementedError} for D2.1.
+ * else throws {@link OxcNotImplementedError}.
  *
  * @param node The value AST node.
  * @param filename Filename for diagnostic offsets.
@@ -6576,7 +6691,6 @@ function astValueToSzValue(
             return value;
         }
         throw new OxcNotImplementedError(
-            'D2.1',
             `unsupported literal value type at ${filename}:${node.start}`,
         );
     }
@@ -6592,7 +6706,6 @@ function astValueToSzValue(
             }
         }
         throw new OxcNotImplementedError(
-            'D2.1',
             `unsupported unary expression at ${filename}:${node.start}`,
         );
     }
@@ -6601,20 +6714,109 @@ function astValueToSzValue(
     }
     if (node.type === 'Identifier' || node.type === 'MemberExpression') {
         throw new OxcNotImplementedError(
-            'D2.1',
             `identifier reference in sz object — scope resolution lands in a later slice (${filename}:${node.start})`,
         );
     }
     if (node.type === 'ConditionalExpression' || node.type === 'LogicalExpression') {
         throw new OxcNotImplementedError(
-            'D2.5',
             `conditional/logical expression in sz object at ${filename}:${node.start}`,
         );
     }
     throw new OxcNotImplementedError(
-        'D2.1',
         `unsupported value node type ${node.type} at ${filename}:${node.start}`,
     );
+}
+
+/**
+ * How a named import specifier spells the export it binds.
+ *
+ * The two shapes are the whole set: `import { a }` writes an identifier and
+ * `import { 'a-b' as ab }` writes a string literal. Narrowed rather than
+ * coerced — `String()` over an unexpected shape would render it as
+ * `[object Object]`, a name matching no export, silently.
+ */
+type ImportedExportNode = { type: 'Identifier'; name: string } | { type: 'Literal'; value: string };
+
+/**
+ * A named import specifier, in the fields this file reads.
+ *
+ * `imported` is required here where the node type says the specifier is a named
+ * one: default and namespace specifiers, which have no export name, are a
+ * different node type and never reach this shape.
+ */
+interface NamedImportSpecifierNode {
+    importKind?: string;
+    imported: ImportedExportNode;
+    local: { name: string };
+}
+
+/**
+ * The export name an import specifier names.
+ *
+ * @param imported - The specifier's `imported` node.
+ * @returns The export name, as written.
+ */
+function importedExportName(imported: ImportedExportNode): string {
+    return imported.type === 'Identifier' ? imported.name : imported.value;
+}
+
+/**
+ * Map each locally-bound import name to the static sz object it refers to.
+ *
+ * Resolved once per file rather than per reference: the identifier path then
+ * answers with one map lookup, and a file that imports nothing the registry
+ * carries pays a single walk.
+ *
+ * The registry is keyed by EXPORT name while the code uses the LOCAL one, so
+ * `import { cardSz as card }` has to be read through its specifier. Matching
+ * the local name against the registry would resolve the wrong entry the moment
+ * the two differ.
+ *
+ * v1 accepts a named value import only. Namespace, default and type-only
+ * imports fall through to the runtime path they have today.
+ *
+ * @param root - Program AST root.
+ * @param registry - Cross-module sz objects visible to this file.
+ * @returns Local binding name to its exported object.
+ */
+function collectImportedSzObjects(
+    root: OxcNode,
+    registry: Readonly<Record<string, Readonly<Record<string, unknown>>>> | undefined,
+): Map<string, Record<string, unknown>> {
+    const out = new Map<string, Record<string, unknown>>();
+    if (registry === undefined) return out;
+    walk(root, node => {
+        if (node.type !== 'ImportDeclaration') return;
+        // Structural, not optional: a declaration always names a source and
+        // always carries a specifier list, empty for a side-effect import.
+        const declaration = node as unknown as {
+            source: { value: string };
+            importKind?: string;
+            specifiers: OxcNode[];
+        };
+        if (declaration.importKind === 'type') return;
+        const exported = registry[declaration.source.value];
+        if (exported === undefined) return;
+        for (const specifierNode of declaration.specifiers) {
+            if (specifierNode.type !== 'ImportSpecifier') continue;
+            const specifier = specifierNode as unknown as NamedImportSpecifierNode;
+            if (specifier.importKind === 'type') continue;
+            const exportName = importedExportName(specifier.imported);
+            // Own properties only. What the check is for is `__proto__`, which
+            // on an ordinary object answers with `Object.prototype` instead of
+            // nothing and would be lowered as though a module had exported it.
+            // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; the toolchain lib is ES2021.
+            const own = Object.prototype.hasOwnProperty.call(exported, exportName);
+            const value = own ? exported[exportName] : undefined;
+            // An array is an object and has no sz keys — only indices, which
+            // would lower as though `0` were a variant name. The reference
+            // engine refuses it, so this one has to as well.
+            if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+                out.set(specifier.local.name, value as Record<string, unknown>);
+            }
+        }
+    });
+    return out;
 }
 
 /**
@@ -6635,7 +6837,19 @@ function collectObjectBindings(
     constOnly = false,
 ): Map<string, ObjectExpressionNode> {
     const bindings = new Map<string, ObjectExpressionNode>();
+    // A name written to again does not still hold its initializer, so folding
+    // that initializer into classes would emit the value the binding no longer
+    // has. Collected during the same walk and applied afterwards, because the
+    // write can appear before the declaration in traversal order.
+    const reassigned = new Set<string>();
     walk(root, node => {
+        if (node.type === 'AssignmentExpression') {
+            const target = (node as unknown as { left?: OxcNode }).left;
+            if (target?.type === 'Identifier') {
+                reassigned.add(String((target as IdentifierNode).name));
+            }
+            return;
+        }
         if (node.type !== 'VariableDeclaration') {
             return;
         }
@@ -6668,6 +6882,9 @@ function collectObjectBindings(
             }
         }
     });
+    for (const name of reassigned) {
+        bindings.delete(name);
+    }
     return bindings;
 }
 
@@ -6781,10 +6998,9 @@ function isAstMetadataKey(key: string): boolean {
 }
 
 /**
- * Hand-rolled depth-first AST walker. Replaces a Babel `traverse` call
- * for the read-only D2.1 scope — D2.2+ may upgrade to a parent-tracking
- * walker once magic-string edits need parent ranges (see
- * `.agent/planning/babel-to-oxc-mapping.md` § 4.1).
+ * Hand-rolled depth-first AST walker, in place of a Babel `traverse` call.
+ * It reports nodes without their parents, which is enough for every edit this
+ * lane makes; an edit that needs a parent range would have to upgrade it.
  *
  * @param node Root AST node.
  * @param visit Function called for every visited node.
@@ -6810,12 +7026,62 @@ function walk(node: unknown, visit: (node: OxcNode) => void): void {
     }
 }
 
-/** One exported szv factory found by the registry extractor. */
-export interface SzvRegistryEntry {
+/**
+ * What one recorded export IS, because the two are not interchangeable.
+ *
+ * `szv-config` is a variant TABLE the consumer compiles and then picks from.
+ * `sz-object` is a VALUE the consumer lowers exactly as it would the same
+ * literal written locally. Carrying them untagged would leave every reader —
+ * including the native decoder — guessing which machinery applies.
+ */
+export type CrossModuleExportKind = 'szv-config' | 'sz-object';
+
+/** One exported value found by the cross-module registry extractor. */
+export interface CrossModuleRegistryEntry {
+    /** What the value is, and therefore how a consumer must treat it. */
+    kind: CrossModuleExportKind;
     /** The exported binding name. */
     exportName: string;
-    /** Statically evaluated, qualification-passing config. */
-    config: Record<string, unknown>;
+    /** Statically evaluated payload: an szv config, or the sz object itself. */
+    value: Record<string, unknown>;
+}
+
+/**
+ * Read one exported declarator into a registry entry, or refuse it.
+ *
+ * An szv factory is tried first: `szv(<config>)` is a call, so it can never
+ * also read as a plain object, and the order only fixes which check runs.
+ *
+ * `const` is required for the plain-object kind. A `let` export is a live
+ * binding that the module can rebind after any importer has already been
+ * compiled against its first value, and nothing in a per-file transform could
+ * see that happen. This is the same answer the local path gives a reassigned
+ * binding, one step more conservative because the write would be in another
+ * file entirely.
+ *
+ * @param declarator - One declarator of an exported variable declaration.
+ * @param isConst - Whether the declaration was written with `const`.
+ * @returns The entry to record, or null when the export does not qualify.
+ */
+function readCrossModuleDeclarator(
+    declarator: VariableDeclaratorNode,
+    isConst: boolean,
+): CrossModuleRegistryEntry | null {
+    const factory = readSzvFactoryDeclaratorOxc(declarator);
+    if (factory !== null) {
+        if (factory.config == null || qualifyStaticSzvConfig(factory.config) === null) return null;
+        return { kind: 'szv-config', exportName: factory.name, value: factory.config };
+    }
+    if (!isConst || declarator.id?.type !== 'Identifier' || !declarator.init) return null;
+    const name = declarator.id.name;
+    if (name === undefined || SZV_RESERVED_FACTORY_NAMES.has(name)) return null;
+    const init = unwrapExpression(declarator.init);
+    if (init.type !== 'ObjectExpression') return null;
+    // The SAME evaluation the local literal path runs. A narrower predicate
+    // here would mean an object qualifies in one file and not in another, which
+    // is the subset-predicate failure this repo has already shipped once.
+    const value = evaluateStaticObjectOxc(init);
+    return value === null ? null : { kind: 'sz-object', exportName: name, value };
 }
 
 /**
@@ -6832,8 +7098,11 @@ export interface SzvRegistryEntry {
  * @param filename - Module filename, for parser dialect detection.
  * @returns The exported factories, declaration order preserved.
  */
-export function extractSzvRegistryEntries(source: string, filename: string): SzvRegistryEntry[] {
-    if (!source.includes('szv(') || !source.includes('export')) {
+export function extractCrossModuleRegistryEntries(
+    source: string,
+    filename: string,
+): CrossModuleRegistryEntry[] {
+    if (!source.includes('export')) {
         return [];
     }
     let program: { body: OxcNode[] };
@@ -6845,18 +7114,16 @@ export function extractSzvRegistryEntries(source: string, filename: string): Szv
         /* v8 ignore next -- oxc reports syntax errors in-band; only native/parser failures throw. */
         return [];
     }
-    const out: SzvRegistryEntry[] = [];
+    const out: CrossModuleRegistryEntry[] = [];
     for (const statement of program.body) {
         if (statement.type !== 'ExportNamedDeclaration') continue;
         const declaration = (statement as unknown as { declaration?: OxcNode }).declaration;
         if (declaration?.type !== 'VariableDeclaration') continue;
         const declarators = (declaration as unknown as VariableDeclarationNode).declarations;
+        const isConst = (declaration as unknown as { kind?: string }).kind === 'const';
         for (const declarator of declarators) {
-            const factory = readSzvFactoryDeclaratorOxc(declarator);
-            if (factory?.config == null || qualifyStaticSzvConfig(factory.config) === null) {
-                continue;
-            }
-            out.push({ exportName: factory.name, config: factory.config });
+            const entry = readCrossModuleDeclarator(declarator, isConst);
+            if (entry !== null) out.push(entry);
         }
     }
     return out;

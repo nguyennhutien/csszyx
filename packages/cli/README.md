@@ -33,12 +33,40 @@ npx csszyx doctor
 
 ### `check`
 
-Scan the whole project for unknown or aliased `sz` keys — CI-friendly (non-zero
-exit on findings).
+Scan the whole project for unknown or aliased `sz` keys, then ask your own
+Tailwind whether every class csszyx emitted actually produces CSS — CI-friendly
+(non-zero exit on findings).
 
 ```bash
 npx csszyx check
 ```
+
+The second pass loads the stylesheet that imports Tailwind, so your `@theme`
+tokens, custom breakpoints and `@utility` definitions all count as real. That
+catches the mistakes a key check cannot see: a canonical key whose value has no
+utility behind it, or a breakpoint spelled `tablt:` instead of `tablet:`. Both
+ship a class that sits in the DOM and styles nothing.
+
+It needs Tailwind v4 resolvable from the project. Without it — no v4, no
+stylesheet importing Tailwind, a stylesheet that will not compile — the pass
+reports why it was skipped and the key check still runs. It never reports a
+class dead because it could not find the design system.
+
+`@plugin` is loaded the same way Tailwind loads it, so classes that typography,
+forms or a local plugin add count as real. `group` and `peer`, bare or scoped
+(`group/sidebar`), are markers rather than utilities and are never reported.
+
+If a class is real in a way the stylesheet cannot show — defined by a later
+build step, or emitted for a consumer that ships its own CSS — vouch for it
+instead of turning the check off:
+
+```bash
+npx csszyx check --allow legacy-widget --allow vendor-grid
+```
+
+Keep that in a `package.json` script so the list is committed and reviewable.
+Accepted classes are counted in the summary, so the list cannot quietly grow
+into a place where findings go to be forgotten.
 
 ### `explain`
 
@@ -101,7 +129,7 @@ npx csszyx generate-types --output ./src/csszyx.d.ts
 
 ### `migrate`
 
-Convert Tailwind `className="..."` to CSSzyx `sz={...}` props. Phase 1 supports static string classNames.
+Convert Tailwind `className="..."` to CSSzyx `sz={...}` props. Static string classNames are supported.
 Display utilities migrate to canonical `display` props (`flex` →
 `{ display: 'flex' }`) instead of boolean sugar, and conflicting display
 utilities in the same variant scope stay unresolved for manual review.

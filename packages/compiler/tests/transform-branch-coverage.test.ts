@@ -456,7 +456,14 @@ describe('runtime fallback diagnostics', () => {
         [
             'an imported identifier',
             "import { external } from './x'; const A = () => <div sz={external} />;",
-            'identifier `external`',
+            'imported binding `external`',
+        ],
+        [
+            // The same shape WITHOUT an import: a prop the caller supplies.
+            // These two must not read alike — only the first one lost classes.
+            'a bare identifier',
+            'const A = ({ sz }) => <div sz={sz} />;',
+            'identifier `sz`',
         ],
         [
             'a member expression',

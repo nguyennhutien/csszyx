@@ -12,7 +12,7 @@ import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@
 // font-features-[normal]) and added slot-member diagnostics — a schema-14
 // entry would replay the old class strings and the old warning set for any
 // file whose source hash did not move.
-const CACHE_SCHEMA_VERSION = 15;
+const CACHE_SCHEMA_VERSION = 16;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust';
@@ -97,6 +97,8 @@ export interface TransformCacheKeyInput {
     globalVarAliases?: ReadonlyArray<readonly [string, string]>;
     /** Serialized cross-module registry entries fed to this file, if any. */
     crossModuleStatics?: string;
+    /** Serialized cross-module sz objects fed to this file, if any. */
+    crossModuleSzObjects?: string;
     /** Source filename; recovery tokens depend on it. */
     filename: string;
     /** Source file contents. */
@@ -143,6 +145,7 @@ export function createTransformCacheKey(input: TransformCacheKeyInput): Transfor
         `mangleVarHoistMaxDepth=${input.mangleVarHoistMaxDepth ?? 'default'}`,
         `globalVarAliases=${JSON.stringify(globalVarAliases)}`,
         `crossModuleStatics=${input.crossModuleStatics ?? 'none'}`,
+        `crossModuleSzObjects=${input.crossModuleSzObjects ?? 'none'}`,
         `filename=${input.filename}`,
         `source=${inputSha256}`,
     ].join('\n');

@@ -18,6 +18,10 @@
       "types": "./src/react.ts"
     }
   },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "peerDependencies": {
     "react": ">=17.0.0"
   },

@@ -50,7 +50,13 @@ export { __szColorVar, __szSpacingVar, __szUnitVar } from './lite.js';
 // Mangle-aware className merge (last-wins override) for layered components
 export { _szcn, szcn, szDecode } from './merge-classes.js';
 
-export { registerSzcnGroups, type SzcnThemeGroups } from './merge-groups.js';
+export {
+    clearSzcnGroups,
+    getSzcnGroups,
+    registerSzcnGroups,
+    type SzcnThemeGroups,
+    setSzcnGroups,
+} from './merge-groups.js';
 // Box-model class routing + category-aware toolkit
 export {
     type BoxRole,

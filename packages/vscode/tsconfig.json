@@ -6,11 +6,11 @@
         "composite": true,
         "incremental": true,
         "isolatedDeclarations": true,
-        "outDir": "./dist",
+        "outDir": "./.tsout",
         "rootDir": "./src",
         "declaration": true,
         "declarationMap": true,
-        "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
+        "tsBuildInfoFile": "./.tsout/tsconfig.tsbuildinfo",
         // VS Code extension needs the vscode + node typings; DOM globals
         // (setTimeout etc) come from node.
         "types": ["node", "vscode"]

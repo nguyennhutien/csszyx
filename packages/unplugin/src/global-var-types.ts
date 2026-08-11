@@ -66,7 +66,7 @@ export interface GlobalVarScanCacheKeyInput {
     mtimeMs: number;
 }
 
-/** CSS source supplied to the Phase H validation orchestrator. */
+/** CSS source supplied to the global-variable validation orchestrator. */
 export interface GlobalVarCssSource {
     /** Source file path. */
     filePath: string;
@@ -76,7 +76,7 @@ export interface GlobalVarCssSource {
     mtimeMs?: number;
 }
 
-/** JS/TS/JSX/TSX source supplied to the Phase H validation orchestrator. */
+/** JS/TS/JSX/TSX source supplied to the global-variable validation orchestrator. */
 export interface GlobalVarCodeSource {
     /** Source file path. */
     filePath: string;
@@ -112,7 +112,7 @@ export interface GlobalVarAliasDiagnostic {
         | 'tailwind-owned'
         | 'registered-property'
         | 'alias-collision';
-    /** Diagnostic severity. Phase H M2 is fail-closed. */
+    /** Diagnostic severity. Every finding fails the build. */
     severity: GlobalVarAliasDiagnosticSeverity;
     /** Related custom-property name. */
     name: string;
@@ -156,7 +156,7 @@ export interface GlobalVarAliasPlan {
     diagnostics: GlobalVarAliasDiagnostic[];
 }
 
-/** Input for Phase H scanner/planner/diagnostics integration. */
+/** Input for the global-variable scanner/planner/diagnostics integration. */
 export interface ValidateGlobalVarAliasInputsOptions {
     /** CSS sources that define or reference custom properties. */
     cssFiles: GlobalVarCssSource[];
@@ -194,7 +194,7 @@ export interface CreateGlobalVarAliasValidationOptionsInput {
     cacheDir?: string;
 }
 
-/** Output from Phase H scanner/planner/diagnostics integration. */
+/** Output from the global-variable scanner/planner/diagnostics integration. */
 export interface GlobalVarAliasValidationResult {
     /** CSS scan results. */
     scans: CssVarScanResult[];

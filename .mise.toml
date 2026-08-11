@@ -7,3 +7,8 @@ rust = "1.97.1"
 "npm:@google/gemini-cli" = "latest"
 "cargo:cocogitto" = "7.0.0"
 "github:snyk/cli" = "latest"
+# gh, spelled out rather than via the `gh` registry shortname: that shortname
+# resolves to the aqua backend, whose attestation check still expects the
+# cli/cli release workflow identity and fails against GitHub's current release
+# signer. The exe name is explicit because the archive ships bin/gh, not bin/cli.
+"github:cli/cli" = { version = "latest", exe = "gh" }

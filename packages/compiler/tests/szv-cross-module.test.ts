@@ -14,7 +14,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { transformSourceCode } from '../src/transform.js';
-import { extractSzvRegistryEntries, transformOxc } from '../src/transform-oxc.js';
+import { extractCrossModuleRegistryEntries, transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
 
 type Engine = (
@@ -188,10 +188,10 @@ describe('three-engine cross-module parity', () => {
     );
 });
 
-describe('extractSzvRegistryEntries', () => {
+describe('extractCrossModuleRegistryEntries — the szv arm', () => {
     it('ignores exported non-variable declarations and export lists', () => {
         expect(
-            extractSzvRegistryEntries(
+            extractCrossModuleRegistryEntries(
                 'export function szv() {}\nconst local = 1; export { local };',
                 '/p/styles.ts',
             ),
@@ -205,9 +205,9 @@ describe('extractSzvRegistryEntries', () => {
             'const local = szv({ variants: { hidden: { y: { m: 1 } } } });\n' +
             'export const __szvPick = szv({ base: { m: 1 } });\n' +
             'export const b = szv({ base: { flex: true } });\n';
-        const entries = extractSzvRegistryEntries(source, '/p/styles.ts');
+        const entries = extractCrossModuleRegistryEntries(source, '/p/styles.ts');
         expect(entries.map(entry => entry.exportName)).toEqual(['a', 'b']);
-        expect(entries[0].config).toEqual({ variants: { p1: { x: { p: 1 } } } });
+        expect(entries[0].value).toEqual({ variants: { p1: { x: { p: 1 } } } });
     });
 
     it('skips factories that fail qualification', () => {
@@ -216,11 +216,11 @@ describe('extractSzvRegistryEntries', () => {
             // overlap: base and leaf touch the same canonical key
             'export const bad = szv({ base: { p: 4 }, variants: { pad: { lg: { p: 8 } } } });\n' +
             'export const dynamic2 = szv(cfg);\n';
-        expect(extractSzvRegistryEntries(source, '/p/styles.ts')).toEqual([]);
+        expect(extractCrossModuleRegistryEntries(source, '/p/styles.ts')).toEqual([]);
     });
 
-    it('returns nothing for unparseable or szv-free sources', () => {
-        expect(extractSzvRegistryEntries('export const x = 1;', '/p/a.ts')).toEqual([]);
-        expect(extractSzvRegistryEntries('const } broken szv(', '/p/b.ts')).toEqual([]);
+    it('returns nothing for unparseable sources or non-sz exports', () => {
+        expect(extractCrossModuleRegistryEntries('export const x = 1;', '/p/a.ts')).toEqual([]);
+        expect(extractCrossModuleRegistryEntries('const } broken szv(', '/p/b.ts')).toEqual([]);
     });
 });

@@ -5,14 +5,16 @@ use oxc_ast::{
         Expression, ImportDeclaration, ImportDeclarationSpecifier, JSXAttribute, JSXAttributeItem,
         JSXAttributeName, JSXAttributeValue, JSXElement, JSXElementName, JSXExpression,
         JSXFragment, JSXMemberExpression, JSXMemberExpressionObject, JSXOpeningElement,
-        JSXSpreadAttribute, ObjectExpression, ObjectProperty, ObjectPropertyKind, PropertyKey,
-        TSTypeQuery, TSTypeQueryExprName, UnaryOperator, VariableDeclaration,
+        JSXSpreadAttribute, ObjectExpression, ObjectProperty, ObjectPropertyKind, Program,
+        PropertyKey, Statement, TSTypeQuery, TSTypeQueryExprName, UnaryOperator,
+        VariableDeclaration,
     },
     AstKind,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_span::{GetSpan, SourceType, Span};
+use std::collections::HashSet;
 use std::time::Instant;
 
 use super::{
@@ -22,6 +24,7 @@ use super::{
     SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr, StaticArrayPartIr, StaticSzObject,
     StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr,
     SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings,
+    UnsupportedRecoveryIr,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -70,6 +73,36 @@ pub fn parse_source_shell_with_budget_and_statics(
     ast_budget: usize,
     cross_module: &super::szv_precompile::CrossModuleStatics,
 ) -> ParsedSourceShell {
+    parse_source_shell_with_registries(
+        file,
+        ast_budget,
+        CrossModuleRegistries {
+            szv_factories: cross_module,
+            sz_objects: &Vec::new(),
+        },
+    )
+}
+
+/// The bundler-supplied cross-module registries one parse may consult.
+///
+/// They travel as a named pair rather than two positional arguments because
+/// they decode to the same Rust type: a swap would compile and quietly apply
+/// the wrong machinery to each.
+#[derive(Clone, Copy)]
+pub struct CrossModuleRegistries<'a> {
+    /// Imported szv factory configs: specifier → (exported name → config).
+    pub szv_factories: &'a super::szv_precompile::CrossModuleStatics,
+    /// Imported static sz objects: specifier → (exported name → object).
+    pub sz_objects: &'a super::szv_precompile::CrossModuleSzObjects,
+}
+
+/// [`parse_source_shell_with_budget`] with both cross-module registries.
+pub fn parse_source_shell_with_registries(
+    file: &TransformFile,
+    ast_budget: usize,
+    registries: CrossModuleRegistries<'_>,
+) -> ParsedSourceShell {
+    let cross_module = registries.szv_factories;
     let allocator = Allocator::default();
     let source_type = source_type_for_path(&file.filename);
     let parse_start = Instant::now();
@@ -88,6 +121,9 @@ pub fn parse_source_shell_with_budget_and_statics(
         let scope_start = Instant::now();
         let scope = super::scope::DeclaratorScope::from_program(&parsed.program);
         timings.scope_ns = elapsed_ns(scope_start);
+        let imported_sz_objects =
+            collect_imported_sz_objects(&parsed.program, registries.sz_objects);
+        let imported_names = collect_imported_names(&parsed.program);
         let mut visitor = CsszyxIrVisitor {
             source: &file.source,
             ir: &mut ir,
@@ -105,6 +141,8 @@ pub fn parse_source_shell_with_budget_and_statics(
             szv_type_query_counts: Vec::new(),
             szv_gate: file.source.contains("szv(") || !cross_module.is_empty(),
             cross_module,
+            imported_sz_objects: &imported_sz_objects,
+            imported_names: &imported_names,
         };
         let ir_start = Instant::now();
         visitor.visit_program(&parsed.program);
@@ -211,6 +249,12 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     szv_gate: bool,
     /// Bundler-resolved imported factories: specifier → (name → config).
     cross_module: &'p super::szv_precompile::CrossModuleStatics,
+    /// Imported static sz objects already narrowed to this file's LOCAL
+    /// binding names, so identifier lowering is one lookup and a file that
+    /// imports none of them pays nothing.
+    imported_sz_objects: &'p [(String, StaticSzObject)],
+    /// Local names this module introduced with an import, any form.
+    imported_names: &'p HashSet<String>,
 }
 
 /// One qualifying szr import clause, recorded for the deferred rewrite.
@@ -395,15 +439,10 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
                             style_attribute_index = Some(index);
                         }
                     }
-                    "szRecover" => {
-                        if let Some(index) = self.collect_recovery_attribute(attr) {
-                            recovery_attribute_index = Some(index);
-                        } else {
-                            self.ir
-                                .unsupported_recovery_attribute_spans
-                                .push(text_span(attr.span));
-                        }
-                    }
+                    "szRecover" => match self.collect_recovery_attribute(attr) {
+                        Ok(index) => recovery_attribute_index = Some(index),
+                        Err(reason) => self.ir.unsupported_recovery_attributes.push(reason),
+                    },
                     "data-sz-recovery-token" => {
                         has_recovery_token_attribute = true;
                     }
@@ -555,6 +594,8 @@ fn safe_style_spread_object(object: &ObjectExpression<'_>) -> Option<SafeStyleSp
 struct ResolveContext<'p> {
     scope: &'p super::scope::DeclaratorScope,
     program: &'p oxc_ast::ast::Program<'p>,
+    /// Static sz objects this file imported, by LOCAL binding name.
+    imported_sz_objects: &'p [(String, StaticSzObject)],
 }
 
 impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
@@ -562,6 +603,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         ResolveContext {
             scope: self.scope,
             program: self.program,
+            imported_sz_objects: self.imported_sz_objects,
         }
     }
 
@@ -749,7 +791,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         runtime_fallback_span_from_jsx_expression(&container.expression)?;
                     let candidate_classes =
                         candidate_classes_from_jsx_expression(&container.expression, ctx);
-                    runtime_fallback_diagnostic = classify_runtime_fallback(&container.expression);
+                    runtime_fallback_diagnostic =
+                        classify_runtime_fallback(&container.expression, self.imported_names);
                     (
                         StaticSzObject::empty(),
                         value_span,
@@ -854,7 +897,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     // finalize.
                     if callee.name == "szr" {
                         if let Some(expression) = argument.as_expression() {
-                            let (kind, detail) = classify_expression_fallback(expression);
+                            let (kind, detail) =
+                                classify_expression_fallback(expression, self.imported_names);
                             self.pending_szr_fallbacks.push(PendingSzrFallback {
                                 call_span: text_span(call.span()),
                                 fallback: super::SiteFallbackIr {
@@ -1074,6 +1118,13 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         )
     }
 
+    /// Whether a span sits inside an `sz` attribute the rewrite replaces.
+    fn span_inside_sz_attribute(&self, span: super::TextSpan) -> bool {
+        self.ir.sz_attributes.iter().any(|attribute| {
+            span.start >= attribute.attribute_span.start && span.end <= attribute.attribute_span.end
+        })
+    }
+
     /// Decide the szv precompile after the whole file was walked, writing the
     /// splices into the IR. Returns the spans of replaced factory calls so the
     /// szr proof can treat them as strings.
@@ -1102,6 +1153,17 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 .iter()
                 .all(|site| szr_factory_spans.contains(&site.span) && site.argument.is_some());
             if !accounted {
+                continue;
+            }
+            // Everything under an `sz` attribute is replaced by a generated
+            // expression, so a call nested in it cannot also be spliced: the
+            // rewrite buffer refuses to split a range it already replaced and
+            // aborts the process. Mirrors `callInsideRewrittenSpan` in the JS
+            // lanes, so all three keep the runtime path for this shape.
+            if calls
+                .iter()
+                .any(|site| self.span_inside_sz_attribute(site.span))
+            {
                 continue;
             }
             let type_queries = self
@@ -1265,7 +1327,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         let Some(expression) = argument.as_expression() else {
             return;
         };
-        let (kind, detail) = classify_expression_fallback(expression);
+        let (kind, detail) = classify_expression_fallback(expression, self.imported_names);
         self.ir.site_fallbacks.push(super::SiteFallbackIr {
             site,
             kind,
@@ -1274,14 +1336,17 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         });
     }
 
-    fn collect_recovery_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
+    fn collect_recovery_attribute(
+        &mut self,
+        attr: &JSXAttribute<'_>,
+    ) -> Result<usize, UnsupportedRecoveryIr> {
         let Some(JSXAttributeValue::StringLiteral(value)) = &attr.value else {
-            return None;
+            return Err(UnsupportedRecoveryIr::NonLiteral);
         };
         let mode = match value.value.as_str() {
             "csr" => RecoveryMode::Csr,
             "dev-only" => RecoveryMode::DevOnly,
-            _ => return None,
+            other => return Err(UnsupportedRecoveryIr::UnknownMode(other.to_string())),
         };
 
         let index = self.ir.recovery_attributes.len();
@@ -1289,7 +1354,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             attribute_span: text_span(attr.span),
             mode,
         });
-        Some(index)
+        Ok(index)
     }
 }
 
@@ -2158,10 +2223,11 @@ fn split_class_tokens(value: &str) -> Vec<String> {
 ///   `computed`, and that shared quirk is pinned by the parity suite.
 fn classify_runtime_fallback(
     expression: &JSXExpression<'_>,
+    imported: &HashSet<String>,
 ) -> Option<super::RuntimeFallbackDiagnosticIr> {
     use super::RuntimeFallbackDiagnosticIr;
 
-    let (kind, detail) = classify_expression_fallback(expression.as_expression()?);
+    let (kind, detail) = classify_expression_fallback(expression.as_expression()?, imported);
     Some(RuntimeFallbackDiagnosticIr { kind, detail })
 }
 
@@ -2537,15 +2603,71 @@ fn is_provably_non_object_argument(expression: &Expression<'_>) -> bool {
 /// Classify an expression into the shared matrix vocabulary.
 ///
 /// Parentheses are seen through (Babel's AST has no node for them); TS wrappers
+/// Every local name this module introduced with an import, any form.
+///
+/// Named, default and namespace alike: what decides the diagnostic is only
+/// that the binding comes from another module, not which form brought it in.
+fn collect_imported_names(program: &Program<'_>) -> HashSet<String> {
+    let mut names = HashSet::new();
+    for statement in &program.body {
+        let Statement::ImportDeclaration(declaration) = statement else {
+            continue;
+        };
+        let Some(specifiers) = &declaration.specifiers else {
+            continue;
+        };
+        for specifier in specifiers {
+            let local = match specifier {
+                ImportDeclarationSpecifier::ImportSpecifier(entry) => &entry.local.name,
+                ImportDeclarationSpecifier::ImportDefaultSpecifier(default) => &default.local.name,
+                ImportDeclarationSpecifier::ImportNamespaceSpecifier(namespace) => {
+                    &namespace.local.name
+                }
+            };
+            names.insert(local.to_string());
+        }
+    }
+    names
+}
+
+/// The imported binding an unresolved expression roots in, when it has one.
+///
+/// A member expression is judged by its ROOT object, so `S.cardSz` on a
+/// namespace import counts while `props.sz` does not. Parentheses are already
+/// gone by the time this is asked: the caller unwraps them so that its own
+/// position reporting matches Babel's, which has no such node.
+fn imported_root_name(expression: &Expression<'_>, imported: &HashSet<String>) -> Option<String> {
+    let mut current = expression;
+    loop {
+        current = match current {
+            Expression::StaticMemberExpression(member) => &member.object,
+            Expression::ComputedMemberExpression(member) => &member.object,
+            Expression::Identifier(identifier) => {
+                let name = identifier.name.as_str();
+                return imported.contains(name).then(|| name.to_string());
+            }
+            _ => return None,
+        };
+    }
+}
+
 /// are NOT, because Babel classifies those as `other`.
 fn classify_expression_fallback(
     expression: &Expression<'_>,
+    imported: &HashSet<String>,
 ) -> (super::RuntimeFallbackKindIr, String) {
     use super::RuntimeFallbackKindIr;
 
     let mut expression = expression;
     while let Expression::ParenthesizedExpression(inner) = expression {
         expression = &inner.expression;
+    }
+
+    if let Some(name) = imported_root_name(expression, imported) {
+        // An import names a module-level value this build tried to read and
+        // could not, so nothing collected its classes. Everything below is
+        // usually a prop the caller supplies, collected where it is written.
+        return (RuntimeFallbackKindIr::Import, name);
     }
 
     let (kind, detail) = match expression {
@@ -3083,6 +3205,75 @@ fn static_object_candidate_from_expression(
     }
 }
 
+/// Narrow the bundler's sz-object registry to this file's LOCAL binding names.
+///
+/// Resolved once per file rather than per reference: identifier lowering is
+/// then a single lookup, and a file importing nothing the registry carries
+/// pays one pass over the module's top level.
+///
+/// The registry is keyed by EXPORT name while the code writes the LOCAL one,
+/// so every specifier must be read through. Matching a local name against the
+/// registry would resolve the wrong entry the moment an alias makes the two
+/// differ.
+///
+/// v1 accepts a named value import and nothing else — a namespace, default or
+/// type-only import keeps the runtime path it has today rather than being
+/// guessed at.
+fn collect_imported_sz_objects(
+    program: &Program<'_>,
+    registry: &super::szv_precompile::CrossModuleSzObjects,
+) -> Vec<(String, StaticSzObject)> {
+    let mut out = Vec::new();
+    if registry.is_empty() {
+        return out;
+    }
+    for statement in &program.body {
+        let Statement::ImportDeclaration(declaration) = statement else {
+            continue;
+        };
+        if declaration.import_kind.is_type() {
+            continue;
+        }
+        let source_value = declaration.source.value.as_str();
+        let Some((_, entries)) = registry
+            .iter()
+            .find(|(specifier, _)| specifier == source_value)
+        else {
+            continue;
+        };
+        let Some(specifiers) = &declaration.specifiers else {
+            continue;
+        };
+        for entry in specifiers {
+            let ImportDeclarationSpecifier::ImportSpecifier(specifier) = entry else {
+                continue;
+            };
+            if specifier.import_kind.is_type() {
+                continue;
+            }
+            let imported = specifier.imported.name();
+            let Some((_, object)) = entries.iter().find(|(name, _)| name.as_str() == imported)
+            else {
+                continue;
+            };
+            out.push((specifier.local.name.as_str().to_string(), object.clone()));
+        }
+    }
+    out
+}
+
+/// The imported static sz object a local binding name stands for, if the
+/// bundler's registry carried one for this file.
+fn imported_sz_object<'a>(
+    imports: &'a [(String, StaticSzObject)],
+    name: &str,
+) -> Option<&'a StaticSzObject> {
+    imports
+        .iter()
+        .find(|(local, _)| local == name)
+        .map(|(_, object)| object)
+}
+
 fn static_object_from_jsx_expression(
     expression: &JSXExpression<'_>,
     ctx: ResolveContext<'_>,
@@ -3116,13 +3307,20 @@ fn static_object_from_jsx_expression(
         // what the rewrite phase replaces; identifier resolution is a
         // semantic enhancement, not a span change.
         JSXExpression::Identifier(identifier) => {
-            let initializer = ctx.scope.resolve_initializer_before(
+            // The same-file binding is asked first, so a local declaration of
+            // the name wins over an import of it without the two needing to be
+            // ordered by hand — a local const is what the code refers to.
+            if let Some(initializer) = ctx.scope.resolve_initializer_before(
                 &identifier.name,
                 identifier.span.start,
                 ctx.program,
-            )?;
-            let (object, _, rewrites_empty_class) =
-                static_object_from_expression(initializer, ctx)?;
+            ) {
+                let (object, _, rewrites_empty_class) =
+                    static_object_from_expression(initializer, ctx)?;
+                return Some((object, text_span(identifier.span), rewrites_empty_class));
+            }
+            let object = imported_sz_object(ctx.imported_sz_objects, &identifier.name)?.clone();
+            let rewrites_empty_class = object.is_empty();
             Some((object, text_span(identifier.span), rewrites_empty_class))
         }
         _ => None,
@@ -4167,10 +4365,10 @@ fn string_value_span(span: Span, source: &str) -> TextSpan {
 mod tests {
     use super::{
         escape_json_string, parse_source_shell, parse_source_shell_with_budget,
-        parse_source_shell_with_budget_and_statics, source_type_for_path, string_value_span,
-        MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
+        parse_source_shell_with_budget_and_statics, parse_source_shell_with_registries,
+        source_type_for_path, string_value_span, MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
     };
-    use crate::transform::{lower::lower_source_ir_classes, TransformFile};
+    use crate::transform::{lower::lower_source_ir_classes, TransformFile, UnsupportedRecoveryIr};
     use oxc_span::Span;
 
     #[test]
@@ -4371,6 +4569,125 @@ export const cls = szr(localCard({ pad: 'sm' }));";
             &statics,
         );
         assert_eq!(parsed.ir.szv_replacements.len(), 1);
+    }
+
+    /// `{ p: 4 }` as the exporter would have written it, in the decoded form
+    /// the bundler's registry arrives in.
+    fn cross_module_card() -> super::StaticSzObject {
+        super::StaticSzObject {
+            properties: vec![super::StaticSzProperty {
+                key: "p".into(),
+                value: super::StaticSzValue::Number(4.0),
+                span: super::TextSpan { start: 0, end: 0 },
+            }],
+        }
+    }
+
+    fn parse_with_sz_objects(
+        source: &str,
+        registry: &super::super::szv_precompile::CrossModuleSzObjects,
+    ) -> super::ParsedSourceShell {
+        parse_source_shell_with_registries(
+            &TransformFile {
+                filename: "/repo/src/Card.tsx".into(),
+                source: source.into(),
+            },
+            usize::MAX,
+            super::CrossModuleRegistries {
+                szv_factories: &Vec::new(),
+                sz_objects: registry,
+            },
+        )
+    }
+
+    #[test]
+    fn parser_lowers_an_imported_sz_object_like_a_local_literal() {
+        let registry = vec![(
+            "./styles".into(),
+            vec![("cardSz".into(), cross_module_card())],
+        )];
+
+        for source in [
+            "import { cardSz } from './styles';\nexport const A = () => <div sz={cardSz} />;",
+            // The registry is keyed by EXPORT name while the code writes the
+            // local one, so an alias must still find the entry.
+            "import { cardSz as card } from './styles';\nexport const A = () => <div sz={card} />;",
+        ] {
+            let parsed = parse_with_sz_objects(source, &registry);
+            let attribute = &parsed.ir.sz_attributes[0];
+            assert!(!attribute.runtime_fallback, "{source}");
+            assert_eq!(attribute.object.properties[0].key, "p");
+            assert_eq!(
+                attribute.object.properties[0].value,
+                super::StaticSzValue::Number(4.0)
+            );
+        }
+    }
+
+    #[test]
+    fn parser_prefers_a_local_declaration_over_the_imported_name() {
+        let registry = vec![(
+            "./styles".into(),
+            vec![("cardSz".into(), cross_module_card())],
+        )];
+        let source = "import { cardSz } from './styles';\nexport const A = () => { const cardSz = { m: 2 }; return <div sz={cardSz} />; };";
+
+        let parsed = parse_with_sz_objects(source, &registry);
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(attribute.object.properties[0].key, "m");
+    }
+
+    #[test]
+    fn parser_refuses_imports_outside_the_named_value_form() {
+        let registry = vec![(
+            "./styles".into(),
+            vec![("cardSz".into(), cross_module_card())],
+        )];
+        let cases = [
+            "import type { cardSz } from './styles';",
+            "import { type cardSz } from './styles';",
+            "import cardSz from './styles';",
+            // A side-effect import binds no name at all. It still names a
+            // module the registry carries, so the collector has to walk past
+            // it rather than read specifiers that are not there.
+            "import './styles';",
+            "import './styles';\nimport { unrelated } from './other';",
+            // An export the registry does not carry, and a specifier it does
+            // not carry: both must leave today's runtime path untouched.
+            "import { cardSz } from './elsewhere';",
+            "import { otherSz as cardSz } from './styles';",
+        ];
+
+        for import in cases {
+            let source = format!("{import}\nexport const A = () => <div sz={{cardSz}} />;");
+            let parsed = parse_with_sz_objects(&source, &registry);
+            assert!(parsed.ir.sz_attributes[0].runtime_fallback, "{import}");
+        }
+
+        // A namespace import is referenced through a member expression, which
+        // never reached the identifier path in the first place.
+        let namespace =
+            "import * as S from './styles';\nexport const A = () => <div sz={S.cardSz} />;";
+        let parsed = parse_with_sz_objects(namespace, &registry);
+        assert!(parsed.ir.sz_attributes[0].runtime_fallback);
+
+        // An absent registry must mean exactly what an empty one means.
+        let direct =
+            "import { cardSz } from './styles';\nexport const A = () => <div sz={cardSz} />;";
+        assert!(parse_with_sz_objects(direct, &Vec::new()).ir.sz_attributes[0].runtime_fallback);
+    }
+
+    #[test]
+    fn imported_sz_object_answers_by_local_binding_name() {
+        let imports = vec![("card".to_string(), cross_module_card())];
+
+        assert_eq!(
+            super::imported_sz_object(&imports, "card"),
+            Some(&cross_module_card())
+        );
+        // The EXPORT name is not a binding this file has, so it must miss.
+        assert!(super::imported_sz_object(&imports, "cardSz").is_none());
     }
 
     #[test]
@@ -5551,7 +5868,12 @@ export const cls = szr(localCard({ pad: 'sm' }));";
             source: "const Invalid = () => <Panel szRecover='sometimes' />;".to_string(),
         });
         assert!(invalid.ir.recovery_attributes.is_empty());
-        assert_eq!(invalid.ir.unsupported_recovery_attribute_spans.len(), 1);
+        // The mode NAME is carried through so the diagnostic can quote the typo
+        // back, the way the Babel and oxc lanes do.
+        assert_eq!(
+            invalid.ir.unsupported_recovery_attributes,
+            vec![UnsupportedRecoveryIr::UnknownMode("sometimes".to_string())]
+        );
     }
 
     #[test]
@@ -5565,7 +5887,12 @@ export const cls = szr(localCard({ pad: 'sm' }));";
 
         assert!(parsed.diagnostics.is_empty());
         assert!(parsed.ir.recovery_attributes.is_empty());
-        assert_eq!(parsed.ir.unsupported_recovery_attribute_spans.len(), 1);
+        // A dynamic value is a different failure from a misspelled mode, and the
+        // two must stay distinguishable this far down.
+        assert_eq!(
+            parsed.ir.unsupported_recovery_attributes,
+            vec![UnsupportedRecoveryIr::NonLiteral]
+        );
     }
 
     #[test]

@@ -2036,8 +2036,13 @@ export type SzArrayElement = SzProps | string | false | null | undefined;
  * <div sz={{ p: 4, bg: 'blue-500' }} />
  * <div sz={[base, isActive && activeStyle]} />
  * ```
+ *
+ * The array member is `readonly` because `as const` is the authoring advice
+ * for a shared style object, and on an array that produces a readonly tuple.
+ * A mutable element type would reject exactly what the docs recommend, and
+ * nothing reads an sz array more than once or writes to it.
  */
-export type SzPropValue = string | SzProps | SzArrayElement[];
+export type SzPropValue = string | SzProps | readonly SzArrayElement[];
 
 /**
  * Value of the `szs` prop — a map of a component's slot names to sz values, so a

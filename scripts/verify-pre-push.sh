@@ -24,13 +24,21 @@ if [ -n "$upstream" ]; then
     while IFS= read -r f; do
         [ -f "$f" ] || continue
         all_changed+=("$f")
+        # Build scripts and config — not application source.
         case "$f" in
-            # Build scripts and config — not application source
-            */scripts/*.mjs|*/scripts/*.ts|build.rs|*/build.rs) ;;
+            */scripts/*.mjs|*/scripts/*.ts|build.rs|*/build.rs) continue ;;
+        esac
+        # "Does this affect build output?" and "is this lintable?" are two
+        # independent questions, and most files answer yes to both. A `;;&`
+        # fall-through would say that in one case block, but that is bash 4
+        # syntax and macOS ships bash 3.2 — where the script does not parse at
+        # all. This gate runs on the machine that pushes, so it has to work
+        # there.
+        case "$f" in
             # Application source that affects build output
-            *.ts|*.tsx|*.js|*.jsx|*.cjs|*.mjs|*.rs)
-                source_files+=("$f")
-                ;;&
+            *.ts|*.tsx|*.js|*.jsx|*.cjs|*.mjs|*.rs) source_files+=("$f") ;;
+        esac
+        case "$f" in
             *.ts|*.tsx|*.js|*.jsx|*.cjs|*.mjs|*.json|*.jsonc|*.json5|*.css)
                 lint_files+=("$f")
                 ;;

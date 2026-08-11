@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { transform } from '../src/transform.js';
+import { expectParity } from './tri-engine-harness.js';
 
 const t = (sz: Parameters<typeof transform>[0]): string => transform(sz).className;
 
@@ -86,20 +87,39 @@ describe('typography — font weight', () => {
         expect(t({ weight: 'bold' })).toBe('font-bold');
     });
 
-    it('{ weight: 500 } → font-500', () => {
-        expect(t({ weight: 500 })).toBe('font-500');
+    it('{ weight: 500 } → font-[500]', () => {
+        expect(t({ weight: 500 })).toBe('font-[500]');
     });
 
     it('{ weight: "semibold" } → font-semibold (alias)', () => {
         expect(t({ weight: 'semibold' })).toBe('font-semibold');
     });
 
-    it('{ weight: 550 } → font-550 (arbitrary)', () => {
-        expect(t({ weight: 550 })).toBe('font-550');
+    it('{ weight: 550 } → font-[550] (arbitrary)', () => {
+        expect(t({ weight: 550 })).toBe('font-[550]');
     });
 
     it('{ weight: "--w" } → font-(weight:--w) (css variable)', () => {
         expect(t({ weight: '--w' })).toBe('font-(weight:--w)');
+    });
+});
+
+// Tailwind v4 spells font weights through the `--font-weight-*` theme
+// namespace, so the utility is a NAME (`font-thin`) and never a number: stock
+// Tailwind serves no `font-<number>` at all, and every numeric weight csszyx
+// emitted styled nothing. The bracket form carries the literal the author
+// wrote, which is what `{ weight: N }` means, and works with no theme setup.
+describe('typography — a numeric font weight brackets on every engine', () => {
+    it('{ weight: 100 } → font-[100]', () => {
+        expectParity('{ weight: 100 }', 'font-[100]');
+    });
+
+    it('{ weight: 550 } → font-[550]', () => {
+        expectParity('{ weight: 550 }', 'font-[550]');
+    });
+
+    it('{ weight: "thin" } stays a named utility', () => {
+        expectParity("{ weight: 'thin' }", 'font-thin');
     });
 });
 

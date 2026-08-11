@@ -2,10 +2,26 @@
     "$schema": "https://turborepo.com/schema.json",
     "extends": ["//"],
     "tasks": {
+        // This file REPLACES the root `test` task rather than merging into it, so
+        // a root-level `@csszyx/cli#test` entry would be silently ignored — the
+        // corpus inputs below have to live here.
+        //
+        // The corpus suites replay pinned component snapshots from the repo root,
+        // outside this package. `inputs` is package-scoped, so without the
+        // `$TURBO_ROOT$` entries turbo replays a cached pass over an edited
+        // corpus instead of re-running against it.
         "test": {
             "dependsOn": ["^build", "build"],
             "outputs": ["coverage/**"],
-            "inputs": ["src/**", "tests/**", "test/**", "*.config.js", "*.config.ts"]
+            "inputs": [
+                "src/**",
+                "tests/**",
+                "test/**",
+                "*.config.js",
+                "*.config.ts",
+                "$TURBO_ROOT$/scripts/corpus/**",
+                "$TURBO_ROOT$/scripts/corpus-combo/**"
+            ]
         }
     }
 }

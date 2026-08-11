@@ -152,6 +152,19 @@ recommended layout — it makes the component the unit of tree-shaking. In a
 monorepo, opt a workspace package in with
 [`compileSources`](/docs/monorepo-content-scope/) so its `szv` is scanned too.
 
+### Imported factories are precompiled in production builds only
+
+`szr(importedFactory({…}))` collapses to a build-time string using a registry
+the prescan fills, and that registry is switched off in a dev server and in
+`vite build --watch`: both reuse one prescan, so an edited factory would keep
+serving importers its old table. The runtime path produces identical classes,
+so the only difference is bundle size.
+
+Because the registry is off, those call sites cannot be resolved in those
+modes. csszyx does **not** report them there — the "result is unknown at build
+time" advice would be asking you to rewrite code that compiles perfectly in a
+production build. A fallback naming anything else still reports normally.
+
 ## Config validation (development)
 
 In development, `szv` validates the config shape and the selection and warns once

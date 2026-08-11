@@ -2043,7 +2043,7 @@
         }
       ]
     },
-    "oxc": "font-600"
+    "oxc": "font-[600]"
   },
   {
     "sz": "{\"indent\":4}",
@@ -27677,7 +27677,7 @@
         }
       ]
     },
-    "oxc": "font-100"
+    "oxc": "font-[100]"
   },
   {
     "sz": "{\"weight\":200}",
@@ -27696,7 +27696,26 @@
         }
       ]
     },
-    "oxc": "font-200"
+    "oxc": "font-[200]"
+  },
+  {
+    "sz": "{\"weight\":550}",
+    "ir": {
+      "properties": [
+        {
+          "key": "weight",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 550
+          }
+        }
+      ]
+    },
+    "oxc": "font-[550]"
   },
   {
     "sz": "{\"weight\":\"bold\"}",

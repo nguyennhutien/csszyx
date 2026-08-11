@@ -128,7 +128,7 @@ export interface ProductionConfig {
     /**
      * Alias stable app-owned global CSS custom properties.
      *
-     * This is the opt-in gate for the `g` tier. Phase H v1 is alias-only:
+     * This is the opt-in gate for the `g` tier. Aliasing is the only mode:
      * original public custom-property declarations remain defined, and
      * csszyx-owned references may use short generated aliases. Explicit
      * `tokens` are supported first; `autoPrefix` remains blocked until CSS
@@ -139,25 +139,11 @@ export interface ProductionConfig {
     mangleGlobalVars?: GlobalVarMangleConfig;
 
     /**
-     * Enable content hashing for immutable caching.
-     *
-     * @default true
-     */
-    contentHashing: boolean;
-
-    /**
      * Inject checksum for SSR hydration validation.
      *
      * @default true
      */
     injectChecksum: boolean;
-
-    /**
-     * Enable incremental build caching.
-     *
-     * @default true
-     */
-    incrementalBuild: boolean;
 
     /**
      * Minify output (class names and attributes).
@@ -194,7 +180,7 @@ export interface GlobalVarMangleConfig {
     enabled: boolean;
 
     /**
-     * Phase H v1 only supports alias mode.
+     * Aliasing is the only mode implemented; a full rename is not.
      *
      * @default "alias"
      */
@@ -223,7 +209,7 @@ export interface GlobalVarMangleConfig {
     /**
      * Prefix used for generated global aliases.
      *
-     * Phase H v1 defaults to `---g`, then appends csszyx's z-y-x encoder
+     * Defaults to `---g`, then appends csszyx's z-y-x encoder
      * output: `---gz`, `---gy`, `---gx`, ...
      *
      * @default "---g"
@@ -231,7 +217,7 @@ export interface GlobalVarMangleConfig {
     aliasPrefix?: string;
 
     /**
-     * Unsafe usage handling. Phase H v1 keeps this as error-only.
+     * Unsafe usage handling. Failing the build is the only behaviour today.
      *
      * @default "error"
      */
@@ -307,7 +293,7 @@ function validateAliasPrefix(config: GlobalVarMangleConfig): string | null {
 }
 
 /**
- * Validates the Phase H global variable alias config shape.
+ * Validates the global variable alias config shape.
  *
  * @param config User-provided global variable alias config.
  * @returns Validation errors. Empty means the config shape is valid.
@@ -319,11 +305,16 @@ export function validateGlobalVarMangleConfig(config: GlobalVarMangleConfig | un
 
     const errors: string[] = [];
     if (config.mode !== undefined && config.mode !== 'alias') {
-        errors.push("production.mangleGlobalVars.mode only supports 'alias' in Phase H v1.");
+        errors.push(
+            "production.mangleGlobalVars.mode only supports 'alias'. A full rename needs " +
+                'every reference rewritten, including the ones csszyx cannot see.',
+        );
     }
     if (config.onUnsafeUsage !== undefined && config.onUnsafeUsage !== 'error') {
         errors.push(
-            "production.mangleGlobalVars.onUnsafeUsage only supports 'error' in Phase H v1.",
+            "production.mangleGlobalVars.onUnsafeUsage only supports 'error'. An unsafe " +
+                'usage means a token would be aliased where the rename cannot be proven ' +
+                'complete, so there is nothing safe to downgrade it to.',
         );
     }
     const prefixErrors = [validateAutoPrefix(config), validateAliasPrefix(config)];
@@ -423,11 +414,31 @@ export interface BuildConfig {
     buildId?: string;
 
     /**
-     * Path to Tailwind config file.
+     * Emit `csszyx-manifest.json` next to the build output.
      *
-     * @default "tailwind.config.js"
+     * Only `@csszyx/dynamic` reads it, to answer "is this class already in the
+     * built CSS?" and skip injecting a duplicate rule. A build that emits it
+     * therefore pays for the WHOLE class census to answer questions about the
+     * handful of classes `dynamic()` renders — measured on a 668-class census,
+     * the file costs about 2 kB gzipped while a typical `dynamic()` surface
+     * saves a few hundred bytes of injection. It only comes out ahead once most
+     * of the app is rendered at runtime.
+     *
+     * Turning it off is safe: `dynamic()` treats a missing manifest as "nothing
+     * is pre-built" and injects rules itself, so styles are identical either
+     * way. What changes is bytes and one-time work.
+     *
+     * Turning it ON only pays if the app calls `preloadManifest()` and awaits it
+     * before its first render — `dynamic()` is synchronous and the fetch is not,
+     * so an unawaited manifest arrives after the first paint has already
+     * injected everything, and the build pays both costs.
+     *
+     * Run `dynamicReport()` from `@csszyx/dynamic` in development to measure
+     * which side your app is on.
+     *
+     * @default false
      */
-    tailwindConfig?: string;
+    emitManifest?: boolean;
 
     /**
      * Output directory for generated files.
@@ -489,6 +500,46 @@ export interface BuildConfig {
      * @example ['src/styles/theme.css', 'src/styles/tokens.css']
      */
     scanCss?: string | string[];
+
+    /**
+     * Compile a static sz object that a component imports from another module.
+     *
+     * `export const cardSz = { p: 4 }` in one file and `sz={cardSz}` in another
+     * is an ordinary way to share a fixed style, but the compiler reads one file
+     * at a time: the imported binding is a name it cannot see through, so the
+     * element falls back to the runtime AND contributes no classes. The class
+     * text then exists in no output at all, so nothing tells Tailwind to
+     * generate the CSS the browser will ask for.
+     *
+     * With this on, the prescan records those exports and each importer lowers
+     * them exactly as it would the same literal written locally.
+     *
+     * On by default, because the alternative default is a build that reports
+     * missing CSS and names this option as the way out — guidance, not a
+     * setting. Turning it OFF is still supported and is the reason it remains
+     * a setting at all: resolving across modules means a file's output is no
+     * longer a pure function of its own text, and a project that hits a
+     * cross-file resolution problem needs a one-line way back to the
+     * file-local behaviour rather than a downgrade.
+     *
+     * v1 covers a direct `sz={binding}` from a named import, written either
+     * relative or through a project alias — the bundler's `resolve.alias` and
+     * `compilerOptions.paths` in `tsconfig.json` are both read. A barrel, a
+     * package specifier, and a namespace or default import keep the runtime
+     * path they have today, and keep reporting it.
+     *
+     * On the Next.js Turbopack lane this option lives on the loader instead,
+     * and the loader and the prebuild must resolve it the SAME way — the
+     * loader emits the class and the prebuild safelists it, so a lane running
+     * with it against one without it ships class names with no rule. Both
+     * default to on; to turn it off, pass `importedStaticSz: false` to
+     * `csszyxTurbopack` AND `--no-imported-static-sz` to `csszyx next
+     * prebuild` and `csszyx next watch`. A mismatch fails the build on the
+     * config hash rather than shipping the broken output.
+     *
+     * @default true
+     */
+    importedStaticSz?: boolean;
 }
 
 /**
@@ -511,52 +562,6 @@ export interface HydrationConfig {
      * @default true
      */
     strict: boolean;
-
-    /**
-     * Default recovery mode for components without explicit szRecover.
-     *
-     * @default null (no recovery)
-     */
-    defaultRecoveryMode?: 'csr' | 'dev-only' | null;
-
-    /**
-     * Enable hydration audit logging.
-     *
-     * @default true
-     */
-    auditLog: boolean;
-}
-
-/**
- * Performance optimization configuration.
- */
-export interface PerformanceConfig {
-    /**
-     * Enable parallel processing during build.
-     *
-     * @default true
-     */
-    parallel: boolean;
-
-    /**
-     * Number of worker threads for parallel processing.
-     * Auto-detected if not provided.
-     */
-    workers?: number;
-
-    /**
-     * Enable CSS variable optimization.
-     *
-     * @default true
-     */
-    optimizeVariables: boolean;
-
-    /**
-     * Enable zero-runtime optimization for static cases.
-     *
-     * @default true
-     */
-    zeroRuntime: boolean;
 }
 
 /**
@@ -582,11 +587,6 @@ export interface CsszyxConfig {
      * Hydration safety configuration.
      */
     hydration: HydrationConfig;
-
-    /**
-     * Performance optimization configuration.
-     */
-    performance: PerformanceConfig;
 }
 
 /**
@@ -643,20 +643,27 @@ export type PartialCsszyxConfig = {
     contentScopeCheck?: boolean;
 
     /**
-     * Silence ALL csszyx build warnings (the skipped-`sz`, missing-Tailwind-entry,
-     * unscoped-content, unresolvable-spread, and safelist-cap messages). For when
-     * the warnings are understood/intentional, or to keep csszyx quiet while
-     * focusing on another tool's output in the build log. Errors that throw
-     * (security / crash / build-break guards) are unaffected — only warnings are
-     * muted. Defaults to `false`.
+     * Silence csszyx build warnings.
+     *
+     * `true` silences ALL of them (the skipped-`sz`, missing-Tailwind-entry,
+     * unscoped-content, unresolvable-spread, and safelist-cap messages) —
+     * including the ones reporting that classes never reached the safelist, so
+     * the CSS for them is simply absent. Those are not style advice: they say
+     * the build produced less than it was asked for, and `true` hides them.
+     *
+     * `'nudges'` silences only the advisory half and keeps every
+     * integrity report. Reach for it when the goal is a calmer build log
+     * rather than accepting known-missing output.
+     *
+     * Errors that throw (security / crash / build-break guards) are unaffected
+     * in either mode — only warnings are muted. Defaults to `false`.
      */
-    quiet?: boolean;
+    quiet?: boolean | 'nudges';
 
     development?: Partial<DevelopmentConfig>;
     production?: Partial<ProductionConfig>;
     build?: Partial<BuildConfig>;
     hydration?: Partial<HydrationConfig>;
-    performance?: Partial<PerformanceConfig>;
 };
 
 /**
@@ -677,22 +684,31 @@ export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
     mangle: false,
     mangleVars: false,
     mangleVarHoistMaxDepth: 5,
-    contentHashing: true,
     injectChecksum: true,
-    incrementalBuild: true,
     minify: true,
 };
+
+/**
+ * Whether an imported static sz object is compiled, when nothing configures it.
+ *
+ * Named separately from {@link DEFAULT_BUILD_CONFIG} because every lane has to
+ * resolve an unset option through it, and reading it off the config object
+ * makes it `boolean | undefined` — which forces each reader to invent a second
+ * fallback for a case the config cannot produce.
+ */
+export const DEFAULT_IMPORTED_STATIC_SZ = true;
 
 /**
  * Default build configuration.
  */
 export const DEFAULT_BUILD_CONFIG: BuildConfig = {
-    tailwindConfig: 'tailwind.config.js',
+    emitManifest: false,
     outputDir: '.csszyx',
     cacheDir: '.csszyx/cache',
     cache: true,
     astBudgetLimit: 50000,
     parser: 'rust',
+    importedStaticSz: DEFAULT_IMPORTED_STATIC_SZ,
 };
 
 /**
@@ -700,17 +716,6 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
  */
 export const DEFAULT_HYDRATION_CONFIG: HydrationConfig = {
     strict: true,
-    defaultRecoveryMode: null,
-    auditLog: true,
-};
-
-/**
- * Default performance configuration.
- */
-export const DEFAULT_PERFORMANCE_CONFIG: PerformanceConfig = {
-    parallel: true,
-    optimizeVariables: true,
-    zeroRuntime: true,
 };
 
 /**
@@ -721,7 +726,6 @@ export const DEFAULT_CSSZYX_CONFIG: CsszyxConfig = {
     production: DEFAULT_PRODUCTION_CONFIG,
     build: DEFAULT_BUILD_CONFIG,
     hydration: DEFAULT_HYDRATION_CONFIG,
-    performance: DEFAULT_PERFORMANCE_CONFIG,
 };
 
 /**

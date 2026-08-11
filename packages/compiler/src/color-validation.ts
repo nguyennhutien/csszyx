@@ -7,6 +7,7 @@
  */
 
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
+import { szDevWarningsEnabled } from './sz-dev-warnings.js';
 import { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 
 export const COLOR_STRING_KEYWORDS: Set<string> = new Set([
@@ -135,24 +136,50 @@ function sanitizeColorEntry(
 }
 
 /**
+ * Warn that a color string is not recognized and is therefore dropped.
+ *
+ * Exported because the same value is rejected on two paths — the TypeScript
+ * transform and the WASM pre-validation — and the message must be one text.
+ * It was written out twice before, and the copies had already drifted apart in
+ * which conditions they printed under.
+ *
+ * @param key - Color property key.
+ * @param color - Rejected color value.
+ */
+export function warnUnrecognizedColor(key: string, color: string): void {
+    if (!szDevWarningsEnabled()) return;
+    console.warn(
+        `[csszyx] "${key}: '${color}'" is not a recognized color value and will be ignored. ` +
+            'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
+            'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
+    );
+}
+
+/**
+ * Warn that slash opacity in a string needs the color-object form instead.
+ *
+ * @param key - Color property key.
+ * @param color - Rejected color value, including the slash.
+ */
+export function warnStringColorOpacity(key: string, color: string): void {
+    if (!szDevWarningsEnabled()) return;
+    const slash = color.indexOf('/');
+    console.warn(
+        `[csszyx] "${key}: '${color}'" — string slash opacity is not supported. ` +
+            `Use object form: { color: '${color.slice(0, slash)}', op: ${color.slice(slash + 1)} }.`,
+    );
+}
+
+/**
  * Emit development-only guidance for a rejected color string.
  * @param key - Color property key.
  * @param color - Rejected color value.
  * @param slashOpacity - Whether slash-opacity syntax caused rejection.
  */
 function warnInvalidColor(key: string, color: string, slashOpacity: boolean): void {
-    if (process.env.NODE_ENV === 'production' || typeof window !== 'undefined') return;
     if (slashOpacity) {
-        const slash = color.indexOf('/');
-        console.warn(
-            `[csszyx] "${key}: '${color}'" — string slash opacity is not supported. ` +
-                `Use object form: { color: '${color.slice(0, slash)}', op: ${color.slice(slash + 1)} }.`,
-        );
+        warnStringColorOpacity(key, color);
         return;
     }
-    console.warn(
-        `[csszyx] "${key}: '${color}'" is not a recognized color value and will be ignored. ` +
-            'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
-            'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
-    );
+    warnUnrecognizedColor(key, color);
 }

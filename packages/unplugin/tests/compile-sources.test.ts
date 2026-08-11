@@ -217,6 +217,21 @@ describe('skippedSzFilesMessage', () => {
         expect(message).toContain('2 file(s) under packages/');
         expect(message).toContain('/repo/packages/vui/Button.tsx');
         expect(message).toContain('compileSources');
-        expect(message).toContain('no CSS');
+        expect(message).toContain('safelist');
+    });
+
+    it('names the cross-module registry consequence when a skip costs it', () => {
+        // A skipped module that EXPORTS szv factories costs every importer its
+        // precompile; the field report traced that back by hand because the
+        // message only talked about CSS.
+        const factory = '/repo/packages/vui/src/flexSzv.ts';
+        const message = skippedSzFilesMessage([factory, '/repo/packages/vui/Card.tsx'], [factory]);
+        expect(message).toContain('1 of them may export `szv` factories');
+        expect(message).toContain('cross-module registry');
+    });
+
+    it('omits the registry clause when no skipped file exports a factory', () => {
+        const message = skippedSzFilesMessage(['/repo/packages/vui/Card.tsx']);
+        expect(message).not.toContain('cross-module registry');
     });
 });

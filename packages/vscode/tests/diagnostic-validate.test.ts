@@ -103,6 +103,25 @@ describe('validateDocument — unknown keys', () => {
         expect(diagnostic?.message).toMatch(/^'maskVia' was removed:/);
     });
 
+    it('accepts every parametric variant, which took a nested key not a value', () => {
+        // `group`, `peer`, `data`, `aria`, `has`, `not` and `supports` live in
+        // SPECIAL_VARIANTS rather than KNOWN_VARIANTS because the compiler
+        // resolves them by descending into the nested key. Validating top-level
+        // keys against KNOWN_VARIANTS alone reported all seven as unknown props
+        // — including `group: { hover: … }`, which the front page documents.
+        for (const source of [
+            "const A = () => <div sz={{ group: { hover: { color: 'white' } } }} />;",
+            "const A = () => <div sz={{ peer: { checked: { bg: 'blue-500' } } }} />;",
+            "const A = () => <div sz={{ data: { active: { bg: 'blue-500' } } }} />;",
+            "const A = () => <div sz={{ aria: { expanded: { color: 'blue-600' } } }} />;",
+            'const A = () => <div sz={{ has: { focus: { ring: 2 } } }} />;',
+            'const A = () => <div sz={{ not: { first: { mt: 4 } } }} />;',
+            "const A = () => <div sz={{ supports: { grid: { display: 'grid' } } }} />;",
+        ]) {
+            expect(diagnosticsFor(source), source).toEqual([]);
+        }
+    });
+
     it('warns on an unknown key with the docs link and an exact range', () => {
         const text = 'const A = () => <div sz={{ foo: 4, p: 2 }} />;';
         const diags = diagnosticsFor(text);

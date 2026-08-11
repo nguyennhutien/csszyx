@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { readNextGenerationManifest } from '../src/next-generation-manifest.js';
 import { type NextTurboLoaderContext, runNextTurboLoader } from '../src/next-turbo-loader.js';
+import { _resetThemeGroupsFileCache } from '../src/theme-groups-file.js';
 
 const tempDirs: string[] = [];
 
@@ -209,5 +210,165 @@ describe('Next Turbopack loader core', () => {
                 compilerOptions: { mangleVars: true },
             }),
         ).toThrow(/does not support production CSS variable mangling/);
+    });
+});
+
+describe('szcn theme groups on the Turbopack lane', () => {
+    const roots: string[] = [];
+
+    afterEach(() => {
+        _resetThemeGroupsFileCache();
+        for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true });
+    });
+
+    /**
+     * Build a project whose stylesheet declares tokens szcn groups by.
+     *
+     * @param options - Fixture switches.
+     * @param options.theme - False to omit the @theme block entirely.
+     * @param options.source - Module source to transform.
+     * @returns The project root, the module path, and a loader context.
+     */
+    function project(options: { theme?: boolean; source: string }): {
+        root: string;
+        filename: string;
+        ctx: NextTurboLoaderContext & { watched: string[] };
+    } {
+        const watched: string[] = [];
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-next-theme-'));
+        roots.push(root);
+        mkdirSync(join(root, 'src'), { recursive: true });
+        // The Next root resolver walks up to the nearest package.json. Without
+        // one the fixture root would resolve to src/, which is not what a real
+        // project looks like.
+        writeFileSync(join(root, 'package.json'), '{"name":"fixture"}\n', 'utf8');
+        writeFileSync(
+            join(root, 'src/theme.css'),
+            options.theme === false
+                ? '@import "tailwindcss";'
+                : '@import "tailwindcss";\n@theme { --color-brand: #2dd597; }',
+            'utf8',
+        );
+        const filename = join(root, 'src/App.tsx');
+        writeFileSync(filename, options.source, 'utf8');
+        return {
+            root,
+            filename,
+            ctx: Object.assign(
+                {
+                    resourcePath: filename,
+                    rootContext: root,
+                    context: join(root, 'src'),
+                    mode: 'development',
+                    addDependency: (file: string) => {
+                        watched.push(file);
+                    },
+                },
+                { watched },
+            ),
+        };
+    }
+
+    /** Loader options every case in this block shares. */
+    const OPTIONS = {
+        parserMode: 'babel',
+        config: { mangleVars: false },
+        nextVersion: '16.2.7',
+        csszyxVersion: '0.9.0',
+        compilerVersion: '0.9.0',
+        nativeVersion: '0.9.0-test',
+        writeOptions: { retryDelayMs: 0 },
+    } as const;
+
+    it('writes a real registration module and imports it from a szcn caller', () => {
+        // Turbopack cannot resolve the `virtual:` specifier every other lane
+        // uses, so without a real file the app's custom tokens never register
+        // and szcn keeps both classes with the stylesheet picking the winner.
+        const { root, filename, ctx } = project({
+            source: `"use client";\nimport { szcn } from '@csszyx/runtime';\nexport const A = (p) => szcn('text-brand', p.className);\n`,
+        });
+
+        const result = runNextTurboLoader(readFileSync(filename, 'utf8'), ctx, OPTIONS);
+
+        const generated = join(root, '.csszyx/theme-groups.mjs');
+        expect(existsSync(generated)).toBe(true);
+        expect(readFileSync(generated, 'utf8')).toContain('"colors":["brand"]');
+        expect(result.code).toContain("import '../.csszyx/theme-groups.mjs';");
+        // The directive must stay the first statement in the module.
+        expect(result.code.indexOf('"use client"')).toBeLessThan(
+            result.code.indexOf('theme-groups.mjs'),
+        );
+    });
+
+    it('leaves a module that cannot call szcn untouched', () => {
+        const { root, filename, ctx } = project({
+            source: 'export const A = () => <div sz={{ p: 4 }} />;',
+        });
+
+        const result = runNextTurboLoader(readFileSync(filename, 'utf8'), ctx, OPTIONS);
+
+        expect(result.code).not.toContain('theme-groups');
+        expect(existsSync(join(root, '.csszyx/theme-groups.mjs'))).toBe(false);
+    });
+
+    it('writes nothing when the project declares no groupable tokens', () => {
+        // An empty registration would be a module every szcn caller imports
+        // for no change in behaviour.
+        const { root, filename, ctx } = project({
+            theme: false,
+            source: `import { szcn } from '@csszyx/runtime';\nexport const A = (p) => szcn('p-4', p.className);\n`,
+        });
+
+        const result = runNextTurboLoader(readFileSync(filename, 'utf8'), ctx, OPTIONS);
+
+        expect(result.code).not.toContain('theme-groups');
+        expect(existsSync(join(root, '.csszyx/theme-groups.mjs'))).toBe(false);
+    });
+
+    it('regenerates when a watched stylesheet changes, without restarting', () => {
+        // Turbopack forwards a loader's file dependencies to its watcher, so an
+        // edit re-runs the loader. The generated module must follow the edit
+        // rather than stay at whatever the first compile saw.
+        const { root, filename, ctx } = project({
+            source: `import { szcn } from '@csszyx/runtime';\nexport const A = (p) => szcn('text-brand', p.className);\n`,
+        });
+        const generated = join(root, '.csszyx/theme-groups.mjs');
+
+        runNextTurboLoader(readFileSync(filename, 'utf8'), ctx, OPTIONS);
+        expect(readFileSync(generated, 'utf8')).toContain('"colors":["brand"]');
+        expect(ctx.watched).toContain(join(root, 'src/theme.css'));
+
+        writeFileSync(
+            join(root, 'src/theme.css'),
+            '@import "tailwindcss";\n@theme { --color-accent: #3f0fa6; }\n',
+            'utf8',
+        );
+        runNextTurboLoader(readFileSync(filename, 'utf8'), ctx, OPTIONS);
+
+        const after = readFileSync(generated, 'utf8');
+        expect(after).toContain('"colors":["accent"]');
+        expect(after).not.toContain('brand');
+    });
+
+    it('watches a stylesheet that carries no tokens yet', () => {
+        // The edit that matters most is the one ADDING the first @theme block:
+        // watching only token-carrying files would miss exactly that.
+        const { root, filename, ctx } = project({
+            theme: false,
+            source: `import { szcn } from '@csszyx/runtime';\nexport const A = (p) => szcn('p-4', p.className);\n`,
+        });
+
+        runNextTurboLoader(readFileSync(filename, 'utf8'), ctx, OPTIONS);
+        expect(ctx.watched).toContain(join(root, 'src/theme.css'));
+
+        writeFileSync(
+            join(root, 'src/theme.css'),
+            '@import "tailwindcss";\n@theme { --color-late: #123456; }\n',
+            'utf8',
+        );
+        const result = runNextTurboLoader(readFileSync(filename, 'utf8'), ctx, OPTIONS);
+
+        expect(readFileSync(join(root, '.csszyx/theme-groups.mjs'), 'utf8')).toContain('"late"');
+        expect(result.code).toContain('theme-groups.mjs');
     });
 });

@@ -4,11 +4,11 @@
         "composite": true,
         "incremental": true,
         "isolatedDeclarations": true,
-        "outDir": "./dist",
+        "outDir": "./.tsout",
         "rootDir": "./src",
         "declaration": true,
         "declarationMap": true,
-        "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
+        "tsBuildInfoFile": "./.tsout/tsconfig.tsbuildinfo",
         "emitDeclarationOnly": false
     },
     "references": [{ "path": "../compiler" }],

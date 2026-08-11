@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { type SzObject, transform } from '../src/transform.js';
+import { __resetSzWarnDedupForTests } from '../src/transform-core.js';
 
 const t = (sz: SzObject): string => transform(sz).className;
 
@@ -14,6 +15,8 @@ const t = (sz: SzObject): string => transform(sz).className;
 describe('removed boolean sugar', () => {
     afterEach(() => {
         vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+        __resetSzWarnDedupForTests();
     });
 
     const removed: Array<[string, string]> = [
@@ -28,6 +31,9 @@ describe('removed boolean sugar', () => {
         ['italic', "{ fontStyle: 'italic' }"],
         ['underline', "{ decoration: 'underline' }"],
         ['antialiased', "{ fontSmoothing: 'grayscale' }"],
+        // Reported from the field as a silent no-op: the class really is
+        // dropped, and the migration warning is the whole answer.
+        ['grid', "{ display: 'grid' }"],
     ];
 
     for (const [key, canonical] of removed) {
@@ -40,6 +46,26 @@ describe('removed boolean sugar', () => {
             expect(spy).toHaveBeenCalledWith(expect.stringContaining(canonical));
         });
     }
+
+    it('warns once per key, however many times the object is lowered', () => {
+        const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        for (let render = 0; render < 3; render += 1) {
+            expect(t({ grid: true } as SzObject)).toBe('');
+        }
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns in a browser dev runtime, where there is no build log to read', () => {
+        // The general dev gate also requires `typeof window === 'undefined'`,
+        // which silenced exactly the case with no other channel: a runtime sz
+        // object whose key is dropped and whose element renders unstyled.
+        vi.stubGlobal('window', {});
+        const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        expect(t({ grid: true } as SzObject)).toBe('');
+        expect(spy).toHaveBeenCalledWith(
+            expect.stringContaining('"grid" boolean sugar was removed'),
+        );
+    });
 
     it('does not break the flex shorthand (flex: 1 / flex: "auto")', () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {});

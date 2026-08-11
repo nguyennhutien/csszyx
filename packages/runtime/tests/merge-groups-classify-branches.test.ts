@@ -84,3 +84,19 @@ describe('registerSzcnGroups collision blocklist — non-colors category', () =>
         expect(warn.mock.calls.some(c => /shadows a built-in value/.test(String(c[0])))).toBe(true);
     });
 });
+
+describe('classifyAmbiguousValue — stroke and gradient-stop fallbacks', () => {
+    // Both prefixes take either a colour or a measurement, and a value that is
+    // neither must classify as nothing rather than being guessed into one of
+    // them: a wrong group merges two classes the author meant to keep.
+    it('returns null for a stroke value that is neither a colour nor a width', () => {
+        expect(classifyAmbiguousValue('stroke', 'squiggly')).toBeNull();
+    });
+
+    it.each(['from', 'via', 'to'])(
+        'returns null for a %s value that is neither a colour nor a position',
+        prefix => {
+            expect(classifyAmbiguousValue(prefix, 'halfway')).toBeNull();
+        },
+    );
+});

@@ -32,7 +32,9 @@
     ".next-turbo-source/types/**/*.ts",
     ".next-turbo-source/dev/types/**/*.ts",
     ".next-turbo-csszyx/types/**/*.ts",
-    ".next-turbo-csszyx/dev/types/**/*.ts"
+    ".next-turbo-csszyx/dev/types/**/*.ts",
+    ".next-turbo-xmod/types/**/*.ts",
+    ".next-turbo-xmod/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

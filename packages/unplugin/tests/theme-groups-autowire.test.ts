@@ -98,7 +98,7 @@ describe('theme groups auto-wiring (real vite build, zero app wiring)', () => {
     }, 60_000);
 
     it('the registration call ships inside the bundle', () => {
-        expect(bundle).toContain('registerSzcnGroups');
+        expect(bundle).toContain('setSzcnGroups');
     });
 
     it('every theme category reaches its group, weights not mis-filed as families', () => {
@@ -170,7 +170,7 @@ export const slotOverride = szcn('text-sub', 'text-danger');
         const distDir = join(root, 'dist');
         const files = readdirSync(distDir).filter(f => f.endsWith('.js') || f.endsWith('.mjs'));
         const bundle = files.map(f => readFileSync(join(distDir, f), 'utf8')).join('\n');
-        expect(bundle).toContain('registerSzcnGroups');
+        expect(bundle).toContain('setSzcnGroups');
         expect(bundle).toMatch(/"colors":\s*\[\s*"danger",\s*"sub"\s*\]/);
 
         const entryFile = files.find(f => f.startsWith('bundle')) ?? files[0];
@@ -223,4 +223,74 @@ describe('HMR: editing @theme reloads the generated registration module', () => 
             'a theme edit must reload the registration module, or the dev server serves stale groups until restart',
         ).toContain('\0virtual:csszyx/theme-groups');
     });
+});
+
+describe('scanCss narrows type augmentation, not merge correctness', () => {
+    it('registers @theme tokens from a stylesheet scanCss does not list', async () => {
+        // `scanCss` exists to say which CSS drives `.csszyx/theme.d.ts`. It was
+        // also switching OFF project-wide @theme discovery, so a second
+        // stylesheet's tokens never reached szcn — and the failure is silent:
+        // both classes survive, and whichever the stylesheet emits last wins
+        // instead of the one the author wrote last. A project with a design
+        // system file plus a page file is the ordinary case.
+        loadNativeBinding();
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-theme-partial-'));
+        tempDirs.push(root);
+        mkdirSync(join(root, 'src'), { recursive: true });
+        writeFileSync(
+            join(root, 'src/typed.css'),
+            `@import 'tailwindcss';
+@theme {
+    --color-typed: oklch(0.7 0.05 250);
+}
+`,
+            'utf8',
+        );
+        writeFileSync(
+            join(root, 'src/design-system.css'),
+            `@theme {
+    --color-unlisted: oklch(0.6 0.2 25);
+}
+`,
+            'utf8',
+        );
+        writeFileSync(
+            join(root, 'src/main.ts'),
+            `import { szcn } from '@csszyx/runtime';
+export const acrossFiles = szcn('text-typed', 'text-unlisted');
+`,
+            'utf8',
+        );
+
+        await build({
+            root,
+            logLevel: 'silent',
+            plugins: [
+                vitePlugin({
+                    // Only ONE of the two stylesheets is listed.
+                    build: { cache: false, scanCss: ['src/typed.css'] },
+                    production: { mangle: false },
+                }),
+            ],
+            resolve: {
+                alias: { '@csszyx/runtime': resolve(__dirname, '../../runtime/src/index.ts') },
+            },
+            build: {
+                minify: false,
+                lib: { entry: join(root, 'src/main.ts'), formats: ['es'], fileName: 'bundle' },
+                rollupOptions: { external: ['tailwindcss'] },
+            },
+        });
+
+        const distDir = join(root, 'dist');
+        const files = readdirSync(distDir).filter(f => f.endsWith('.js') || f.endsWith('.mjs'));
+        const bundle = files.map(f => readFileSync(join(distDir, f), 'utf8')).join('\n');
+        expect(bundle).toMatch(/"colors":\s*\[\s*"typed",\s*"unlisted"\s*\]/);
+
+        const entryFile = files.find(f => f.startsWith('bundle')) ?? files[0];
+        const builtModule = (await import(
+            pathToFileURL(join(distDir, entryFile as string)).href
+        )) as { acrossFiles: string };
+        expect(builtModule.acrossFiles).toBe('text-unlisted');
+    }, 60_000);
 });

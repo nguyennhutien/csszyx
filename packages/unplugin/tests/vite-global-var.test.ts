@@ -214,7 +214,7 @@ async function runVite(root: string, options: { sourcemap?: boolean } = {}): Pro
         },
         plugins: [
             ...(vitePlugin({
-                build: { cache: false, parser: 'oxc' },
+                build: { emitManifest: true, cache: false, parser: 'oxc' },
                 production: {
                     mangle: true,
                     mangleGlobalVars: {

@@ -1,7 +1,7 @@
 /**
  * AST Transformer: Replaces className attributes with sz props.
  *
- * Phase 2: Uses Babel AST traversal for JSX/TSX files. Supports:
+ * Uses Babel AST traversal for JSX/TSX files. Supports:
  * - Static className="..." (string literals)
  * - className={'...'} (string in expression container)
  * - className={clsx(...)} / cn(...) / twMerge(...)
@@ -790,7 +790,7 @@ export function transformSource(
 }
 
 /**
- * Backwards-compatible alias for Phase 1 callers.
+ * Backwards-compatible alias kept for callers of the earlier name.
  * Uses the same Babel-based transformer internally.
  *
  * @param source - Source file content string.

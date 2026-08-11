@@ -90,6 +90,7 @@ interface CacNextPrebuildOptions {
     outputFile?: string;
     cacheDir?: string;
     ignore?: string;
+    importedStaticSz?: boolean;
     json?: boolean;
 }
 
@@ -100,6 +101,7 @@ interface CacNextWatchOptions {
     outputFile?: string;
     cacheDir?: string;
     ignore?: string;
+    importedStaticSz?: boolean;
     debounceMs?: number | string;
 }
 
@@ -116,6 +118,7 @@ async function runNextPrebuildCommand(
         cacheDir: options.cacheDir,
         pattern,
         extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
+        importedStaticSz: options.importedStaticSz,
         json: options.json,
     });
     if (code !== 0) {
@@ -135,6 +138,7 @@ async function runNextWatchCommand(
         cacheDir: options.cacheDir,
         pattern,
         extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
+        importedStaticSz: options.importedStaticSz,
         debounceMs: options.debounceMs,
     });
     process.exitCode = code;
@@ -172,11 +176,13 @@ cli.command(
     .option('--pattern <glob>', 'Glob of source files to scan')
     .option('--ignore <glob>', 'Extra ignore glob (repeatable)')
     .option('--cwd <dir>', 'Current working directory')
+    .option('--allow <class>', 'Accept an emitted class that produces no CSS (repeatable)')
     .action(async options => {
         await check({
             cwd: options.cwd,
             pattern: options.pattern,
             ignore: repeatableOption(options.ignore),
+            allow: repeatableOption(options.allow),
         });
     });
 
@@ -287,6 +293,14 @@ cli.command(
     )
     .option('--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)')
     .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
+    .option(
+        '--imported-static-sz',
+        'Compile a plain exported sz object into the modules that import it (default)',
+    )
+    .option(
+        '--no-imported-static-sz',
+        'Leave imported sz objects to the runtime; pass the same to the loader',
+    )
     .option('--json', 'Emit a single JSON result instead of formatted text')
     .action(runNextPrebuildCommand);
 
@@ -301,6 +315,14 @@ cli.command('next-watch [pattern]', 'Maintain the Next.js Turbopack csszyx safel
     )
     .option('--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)')
     .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
+    .option(
+        '--imported-static-sz',
+        'Compile a plain exported sz object into the modules that import it (default)',
+    )
+    .option(
+        '--no-imported-static-sz',
+        'Leave imported sz objects to the runtime; pass the same to the loader',
+    )
     .option('--debounce-ms <ms>', 'Safelist materialization debounce (default: 50)')
     .action(runNextWatchCommand);
 

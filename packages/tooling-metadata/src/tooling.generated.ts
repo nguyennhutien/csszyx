@@ -452,6 +452,19 @@ export const KNOWN_VARIANTS = [
     "visited",
     "xl"
 ] as const;
+/** Variants that take a nested KEY rather than a value: `group: { hover: … }`,
+ * `data: { active: … }`. They live outside KNOWN_VARIANTS because the compiler
+ * resolves them by descending, so a consumer that validates top-level keys
+ * against KNOWN_VARIANTS alone reports every one of them as an unknown prop. */
+export const SPECIAL_VARIANTS = [
+    "aria",
+    "data",
+    "group",
+    "has",
+    "not",
+    "peer",
+    "supports"
+] as const;
 export const SUGGESTION_MAP = {
     "backgroundColor": "bg",
     "backgroundImage": "bgImg",
@@ -551,6 +564,17 @@ export const SUGGESTION_MAP = {
     "flexWrapReverse": "flexWrap: 'wrap-reverse'",
     "flexNowrap": "flexWrap: 'nowrap'"
 } as const;
+/** Sides of the linear mask slot, in the compiler's order. Editor tooling
+ * offers exactly these, so a side added to the compiler shows up without a
+ * second list to remember. */
+export const MASK_SIDES = [
+    "t",
+    "r",
+    "b",
+    "l",
+    "x",
+    "y"
+] as const;
 /** Removed keys whose replacement is a SHAPE, not another key name — rendered
  * as "was removed: <note>", never through the did-you-mean template. */
 export const MIGRATION_NOTES = {

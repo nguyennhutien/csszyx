@@ -1,0 +1,15 @@
+/* A Tailwind entry of this route's own, and the reason this route exists.
+
+   The playground's shared `globals.css` lists `@source` files that other specs
+   rewrite while the suite runs — the loader safelist, the source probe target.
+   Every route that inherits it therefore inherits their churn, and the
+   cross-module spec's last link (Tailwind regenerating from a changed
+   `@source`) was the one that could not keep up.
+
+   This entry names only what this route owns, so nothing else in the suite can
+   move it. `source(none)` for the same reason globals.css uses it: the auto
+   base resolves up to the monorepo root and scans docs that carry `url(...)`
+   examples as text. */
+@import "tailwindcss" source(none);
+@source "./";
+@source "../../.csszyx/xmod/classes.html";

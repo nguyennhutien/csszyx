@@ -18,7 +18,7 @@ import type {
 } from './global-var-types.js';
 
 /**
- * Runs the Phase H pure validation pipeline without mutating build output.
+ * Runs the pure global-variable validation pipeline without mutating build output.
  *
  * @param options Validation input.
  * @returns CSS scans, alias plan, and JS/JSX out-of-band diagnostics.

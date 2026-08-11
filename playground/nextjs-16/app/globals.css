@@ -11,6 +11,11 @@
 
 @theme {
     --color-csszyx-next: #2563eb;
+    /* Removed and restored at runtime by
+       nextjs-16-turbo-theme-groups-hmr.spec.ts, which checks that szcn stops
+       grouping a token the stylesheet no longer declares. Keep it on its own
+       line so the spec can drop it deterministically. */
+    --color-csszyx-live: #16a34a;
 }
 
 html,

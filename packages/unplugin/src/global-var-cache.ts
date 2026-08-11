@@ -12,7 +12,7 @@ import type {
  * Resolves the global variable scan cache directory.
  *
  * @param cacheDir csszyx cache root.
- * @returns Cache directory for Phase H CSS scans.
+ * @returns Cache directory for global-variable CSS scans.
  */
 export function resolveGlobalVarScanCacheDir(cacheDir: string): string {
     return path.join(cacheDir, 'global-vars');

@@ -678,20 +678,27 @@ function transformSzObjectExpression(
  *
  * @param path sz attribute path.
  * @param expression Expression to resolve.
+ * @param crossModuleSzObjects Static sz objects this file's imports resolve to.
  * @returns Compiled class expression, or null when unresolved.
  */
 function resolveStaticSzExpression(
     path: babel.NodePath<t.JSXAttribute>,
     expression: t.Expression | t.JSXEmptyExpression,
+    crossModuleSzObjects?: CrossModuleSzObjects,
 ): t.Expression | null {
     const getBinding: GetBinding = name => path.scope.getBinding(name);
     if (t.isConditionalExpression(expression)) {
         return tryStaticTransformNode(expression, getBinding);
     }
     if (!t.isIdentifier(expression)) return null;
+    // One binding lookup answers both questions, so a local declaration wins
+    // over an import of the same name without anything having to order them.
     const binding = path.scope.getBinding(expression.name);
-    if (!binding?.path.isVariableDeclarator() || !binding.path.node.init) return null;
-    return tryStaticTransformNode(binding.path.node.init, getBinding);
+    const imported = importedSzObject(binding, crossModuleSzObjects);
+    if (imported !== null) return t.stringLiteral(transform(imported).className);
+    const declarator = foldableDeclarator(binding);
+    if (!declarator?.node.init) return null;
+    return tryStaticTransformNode(declarator.node.init, getBinding);
 }
 
 /** Runtime fallback reason and its actionable replacement guidance. */
@@ -704,9 +711,13 @@ type RuntimeFallbackDescription = SzFallbackDescription;
  * the oxc and Rust lanes cannot drift from it.
  *
  * @param expression Unresolved sz expression.
+ * @param scope Scope the expression was written in, for binding lookup.
  * @returns Runtime fallback reason and suggestion.
  */
-function describeRuntimeFallback(expression: t.Expression): RuntimeFallbackDescription {
+function describeRuntimeFallback(
+    expression: t.Expression,
+    scope: babel.NodePath['scope'],
+): RuntimeFallbackDescription {
     if (t.isCallExpression(expression)) {
         const callee = expression.callee;
         let name: string = SZ_FALLBACK_UNKNOWN_CALLEE;
@@ -716,6 +727,10 @@ function describeRuntimeFallback(expression: t.Expression): RuntimeFallbackDescr
         }
         return describeSzFallback('call', name);
     }
+    const importedRoot = importedRootName(expression, scope);
+    if (importedRoot !== null) {
+        return describeSzFallback('import', importedRoot);
+    }
     if (t.isIdentifier(expression)) {
         return describeSzFallback('identifier', expression.name);
     }
@@ -723,6 +738,38 @@ function describeRuntimeFallback(expression: t.Expression): RuntimeFallbackDescr
         return describeSzFallback('member');
     }
     return describeSzFallback('other', expression.type);
+}
+
+/**
+ * The imported binding an unresolved expression roots in, when it has one.
+ *
+ * This is the whole basis for treating a fallback as lost CSS rather than as
+ * advice. An import names a module-level value the compiler went looking for
+ * and could not read, so nothing collected its classes anywhere. A bare
+ * identifier or member access usually names a prop the CALLER supplies, whose
+ * literal is collected where the caller writes it — forwarding `sz` through a
+ * wrapper is the documented pattern, and reporting it as a build failure would
+ * fire on working code.
+ *
+ * A member expression is judged by its ROOT object: `S.cardSz` on a namespace
+ * import is a module value, `props.sz` is not.
+ *
+ * @param expression Unresolved sz expression.
+ * @param scope Scope the expression was written in.
+ * @returns The imported binding's local name, or null.
+ */
+function importedRootName(expression: t.Expression, scope: babel.NodePath['scope']): string | null {
+    let root: t.Node = expression;
+    while (t.isMemberExpression(root)) root = root.object;
+    if (!t.isIdentifier(root)) return null;
+    const binding = scope.getBinding(root.name);
+    const declaration = binding?.path;
+    if (declaration === undefined) return null;
+    const isImport =
+        declaration.isImportSpecifier() ||
+        declaration.isImportDefaultSpecifier() ||
+        declaration.isImportNamespaceSpecifier();
+    return isImport ? root.name : null;
 }
 
 /**
@@ -838,12 +885,22 @@ function recordSzrImportCandidate(
  * @param call - The call expression node.
  * @param szrState - szr import-rewrite accumulator.
  * @param szvState - szv precompile accumulator.
+ * @param seen - Call nodes already recorded, by identity.
  */
 function recordIdentifierCall(
     call: t.CallExpression,
     szrState: SzrRewriteState,
     szvState: SzvPrecompileState,
+    seen: Set<t.CallExpression>,
 ): void {
+    // The sz rewrite assigns a new `path.node.value` that reuses the authored
+    // className expression, and Babel then descends into the replacement — so
+    // `className={szr(f(...))}` beside an `sz` attribute reaches this visitor
+    // twice for the same node. Counting it twice makes the reference
+    // accounting see one call too many and silently drops the precompile.
+    // The span-based engines walk once and never observe this.
+    if (seen.has(call)) return;
+    seen.add(call);
     const calleeName = t.isIdentifier(call.callee) ? call.callee.name : null;
     recordIdentifierCallByName(call, calleeName, szrState.szrCalls, szvState);
 }
@@ -1261,6 +1318,7 @@ function babelSzvFactoryAccounted(
         source,
         state.commentSpans,
         state.typeQueryCounts,
+        state.rewrittenSpans,
     );
 }
 
@@ -1603,7 +1661,7 @@ function transformRuntimeSzFallback(
     const lineColumn = expression.loc
         ? `${expression.loc.start.line}:${expression.loc.start.column + 1}`
         : '?';
-    const description = describeRuntimeFallback(expression);
+    const description = describeRuntimeFallback(expression, path.scope);
     diagnostics.push(
         `sz fallback at ${lineColumn}: ${description.reason}.\n  Suggestion: ${description.suggestion}`,
     );
@@ -1663,6 +1721,7 @@ function unchangedSzValueResult(): SzValueTransformResult {
  * @param classes Tailwind discovery set.
  * @param diagnostics Compiler diagnostics.
  * @param filename Source filename.
+ * @param crossModuleSzObjects Static sz objects this file's imports resolve to.
  * @returns Transform status and runtime helper usage.
  */
 function transformSzAttributeValue(
@@ -1672,6 +1731,7 @@ function transformSzAttributeValue(
     classes: Set<string>,
     diagnostics: string[],
     filename: string,
+    crossModuleSzObjects?: CrossModuleSzObjects,
 ): SzValueTransformResult {
     const value = path.node.value;
     if (t.isStringLiteral(value)) {
@@ -1681,10 +1741,17 @@ function transformSzAttributeValue(
     if (!t.isJSXExpressionContainer(value)) return unchangedSzValueResult();
 
     const expression = value.expression;
-    if (t.isObjectExpression(expression)) {
+    // `as const` / `satisfies` / `as T` are erased before anything runs, so an
+    // object wearing one is the same object — and the binding path already
+    // reads it that way. Strip here too, or the identical literal compiles or
+    // falls back depending on where it was written. Only the dispatch sees the
+    // unwrapped node: the fallback classifier below keeps reporting the
+    // expression as authored, which is what the engines agree on.
+    const dispatched = unwrapTsExpression(expression);
+    if (t.isObjectExpression(dispatched)) {
         const objectResult = transformSzObjectExpression(
             path,
-            expression,
+            dispatched,
             existing,
             classMergeUsage,
             classes,
@@ -1696,7 +1763,7 @@ function transformSzAttributeValue(
         }
     }
 
-    const staticExpression = resolveStaticSzExpression(path, expression);
+    const staticExpression = resolveStaticSzExpression(path, expression, crossModuleSzObjects);
     if (staticExpression !== null) {
         applyCompiledClassExpression(path, staticExpression, existing, classMergeUsage, classes);
         return { ...unchangedSzValueResult(), transformed: true };
@@ -2075,6 +2142,17 @@ export interface TransformSourceCodeOptions {
     crossModuleStatics?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 
     /**
+     * Static sz OBJECTS a module imports, keyed by import specifier then by
+     * EXPORT name — the bundler's registry, filtered to what this file can see.
+     *
+     * Separate from {@link crossModuleStatics} because the two are not the same
+     * thing: an szv config is a variant table the engine compiles and picks
+     * from, an sz object is a value it lowers. One untagged map would leave
+     * every reader guessing which machinery applies.
+     */
+    crossModuleSzObjects?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+
+    /**
      * Opt into tiered CSS custom property names for parser paths that support
      * the CSS variable system. Unsupported parser paths must preserve existing
      * `--_sz-*` output until they explicitly port this option.
@@ -2093,7 +2171,7 @@ export interface TransformSourceCodeOptions {
 
     /**
      * Explicit app-owned global CSS custom-property aliases. Parser paths that
-     * support Phase H rewrite exact static sz string values from original
+     * support aliasing rewrite exact static sz string values from original
      * token names to aliases, for example `--brand-primary` -> `---gz`.
      */
     globalVarAliases?: GlobalVarAliasTableInput;
@@ -2210,9 +2288,13 @@ export function transformSourceCode(
         replacedCalls: new Set(),
         candidates: new Map(),
         identifierCalls: new Map(),
+        rewrittenSpans: [],
         usedPick: false,
         usedPick1: false,
     };
+    // Node identities already handed to recordIdentifierCall — see its comment
+    // for why one node can reach the visitor twice in this lane.
+    const recordedIdentifierCalls = new Set<t.CallExpression>();
     const collectedClasses = new Set<string>();
     // Classes discovered from `szs` slot values. Kept OUT of collectedClasses
     // until after the traversal so the discovery order is deterministic across
@@ -2358,6 +2440,15 @@ export function transformSourceCode(
                                 return;
                             }
 
+                            // Everything under this attribute is about to be
+                            // replaced by a generated expression, so a factory
+                            // call nested in it cannot be spliced. Recorded
+                            // before the rewrite, while the node still carries
+                            // its original offsets.
+                            if (szvPrecompile.enabled) {
+                                szvPrecompile.rewrittenSpans.push(path.node);
+                            }
+
                             // Point the dev-mode unknown-property warning at this
                             // sz prop. Cleared in the visitor's `exit` so it never
                             // leaks to an unrelated later transform.
@@ -2383,6 +2474,7 @@ export function transformSourceCode(
                                 collectedClasses,
                                 diagnostics,
                                 filename ?? 'file.tsx',
+                                options?.crossModuleSzObjects,
                             );
                             transformed ||= valueResult.transformed;
                             usesColorVar ||= valueResult.usesColorVar;
@@ -2428,7 +2520,12 @@ export function transformSourceCode(
                                 filename,
                                 options?.rootDir,
                             );
-                            recordIdentifierCall(path.node, szrRewrite, szvPrecompile);
+                            recordIdentifierCall(
+                                path.node,
+                                szrRewrite,
+                                szvPrecompile,
+                                recordedIdentifierCalls,
+                            );
                         },
 
                         TSTypeQuery(path: babel.NodePath<t.TSTypeQuery>) {
@@ -2810,8 +2907,108 @@ function parseStyleStringToObjectExpr(styleStr: string): t.ObjectExpression {
     return t.objectExpression(objProps);
 }
 
+/** One resolved binding, narrowed to what folding needs to decide. */
+interface ResolvedBinding {
+    path: babel.NodePath;
+    /** Babel's "never written to again after its declaration". */
+    constant: boolean;
+}
+
 /** Scope binding resolver — wraps `path.scope.getBinding` for testability and optional use. */
-type GetBinding = (name: string) => { path: babel.NodePath } | null | undefined;
+type GetBinding = (name: string) => ResolvedBinding | null | undefined;
+
+/** Cross-module sz objects, keyed by import specifier then by EXPORT name. */
+type CrossModuleSzObjects = Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+
+/**
+ * Whether an object carries a key itself, rather than inheriting it.
+ *
+ * `registry['__proto__']` on an ordinary object answers with `Object.prototype`
+ * and `Object.prototype['toString']` answers with a function — either would be
+ * read as an entry from a table no module wrote.
+ *
+ * @param target - Object to inspect.
+ * @param key - Property name read out of source text.
+ * @returns True when the key is the object's own.
+ */
+function hasOwn(target: object, key: string): boolean {
+    // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is ES2022; the toolchain lib is ES2021.
+    return Object.prototype.hasOwnProperty.call(target, key);
+}
+
+/**
+ * Resolve one binding to the static sz object its module exports.
+ *
+ * Resolution is by BINDING, never by matching a text name against the
+ * registry: a local declaration of the same name is what the code refers to,
+ * and reading the name would silently prefer the import. For the same reason
+ * the registry is keyed by the EXPORT name while the code uses the local one —
+ * `import { cardSz as card }` must find `cardSz`.
+ *
+ * v1 accepts a named value import and nothing else. A namespace or default
+ * import, and a type-only one, all fall through to the runtime path they have
+ * today rather than being guessed at.
+ *
+ * @param binding - Binding as the scope resolved it.
+ * @param registry - Cross-module sz objects visible to this file.
+ * @returns The exported object, or null when this is not one.
+ */
+function importedSzObject(
+    binding: ResolvedBinding | null | undefined,
+    registry: CrossModuleSzObjects | undefined,
+): SzObject | null {
+    if (registry === undefined || binding === null || binding === undefined) return null;
+    const specifier = binding.path;
+    if (!specifier.isImportSpecifier()) return null;
+    // An import specifier's parent is the declaration that introduced it —
+    // Babel builds no other arrangement — so this is read rather than re-tested.
+    const declaration = specifier.parentPath as babel.NodePath<t.ImportDeclaration>;
+    if (declaration.node.importKind === 'type' || specifier.node.importKind === 'type') return null;
+    const imported = specifier.node.imported;
+    const exportName = t.isIdentifier(imported) ? imported.name : imported.value;
+    // Own properties only. The registry is keyed by names read out of source
+    // text, and `registry['__proto__']` on an ordinary object answers with
+    // `Object.prototype` — an object that would then be lowered as if a module
+    // had exported it. The bundler builds these tables without a prototype for
+    // the same reason; this keeps a hand-built one from smuggling entries in.
+    const specifierKey = declaration.node.source.value;
+    if (!hasOwn(registry, specifierKey)) return null;
+    const exported = registry[specifierKey];
+    if (exported === undefined || !hasOwn(exported, exportName)) return null;
+    const value = exported[exportName];
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? (value as SzObject)
+        : null;
+}
+
+/**
+ * Whether a binding's initializer may stand in for its value at render time.
+ *
+ * Folding reads the INITIALIZER, so it is sound only while that is still what
+ * the binding holds. Write to the binding again and it is not: the emitted
+ * class describes the first value while the runtime holds the second, which
+ * styles the element wrong rather than leaving it unstyled. `szv` refuses the
+ * same shape (`resolveToConstObjectExpression`), and the native engine says so
+ * outright on `resolve_const_initializer_before`.
+ *
+ * The question is reassignment, not the keyword: a `let` that is never written
+ * to again holds its initializer just as a `const` does, and folding it is a
+ * pinned behaviour. Property mutation (`s.p = 8`) is out of reach here and
+ * stays part of the documented compile-time-value contract.
+ *
+ * Class DISCOVERY does not use this. Over-collecting a class that never
+ * renders costs an unused rule; under-collecting costs the CSS, so that side
+ * stays deliberately generous.
+ *
+ * @param binding - Binding as the scope resolved it.
+ * @returns The declarator whose initializer may be folded, or null.
+ */
+function foldableDeclarator(
+    binding: ResolvedBinding | null | undefined,
+): babel.NodePath<t.VariableDeclarator> | null {
+    if (!binding?.constant) return null;
+    return binding.path.isVariableDeclarator() ? binding.path : null;
+}
 
 /**
  * Whether a JSX opening-element name is a host (DOM) element — a plain
@@ -3093,9 +3290,9 @@ function tryResolveStaticSzObject(node: t.Node, getBinding?: GetBinding): SzObje
         return evaluateStaticObject(resolved);
     }
     if (t.isIdentifier(inner) && getBinding) {
-        const binding = getBinding(inner.name);
-        if (binding?.path.isVariableDeclarator()) {
-            const init = binding.path.node.init;
+        const declarator = foldableDeclarator(getBinding(inner.name));
+        if (declarator !== null) {
+            const init = declarator.node.init;
             if (init) {
                 return tryResolveStaticSzObject(init, getBinding);
             }
@@ -3173,9 +3370,9 @@ function tryStaticIdentifierTransform(
     node: t.Identifier,
     getBinding: GetBinding,
 ): t.Expression | null {
-    const binding = getBinding(node.name);
-    if (!binding?.path.isVariableDeclarator()) return null;
-    const initializer = binding.path.node.init;
+    const declarator = foldableDeclarator(getBinding(node.name));
+    if (declarator === null) return null;
+    const initializer = declarator.node.init;
     return initializer ? tryStaticTransformNode(initializer, getBinding) : null;
 }
 
@@ -4070,7 +4267,7 @@ function evaluateStaticObject(node: t.ObjectExpression): SzObject | null {
  */
 function resolveObjectSpreads(
     node: t.ObjectExpression,
-    getBinding: (name: string) => { path: babel.NodePath } | null | undefined,
+    getBinding: GetBinding,
 ): t.ObjectExpression | null {
     const newProps: t.ObjectExpression['properties'] = [];
     for (const prop of node.properties) {
@@ -4089,7 +4286,7 @@ function resolveObjectSpreads(
  */
 function resolveObjectSpreadProperty(
     prop: t.ObjectExpression['properties'][number],
-    getBinding: (name: string) => { path: babel.NodePath } | null | undefined,
+    getBinding: GetBinding,
 ): t.ObjectExpression['properties'] | null {
     if (!t.isSpreadElement(prop)) {
         if (!t.isObjectProperty(prop) || !t.isObjectExpression(prop.value)) return [prop];
@@ -4097,9 +4294,9 @@ function resolveObjectSpreadProperty(
         return value ? [t.objectProperty(prop.key, value, prop.computed, prop.shorthand)] : null;
     }
     if (!t.isIdentifier(prop.argument)) return null;
-    const binding = getBinding(prop.argument.name);
-    if (!binding?.path.isVariableDeclarator()) return null;
-    let init = binding.path.node.init;
+    const declarator = foldableDeclarator(getBinding(prop.argument.name));
+    if (declarator === null) return null;
+    let init = declarator.node.init;
     if (t.isTSAsExpression(init) || t.isTSSatisfiesExpression(init)) init = init.expression;
     if (!t.isObjectExpression(init)) return null;
     return resolveObjectSpreads(init, getBinding)?.properties ?? null;

@@ -40,16 +40,36 @@ pnpm add @csszyx/dynamic
 ## API
 
 ```ts
-import { dynamic, preloadManifest, cleanup, purifySz } from "@csszyx/dynamic";
-
-// Optional: eagerly fetch the manifest at startup for zero-latency first inject
-await preloadManifest("/csszyx-manifest.json");
+import { dynamic, dynamicReport, cleanup, purifySz } from "@csszyx/dynamic";
 
 // Untrusted input (JSON from a CMS)? Sanitize before injecting:
 const cls = dynamic(purifySz(untrustedSzObject));
 
+// Development: did the build-time manifest earn its transfer here?
+console.log(dynamicReport().summary);
+
 // Release injected sheets + manifest cache (e.g. on route teardown)
 cleanup();
+```
+
+### The manifest is opt-in
+
+`dynamic()` can consult `csszyx-manifest.json` to skip injecting rules the built
+CSS already has, but the build does not emit it unless asked
+(`build: { emitManifest: true }`). Without one, `dynamic()` treats nothing as
+pre-built and generates its own rules — identical styles, different bytes.
+
+The file lists the whole class census to answer questions about the few classes
+`dynamic()` renders, so it only pays off once most of the app is styled at
+runtime. If you enable it, `await preloadManifest()` before the first render:
+`dynamic()` is synchronous and the fetch is not, so an unawaited manifest
+arrives after everything has already been injected and the build pays both
+costs.
+
+```ts
+import { preloadManifest } from "@csszyx/dynamic";
+
+await preloadManifest(); // before the first render
 ```
 
 ## React
@@ -62,7 +82,7 @@ function FormField({ schema }) {
   return <div className={sz(schema.style)}>{schema.label}</div>;
 }
 
-// Custom manifest URL (non-root deployments):
+// Custom manifest URL, for a non-root deployment that opted into the manifest:
 <CsszyxProvider manifest="/assets/csszyx-manifest.json">
   <App />
 </CsszyxProvider>;

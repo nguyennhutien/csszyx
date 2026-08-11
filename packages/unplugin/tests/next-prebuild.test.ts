@@ -52,6 +52,48 @@ describe('Next Turbopack prebuild core', () => {
         };
     }
 
+    it('safelists a class the loader will only emit from an imported style object', () => {
+        // The loader compiles `sz={cardSz}` into a class name; this pass is
+        // what puts that name where Tailwind reads it. Resolve differently
+        // here and the page ships a class whose rule was never generated —
+        // strictly worse than neither of them compiling it, which is why the
+        // two share one resolver and one opt-in.
+        const root = tempRoot();
+        writeSource(root, 'app/styles.ts', 'export const cardSz = { p: 7 };\n');
+        const page = writeSource(
+            root,
+            'app/page.tsx',
+            "import { cardSz } from './styles';\nexport default () => <div sz={cardSz} />;\n",
+        );
+
+        const result = runNextPrebuild({
+            ...baseOptions(root, [page]),
+            importedStaticSz: true,
+        });
+
+        expect(readFileSync(result.safelistOutputPath, 'utf8')).toContain('p-7');
+    });
+
+    it('leaves the class out when the setting is turned off', () => {
+        // Turning it off is the supported way back to file-local behaviour, so
+        // it has to actually withdraw the class from the safelist — not merely
+        // stop the loader compiling it.
+        const root = tempRoot();
+        writeSource(root, 'app/styles.ts', 'export const cardSz = { p: 7 };\n');
+        const page = writeSource(
+            root,
+            'app/page.tsx',
+            "import { cardSz } from './styles';\nexport default () => <div sz={cardSz} />;\n",
+        );
+
+        const result = runNextPrebuild({
+            ...baseOptions(root, [page]),
+            importedStaticSz: false,
+        });
+
+        expect(readFileSync(result.safelistOutputPath, 'utf8')).not.toContain('p-7');
+    });
+
     it('transforms each file, writes per-file shards, and materializes a completed manifest', () => {
         const root = tempRoot();
         const fileA = writeSource(
@@ -179,6 +221,24 @@ describe('Next Turbopack prebuild core', () => {
                 compilerOptions: { mangleVars: true },
             }),
         ).toThrow(/does not support production CSS variable mangling/);
+    });
+
+    it('runs with no csszyx config at all, the way an unconfigured app starts', () => {
+        // Every other case pins a config, so the shape a project gets before it
+        // has one goes untested — and that shape still has to reach the
+        // generation identity, or the loader and the prebuild disagree from the
+        // first build.
+        const root = tempRoot();
+        const filename = writeSource(
+            root,
+            'src/A.tsx',
+            'export const A = () => <div sz={{ p: 4 }} />;',
+        );
+        const { config: _config, ...withoutConfig } = baseOptions(root, [filename]);
+
+        const result = runNextPrebuild(withoutConfig);
+
+        expect(readFileSync(result.safelistOutputPath, 'utf8')).toContain('p-4');
     });
 
     it('fails closed if the source still contains csszyx sz syntax after transform', () => {

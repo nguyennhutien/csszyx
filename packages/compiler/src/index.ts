@@ -82,9 +82,10 @@ export {
     SUGGESTION_MAP,
 } from './transform-core.js';
 export {
-    extractSzvRegistryEntries,
+    type CrossModuleExportKind,
+    type CrossModuleRegistryEntry,
+    extractCrossModuleRegistryEntries,
     OxcNotImplementedError,
-    type SzvRegistryEntry,
     type TransformOxcResult,
     transformOxc,
 } from './transform-oxc.js';
@@ -124,6 +125,7 @@ export type {
     SpacingScale,
     SpacingValue,
     SvgProps,
+    SzArrayElement,
     SzProps,
     SzPropsBase,
     SzPropValue,

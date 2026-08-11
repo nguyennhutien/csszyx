@@ -274,6 +274,24 @@ jobs:
         run: |
           node --test scripts/validate-no-nul-bytes.test.mjs
           node scripts/validate-no-nul-bytes.mjs
+      # The warning reference page quotes build and runtime messages verbatim so
+      # a reader can match what their terminal printed. Rewording a message is a
+      # one-line change in any of nine packages, and nothing else notices that
+      # the page now describes a message the code no longer prints. Deliberately
+      # in this unfiltered job: the docs and the messages live in different path
+      # groups, so a filtered job would skip exactly the changes that break it.
+      - name: Check documented warnings still exist in source
+        run: |
+          node --test scripts/validate-warning-docs.test.mjs
+          node scripts/validate-warning-docs.mjs
+      # The reverse direction: messages nobody documented. This started as a
+      # report with a baseline of seven; those were documented, so it enforces.
+      # A message that is genuinely internal goes in the baseline file, where
+      # the exemption is a diff someone reviews.
+      - name: Check every warning message is documented
+        run: |
+          node --test scripts/validate-undocumented-warnings.test.mjs
+          node scripts/validate-undocumented-warnings.mjs
       - name: Validate native package metadata
         run: node packages/core/scripts/validate-native-packages.mjs
 
@@ -768,6 +786,18 @@ jobs:
         run: |
           pnpm run gen:llms
           pnpm exec turbo run build ${{ needs.detect-changes.outputs.turbo_affected == 'true' && '--affected' || '' }}
+
+      # Absolute gzip budgets for the JS that reaches user bundles (runtime,
+      # dynamic, the compiler browser entry closure). Bytes are deterministic,
+      # so unlike timing this can be a hard gate with zero flake risk. The
+      # gated packages are built explicitly first: the workspace build above
+      # may scope them away via --affected, and the check treats a missing
+      # dist as a failure rather than a pass — turbo serves already-built
+      # packages from cache, so the extra build is seconds, not minutes.
+      - name: Package size gate
+        run: |
+          pnpm exec turbo run build --filter=@csszyx/runtime --filter=@csszyx/dynamic --filter=@csszyx/compiler
+          pnpm check:package-size
 
   # Aggregator. Always runs. Branch protection should require this single
   # check rather than the individual jobs above — those may be legitimately

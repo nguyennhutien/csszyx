@@ -8,11 +8,11 @@ use super::{
     fast_path::{triage_source, FastPathTriage},
     global_var_aliases::apply_global_var_aliases,
     lower::{collect_unknown_sz_keys, lower_source_ir_classes},
-    parser::{parse_source_shell_with_budget_and_statics, AST_BUDGET},
+    parser::{parse_source_shell_with_registries, CrossModuleRegistries, AST_BUDGET},
     recovery::{generate_inline_recovery_token, offset_to_line_column, LineIndex},
     rewrite::rewrite_static_sz_attributes,
     DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile, TransformMetadata,
-    TransformOptions, TransformProducer, TransformResult, TransformTimings,
+    TransformOptions, TransformProducer, TransformResult, TransformTimings, UnsupportedRecoveryIr,
 };
 use std::time::Instant;
 
@@ -213,10 +213,18 @@ fn transform_static_classes_with_options(
         .as_deref()
         .map(super::szv_precompile::decode_cross_module_statics)
         .unwrap_or_default();
-    let parsed = parse_source_shell_with_budget_and_statics(
+    let cross_module_sz_objects = options
+        .cross_module_sz_objects_json
+        .as_deref()
+        .map(super::szv_precompile::decode_cross_module_statics)
+        .unwrap_or_default();
+    let parsed = parse_source_shell_with_registries(
         file,
         options.ast_budget.unwrap_or(AST_BUDGET),
-        &cross_module,
+        CrossModuleRegistries {
+            szv_factories: &cross_module,
+            sz_objects: &cross_module_sz_objects,
+        },
     );
     let global_var_aliases = (!options.global_var_aliases.is_empty())
         .then(|| apply_global_var_aliases(&parsed.ir, &options.global_var_aliases));
@@ -496,6 +504,7 @@ fn site_fallback_diagnostics(
             let kind = match fallback.kind {
                 RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
                 RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
+                RuntimeFallbackKindIr::Import => SzFallbackKind::Import,
                 RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
                 RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
             };
@@ -536,6 +545,7 @@ fn runtime_fallback_diagnostics(
         let kind = match diagnostic.kind {
             RuntimeFallbackKindIr::Call => SzFallbackKind::Call,
             RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
+            RuntimeFallbackKindIr::Import => SzFallbackKind::Import,
             RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
             RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
         };
@@ -713,14 +723,24 @@ fn deferred_array_object_diagnostics(file: &TransformFile, ir: &super::SourceIr)
         .collect()
 }
 
+/// Renders the `szRecover` diagnostics, byte-identical to the Babel and oxc
+/// lanes.
+///
+/// The two cases stay separate on purpose: a dynamic value and a misspelled
+/// mode need different fixes, and a build that switches `build.parser` must not
+/// change the text it prints.
 fn unsupported_recovery_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
-    ir.unsupported_recovery_attribute_spans
+    ir.unsupported_recovery_attributes
         .iter()
-        .map(|span| {
-            format!(
-                "[csszyx] szRecover at {}:{}: only static string-literal values \"csr\" or \"dev-only\" are supported. Token emission skipped.",
-                file.filename, span.start
-            )
+        .map(|reason| match reason {
+            UnsupportedRecoveryIr::NonLiteral => format!(
+                "[csszyx] szRecover at {}: only string-literal values (\"csr\" | \"dev-only\") are supported. Dynamic values disable token emission for this element.",
+                file.filename
+            ),
+            UnsupportedRecoveryIr::UnknownMode(mode) => format!(
+                "[csszyx] szRecover at {}: unknown mode \"{mode}\" — expected \"csr\" or \"dev-only\". Token emission skipped.",
+                file.filename
+            ),
         })
         .collect()
 }
@@ -956,6 +976,55 @@ mod tests {
         assert!(diagnostics.contains("member expression"), "{diagnostics}");
         assert!(diagnostics.contains("AwaitExpression"), "{diagnostics}");
         assert!(diagnostics.contains("szv catalog at 5:"), "{diagnostics}");
+    }
+
+    #[test]
+    fn static_engine_names_an_imported_binding_apart_from_a_forwarded_prop() {
+        // These two read alike in the AST and mean opposite things. An import
+        // is a module-level value this build tried to read and could not, so
+        // nothing collected its classes; a forwarded prop belongs to the
+        // caller, whose literal is collected where the caller writes it. The
+        // wording has to separate them, because the bundler routes production
+        // reporting on exactly that difference.
+        let file = TransformFile {
+            filename: "/repo/src/Imports.tsx".to_string(),
+            source: [
+                "import { cardSz } from './styles';",
+                "import fallbackSz from './fallback';",
+                "import * as S from './all';",
+                "export const A = () => <div sz={cardSz} />;",
+                "export const B = () => <div sz={fallbackSz} />;",
+                "export const C = () => <div sz={S.cardSz} />;",
+                "export const D = ({ sz }) => <div sz={sz} />;",
+                // Parentheses, a computed member, and an szr argument: the
+                // same question asked through three more shapes, because each
+                // reaches the classifier by its own arm.
+                "export const E = () => <div sz={(cardSz)} />;",
+                "export const F = () => <div sz={S['cardSz']} />;",
+                "export const G = szr(cardSz);",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        for name in ["cardSz", "fallbackSz", "S"] {
+            assert!(
+                diagnostics.contains(&format!("imported binding `{name}`")),
+                "{diagnostics}"
+            );
+        }
+        assert!(diagnostics.contains("import it by name"), "{diagnostics}");
+        // The forwarded prop keeps the plain wording, and must not be reported
+        // as an import just because it is also an unresolved identifier.
+        assert!(diagnostics.contains("identifier `sz`"), "{diagnostics}");
+        assert!(
+            !diagnostics.contains("imported binding `sz`"),
+            "{diagnostics}"
+        );
+        // The szr site renders through its own mapping, so an import reaching
+        // it has to be named there too.
+        assert!(diagnostics.contains("szr fallback at "), "{diagnostics}");
     }
 
     #[test]
@@ -1444,6 +1513,25 @@ mod tests {
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.contains("szRecover")));
+    }
+
+    #[test]
+    fn static_engine_names_the_unknown_recovery_mode_it_rejected() {
+        // A misspelled mode and a dynamic value both disable token emission, and
+        // they need different fixes — one is a typo, the other is a shape the
+        // engine cannot read. A shared message would send the author looking for
+        // the wrong problem, so the mode they actually wrote is quoted back.
+        let file = TransformFile {
+            filename: "src/App.tsx".to_string(),
+            source: "export const App = () => <div szRecover=\"csrr\">x</div>;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(result.recovery_tokens.is_empty());
+        let diagnostics = result.diagnostics.join("\n");
+        assert!(diagnostics.contains("csrr"), "{diagnostics}");
+        assert!(diagnostics.contains("unknown mode"), "{diagnostics}");
     }
 
     #[test]

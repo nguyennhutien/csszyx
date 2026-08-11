@@ -37,14 +37,27 @@ cd "$REPO"
 
 echo "[verify-like-ci] Wiping cached build artefacts so turbo and vitest start fresh..."
 find packages apps playground -name dist -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null || true
+find packages -name .tsout -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null || true
 find playground packages/e2e -name '.csszyx' -type d -exec rm -rf {} + 2>/dev/null || true
 rm -rf .turbo apps/docs/.astro apps/docs/dist apps/docs/.csszyx
+# The devcontainer mounts this repository at a different path, and target/ is the
+# same directory on disk for both. Objects built in one environment stay behind,
+# and llvm-cov folds them into the next run's report — mixing two source roots
+# into one coverage number and then failing on a path that does not exist here.
+# A clean tree costs about 25 seconds, and the native build below rebuilds anyway.
+rm -rf target/llvm-cov-target
 
 echo "[verify-like-ci] Tracked symlink guard..."
 pnpm check:tracked-symlinks
 
 echo "[verify-like-ci] Raw NUL byte guard (binary-flipped source files)..."
 pnpm check:no-nul-bytes
+
+echo "[verify-like-ci] Checking the documented warning messages still exist in source..."
+pnpm check:warning-docs
+
+echo "[verify-like-ci] Checking every warning message has a reference entry..."
+pnpm check:undocumented-warnings
 
 echo "[verify-like-ci] Biome preflight (strict — no auto-fix, no unsafe-skip)..."
 pnpm lint:fast
@@ -87,6 +100,13 @@ echo "[verify-like-ci] Rust gates (rustfmt, clippy x3 feature sets, native check
     cargo test --features native-engine
 )
 
+# The Coverage workflow runs this and verify-like-ci did not, so a PR could be
+# green locally and red on a gate the author never saw. It re-runs the same
+# tests under instrumentation — about 13s on a warm target dir, which buys back
+# the round trip through CI that a coverage miss otherwise costs.
+echo "[verify-like-ci] Rust coverage gate (mirrors the Coverage workflow)..."
+pnpm cov:rust
+
 echo "[verify-like-ci] Running unit tests through turbo (catches missing build deps)..."
 pnpm test:unit
 
@@ -114,6 +134,11 @@ pnpm check:emitted-classes
 
 echo "[verify-like-ci] Workspace build (every playground, every package)..."
 pnpm build
+
+# Runs after the build on purpose: the gate measures built dist output, and a
+# missing dist fails it rather than passing it.
+echo "[verify-like-ci] Package size gate (user-shipped gzip budgets)..."
+pnpm check:package-size
 
 if [ "$SKIP_E2E" -eq 0 ]; then
     echo "[verify-like-ci] Playwright e2e (full suite — slowest step)..."

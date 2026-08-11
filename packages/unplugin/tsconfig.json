@@ -6,8 +6,8 @@
         "incremental": true,
         "isolatedDeclarations": true,
         "declaration": true,
-        "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
-        "outDir": "dist",
+        "tsBuildInfoFile": "./.tsout/tsconfig.tsbuildinfo",
+        "outDir": "./.tsout",
         "rootDir": "src",
         "types": ["node"]
     },

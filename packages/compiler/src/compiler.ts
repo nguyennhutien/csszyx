@@ -151,8 +151,9 @@ export class CsszyxCompiler {
             }
         }
 
-        // JS Fallback - deterministic hash (temporary until WASM Phase 3)
-        // Phase 3 replaces this fallback when WASM generate_token becomes available.
+        // Deterministic JS hash, used while the WASM core exposes no
+        // generate_token — the value only has to be stable, not identical to what
+        // the core would produce.
         const str = `${metadata.component}:${metadata.filePath}:${metadata.line}:${metadata.column}:${metadata.mode}:${metadata.buildId}`;
         let hash = 0;
         for (const character of str) {

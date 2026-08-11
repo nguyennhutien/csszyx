@@ -108,6 +108,21 @@ safelist file (`csszyx-classes.html`), then **auto-injects** an `@source` pointi
 it. That is why, even with `source(none)`, your csszyx styles still emit — the plugin
 already registered its own source. You only ever scope **your own** templates.
 
+### Workspace packages you compile
+
+The safelist covers every directory the prescan walks, which includes anything you
+opted in with [`compileSources`](/docs/reference/config/). A vendored design system
+beside your app is therefore safe to scope: its `sz`-compiled classes and the raw
+`className` literals sitting next to them are both written to the safelist, and the
+auto-injected `@source` picks them up wherever the package lives relative to the CSS
+file.
+
+The condition is the opt-in. A `/packages/` directory that is *not* in
+`compileSources` is skipped by the prescan, so its classes are absent from the
+safelist and `source(none)` would drop them — that is exactly what the build-end
+"skipped by ignore rules" warning is telling you. Add the directory first, confirm
+the warning is gone, then scope.
+
 ## See also
 
 - [Installation](/docs/installation/) — first-time setup.

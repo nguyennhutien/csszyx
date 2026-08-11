@@ -21,6 +21,25 @@ describe('csszyxTurbopack', () => {
         expect(rule.loaders[0].options.parserMode).toBe('rust');
     });
 
+    it.each([true, false])('forwards an explicit importedStaticSz of %s', value => {
+        // Forwarded only when set, so an unconfigured project keeps whatever
+        // the loader resolves as the default. Both values have to travel: with
+        // the default on, `false` is the one that carries information, and
+        // dropping it would leave the loader compiling what the prebuild does
+        // not safelist.
+        const rule = csszyxTurbopack({}, { importedStaticSz: value }).rules?.['*.tsx'] as {
+            loaders: Array<{ options: Record<string, unknown> }>;
+        };
+        expect(rule.loaders[0].options.importedStaticSz).toBe(value);
+    });
+
+    it('omits importedStaticSz when nothing configures it', () => {
+        const rule = csszyxTurbopack().rules?.['*.tsx'] as {
+            loaders: Array<{ options: Record<string, unknown> }>;
+        };
+        expect('importedStaticSz' in rule.loaders[0].options).toBe(false);
+    });
+
     it('forwards safelistOutputFile and config to the loader', () => {
         const rule = csszyxTurbopack(
             {},

@@ -3,7 +3,7 @@ title: Runtime Helpers
 description: szr (sz-resolve), szcn merge, szDecode, _szMerge, szv() composition and variant helpers, plus splitBox, classify/has/pick/omit, stripSzProps, and verifyMangleChecksumAsync.
 ---
 
-import { Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
+import { Aside, Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
 
 The runtime package provides helpers for composing `className` strings
 dynamically. For static sz props, no helpers are needed — the compiler
@@ -35,6 +35,16 @@ produces plain strings at build time.
     ```
   </TabItem>
 </Tabs>
+
+<Aside type="note" title="What the umbrella gives browser code">
+Bundlers resolve `csszyx` in client code through its `browser` condition, which
+carries the runtime helpers and types only. The compiler and the bundler
+plugins are Node-only — `transform`, `vitePlugin`, `webpackPlugin` and friends
+stay available when the same import runs in Node (a config file, a script, an
+SSR build), and plugins have their own entries: `csszyx/vite`,
+`csszyx/webpack`. Asking for a build-time name from client code is a bundler
+error naming the missing export, not a silent `undefined`.
+</Aside>
 
 ## `szr(...classes)`
 
@@ -159,7 +169,7 @@ RTL — those stay keep-both (still cascade-correct).
 
 ### Property groups for ambiguous prefixes
 
-Eight prefixes span more than one CSS property (`text-sm` is font-size,
+Sixteen prefixes span more than one CSS property (`text-sm` is font-size,
 `text-red-500` is color). For these, `szcn` classifies the token **value** into
 a property group: same group → last wins, different group → co-exist,
 unclassifiable → keep-both.
@@ -184,18 +194,46 @@ szcn('border-2', 'border-4');      // → 'border-4'
 // flex: shorthand / direction / wrap
 szcn('flex-row', 'flex-col');      // → 'flex-col'
 szcn('flex', 'flex-1');            // → 'flex flex-1'   bare flex is display
+
+// shadow / drop-shadow / inset-shadow: size vs shadow color
+szcn('shadow-sm', 'shadow-lg');       // → 'shadow-lg'
+szcn('shadow-lg', 'shadow-red-500');  // → 'shadow-lg shadow-red-500'
+
+// decoration: thickness / style / color
+szcn('decoration-2', 'decoration-red-500'); // → 'decoration-2 decoration-red-500'
+
+// stroke: width vs paint
+szcn('stroke-2', 'stroke-red-500'); // → 'stroke-2 stroke-red-500'
+
+// from / via / to: gradient stop position vs stop color
+szcn('from-10%', 'from-red-500');   // → 'from-10% from-red-500'
 ```
+
+Setting a shadow's size and its color together is the documented Tailwind way
+to write one, so those two never share a group — the same reasoning that keeps
+`border-2` and `border-red-500` apart.
 
 Still keep-both by design: directional/axis forms of border-family prefixes
 (`border-t-2` vs `border-2`, `divide-x-2` vs `divide-y-2`), CSS-variable values
 (`text-(--brand)` — the type is unknown), and any value csszyx cannot classify.
 
 :::tip[Custom `@theme` tokens join automatically]
-With `build.scanCss` configured, tokens from your `@theme` blocks
-(`--color-brand`, `--text-huge`, …) are registered into their groups by the
-build plugin — `szcn('text-brand', 'text-accent')` → `'text-accent'` with zero
-wiring, updated on HMR. For utility-shaped classes written in plain CSS outside
-`@theme`, register them once with [`registerSzcnGroups`](#registerszcngroupsgroups).
+Tokens from your `@theme` blocks (`--color-brand`, `--text-huge`, …) are
+registered into their groups by the build plugin —
+`szcn('text-brand', 'text-accent')` → `'text-accent'` with zero wiring, updated
+on HMR. The plugin discovers every stylesheet in the project, so this does not
+depend on `build.scanCss`: that option chooses which CSS drives the generated
+*types*, and narrowing it never narrows merging. For utility-shaped classes
+written in plain CSS outside `@theme`, register them once with
+[the theme group registry](#theme-group-registry).
+
+**Next.js with Turbopack** reaches the same result by a different route: that
+lane compiles one file at a time and cannot resolve a virtual module, so csszyx
+writes the registration to `.csszyx/theme-groups.mjs` and imports it from the
+modules that call `szcn`. Your stylesheets are declared as loader dependencies,
+so editing a `@theme` block regenerates it during the dev session — same live
+behaviour as the other bundlers. See the
+[Turbopack capability table](/docs/installation/#what-the-turbopack-lane-can-and-cannot-use).
 :::
 
 ### Production encode of runtime-resolved classes
@@ -217,11 +255,12 @@ In dev, or on a build without mangling, the encode step is an identity.
 Code that **inspects** a className for a utility by its original spelling must
 decode first — see [`szDecode`](#szdecodetoken).
 
-## `registerSzcnGroups(groups)`
+## Theme group registry
 
-Registers custom token names so `szcn` can classify classes built from them.
-Idempotent and additive; the build plugin calls it automatically from the
-app's `@theme` blocks — call it manually only for hand-written CSS utilities.
+Custom token names have to be declared before `szcn` can classify classes built
+from them. The build plugin does this automatically from your `@theme` blocks —
+these functions are for hand-written CSS utilities, and for reading back what
+is in effect.
 
 ```ts
 interface SzcnThemeGroups {
@@ -231,8 +270,22 @@ interface SzcnThemeGroups {
   fontWeights?: readonly string[];   // 'chunky' → font-chunky
 }
 
-function registerSzcnGroups(groups: SzcnThemeGroups): void
+function registerSzcnGroups(groups: SzcnThemeGroups, source?: string): void
+function setSzcnGroups(groups: SzcnThemeGroups, source?: string): void
+function clearSzcnGroups(source?: string): void
+function getSzcnGroups(): Record<'colors' | 'textSizes' | 'fontFamilies' | 'fontWeights', string[]>
 ```
+
+Declarations are kept **per source**, defaulting to `'app'`. That is what lets a
+rebuild replace everything it scanned without touching what your code
+registered by hand — the build uses the source `'build'`.
+
+| Function | Does |
+| --- | --- |
+| `registerSzcnGroups` | Adds names, keeping what the source already declared. The default for hand-written CSS. |
+| `setSzcnGroups` | Replaces the source's whole declaration. A category left out is cleared. |
+| `clearSzcnGroups` | Drops one source, or every source when called with no argument. |
+| `getSzcnGroups` | Reads the names currently **in effect** — what survived the guard rails, sorted and copied. For tests and diagnostics, not a hot path. |
 
 ```ts
 import { registerSzcnGroups } from '@csszyx/runtime';
@@ -241,16 +294,24 @@ import { registerSzcnGroups } from '@csszyx/runtime';
 registerSzcnGroups({ colors: ['brand', 'tag-blue-bg'], fontFamilies: ['display'] });
 ```
 
+<Aside type="tip" title="Why replacing needs a source">
+Adding is enough while a build runs once. A dev server re-runs it, and then a
+deleted or renamed `@theme` token has to stop grouping — which an add-only
+registry cannot express. Scoping the replace to a source is what keeps that
+from wiping an app's own registration on every rebuild.
+</Aside>
+
 Guard rails — both fall back to keep-both with a one-time dev warning, never a
 wrong merge:
 
 - A name that **shadows a built-in value keyword** of an affected prefix is
   rejected: a color named `cover` would make `szcn` misread `bg-cover`
   (background-size) as a color and merge it wrongly.
-- A name registered in **two conflicting categories** (both a color and a text
-  size — `text-huge` becomes unclassifiable) is dropped from both, and the drop
-  is remembered: later registrations of either side are rejected too, so
-  registration order can never resurrect an ambiguous name into one category.
+- A name declared in **two conflicting categories** (both a color and a text
+  size — `text-huge` becomes unclassifiable) is dropped from both, for as long
+  as both declarations exist. The effective sets are recomputed from every
+  source on each change, so neither guard rail depends on the order things were
+  declared in.
 
 ## `szDecode(token)`
 

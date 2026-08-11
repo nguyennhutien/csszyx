@@ -22,7 +22,20 @@ function tempRoot(): string {
     return dir;
 }
 
-async function waitFor(assertion: () => boolean, timeoutMs = 3_000): Promise<void> {
+/**
+ * Wait for a filesystem watcher to reach a state.
+ *
+ * The budget is deliberately generous. This waits on a real watcher plus a
+ * debounce, and the assertion is that the state is reached AT ALL — not that it
+ * is reached quickly. A tight budget turns CPU contention into a failure: at
+ * 3s this passed when run alone and failed reproducibly inside the full
+ * parallel suite on macOS. A watcher that is genuinely broken never fires, so
+ * the extra seconds cost nothing on a real regression.
+ *
+ * @param assertion - Condition to poll until it holds.
+ * @param timeoutMs - How long to keep polling before giving up.
+ */
+async function waitFor(assertion: () => boolean, timeoutMs = 15_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
         if (assertion()) {
@@ -78,7 +91,7 @@ describe('csszyx next-watch command', () => {
         } finally {
             await session.close();
         }
-    });
+    }, 30_000);
 
     it('fails startup when no source files match', async () => {
         const root = tempRoot();

@@ -259,6 +259,19 @@ mod tests {
     }
 
     #[test]
+    fn test_tier5_grows_a_fourth_letter_instead_of_wrapping() {
+        // Three letters address 52^3 = 140_608 slots, exhausted at index
+        // TIER4_END + 140_607. The next index must grow a fourth letter.
+        assert_eq!(encode(149_083), "AAA");
+        assert_eq!(encode(149_084), "yzzz");
+
+        // The failure mode this pins down is truncation, not a wrong letter:
+        // dropping the leading letter would re-emit "zzz" and hand two
+        // distinct styles the same class name.
+        assert_ne!(encode(149_084), encode(8476));
+    }
+
+    #[test]
     fn test_reversed_sequence() {
         // Verify reversed order is maintained
         assert!(encode(0) > encode(1)); // "z" > "y"

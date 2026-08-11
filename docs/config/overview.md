@@ -114,9 +114,7 @@ Controls production build behavior:
 ```ts
 interface ProductionConfig {
   mangle: boolean; // Obfuscate class names (z, y, x, ...) — opt-in, default false
-  contentHashing: boolean; // Hash for immutable caching
   injectChecksum: boolean; // Add hydration checksum to HTML
-  incrementalBuild: boolean; // Enable build caching
   minify: boolean; // Minify output
 }
 ```
@@ -124,9 +122,7 @@ interface ProductionConfig {
 **Defaults:**
 
 - `mangle`: `false`
-- `contentHashing`: `true`
 - `injectChecksum`: `true`
-- `incrementalBuild`: `true`
 - `minify`: `true`
 
 ### Build
@@ -136,7 +132,6 @@ Controls build pipeline:
 ```ts
 interface BuildConfig {
   buildId?: string; // Build identifier (auto-generated if omitted)
-  tailwindConfig?: string; // Path to Tailwind config file
   outputDir?: string; // Output directory
   cacheDir?: string; // Cache directory
   astBudgetLimit?: number; // Max AST nodes per file before the transform skips it (warned; safelist prescan runs at 10x)
@@ -148,7 +143,6 @@ interface BuildConfig {
 **Defaults:**
 
 - `buildId`: Auto-generated timestamp
-- `tailwindConfig`: `'tailwind.config.js'`
 - `outputDir`: `'.csszyx'`
 - `cacheDir`: `'.csszyx/cache'`
 - `astBudgetLimit`: `50000`
@@ -221,11 +215,20 @@ root (`config.root`, default the build cwd); absolute paths pass through;
 pnpm symlinks are matched after realpath resolution. Each entry exempts
 that directory from the ignore AND adds it as a pre-scan root.
 `node_modules` and `.next` stay ignored unless a listed path points into
-them. A `/packages/` file with `sz` not under any `compileSources`
-directory is skipped silently (no CSS); csszyx warns at build end listing
-those files. A path that does not resolve to a directory is reported in a
+them. A `/packages/` file using csszyx and not under any `compileSources`
+directory is skipped (no CSS); csszyx warns at build end listing those
+files. A path that does not resolve to a directory is reported in a
 build warning. A non-`/packages/` lib inside the build root needs no
 config — it is compiled and scanned automatically.
+
+Opting a package in is also what makes the cross-module `szv` precompile
+work inside it. The pre-scan is what records a module's exported
+factories, so a skipped module keeps its factories out of the registry
+and every importer — including its own siblings — falls back to the
+runtime path. That case is reported in production builds too, because
+the cost is not a style nudge but csszyx output the build did not
+produce; a skip that only affects one file's own classes stays
+development-only.
 
 ### Hydration
 
@@ -234,36 +237,12 @@ Controls SSR hydration behavior:
 ```ts
 interface HydrationConfig {
   strict: boolean; // Enable strict checks
-  defaultRecoveryMode?: "csr" | "dev-only"; // Default recovery mode
-  auditLog: boolean; // Log hydration events
 }
 ```
 
 **Defaults:**
 
 - `strict`: `true`
-- `defaultRecoveryMode`: `null` (no recovery)
-- `auditLog`: `true`
-
-### Performance
-
-Controls performance optimizations:
-
-```ts
-interface PerformanceConfig {
-  parallel: boolean; // Parallel processing during build
-  workers?: number; // Worker thread count (auto-detected)
-  optimizeVariables: boolean; // CSS variable optimization
-  zeroRuntime: boolean; // Static optimization for zero-runtime cases
-}
-```
-
-**Defaults:**
-
-- `parallel`: `true`
-- `workers`: Auto-detected (CPU cores)
-- `optimizeVariables`: `true`
-- `zeroRuntime`: `true`
 
 ## See Also
 

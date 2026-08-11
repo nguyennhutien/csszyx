@@ -99,7 +99,7 @@ const config: CsszyxConfig = {
 #### Global Variable Alias Safety
 
 `production.mangleGlobalVars` aliases explicit app-owned custom-property
-`tokens` in Phase H v1. Tailwind-owned `@theme` namespaces are rejected by
+`tokens` you list explicitly. Tailwind-owned `@theme` namespaces are rejected by
 shared config validation and must not be passed in `tokens` or `autoPrefix`.
 `autoPrefix` remains blocked until CSS pre-scan support exists.
 
@@ -312,10 +312,7 @@ type BuildPhase =
 
 ```typescript
 type HydrationErrorType =
-  | "checksum_mismatch"
-  | "map_missing"
-  | "invalid_token"
-  | "abort_failed";
+  "checksum_mismatch" | "map_missing" | "invalid_token" | "abort_failed";
 ```
 
 ### Environment

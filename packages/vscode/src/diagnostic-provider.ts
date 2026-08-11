@@ -21,6 +21,7 @@ import {
     KNOWN_VARIANTS,
     MIGRATION_NOTES,
     PROPERTY_MAP,
+    SPECIAL_VARIANTS,
     SUGGESTION_MAP,
 } from './data.js';
 import { findSzExpressions } from './parser.js';
@@ -45,11 +46,19 @@ const REGEX_SPECIAL_CHARACTERS = new Set([
     BACKSLASH,
 ]);
 
-/** Set of all valid top-level sz prop keys (built once). */
+/** Set of all valid top-level sz prop keys (built once).
+ *
+ * Every vocabulary the compiler accepts has to be listed, including
+ * `SPECIAL_VARIANTS` — the parametric ones (`group`, `peer`, `data`, `aria`,
+ * `has`, `not`, `supports`) live in their own set because they take a nested
+ * key rather than a value, and leaving that set out flagged all seven as
+ * unknown props. `group: { hover: … }` is documented on the front page.
+ */
 const VALID_KEYS = new Set<string>([
     ...Object.keys(PROPERTY_MAP),
     ...BOOLEAN_SHORTHANDS,
     ...KNOWN_VARIANTS,
+    ...SPECIAL_VARIANTS,
     'css',
 ]);
 

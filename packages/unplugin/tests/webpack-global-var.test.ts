@@ -97,7 +97,7 @@ async function runWebpack(root: string): Promise<void> {
         },
         plugins: [
             webpackPlugin({
-                build: { cache: false },
+                build: { emitManifest: true, cache: false },
                 production: {
                     mangleGlobalVars: {
                         enabled: true,

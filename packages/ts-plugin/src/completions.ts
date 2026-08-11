@@ -111,6 +111,8 @@ function entry(
  * @param shouldStop - Cooperative deadline and cancellation check.
  * @param exclude - Sibling keys already assigned in the object; suggesting a
  * key twice in one object is never useful (duplicates override silently).
+ * @param prefix - Text inserted before the key, for a slot whose previous
+ * property is missing its comma.
  * @returns Key completion entries, or an empty list for an unsupported schema.
  */
 export function buildSzKeyEntries(
@@ -119,6 +121,7 @@ export function buildSzKeyEntries(
     replacementSpan: ts.TextSpan,
     shouldStop: () => boolean = () => false,
     exclude?: ReadonlySet<string>,
+    prefix?: string,
 ): ts.CompletionEntry[] {
     if (METADATA_SCHEMA_VERSION !== 1) return [];
     const result: ts.CompletionEntry[] = [];
@@ -126,9 +129,24 @@ export function buildSzKeyEntries(
         if (result.length % 32 === 0 && shouldStop()) break;
         if (result.length >= limit) break;
         if (exclude?.has(name)) continue;
-        result.push(entry(tsMod, name, 'key', result.length, replacementSpan));
+        result.push(
+            entry(tsMod, name, 'key', result.length, replacementSpan, keyInsertText(name, prefix)),
+        );
     }
     return result;
+}
+
+/** Insertion text for one key entry.
+ *
+ * Undefined for the ordinary slot, so the editor inserts the label and nothing
+ * about the common path changes.
+ *
+ * @param name - Key label.
+ * @param prefix - Separator text to prepend, when the slot needs one.
+ * @returns Insert text, or undefined to use the label.
+ */
+function keyInsertText(name: string, prefix?: string): string | undefined {
+    return prefix === undefined ? undefined : `${prefix}${name}`;
 }
 
 /** Build key entries for a structured object-value form (e.g. `{ color, op }`).
@@ -136,6 +154,8 @@ export function buildSzKeyEntries(
  * @param form - The form whose members are the only valid keys.
  * @param replacementSpan - Source span replaced on acceptance.
  * @param exclude - Members already assigned in the object.
+ * @param prefix - Text inserted before the key, for a slot whose previous
+ * property is missing its comma.
  * @returns Member key entries with per-member hints.
  */
 export function buildFormKeyEntries(
@@ -143,12 +163,20 @@ export function buildFormKeyEntries(
     form: ObjectValueForm,
     replacementSpan: ts.TextSpan,
     exclude?: ReadonlySet<string>,
+    prefix?: string,
 ): ts.CompletionEntry[] {
     if (METADATA_SCHEMA_VERSION !== 1) return [];
     const result: ts.CompletionEntry[] = [];
     for (const member of form.members) {
         if (exclude?.has(member.name)) continue;
-        const item = entry(tsMod, member.name, 'key', result.length, replacementSpan);
+        const item = entry(
+            tsMod,
+            member.name,
+            'key',
+            result.length,
+            replacementSpan,
+            keyInsertText(member.name, prefix),
+        );
         result.push({ ...item, labelDetails: { description: member.detail } });
     }
     return result;

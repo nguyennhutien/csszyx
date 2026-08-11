@@ -12,7 +12,7 @@
  * without a cast. See {@link SzInput}.
  */
 
-import type { SzObject, SzProps, SzPropValue } from '@csszyx/compiler';
+import type { SzArrayElement, SzObject, SzProps, SzPropValue } from '@csszyx/compiler';
 
 import type { SzInput } from './concatenate.js';
 // NOSONAR: this contract intentionally verifies the deprecated public alias.
@@ -36,6 +36,18 @@ export type _ContractObjectToInput = Assert<AssignableTo<SzObject, SzInput>>;
 export type _ContractStringToInput = Assert<AssignableTo<string, SzInput>>;
 export type _ContractArrayToInput = Assert<AssignableTo<SzPropValue[], SzInput>>;
 export type _ContractFalsyToInput = Assert<AssignableTo<null | undefined | false, SzInput>>;
+
+// ── `as const` is authoring advice, so it must not cost assignability ──
+// The docs recommend `as const` on a shared style object. On an OBJECT that is
+// free; on an ARRAY it produces a readonly tuple, which a mutable element type
+// rejects — the recommendation would then break the code that followed it.
+// Nothing here mutates an sz array, so accepting readonly costs nothing.
+export type _ContractReadonlyArrayToPropValue = Assert<
+    AssignableTo<readonly SzArrayElement[], SzPropValue>
+>;
+export type _ContractReadonlyArrayToInput = Assert<
+    AssignableTo<readonly SzArrayElement[], SzInput>
+>;
 
 // ── SzInput stays narrow enough to reject primitives that are not strings ──
 // (the object member must not swallow numbers/booleans — those are not sz inputs).

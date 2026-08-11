@@ -124,6 +124,16 @@ describe('className expression + static sz merges (never overwritten)', () => {
         }
     });
 
+    it('merges a valueless className as an empty string (oxc)', () => {
+        // `<div className sz={...}>` gives the attribute the value `true`,
+        // which carries no classes. Oxc folds it into the merge as `""`;
+        // babel and the native engine do not treat it as a mergeable
+        // className at all and leave the bare attribute beside the compiled
+        // one, so this shape is pinned for the oxc lane only.
+        const tsx = 'export const A = ({ r }) => <Row className sz={{ ...r }} />;';
+        expect(element(transformOxc(tsx, 'F.tsx').code)).toContain('_szMerge("", _sz({ ...r }))');
+    });
+
     it('sets the runtime/merge flags so the import gets injected (oxc)', () => {
         const tsx = 'export const A = ({ c }) => <Row className={c} sz={{ p: 4 }} />;';
         const result = transformOxc(tsx, 'F.tsx');

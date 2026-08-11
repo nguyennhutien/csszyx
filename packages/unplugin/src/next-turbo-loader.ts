@@ -4,7 +4,14 @@ import * as path from 'node:path';
 
 import type { TransformSourceCodeOptions } from '@csszyx/compiler';
 
+import { insertAfterUseDirective } from './directive-prologue.js';
 import type { JsonLike } from './next-cache-identity.js';
+import {
+    configWithImportedStaticSz,
+    normalizeProviderPaths,
+    resolveNextCrossModule,
+    withCrossModuleStatics,
+} from './next-cross-module.js';
 import {
     readNextGenerationManifest,
     validateNextGenerationManifest,
@@ -24,6 +31,7 @@ import {
 } from './next-transform-metadata.js';
 import { runNextWatcherCycle } from './next-watcher-cycle.js';
 import { normalizePathSeparators } from './path-normalization.js';
+import { ensureThemeGroupsFile, themeGroupsSpecifier } from './theme-groups-file.js';
 import { resolveTransformCacheDir } from './transform-cache.js';
 
 /** Serializable options accepted by the Next Turbopack csszyx loader. */
@@ -46,6 +54,16 @@ export interface NextTurboLoaderOptions {
     allowProductionMangling?: boolean;
     materializeSafelist?: boolean;
     writeOptions?: AtomicWriteOptions;
+    /**
+     * Whether a plain exported sz object may be compiled into its importers.
+     *
+     * The same setting the other lanes spell `build.importedStaticSz`, on
+     * unless given, and `csszyx next prebuild` has to resolve it identically —
+     * the prebuild is what safelists the classes the loader then emits, so a
+     * lane that resolves more than the other would emit class names with no
+     * rule behind them.
+     */
+    importedStaticSz?: boolean;
 }
 
 /** Minimal Webpack-compatible loader context used by Turbopack. */
@@ -93,7 +111,7 @@ export function runNextTurboLoader(
         loaderContext: loaderContext.context,
         cacheDir: options.cacheDir,
         safelistOutputFile: options.safelistOutputFile,
-        config: options.config ?? {},
+        config: configWithImportedStaticSz(options.config ?? {}, options.importedStaticSz),
         env: options.env ?? process.env,
         envKeys: options.envKeys,
         nextVersion: options.nextVersion ?? 'unknown-next',
@@ -108,11 +126,21 @@ export function runNextTurboLoader(
 
     assertProductionManifestReady(context, options);
 
+    // Cross-module resolution, inverted for this lane: no prescan hands the
+    // loader a registry, so it reads each provider from disk itself. Every one
+    // it read is declared below — an edited style module has to invalidate its
+    // importers, or they keep compiling against the value it used to have.
+    const crossModule = resolveNextCrossModule({
+        filename: loaderContext.resourcePath,
+        source,
+        root: context.root,
+        importedStaticSz: options.importedStaticSz,
+    });
     const transform = transformNextSource({
         source,
         filename: loaderContext.resourcePath,
         parserMode: options.parserMode ?? 'rust',
-        compilerOptions: options.compilerOptions,
+        compilerOptions: withCrossModuleStatics(options.compilerOptions, crossModule.statics),
         cacheRoot: resolveTransformCacheDir(
             context.root,
             path.relative(context.root, context.cacheDir),
@@ -126,6 +154,34 @@ export function runNextTurboLoader(
         allowBabelFallback: options.allowBabelFallback,
     });
     const injected = injectNextRuntimeImports(transform.result.code, transform.result);
+    // szcn theme groups. The other lanes import a virtual module the plugin
+    // resolves; a loader cannot, so a real file is written once per project and
+    // imported by path. Only modules that can call szcn pay for it, and the
+    // import goes AFTER any `use client` directive, which must stay first.
+    const callsSzcn = transform.result.usesSzcn || /\bszcn\s*\(/.test(source);
+    const themeGroups = callsSzcn
+        ? ensureThemeGroupsFile(context.root, path.join(context.root, '.csszyx'))
+        : { file: null, watch: [] };
+    // Turbopack forwards a loader's file dependencies to its watcher (its
+    // webpack-loader bridge reports `fileDependencies` back over IPC), so
+    // declaring the project's stylesheets here is what makes a `@theme` edit
+    // regenerate the registration DURING a dev session instead of at the next
+    // build. Only author-owned stylesheets are declared — never the generated
+    // module, which the loader itself writes.
+    for (const stylesheet of themeGroups.watch) loaderContext.addDependency?.(stylesheet);
+    // The other half of cross-module resolution. Turbopack forwards these the
+    // same way it forwards the stylesheets above, so editing a style module
+    // re-runs the loader for every file that read it.
+    for (const provider of normalizeProviderPaths(crossModule.providers)) {
+        loaderContext.addDependency?.(provider);
+    }
+    const code =
+        themeGroups.file === null
+            ? injected.code
+            : insertAfterUseDirective(
+                  injected.code,
+                  `import '${themeGroupsSpecifier(loaderContext.resourcePath, themeGroups.file)}';\n`,
+              );
     const metadata = collectNextTransformMetadata(
         transform.result,
         source,
@@ -167,16 +223,20 @@ export function runNextTurboLoader(
     // materialization cycle. Registering them as Turbopack dependencies would
     // make every loader call invalidate every other loader call's cache as
     // soon as the cycle rewrites them, producing a re-run cascade that only
-    // converges because Turbopack content-hash-dedupes the loader output. We
-    // intentionally register no dependencies and let Tailwind v4's PostCSS
-    // `@source` watcher pick up the safelist file independently.
+    // converges because Turbopack content-hash-dedupes the loader output. None
+    // of them is registered; Tailwind v4's PostCSS `@source` watcher picks up
+    // the safelist file independently.
+    //
+    // The stylesheets above are the opposite case and ARE registered: they are
+    // author-owned INPUTS the emitted code genuinely depends on, not outputs
+    // this loader rewrites, so watching them converges instead of cascading.
     return {
-        code: injected.code,
+        code,
         context,
         transform,
         shardPath,
         materialized,
-        dependencies: [],
+        dependencies: themeGroups.watch,
     };
 }
 

@@ -7,6 +7,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { build } from 'vite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { vitePlugin } from '../src/unplugin.js';
@@ -16,6 +17,25 @@ afterEach(() => {
     for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
     vi.restoreAllMocks();
 });
+
+/**
+ * Create a throwaway project root that survives being handed to a bundler.
+ *
+ * On macOS `os.tmpdir()` is `/var/folders/…`, a symlink to `/private/var/…`.
+ * Vite resolves the html entry to its real path but keeps the configured root
+ * as written, so the relative asset name it derives climbs out of the output
+ * directory and rolldown rejects it. Resolving the root once here keeps both
+ * halves on the same side of the symlink; on Linux, where the two already
+ * agree, this changes nothing.
+ *
+ * @param prefix - Directory name prefix for the temporary root.
+ * @returns Absolute, symlink-resolved root, registered for cleanup.
+ */
+function makeTempRoot(prefix: string): string {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+    tempDirs.push(root);
+    return root;
+}
 
 type PrePlugin = {
     configResolved?: (c: { root: string; command: string }) => void;
@@ -42,8 +62,7 @@ describe('production option validation', () => {
 
 describe('compileSources resolution warning', () => {
     it('warns once about entries that do not resolve to a directory', () => {
-        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-compilesrc-'));
-        tempDirs.push(root);
+        const root = makeTempRoot('csszyx-compilesrc-');
         fs.mkdirSync(path.join(root, 'src'), { recursive: true });
 
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -63,5 +82,73 @@ describe('compileSources resolution warning', () => {
         expect(message).toContain('compileSources');
         expect(message).toContain('did not resolve to a');
         expect(message).toContain('does-not-exist');
+    });
+});
+
+describe('manifest emission', () => {
+    /**
+     * Build the fixture and list what landed in the output directory.
+     *
+     * @param emitManifest - The option under test, or undefined for the default.
+     * @returns Emitted asset file names.
+     */
+    const buildAssets = async (emitManifest?: boolean): Promise<string[]> => {
+        const root = makeTempRoot('csszyx-manifest-');
+        fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+        fs.writeFileSync(
+            path.join(root, 'index.html'),
+            '<!doctype html><html><body><script type="module" src="/src/main.ts"></script></body></html>',
+            'utf8',
+        );
+        fs.writeFileSync(
+            path.join(root, 'src/main.ts'),
+            "export const A = () => ({ cls: 'x' });\ndocument.body.textContent = String(A().cls);\n",
+            'utf8',
+        );
+        await build({
+            root,
+            logLevel: 'silent',
+            plugins: [
+                vitePlugin(
+                    emitManifest === undefined
+                        ? { build: { parser: 'oxc', cache: false } }
+                        : { build: { emitManifest, parser: 'oxc', cache: false } },
+                ),
+            ],
+            build: { minify: false },
+        });
+        return fs.readdirSync(path.join(root, 'dist'));
+    };
+
+    it('does not emit the manifest by default', async () => {
+        // Only `@csszyx/dynamic` reads it, and it carries the whole class census
+        // to answer questions about the few classes `dynamic()` renders — on a
+        // measured 668-class census that is ~2 kB gz against a few hundred bytes
+        // of injection spared. Off unless asked for.
+        expect(await buildAssets()).not.toContain('csszyx-manifest.json');
+    }, 120_000);
+
+    it('emits it when the build asks for it', async () => {
+        expect(await buildAssets(true)).toContain('csszyx-manifest.json');
+    }, 120_000);
+});
+
+describe('unknown option reporting', () => {
+    it('warns when the plugin is handed an option it will never read', () => {
+        // The reported case: `compilePackages` became `compileSources` before
+        // 0.12.0, and passing the old name produced no CSS for the workspace
+        // package and not one word from the build.
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vitePlugin({ compilePackages: ['vui'] } as never);
+        const logged = warn.mock.calls.map(call => call.map(String).join(' ')).join('\n');
+        expect(logged).toContain('not recognized');
+        expect(logged).toContain('`compilePackages` was replaced by `compileSources`');
+    });
+
+    it('stays silent for a config that only uses real options', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vitePlugin({ compileSources: ['../packages/vui'], quiet: 'nudges' });
+        const logged = warn.mock.calls.map(call => call.map(String).join(' ')).join('\n');
+        expect(logged).not.toContain('not recognized');
     });
 });

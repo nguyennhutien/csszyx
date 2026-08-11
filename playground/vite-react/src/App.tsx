@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
+import { ThemeGroupsFixture } from './ThemeGroupsFixture';
 import { RecoveryFixture } from './Recovery';
 import { VerificationComponent } from './Verification';
 import { SzvStandalone } from './SzvStandalone';
@@ -69,6 +70,10 @@ function App() {
 
   if (page === 'recovery') {
     return <RecoveryFixture />;
+  }
+
+  if (page === 'theme-groups') {
+    return <ThemeGroupsFixture />;
   }
 
   return (

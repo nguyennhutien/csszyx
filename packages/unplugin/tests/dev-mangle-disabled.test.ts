@@ -1,8 +1,7 @@
-import { homedir } from 'node:os';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { vitePlugin } from '../src/unplugin.js';
+import { freshFixtureRoot } from './fixture-root.js';
 
 /**
  * Mangling is a production bundle-size optimization with no value in a dev server,
@@ -29,7 +28,7 @@ async function injectedMangleMap(command: 'serve' | 'build'): Promise<string> {
         return fn ? await fn.apply(ctx, args) : undefined;
     };
 
-    const root = resolve(homedir(), '.cache/csszyx-tests/dev-mangle');
+    const root = freshFixtureRoot('dev-mangle');
     await call('configResolved', { root, command });
     await call(
         'transform',

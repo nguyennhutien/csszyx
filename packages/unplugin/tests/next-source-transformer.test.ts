@@ -162,6 +162,36 @@ describe('Next source transformer', () => {
             ),
         ).toThrow();
     });
+    it('will not serve a file the output built against a different table', () => {
+        // The registry slice a file compiled against is part of its identity.
+        // Sharing one key across two tables serves an importer the output built
+        // from the value its provider used to have — the failure this lane
+        // refused to risk before it resolved anything at all.
+        const root = tempRoot();
+        const cacheRoot = resolveTransformCacheDir(root, '.csszyx/cache');
+        const source = "import { rowSz } from './styles';\nconst A=()=> <div sz={{ p: 4 }} />;";
+        const against = (table: unknown) => ({
+            ...input({ source }),
+            cacheRoot,
+            compilerOptions: { crossModuleStatics: table },
+        });
+        const table = { './styles': { rowSz: { base: { p: 1 } } } };
+
+        // Warm it, then prove the cache is live for an identical call — without
+        // this the misses below would prove nothing.
+        transformNextSource(against(table));
+        expect(transformNextSource(against(table)).cacheStatus).toBe('hit');
+
+        // Same source, same everything else. Only the table differs.
+        expect(
+            transformNextSource(against({ './styles': { rowSz: { base: { p: 2 } } } })).cacheStatus,
+        ).not.toBe('hit');
+
+        // And a run with no table at all is a third identity, not the first.
+        expect(transformNextSource({ ...input({ source }), cacheRoot }).cacheStatus).not.toBe(
+            'hit',
+        );
+    });
 });
 
 function packageVersion(packageJsonPath: string): string {

@@ -28,6 +28,7 @@ export {
     MIGRATION_NOTES,
     NEGATIVE_VALUE_KEYS,
     PROPERTY_MAP,
+    SPECIAL_VARIANTS,
     SUGGESTION_MAP,
     VALUE_SUGGESTIONS,
 } from './tooling.generated';

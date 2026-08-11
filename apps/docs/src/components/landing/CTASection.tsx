@@ -200,7 +200,7 @@ export default function CTASection() {
             fontFamily: 'display',
             transition: 'all',
             duration: 500,
-            ease: 'ease-in-out',
+            ease: 'in-out',
             cursor: 'pointer',
           }}
         >

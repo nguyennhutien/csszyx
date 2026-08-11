@@ -162,3 +162,42 @@ fn a_malformed_statics_payload_only_costs_the_optimization() {
     assert!(!result.code.contains("__szvT_"));
     assert!(result.code.contains("cardSz({ pad: 'sm' })"));
 }
+
+#[test]
+fn a_factory_call_inside_an_sz_attribute_keeps_the_runtime_path() {
+    // The sz attribute is replaced by a generated expression, so there is no
+    // range left to splice the pick into. This used to abort the process at
+    // `string_wizard` with no file name; the correct outcome is the runtime
+    // path, which the JS lanes reach through the same rule.
+    let source = format!(
+        "{IMPORTS}{FACTORY}export const P = () => (\n    <div className=\"base\" sz={{[{{ p: 4 }}, szr(cardSz({{ pad: 'sm' }}))]}}>p</div>\n);\n"
+    );
+    let result = run(&source);
+    assert!(
+        result.code.contains("_szPart(szr(cardSz({ pad: 'sm' })))"),
+        "the authored call must survive untouched, got:\n{}",
+        result.code
+    );
+    assert!(!result.code.contains("__szvPick"));
+    assert!(!result.code.contains("__szvT_"));
+    // The argument is unproven, so the slim core entry must not be claimed.
+    assert!(!result.code.contains("@csszyx/runtime/core"));
+}
+
+#[test]
+fn a_factory_call_in_a_class_attribute_beside_sz_still_precompiles() {
+    // The same element carries both rewrites. Merging around the authored
+    // expression instead of over it leaves the call site spliceable.
+    let source = format!(
+        "{IMPORTS}{FACTORY}export const P = () => (\n    <div className={{szr(cardSz({{ pad: 'sm' }}))}} sz={{{{ position: 'fixed' }}}}>p</div>\n);\n"
+    );
+    let result = run(&source);
+    assert!(
+        result
+            .code
+            .contains("_szMerge(szr(\"rounded-lg p-2 bg-blue-500 text-white\"), \"fixed\")"),
+        "the precompile and the sz merge must compose, got:\n{}",
+        result.code
+    );
+    assert!(result.code.contains("@csszyx/runtime/core"));
+}

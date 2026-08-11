@@ -26,6 +26,7 @@ export interface NextPrebuildCommandOptions {
     cacheDir?: string;
     pattern?: string;
     extraIgnore?: readonly string[];
+    importedStaticSz?: boolean;
     json?: boolean;
 }
 
@@ -64,6 +65,7 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             parserMode,
             safelistOutputFile: options.outputFile,
             cacheDir: options.cacheDir,
+            importedStaticSz: options.importedStaticSz,
             config: { mangleVars: false },
             // Versions intentionally omitted: runNextPrebuild's package.json
             // fallback reads the real installed @csszyx/unplugin and

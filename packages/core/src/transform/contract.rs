@@ -29,6 +29,13 @@ pub struct TransformOptions {
     /// Cross-module szv registry payload, ordered-pair JSON from the bundler.
     #[serde(default)]
     pub cross_module_statics_json: Option<String>,
+    /// Cross-module static sz OBJECT registry payload, ordered-pair JSON from
+    /// the bundler. Kept apart from the szv payload because an szv config is a
+    /// variant table the engine compiles and picks from, while an sz object is
+    /// a value it lowers — one untagged map would leave the decoder guessing
+    /// which machinery applies.
+    #[serde(default)]
+    pub cross_module_sz_objects_json: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.

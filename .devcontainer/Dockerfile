@@ -19,7 +19,15 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         ripgrep
 
 # mise — manages node, pnpm, and other tools via .mise.toml
-RUN curl https://mise.run | sh
+#
+# Pinned deliberately. mise ships CalVer (year.month.patch), so a release that
+# changes internals carries no major-version signal, and this line only re-runs
+# when the image is rebuilt — an unpinned installer therefore turns any rebuild
+# into an unannounced tool upgrade. 2026.8.x replaced the npm backend with a
+# pnpm-style store, relocating every `npm:` tool's executable and breaking the
+# scripts under .devcontainer/ that resolve those paths. Bump this on purpose,
+# then rebuild and verify, rather than discovering the change mid-task.
+RUN curl https://mise.run | MISE_VERSION=v2026.8.1 sh
 ENV PATH="/root/.local/bin:/root/.local/share/mise/shims:${PATH}"
 RUN echo 'eval "$(mise activate bash)"' >> /root/.bashrc \
     && echo 'eval "$(mise activate zsh)"' >> /root/.zshrc

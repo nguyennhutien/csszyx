@@ -6,7 +6,7 @@
  * understand and generate csszyx sz props.
  *
  * Architecture follows Tier-1 Proxy patterns:
- * - 7 Stateless Sandbox tools (no destructive edits)
+ * - 8 Stateless Sandbox tools (no destructive edits)
  * - 3 Reference Data Endpoints
  * - Unified Single Source of Truth via @csszyx/compiler and @csszyx/unplugin
  *
@@ -38,6 +38,7 @@ const VERSION = packageJson.version;
 import { getPrompt, listPrompts } from './prompts/index.js';
 import { listResources, readResource } from './resources/index.js';
 import { batchSchema, handleBatch } from './tools/batch.js';
+import { compilePreviewSchema, handleCompilePreview } from './tools/compile-preview.js';
 import { expandSchema, handleExpand } from './tools/expand.js';
 import { handleLookup, lookupSchema } from './tools/lookup.js';
 import { handleMigrate, migrateSchema } from './tools/migrate.js';
@@ -190,6 +191,27 @@ export const TOOLS = [
             required: ['css'],
         },
     },
+    {
+        name: 'csszyx_compile_preview',
+        description:
+            'Compile a whole SOURCE MODULE and report what csszyx made of it: the rewritten code, the classes, the diagnostics, and the runtime helpers left over. Use this when the question is about the code AROUND the sz prop — whether a szv factory precompiles, whether a value stays dynamic, whether a key is unknown. For a bare sz object, use csszyx_expand instead.',
+        inputSchema: {
+            type: 'object' as const,
+            properties: {
+                source: {
+                    type: 'string' as const,
+                    description:
+                        'A source module, including its imports and component. Example: export const A = () => <div sz={{ p: 4 }} />;',
+                },
+                filename: {
+                    type: 'string' as const,
+                    description:
+                        'Filename to attribute diagnostics to. The extension selects the parser, so use .tsx for JSX. Defaults to preview.tsx.',
+                },
+            },
+            required: ['source'],
+        },
+    },
 ];
 
 // ============================================================================
@@ -212,6 +234,10 @@ const TOOL_HANDLERS: Record<
     csszyx_migrate: { schema: migrateSchema, handler: handleMigrate as ToolHandler },
     csszyx_batch: { schema: batchSchema, handler: handleBatch as ToolHandler },
     csszyx_theme: { schema: themeSchema, handler: handleTheme as ToolHandler },
+    csszyx_compile_preview: {
+        schema: compilePreviewSchema,
+        handler: handleCompilePreview as ToolHandler,
+    },
 };
 
 // The low-level request handlers intentionally preserve the established wire

@@ -575,6 +575,26 @@ import { variants } from './styles';
 
 For style maps keyed at runtime, use [`szv()`](/docs/szv) (variants are
 declared statically) or [`dynamic()`](/docs/dynamic) (injects CSS at runtime).
+
+csszyx reports both shapes while it builds. When the value comes from an
+**import**, that report is kept in **production** builds too and survives
+`quiet: 'nudges'` — the compiler went looking for a module-level value, could
+not read it, and no class was collected anywhere, which is a build result
+rather than style advice. Reading imported objects is on by default
+([`build.importedStaticSz`](/docs/reference/config/#imported-static-sz-objects-importedstaticsz)),
+so the report means the import did not qualify — or that the setting was
+turned off.
+
+Every other unresolved shape stays advisory and dev-only, including a
+forwarded prop:
+
+```tsx
+// Advisory: `sz` belongs to the CALLER, whose literal is collected where it
+// is written. Forwarding it this way is the supported wrapper pattern.
+function Box({ sz }: { sz?: SzPropValue }) {
+    return <div sz={sz} />;
+}
+```
 :::
 
 ## Shared Style Objects

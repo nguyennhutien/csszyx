@@ -6,8 +6,14 @@
  * like hover, focus, etc.
  */
 
-import { hasSlashOpacity, isValidColorString } from './color-validation.js';
+import {
+    hasSlashOpacity,
+    isValidColorString,
+    warnStringColorOpacity,
+    warnUnrecognizedColor,
+} from './color-validation.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
+import { szDevWarningsEnabled } from './sz-dev-warnings.js';
 import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 
 // Re-exported so the runtime (which imports from `@csszyx/compiler/browser`,
@@ -59,8 +65,16 @@ export function deepMergeSzObjects(target: SzObject, source: SzObject): SzObject
     return result;
 }
 
-/** Sides of the linear mask slot; each writes its own `--tw-mask-<side>` variable. */
-const MASK_SIDES: readonly string[] = ['t', 'r', 'b', 'l', 'x', 'y'];
+/**
+ * Sides of the linear mask slot; each writes its own `--tw-mask-<side>`
+ * variable.
+ *
+ * Exported because the editor tooling has to offer the same six names, and a
+ * second hand-written copy there would drift: a side present in one list and
+ * absent from the other makes the completion and the compiler disagree about
+ * what is legal.
+ */
+export const MASK_SIDES: readonly string[] = ['t', 'r', 'b', 'l', 'x', 'y'];
 
 /**
  * Sub-keys of one property that write the SAME CSS custom property, so only one
@@ -1402,26 +1416,54 @@ function needsArbitraryBrackets(value: string): boolean {
     return (
         isArbitraryLength(v) ||
         v.startsWith('#') || // Hex colors
-        v.startsWith('rgb') || // RGB colors
-        v.startsWith('hsl') || // HSL colors
-        v.includes('calc(') || // Calculations
-        v.includes('var(') || // CSS variables (old syntax)
-        v.includes('attr(') || // attr() function
-        v.includes('url(') || // URLs
-        v.includes('clamp(') || // Clamp
-        v.includes('min(') || // Min
-        v.includes('max(') || // Max
-        // Gradient functions. A mask or background taking one as a raw value
-        // needs brackets like every other CSS function; without them the class
-        // is `mask-linear-gradient(…)`, which Tailwind does not serve.
-        // One probe, not six: every gradient function name ends in
-        // `-gradient(`, and the three `repeating-*` spellings contain their
-        // base name anyway, so the extra checks only re-scanned the value on
-        // the common no-gradient path. The Rust lane already carries the
-        // three-check form with the same reasoning.
-        v.includes('-gradient(') ||
+        containsCssFunctionCall(v) ||
         v.includes(' ') // Values with spaces need brackets
     );
+}
+
+/**
+ * Whether a value contains a CSS function call, which cannot appear bare in a
+ * class name.
+ *
+ * This replaces a hand-kept list of function names, which had done what such
+ * lists do: the native engine carried `oklch()`, `lab()`, `lch()` and `hwb()`
+ * that this one did not, and `env()` was in neither, so
+ * `pt: 'env(safe-area-inset-top)'` compiled to a class Tailwind does not
+ * serve while `pt: 'calc(…)'` compiled correctly. A `(` preceded by an
+ * identifier that starts with a letter is a function call, whatever its name.
+ *
+ * Three shapes must stay bare. The build-time call `--spacing(4)` has a `--`
+ * name head. The CSS-variable shorthand `(--x)` has no name at all. And a
+ * utility value ending in that shorthand — `thumb-(--c)`, `size-(--s)` — puts
+ * a dash immediately before the paren and `--` immediately after it, which no
+ * function call ever does: `var(--x)` has a name character there.
+ *
+ * A single leading dash is a negative value rather than a build-time call, so
+ * `-linear-gradient(…)` is still a function.
+ *
+ * The scan is linear and allocation-free. Identifier runs walked backwards
+ * from two different `(` cannot overlap — a `(` is not an identifier
+ * character, so each walk stops at or after the previous one.
+ *
+ * @param value - Candidate sz string value, outer brackets already stripped.
+ * @returns Whether a CSS function call appears anywhere in the value.
+ */
+function containsCssFunctionCall(value: string): boolean {
+    for (let at = value.indexOf('('); at > 0; at = value.indexOf('(', at + 1)) {
+        if (value.codePointAt(at - 1) === 45 && value.startsWith('--', at + 1)) {
+            continue;
+        }
+        let start = at;
+        // `start > 0` is what puts the index in range, so the read has no absent
+        // case: asserted rather than given a fallback arm no input can reach.
+        while (start > 0 && isAsciiIdentifierCode(value.codePointAt(start - 1) as number)) {
+            start -= 1;
+        }
+        if (start < at && !value.startsWith('--', start)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -1988,24 +2030,6 @@ let szTransformDepth = 0;
 let szWarnLocation: string | undefined;
 
 /**
- * Whether dev-mode sz diagnostics should be printed. True in development, in a
- * Node/SSR context only (never the browser client — the warnings would double a
- * server-side render), and unless `CSSZYX_QUIET_SZ_WARNINGS=1` mutes them. The
- * opt-out lets a team that prefers a quiet dev loop rely on `csszyx check`
- * instead; the default stays ON because an unknown/aliased key is a
- * dropped-class correctness signal, not a style nudge.
- *
- * @returns Whether a dev-mode sz warning should be printed.
- */
-function szDevWarningsEnabled(): boolean {
-    return (
-        process.env.NODE_ENV !== 'production' &&
-        typeof window === 'undefined' &&
-        process.env.CSSZYX_QUIET_SZ_WARNINGS !== '1'
-    );
-}
-
-/**
  * Whether the one-time "run a full project scan" hint has been shown. Build-time
  * unknown-key warnings are lazy (a file warns only when its route is requested),
  * so the first one points the developer at `csszyx check` for a complete pass.
@@ -2363,24 +2387,8 @@ function validateColorPropertyString(key: string, value: string): boolean {
         return false;
     }
     if (isValidColorString(value)) return true;
-    if (szDevWarningsEnabled()) {
-        console.warn(
-            `[csszyx] "${key}: '${value}'" is not a recognized color value and will be ignored. ` +
-                'Use a Tailwind color ("blue-500"), CSS variable ("--my-color"), ' +
-                'hex/rgb/hsl ("#ff0000"), or object form ({ color: "blue-500", op: 50 }).',
-        );
-    }
+    warnUnrecognizedColor(key, value);
     return false;
-}
-
-/** Warns that slash opacity requires color-object syntax. */
-function warnStringColorOpacity(key: string, value: string): void {
-    if (!szDevWarningsEnabled()) return;
-    const slash = value.indexOf('/');
-    console.warn(
-        `[csszyx] "${key}: '${value}'" — string slash opacity is not supported. ` +
-            `Use object form: { color: '${value.slice(0, slash)}', op: ${value.slice(slash + 1)} }.`,
-    );
 }
 
 /** Collects direct, named, and arbitrary container-query variants. */
@@ -3478,6 +3486,16 @@ function collectFallbackProperty(
         classes.push(`${prefix}leading-[${value}]`);
         return;
     }
+    // Tailwind v4 spells font weights through the `--font-weight-*` theme
+    // namespace, so the utility is always a NAME: it serves no `font-<number>`
+    // at all, not even the nine standard steps. Every numeric weight used to
+    // emit a bare class that styled nothing. The bracket carries the literal
+    // the author wrote, which is exactly what `{ weight: N }` asks for, and
+    // needs no theme declaration. Same reasoning as the leading ratio above.
+    if (rawKey === 'weight' && typeof value === 'number') {
+        classes.push(`${prefix}${key}-[${value}]`);
+        return;
+    }
     if (typeof value === 'number') {
         warnDeadSpacingStep(rawKey, value);
         classes.push(`${prefix}${formatNumericUtility(key, value)}`);
@@ -3543,6 +3561,7 @@ export function __resetSzWarnDedupForTests(): void {
     _warnedSpacingSteps.clear();
     _warnedOpacityTokens.clear();
     _warnedPropertyObjects.clear();
+    warnedRemovedSugar.clear();
 }
 
 /**
@@ -3622,12 +3641,25 @@ function collectNestedVariant(
     if (nestedResult.className) classes.push(nestedResult.className);
 }
 
-/** Suppresses a removed boolean shorthand and emits its migration warning. */
+/**
+ * Suppresses a removed boolean shorthand and emits its migration warning.
+ *
+ * Gated like {@link warnAlignmentValue} — on the build mode alone. The general
+ * dev gate also requires `typeof window === 'undefined'`, which silences the
+ * browser console, and a removed shorthand reaching a runtime sz object is
+ * exactly the case with no build log to read: the key is dropped and the
+ * element renders unstyled with nothing said anywhere.
+ *
+ * @param rawKey - The authored sz key.
+ * @param value - Its value; only `true` is the removed shorthand.
+ * @returns Whether the key was a removed shorthand and produced no class.
+ */
 function collectRemovedBooleanSugar(rawKey: string, value: unknown): boolean {
     if (value !== true) return false;
     const removed = REMOVED_BOOLEAN_SUGAR[rawKey];
     if (!removed) return false;
-    if (szDevWarningsEnabled()) {
+    if (process.env.NODE_ENV !== 'production' && !warnedRemovedSugar.has(rawKey)) {
+        warnedRemovedSugar.add(rawKey);
         console.warn(
             `[csszyx] "${rawKey}" boolean sugar was removed. Use ` +
                 `{ ${removed.key}: '${removed.value}' } instead, or run \`csszyx migrate\`.`,
@@ -3635,6 +3667,9 @@ function collectRemovedBooleanSugar(rawKey: string, value: unknown): boolean {
     }
     return true;
 }
+
+/** Removed shorthands already warned about, so a re-render cannot spam. */
+const warnedRemovedSugar = new Set<string>();
 
 /** Collects string shortcuts that must run before property-name resolution. */
 function collectUnresolvedStringProperty(

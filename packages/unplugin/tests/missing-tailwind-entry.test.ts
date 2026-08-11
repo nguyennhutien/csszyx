@@ -3,47 +3,94 @@ import { describe, expect, it } from 'vitest';
 import {
     emitMissingCssFallback,
     missingTailwindEntryMessage,
+    resolveQuietMode,
     shouldEmitMissingCssFallback,
     shouldEmitWarning,
     shouldWarnMissingTailwindEntry,
 } from '../src/unplugin.js';
 
-// Warning-emission policy: `quiet` mutes everything; `devOnly` usage nudges are
-// suppressed in production so csszyx-as-a-dependency doesn't noise a host app's
-// prod build. csszyx-output-defect warnings (devOnly=false) stay in every mode.
+// Warning-emission policy: `quiet: true` mutes everything; `'nudges'` mutes
+// exactly the `devOnly` usage nudges, which are also the ones suppressed in
+// production so csszyx-as-a-dependency doesn't noise a host app's prod build.
+// csszyx-output-defect warnings (devOnly=false) stay in every mode but `'all'`.
+describe('resolveQuietMode', () => {
+    it('maps the authored values onto the three modes', () => {
+        expect(resolveQuietMode(true)).toBe('all');
+        expect(resolveQuietMode('nudges')).toBe('nudges');
+        expect(resolveQuietMode(false)).toBe('off');
+        expect(resolveQuietMode(undefined)).toBe('off');
+    });
+
+    it('passes an already-resolved mode through unchanged', () => {
+        // The gates are exported from the package entry and accept either
+        // form, so normalization has to be idempotent.
+        expect(resolveQuietMode('all')).toBe('all');
+        expect(resolveQuietMode('off')).toBe('off');
+    });
+});
+
+describe('the gates survive an untyped boolean caller', () => {
+    // The types now take the resolved mode, which is the honest signature. But
+    // these are exported from the package entry, and a JavaScript caller has no
+    // compiler to stop it passing `true` — which must not mean `off`, or quiet
+    // would be set with warnings still printing.
+    const missingCss = 'szv catalog at 1:1: factory config cannot be resolved at build time';
+    const untyped = <T>(value: unknown): T => value as T;
+
+    it('treats true exactly as all', () => {
+        expect(shouldEmitWarning(untyped('true' && true), false, false)).toBe(false);
+        expect(shouldEmitMissingCssFallback(untyped(true), missingCss)).toBe(false);
+    });
+
+    it('treats false and undefined exactly as off', () => {
+        expect(shouldEmitWarning(untyped(false), false, false)).toBe(true);
+        expect(shouldEmitWarning(untyped(undefined), false, false)).toBe(true);
+        expect(shouldEmitMissingCssFallback(untyped(false), missingCss)).toBe(true);
+    });
+});
+
 describe('shouldEmitWarning', () => {
-    it('mutes every warning when quiet is set, regardless of mode', () => {
-        expect(shouldEmitWarning(true, false, false)).toBe(false);
-        expect(shouldEmitWarning(true, false, true)).toBe(false);
-        expect(shouldEmitWarning(true, true, false)).toBe(false);
+    it('mutes every warning when quiet is all, regardless of mode', () => {
+        expect(shouldEmitWarning('all', false, false)).toBe(false);
+        expect(shouldEmitWarning('all', false, true)).toBe(false);
+        expect(shouldEmitWarning('all', true, false)).toBe(false);
     });
 
     it('keeps a non-devOnly (output-defect) warning in every mode', () => {
-        expect(shouldEmitWarning(false, false, false)).toBe(true);
-        expect(shouldEmitWarning(false, false, true)).toBe(true);
+        expect(shouldEmitWarning('off', false, false)).toBe(true);
+        expect(shouldEmitWarning('off', false, true)).toBe(true);
+        expect(shouldEmitWarning('nudges', false, false)).toBe(true);
+        expect(shouldEmitWarning('nudges', false, true)).toBe(true);
     });
 
-    it('suppresses a devOnly (usage-nudge) warning only in production', () => {
-        expect(shouldEmitWarning(false, true, false)).toBe(true); // dev → shown
-        expect(shouldEmitWarning(false, true, true)).toBe(false); // prod → silent
+    it('suppresses a devOnly (usage-nudge) warning in production or under nudges', () => {
+        expect(shouldEmitWarning('off', true, false)).toBe(true); // dev → shown
+        expect(shouldEmitWarning('off', true, true)).toBe(false); // prod → silent
+        expect(shouldEmitWarning('nudges', true, false)).toBe(false);
     });
 });
 
 describe('shouldEmitMissingCssFallback', () => {
     const missingCss = 'szv catalog at 1:1: factory config cannot be resolved at build time';
 
-    it('emits only actionable missing-CSS diagnostics when not quiet', () => {
-        expect(shouldEmitMissingCssFallback(false, missingCss)).toBe(true);
-        expect(shouldEmitMissingCssFallback(true, missingCss)).toBe(false);
-        expect(shouldEmitMissingCssFallback(false, 'ordinary diagnostic')).toBe(false);
+    it('emits only actionable missing-CSS diagnostics when not fully quiet', () => {
+        expect(shouldEmitMissingCssFallback('off', missingCss)).toBe(true);
+        expect(shouldEmitMissingCssFallback('all', missingCss)).toBe(false);
+        expect(shouldEmitMissingCssFallback('off', 'ordinary diagnostic')).toBe(false);
+    });
+
+    it('survives the nudges mode, which is the whole point of that mode', () => {
+        expect(shouldEmitMissingCssFallback('nudges', missingCss)).toBe(true);
     });
 
     it('routes an eligible diagnostic through the supplied channel', () => {
         const emitted: string[] = [];
-        emitMissingCssFallback(false, missingCss, '/src/Card.tsx', message =>
+        emitMissingCssFallback('off', missingCss, '/src/Card.tsx', message =>
             emitted.push(message),
         );
-        emitMissingCssFallback(true, missingCss, '/src/Card.tsx', message => emitted.push(message));
+        emitMissingCssFallback('all', missingCss, '/src/Card.tsx', message =>
+            emitted.push(message),
+        );
         expect(emitted).toEqual([`[csszyx] /src/Card.tsx\n  ${missingCss}`]);
     });
 });

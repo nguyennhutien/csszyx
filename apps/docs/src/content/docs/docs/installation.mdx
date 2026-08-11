@@ -3,7 +3,7 @@ title: Installation
 description: How to install and configure CSSzyx in your project.
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Install
 
@@ -129,6 +129,34 @@ Because Turbopack never mangles, the hybrid-mangle collision warning and
 `production.mangleExclude` are Vite/Webpack concerns only — there is nothing to
 disable or reserve on Turbopack.
 :::
+
+#### What the Turbopack lane can and cannot use
+
+csszyx's Turbopack support is a webpack-compatible loader wired through
+`turbopack.rules`, so it is bounded by how much of the webpack loader API
+Turbopack implements. This is the state csszyx builds on, taken from the
+Next.js 16 documentation and validated against **Next.js 16.2.x**, the version
+the csszyx playground pins and CI runs.
+
+| Capability | Status | What csszyx does with it |
+| --- | --- | --- |
+| `turbopack` config key | Named `turbopack` from **15.3**; was `experimental.turbo` in **13.0.0–15.2.x**, removed in **16** | `csszyxTurbopack()` writes this block |
+| `turbopack.rules` loaders | Supported | Runs the `sz` transform |
+| File dependencies (`this.addDependency`) | Supported — Turbopack reports a loader's file dependencies back to its watcher | Watches your `@theme` stylesheets so `szcn` groups refresh live |
+| `resolveAlias` | Supported | Not used — the theme registration imports a real relative path, so no app config is needed |
+| `this.emitFile` | **Not supported** | Why the generated registration is written to `.csszyx/` directly instead of emitted |
+| `this.mode` | **Not supported** | csszyx falls back to `NODE_ENV`, so dev/production detection is unaffected |
+| `this.importModule` / `this.loadModule` | **Not supported** | Unused |
+| `this.fs` | Partial — `readFile` only | Unused |
+| Deep bundle rewrite hook | Not exposed | Why production mangling stays Webpack-only |
+
+<Aside type="note" title="Versions the table does and does not pin">
+The `turbopack` config rename is dated because Next.js documents it. The
+per-method loader statuses are the ones Next.js 16 documents; Next.js does not
+publish the release each of them landed in, so treat them as "true on 16.2.x,
+verified", not as a lower bound. If you run an older 15.x, check the loader
+behaviour before relying on it.
+</Aside>
 
 ### Next.js Turbopack setup
 

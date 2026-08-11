@@ -45,7 +45,7 @@ ensure_activation /root/.zshrc zsh
 # Layer 2: mise-managed tools. Public containers repair project tools only;
 # private personal containers opt into the AI CLI entries from .mise.toml.
 # `mise install` is idempotent and fast when everything is already present.
-REQUIRED_MISE_TOOLS=(node pnpm rust cargo:cocogitto)
+REQUIRED_MISE_TOOLS=(node pnpm rust cargo:cocogitto github:cli/cli)
 if [ "${CSSZYX_PERSONAL_DEVCONTAINER:-0}" = "1" ]; then
     REQUIRED_MISE_TOOLS+=(npm:@anthropic-ai/claude-code npm:@openai/codex)
 fi
@@ -72,7 +72,7 @@ if [ "$MISE_TOOLS_COMPLETE" -ne 1 ]; then
 fi
 
 # Layer 3: verify each runtime tool actually resolves on PATH.
-RUNTIME_TOOLS=(node pnpm cargo wasm-pack cog)
+RUNTIME_TOOLS=(node pnpm cargo wasm-pack cog gh)
 if [ "${CSSZYX_PERSONAL_DEVCONTAINER:-0}" = "1" ]; then
     RUNTIME_TOOLS+=(claude codex)
 fi

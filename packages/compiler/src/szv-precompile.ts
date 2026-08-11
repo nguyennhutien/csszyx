@@ -498,6 +498,53 @@ export interface CommentSpan {
 }
 
 /**
+ * A source range with offsets that may be absent.
+ *
+ * Both lanes hand this module raw AST nodes, and Babel types `start`/`end` as
+ * nullable because a synthesized node has no source position. Accepting the
+ * node as-is keeps the null handling in one tested place instead of at every
+ * recording site.
+ */
+export interface MaybeSpan {
+    /** Offset of the range's first character, when known. */
+    start?: number | null;
+    /** Offset one past the range's last character, when known. */
+    end?: number | null;
+}
+
+/**
+ * Whether a factory call sits inside a source range the sz rewrite replaces.
+ *
+ * All three engines splice the precompiled pick over the call's own bytes.
+ * When those bytes are inside an `sz` attribute — `sz={[{ p: 4 }, szr(f())]}`
+ * — the sz rewrite has already replaced that whole range with a generated
+ * expression, and neither span-based engine can edit text it has replaced:
+ * magic-string throws, string_wizard aborts the process without naming the
+ * file, and one oxc path emitted malformed JSX with no error at all. So the
+ * call keeps its runtime path, in every engine, and the existing szr fallback
+ * diagnostic reports it.
+ *
+ * A range or call with unknown offsets never matches: an absent position is
+ * not evidence of an overlap, and losing the precompile for it would be a
+ * silent regression rather than a safety property.
+ *
+ * @param call - Call node carrying its source offsets.
+ * @param rewritten - Ranges the sz rewrite replaces wholesale.
+ * @returns True when the call cannot be spliced.
+ */
+export function callInsideRewrittenSpan(call: MaybeSpan, rewritten: readonly MaybeSpan[]): boolean {
+    const { start, end } = call;
+    if (typeof start !== 'number' || typeof end !== 'number') return false;
+    return rewritten.some(
+        range =>
+            typeof range.start === 'number' &&
+            typeof range.end === 'number' &&
+            start >= range.start &&
+            end <= range.end,
+    );
+}
+
+/**
  * Count word-boundary occurrences of an identifier OUTSIDE comments.
  *
  * Comments are erased at runtime, so a doc comment mentioning a factory (or
@@ -685,6 +732,9 @@ export interface SzvPrecompileState<TCall, TNode, TCandidate> {
     candidates: Map<string, TCandidate>;
     /** Every direct identifier-callee call, by callee name. */
     identifierCalls: Map<string, TCall[]>;
+    /** Source ranges the sz rewrite replaces wholesale — see
+     * {@link callInsideRewrittenSpan}. */
+    rewrittenSpans: MaybeSpan[];
     /** Whether any rewrite emitted a `__szvPick` call. */
     usedPick: boolean;
     /** Whether any rewrite emitted a `__szvPick1` single-dimension call. */
@@ -792,7 +842,7 @@ export function recordCrossModuleSzvFactoryImports<TCandidate>(
  * The factory name must occur exactly `1 (declaration) + calls + type queries`
  * times outside comments, every call must sit directly in an `szr(...)`
  * argument position with at most one argument, and the table identifier must
- * be free in the file.
+ * be free in the file. No call may sit inside a range the sz rewrite replaces.
  *
  * @param factoryName - The factory binding name.
  * @param calls - Every direct call of the factory in the file.
@@ -800,20 +850,25 @@ export function recordCrossModuleSzvFactoryImports<TCandidate>(
  * @param source - Original file text.
  * @param commentSpans - Comment spans, for comment-excluded accounting.
  * @param typeQueryCounts - `typeof X` reference counts by name.
+ * @param rewrittenSpans - Ranges the sz rewrite replaces wholesale.
  * @returns True when every reference is accounted for.
  */
-export function szvFactoryAccountingHolds<TCall extends { arguments: { length: number } }>(
+export function szvFactoryAccountingHolds<
+    TCall extends { arguments: { length: number }; start?: number | null; end?: number | null },
+>(
     factoryName: string,
     calls: readonly TCall[],
     szrArgumentNodes: ReadonlySet<unknown>,
     source: string,
     commentSpans: readonly CommentSpan[],
     typeQueryCounts: ReadonlyMap<string, number>,
+    rewrittenSpans: readonly MaybeSpan[],
 ): boolean {
     if (calls.length === 0) return false;
     for (const call of calls) {
         if (!szrArgumentNodes.has(call)) return false;
         if (call.arguments.length > 1) return false;
+        if (callInsideRewrittenSpan(call, rewrittenSpans)) return false;
     }
     const typeQueries = typeQueryCounts.get(factoryName) ?? 0;
     const occurrences = countWordOccurrencesOutsideComments(source, factoryName, commentSpans);

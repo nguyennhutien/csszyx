@@ -300,17 +300,39 @@ pub(crate) fn collect_dead_spacing_steps(
     }
 }
 
-/// Collects PROPERTY keys whose value is an object that is not the
-/// Legal members of one mask slot. Mirrors the TypeScript
-/// `MASK_SLOT_MEMBERS` table; anything else emits nothing at lowering.
+/// Legal members of one mask slot, minus the linear sides.
+///
+/// `maskLinear` also accepts every entry in `MASK_SIDES`, reported by the
+/// second field so the side vocabulary is named once in this file rather than
+/// re-spelled per use. Mirrors the TypeScript `MASK_SLOT_MEMBERS` table;
+/// anything else emits nothing at lowering.
 #[cfg(feature = "native-engine")]
-fn mask_slot_members(slot: &str) -> Option<&'static [&'static str]> {
+fn mask_slot_members(slot: &str) -> Option<(&'static [&'static str], bool)> {
     match slot {
-        "maskLinear" => Some(&["angle", "from", "to", "t", "r", "b", "l", "x", "y"]),
-        "maskConic" => Some(&["angle", "from", "to"]),
-        "maskRadial" => Some(&["at", "size", "shape", "from", "to"]),
+        "maskLinear" => Some((&["angle", "from", "to"], true)),
+        "maskConic" => Some((&["angle", "from", "to"], false)),
+        "maskRadial" => Some((&["at", "size", "shape", "from", "to"], false)),
         _ => None,
     }
+}
+
+/// Whether one member name is legal in a slot with these base members.
+#[cfg(feature = "native-engine")]
+fn is_mask_slot_member(name: &str, base: &[&str], accepts_sides: bool) -> bool {
+    base.contains(&name) || (accepts_sides && MASK_SIDES.contains(&name))
+}
+
+/// Render the legal member list a diagnostic names, in the table's order.
+///
+/// Only runs when a member is already known to be wrong, so the allocation
+/// stays off the path every correct mask slot takes.
+#[cfg(feature = "native-engine")]
+fn mask_slot_member_list(base: &[&str], accepts_sides: bool) -> String {
+    let mut names: Vec<&str> = base.to_vec();
+    if accepts_sides {
+        names.extend(MASK_SIDES);
+    }
+    names.join(", ")
 }
 
 /// Legal members of one linear edge object. Mirrors `MASK_EDGE_MEMBERS`.
@@ -333,23 +355,21 @@ pub(crate) fn collect_unknown_mask_slot_members(
         let StaticSzValue::Object(nested) = &property.value else {
             continue;
         };
-        let Some(members) = mask_slot_members(&property.key) else {
+        let Some((base, accepts_sides)) = mask_slot_members(&property.key) else {
             collect_unknown_mask_slot_members(nested, out);
             continue;
         };
         for entry in &nested.properties {
-            if !members.contains(&entry.key.as_str()) {
+            if !is_mask_slot_member(&entry.key, base, accepts_sides) {
                 out.push((
                     property.key.clone(),
                     entry.key.clone(),
-                    members.join(", "),
+                    mask_slot_member_list(base, accepts_sides),
                     entry.span.start,
                 ));
                 continue;
             }
-            if property.key != "maskLinear"
-                || !matches!(entry.key.as_str(), "t" | "r" | "b" | "l" | "x" | "y")
-            {
+            if !accepts_sides || !MASK_SIDES.contains(&entry.key.as_str()) {
                 continue;
             }
             let StaticSzValue::Object(edge) = &entry.value else {
@@ -832,8 +852,36 @@ fn object_children(object: &StaticSzObject) -> impl Iterator<Item = (&str, &Stat
         })
 }
 
-#[allow(clippy::too_many_lines)]
 fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
+    // The important modifier belongs to the CLASS, not to the value. Every
+    // decision below reads the value itself — whether it needs brackets,
+    // whether it is a fraction, where a leading minus goes — and a trailing
+    // `!` made a unit stop looking like one: `14px!` matched no CSS unit, so
+    // `text-14px!` shipped without brackets and Tailwind has no such utility.
+    // Values that bracket for another reason had the opposite problem, closing
+    // the bracket after the bang (`bg-[#fff!]`). Split it off first and put it
+    // back on the finished class, mirroring `handleImportant` in the
+    // TypeScript core. Only a TRAILING bang is the modifier; one inside an
+    // arbitrary value belongs to the value.
+    if let StaticSzValue::String(text) = value {
+        if let Some(base) = text.strip_suffix('!') {
+            // Exactly one bang, never a loop: the TypeScript core strips one
+            // and so must this, or `14px!!` would lower differently per engine.
+            let without_bang = StaticSzValue::String(base.to_string());
+            return format_static_class_value(key, &without_bang, prefix)
+                .map(|class_name| format!("{class_name}!"));
+        }
+    }
+    format_static_class_value(key, value, prefix)
+}
+
+/// Lower one key/value pair, with the important modifier already accounted for.
+///
+/// Split from [`format_static_class`] so the bang is removed exactly once. The
+/// value reaching here never carries one, which is what lets every decision
+/// below read the value as written.
+#[allow(clippy::too_many_lines)]
+fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
     if key == "animationDelay" {
         let ms = match value {
             StaticSzValue::Number(num) => format!("{}ms", format_abs_number(*num)),
@@ -877,6 +925,18 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
             // ratio instead of emitting a dead class. Mirrors the oxc lane.
             if (key == "leading" || key == "lineHeight") && (value * 4.0).fract() != 0.0 {
                 return Some(format!("{prefix}leading-[{}]", format_abs_number(*value)));
+            }
+            // Tailwind v4 spells font weights through the `--font-weight-*`
+            // theme namespace, so it serves no `font-<number>` at all — not
+            // even the nine standard steps. A numeric weight brackets the
+            // literal instead of emitting a class that styles nothing.
+            // Mirrors the TypeScript lanes.
+            if key == "weight" {
+                return Some(format!(
+                    "{prefix}{}-[{}]",
+                    class_key.as_ref(),
+                    format_number_literal(*value)
+                ));
             }
             Some(format_number_class(class_key.as_ref(), *value, prefix))
         }
@@ -1741,14 +1801,22 @@ fn format_number_class(key: &str, value: f64, prefix: &str) -> String {
     }
 }
 
-fn format_abs_number(value: f64) -> String {
-    let abs_value = value.abs();
-    if abs_value.fract() == 0.0 {
+/// Render a number the way JavaScript prints it, sign kept.
+///
+/// The TypeScript lanes interpolate the value straight into the class string,
+/// so an engine only agrees with them by dropping the `.0` that Rust's default
+/// float formatting keeps.
+fn format_number_literal(value: f64) -> String {
+    if value.fract() == 0.0 {
         #[allow(clippy::cast_possible_truncation)]
-        (abs_value as i64).to_string()
+        (value as i64).to_string()
     } else {
-        abs_value.to_string()
+        value.to_string()
     }
+}
+
+fn format_abs_number(value: f64) -> String {
+    format_number_literal(value.abs())
 }
 
 const CSS_UNITS: &[&str] = &[
@@ -1881,34 +1949,7 @@ fn needs_brackets(value: &str) -> bool {
         return false;
     }
 
-    if value.starts_with('#')
-        || value.starts_with("rgb")
-        || value.starts_with("hsl")
-        || value.starts_with("oklch")
-        || value.starts_with("color(")
-        || value.starts_with("hwb(")
-        || value.starts_with("lab(")
-        || value.starts_with("lch(")
-        || value.starts_with("oklab(")
-    {
-        return true;
-    }
-
-    if value.contains("calc(")
-        || value.contains("var(")
-        || value.contains("attr(")
-        || value.contains("url(")
-        || value.contains("clamp(")
-        || value.contains("min(")
-        || value.contains("max(")
-        // Gradient functions need brackets like every other CSS function;
-        // without them the class is `mask-linear-gradient(…)`, which Tailwind
-        // does not serve. Repeating variants are covered by the base names.
-        || value.contains("linear-gradient(")
-        || value.contains("radial-gradient(")
-        || value.contains("conic-gradient(")
-        || value.contains(' ')
-    {
+    if value.starts_with('#') || contains_css_function_call(value) || value.contains(' ') {
         return true;
     }
 
@@ -1926,6 +1967,41 @@ fn needs_brackets(value: &str) -> bool {
 }
 
 #[inline]
+/// Whether a value contains a CSS function call, which cannot appear bare in a
+/// class name.
+///
+/// Mirrors `containsCssFunctionCall` in `transform-core.ts`, which replaced the
+/// hand-kept name list both engines used to carry. The lists had drifted — this
+/// one knew `oklch()`, `lab()`, `lch()` and `hwb()` and the JS one did not, and
+/// neither knew `env()` — so the same value could bracket on one engine and
+/// emit a dead class on another. A `(` preceded by an identifier that starts
+/// with a letter is a function call, whatever its name.
+///
+/// Three shapes stay bare: Tailwind's `--spacing(4)`, the `(--x)` variable
+/// shorthand, and a utility value ending in that shorthand — `thumb-(--c)` puts
+/// a dash immediately before the paren and `--` immediately after it, which no
+/// function call ever does. A single leading dash is a negative value, not a
+/// build-time call, so `-linear-gradient(…)` is still a function.
+fn contains_css_function_call(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    for (at, _) in value.match_indices('(') {
+        if at == 0 {
+            continue;
+        }
+        if bytes[at - 1] == b'-' && value[at + 1..].starts_with("--") {
+            continue;
+        }
+        let mut start = at;
+        while start > 0 && is_ascii_identifier_byte(bytes[start - 1]) {
+            start -= 1;
+        }
+        if start < at && !value[start..].starts_with("--") {
+            return true;
+        }
+    }
+    false
+}
+
 const fn is_ascii_identifier_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-'
 }
@@ -2136,6 +2212,29 @@ mod tests {
         assert!(!needs_brackets("red-500"));
         assert!(!needs_brackets("[#333]"));
         assert!(!needs_brackets("4"));
+    }
+
+    #[test]
+    fn needs_brackets_covers_any_css_function_not_a_name_list() {
+        // The name lists this replaced had drifted between engines, and `env()`
+        // was in none of them: `pt-env(safe-area-inset-top)` is not a class
+        // Tailwind serves.
+        assert!(needs_brackets("env(safe-area-inset-top)"));
+        assert!(needs_brackets("fit-content(200px)"));
+        assert!(needs_brackets("repeat(3,1fr)"));
+        assert!(needs_brackets("color-mix(in_srgb,red,blue)"));
+        // A single leading dash is a negative value, not a build-time call.
+        assert!(needs_brackets("-linear-gradient(black,transparent)"));
+        // Tailwind's own call and the CSS-variable shorthand keep their bare
+        // form, as does a utility value ending in that shorthand; so does
+        // anything with no call in it at all.
+        assert!(!needs_brackets("--spacing(4)"));
+        assert!(!needs_brackets("(--gap)"));
+        assert!(!needs_brackets("thumb-(--c)"));
+        assert!(!needs_brackets("size-(--s)"));
+        assert!(!needs_brackets("full"));
+        // The discriminator is the dash-then-double-dash pair around the paren.
+        assert!(needs_brackets("var(--x)"));
     }
 
     #[test]
@@ -3394,7 +3493,7 @@ mod tests {
             uses_szv_pick1: false,
             style_attributes: Vec::new(),
             recovery_attributes: Vec::new(),
-            unsupported_recovery_attribute_spans: Vec::new(),
+            unsupported_recovery_attributes: Vec::new(),
             jsx_opening_elements: Vec::new(),
             szs_attributes: Vec::new(),
             szs_diagnostics: Vec::new(),

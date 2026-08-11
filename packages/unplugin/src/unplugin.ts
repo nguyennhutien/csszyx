@@ -26,6 +26,7 @@ import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@cssz
 import {
     CSSZYX_GLOBAL_ALIAS_PREFIX,
     DEFAULT_BUILD_CONFIG,
+    DEFAULT_IMPORTED_STATIC_SZ,
     type GlobalVarMangleConfig,
     type PartialCsszyxConfig,
     validateGlobalVarMangleConfig,
@@ -38,6 +39,18 @@ import type { PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
 import { babelFallbackReason } from './babel-fallback-reason.js';
+import { findUnknownConfigKeys, unknownConfigKeysMessage } from './config-keys.js';
+import {
+    importedSpecifiersIn,
+    mayExportSzvFactories,
+    recordSzObjectRegistryFile,
+    recordSzvRegistryFile,
+    resolveCrossModuleStaticsFor,
+    resolveProviderPath,
+    resolveProviderPathWith,
+    type SzvCrossModuleRegistry,
+    specifierBases,
+} from './cross-module-registry.js';
 import { mangleCSSSync } from './css-mangler.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
@@ -69,6 +82,7 @@ import {
 import { runtimeHelperGroupsFromUsage } from './next-runtime-injection.js';
 import { resolveParserMode } from './parser-mode.js';
 import { normalizePathSeparators } from './path-normalization.js';
+import { isReadableProviderFile } from './provider-file.js';
 import {
     assertNoRSCBoundaryViolation,
     assertNoRSCGraphViolation,
@@ -77,12 +91,14 @@ import {
     type RSCModuleRecord,
 } from './rsc-boundary.js';
 import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
+import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
+import { discoverProjectTheme } from './theme-discovery.js';
 import {
-    recordSzvRegistryFile,
-    resolveCrossModuleStaticsFor,
-    type SzvCrossModuleRegistry,
-} from './szv-registry.js';
+    ensureThemeGroupsFile,
+    THEME_GROUPS_FILE_MARKER,
+    themeGroupsSpecifier,
+} from './theme-groups-file.js';
 import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
@@ -110,6 +126,7 @@ import {
     RESOLVED_VIRTUAL_MODULE_ID,
     resolveVirtualModule,
     THEME_GROUPS_VIRTUAL_ID,
+    type ThemeGroupTokens,
     VAR_MANGLE_MAP_PLACEHOLDER,
 } from './virtual-modules.js';
 
@@ -123,12 +140,21 @@ interface PluginState {
      * Drives the `@source` safelist; NOT the mangle map.
      */
     classes: Set<string>;
-    /** Merged @theme scan result — feeds the theme-groups virtual module. */
+    /**
+     * Merged @theme scan result — the ONLY consumer is the theme-groups virtual
+     * module, so this is a merge-correctness input, not a typing one.
+     */
     parsedTheme: import('./theme-scanner.js').ParsedTheme | null;
     /**
-     * CSS files the zero-config @theme auto-scan found tokens in (only when
-     * `build.scanCss` is unset). Dev HMR re-scans when one of these — or any
-     * other .css file — changes, mirroring the explicit scanCss reload path.
+     * Tokens from the files `build.scanCss` lists, kept apart from the
+     * project-wide discovery so a token deleted from either source disappears
+     * from the merged result instead of lingering across a re-scan.
+     */
+    scanCssTheme: import('./theme-scanner.js').ParsedTheme | null;
+    /**
+     * CSS files the project-wide @theme scan found tokens in. Dev HMR re-scans
+     * when one of these — or any other .css file — changes, mirroring the
+     * explicit scanCss reload path.
      */
     autoThemeCssFiles: string[];
     /**
@@ -168,11 +194,21 @@ interface PluginState {
     /** Unresolvable-spread warnings surfaced to the build log in every mode. */
     spreadWarnings: Set<string>;
     /**
-     * Workspace-package files under `/packages/` that contain `sz` but were
+     * Workspace-package files under `/packages/` that use csszyx but were
      * skipped by the hard-ignore (not under any `compileSources` dir). Surfaced at
      * build end so the silent no-op (skipped `sz` → no CSS) becomes visible.
      */
     skippedSzFiles: Set<string>;
+    /**
+     * The subset of {@link skippedSzFiles} that may export szv factories.
+     *
+     * Skipping one of these does more than lose a file's own CSS: it keeps the
+     * module out of the cross-module registry, so every importer — compiled or
+     * not — silently falls back to the runtime path. That is dropped csszyx
+     * output rather than a usage nudge, so its presence promotes the warning
+     * out of dev-only.
+     */
+    skippedSzvExportFiles: Set<string>;
     /** Guards the skipped-sz-files warning so it fires at most once. */
     skipWarningEmitted: boolean;
     /**
@@ -720,25 +756,55 @@ export function unscopedMonorepoMessage(): string {
 }
 
 /**
- * Whether a csszyx build warning should be emitted. `quiet` mutes all of them;
- * `devOnly` additionally suppresses the warning in a production build (for usage
- * nudges that must not noise a host app's prod output). Pure so the gating policy
- * is unit-tested without the worker-based buildEnd wiring.
+ * The `quiet` option, normalized.
  *
- * @param quiet - The `quiet` option: mute every warning.
- * @param devOnly - This warning is a dev-only usage nudge.
+ * `'all'` is the blunt setting a plain `true` selects; `'nudges'` keeps every
+ * report that the build produced less output than it was asked for.
+ */
+export type QuietMode = 'off' | 'nudges' | 'all';
+
+/**
+ * Normalize the authored `quiet` value. Idempotent, so a already-normalized
+ * mode passes through unchanged.
+ *
+ * @param quiet - Authored option value, or an already-resolved mode.
+ * @returns The mode the gates read.
+ */
+export function resolveQuietMode(quiet: boolean | 'nudges' | QuietMode | undefined): QuietMode {
+    if (quiet === true || quiet === 'all') return 'all';
+    if (quiet === 'nudges') return 'nudges';
+    return 'off';
+}
+
+/**
+ * Whether a csszyx build warning should be emitted.
+ *
+ * `devOnly` is already this plugin's marker for "usage nudge": it suppresses
+ * the warning in a production build so it cannot noise a host app's output.
+ * `'nudges'` mutes exactly that same set, which keeps one axis instead of
+ * inventing a second classification for the same distinction. `true` mutes
+ * everything. Pure so the gating policy is unit-tested without the
+ * worker-based buildEnd wiring.
+ *
+ * @param quiet - Resolved quiet mode.
+ * @param devOnly - This warning is a usage nudge.
  * @param isProduction - Whether this is a production build.
  * @returns true when the warning should be printed.
  */
 export function shouldEmitWarning(
-    quiet: boolean,
+    quiet: QuietMode,
     devOnly: boolean,
     isProduction: boolean,
 ): boolean {
-    if (quiet) {
+    // Normalized again despite the narrowed type: these gates are exported from
+    // the package entry, and an untyped JavaScript caller passing `true` would
+    // otherwise fall through to the `off` branch — quiet set, warnings still
+    // printed. `resolveQuietMode` is idempotent, so this costs nothing.
+    const mode = resolveQuietMode(quiet);
+    if (mode === 'all') {
         return false;
     }
-    if (devOnly && isProduction) {
+    if (devOnly && (isProduction || mode === 'nudges')) {
         return false;
     }
     return true;
@@ -747,24 +813,29 @@ export function shouldEmitWarning(
 /**
  * Whether a transform diagnostic describes missing CSS and may be printed.
  *
- * @param quiet - Whether all build warnings are muted.
+ * Only the blunt mode hides these. A missing-CSS diagnostic says classes never
+ * reached the safelist, so the styles are absent from the output — a build
+ * result, not a style opinion, and `'nudges'` exists so a calmer log does not
+ * have to cost it.
+ *
+ * @param quiet - Resolved quiet mode.
  * @param message - Compiler diagnostic to classify.
  * @returns True when the diagnostic is an unsilenced missing-CSS failure.
  */
-export function shouldEmitMissingCssFallback(quiet: boolean, message: string): boolean {
-    return !quiet && szFallbackConsequenceOf(message) === 'missing-css';
+export function shouldEmitMissingCssFallback(quiet: QuietMode, message: string): boolean {
+    return resolveQuietMode(quiet) !== 'all' && szFallbackConsequenceOf(message) === 'missing-css';
 }
 
 /**
  * Emit one missing-CSS fallback through the caller's output channel.
  *
- * @param quiet - Whether all build warnings are muted.
+ * @param quiet - Resolved quiet mode.
  * @param message - Compiler diagnostic to classify and emit.
  * @param id - Bundler module identifier included in the warning.
  * @param emit - Warning output channel.
  */
 export function emitMissingCssFallback(
-    quiet: boolean,
+    quiet: QuietMode,
     message: string,
     id: string,
     emit: (message: string) => void,
@@ -1040,20 +1111,32 @@ export function isPackagesSkippedSource(id: string, sourceDirs: readonly string[
 }
 
 /**
- * Build the workspace-package skip warning. Lists the skipped files that contain
- * `sz` so the developer can add the package directory to `compileSources`
+ * Build the workspace-package skip warning. Lists the skipped files that use
+ * csszyx so the developer can add the package directory to `compileSources`
  * instead of silently shipping no CSS for them.
  *
- * @param files - skipped `/packages/` file paths that contain `sz`.
+ * @param files - skipped `/packages/` file paths that use csszyx.
+ * @param szvExportFiles - the subset that may export `szv` factories, whose
+ *   skip also costs every importer its cross-module precompile.
  * @returns the warning string.
  */
-export function skippedSzFilesMessage(files: readonly string[]): string {
+export function skippedSzFilesMessage(
+    files: readonly string[],
+    szvExportFiles: readonly string[] = [],
+): string {
     const list = files.map(file => `  - ${file}`).join('\n');
+    const registryClause =
+        szvExportFiles.length === 0
+            ? ''
+            : `\n${szvExportFiles.length} of them may export \`szv\` factories, so they stay ` +
+              'out of the cross-module registry and every importer falls back to the ' +
+              'runtime path.';
     return (
-        `[csszyx] ${files.length} file(s) under packages/ contain \`sz\` but were ` +
+        `[csszyx] ${files.length} file(s) under packages/ use csszyx but were ` +
         `skipped by ignore rules:\n${list}\n` +
         'Add the package directory to `compileSources` (or move the file out of ' +
-        'packages/) — otherwise their `sz` produces no CSS.'
+        'packages/) — otherwise their classes never reach the safelist.' +
+        registryClause
     );
 }
 
@@ -1146,8 +1229,8 @@ export function shouldTrackGlobalVarSources(config?: { enabled?: boolean }): boo
 }
 
 /**
- * Records source text available before bundling/minification for Phase H
- * global-var diagnostics.
+ * Records source text available before bundling/minification for global-var
+ * diagnostics.
  *
  * @param state Plugin state to update.
  * @param filename Source filename that owns the text.
@@ -1241,7 +1324,7 @@ function collectRollupGlobalVarCssAssets(
 }
 
 /**
- * Reads configured source CSS files for Phase H validation.
+ * Reads configured source CSS files for global-variable validation.
  *
  * Some framework pipelines, notably Astro prerender builds, can invoke an
  * output hook before all user CSS is visible as a Rollup/Webpack asset. The
@@ -1424,7 +1507,7 @@ function buildVarMangleMap(
 }
 
 /**
- * Extracts Phase H global custom-property aliases for manifest/debug tooling.
+ * Extracts global custom-property aliases for manifest/debug tooling.
  *
  * The legacy `varMangleMap` also carries dynamic s/c-tier CSS variables. This
  * helper keeps manifest consumers from guessing tiers by exposing only aliases
@@ -2308,7 +2391,7 @@ function mangleQuotedStringLiterals(body: string, mangle: (inner: string) => str
 }
 
 /**
- * Validates the planned Phase H global-variable alias config before plugin
+ * Validates the planned global-variable alias config before plugin
  * state is created.
  *
  * @param options User plugin options.
@@ -2324,12 +2407,14 @@ function assertGlobalVarMangleConfig(options: PartialCsszyxConfig): void {
     if (config?.enabled === true) {
         if (!config.tokens || config.tokens.length === 0) {
             throw new Error(
-                '[csszyx] production.mangleGlobalVars.enabled requires explicit tokens in Phase H v1.',
+                '[csszyx] production.mangleGlobalVars.enabled requires explicit tokens. Aliasing ' +
+                    'a property csszyx was not told about would rename references it cannot see.',
             );
         }
         if (config.autoPrefix !== undefined && config.autoPrefix !== '') {
             throw new Error(
-                '[csszyx] production.mangleGlobalVars.autoPrefix requires CSS pre-scan support and is not enabled in Phase H v1.',
+                '[csszyx] production.mangleGlobalVars.autoPrefix is not available: choosing tokens ' +
+                    'by prefix needs a CSS pre-scan that does not exist yet. List the tokens instead.',
             );
         }
     }
@@ -2357,14 +2442,29 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // (configResolved), so dev always uses readable class names that match the
     // dev CSS. `let` because the command is only known at configResolved.
     let manglingEnabled = options.production?.mangle === true;
-    // Cross-module szv registry: built once during prescan, resolved per file.
-    // PRODUCTION ONLY (v1): a dev server would need registry-dependency
-    // invalidation (module A's config edit must re-transform module B), a
-    // whole failure class this cut removes — dev keeps today's exact behavior.
-    // Forced off for `command === 'serve'` below, like mangling.
-    let crossModuleRegistryEnabled = process.env.NODE_ENV !== 'development';
+    // Cross-module szv registry: filled by the prescan, refreshed per edit by
+    // `refreshSzvRegistryEntry`, resolved per file. Watch lanes used to switch
+    // this off because a one-shot prescan left an edited factory serving its
+    // startup table; refreshing the entry removes that staleness at the source,
+    // so the precompile now runs in a dev server too.
+    const crossModuleRegistryEnabled = true;
+    // Resolved once: the shared default is not merged into plugin options, so
+    // every read site would otherwise have to remember the fallback, and one
+    // that forgot would run a different feature than the rest of the plugin.
+    const importedStaticSzEnabled = options.build?.importedStaticSz ?? DEFAULT_IMPORTED_STATIC_SZ;
     /** absPath (separator-normalized) → exported factory configs. */
     const szvCrossModuleRegistry: SzvCrossModuleRegistry = new Map();
+    // Provider paths already read for sz objects this session. A module that
+    // exports nothing usable is absent from the registry, so the registry alone
+    // cannot answer "have I looked at this?" — without the set, every edit of a
+    // file would re-read and re-parse each of its relative imports.
+    const szObjectProvidersExamined = new Set<string>();
+    // What a non-relative specifier stands for, read from the bundler's own
+    // resolve config and the project's tsconfig. Assigned before the prescan
+    // runs on each lane that has one: the prescan decides which modules to read
+    // using this table, and the transform looks them up using the same table,
+    // so a late assignment would collect a demand nothing later resolves.
+    let specifierAliases: SpecifierAlias[] = [];
     // Class names the mangler must never produce as a token, so a short alias
     // can't collide with a literal class in non-csszyx CSS (hybrid builds). Comes
     // from config, so it is available identically at every finalizeMangleMap call
@@ -2429,9 +2529,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // lazily once the project root is known (configResolved / beforeCompile),
     // because the entries resolve relative to that root.
     const compileSources = options.compileSources ?? [];
-    // `quiet` mutes every csszyx build warning (e.g. to focus on another tool's
+    // `quiet` mutes csszyx build warnings (e.g. to focus on another tool's
     // output). Errors that throw are unaffected — only warnings are silenced.
-    const quiet = options.quiet === true;
+    // `'nudges'` keeps the reports that say output is missing.
+    const quiet = resolveQuietMode(options.quiet);
+    // An option the plugin does not read is silent, so whatever it was set for
+    // simply does not happen — the renamed `compilePackages` cost a field user
+    // an afternoon exactly that way. Reported at the top, before any build
+    // output, because it explains everything that follows. NOT `devOnly`: a
+    // production build is where the missing behaviour actually costs something.
+    const unknownConfigKeys = findUnknownConfigKeys(options);
+    if (unknownConfigKeys.length > 0) {
+        emitWarning(unknownConfigKeysMessage(unknownConfigKeys));
+    }
     /**
      * Emit a csszyx build warning, unless `quiet` mutes all of them. `devOnly`
      * additionally suppresses it in production — for usage nudges that should not
@@ -2514,6 +2624,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const state: PluginState = {
         classes: new Set<string>(),
         parsedTheme: null,
+        scanCssTheme: null,
         autoThemeCssFiles: [],
         sawTailwindEntry: false,
         sawAnyCss: false,
@@ -2522,6 +2633,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         contentScopeWarningEmitted: false,
         spreadWarnings: new Set<string>(),
         skippedSzFiles: new Set<string>(),
+        skippedSzvExportFiles: new Set<string>(),
         skipWarningEmitted: false,
         classesCapped: false,
         ownedClasses: new Set<string>(),
@@ -2673,68 +2785,33 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Zero-config @theme discovery. Runs ONLY when `build.scanCss` is unset:
-     * walks the project root (plus opted-in compileSources dirs outside it) for
-     * .css files carrying an @theme block and merges their tokens into
-     * `state.parsedTheme`, so szcn's custom-token groups work without wiring.
-     * An explicit `scanCss` stays fully authoritative — this never runs then,
-     * and unlike runThemeScan it does NOT write .csszyx/theme.d.ts (type
-     * augmentation remains the scanCss opt-in; this only feeds runtime merge
-     * correctness, where a missed token silently breaks last-wins).
+     * Project-wide @theme discovery. Walks the project root (plus opted-in
+     * compileSources dirs outside it) for .css files carrying an @theme block
+     * and merges their tokens into `state.parsedTheme`, so szcn's custom-token
+     * groups work without wiring.
+     *
+     * Runs whether or not `build.scanCss` is set. That option says which CSS
+     * drives `.csszyx/theme.d.ts` — a TYPING scope, and this scan writes no
+     * .d.ts. Letting it also narrow the merge groups meant a project that
+     * listed one stylesheet silently lost last-wins for every token declared in
+     * another: both classes survive and the STYLESHEET order picks the winner
+     * instead of the author's. A missing type is an autocomplete gap; a missing
+     * merge group is wrong output.
      *
      * @param rootDir - project root directory to walk.
      */
     function runAutoThemeScan(rootDir: string): void {
-        if (options.build?.scanCss) {
-            return;
-        }
         refreshCompileSourceDirs();
-        const cssFiles: string[] = [];
-        const walk = (dir: string): void => {
-            let entries: fs.Dirent[];
-            try {
-                entries = fs.readdirSync(dir, { withFileTypes: true });
-            } catch {
-                return;
-            }
-            for (const entry of entries) {
-                if (entry.isDirectory()) {
-                    if (!IGNORE_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
-                        walk(path.join(dir, entry.name));
-                    }
-                    continue;
-                }
-                if (entry.name.endsWith('.css')) {
-                    cssFiles.push(path.join(dir, entry.name));
-                }
-            }
-        };
-        walk(rootDir);
-        const normRoot = normalizeForMatch(rootDir);
-        for (const sourceDir of compileSourceDirs) {
-            if (sourceDir === normRoot || sourceDir.startsWith(`${normRoot}/`)) {
-                continue;
-            }
-            walk(sourceDir);
-        }
-        const themes: ParsedTheme[] = [];
-        const themeFiles: string[] = [];
-        for (const file of cssFiles) {
-            let content: string;
-            try {
-                content = fs.readFileSync(file, 'utf-8');
-            } catch {
-                continue;
-            }
-            if (!content.includes('@theme')) {
-                continue;
-            }
-            themes.push(parseThemeBlocks(content));
-            themeFiles.push(file);
-        }
-        state.autoThemeCssFiles = themeFiles;
-        if (themes.length > 0) {
-            state.parsedTheme = mergeThemes(themes);
+        const discovered = discoverProjectTheme(rootDir, [...compileSourceDirs]);
+        state.autoThemeCssFiles = discovered.files;
+        // Recomputed from both sources every time rather than merged into the
+        // previous value: a token deleted from a stylesheet must disappear, and
+        // accumulating into `state.parsedTheme` would keep it registered.
+        const sources = [state.scanCssTheme, discovered.theme].filter(
+            (theme): theme is ParsedTheme => theme !== null,
+        );
+        if (sources.length > 0) {
+            state.parsedTheme = mergeThemes(sources);
         }
     }
 
@@ -2782,7 +2859,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
     /**
      * Runs the configured source transform. Rust is the default parser after
-     * the Phase E max-speed pass and routes through the native engine. Oxc is
+     * the max-speed pass and routes through the native engine. Oxc is
      * the documented JavaScript fallback for native-unavailable platforms, and
      * Babel remains the final compatibility safety net for unexpected
      * parser/compiler failures on either engine.
@@ -2805,9 +2882,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             szvCrossModuleRegistry,
             filename,
             source,
+            specifierAliases,
         );
-        if (crossModuleStatics !== undefined) {
-            compilerOptions.crossModuleStatics = crossModuleStatics;
+        // The registry is filled in every mode; only the REWRITE is gated, so
+        // an edited factory can never serve importers a stale table.
+        if (crossModuleRegistryEnabled && crossModuleStatics.szvConfigs !== undefined) {
+            compilerOptions.crossModuleStatics = crossModuleStatics.szvConfigs;
+        }
+        if (crossModuleStatics.szObjects !== undefined) {
+            compilerOptions.crossModuleSzObjects = crossModuleStatics.szObjects;
         }
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
 
@@ -3016,6 +3099,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 compilerOptions.crossModuleStatics === undefined
                     ? undefined
                     : JSON.stringify(compilerOptions.crossModuleStatics),
+            crossModuleSzObjects:
+                compilerOptions.crossModuleSzObjects === undefined
+                    ? undefined
+                    : JSON.stringify(compilerOptions.crossModuleSzObjects),
             filename: effectiveFilename,
             source,
         };
@@ -3023,6 +3110,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
     /**
      * Transforms prescan files, batching Rust cache misses in one native call.
+     *
+     * The batch carries ONE options object for every file in it, so a file
+     * whose imports resolve to registry entries cannot ride in it — its
+     * `crossModuleStatics` are its own. Those files take the per-file path and
+     * the rest still batch, which keeps the native round-trip saving where it
+     * came from: in a real project almost nothing imports a style module.
      *
      * @param files Source files discovered during prescan.
      * @returns Transform results for files that compiled successfully.
@@ -3032,21 +3125,47 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return transformPrescanSourcesIndividually(files);
         }
 
+        const perFile: PrescanSourceFile[] = [];
+        const batchable: PrescanSourceFile[] = [];
+        for (const file of files) {
+            (hasCrossModuleStatics(file) ? perFile : batchable).push(file);
+        }
+        const individual = transformPrescanSourcesIndividually(perFile);
+
         const compilerOptions = createCompilerOptions(prescanAstBudget);
         const cacheRoot = resolveTransformCacheDir(state.rootDir, options.build?.cacheDir);
         const results = new Map<string, SourceTransformResult>();
 
         if (cacheEnabled) evictTransformCacheOnce();
         ensureRustTransformAvailable();
-        const misses = collectRustPrescanMisses(files, compilerOptions, cacheRoot, results);
-        if (misses.length === 0) return orderPrescanResults(files, results);
-
-        try {
-            runRustPrescanBatch(misses, compilerOptions, cacheRoot, results);
-        } catch {
-            runRustPrescanFallback(misses, results);
+        const misses = collectRustPrescanMisses(batchable, compilerOptions, cacheRoot, results);
+        if (misses.length > 0) {
+            try {
+                runRustPrescanBatch(misses, compilerOptions, cacheRoot, results);
+            } catch {
+                runRustPrescanFallback(misses, results);
+            }
         }
-        return orderPrescanResults(files, results);
+        return [...individual, ...orderPrescanResults(batchable, results)];
+    }
+
+    /**
+     * Whether one prescan file's imports resolve to anything in the registry.
+     *
+     * Asked with the same function the transform uses, so a file routed to the
+     * batch is one the transform would also have given no statics.
+     *
+     * @param file - Source file discovered during prescan.
+     * @returns True when the file has per-file cross-module options.
+     */
+    function hasCrossModuleStatics(file: PrescanSourceFile): boolean {
+        const resolved = resolveCrossModuleStaticsFor(
+            szvCrossModuleRegistry,
+            file.filePath,
+            file.content,
+            specifierAliases,
+        );
+        return resolved.szvConfigs !== undefined || resolved.szObjects !== undefined;
     }
 
     /**
@@ -3317,15 +3436,27 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
     /**
      * Records a skipped file when it is workspace-package source under
-     * `/packages/` (not under any `compileSources` directory) that contains `sz`.
-     * These are the silent no-op cases — the file is never compiled, so its `sz`
-     * produces no CSS — surfaced once at build end. node_modules/.next are never
-     * scanned (handled by {@link isPackagesSkippedSource}).
+     * `/packages/` (not under any `compileSources` directory) that carries
+     * csszyx authoring surface. These are the silent no-op cases — the file is
+     * never prescanned, so its classes never reach the safelist and any szv
+     * factory it exports never reaches the cross-module registry — surfaced
+     * once at build end. node_modules/.next are never scanned (handled by
+     * {@link isPackagesSkippedSource}).
+     *
+     * The marker set is the prescan's own, not a subset: a module holding only
+     * `szv` factories carries no `sz=` or `sz:` at all, and that is exactly the
+     * module whose skip costs every importer its precompile.
      *
      * @param filePath - filesystem path of the file the prescan skipped.
      */
     function recordPackagesSkipIfSz(filePath: string): void {
-        if (!isPackagesSkippedSource(filePath, compileSourceDirs)) {
+        // Called per module from `transformInclude` as well as from the prescan
+        // walk, and a build with several environments resolves the same file
+        // more than once — never read it twice.
+        if (
+            state.skippedSzFiles.has(filePath) ||
+            !isPackagesSkippedSource(filePath, compileSourceDirs)
+        ) {
             return;
         }
         let content: string;
@@ -3334,8 +3465,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         } catch {
             return;
         }
-        if (content.includes('sz=') || content.includes('szs=') || content.includes('sz:')) {
-            state.skippedSzFiles.add(filePath);
+        if (!fileMayContainSafelistableSz(content)) {
+            return;
+        }
+        state.skippedSzFiles.add(filePath);
+        if (mayExportSzvFactories(content)) {
+            state.skippedSzvExportFiles.add(filePath);
         }
     }
 
@@ -3386,6 +3521,147 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Refresh one file's registry entry after a watch-mode edit.
+     *
+     * The prescan fills the registry once, so without this an edited factory
+     * keeps serving importers the table it had at startup. That is why the
+     * cross-module precompile used to be switched off entirely outside a
+     * one-shot production build.
+     *
+     * Invalidating the importers is the bundler's job and it already does it:
+     * the rewrite replaces the factory CALL but leaves the `import` statement
+     * standing, so the module graph keeps the edge and every importer
+     * re-transforms on its own. The transform cache keys on the resolved
+     * statics, so a changed table cannot be served from cache either. Refreshing
+     * the entry before those re-transforms run is the whole fix.
+     *
+     * @param filePath - Absolute path of the changed or deleted file.
+     * @param content - New source text, or null when the file was deleted.
+     */
+    function refreshSzvRegistryEntry(filePath: string, content: string | null): void {
+        if (!shouldProcessSource(filePath)) return;
+        if (content === null) {
+            szvCrossModuleRegistry.delete(normalizePathSeparators(filePath));
+            return;
+        }
+        recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content);
+        // A provider edited during a watch has to lose its stale value the same
+        // way an edited factory does. Re-reading the changed file for both kinds
+        // costs one parse of one file; deciding whether it is still demanded
+        // would cost the import graph, and a recorded export nothing imports
+        // resolves for nobody anyway.
+        if (importedStaticSzEnabled) {
+            recordSzObjectRegistryFile(szvCrossModuleRegistry, filePath, content);
+            szObjectProvidersExamined.add(normalizePathSeparators(filePath));
+            recordProvidersDemandedBy(filePath, content);
+        }
+    }
+
+    /**
+     * Read the providers one changed file newly imports from.
+     *
+     * The prescan collects demand from a whole-project walk, so it only knows
+     * the imports that existed when the server started. Adding a cross-file
+     * style import mid-session named a module nothing had demanded: it was
+     * absent from the registry, the importer fell back, and only touching the
+     * provider afterwards brought it in — a recovery step nothing tells the
+     * author about, at the moment they have just opted in and are least able
+     * to tell a limitation from a bug.
+     *
+     * Resolution goes through the same probe list the prescan uses, against
+     * the same disk predicate the Turbopack loader uses, so a specifier lands
+     * on one file whichever lane resolved it.
+     *
+     * @param filePath - Absolute path of the changed file.
+     * @param content - Its new source text.
+     */
+    function recordProvidersDemandedBy(filePath: string, content: string): void {
+        // Demand comes from files that author sz, matching the prescan's gate:
+        // an edited module that styles nothing imports nothing worth reading.
+        if (!fileMayContainSafelistableSz(content)) return;
+        const directory = path.dirname(filePath);
+        for (const specifier of importedSpecifiersIn(content)) {
+            for (const base of specifierBases(specifier, directory, specifierAliases)) {
+                const providerPath = resolveProviderPathWith(base, isReadableProviderFile);
+                if (providerPath === undefined) continue;
+                const key = normalizePathSeparators(providerPath);
+                // Already-seen providers are kept current by their own refresh,
+                // so re-reading here would buy nothing.
+                if (!szObjectProvidersExamined.has(key)) {
+                    szObjectProvidersExamined.add(key);
+                    readAndRecordSzObjectProvider(providerPath);
+                }
+                break;
+            }
+        }
+    }
+
+    /**
+     * Record one provider's exported sz objects, ignoring a file that cannot
+     * be read.
+     *
+     * @param providerPath - Absolute provider path.
+     */
+    function readAndRecordSzObjectProvider(providerPath: string): void {
+        let content: string;
+        try {
+            content = fs.readFileSync(providerPath, 'utf-8');
+        } catch {
+            return;
+        }
+        recordSzObjectRegistryFile(szvCrossModuleRegistry, providerPath, content);
+    }
+
+    /**
+     * Read every module an sz-authoring file imports from, and record what it
+     * exports.
+     *
+     * Runs after the walk because the demand is only complete once every
+     * sz-authoring file has been seen. Reading from disk rather than keeping
+     * every file's text in memory: the demanded set is small, and holding the
+     * project's sources to serve it would not be.
+     *
+     * @param seenSourcePaths - Paths the prescan walked.
+     * @param demand - Specifier bases imported by files that author sz.
+     */
+    function recordDemandedSzObjectProviders(
+        seenSourcePaths: ReadonlySet<string>,
+        demand: ReadonlySet<string>,
+    ): void {
+        for (const base of demand) {
+            const providerPath = resolveProviderPath(seenSourcePaths, base);
+            // A specifier resolving to nothing the walk saw is ordinary — a
+            // package, a tsconfig alias, a file outside the compiled roots. It
+            // costs the optimization and the importer keeps the runtime path,
+            // which is exactly what v1 promises for those.
+            if (providerPath === undefined) continue;
+            // Marked seen so a later watch edit does not re-read what the walk
+            // already answered; the entry stays current through its own refresh.
+            szObjectProvidersExamined.add(normalizePathSeparators(providerPath));
+            readAndRecordSzObjectProvider(providerPath);
+        }
+    }
+
+    /**
+     * Read a changed file and refresh its registry entry.
+     *
+     * @param filePath - Absolute path of the changed file.
+     */
+    function refreshSzvRegistryEntryFromDisk(filePath: string): void {
+        if (!shouldProcessSource(filePath)) return;
+        let content: string;
+        try {
+            content = fs.readFileSync(filePath, 'utf-8');
+        } catch {
+            // Read failures are the delete race; drop the entry rather than
+            // keep one nothing can refresh.
+            refreshSzvRegistryEntry(filePath, null);
+            return;
+        }
+        refreshSzvRegistryEntry(filePath, content);
+    }
+
+    /**
      * Pre-scans source files to discover class names before Tailwind CSS runs.
      * Tailwind v4 reads source files from disk and can't detect classes generated
      * by the csszyx transform (e.g. `sz={{ hover: { bg: 'gray-700' } }}` → `hover:bg-gray-700`).
@@ -3397,12 +3673,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // exporting a qualifying factory would keep its old table through any
         // later prescan in the same process.
         szvCrossModuleRegistry.clear();
+        // Cleared with the registry it describes: a provider "already examined"
+        // against entries that no longer exist would never be read again.
+        szObjectProvidersExamined.clear();
         const prescanStarted = performance.now();
         const discoveredClasses = new Set<string>();
         // Raw className values feed both Tailwind safelisting and the authored
         // ownership set, but never become csszyx-owned by themselves.
         const rawDiscoveredClasses = new Set<string>();
         const prescanSources: PrescanSourceFile[] = [];
+        // Paths the walk saw, so the second pass can turn a specifier into the
+        // file a consumer meant without going back to the filesystem to guess.
+        const seenSourcePaths = new Set<string>();
+        // Specifier bases imported by files that author sz, filled during the
+        // walk and read once it finishes.
+        const szObjectDemand = new Set<string>();
 
         /**
          * Read one processable source into the prescan queue.
@@ -3425,8 +3710,33 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // need the expensive sz parser pass.
             recordAuthoredClasses(content);
             recordSzvRegistryEntries(filePath, content);
+            seenSourcePaths.add(normalizePathSeparators(filePath));
             if (fileMayContainSafelistableSz(content)) {
                 prescanSources.push({ filePath, content });
+                recordSzObjectDemand(filePath, content);
+            }
+        }
+
+        /**
+         * Note every module an sz-authoring file imports from.
+         *
+         * This is what keeps the sz-object pass demand-driven. `szv(` is a
+         * cheap marker a provider carries in its own text; a plain exported
+         * object has none, and `export const` is far too common to gate on —
+         * asking every module in a project would parse code with nothing to do
+         * with styling, on every build. What a file that USES sz imports is a
+         * small set, and it is the only set that can matter.
+         *
+         * @param filePath Importing file path.
+         * @param content Importing file text.
+         */
+        function recordSzObjectDemand(filePath: string, content: string): void {
+            if (!importedStaticSzEnabled) return;
+            const directory = path.dirname(filePath);
+            for (const specifier of importedSpecifiersIn(content)) {
+                for (const base of specifierBases(specifier, directory, specifierAliases)) {
+                    szObjectDemand.add(base);
+                }
             }
         }
 
@@ -3438,7 +3748,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * @param content Source text.
          */
         function recordSzvRegistryEntries(filePath: string, content: string): void {
-            if (!crossModuleRegistryEnabled) return;
+            // Recorded even when the registry is disabled for rewriting. Only
+            // `transformConfiguredSource` gates on that flag; here the entries
+            // are what lets the diagnostics tell "this factory would have been
+            // precompiled, csszyx just turned the feature off for this build"
+            // apart from a genuine authoring problem. A stale entry cannot
+            // affect emitted code through that path.
             recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content);
         }
 
@@ -3479,6 +3794,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
             scanDir(sourceDir);
         }
+
+        recordDemandedSzObjectProviders(seenSourcePaths, szObjectDemand);
 
         const prescanContentByPath = new Map(
             prescanSources.map(file => [file.filePath, file.content]),
@@ -3923,11 +4240,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // missing-css means the classes never reached the safelist — the
             // styles are simply absent, which is the failure class that must
             // surface in production builds too (same tier as the spread
-            // warning above). `quiet` still silences it: that flag is the
-            // documented way to mute every build warning.
+            // warning above). Only `quiet: true` silences it; `'nudges'` exists
+            // precisely so a calmer log does not have to cost this report.
             emitMissingCssFallback(quiet, message, id, console.warn);
         }
-        if (quiet || result.diagnostics.length === 0 || process.env.NODE_ENV === 'production') {
+        if (
+            quiet !== 'off' ||
+            result.diagnostics.length === 0 ||
+            process.env.NODE_ENV === 'production'
+        ) {
             return;
         }
         for (const message of result.diagnostics) {
@@ -4081,6 +4402,25 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * The theme token names the registration module carries.
+     *
+     * One source for the module's payload and for the hot-update comparison
+     * that decides whether a stylesheet edit changed anything — building the
+     * shape twice is how the two would drift and the reload stop firing.
+     *
+     * @returns Token names per szcn merge-group category.
+     */
+    function themeGroupTokens(): ThemeGroupTokens {
+        const theme = state.parsedTheme;
+        return {
+            colors: theme?.colors ?? [],
+            textSizes: theme?.textSizes ?? [],
+            fontFamilies: theme?.fonts ?? [],
+            fontWeights: theme?.fontWeights ?? [],
+        };
+    }
+
+    /**
      * Inject theme-group registration into modules that can call szcn.
      *
      * @param code Original source used for authored szcn detection.
@@ -4098,9 +4438,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (
             (!usesSzcn && !/\bszcn\s*\(/.test(code)) ||
             transformedCode.includes(THEME_GROUPS_VIRTUAL_ID) ||
+            transformedCode.includes(THEME_GROUPS_FILE_MARKER) ||
             !shouldProcessSource(id)
         ) {
             return null;
+        }
+        // webpack reads the colon in `virtual:` as a URI scheme and fails the
+        // build before any resolve plugin runs — the same reason the
+        // mangle-runtime injection is lane-gated. Gating this one off instead
+        // would silently cost the lane its theme merge groups, so it gets the
+        // registration as a real file, exactly like the Turbopack loader does.
+        if (activeFramework === 'webpack') {
+            const groups = ensureThemeGroupsFile(
+                state.rootDir,
+                path.join(state.rootDir, '.csszyx'),
+            );
+            if (groups.file === null) return null;
+            // `split` always yields a first element, so there is nothing to
+            // fall back to: an id with no query answers with the whole id.
+            const [from] = id.split('?');
+            return `import '${themeGroupsSpecifier(from, groups.file)}';\n${transformedCode}`;
         }
         return `import '${THEME_GROUPS_VIRTUAL_ID}';\n${transformedCode}`;
     }
@@ -4250,13 +4607,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     return createMangleRuntimeModule(globalVarAliasPrefix);
                 }
                 if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
-                    const theme = state.parsedTheme;
-                    return createThemeGroupsModule({
-                        colors: theme?.colors ?? [],
-                        textSizes: theme?.textSizes ?? [],
-                        fontFamilies: theme?.fonts ?? [],
-                        fontWeights: theme?.fontWeights ?? [],
-                    });
+                    return createThemeGroupsModule(themeGroupTokens());
                 }
                 return null;
             },
@@ -4273,7 +4624,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     return true;
                 }
                 // Only handle source files in PRE phase
-                return shouldProcessSource(id);
+                if (shouldProcessSource(id)) {
+                    return true;
+                }
+                // The bundler resolved this module, so it is genuinely part of
+                // the build even when the prescan never walked its directory —
+                // which is the case for a package tree OUTSIDE the project
+                // root. Recording the skip here is the only way that layout can
+                // ever be reported; the prescan walk alone sees nothing.
+                recordPackagesSkipIfSz(id);
+                return false;
             },
 
             /**
@@ -4402,12 +4762,20 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Surface the skipped files once so the no-op is visible.
                 if (!state.skipWarningEmitted && state.skippedSzFiles.size > 0) {
                     state.skipWarningEmitted = true;
-                    // A usage nudge (add the package dir to compileSources), not a
-                    // csszyx-output defect — dev-only so it never noises a host
-                    // app's production build.
-                    emitWarning(skippedSzFilesMessage(sortStrings(state.skippedSzFiles)), {
-                        devOnly: true,
-                    });
+                    // Gated by consequence. A skipped file that only carries its
+                    // own `sz` is a usage nudge — dev-only, so it never noises a
+                    // host app's production build. A skipped file that may EXPORT
+                    // szv factories also drops every importer's precompile, which
+                    // is missing csszyx output rather than a nudge, and a field
+                    // report cost an afternoon of bisecting because the
+                    // production build said nothing.
+                    emitWarning(
+                        skippedSzFilesMessage(
+                            sortStrings(state.skippedSzFiles),
+                            sortStrings(state.skippedSzvExportFiles),
+                        ),
+                        { devOnly: state.skippedSzvExportFiles.size === 0 },
+                    );
                 }
                 // The safelist hit its hard cap; extra classes were dropped. This
                 // only happens on pathological/hostile class cardinality — surface
@@ -4447,7 +4815,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     recordGlobalVarSourceFile(state, id, null);
                     recordFileVarMangleEntries(state, id, []);
                     recordFileCSSVariableMetrics(state, id, null);
+                    refreshSzvRegistryEntry(id, null);
+                    return;
                 }
+                // The rollup-family lanes: `vite build --watch` and `rollup -w`,
+                // where `handleHotUpdate` never fires. Runs before the rebuild,
+                // so importers re-transform against the refreshed table rather
+                // than the one from startup.
+                refreshSzvRegistryEntryFromDisk(id);
             },
 
             /**
@@ -4456,6 +4831,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              */
             webpack(compiler: WebpackCompiler) {
                 activeFramework = 'webpack';
+                // Write the szcn theme-group registration now, not when the
+                // first module that imports it is transformed. webpack caches
+                // transformed modules across builds, so a rebuild can replay an
+                // already-injected import WITHOUT running the transform that
+                // creates the file — and if anything removed the generated
+                // directory in between (a clean script that spares webpack's own
+                // cache is enough), the build fails on a module nobody touched.
+                // Producing it at lane entry makes its existence a property of
+                // the build rather than of what happened to be recompiled.
+                compiler.hooks?.beforeCompile?.tap?.('csszyx:theme-groups', () => {
+                    // The compiler's own context, not `state.rootDir`: that is
+                    // assigned by another hook on this same event, and tap order
+                    // follows registration order, so reading it here would
+                    // depend on which of the two was wired first.
+                    const root = compiler.context || process.cwd();
+                    ensureThemeGroupsFile(root, path.join(root, '.csszyx'));
+                });
                 // Never mangle in a development-mode webpack build — the same
                 // reason as the `vite serve` guard: dev CSS is unmangled, so a
                 // delivered runtime map would encode classes to tokens no dev
@@ -4465,13 +4857,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // used to prevent by accident.
                 if (compiler.options?.mode === 'development') {
                     manglingEnabled = false;
-                }
-                // `webpack --watch` (any mode) rebuilds against the ONE prescan
-                // registry — the beforeCompile guard below even skips the
-                // prescan on rebuilds — so an edited factory module keeps its
-                // stale table. Same v1 cut as the vite/rollup watch guards.
-                if (compiler.watchMode === true || compiler.options?.watch === true) {
-                    crossModuleRegistryEnabled = false;
                 }
                 // Delivery is decided by the vite/rollup hooks (module
                 // injection + transformIndexHtml); this lane ships the map the
@@ -4487,14 +4872,32 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
                     state.rootDir = root;
+                    // Next.js maps `@/*` with a resolver plugin rather than an
+                    // alias table, so webpack's own alias object is empty on the
+                    // framework that needs this most; `collectSpecifierAliases`
+                    // reads tsconfig for exactly that case.
+                    specifierAliases = collectSpecifierAliases(
+                        root,
+                        compiler.options?.resolve?.alias,
+                    );
                     evictTransformCacheOnce();
                     if (state.classes.size === 0) {
                         prescanAndWriteClasses();
                     }
+                    // A rebuild skips the prescan above, so an edited factory
+                    // would keep serving importers its startup table. webpack
+                    // hands the watcher's changed set straight to this hook;
+                    // refresh those entries before any module re-transforms.
+                    for (const changed of compiler.modifiedFiles ?? []) {
+                        refreshSzvRegistryEntryFromDisk(changed);
+                    }
+                    for (const removed of compiler.removedFiles ?? []) {
+                        refreshSzvRegistryEntry(removed, null);
+                    }
                     // Generate theme type augmentation from @theme CSS blocks
-                    state.parsedTheme =
-                        runThemeScan(root, options.build?.scanCss) ?? state.parsedTheme;
-                    // Zero-config fallback: no scanCss → discover @theme CSS automatically.
+                    state.scanCssTheme =
+                        runThemeScan(root, options.build?.scanCss) ?? state.scanCssTheme;
+                    // Always: project-wide @theme discovery feeds merge groups.
                     runAutoThemeScan(root);
                 });
                 // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes
@@ -4519,10 +4922,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // watch mode — `rollup -w` here, and vite build --watch
                     // through the same rollup context.
                     activeFramework = 'rollup';
-                    const meta = (this as unknown as { meta?: { watchMode?: boolean } }).meta;
-                    if (meta?.watchMode) {
-                        crossModuleRegistryEnabled = false;
-                    }
                 },
             },
 
@@ -4537,27 +4936,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = config.root || process.cwd();
                     state.rootDir = root;
+                    // Vite has already normalized `resolve.alias` into its array
+                    // form here, which is also the form this reads — taking it
+                    // from the RESOLVED config means an alias another plugin
+                    // added is honoured exactly as the build will resolve it.
+                    specifierAliases = collectSpecifierAliases(root, config.resolve?.alias);
                     // Never mangle in a dev server — the runtime mangle map would
                     // not match the un-mangled dev CSS. See `manglingEnabled` above.
                     if (config.command === 'serve') {
                         manglingEnabled = false;
-                        crossModuleRegistryEnabled = false;
-                    }
-                    // `vite build --watch` is a production-mode build with the
-                    // dev server's staleness problem: the registry is recorded
-                    // once at prescan and never re-recorded, so a factory edit
-                    // would compile importers against the old table on every
-                    // rebuild. Same v1 cut as `serve`.
-                    if (config.build?.watch) {
-                        crossModuleRegistryEnabled = false;
                     }
                     evictTransformCacheOnce();
                     // Pre-scan source files so Tailwind can discover classes
                     prescanAndWriteClasses();
                     // Generate theme type augmentation from @theme CSS blocks
-                    state.parsedTheme =
-                        runThemeScan(root, options.build?.scanCss) ?? state.parsedTheme;
-                    // Zero-config fallback: no scanCss → discover @theme CSS automatically.
+                    state.scanCssTheme =
+                        runThemeScan(root, options.build?.scanCss) ?? state.scanCssTheme;
+                    // Always: project-wide @theme discovery feeds merge groups.
                     runAutoThemeScan(root);
                 },
 
@@ -4587,18 +4982,29 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
                         }
                     };
-                    if (scanCss) {
+                    if (ctx.file.endsWith('.css')) {
+                        // ANY css edit may add or remove @theme tokens, including
+                        // in a file `scanCss` does not list and one the scan has
+                        // not seen yet — so re-discover project-wide either way.
+                        // A file that IS listed additionally refreshes the typing
+                        // scan, which is what rewrites `.csszyx/theme.d.ts`.
                         const root = ctx.server.config.root || process.cwd();
-                        if (matchesAnyPattern(ctx.file, scanCss, root)) {
-                            state.parsedTheme = runThemeScan(root, scanCss) ?? state.parsedTheme;
-                            reloadThemeGroupsModule();
+                        const before = createThemeGroupsModule(themeGroupTokens());
+                        if (scanCss && matchesAnyPattern(ctx.file, scanCss, root)) {
+                            state.scanCssTheme = runThemeScan(root, scanCss) ?? state.scanCssTheme;
                         }
-                    } else if (ctx.file.endsWith('.css')) {
-                        // Zero-config mode: any CSS edit may add or remove @theme
-                        // tokens (including in a file the auto-scan has not seen
-                        // yet), so re-discover and reload the registration.
-                        runAutoThemeScan(ctx.server.config.root || process.cwd());
+                        runAutoThemeScan(root);
                         reloadThemeGroupsModule();
+                        // Invalidating is not enough. A stylesheet edit is a CSS
+                        // hot update: Vite swaps the styles and never re-executes
+                        // a JS module, so the registration the page booted with
+                        // stays in memory and a DELETED token keeps grouping
+                        // classes the stylesheet no longer defines. Only a reload
+                        // re-runs it — and only when the tokens actually changed,
+                        // so ordinary CSS edits keep the hot update they should.
+                        if (createThemeGroupsModule(themeGroupTokens()) !== before) {
+                            ctx.server.ws.send({ type: 'full-reload' });
+                        }
                     }
 
                     // Incremental sz class discovery: when a source file changes, scan it
@@ -4614,8 +5020,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     try {
                         fileContent = fs.readFileSync(ctx.file, 'utf-8');
                     } catch {
+                        refreshSzvRegistryEntry(ctx.file, null);
                         return;
                     }
+
+                    // Before the importers re-transform: an edited factory must
+                    // not serve them the table it had at server start. Reuses
+                    // the read above, and runs ahead of the `sz` marker gate
+                    // below because a module of pure `szv` factories carries
+                    // none of those markers.
+                    //
+                    // Vite also calls `watchChange` in dev, so in THIS version
+                    // either path alone would do — verified by disabling each
+                    // in turn. They are kept because their lane coverage
+                    // differs, not for redundancy: `handleHotUpdate` never
+                    // fires for `vite build --watch` or `rollup -w`, and a
+                    // bundler version that stops calling one must not silently
+                    // bring the staleness back.
+                    refreshSzvRegistryEntry(ctx.file, fileContent);
 
                     if (
                         !fileContent.includes('sz=') &&
@@ -4993,7 +5415,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             collectRollupGlobalVarCssAssets(bundle),
         );
         const shouldMangle = manglingEnabled && Object.keys(state.mangleMap).length > 0;
-        emitAsset('csszyx-manifest.json', JSON.stringify(createBundleManifest(shouldMangle)));
+        // Opt-in: only `@csszyx/dynamic` reads this, and only to skip injecting
+        // rules the built CSS already has. The file carries the whole class
+        // census to answer questions about the few classes `dynamic()` renders,
+        // so on a measured 668-class census it costs ~2 kB gz to spare a few
+        // hundred bytes of injection. A missing manifest is not a failure —
+        // `dynamic()` injects instead, and the styles are identical.
+        if (options.build?.emitManifest === true) {
+            emitAsset('csszyx-manifest.json', JSON.stringify(createBundleManifest(shouldMangle)));
+        }
         if (shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) {
             const globalVarMap = createGlobalVarMapAssetSource(
                 state.varMangleMap,
