@@ -24,6 +24,7 @@ concurrency:
 
 jobs:
   detect-changes:
+    name: Fuzzing gate
     uses: ./.github/workflows/detect-changes.yml
 
   fuzzing:
