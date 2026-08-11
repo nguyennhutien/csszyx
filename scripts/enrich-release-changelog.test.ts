@@ -1,9 +1,42 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { buildSection, parseConventional, spliceSection } from './enrich-release-changelog.mjs';
+import {
+    buildSection,
+    buildSquashBody,
+    parseConventional,
+    spliceSection,
+} from './enrich-release-changelog.mjs';
 
 describe('release changelog enrichment', () => {
+    // The body GitHub would have written if it had not stopped at 64 KiB. The
+    // shape is load-bearing: the PR reference is read off the first line and
+    // applied to everything below it, and a footer attaches to the bullet above
+    // it — so this is asserted by parsing it back, not by string comparison.
+    it('rebuilds a squash body that parses like the real thing', () => {
+        const body = buildSquashBody('feat!: bundle the lot (#99)', [
+            'feat(runtime): add a thing',
+            'fix(compiler): stop dropping a value\n\nBREAKING CHANGE: `parse()` takes an options object.',
+            '   ',
+        ]);
+
+        const entries = parseConventional([body]);
+
+        assert.deepEqual(
+            entries.map(e => [e.type, e.scope, e.desc, e.pr, e.breaking]),
+            [
+                ['feat', '', 'bundle the lot', '99', true],
+                ['feat', 'runtime', 'add a thing', '99', false],
+                ['fix', 'compiler', 'stop dropping a value', '99', true],
+            ],
+        );
+        assert.equal(entries[2].note, '`parse()` takes an options object.');
+    });
+
+    it('leaves a subject alone when the pull request has no commits to read', () => {
+        assert.equal(buildSquashBody('chore: nothing (#1)', []), 'chore: nothing (#1)');
+    });
+
     it('parses scoped, breaking, and squash-body entries without duplicates', () => {
         const entries = parseConventional([
             [
