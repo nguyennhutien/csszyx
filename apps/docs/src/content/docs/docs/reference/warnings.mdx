@@ -437,7 +437,7 @@ with a different remedy pointing at the CSS pipeline instead.
 ### Mangling made the build bigger
 
 ```text
-[csszyx] production.mangle is making this build BIGGER: +{n} B gzipped. The runtime mangle map costs {n} B via {channels}, while the mangled CSS saves {n} B. Mangling is a name-obfuscation feature; over a compressed response it does not reduce payload, because utility class names compress far better than the map they need. If you enabled it for size, set `production.mangle: false`. If you enabled it to hide class names, this is the expected price and you can ignore this. Narrowing `production.mangleMapDelivery` removes a map copy when only one channel is needed. (Measured on CSS and the map; class shortening inside JS chunks is not counted, so the real net is slightly better than this figure.)
+[csszyx] production.mangle is making this build BIGGER: +{n} B gzipped. The runtime mangle map costs {n} B via {channels}, while the mangled CSS saves {n} B and the shortened classes in code save {n} B. Mangling is a name-obfuscation feature; over a compressed response it does not reduce payload, because utility class names compress far better than the map they need. If you enabled it for size, set `production.mangle: false`. If you enabled it to hide class names, this is the expected price and you can ignore this. Narrowing `production.mangleMapDelivery` removes a map copy when only one channel is needed.
 ```
 
 The CSS clause flips to `the mangled CSS COSTS {n} B (short tokens compress

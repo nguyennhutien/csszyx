@@ -19,17 +19,30 @@ import {
 /**
  * Build an account with the given gzipped CSS totals and channels.
  *
+ * Code totals default to zero so the CSS-focused cases below read as they did
+ * before code assets were weighed; the cases that care set them explicitly.
+ *
  * @param before - Gzipped bytes before mangling.
  * @param after - Gzipped bytes after mangling.
  * @param channels - Channels that shipped the map.
+ * @param code - Gzipped code bytes, before and after.
+ * @param code.before - Gzipped code bytes before mangling.
+ * @param code.after - Gzipped code bytes after mangling.
  * @returns Prepared account.
  */
 function account(
     before: number,
     after: number,
     channels: Array<'html' | 'bundle'> = ['html'],
+    code: { before: number; after: number } = { before: 0, after: 0 },
 ): MangleSizeAccount {
-    return { cssGzBefore: before, cssGzAfter: after, channels: new Set(channels) };
+    return {
+        cssGzBefore: before,
+        cssGzAfter: after,
+        codeGzBefore: code.before,
+        codeGzAfter: code.after,
+        channels: new Set(channels),
+    };
 }
 
 describe('gzipBytes', () => {
@@ -102,6 +115,31 @@ describe('computeMangleSizeVerdict', () => {
         expect(verdict.cssSaving).toBe(1000);
         expect(verdict.net).toBe(verdict.mapCost - 1000);
     });
+
+    // Shortening class strings inside chunks is a real saving. Leaving it out
+    // of the net overstated the cost of the feature the advisory tells people
+    // to switch off — measured at roughly 39% too high on a consumer's build.
+    it('nets the code saving too, not only the CSS', () => {
+        const verdict = computeMangleSizeVerdict(
+            account(5000, 4000, ['html'], { before: 9000, after: 8000 }),
+            '{}',
+        );
+        expect(verdict.codeSaving).toBe(1000);
+        expect(verdict.net).toBe(verdict.mapCost - 2000);
+    });
+
+    it('can be turned from a cost into a win by the code saving alone', () => {
+        const payload = JSON.stringify({ 'bg-red-500': 'z' });
+        const cssOnly = computeMangleSizeVerdict(account(5000, 4990, ['html']), payload);
+        const withCode = computeMangleSizeVerdict(
+            account(5000, 4990, ['html'], { before: 9000, after: 4000 }),
+            payload,
+        );
+
+        expect(cssOnly.net).toBeGreaterThan(0);
+        expect(withCode.net).toBeLessThan(0);
+        expect(mangleSizeMessage(withCode)).toBeNull();
+    });
 });
 
 describe('mangleSizeMessage', () => {
@@ -157,5 +195,19 @@ describe('mangleSizeMessage', () => {
             bigPayload,
         );
         expect(mangleSizeMessage(verdict)).toContain('mangleMapDelivery');
+    });
+
+    it('states the code saving instead of disclaiming it', () => {
+        // The figure used to end with a note that class shortening in chunks
+        // was not counted "so the real net is slightly better". It is counted
+        // now, so the message states it and the disclaimer is gone.
+        const verdict = computeMangleSizeVerdict(
+            account(5000, 4990, ['html'], { before: 900, after: 800 }),
+            bigPayload,
+        );
+        const message = mangleSizeMessage(verdict);
+
+        expect(message).toContain('the shortened classes in code save 100 B');
+        expect(message).not.toContain('is not counted');
     });
 });

@@ -76,6 +76,7 @@ import {
     createMangleSizeAccount,
     type MangleSizeAccount,
     mangleSizeMessage,
+    recordCodePair,
     recordCssPair,
     resetMangleSizeAccount,
 } from './mangle-size-report.js';
@@ -5243,6 +5244,31 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Rewrite one code asset's class strings, weighing what the shortening saved.
+     *
+     * Shared by both output lanes because they do the same thing to the same
+     * kind of asset — a rollup chunk and a webpack `.js` asset — and the
+     * measurement has to agree between them or the advisory's figure depends on
+     * the bundler.
+     *
+     * The map substitution runs on BOTH sides of the comparison. Its bytes are
+     * charged once as `mapCost`, so letting them appear on only the "after"
+     * side would bill the same payload twice and report a cost that is mostly
+     * the map counted again.
+     *
+     * @param source - Asset source as the bundler produced it.
+     * @param shouldMangle - Whether class mangling applies to this output.
+     * @returns The rewritten source.
+     */
+    function rewriteCodeAsset(source: string, shouldMangle: boolean): string {
+        if (!shouldMangle) return replacePlaceholders(source);
+        const before = replacePlaceholders(source);
+        const after = replacePlaceholders(mangleCodeClasses(source));
+        recordCodePair(sizeAccount, before, after);
+        return after;
+    }
+
+    /**
      * Rewrite one emitted CSS asset and collect hybrid-mangle ownership evidence.
      *
      * @param source Original CSS source.
@@ -5342,9 +5368,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         if (!file.endsWith('.js')) return;
 
-        const rewritten = shouldMangle
-            ? replacePlaceholders(mangleCodeClasses(source))
-            : replacePlaceholders(source);
+        const rewritten = rewriteCodeAsset(source, shouldMangle);
         if (rewritten !== source) {
             compilation.updateAsset(file, new compiler.webpack.sources.RawSource(rewritten));
         }
@@ -5445,9 +5469,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         if (chunk.type !== 'chunk' || chunk.code === undefined) return;
 
-        const rewritten = shouldMangle
-            ? replacePlaceholders(mangleCodeClasses(chunk.code))
-            : replacePlaceholders(chunk.code);
+        const rewritten = rewriteCodeAsset(chunk.code, shouldMangle);
         if (rewritten !== chunk.code) chunk.code = rewritten;
     }
 

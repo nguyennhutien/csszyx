@@ -25,6 +25,10 @@ export interface MangleSizeAccount {
     cssGzBefore: number;
     /** Gzipped bytes of the same assets after class mangling. */
     cssGzAfter: number;
+    /** Gzipped bytes of every code asset before class mangling. */
+    codeGzBefore: number;
+    /** Gzipped bytes of the same code assets after class mangling. */
+    codeGzAfter: number;
     /** Channels observed to have shipped the map. */
     channels: Set<MangleMapChannel>;
 }
@@ -35,7 +39,7 @@ export interface MangleSizeAccount {
  * @returns Zeroed size account.
  */
 export function createMangleSizeAccount(): MangleSizeAccount {
-    return { cssGzBefore: 0, cssGzAfter: 0, channels: new Set() };
+    return { cssGzBefore: 0, cssGzAfter: 0, codeGzBefore: 0, codeGzAfter: 0, channels: new Set() };
 }
 
 /**
@@ -51,6 +55,8 @@ export function createMangleSizeAccount(): MangleSizeAccount {
 export function resetMangleSizeAccount(account: MangleSizeAccount): void {
     account.cssGzBefore = 0;
     account.cssGzAfter = 0;
+    account.codeGzBefore = 0;
+    account.codeGzAfter = 0;
     account.channels.clear();
 }
 
@@ -90,13 +96,45 @@ export function recordCssPair(account: MangleSizeAccount, before: string, after:
     account.cssGzAfter += gzipBytes(after);
 }
 
+/**
+ * Record one code asset's before/after pair.
+ *
+ * Shortening class strings inside JS chunks is a real saving that this report
+ * used to disclaim instead of measure — the note that "the real net is slightly
+ * better" was carrying too much weight. Measured on a consumer's build the
+ * uncounted share was about 1.3 kB of a 3.4 kB verdict, so the advice to turn
+ * the feature off was argued from a cost roughly 39% larger than the real one.
+ *
+ * Both sides must arrive with the mangle-map placeholder already substituted:
+ * the map's bytes are charged once as `mapCost`, and letting them differ across
+ * the pair would bill the same payload twice.
+ *
+ * @param account - Accumulator to update.
+ * @param before - Code before class mangling, map substituted.
+ * @param after - Code after class mangling, map substituted.
+ */
+export function recordCodePair(account: MangleSizeAccount, before: string, after: string): void {
+    // Same reasoning as the CSS pair: an unchanged asset is weighed once and
+    // counted on both sides so it cannot skew the delta.
+    if (before === after) {
+        const bytes = gzipBytes(before);
+        account.codeGzBefore += bytes;
+        account.codeGzAfter += bytes;
+        return;
+    }
+    account.codeGzBefore += gzipBytes(before);
+    account.codeGzAfter += gzipBytes(after);
+}
+
 /** Verdict describing what mangling cost or saved on the measurable surfaces. */
 export interface MangleSizeVerdict {
     /** Gzipped bytes the map added, summed over the channels that shipped it. */
     mapCost: number;
     /** Gzipped bytes the mangled CSS saved. Negative when mangling grew the CSS. */
     cssSaving: number;
-    /** `mapCost - cssSaving`. Positive means mangling made the build bigger. */
+    /** Gzipped bytes the shortened classes in code assets saved. */
+    codeSaving: number;
+    /** `mapCost - cssSaving - codeSaving`. Positive means mangling made the build bigger. */
     net: number;
     /** Channels the map shipped through. */
     channels: MangleMapChannel[];
@@ -116,7 +154,8 @@ export function computeMangleSizeVerdict(
     const channels = sortStrings(account.channels);
     const mapCost = gzipBytes(mapPayload) * channels.length;
     const cssSaving = account.cssGzBefore - account.cssGzAfter;
-    return { mapCost, cssSaving, net: mapCost - cssSaving, channels };
+    const codeSaving = account.codeGzBefore - account.codeGzAfter;
+    return { mapCost, cssSaving, codeSaving, net: mapCost - cssSaving - codeSaving, channels };
 }
 
 /**
@@ -135,19 +174,22 @@ export function mangleSizeMessage(verdict: MangleSizeVerdict): string | null {
         verdict.cssSaving >= 0
             ? `the mangled CSS saves ${verdict.cssSaving} B`
             : `the mangled CSS COSTS ${-verdict.cssSaving} B (short tokens compress worse than the names they replaced)`;
+    const codePart =
+        verdict.codeSaving >= 0
+            ? `the shortened classes in code save ${verdict.codeSaving} B`
+            : `the shortened classes in code COST ${-verdict.codeSaving} B`;
     const channelPart =
         verdict.channels.length > 1
             ? `${verdict.channels.join(' + ')} (${verdict.channels.length} copies)`
             : verdict.channels[0];
     return (
         `[csszyx] production.mangle is making this build BIGGER: +${verdict.net} B gzipped. ` +
-        `The runtime mangle map costs ${verdict.mapCost} B via ${channelPart}, while ${cssPart}. ` +
+        `The runtime mangle map costs ${verdict.mapCost} B via ${channelPart}, while ${cssPart} ` +
+        `and ${codePart}. ` +
         'Mangling is a name-obfuscation feature; over a compressed response it does not reduce ' +
         'payload, because utility class names compress far better than the map they need. ' +
         'If you enabled it for size, set `production.mangle: false`. If you enabled it to hide ' +
         'class names, this is the expected price and you can ignore this. ' +
-        'Narrowing `production.mangleMapDelivery` removes a map copy when only one channel is needed. ' +
-        '(Measured on CSS and the map; class shortening inside JS chunks is not counted, so the ' +
-        'real net is slightly better than this figure.)'
+        'Narrowing `production.mangleMapDelivery` removes a map copy when only one channel is needed.'
     );
 }
