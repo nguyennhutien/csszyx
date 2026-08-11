@@ -664,20 +664,54 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
 }
 
 /**
+ * A `@import "tailwindcss"` / `@import "tailwindcss/<layer>.css"` specifier.
+ *
+ * Global because the modifier scan below inspects every Tailwind import in the
+ * file, not only the first: a split setup imports the layers separately and any
+ * one of them may carry the scoping modifier.
+ */
+const TAILWIND_IMPORT_SPECIFIER = /@import\s+["']tailwindcss(?:\/[^"']*)?["']/g;
+
+/** A `source()` modifier, as a whole word so `nosource(` cannot match. */
+const SOURCE_MODIFIER = /\bsource\(/;
+
+/**
+ * Whether any Tailwind import carries a `source()` modifier.
+ *
+ * Tailwind v4 accepts the import modifiers — `layer()`, `important`, `theme()`,
+ * `prefix()`, `source()` — in any order, so matching one arrangement recognises
+ * only the projects that happen to write it that way. Reading the modifier list
+ * up to the statement terminator is order-independent by construction, and
+ * bounding it at the `;` stops an unscoped import from borrowing the scoping of
+ * an unrelated import further down the file.
+ *
+ * @param css - CSS module source, block comments already stripped.
+ * @returns true when a Tailwind import scopes content detection.
+ */
+function tailwindImportScopesContent(css: string): boolean {
+    for (const match of css.matchAll(TAILWIND_IMPORT_SPECIFIER)) {
+        const modifiersStart = match.index + match[0].length;
+        const terminator = css.indexOf(';', modifiersStart);
+        const modifiers =
+            terminator === -1 ? css.slice(modifiersStart) : css.slice(modifiersStart, terminator);
+        if (SOURCE_MODIFIER.test(modifiers)) return true;
+    }
+    return false;
+}
+
+/**
  * Whether a CSS module scopes Tailwind's content detection — `source(none)` or
- * `source("…")` on the `@import "tailwindcss"`, or any `@source not` exclusion.
+ * `source("…")` on a `@import "tailwindcss"`, or any `@source not` exclusion.
  * A plain additive `@source "…"` does NOT count: it only adds a path, it does
- * not stop the automatic climb-to-the-workspace-root scan. Block comments are
- * stripped first so a commented-out directive does not count.
+ * not stop the automatic scan. Block comments are stripped first so a
+ * commented-out directive does not count.
  *
  * @param code - CSS module source.
  * @returns true when the entry scopes (or excludes from) content detection.
  */
 export function cssHasContentScope(code: string): boolean {
     const s = stripCssBlockComments(code);
-    return (
-        /@import\s+["']tailwindcss(?:\/[^"']*)?["']\s+source\(/.test(s) || /@source\s+not\b/.test(s)
-    );
+    return tailwindImportScopesContent(s) || /@source\s+not\b/.test(s);
 }
 
 /**

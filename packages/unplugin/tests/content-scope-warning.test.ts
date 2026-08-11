@@ -30,6 +30,39 @@ describe('cssHasContentScope', () => {
     it('ignores commented-out directives', () => {
         expect(cssHasContentScope('@import "tailwindcss";\n/* @source not "x"; */')).toBe(false);
     });
+
+    // Tailwind v4 accepts the import modifiers in any order, so recognising
+    // `source()` only where it happens to come first reports a scoped entry as
+    // unscoped. A project that supplies its own reset imports the layers
+    // separately and marks utilities `important`, which is the arrangement that
+    // put `important` between the specifier and `source()`.
+    describe.each([
+        ['granular specifier', '@import "tailwindcss/utilities.css" source(none);'],
+        ['important before source', '@import "tailwindcss/utilities.css" important source(none);'],
+        ['important after source', '@import "tailwindcss/utilities.css" source(none) important;'],
+        ['layer before source, bare', '@import "tailwindcss" layer(utilities) source(none);'],
+        [
+            'layer and important before source',
+            '@import "tailwindcss/utilities.css" layer(utilities) important source(none);',
+        ],
+        ['narrowing source() with modifiers', '@import "tailwindcss" important source("../src");'],
+    ])('detects source() regardless of modifier order — %s', (_name, css) => {
+        it('is scoped', () => {
+            expect(cssHasContentScope(css)).toBe(true);
+        });
+    });
+
+    it('does not read a later import’s source() as this one’s', () => {
+        // The scan stops at the statement terminator, so an unscoped Tailwind
+        // import cannot borrow scoping from an unrelated import after it.
+        expect(cssHasContentScope('@import "tailwindcss";\n@import "other" source(none);')).toBe(
+            false,
+        );
+    });
+
+    it('does not match a modifier that merely ends in "source("', () => {
+        expect(cssHasContentScope('@import "tailwindcss" nosource(none);')).toBe(false);
+    });
 });
 
 describe('shouldWarnUnscopedMonorepo', () => {
