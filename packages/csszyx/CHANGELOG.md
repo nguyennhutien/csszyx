@@ -1,5 +1,16 @@
 # csszyx
 
+## [0.13.0](https://github.com/nguyennhutien/csszyx/compare/v0.12.0...v0.13.0) (2026-08-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* `shouldEmitWarning`, `shouldEmitMissingCssFallback` and `emitMissingCssFallback` now type their first parameter as the resolved `QuietMode` rather than the authored option. TypeScript callers passing a boolean should pass `resolveQuietMode(value)` instead; the runtime still accepts a boolean, so JavaScript callers are unaffected.
+
+### Features
+
+* compile sz objects a component imports from another module ([#206](https://github.com/nguyennhutien/csszyx/issues/206)) ([ba51dec](https://github.com/nguyennhutien/csszyx/commit/ba51dec97683597978f4a663d403d5925632cc29))
+
 ## [0.12.0](https://github.com/nguyennhutien/csszyx/compare/v0.11.11...v0.12.0) (2026-08-03)
 
 ### ⚠ BREAKING CHANGES
