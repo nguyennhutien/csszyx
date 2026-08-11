@@ -10,9 +10,12 @@
  * lands on the prototype every object in the process shares.
  *
  * A dependency shipping one `export const __proto__` is enough, and a build
- * tool reads dependencies. The tables are therefore built without a prototype,
- * and these cases hold that: they fail loudly if the objects ever go back to
- * being plain, which is a one-character change away at every call site.
+ * tool reads dependencies. Two defences answer that, and these cases hold both:
+ * the name is refused before it can become a key, and the tables are built
+ * without a prototype so a name nobody thought to refuse still has no setter to
+ * trigger. Either alone would pass most of what follows; the canary assertions
+ * fail loudly if both are ever dropped, which is a small edit away at every
+ * call site.
  */
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -67,12 +70,14 @@ describe('a provider exporting __proto__', () => {
         });
 
         expect(({} as Record<string, unknown>)[CANARY]).toBeUndefined();
-        // Kept as an ordinary key, which resolves for nobody. That is the right
-        // outcome: the name is recorded exactly as written and matches no
-        // import the compiler will ask about.
-        const slice = resolved.statics.szObjects?.['./styles'];
-        expect(slice && Object.keys(slice)).toEqual(['__proto__']);
-        expect(slice && Object.getPrototypeOf(slice)).toBeNull();
+        // Refused rather than recorded. The importer loses the precompile for
+        // that one name and compiles it at runtime, which is what every module
+        // csszyx cannot read statically already does.
+        expect(resolved.statics.szObjects).toBeUndefined();
+        // The provider is still declared to the watcher. Reading a file and
+        // recording nothing from it is exactly the case that has to invalidate
+        // this importer when the file later exports something usable.
+        expect(resolved.providers).toHaveLength(1);
     });
 
     it('does not reach Object.prototype through the prescan registry', () => {
@@ -91,8 +96,29 @@ describe('a provider exporting __proto__', () => {
         );
 
         expect(({} as Record<string, unknown>)[CANARY]).toBeUndefined();
+        expect(resolved.szObjects).toBeUndefined();
+    });
+
+    it('does not take the whole module down with it', () => {
+        // The refusal is per name, not per provider: a module exporting the
+        // hazardous name alongside real ones keeps the real ones.
+        const { root, page } = projectExportingProto();
+        const registry: SzvCrossModuleRegistry = new Map();
+        recordSzObjectRegistryFile(
+            registry,
+            join(root, 'app/styles.ts'),
+            `export const __proto__ = { ${CANARY}: 'reached' };\nexport const cardSz = { p: 4 };\n`,
+        );
+
+        const resolved = resolveCrossModuleStaticsFor(
+            registry,
+            page,
+            "import { cardSz } from './styles';\n",
+        );
+
+        expect(({} as Record<string, unknown>)[CANARY]).toBeUndefined();
         const slice = resolved.szObjects?.['./styles'];
-        expect(slice && Object.keys(slice)).toEqual(['__proto__']);
+        expect(slice && Object.keys(slice)).toEqual(['cardSz']);
         expect(slice && Object.getPrototypeOf(slice)).toBeNull();
     });
 });
@@ -100,9 +126,8 @@ describe('a provider exporting __proto__', () => {
 describe('an importer whose specifier is spelled __proto__', () => {
     it('files it as an ordinary key rather than through the prototype', () => {
         // The other half of the same hazard: the outer table is keyed by the
-        // specifier, so a module resolvable under that name would otherwise
-        // make `bySpecifier[specifier] ??= {}` read a prototype it then wrote
-        // straight into.
+        // specifier too, so a module resolvable under that name would reach the
+        // prototype through the OUTER write even with every export name clean.
         const root = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-proto-spec-')));
         roots.push(root);
         mkdirSync(join(root, 'app/__proto__'), { recursive: true });
@@ -123,9 +148,6 @@ describe('an importer whose specifier is spelled __proto__', () => {
         });
 
         expect(({} as Record<string, unknown>)[CANARY]).toBeUndefined();
-        const objects = resolved.statics.szObjects;
-        if (objects !== undefined) {
-            expect(Object.getPrototypeOf(objects)).toBeNull();
-        }
+        expect(resolved.statics.szObjects).toBeUndefined();
     });
 });

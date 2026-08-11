@@ -245,6 +245,54 @@ function firstRegistryHit(
 }
 
 /**
+ * File one export under the specifier that named it, in the channel for its kind.
+ *
+ * The single place a name lifted from somebody else's source becomes a key.
+ * Both lanes write through it — the prescan registry and the Turbopack
+ * loader — because the hazard is in the keying, not in either lane, and a
+ * second copy of these four lines is a second place to forget the guard.
+ *
+ * Two defences, because they fail differently. The tables carry no prototype,
+ * so there is no setter to trigger even for a name nobody thought to reject;
+ * and `__proto__` is rejected outright, so the guarantee does not rest on
+ * every future caller remembering how these objects were built. A provider
+ * exporting that name loses the precompile and compiles at runtime like any
+ * module csszyx cannot read statically.
+ *
+ * Only that one name. The siblings usually listed beside it — `constructor`,
+ * `prototype` — are ordinary properties under a single-level write: assigning
+ * them shadows, it does not escape. Refusing those too would drop real exports
+ * for nothing.
+ *
+ * @param resolved - Resolution being built.
+ * @param kind - What the provider exported.
+ * @param specifier - Specifier as written in the import.
+ * @param name - Export name as the provider spelled it.
+ * @param value - The exported value.
+ */
+export function recordResolvedEntry(
+    resolved: ResolvedCrossModuleEntries,
+    kind: CrossModuleExportKind,
+    specifier: string,
+    name: string,
+    value: Record<string, unknown>,
+): void {
+    if (specifier === '__proto__' || name === '__proto__') return;
+    const channel = kind === 'szv-config' ? 'szvConfigs' : 'szObjects';
+    let bySpecifier = resolved[channel];
+    if (bySpecifier === undefined) {
+        bySpecifier = emptyNameIndex();
+        resolved[channel] = bySpecifier;
+    }
+    let byName = bySpecifier[specifier];
+    if (byName === undefined) {
+        byName = emptyNameIndex();
+        bySpecifier[specifier] = byName;
+    }
+    byName[name] = value;
+}
+
+/**
  * File one module's exports under the specifier that named it, split by kind.
  *
  * @param resolved - Resolution being built.
@@ -257,11 +305,7 @@ function fileUnderSpecifier(
     entries: Record<string, CrossModuleRegistryValue>,
 ): void {
     for (const [name, recorded] of Object.entries(entries)) {
-        const channel = recorded.kind === 'szv-config' ? 'szvConfigs' : 'szObjects';
-        resolved[channel] ??= emptyNameIndex();
-        const bySpecifier = resolved[channel];
-        bySpecifier[specifier] ??= emptyNameIndex();
-        bySpecifier[specifier][name] = recorded.value;
+        recordResolvedEntry(resolved, recorded.kind, specifier, name, recorded.value);
     }
 }
 
