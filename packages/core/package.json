@@ -31,6 +31,10 @@
     "./native": {
       "types": "./native/index.d.ts",
       "node": "./native/index.js"
+    },
+    "./parser-wasm": {
+      "types": "./pkg-parser/csszyx_core.d.ts",
+      "node": "./pkg-parser/csszyx_core.js"
     }
   },
   "files": [

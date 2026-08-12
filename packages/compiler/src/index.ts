@@ -97,6 +97,12 @@ export {
     transformRust,
     transformRustBatch,
 } from './transform-rust.js';
+export {
+    isWasmTransformAvailable,
+    transformWasm,
+    transformWasmBatch,
+    WasmTransformUnavailableError,
+} from './transform-wasm.js';
 
 // Export sz prop types (for IntelliSense and type safety)
 // CustomTheme is the augmentable interface — exported so users and plugins can
