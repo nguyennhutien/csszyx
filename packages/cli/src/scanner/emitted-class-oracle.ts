@@ -26,6 +26,7 @@
  * @module
  */
 
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -174,21 +175,64 @@ const defaultLoader: TailwindLoader = async resolveFrom => {
 };
 
 /**
+ * Map one `@import` specifier onto a file on disk.
+ *
+ * Three kinds arrive here and only the first two used to be handled. A design
+ * system that ships its tokens as a package subpath — `@import
+ * "@acme/ui/sz-theme"` against an exports map — is the ordinary shape for a
+ * monorepo, and both Vite and Tailwind resolve it through node. Reading it as a
+ * path relative to the stylesheet produces a directory that cannot exist, the
+ * compile throws, and the dead-class pass degrades to a skip. Since a skip is
+ * reported rather than failed, such a project keeps "passing" a check that has
+ * never once run.
+ *
+ * `loadModule` below already resolves `@plugin` specifiers this way; this is
+ * the same rule applied to the stylesheet loader.
+ *
+ * @param id - Import specifier as written.
+ * @param base - Directory the importing stylesheet lives in.
+ * @param tailwindRoot - Root of the resolved Tailwind package.
+ * @param resolveFrom - Project directory whose `package.json` anchors packages.
+ * @returns Absolute path to the stylesheet.
+ */
+function resolveStylesheetPath(
+    id: string,
+    base: string,
+    tailwindRoot: string,
+    resolveFrom: string,
+): string {
+    // Anchored rather than a prefix test: `tailwindcss-animate` is a package of
+    // its own, and routing it into the Tailwind package would look for a file
+    // that is not there.
+    if (id === 'tailwindcss' || id.startsWith('tailwindcss/')) {
+        return tailwindPackageStylesheet(id, tailwindRoot);
+    }
+    if (id.startsWith('.') || path.isAbsolute(id)) return path.resolve(base, id);
+    // A bare specifier is ambiguous: CSS reads `@import "theme.css"` as a
+    // sibling file, node reads it as a package. Prefer the file when one is
+    // actually there, so stylesheets that relied on the old behaviour keep
+    // resolving, and fall through to node resolution otherwise.
+    const sibling = path.resolve(base, id);
+    if (existsSync(sibling)) return sibling;
+    return createRequire(path.join(resolveFrom, 'package.json')).resolve(id);
+}
+
+/**
  * Read one stylesheet Tailwind asked for, from the package or from the project.
  *
  * @param id - Import specifier as written.
  * @param base - Directory the importing stylesheet lives in.
  * @param tailwindRoot - Root of the resolved Tailwind package.
+ * @param resolveFrom - Project directory whose `package.json` anchors packages.
  * @returns The stylesheet Tailwind expects back.
  */
 async function loadStylesheet(
     id: string,
     base: string,
     tailwindRoot: string,
+    resolveFrom: string,
 ): Promise<LoadedStylesheet> {
-    const file = id.startsWith('tailwindcss')
-        ? tailwindPackageStylesheet(id, tailwindRoot)
-        : path.resolve(base, id);
+    const file = resolveStylesheetPath(id, base, tailwindRoot, resolveFrom);
     return { path: file, base: path.dirname(file), content: await readFile(file, 'utf8') };
 }
 
@@ -329,7 +373,8 @@ export async function createEmittedClassOracle(
     try {
         design = await load(options.css, {
             base: options.cssBase,
-            loadStylesheet: (id, base) => loadStylesheet(id, base, tailwind.root),
+            loadStylesheet: (id, base) =>
+                loadStylesheet(id, base, tailwind.root, options.resolveFrom),
             loadModule: (id, base) => loadModule(id, base, options.resolveFrom),
         });
     } catch (error) {

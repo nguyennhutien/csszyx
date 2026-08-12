@@ -180,6 +180,100 @@ describe('createEmittedClassOracle — stylesheets that load plugins', () => {
     });
 });
 
+// A design system that ships its tokens as a package subpath is the ordinary
+// shape for a monorepo, and Vite and Tailwind both resolve it. Reading the
+// specifier as a path relative to the CSS file turns it into a directory that
+// does not exist, and the whole check degrades to a skip — so a project can
+// keep "passing" forever without the dead-class pass ever having run.
+describe('createEmittedClassOracle — imports that name a package', () => {
+    const created: string[] = [];
+
+    afterEach(() => {
+        for (const dir of created.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    /**
+     * Write a throwaway project that imports its theme by package specifier.
+     *
+     * Created at the repository ROOT so `tailwindcss` resolves to v4 by walking
+     * up — this package pins v3 permanently for `csszyx migrate`, so a fixture
+     * under `packages/cli` would find a Tailwind with no design system at all.
+     * The fixture package still resolves from the project's own
+     * `node_modules`, which is what the specifier branch has to get right.
+     *
+     * The leading dot keeps the throwaway stylesheet out of the `**\/*.css`
+     * entry scan, which does not walk dot directories.
+     *
+     * @param subpath - Exports-map subpath the stylesheet imports.
+     * @returns The project directory.
+     */
+    function projectImporting(subpath: string): string {
+        const root = fs.mkdtempSync(path.join(REPO, '.tmp-oracle-pkg-import-'));
+        created.push(root);
+        const pkg = path.join(root, 'node_modules', '@fixture', 'design-system');
+        fs.mkdirSync(pkg, { recursive: true });
+        fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'proj' }));
+        fs.writeFileSync(
+            path.join(pkg, 'package.json'),
+            JSON.stringify({
+                name: '@fixture/design-system',
+                exports: { './sz-theme': './tokens.css' },
+            }),
+        );
+        fs.writeFileSync(
+            path.join(pkg, 'tokens.css'),
+            '@theme { --color-fixture-brand: #123456; }',
+        );
+        fs.writeFileSync(
+            path.join(root, 'app.css'),
+            `@import "tailwindcss";\n@import "${subpath}";`,
+        );
+        return root;
+    }
+
+    it('resolves an exports-map subpath and takes the theme it brings', async () => {
+        const root = projectImporting('@fixture/design-system/sz-theme');
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: root,
+            css: await readFile(path.join(root, 'app.css'), 'utf8'),
+            cssBase: root,
+        });
+
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+        // The probe proves the oracle is answering rather than passing
+        // everything; `bg-fixture-brand` exists only via the imported theme.
+        expect(oracle.findDead(['bg-fixture-brand', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
+    it('names the specifier when the package is absent', async () => {
+        const root = projectImporting('@fixture/not-installed/sz-theme');
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: root,
+            css: await readFile(path.join(root, 'app.css'), 'utf8'),
+            cssBase: root,
+        });
+
+        expect(oracle.ok).toBe(false);
+        expect(oracle.ok === false && oracle.reason).toContain('@fixture/not-installed');
+    });
+
+    it('still reads a relative import from the stylesheet, not from node_modules', async () => {
+        const root = projectImporting('./local-theme.css');
+        fs.writeFileSync(
+            path.join(root, 'local-theme.css'),
+            '@theme { --color-local-only: #654321; }',
+        );
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: root,
+            css: await readFile(path.join(root, 'app.css'), 'utf8'),
+            cssBase: root,
+        });
+
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+        expect(oracle.findDead(['bg-local-only', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+});
+
 describe('createEmittedClassOracle — markers are not dead classes', () => {
     it('keeps the bare markers', async () => {
         const oracle = await readyOracle();
