@@ -97,6 +97,18 @@ const sources = [
     'const A = ({ x, y, a, b }) => <div sz={{ p: a ? x : undefined, m: b ? y : undefined }} />;',
     'const A = ({ w, f, on, big }) => <div sz={{ w: w, flex: on ? f : undefined, p: big ? 8 : 2 }} />;',
     'const A = ({ w, f, on, big }) => <div className="x" sz={{ w: w, flex: on ? f : undefined, p: big ? 8 : 2 }} />;',
+
+    // A const DECLARED in the same file, used as a scalar sz value. The corpus
+    // already covers a free identifier (`p: pad`), which every engine defers to
+    // runtime — but not a resolvable one, where the engines disagree about
+    // whether to read it at build time. Without these the gate cannot see the
+    // divergence at all.
+    'const x = 4; const A = () => <div sz={{ p: x }} />;',
+    'const c = "red-500"; const A = () => <div sz={{ bg: c }} />;',
+    'const c = "red-500"; const A = () => <div sz={{ hover: { bg: c } }} />;',
+    'const A = () => { const x = 4; return <div sz={{ p: x }} />; };',
+    // Computed key whose const resolves to a real property name.
+    'const k = "p"; const A = () => <div sz={{ [k]: 4 }} />;',
 ];
 
 const records = sources.map(source => {

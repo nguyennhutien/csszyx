@@ -345,11 +345,16 @@ Fix: explicitly declare `tailwindcss` as a dependency in each package that uses 
 the plugins array.
 
 **"No prebuilt native binary" warning, or a `native engine unavailable` build
-error** — CSSzyx parses your source with three interchangeable engines. The
-default is `rust` (a native addon) because it is the fastest; `oxc` and `babel`
-are pure-JavaScript and need no binary. **All three emit the exact same classes**
-(this is gate-tested for parity), so the engine only affects build speed, never
-your output.
+error** — CSSzyx parses your source with three engines. The default is `rust`
+(a native addon) because it is the fastest. `oxc` runs on `oxc-parser`, which
+ships its own per-platform binaries covering far more targets than CSSzyx's own
+set, so it is usually available where the CSSzyx addon is not; only `babel` is
+pure JavaScript.
+
+The engines agree on classes for every shape the parity corpus covers, which is
+what makes a fallback safe in practice — but "identical output" is not a promise
+CSSzyx makes. Two shapes compile differently, and they are listed in
+[Where the engines differ](/docs/reference/warnings/#where-the-engines-differ).
 
 The native engine ships as per-platform optional dependencies
 (`@csszyx/core-<platform>`) — one is auto-selected for your OS/CPU/libc during a
@@ -371,8 +376,8 @@ What happens, and what to do:
 
 - **You only inherited the default `rust`** (you did not set `build.parser` or the
   `CSSZYX_PARSER` env var): CSSzyx **automatically falls back to `oxc`** and prints
-  the warning once. Your build succeeds and your classes are identical — nothing to
-  fix. To silence the warning, set the parser explicitly (next bullet) or install
+  the warning once. Your build succeeds; the warning names the one shape whose
+  classes change. To silence it, set the parser explicitly (next bullet) or install
   the matching `@csszyx/core-<platform>` package / stop omitting optional deps.
 - **You explicitly chose `rust`** (via config or env): this stays a **hard error**
   on purpose — an explicit choice is never silently swapped. Either install the

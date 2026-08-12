@@ -421,5 +421,40 @@
     "rawClassNames": [
       "x"
     ]
+  },
+  {
+    "source": "const x = 4; const A = () => <div sz={{ p: x }} />;",
+    "classes": [
+      "p-(--_sz-p)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const c = \"red-500\"; const A = () => <div sz={{ bg: c }} />;",
+    "classes": [
+      "bg-(--_sz-bg)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const c = \"red-500\"; const A = () => <div sz={{ hover: { bg: c } }} />;",
+    "classes": [
+      "hover:bg-(--_sz-hover-bg)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = () => { const x = 4; return <div sz={{ p: x }} />; };",
+    "classes": [
+      "p-(--_sz-p)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const k = \"p\"; const A = () => <div sz={{ [k]: 4 }} />;",
+    "classes": [
+      "k-4"
+    ],
+    "rawClassNames": []
   }
 ]

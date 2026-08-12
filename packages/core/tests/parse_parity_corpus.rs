@@ -17,7 +17,30 @@ mod parse_parity {
 
     /// Sources whose rust parse output is known to diverge from oxc, pending a
     /// fix. Each entry must be removed once the gap is closed.
-    const KNOWN_DIVERGENCES: &[&str] = &[];
+    ///
+    /// Every entry below is a const DECLARED in the same file and used as a
+    /// scalar sz value. Rust reads it at build time and emits a static utility;
+    /// the TypeScript engines defer to a runtime CSS variable plus an inline
+    /// `style`. Rust's output is the intended one — a static class needs no
+    /// runtime call and no inline style — so these are listed here rather than
+    /// "fixed" on the rust side, and the TypeScript engines are the ones that
+    /// have to catch up.
+    ///
+    /// The last entry is different in kind: for a computed key the TypeScript
+    /// engines emit `k-4`, built from the IDENTIFIER name rather than the
+    /// string it resolves to. No engine emits the `p-4` the code actually
+    /// renders, so the class is pure safelist noise and rust emitting nothing
+    /// is the safer of the two wrong answers.
+    ///
+    /// These shapes were absent from the corpus entirely until 2026-08-12,
+    /// which is why a divergence on the default parser went unseen.
+    const KNOWN_DIVERGENCES: &[&str] = &[
+        "const x = 4; const A = () => <div sz={{ p: x }} />;",
+        "const c = \"red-500\"; const A = () => <div sz={{ bg: c }} />;",
+        "const c = \"red-500\"; const A = () => <div sz={{ hover: { bg: c } }} />;",
+        "const A = () => { const x = 4; return <div sz={{ p: x }} />; };",
+        "const k = \"p\"; const A = () => <div sz={{ [k]: 4 }} />;",
+    ];
 
     #[derive(serde::Deserialize)]
     struct ParseRecord {

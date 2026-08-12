@@ -2668,7 +2668,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // Graceful degradation: when `rust` is only the DEFAULT (not opted into) and no
     // prebuilt native binary is installed for this platform (unsupported arch,
     // optional deps omitted, or a cross-platform frozen lockfile), fall back to
-    // `oxc` — which produces parity-identical classes — with a one-time warning,
+    // `oxc` — whose classes match on every shape the parity corpus covers — with
+    // a one-time warning that names the shape where they do not,
     // instead of hard-failing a build the user never asked to run on `rust`. An
     // EXPLICIT `rust` (env or config) keeps its loud-failure contract.
     const { parser: parserMode, degraded: parserDegraded } = resolveParserMode({
@@ -2691,10 +2692,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             _hasWarnedNativeFallback = true;
             console.warn(
                 '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
-                    'platform, so the default `rust` parser fell back to `oxc`. Output classes ' +
-                    'are identical (parity-tested); only parse speed differs. To use the native ' +
-                    'engine, install the matching @csszyx/core-<platform> package (or do not ' +
-                    'omit optional dependencies). Set `build.parser` explicitly to silence this.',
+                    'platform, so the default `rust` parser fell back to `oxc`. Parse speed ' +
+                    'differs, and so does one shape: a const a file declares and then uses as ' +
+                    'an sz value compiles to a static utility under `rust` and to a runtime CSS ' +
+                    'variable under `oxc`. To use the native engine, install the matching ' +
+                    '@csszyx/core-<platform> package (or do not omit optional dependencies). ' +
+                    'Set `build.parser` explicitly to silence this.',
             );
         }
         if (!_loggedActiveParsers.has(parserMode)) {

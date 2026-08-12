@@ -6,7 +6,8 @@
  * Precedence (highest first): a valid `CSSZYX_PARSER` env value, then
  * `build.parser` config, then the default. A `rust` choice that is EXPLICIT (env
  * or config) keeps its loud-failure contract; a `rust` that is merely the default
- * degrades to `oxc` (parity-identical output) when no native binary is available,
+ * degrades to `oxc` — which matches on every shape the parity corpus covers —
+ * when no native binary is available,
  * rather than hard-failing a build the user never opted into `rust` for.
  */
 

@@ -416,7 +416,7 @@ These are informational and always print to stderr, once.
 | Message |
 | --- |
 | `[csszyx] active parser: rust (native engine)` · `[csszyx] active parser: oxc (degraded from default ``rust``: no native binary for this platform)` |
-| `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, so the default ``rust`` parser fell back to ``oxc``. Output classes are identical (parity-tested); only parse speed differs. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
+| `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, so the default ``rust`` parser fell back to ``oxc``. Parse speed differs, and so does one shape: a const a file declares and then uses as an sz value compiles to a static utility under ``rust`` and to a runtime CSS variable under ``oxc``. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
 | `[csszyx] oxc parser fell back to Babel for {filename}: {reason} ({n} file(s) so far). Output is still correct; this usually means the file uses a syntax the oxc lane does not yet handle.` |
 | `[csszyx] parse error in {filename}: the native engine could not fully scan this file ({n} syntax error(s))` |
 
@@ -426,9 +426,11 @@ followed by the underlying error. The JavaScript transformer produces the same
 classes, so this costs speed only. Its success counterpart,
 `[csszyx] WASM Core initialized (v{version})`, prints through `console.info`.
 
-<Aside type="note" title="A parser fallback is not a correctness problem">
-The three engines are parity-tested against each other. A fallback costs parse
-speed, not classes.
+<Aside type="note" title="What a parser fallback costs">
+The engines are parity-tested against a shared corpus, so a fallback mostly
+costs parse speed. It is not free of behaviour, though: see
+[Where the engines differ](#where-the-engines-differ) for the shapes that
+compile differently.
 </Aside>
 
 ### Budgets and limits
@@ -589,14 +591,19 @@ The Svelte and Vue adapters print a parse failure only when `debug` is enabled:
 ## Where the engines differ
 
 csszyx has three compile engines — the native Rust engine (default), oxc, and
-Babel — selected by `build.parser`. Their **classes** are parity-tested, and
-the wording is byte-identical, with one exception:
+Babel — selected by `build.parser`. Their **classes** are parity-tested and the
+wording is byte-identical, with these exceptions:
 
 | Case | Babel / oxc | Native engine |
 | --- | --- | --- |
 | AST budget exceeded | Thrown error naming `exclude` and `astBudgetLimit` | A diagnostic naming ``build.astBudgetLimit`` and noting the file contributes no classes |
+| A const the file declares, used as a scalar sz value — `const x = 4` then `sz={{ p: x }}` | A runtime CSS variable plus an inline `style`: `p-(--_sz-p)` | The value is read at build time: `p-4` |
+| A computed key whose const resolves to a property name — `const k = 'p'` then `sz={{ [k]: 4 }}` | A class built from the identifier name, `k-4`, which styles nothing | No class |
 
-Both are recognised by the plugin and reported the same way.
+The first is recognised by the plugin and reported the same way. The other two
+are real output differences; the native engine's answer is the intended one,
+and the two JavaScript engines have yet to catch up. Both are pinned by the
+parse-parity corpus so neither side can drift further without the gate saying so.
 
 One case is deliberately unspecified: when you call the compiler API directly
 with **no filename**, each lane substitutes its own stand-in. Babel and oxc say
