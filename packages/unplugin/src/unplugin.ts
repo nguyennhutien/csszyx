@@ -9,6 +9,7 @@ import {
     type CssVariableMangleValue,
     ensureRustTransformAvailable,
     isRustTransformAvailable,
+    isWasmTransformAvailable,
     type SourceTransformResult,
     sortStrings,
     szFallbackConsequenceOf,
@@ -19,6 +20,7 @@ import {
     transformRust,
     transformRustBatch,
     transformSourceCode,
+    transformWasm,
 } from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { getNativePackageName } from '@csszyx/core/native';
@@ -2677,6 +2679,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         envParser: process.env.CSSZYX_PARSER,
         defaultParser: DEFAULT_BUILD_CONFIG.parser ?? 'rust',
         isRustAvailable: isRustTransformAvailable,
+        isWasmAvailable: isWasmTransformAvailable,
     });
     /**
      * Announce the engine actually in effect (and the native-binary degrade, if
@@ -2690,23 +2693,40 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     function announceActiveParser(): void {
         if (parserDegraded && !_hasWarnedNativeFallback) {
             _hasWarnedNativeFallback = true;
-            console.warn(
-                '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
-                    'platform, so the default `rust` parser fell back to `oxc`. Parse speed ' +
-                    'differs, and so does one shape: a const a file declares and then uses as ' +
-                    'an sz value compiles to a static utility under `rust` and to a runtime CSS ' +
-                    'variable under `oxc`. To use the native engine, install the matching ' +
-                    '@csszyx/core-<platform> package (or do not omit optional dependencies). ' +
-                    'Set `build.parser` explicitly to silence this.',
-            );
+            if (parserMode === 'wasm') {
+                console.warn(
+                    '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
+                        'platform, so the default `rust` parser fell back to its wasm build. ' +
+                        'Same engine, same output; only parse speed differs. To use the native ' +
+                        'engine, install the matching @csszyx/core-<platform> package (or do ' +
+                        'not omit optional dependencies). Set `build.parser` explicitly to ' +
+                        'silence this.',
+                );
+            } else {
+                console.warn(
+                    '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
+                        'platform, and the wasm build of the engine is missing too, so the ' +
+                        'default `rust` parser fell back to `oxc`. Parse speed ' +
+                        'differs, and so does one shape: a const a file declares and then uses as ' +
+                        'an sz value compiles to a static utility under `rust` and to a runtime CSS ' +
+                        'variable under `oxc`. To use the native engine, install the matching ' +
+                        '@csszyx/core-<platform> package (or do not omit optional dependencies). ' +
+                        'Set `build.parser` explicitly to silence this.',
+                );
+            }
         }
         if (!_loggedActiveParsers.has(parserMode)) {
             _loggedActiveParsers.add(parserMode);
             let detail: string = parserMode;
             if (parserDegraded) {
-                detail = 'oxc (degraded from default `rust`: no native binary for this platform)';
+                detail =
+                    parserMode === 'wasm'
+                        ? 'wasm (degraded from default `rust`: same engine, wasm build)'
+                        : 'oxc (degraded from default `rust`: no native binary for this platform)';
             } else if (parserMode === 'rust') {
                 detail = 'rust (native engine)';
+            } else if (parserMode === 'wasm') {
+                detail = 'wasm (wasm build of the native engine)';
             }
             // stderr (console.warn), not stdout: a consumer like @csszyx/mcp-server
             // runs a stdio JSON-RPC protocol where any stray stdout corrupts the stream.
@@ -3109,6 +3129,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // producing oxc output users were not expecting.
             return {
                 result: transformRust(source, effectiveFilename, compilerOptions),
+                cacheable: true,
+            };
+        }
+        if (parserMode === 'wasm') {
+            // Same engine as `rust`, so the same fail-loud contract: a wasm
+            // load failure mid-build is a broken installation, not a reason
+            // to switch engines silently.
+            return {
+                result: transformWasm(source, effectiveFilename, compilerOptions),
                 cacheable: true,
             };
         }

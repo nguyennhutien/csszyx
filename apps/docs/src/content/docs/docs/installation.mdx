@@ -345,16 +345,18 @@ Fix: explicitly declare `tailwindcss` as a dependency in each package that uses 
 the plugins array.
 
 **"No prebuilt native binary" warning, or a `native engine unavailable` build
-error** — CSSzyx parses your source with three engines. The default is `rust`
-(a native addon) because it is the fastest. `oxc` runs on `oxc-parser`, which
-ships its own per-platform binaries covering far more targets than CSSzyx's own
-set, so it is usually available where the CSSzyx addon is not; only `babel` is
-pure JavaScript.
+error** — CSSzyx parses your source with one engine that ships as two artifacts,
+plus two older TypeScript lanes. The default is `rust` (a native addon) because
+it is the fastest. The same engine is also compiled to WebAssembly and ships
+inside `@csszyx/core` itself, so a machine with no native binary still runs the
+engine every other machine runs — identical output, only parse speed differs.
+The TypeScript lanes remain selectable: `oxc` runs on `oxc-parser` (which ships
+its own per-platform binaries); only `babel` is pure JavaScript.
 
-The engines agree on classes for every shape the parity corpus covers, which is
-what makes a fallback safe in practice — but "identical output" is not a promise
-CSSzyx makes. Two shapes compile differently, and they are listed in
-[Where the engines differ](/docs/reference/warnings/#where-the-engines-differ).
+The wasm fallback is the same engine, so it cannot change your classes. The
+TypeScript lanes agree on classes for every shape the parity corpus covers, but
+"identical output" is not a promise they make — two shapes compile differently,
+listed in [Where the engines differ](/docs/reference/warnings/#where-the-engines-differ).
 
 The native engine ships as per-platform optional dependencies
 (`@csszyx/core-<platform>`) — one is auto-selected for your OS/CPU/libc during a
@@ -375,10 +377,12 @@ it is just a prebuilt download. It can be absent in three situations:
 What happens, and what to do:
 
 - **You only inherited the default `rust`** (you did not set `build.parser` or the
-  `CSSZYX_PARSER` env var): CSSzyx **automatically falls back to `oxc`** and prints
-  the warning once. Your build succeeds; the warning names the one shape whose
-  classes change. To silence it, set the parser explicitly (next bullet) or install
-  the matching `@csszyx/core-<platform>` package / stop omitting optional deps.
+  `CSSZYX_PARSER` env var): CSSzyx **automatically falls back to the engine's wasm
+  build** and prints the warning once. Your build succeeds with identical classes;
+  only parse speed differs. (If the wasm artifact is missing too, the last resort
+  is `oxc`, and that warning names the one shape whose classes change.) To silence
+  it, set the parser explicitly (next bullet) or install the matching
+  `@csszyx/core-<platform>` package / stop omitting optional deps.
 - **You explicitly chose `rust`** (via config or env): this stays a **hard error**
   on purpose — an explicit choice is never silently swapped. Either install the
   native binary for your platform, or switch to a pure-JS engine:
