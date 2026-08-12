@@ -1,11 +1,13 @@
-//! TS↔Rust parse-level parity.
+//! Frozen regression corpus for the parse level of the native engine.
 //!
 //! The corpus (scripts/gen-rust-parse-parity-corpus.mjs) records, for each
-//! `.tsx` source snippet, the canonical oxc `classes` (sz-derived) and
-//! `rawClassNames` (static className strings). This harness replays the same
-//! sources through the native `transform_batch` and asserts the same two sets,
-//! so the rust parser — the shipped default — cannot diverge from oxc when it
-//! extracts sz objects and class strings from real source.
+//! `.tsx` source snippet, the `classes` (sz-derived) and `rawClassNames`
+//! (static className strings) the engine itself produced when the record was
+//! reviewed — the engine has been the canonical answer since 2026-08-12, so
+//! the fixture's job is "the engine still does what it did", not "two
+//! implementations agree". A red run here is a BEHAVIOUR CHANGE: either fix
+//! the regression, or regenerate deliberately and let review judge the diff.
+//! Never regenerate just to turn the gate green.
 //!
 //! The source parser lives behind the `native-engine` feature, so the harness
 //! only runs under `cargo test --features native-engine`. Plain `cargo test`
@@ -15,32 +17,12 @@
 mod parse_parity {
     use csszyx_core::transform::{transform_batch, TransformFile};
 
-    /// Sources whose rust parse output is known to diverge from oxc, pending a
-    /// fix. Each entry must be removed once the gap is closed.
-    ///
-    /// Every entry below is a const DECLARED in the same file and used as a
-    /// scalar sz value. Rust reads it at build time and emits a static utility;
-    /// the TypeScript engines defer to a runtime CSS variable plus an inline
-    /// `style`. Rust's output is the intended one — a static class needs no
-    /// runtime call and no inline style — so these are listed here rather than
-    /// "fixed" on the rust side, and the TypeScript engines are the ones that
-    /// have to catch up.
-    ///
-    /// The last entry is different in kind: for a computed key the TypeScript
-    /// engines emit `k-4`, built from the IDENTIFIER name rather than the
-    /// string it resolves to. No engine emits the `p-4` the code actually
-    /// renders, so the class is pure safelist noise and rust emitting nothing
-    /// is the safer of the two wrong answers.
-    ///
-    /// These shapes were absent from the corpus entirely until 2026-08-12,
-    /// which is why a divergence on the default parser went unseen.
-    const KNOWN_DIVERGENCES: &[&str] = &[
-        "const x = 4; const A = () => <div sz={{ p: x }} />;",
-        "const c = \"red-500\"; const A = () => <div sz={{ bg: c }} />;",
-        "const c = \"red-500\"; const A = () => <div sz={{ hover: { bg: c } }} />;",
-        "const A = () => { const x = 4; return <div sz={{ p: x }} />; };",
-        "const k = \"p\"; const A = () => <div sz={{ [k]: 4 }} />;",
-    ];
+    /// Records whose committed expectation is known-stale, pending a reviewed
+    /// regeneration. Emptied 2026-08-12 when the fixture was re-based on the
+    /// engine's own answers (the five const-read shapes recorded the
+    /// TypeScript engines' runtime-variable output until then — see the git
+    /// history of this list for what they looked like).
+    const KNOWN_DIVERGENCES: &[&str] = &[];
 
     #[derive(serde::Deserialize)]
     struct ParseRecord {
@@ -77,15 +59,15 @@ mod parse_parity {
 
             let rust_classes = sorted_unique(result.classes.clone());
             let rust_raw = sorted_unique(result.raw_class_names.clone());
-            let oxc_classes = sorted_unique(record.classes.clone());
-            let oxc_raw = sorted_unique(record.raw_class_names.clone());
+            let recorded_classes = sorted_unique(record.classes.clone());
+            let recorded_raw = sorted_unique(record.raw_class_names.clone());
 
-            let diverges = rust_classes != oxc_classes || rust_raw != oxc_raw;
+            let diverges = rust_classes != recorded_classes || rust_raw != recorded_raw;
             let known = KNOWN_DIVERGENCES.contains(&record.source.as_str());
 
             if diverges && !known {
                 unexpected.push(format!(
-                    "  {}\n    classes oxc={oxc_classes:?} rust={rust_classes:?}\n    rawClassNames oxc={oxc_raw:?} rust={rust_raw:?}",
+                    "  {}\n    classes recorded={recorded_classes:?} engine={rust_classes:?}\n    rawClassNames recorded={recorded_raw:?} engine={rust_raw:?}",
                     record.source
                 ));
             } else if !diverges && known {
@@ -95,7 +77,7 @@ mod parse_parity {
 
         assert!(
             unexpected.is_empty(),
-            "{} new TS->rust parse divergence(s) — the rust default parser does not match oxc:\n{}",
+            "{} parse regression(s) — the engine no longer matches its recorded answers:\n{}",
             unexpected.len(),
             unexpected.join("\n")
         );

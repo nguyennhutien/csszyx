@@ -4,9 +4,9 @@
  * `pkg-parser/` is the same `parser.rs`/`engine.rs` source compiled with the
  * `native-engine` feature to `wasm32-unknown-unknown` — the universal fallback
  * a machine uses when no `@csszyx/core-<platform>` binary is available. The
- * corpus replayed here is the same one `parse_parity_corpus.rs` runs through
- * the napi binding, so the two artifacts of the one engine cannot drift apart
- * without this file or that one going red.
+ * corpus replayed here is the same frozen regression corpus
+ * `parse_parity_corpus.rs` runs through the napi binding, so the two artifacts
+ * of the one engine cannot drift apart without this file or that one going red.
  *
  * Like `wasm-runtime-parity.test.ts`, this suite requires `pnpm build` to have
  * produced the wasm packages first.
@@ -53,19 +53,6 @@ const corpus: ParseRecord[] = JSON.parse(
     ),
 );
 
-/**
- * Divergences listed in `parse_parity_corpus.rs::KNOWN_DIVERGENCES`: the
- * corpus records the TypeScript engines' answer, the rust engine intentionally
- * differs, and the wasm artifact must match the RUST side of that line.
- */
-const KNOWN_DIVERGENCES = new Set<string>([
-    'const x = 4; const A = () => <div sz={{ p: x }} />;',
-    'const c = "red-500"; const A = () => <div sz={{ bg: c }} />;',
-    'const c = "red-500"; const A = () => <div sz={{ hover: { bg: c } }} />;',
-    'const A = () => { const x = 4; return <div sz={{ p: x }} />; };',
-    'const k = "p"; const A = () => <div sz={{ [k]: 4 }} />;',
-]);
-
 const sortedUnique = (values: readonly string[]): string[] => [...new Set(values)].sort();
 
 /**
@@ -100,7 +87,6 @@ describe('wasm parser artifact', () => {
 
         const mismatches: string[] = [];
         for (const record of corpus) {
-            if (KNOWN_DIVERGENCES.has(record.source)) continue;
             const result = JSON.parse(
                 wasm.transform_source('corpus.tsx', record.source),
             ) as WasmTransformResult;
