@@ -135,6 +135,39 @@ describe('csszyx check — classes that style nothing', () => {
         expect(report).not.toContain('pointer-none');
     });
 
+    // A skip is the honest answer when there is nothing to ask, and a silent
+    // pass when the question WAS asked and could not be answered. The two look
+    // identical in CI unless the second one fails, so a project whose entry
+    // stops compiling keeps a green check that has not run since.
+    it('fails when the project has a stylesheet that will not compile', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";\n@import "@absent/design-system/tokens";',
+            'src/Good.tsx': 'export const Good = () => <div sz={{ p: 4 }} />;',
+        });
+
+        const report = await reportFor(cwd);
+
+        expect(report).toContain('skipped');
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('still passes when the environment simply has nothing to ask', async () => {
+        // No Tailwind installed is not a broken project — there is no design
+        // system to consult, and failing here would break every consumer whose
+        // build does not use one.
+        const cwd = projectWith(
+            {
+                'src/app.css': '@import "tailwindcss";',
+                'src/Good.tsx': 'export const Good = () => <div sz={{ p: 4 }} />;',
+            },
+            { tailwind: false },
+        );
+
+        await reportFor(cwd);
+
+        expect(process.exitCode).not.toBe(1);
+    });
+
     // Without a way to accept a known finding, the only lever a project has is
     // to stop running the check at all.
     it('accepts a class the project vouched for, and keeps reporting the rest', async () => {

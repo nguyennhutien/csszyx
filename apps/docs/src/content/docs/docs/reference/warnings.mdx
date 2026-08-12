@@ -527,6 +527,19 @@ about files I happen to open".
 | `✖ {n} emitted class(es) style nothing. Each is in the DOM and does nothing: fix the sz key, or define the class with Tailwind's @utility.` | Each offender is listed above it, with the sz key that produced it. |
 | `Dead-class check skipped: no stylesheet in this project imports Tailwind, so there is no design system to ask which classes are real.` | The check needs a Tailwind entry to ask. |
 | `Dead-class check skipped: {reason}.` | |
+| `✖ The dead-class check did not run. Its stylesheet is part of this project, so this is reported as a failure rather than a skip — otherwise a check that never runs is indistinguishable from one that found nothing.` | Exits non-zero. See below. |
+
+A skip is not always harmless. Two things can stop the dead-class pass, and
+only one of them is your project's:
+
+- **Nothing to ask** — no Tailwind installed, or a version with no design
+  system. The command skips and **passes**: failing here would break every
+  consumer who does not build with Tailwind.
+- **The question could not be answered** — a Tailwind entry was found and did
+  not compile, so the pass was supposed to run and could not. The command skips
+  and **fails**, because a check that never runs is indistinguishable in CI
+  from one that found nothing, and a project can otherwise stay green for
+  months after its entry stopped compiling.
 
 `npx @csszyx/cli scan-collisions` finds class names that would collide with a
 mangled token:

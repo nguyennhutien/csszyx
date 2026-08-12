@@ -314,7 +314,27 @@ describe('createEmittedClassOracle — degrading instead of failing', () => {
             { resolveFrom: '/nowhere', css: STOCK, cssBase: '/nowhere' },
             loaderOf(null),
         );
-        expect(oracle).toEqual({ ok: false, reason: expect.stringContaining('not resolve') });
+        // `environment`, not `stylesheet`: a project without Tailwind is not a
+        // broken project, and the caller must not fail CI over it.
+        expect(oracle).toEqual({
+            ok: false,
+            kind: 'environment',
+            reason: expect.stringContaining('not resolve'),
+        });
+    });
+
+    it('marks a stylesheet that will not compile as the project’s own failure', async () => {
+        // This is the half that must reach CI: the question was asked and could
+        // not be answered, which is indistinguishable from "found nothing"
+        // unless the skip carries its kind.
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: REPO,
+            css: '@import "tailwindcss";\n@import "./no-such-stylesheet.css";',
+            cssBase: REPO,
+        });
+
+        expect(oracle.ok).toBe(false);
+        expect(oracle.ok === false && oracle.kind).toBe('stylesheet');
     });
 
     it('skips when the project pins a Tailwind older than v4', async () => {

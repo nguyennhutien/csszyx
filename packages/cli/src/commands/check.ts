@@ -123,14 +123,19 @@ async function reportDeadClasses(
 
     const oracles: Array<Extract<EmittedClassOracle, { ok: true }>> = [];
     const skipped: string[] = [];
+    let stylesheetFailed = false;
     for (const entry of entries) {
         const oracle = await createEmittedClassOracle({
             resolveFrom: cwd,
             css: await readFile(entry, 'utf8'),
             cssBase: path.dirname(entry),
         });
-        if (oracle.ok) oracles.push(oracle);
-        else skipped.push(oracle.reason);
+        if (oracle.ok) {
+            oracles.push(oracle);
+        } else {
+            skipped.push(oracle.reason);
+            stylesheetFailed ||= oracle.kind === 'stylesheet';
+        }
     }
     if (oracles.length === 0) {
         // Every reason, not the first: there was at least one entry and none of
@@ -138,7 +143,19 @@ async function reportDeadClasses(
         // a project whose stylesheets fail for different reasons is exactly the
         // one where hearing only the first sends the user to the wrong file.
         printInfo(`Dead-class check skipped: ${skipped.join('; ')}.`);
-        return false;
+        // A stylesheet that will not compile is a broken project, not an absent
+        // one, and passing it quietly is how a check stays green for months
+        // after it stopped running. An environment with nothing to ask — no
+        // Tailwind, a version without a design system — still passes: failing
+        // there would break every consumer who does not build with one.
+        if (stylesheetFailed) {
+            printWarn(
+                '\n✖ The dead-class check did not run. Its stylesheet is part of this project, ' +
+                    'so this is reported as a failure rather than a skip — otherwise a check ' +
+                    'that never runs is indistinguishable from one that found nothing.',
+            );
+        }
+        return stylesheetFailed;
     }
 
     const vouched = new Set(allow);

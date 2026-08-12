@@ -100,7 +100,41 @@ export type EmittedClassOracle =
            */
           findDead(classes: readonly string[]): string[];
       }
-    | { ok: false; reason: string };
+    | { ok: false; kind: OracleSkipKind; reason: string };
+
+/**
+ * Why the oracle could not answer, at the granularity a caller must act on.
+ *
+ * `environment` — there was nothing to ask. No Tailwind, a version without a
+ * design system, an entry point that moved. Not a defect in the project, and
+ * failing on it would break every consumer that does not build with Tailwind.
+ *
+ * `stylesheet` — the question WAS asked and could not be answered, because the
+ * project's own entry did not compile. That is a broken configuration, and it
+ * is the case that must not pass quietly: a check that never runs looks exactly
+ * like a check that found nothing.
+ */
+export type OracleSkipKind = 'environment' | 'stylesheet';
+
+/**
+ * A skip nobody needs to act on.
+ *
+ * @param reason - Human-readable cause.
+ * @returns The skip.
+ */
+function environmentSkip(reason: string): EmittedClassOracle {
+    return { ok: false, kind: 'environment', reason };
+}
+
+/**
+ * A skip that means the project's own stylesheet stopped the check.
+ *
+ * @param reason - Human-readable cause.
+ * @returns The skip.
+ */
+function stylesheetSkip(reason: string): EmittedClassOracle {
+    return { ok: false, kind: 'stylesheet', reason };
+}
 
 /**
  * A deliberately unservable class, sent along with every real query.
@@ -346,22 +380,17 @@ export async function createEmittedClassOracle(
 ): Promise<EmittedClassOracle> {
     const tailwind = await loadTailwind(options.resolveFrom);
     if (tailwind === null) {
-        return {
-            ok: false,
-            reason: `could not resolve tailwindcss from ${options.resolveFrom}`,
-        };
+        return environmentSkip(`could not resolve tailwindcss from ${options.resolveFrom}`);
     }
     if (!tailwind.version.startsWith('4.')) {
-        return {
-            ok: false,
-            reason: `tailwindcss ${tailwind.version} has no design system to ask; the check needs 4.x`,
-        };
+        return environmentSkip(
+            `tailwindcss ${tailwind.version} has no design system to ask; the check needs 4.x`,
+        );
     }
     if (typeof tailwind.loadDesignSystem !== 'function') {
-        return {
-            ok: false,
-            reason: `tailwindcss ${tailwind.version} does not expose __unstable__loadDesignSystem`,
-        };
+        return environmentSkip(
+            `tailwindcss ${tailwind.version} does not expose __unstable__loadDesignSystem`,
+        );
     }
 
     const load = tailwind.loadDesignSystem as (
@@ -378,24 +407,21 @@ export async function createEmittedClassOracle(
             loadModule: (id, base) => loadModule(id, base, options.resolveFrom),
         });
     } catch (error) {
-        return {
-            ok: false,
-            reason: `the stylesheet did not compile: ${error instanceof Error ? error.message : String(error)}`,
-        };
+        return stylesheetSkip(
+            `the stylesheet did not compile: ${error instanceof Error ? error.message : String(error)}`,
+        );
     }
 
     try {
         if (design.candidatesToCss([SELF_PROOF])[0] !== null) {
-            return {
-                ok: false,
-                reason: 'tailwindcss no longer reports an unservable class as null, so dead classes cannot be told apart',
-            };
+            return environmentSkip(
+                'tailwindcss no longer reports an unservable class as null, so dead classes cannot be told apart',
+            );
         }
     } catch (error) {
-        return {
-            ok: false,
-            reason: `the design system could not be queried: ${error instanceof Error ? error.message : String(error)}`,
-        };
+        return environmentSkip(
+            `the design system could not be queried: ${error instanceof Error ? error.message : String(error)}`,
+        );
     }
 
     return {
