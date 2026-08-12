@@ -65,6 +65,16 @@ function bothLanes(
 }
 
 describe('transform-wasm lane', () => {
+    it('names its unavailable error after the loader detail', async () => {
+        // The degrade path prints this error's message when an EXPLICIT wasm
+        // choice cannot load — the wording is the contract worth pinning.
+        const { WasmTransformUnavailableError } = await import('../src/transform-wasm.js');
+        const err = new WasmTransformUnavailableError('artifact not found');
+        expect(err.name).toBe('WasmTransformUnavailableError');
+        expect(err.message).toBe('transformWasm: wasm engine unavailable - artifact not found');
+        expect(err).toBeInstanceOf(Error);
+    });
+
     it('exists and reports availability', () => {
         expect(lane, MISSING).not.toBeNull();
         expect(lane?.isWasmTransformAvailable()).toBe(true);

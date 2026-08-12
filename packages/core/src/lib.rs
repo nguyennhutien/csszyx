@@ -132,8 +132,9 @@ pub fn version() -> String {
 
 /// Whole-file source transform across the WASM boundary.
 ///
-/// Benchmark probe: measures whether one string in / one JSON string out per
-/// FILE amortises the serde cost that per-object `transform_sz` cannot.
+/// One string in, one JSON string out per FILE: crossing the boundary once
+/// per file amortises the serde cost that makes the per-object runtime path
+/// unviable (measured before this shipped).
 ///
 /// # Errors
 ///
@@ -149,9 +150,9 @@ pub fn transform_source(filename: String, source: String) -> Result<String, JsVa
 
 /// Whole-BATCH transform with full options across the WASM boundary.
 ///
-/// Benchmark probe for the prescan lane: cross-module registries, mangling and
-/// recovery all arrive through `TransformOptions`, and the batch crosses the
-/// boundary once for every file rather than once per file.
+/// The lane's main entry: cross-module registries, mangling and recovery all
+/// arrive through `TransformOptions`, and the batch crosses the boundary once
+/// for the whole file set.
 ///
 /// # Errors
 ///
@@ -199,6 +200,42 @@ mod tests {
             "csr",
             "build"
         ));
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn transform_source_crosses_the_boundary_as_json() {
+        let json = transform_source(
+            "/repo/src/App.tsx".to_string(),
+            "export const A = () => <div sz={{ p: 4 }} />;".to_string(),
+        )
+        .expect("engine is available under native-engine");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("boundary payload is JSON");
+        assert_eq!(
+            value["code"].as_str().unwrap(),
+            "export const A = () => <div className=\"p-4\" />;"
+        );
+        assert_eq!(value["classes"][0], "p-4");
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn transform_batch_json_decodes_options_and_keeps_input_order() {
+        let files = r#"[
+            {"filename":"/a.tsx","source":"export const A = () => <div sz={{ p: 2 }} />;"},
+            {"filename":"/b.tsx","source":"export const B = () => <div className=\"x\" />;"}
+        ]"#;
+        let options = r#"{"mangle_vars":false,"mangle_var_hoist_max_depth":null,
+            "global_var_aliases":[],"root_dir":null,"ast_budget":null,
+            "cross_module_statics_json":null,"cross_module_sz_objects_json":null}"#;
+
+        let json = transform_batch_json(files, options).expect("engine is available");
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(value.as_array().unwrap().len(), 2);
+        assert_eq!(value[0]["classes"][0], "p-2");
+        assert_eq!(value[1]["metadata"]["transformed"], false);
     }
 
     #[test]
