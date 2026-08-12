@@ -1,3 +1,5 @@
+#[cfg(target_arch = "wasm32")]
+use super::engine::Instant;
 use oxc_allocator::Allocator;
 use oxc_ast::{
     ast::{
@@ -15,6 +17,7 @@ use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_span::{GetSpan, SourceType, Span};
 use std::collections::HashSet;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 
 use super::{

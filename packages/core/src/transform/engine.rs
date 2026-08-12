@@ -14,7 +14,28 @@ use super::{
     DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile, TransformMetadata,
     TransformOptions, TransformProducer, TransformResult, TransformTimings, UnsupportedRecoveryIr,
 };
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
+
+/// Clock stub for wasm32, which has no `std::time` clock source.
+///
+/// `Instant::now()` panics under `wasm32-unknown-unknown`; the engine only
+/// uses it for the optional timings instrumentation, so a zero clock keeps
+/// the transform itself intact.
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Copy)]
+pub(crate) struct Instant;
+
+#[cfg(target_arch = "wasm32")]
+impl Instant {
+    pub(crate) fn now() -> Self {
+        Self
+    }
+
+    pub(crate) fn elapsed(self) -> core::time::Duration {
+        core::time::Duration::ZERO
+    }
+}
 
 /// Maximum structural nesting depth of `{}`/`[]`/`()` allowed in a source file
 /// before it is handed to the parser.

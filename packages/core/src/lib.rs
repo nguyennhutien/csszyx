@@ -92,6 +92,13 @@ pub use transformer::transform_sz;
 
 use wasm_bindgen::prelude::*;
 
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn error(msg: &str);
+}
+
 /// Initializes the WASM module.
 ///
 /// Should be called once before using any functions.
@@ -107,7 +114,10 @@ use wasm_bindgen::prelude::*;
 #[allow(clippy::missing_const_for_fn)] // wasm_bindgen(start) doesn't support const
 #[wasm_bindgen(start)]
 pub fn init() {
-    // Initialization placeholder - can be extended with panic hooks if needed
+    #[cfg(target_arch = "wasm32")]
+    std::panic::set_hook(Box::new(|info| {
+        error(&format!("WASM PANIC: {info}"));
+    }));
 }
 
 /// Gets the version of csszyx-core.
@@ -118,6 +128,44 @@ pub fn init() {
 #[wasm_bindgen]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+/// Whole-file source transform across the WASM boundary.
+///
+/// Benchmark probe: measures whether one string in / one JSON string out per
+/// FILE amortises the serde cost that per-object `transform_sz` cannot.
+///
+/// # Errors
+///
+/// Returns the transform error message when the engine refuses the file.
+#[cfg(feature = "native-engine")]
+#[wasm_bindgen]
+pub fn transform_source(filename: String, source: String) -> Result<String, JsValue> {
+    let files = [transform::TransformFile { filename, source }];
+    let results =
+        transform::transform_batch(&files).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    serde_json::to_string(&results[0]).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Whole-BATCH transform with full options across the WASM boundary.
+///
+/// Benchmark probe for the prescan lane: cross-module registries, mangling and
+/// recovery all arrive through `TransformOptions`, and the batch crosses the
+/// boundary once for every file rather than once per file.
+///
+/// # Errors
+///
+/// Returns the decode or transform error message.
+#[cfg(feature = "native-engine")]
+#[wasm_bindgen]
+pub fn transform_batch_json(files_json: &str, options_json: &str) -> Result<String, JsValue> {
+    let files: Vec<transform::TransformFile> =
+        serde_json::from_str(files_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let options: transform::TransformOptions =
+        serde_json::from_str(options_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let results = transform::transform_batch_with_options(&files, options)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    serde_json::to_string(&results).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(test)]
