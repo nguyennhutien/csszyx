@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -55,6 +55,18 @@ export const SIZE_BUDGETS = [
         kind: 'entry-closure',
         target: 'packages/compiler/dist/transform-core.mjs',
         maxGzipBytes: 24_576,
+    },
+    // The wasm build of the parser is the fourth surface: not browser code,
+    // but a file every `npm install` downloads inside @csszyx/core. Measured
+    // 2026-08-12 at 460,116 gzip bytes un-optimized (the release workflow's
+    // wasm-opt pass only shrinks it). The ceiling exists to catch a debug
+    // -profile build or dependency bloat slipping into the artifact — either
+    // multiplies the size, a creep of +10% does not.
+    {
+        name: '@csszyx/core parser wasm artifact',
+        kind: 'file',
+        target: 'packages/core/pkg-parser/csszyx_core_bg.wasm',
+        maxGzipBytes: 520_000,
     },
 ];
 
@@ -173,12 +185,19 @@ export function checkBudgets(budgets, rootDir) {
         const target = path.join(rootDir, budget.target);
         let files;
         try {
-            const entries =
-                budget.kind === 'package-exports' ? listExportEntries(target) : [target];
-            if (entries.length === 0) {
-                throw new Error(`no runtime export entries in ${budget.target}/package.json`);
+            if (budget.kind === 'file') {
+                // A binary artifact is one opaque file: no import closure to
+                // walk, but its absence is still a failure, never a pass.
+                statSync(target);
+                files = [target];
+            } else {
+                const entries =
+                    budget.kind === 'package-exports' ? listExportEntries(target) : [target];
+                if (entries.length === 0) {
+                    throw new Error(`no runtime export entries in ${budget.target}/package.json`);
+                }
+                files = resolveEntryClosure(entries);
             }
-            files = resolveEntryClosure(entries);
         } catch (error) {
             failures.push(`${budget.name}: ${error.message} — run \`pnpm build\` first?`);
             continue;
