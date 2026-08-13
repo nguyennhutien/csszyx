@@ -46,6 +46,14 @@ rm -rf .turbo apps/docs/.astro apps/docs/dist apps/docs/.csszyx
 # into one coverage number and then failing on a path that does not exist here.
 # A clean tree costs about 25 seconds, and the native build below rebuilds anyway.
 rm -rf target/llvm-cov-target
+# Next's build caches carry the absolute paths of whichever environment wrote
+# them, and they share this directory with the devcontainer for the same reason
+# target/ does. A cache written under the container's root sends Turbopack
+# looking for the Next package at a path this environment does not have, and it
+# aborts the dev server mid-suite with "Next.js package not found" — surfacing
+# as an e2e failure that reruns do not clear. CI never has these caches at all,
+# so removing them is what the mirror is for.
+find playground apps -maxdepth 2 -name '.next*' -type d -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null || true
 
 echo "[verify-like-ci] Tracked symlink guard..."
 pnpm check:tracked-symlinks
