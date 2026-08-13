@@ -98,6 +98,27 @@ describe('a class discovered after the freeze fails the build', () => {
         ).rejects.toThrow('gap-7');
     });
 
+    it('names a class the author claimed after the freeze', async () => {
+        const h = boot({ production: { mangle: true } });
+        await h.configResolved({ command: 'build' });
+
+        // Not a NEW class — the prescanned one, now also written by hand.
+        // Mangling skips any class a raw className consumes, so the map loses
+        // an entry it still had when the stylesheet was hashed. The author
+        // half of the census has to be reported too, or the message points at
+        // nothing the reader can find.
+        await h
+            .hookOf('csszyx:pre', 'transform')
+            ?.apply({ warn() {}, error() {} }, [
+                'export const Hand = () => <div className="m-3" />;',
+                join(h.root, 'src/Hand.tsx'),
+            ]);
+
+        await expect(async () =>
+            h.hookOf('csszyx:pre', 'buildEnd')?.apply({ warn() {}, error() {} }, []),
+        ).rejects.toThrow('m-3');
+    });
+
     it('accepts a build whose census matches the prescan', async () => {
         const h = boot({ production: { mangle: true } });
         await h.configResolved({ command: 'build' });

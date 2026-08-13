@@ -9,6 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+    __resetSzWarnDedupForTests,
     formatSzWarnLocation,
     type SzObject,
     setSzWarnLocation,
@@ -25,6 +26,10 @@ const cls = (sz: SzObject, prefix = ''): string => transform(sz, prefix).classNa
 
 let warnSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
+    // Every warning in here dedupes per token per process, so without this a
+    // "stays silent" assertion passes because an EARLIER test already spent
+    // the one warning that token gets — not because the code stayed silent.
+    __resetSzWarnDedupForTests();
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 afterEach(() => {
@@ -107,6 +112,26 @@ describe('formatOpacity via bg color object', () => {
             withComputedValue('', () => {
                 expect(cls({ bg: { color: 'brand', op: 35 } })).toBe('bg-brand/35');
             });
+            expect(warnSpy.mock.calls.map(c => String(c[0])).some(m => m.includes('opacity'))).toBe(
+                false,
+            );
+        });
+
+        it('lowers normally when reading computed style throws', () => {
+            // A detached document, a hardened environment, a stubbed DOM: the
+            // probe is advisory, so a host that refuses to answer must cost the
+            // class nothing.
+            const globals = globalThis as { document?: unknown; getComputedStyle?: unknown };
+            globals.document = { documentElement: {} };
+            globals.getComputedStyle = () => {
+                throw new Error('detached document');
+            };
+            try {
+                expect(cls({ bg: { color: 'brand', op: 35 } })).toBe('bg-brand/35');
+            } finally {
+                delete globals.document;
+                delete globals.getComputedStyle;
+            }
             expect(warnSpy.mock.calls.map(c => String(c[0])).some(m => m.includes('opacity'))).toBe(
                 false,
             );

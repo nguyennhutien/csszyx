@@ -1134,6 +1134,44 @@ mod tests {
     }
 
     #[test]
+    fn static_engine_names_the_enclosing_object_when_a_nested_shape_has_no_key() {
+        // A spread and a bigint key carry no name to report, so the walk names
+        // the object holding them. The path has to keep the nesting: reporting
+        // a bare "config" for something buried three levels down sends the
+        // author back to the top of a factory they already read.
+        for (source_line, expected) in [
+            (
+                "const t = szv({ variants: { c: { blue: { ...base } } } });",
+                "config disqualified at `variants.c.blue`",
+            ),
+            (
+                "const t = szv({ variants: { c: { blue: { 1n: 4 } } } });",
+                "config disqualified at `variants.c.blue`",
+            ),
+            (
+                "const t = szv({ ...spread });",
+                "config disqualified at `config`",
+            ),
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/Nested.tsx".to_string(),
+                source: [
+                    "import { szr, szv } from 'csszyx';",
+                    source_line,
+                    "export const A = () => <div className={szr(t({ c: 'blue' }))} />;",
+                ]
+                .join("\n"),
+            };
+            let result = transform_static_classes(&file, 0, std::time::Instant::now());
+            let diagnostics = result.diagnostics.join("\n");
+            assert!(
+                diagnostics.contains(expected),
+                "expected {expected} for {source_line}, got: {diagnostics}"
+            );
+        }
+    }
+
+    #[test]
     fn static_engine_keeps_the_generic_call_wording_for_a_qualified_factory() {
         // A factory whose CONFIG is fine can still keep its runtime path for
         // usage reasons (here: an extra reference fails the accounting).
