@@ -1267,6 +1267,56 @@ mod tests {
     }
 
     #[test]
+    fn merges_dynamic_style_vars_into_existing_string_style_attribute() {
+        // Kebab-case declarations camelize, `--custom` names stay quoted,
+        // values become string literals — the conversion the JS lanes applied
+        // when a string `style` attribute met an injected css variable.
+        let cases = [
+            (
+                "const A=({pad})=><div style=\"color: red; margin-top: 10px\" sz={{p:pad}}/>;",
+                "const A=({pad})=><div style={{color: \"red\", marginTop: \"10px\", \"--_sz-p\": __szSpacingVar(pad, \"p\")}} className=\"p-(--_sz-p)\"/>;",
+            ),
+            (
+                "const A=({pad})=><div style=\"--brand: teal; -webkit-line-clamp: 2\" sz={{p:pad}}/>;",
+                "const A=({pad})=><div style={{\"--brand\": \"teal\", WebkitLineClamp: \"2\", \"--_sz-p\": __szSpacingVar(pad, \"p\")}} className=\"p-(--_sz-p)\"/>;",
+            ),
+            // An empty string style contributes nothing; the injected vars
+            // stand alone instead of trailing a dangling comma.
+            (
+                "const A=({pad})=><div style=\"\" sz={{p:pad}}/>;",
+                "const A=({pad})=><div style={{\"--_sz-p\": __szSpacingVar(pad, \"p\")}} className=\"p-(--_sz-p)\"/>;",
+            ),
+            // Declarations without a colon or without a property name are
+            // skipped; a quote inside a value is escaped, not truncated.
+            (
+                "const A=({pad})=><div style='oops; : red; content: \"x\"' sz={{p:pad}}/>;",
+                "const A=({pad})=><div style={{content: \"\\\"x\\\"\", \"--_sz-p\": __szSpacingVar(pad, \"p\")}} className=\"p-(--_sz-p)\"/>;",
+            ),
+            // A dash followed by a non-letter cannot camelize, so the dash
+            // survives in the key exactly as the JS conversion kept it.
+            (
+                "const A=({pad})=><div style=\"grid-2col: a\" sz={{p:pad}}/>;",
+                "const A=({pad})=><div style={{grid-2col: \"a\", \"--_sz-p\": __szSpacingVar(pad, \"p\")}} className=\"p-(--_sz-p)\"/>;",
+            ),
+        ];
+
+        for (source, expected) in cases {
+            let rewritten = rewrite(source).expect("rewritten");
+            assert_eq!(rewritten, expected, "{source}");
+        }
+    }
+
+    #[test]
+    fn leaves_a_bare_style_attribute_alone() {
+        // `style` with no value has no string to merge into; the attribute
+        // survives untouched rather than being rewritten into garbage.
+        let source = "const A=({pad})=><div style sz={{p:pad}}/>;";
+        let rewritten = rewrite(source).expect("rewritten");
+        assert!(rewritten.contains("style"), "{rewritten}");
+        assert!(!rewritten.contains("style={{"), "{rewritten}");
+    }
+
+    #[test]
     fn merges_dynamic_style_vars_into_safe_object_spreads() {
         let cases = [
             (

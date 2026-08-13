@@ -982,6 +982,41 @@ mod tests {
     }
 
     #[test]
+    fn diagnostics_render_migration_note_and_canonical_suggestion() {
+        let file = TransformFile {
+            filename: "/repo/src/Diagnostics.tsx".to_string(),
+            source: "const App = () => <div sz={{ maskFrom: 1, backgroundColor: \"red-500\" }} />;"
+                .to_string(),
+        };
+        let result = transform_static_classes_with_options(
+            &file,
+            0,
+            std::time::Instant::now(),
+            TransformOptions {
+                root_dir: Some("/repo/".to_string()),
+                ..TransformOptions::default()
+            },
+        );
+
+        assert!(
+            result.diagnostics.iter().any(|diagnostic| {
+                diagnostic.contains("\"maskFrom\" was removed at src/Diagnostics.tsx:1:")
+            }),
+            "{:?}",
+            result.diagnostics
+        );
+        assert!(
+            result.diagnostics.iter().any(|diagnostic| {
+                diagnostic.contains(
+                    "Use the canonical key \"bg\" instead of \"backgroundColor\" at src/Diagnostics.tsx:1",
+                )
+            }),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
     fn static_engine_reports_property_object_diagnostic() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
