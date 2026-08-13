@@ -2316,7 +2316,52 @@ function formatColorObjectBase(color: string): string {
         : normalizeArbitraryValue(color);
 }
 
-/** Warns when a custom theme token may ignore an opacity modifier. */
+/** The one value shape whose opacity modifier cannot survive color-mix(). */
+const BARE_RGB_TRIPLET = /^\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}$/;
+
+/**
+ * What a theme token's variable computes to on the live page, if readable.
+ *
+ * Computed style resolves the whole var() chain, so the answer is the final
+ * value, not the next hop. Off the browser there is no stylesheet to ask and
+ * the probe returns null.
+ *
+ * @param token - Theme token name, e.g. `brand` for `--color-brand`.
+ * @returns The computed value, or null when it cannot be read.
+ */
+function resolvedThemeTokenValue(token: string): string | null {
+    try {
+        const globals = globalThis as {
+            document?: { documentElement?: unknown };
+            getComputedStyle?: (element: unknown) => { getPropertyValue(name: string): string };
+        };
+        const root = globals.document?.documentElement;
+        if (root === undefined || typeof globals.getComputedStyle !== 'function') {
+            return null;
+        }
+        const value = globals.getComputedStyle(root).getPropertyValue(`--color-${token}`).trim();
+        return value === '' ? null : value;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Warns when a custom theme token PROVABLY ignores its opacity modifier.
+ *
+ * Tailwind v4 wraps the modifier in color-mix(), which dims any valid color,
+ * so no token-text heuristic can call a modifier broken — the one that stood
+ * here flagged six working rules in a field user's otherwise-clean run. The
+ * single breaking shape is a token whose var() chain ends in a bare comma
+ * triplet: substituted into color-mix(), the declaration is invalid CSS and
+ * browsers drop it silently. Only a live stylesheet can answer that, so this
+ * warns exactly when the browser's computed value is that triplet and says
+ * nothing anywhere else — off the browser, `csszyx check` owns the exact
+ * verdict from the compiled stylesheet.
+ *
+ * A token that cannot be resolved is not cached: the stylesheet may simply
+ * not have loaded yet, and a later lowering deserves a fresh answer.
+ */
 function warnCustomOpacityToken(color: string, className: string, opacity: string): void {
     if (
         !szDevWarningsEnabled() ||
@@ -2328,13 +2373,17 @@ function warnCustomOpacityToken(color: string, className: string, opacity: strin
     ) {
         return;
     }
+    const resolved = resolvedThemeTokenValue(color);
+    if (resolved === null || !BARE_RGB_TRIPLET.test(resolved)) {
+        return;
+    }
     _warnedOpacityTokens.add(color);
     const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
     console.warn(
-        `[csszyx] "${className}"${at}: the /${opacity} opacity applies only if the ` +
-            `"${color}" theme token is alpha-capable (oklch or space-separated RGB). ` +
-            'A comma-separated RGB triplet, or a token that resolves through its own alpha ' +
-            'variable, silently ignores the modifier — verify the emitted rule.',
+        `[csszyx] "${className}"${at}: the /${opacity} opacity modifier will not apply — ` +
+            `the "${color}" theme token resolves to the bare comma triplet "${resolved}", ` +
+            'which color-mix() cannot dim. Wrap the variable, e.g. ' +
+            `--color-${color}: rgb(var(--your-triplet)).`,
     );
 }
 
