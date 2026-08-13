@@ -643,7 +643,7 @@ fn apply_dynamic_style_props(
             if let Some(existing) = style_string_value(attr_source) {
                 let merged = style_string_props(existing);
                 let combined = if merged.is_empty() {
-                    props.clone()
+                    props
                 } else {
                     format!("{merged}, {props}")
                 };
