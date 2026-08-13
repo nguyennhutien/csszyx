@@ -1244,6 +1244,70 @@ export function skippedSzFilesMessage(
 }
 
 /**
+ * Explains a class census that grew after the mangle map was already frozen.
+ *
+ * The map is settled right after the prescan because the CSS a build ships is
+ * hashed while it is still being transformed. A class discovered later would be
+ * mangled in one artifact and not in another, so the build stops here rather
+ * than emitting output whose CSS, JS and HTML disagree.
+ *
+ * @param lateOwned csszyx-owned classes first seen after the freeze.
+ * @param lateAuthored raw author classes first seen after the freeze.
+ * @returns the error text.
+ */
+export function lateMangleCensusMessage(
+    lateOwned: readonly string[],
+    lateAuthored: readonly string[],
+): string {
+    const sections = [
+        lateOwned.length > 0 ? `csszyx-owned classes: ${lateOwned.join(', ')}` : '',
+        lateAuthored.length > 0 ? `author classes: ${lateAuthored.join(', ')}` : '',
+    ].filter(Boolean);
+    const found = sections.length > 0 ? sections.join('\n') : 'the class census changed';
+    return (
+        '[csszyx] production.mangle: classes appeared after the mangle map was ' +
+        `frozen, so the emitted CSS was hashed against a different map:\n${found}\n` +
+        'The prescan walks the project root and every `compileSources` directory. ' +
+        'Move the file that owns these classes under one of them, or turn off ' +
+        '`production.mangle` for this build.'
+    );
+}
+
+/**
+ * Explains why a watch build does not mangle.
+ *
+ * @returns the warning text.
+ */
+export function watchModeMangleMessage(): string {
+    return (
+        '[csszyx] production.mangle is disabled for this watch build. Mangling ' +
+        'needs the whole-project prescan that only runs once per process, and a ' +
+        'watch rebuild cannot repeat it — the map would go stale against the ' +
+        'files you edit. Run a one-shot build to get mangled output.'
+    );
+}
+
+/**
+ * Explains why webpack must keep recomputing content hashes.
+ *
+ * csszyx rewrites webpack assets in `processAssets`, which is only safe
+ * because `optimization.realContentHash` runs later and recomputes each hash
+ * from the final bytes. Turning it off puts webpack back in the state this
+ * release fixed for Vite: same filename, different bytes.
+ *
+ * @returns the warning text.
+ */
+export function realContentHashDisabledMessage(): string {
+    return (
+        '[csszyx] optimization.realContentHash is off while production.mangle is ' +
+        'on. csszyx mangles assets after webpack computes their content hashes, ' +
+        'and realContentHash is what recomputes those hashes from the final ' +
+        'bytes. Without it, two builds that differ only by mangling emit the same ' +
+        'filenames with different contents and caches keep serving the old file.'
+    );
+}
+
+/**
  * Computes the `@source` target path for a CSS module: the location of the
  * generated safelist file relative to the CSS file, in posix form and always
  * `./`- or `../`-prefixed so Tailwind treats it as a relative path.
@@ -1462,6 +1526,54 @@ function collectConfiguredGlobalVarCssSources(
                 return [];
             }
         });
+}
+
+/** Module ids Vite treats as stylesheets, matching its own CSS language set. */
+const MANGLEABLE_CSS_ID_RE = /\.(?:css|less|sass|scss|styl|stylus|pcss|postcss|sss)(?:$|\?)/;
+
+/**
+ * Ids that are read as bytes or a URL rather than compiled as a stylesheet.
+ *
+ * `?raw` hands the file's text to the importing module verbatim and `?url`
+ * copies it as an asset — rewriting either would change something the author
+ * asked for unaltered. Worker queries name a different pipeline entirely.
+ */
+const NON_STYLESHEET_CSS_QUERY_RE = /[?&](?:worker|sharedworker|raw|url)(?:&|=|$)/;
+
+/** Rollup's CommonJS interop proxies, which carry no stylesheet text. */
+const COMMONJS_PROXY_RE = /\?commonjs-proxy/;
+
+/**
+ * Decides whether a module id is a stylesheet csszyx should rewrite.
+ *
+ * @param id Bundler module identifier.
+ * @returns True for a stylesheet whose text is destined for emitted CSS.
+ */
+export function isMangleableCssId(id: string): boolean {
+    return (
+        MANGLEABLE_CSS_ID_RE.test(id) &&
+        !NON_STYLESHEET_CSS_QUERY_RE.test(id) &&
+        !COMMONJS_PROXY_RE.test(id)
+    );
+}
+
+/**
+ * Keeps one entry per CSS file name, first occurrence wins.
+ *
+ * The same stylesheet can arrive from more than one inventory — a `scanCss`
+ * pattern and the project walk both name it — and scanning it twice would
+ * report every custom property as declared twice.
+ *
+ * @param assets CSS sources, possibly with repeats.
+ * @returns CSS sources with duplicate file names removed.
+ */
+function dedupeCssAssetsByName(assets: GlobalVarCssAssetSource[]): GlobalVarCssAssetSource[] {
+    const seen = new Set<string>();
+    return assets.filter(asset => {
+        if (seen.has(asset.fileName)) return false;
+        seen.add(asset.fileName);
+        return true;
+    });
 }
 
 /**
@@ -2531,6 +2643,7 @@ function assertGlobalVarMangleConfig(options: PartialCsszyxConfig): void {
 function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     prePlugin: UnpluginInstance<PartialCsszyxConfig, boolean>;
     postPlugin: UnpluginInstance<PartialCsszyxConfig, boolean>;
+    cssPlugin: UnpluginInstance<PartialCsszyxConfig, boolean>;
 } {
     assertGlobalVarMangleConfig(options);
 
@@ -2574,6 +2687,27 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // site (buildEnd / transformIndexHtml / generateBundle / processAssets) — the
     // reason a config exclude-list is consistent where a bundle-CSS scan would not.
     const mangleReserved = new Set(options.production?.mangleExclude ?? []);
+    // True once the class map is settled and every later consumer must read it
+    // rather than rebuild it. Set on the Vite build lane only, because that is
+    // the lane where CSS bytes are hashed during the transform phase and so
+    // have to be mangled there. See freezeMangleMap.
+    let mangleMapFrozen = false;
+    // The census the frozen map was built from, kept to name what arrived late
+    // if the `buildEnd` check finds the map would come out different now.
+    let frozenOwnedClasses: ReadonlySet<string> = new Set<string>();
+    let frozenAuthoredClasses: ReadonlySet<string> = new Set<string>();
+    // True while the CSS rewrite runs in the transform phase (Vite build lane).
+    // The output hook then leaves CSS assets alone: rewriting them a second
+    // time would re-measure every asset and report every class as externally
+    // owned, because the first pass already renamed them.
+    let cssRewrittenInTransform = false;
+    // Every stylesheet the project walk read, used to plan global-var aliases
+    // before the first CSS module is transformed.
+    let projectCssFiles: readonly string[] = [];
+    // Ownership evidence gathered while CSS modules were rewritten, reported
+    // once from the output hook where the whole picture exists.
+    const transformMangledSources = new Set<string>();
+    const transformExternalClasses = new Set<string>();
     // Which delivery channels carry the runtime mangle map. Both channels ship
     // the whole census, so a build that needs only one was paying for the map
     // twice across HTML and JS. Defaults to 'both': dropping a channel is only
@@ -2840,7 +2974,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const result = validateGlobalVarAliasInputs(
             createGlobalVarAliasValidationOptions({
                 rootDir: state.rootDir,
-                cssAssets: [...configuredCssAssets, ...cssAssets],
+                cssAssets: dedupeCssAssetsByName([...configuredCssAssets, ...cssAssets]),
                 sourceFiles: buildGlobalVarSourceFiles(state),
                 tokens: globalVarMangleConfig.tokens,
                 autoPrefix: globalVarMangleConfig.autoPrefix,
@@ -2852,6 +2986,51 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         assertNoGlobalVarAliasValidationErrors(result);
         assertGlobalVarPlanMatchesEarlyAliases(result, earlyGlobalVarAliasEntries);
         return result;
+    }
+
+    /**
+     * Re-checks the frozen alias plan once every source module has been seen.
+     *
+     * The plan is settled before the first stylesheet is rewritten, at a point
+     * where no source module has been transformed — so the out-of-band usage
+     * diagnostics, which read JS/JSX for references an alias cannot follow, had
+     * nothing to look at. Running the same validation again here, with every
+     * observed source file in hand, is what keeps that fail-closed check. Both
+     * runs are held to the same config-derived alias table, so a plan that
+     * changed underneath the build fails inside the validation itself.
+     */
+    function revalidateFrozenGlobalVarPlan(): void {
+        if (!cssRewrittenInTransform) return;
+        validateGlobalVarBundleInputs(collectProjectGlobalVarCssSources());
+    }
+
+    /**
+     * Reads the stylesheets the project walk found, for early alias planning.
+     *
+     * The Vite lane cannot wait for the output bundle: by then the CSS
+     * filename hash is already fixed. The same files the theme discovery
+     * already walked answer the only question the planner asks of CSS — where
+     * each custom property is declared.
+     *
+     * @returns CSS sources in stable file-name order.
+     */
+    function collectProjectGlobalVarCssSources(): GlobalVarCssAssetSource[] {
+        const sources: GlobalVarCssAssetSource[] = [];
+        for (const file of sortStrings(projectCssFiles)) {
+            try {
+                const snapshot = readStableTextFileSnapshotSync(file);
+                sources.push({
+                    fileName: file,
+                    source: snapshot.source,
+                    mtimeMs: snapshot.mtimeMs,
+                });
+            } catch {
+                // A stylesheet that vanished between the walk and this read
+                // contributes nothing; the planner fails closed on a token it
+                // then cannot find a definition for.
+            }
+        }
+        return sources;
     }
 
     /**
@@ -2915,6 +3094,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         refreshCompileSourceDirs();
         const discovered = discoverProjectTheme(rootDir, [...compileSourceDirs]);
         state.autoThemeCssFiles = discovered.files;
+        // Every stylesheet, not only the ones with `@theme`: the global-var
+        // planner needs to see each custom-property declaration in the project
+        // before the first CSS module is rewritten.
+        projectCssFiles = discovered.scanned;
         // Recomputed from both sources every time rather than merged into the
         // previous value: a token deleted from a stylesheet must disappear, and
         // accumulating into `state.parsedTheme` would keep it registered.
@@ -4101,14 +4284,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Finalizes the mangle map from all collected classes.
-     * Always rebuilds to ensure completeness (called after all files
-     * processed). The one repeated WASM cost — `encode` per token — is memoized
-     * inside `allocateMangleTokens`; the checksum is a single call whose input
-     * (the var map) is rebuilt wholesale per CSS file, so it is not safely
-     * skippable on a size heuristic and is left to run each time.
+     * Allocate the class → token map from the census collected so far.
+     *
+     * @returns The class → token map for the current owned/authored sets.
      */
-    function finalizeMangleMap(): void {
+    function computeMangleMap(): Record<string, string> {
         // Mangle only csszyx-owned classes with no raw author consumer. A shared
         // name can enter both sets, so ownership must be resolved explicitly
         // rather than inferred from its presence in ownedClasses.
@@ -4121,10 +4301,67 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             ...state.authoredClasses,
             ...state.ownedClasses,
         ]);
-        state.mangleMap = allocateMangleTokens(
+        return allocateMangleTokens(
             mangleEligibleClasses(state.ownedClasses, state.authoredClasses),
             forbiddenTokens,
         );
+    }
+
+    /**
+     * Settle the class map before anything that gets hashed is produced.
+     *
+     * Vite fixes a CSS asset's filename hash while the module is still in the
+     * transform phase, so the mangled bytes have to exist by then — which means
+     * the map has to be final BEFORE the first CSS module is transformed. The
+     * prescan is what makes that possible: it is already the build's only
+     * safelist source, so a class it did not see has no CSS generated for it
+     * either. Freezing here turns that standing assumption into a contract the
+     * `buildEnd` census check enforces.
+     */
+    function freezeMangleMap(): void {
+        state.mangleMap = computeMangleMap();
+        frozenOwnedClasses = new Set(state.ownedClasses);
+        frozenAuthoredClasses = new Set(state.authoredClasses);
+        mangleMapFrozen = true;
+    }
+
+    /**
+     * Fail the build when the class census moved after the map was frozen.
+     *
+     * A late class means the emitted CSS, JS and HTML were produced from a map
+     * that does not describe this build. That is exactly the silent-wrong-output
+     * failure the whole freeze exists to prevent, so it stops the build instead
+     * of shipping something that mostly works.
+     */
+    function assertMangleCensusUnchanged(): void {
+        if (!mangleMapFrozen) return;
+        const current = computeMangleMap();
+        if (JSON.stringify(current) === JSON.stringify(state.mangleMap)) return;
+        const lateOwned = sortStrings(
+            [...state.ownedClasses].filter(className => !frozenOwnedClasses.has(className)),
+        );
+        const lateAuthored = sortStrings(
+            [...state.authoredClasses].filter(className => !frozenAuthoredClasses.has(className)),
+        );
+        throw new Error(lateMangleCensusMessage(lateOwned, lateAuthored));
+    }
+
+    /**
+     * Finalizes the mangle map from all collected classes.
+     * Always rebuilds to ensure completeness (called after all files
+     * processed). The one repeated WASM cost — `encode` per token — is memoized
+     * inside `allocateMangleTokens`; the checksum is a single call whose input
+     * (the var map) is rebuilt wholesale per CSS file, so it is not safely
+     * skippable on a size heuristic and is left to run each time.
+     */
+    function finalizeMangleMap(): void {
+        // A frozen map is the build's single answer: the CSS was already
+        // rewritten with it during transform, and the bytes Rollup hashed are
+        // those. Reallocating here would silently produce a second map that
+        // only the JS and the HTML would carry.
+        if (!mangleMapFrozen) {
+            state.mangleMap = computeMangleMap();
+        }
         assertVarMangleMapSize(state.varMangleMap, varMangleMapMaxBytes);
         state.checksum = compute_mangle_checksum(
             createHydrationMangleMap(state.mangleMap, state.varMangleMap),
@@ -4786,6 +5023,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             /** Finalizes the mangle map after all source modules have been processed. */
             buildEnd() {
                 finalizeMangleMap();
+                // Both checks run here because this is the last moment before
+                // any output exists: the transform phase is over, so the census
+                // and the source-usage evidence are complete, and nothing has
+                // been written yet.
+                assertMangleCensusUnchanged();
+                revalidateFrozenGlobalVarPlan();
                 assertNoRSCGraphViolation(state.rscModules);
                 // csszyx rewrites sz props into Tailwind class names, but Tailwind
                 // only emits CSS for classes a source/@source covers. The generated
@@ -5015,6 +5258,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     if (config.command === 'serve') {
                         manglingEnabled = false;
                     }
+                    // `vite build --watch` is out of scope for mangling: the map
+                    // is settled from a prescan that runs once per process, and a
+                    // rebuild triggered by an edit cannot repeat it, so the second
+                    // build onwards would mangle against a map that no longer
+                    // matches the sources. Say so once instead of shipping that.
+                    if (manglingEnabled && config.build?.watch) {
+                        manglingEnabled = false;
+                        emitWarning(watchModeMangleMessage());
+                    }
                     evictTransformCacheOnce();
                     // Pre-scan source files so Tailwind can discover classes
                     prescanAndWriteClasses();
@@ -5023,6 +5275,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         runThemeScan(root, options.build?.scanCss) ?? state.scanCssTheme;
                     // Always: project-wide @theme discovery feeds merge groups.
                     runAutoThemeScan(root);
+                    // Everything the CSS rewrite reads has to be settled before
+                    // the first stylesheet is transformed, because that is where
+                    // its bytes are hashed. Both halves come from the same walk
+                    // the prescan just did.
+                    if (config.command === 'build') {
+                        state.globalVarValidationResult = validateGlobalVarBundleInputs(
+                            collectProjectGlobalVarCssSources(),
+                        );
+                    }
+                    if (manglingEnabled && config.command === 'build') {
+                        freezeMangleMap();
+                    }
                 },
 
                 /**
@@ -5482,7 +5746,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Rewrite one Vite bundle entry after the mangle map is complete.
+     * Rewrite one Vite CSS bundle asset after the mangle map is complete.
+     *
+     * JS chunks are NOT handled here: Rollup fixes a chunk's filename hash from
+     * whatever `renderChunk` returned, so rewriting a chunk in `generateBundle`
+     * changes bytes the name no longer describes. See the post plugin's
+     * `renderChunk`.
      *
      * @param chunk Rollup output entry.
      * @param file Output filename.
@@ -5498,25 +5767,48 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         externalClasses: Set<string>,
     ): void {
         if (
-            chunk.type === 'asset' &&
-            chunk.fileName.endsWith('.css') &&
-            chunk.source !== undefined
+            chunk.type !== 'asset' ||
+            !chunk.fileName.endsWith('.css') ||
+            chunk.source === undefined
         ) {
-            const originalCss = chunk.source.toString();
-            const css = rewriteOutputCss(
-                originalCss,
-                file,
-                shouldMangle,
-                mangledSources,
-                externalClasses,
-            );
-            if (css !== originalCss) chunk.source = css;
             return;
         }
-        if (chunk.type !== 'chunk' || chunk.code === undefined) return;
+        const originalCss = chunk.source.toString();
+        const css = rewriteOutputCss(
+            originalCss,
+            file,
+            shouldMangle,
+            mangledSources,
+            externalClasses,
+        );
+        if (css !== originalCss) chunk.source = css;
+    }
 
-        const rewritten = rewriteCodeAsset(chunk.code, shouldMangle);
-        if (rewritten !== chunk.code) chunk.code = rewritten;
+    /**
+     * Rewrite one CSS module while its bytes still decide its filename hash.
+     *
+     * Vite's `vite:css-post` emits the CSS asset — and takes its content hash —
+     * during the render phase, from the text it collected in ITS transform
+     * hook. A plugin in the default (normal) enforce bucket runs after every
+     * `enforce: 'pre'` plugin, so Tailwind has already generated its CSS, and
+     * before `vite:css-post`, so this is the last moment the mangled bytes are
+     * still what the hash will cover.
+     *
+     * @param code CSS module source.
+     * @param id Bundler module identifier.
+     * @returns Rewritten CSS, or null when nothing changed.
+     */
+    function mangleCssModule(code: string, id: string): { code: string; map: null } | null {
+        const shouldMangle =
+            manglingEnabled && mangleMapFrozen && Object.keys(state.mangleMap).length > 0;
+        const css = rewriteOutputCss(
+            code,
+            id,
+            shouldMangle,
+            transformMangledSources,
+            transformExternalClasses,
+        );
+        return css === code ? null : { code: css, map: null };
     }
 
     /**
@@ -5530,9 +5822,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         emitAsset: (fileName: string, source: string) => void,
     ): void {
         finalizeMangleMap();
-        state.globalVarValidationResult = validateGlobalVarBundleInputs(
-            collectRollupGlobalVarCssAssets(bundle),
-        );
+        // The Vite lane planned and applied its aliases before the CSS was
+        // hashed, so the bundle's CSS is already rewritten — re-planning from
+        // it would read the aliases back as undeclared tokens.
+        if (!cssRewrittenInTransform) {
+            state.globalVarValidationResult = validateGlobalVarBundleInputs(
+                collectRollupGlobalVarCssAssets(bundle),
+            );
+        }
         const shouldMangle = manglingEnabled && Object.keys(state.mangleMap).length > 0;
         // Opt-in: only `@csszyx/dynamic` reads this, and only to skip injecting
         // rules the built CSS already has. The file carries the whole class
@@ -5552,16 +5849,20 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (globalVarMap) emitAsset('.csszyx/global-var-map.json', globalVarMap);
         }
 
-        const mangledSources = new Set<string>();
-        const externalClasses = new Set<string>();
-        for (const file in bundle) {
-            rewriteViteBundleEntry(
-                bundle[file],
-                file,
-                shouldMangle,
-                mangledSources,
-                externalClasses,
-            );
+        // On the Vite lane the CSS evidence was gathered in the transform pass
+        // that rewrote it; the bundle carries the same, already-renamed assets.
+        const mangledSources = new Set(transformMangledSources);
+        const externalClasses = new Set(transformExternalClasses);
+        if (!cssRewrittenInTransform) {
+            for (const file in bundle) {
+                rewriteViteBundleEntry(
+                    bundle[file],
+                    file,
+                    shouldMangle,
+                    mangledSources,
+                    externalClasses,
+                );
+            }
         }
         reportOutputMangleHazards(shouldMangle, mangledSources, externalClasses);
     }
@@ -5578,7 +5879,46 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * @param compiler - the Webpack compiler instance
          */
         webpack(compiler: WebpackCompiler) {
+            // csszyx rewrites webpack assets in `processAssets`, after webpack
+            // has hashed them. That is only correct because `realContentHash`
+            // runs later and recomputes each hash from the final bytes — so a
+            // build that switches it off silently reintroduces stale caching.
+            if (manglingEnabled && compiler.options?.optimization?.realContentHash === false) {
+                emitWarning(realContentHashDisabledMessage());
+            }
             registerWebpackAssetProcessor(compiler, processWebpackAssets);
+        },
+
+        /**
+         * Settle the map once, before the first chunk is rendered.
+         *
+         * `renderChunk` is where the class rewrite has to happen, and Rollup
+         * offers no ordering guarantee among chunks — so the map is completed
+         * here rather than from whichever chunk arrives first.
+         */
+        renderStart() {
+            finalizeMangleMap();
+        },
+
+        /**
+         * Rewrite a JS chunk while its bytes still decide its filename hash.
+         *
+         * Rollup renders every chunk, hashes the result, substitutes the
+         * filename placeholders and only then calls `generateBundle` — so the
+         * rewrite this used to do there produced a file whose name described
+         * the un-mangled bytes. The map is complete by `buildEnd`, which is
+         * before the render phase, so nothing forces the later hook.
+         *
+         * @param code Rendered chunk source.
+         * @returns Rewritten chunk, or null when nothing changed.
+         */
+        renderChunk(code: string) {
+            const shouldMangle = manglingEnabled && Object.keys(state.mangleMap).length > 0;
+            const rewritten = rewriteCodeAsset(code, shouldMangle);
+            // `map: null` declares that csszyx produced no mapping for this
+            // pass, which is honest: the rewrite is a plain text substitution
+            // and the previous hook chain never described it either.
+            return rewritten === code ? null : { code: rewritten, map: null };
         },
 
         /**
@@ -5614,7 +5954,45 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         },
     }));
 
-    return { prePlugin, postPlugin };
+    /**
+     * The CSS rewrite, in the one enforce bucket that sits between Tailwind and
+     * Vite's CSS emitter.
+     *
+     * It is a separate plugin because the bucket is the mechanism: `csszyx:pre`
+     * has to run before Tailwind reads the safelist, `csszyx:post` runs after
+     * `vite:css-post` has already taken the asset's hash, and only a plugin
+     * with no `enforce` lands in between. Vite guarantees that ordering itself,
+     * so this needs no knowledge of how the user ordered their plugin array.
+     */
+    const cssPlugin = createUnplugin<PartialCsszyxConfig, boolean>(() => ({
+        name: 'csszyx:css-mangle',
+
+        transformInclude(id: string) {
+            return cssRewrittenInTransform && isMangleableCssId(id);
+        },
+
+        transform(code: string, id: string) {
+            return mangleCssModule(code, id);
+        },
+
+        vite: {
+            /**
+             * Claim the CSS rewrite for the transform phase on this lane.
+             *
+             * A dev server never reaches an output hook, and mangling is off
+             * there anyway; claiming it only for `build` keeps `vite serve`
+             * exactly as it was.
+             *
+             * @param config - the resolved Vite configuration object
+             * @param config.command - `'build'` or `'serve'`
+             */
+            configResolved(config: { command?: string }) {
+                cssRewrittenInTransform = config.command === 'build';
+            },
+        },
+    }));
+
+    return { prePlugin, postPlugin, cssPlugin };
 }
 
 // Export a single instance for default use (compatibility)
@@ -5627,9 +6005,16 @@ export const unplugin: UnpluginInstance<PartialCsszyxConfig, boolean> = defaultI
  * @returns array of Vite plugins for pre-transform and post-mangle phases
  */
 export const vitePlugin = (options: PartialCsszyxConfig = {}): PluginOption[] => {
-    const { prePlugin, postPlugin } = createCsszyxPlugins(options);
-    // Vite can handle arrays directly in plugins config
-    return [prePlugin.vite(options), postPlugin.vite(options)] as unknown as PluginOption[];
+    const { prePlugin, postPlugin, cssPlugin } = createCsszyxPlugins(options);
+    // Vite can handle arrays directly in plugins config. The CSS plugin's
+    // position in this array does not matter — Vite sorts by `enforce`, and
+    // its absent `enforce` is what puts it after Tailwind and before
+    // `vite:css-post`.
+    return [
+        prePlugin.vite(options),
+        cssPlugin.vite(options),
+        postPlugin.vite(options),
+    ] as unknown as PluginOption[];
 };
 
 /**

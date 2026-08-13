@@ -148,7 +148,7 @@ describe('csszyx parser selection', () => {
     });
 
     it('rewrites CSS assets with the validated explicit global variable alias plan', () => {
-        const [prePlugin, postPlugin] = vitePlugin({
+        const [prePlugin, , postPlugin] = vitePlugin({
             build: { emitManifest: true, parser: 'wasm', cache: false },
             production: {
                 mangleGlobalVars: {
@@ -156,7 +156,7 @@ describe('csszyx parser selection', () => {
                     tokens: ['--brand-primary'],
                 },
             },
-        }) as [TransformHook, GenerateBundleHook];
+        }) as [TransformHook, unknown, GenerateBundleHook];
         prePlugin.transform.call(
             { warn: vi.fn() },
             "const App = () => <div sz={{ bg: '--brand-primary' }} />;",
@@ -178,7 +178,7 @@ describe('csszyx parser selection', () => {
     });
 
     it('fails closed when explicit global variable tokens are missing from emitted CSS', () => {
-        const [, postPlugin] = vitePlugin({
+        const [, , postPlugin] = vitePlugin({
             build: { emitManifest: true, parser: 'wasm', cache: false },
             production: {
                 mangleGlobalVars: {
@@ -186,7 +186,7 @@ describe('csszyx parser selection', () => {
                     tokens: ['--brand-primary'],
                 },
             },
-        }) as [TransformHook, GenerateBundleHook];
+        }) as [TransformHook, unknown, GenerateBundleHook];
 
         expect(() =>
             postPlugin.generateBundle.call(
@@ -208,7 +208,7 @@ describe('csszyx parser selection', () => {
         tempDirs.push(root);
         const cssPath = join(root, 'tokens.css');
         writeFileSync(cssPath, ':root{--brand-primary:red}.card{color:var(--brand-primary)}');
-        const [, postPlugin] = vitePlugin({
+        const [, , postPlugin] = vitePlugin({
             build: { emitManifest: true, parser: 'wasm', cache: false, scanCss: cssPath },
             production: {
                 mangleGlobalVars: {
@@ -216,7 +216,7 @@ describe('csszyx parser selection', () => {
                     tokens: ['--brand-primary'],
                 },
             },
-        }) as [TransformHook, GenerateBundleHook];
+        }) as [TransformHook, unknown, GenerateBundleHook];
         const emitFile = vi.fn();
 
         expect(() =>
@@ -242,7 +242,7 @@ describe('csszyx parser selection', () => {
     });
 
     it('can skip the standalone global variable map asset', () => {
-        const [prePlugin, postPlugin] = vitePlugin({
+        const [prePlugin, , postPlugin] = vitePlugin({
             build: { emitManifest: true, parser: 'wasm', cache: false },
             production: {
                 mangleGlobalVars: {
@@ -251,7 +251,7 @@ describe('csszyx parser selection', () => {
                     tokens: ['--brand-primary'],
                 },
             },
-        }) as [TransformHook, GenerateBundleHook];
+        }) as [TransformHook, unknown, GenerateBundleHook];
         prePlugin.transform.call(
             { warn: vi.fn() },
             "const App = () => <div sz={{ bg: '--brand-primary' }} />;",
@@ -477,10 +477,10 @@ describe('csszyx parser selection', () => {
     });
 
     it('preserves mixed scoped and hoisted CSS variable tiers in runtime metadata', () => {
-        const [prePlugin, postPlugin] = vitePlugin({
+        const [prePlugin, , postPlugin] = vitePlugin({
             build: { emitManifest: true, parser: 'wasm', cache: false },
             production: { mangleVars: true },
-        }) as [TransformHook, GenerateBundleHook];
+        }) as [TransformHook, unknown, GenerateBundleHook];
         const source =
             'const App = ({ pad, gap }) => <main><section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section><aside sz={{ p: gap }} /></main>;';
 
