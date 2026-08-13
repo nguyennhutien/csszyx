@@ -99,7 +99,8 @@ Per build:
 CSSZYX_PARSER=wasm pnpm build
 ```
 
-Both values run the same engine, so output is identical; only parse speed
+The default `rust` path is the native addon; `wasm` is the same engine
+compiled to WebAssembly. Both run identical output; only parse speed
 differs. The former `"oxc"` and `"babel"` TypeScript lanes were removed —
 a config still naming them is ignored like an invalid env value and the
 build runs on the default.
