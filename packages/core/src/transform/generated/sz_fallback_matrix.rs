@@ -15,6 +15,7 @@ pub(crate) enum SzFallbackKind {
     Import,
     Member,
     Other,
+    SzvFactory,
 }
 
 /// Stand-in name for a callee with no statically readable name.
@@ -26,8 +27,9 @@ pub(crate) const SZ_FALLBACK_UNKNOWN_CALLEE: &str = "?";
 /// * `kind` - Classified shape of the expression.
 /// * `detail` - Callee name, identifier name, or node type. Ignored by kinds
 ///   whose reason carries no placeholder.
-pub(crate) fn sz_fallback_reason(kind: SzFallbackKind, detail: &str) -> String {
-    let _ = detail;
+/// * `path` - Config position, dot-joined. Only the `SzvFactory` kind reads it.
+pub(crate) fn sz_fallback_reason(kind: SzFallbackKind, detail: &str, path: &str) -> String {
+    let _ = (detail, path);
     match kind {
         SzFallbackKind::Call => {
             format!("function call `{detail}()` result is unknown at build time")
@@ -42,6 +44,9 @@ pub(crate) fn sz_fallback_reason(kind: SzFallbackKind, detail: &str) -> String {
         SzFallbackKind::Other => {
             format!("expression of type `{detail}` is not statically analyzable")
         }
+        SzFallbackKind::SzvFactory => format!(
+            "szv factory `{detail}()` did not precompile — its config disqualified at `{path}`"
+        ),
     }
 }
 
@@ -56,6 +61,7 @@ pub(crate) const fn sz_fallback_suggestion(kind: SzFallbackKind) -> &'static str
         SzFallbackKind::Import => "Export it as a const with a static object literal and import it by name — a barrel, a namespace import, or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().",
         SzFallbackKind::Member => "Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().",
         SzFallbackKind::Other => "Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().",
+        SzFallbackKind::SzvFactory => "Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().",
     }
 }
 
@@ -84,13 +90,15 @@ pub(crate) fn szs_unsupported_diagnostic(filename: &str) -> String {
 /// * `position` - `line:column`, 1-based.
 /// * `kind` - Classified shape of the expression.
 /// * `detail` - Callee name, identifier name, or node type.
+/// * `path` - Config position, dot-joined. Only the `SzvFactory` kind reads it.
 pub(crate) fn format_sz_fallback_diagnostic(
     site: SzFallbackSite,
     position: &str,
     kind: SzFallbackKind,
     detail: &str,
+    path: &str,
 ) -> String {
-    let reason = sz_fallback_reason(kind, detail);
+    let reason = sz_fallback_reason(kind, detail, path);
     match site {
         SzFallbackSite::Szr => {
             let suggestion = sz_fallback_suggestion(kind);

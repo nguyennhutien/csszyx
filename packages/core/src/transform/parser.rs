@@ -139,6 +139,7 @@ pub fn parse_source_shell_with_registries(
             szr_import: None,
             szr_call_args: Vec::new(),
             pending_szr_fallbacks: Vec::new(),
+            szv_disqualified: Vec::new(),
             szv_candidates: Vec::new(),
             szv_call_sites: Vec::new(),
             szv_type_query_counts: Vec::new(),
@@ -238,6 +239,10 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     /// whether that is a real fallback is decided at finalize, after the szv
     /// precompile has proven (or failed to prove) the argument.
     pending_szr_fallbacks: Vec<PendingSzrFallback>,
+    /// szv factories THIS parse saw and refused: binding name to the
+    /// disqualifying position inside the config, for the szr fallback that
+    /// would otherwise blame the factory with generic call advice.
+    szv_disqualified: Vec<(String, String)>,
     /// File-local `const F = szv(<literal config>)` candidates that passed the
     /// shape and overlap checks (reference accounting is deferred).
     szv_candidates: Vec<SzvFactoryRecord>,
@@ -909,6 +914,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                                     kind,
                                     detail,
                                     offset: fallback_expression_offset(expression),
+                                    path: String::new(),
                                 },
                             });
                         }
@@ -1047,16 +1053,27 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 continue;
             };
             let Expression::ObjectExpression(object) = unwrap_expression(argument) else {
+                self.record_szv_disqualified(&name, String::from("config"));
                 continue;
             };
-            let Some(config_object) = strict_literal_object(object) else {
-                continue;
+            let config_object = match strict_literal_object_diagnosed(object, "") {
+                Ok(config_object) => config_object,
+                Err(path) => {
+                    self.record_szv_disqualified(&name, path);
+                    continue;
+                }
             };
-            let Some(config) = super::szv_precompile::static_szv_config_from_object(&config_object)
-            else {
-                continue;
+            let config = match super::szv_precompile::static_szv_config_from_object_diagnosed(
+                &config_object,
+            ) {
+                Ok(config) => config,
+                Err(path) => {
+                    self.record_szv_disqualified(&name, path);
+                    continue;
+                }
             };
-            if !super::szv_precompile::szv_config_free_of_overlap(&config) {
+            if let Some(path) = super::szv_precompile::overlap_disqualify_path(&config) {
+                self.record_szv_disqualified(&name, path);
                 continue;
             }
             self.szv_candidates.push(SzvFactoryRecord {
@@ -1253,7 +1270,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     /// unproven after the szv precompile, in their recorded (source) order.
     fn emit_pending_szr_fallbacks(&mut self, replaced_spans: &[super::TextSpan]) {
         let pending = std::mem::take(&mut self.pending_szr_fallbacks);
-        for record in pending {
+        for mut record in pending {
             let proven = self
                 .szr_call_args
                 .iter()
@@ -1263,7 +1280,30 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             if proven {
                 continue;
             }
+            // A call to a factory this parse saw declared as szv and refused:
+            // the generic call advice ("convert to szv()") is circular there,
+            // so name the factory as what it is and the config position that
+            // disqualified it. Only CONFIG-level refusals rewrite — a factory
+            // that qualified but kept its runtime path for usage reasons has
+            // nothing wrong in its config to point at.
+            if record.fallback.kind == super::RuntimeFallbackKindIr::Call {
+                if let Some((_, path)) = self
+                    .szv_disqualified
+                    .iter()
+                    .find(|(name, _)| *name == record.fallback.detail)
+                {
+                    record.fallback.kind = super::RuntimeFallbackKindIr::SzvFactory;
+                    record.fallback.path.clone_from(path);
+                }
+            }
             self.ir.site_fallbacks.push(record.fallback);
+        }
+    }
+
+    /// Remember one refused szv factory, first declaration wins.
+    fn record_szv_disqualified(&mut self, name: &str, path: String) {
+        if !self.szv_disqualified.iter().any(|(seen, _)| seen == name) {
+            self.szv_disqualified.push((name.to_string(), path));
         }
     }
 
@@ -1347,6 +1387,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             kind,
             detail,
             offset: fallback_expression_offset(expression),
+            path: String::new(),
         });
     }
 
@@ -2475,46 +2516,74 @@ fn strict_static_selection(
 /// identifier-resolving extractor: a broader evaluator here would let this
 /// engine qualify a config the JS lanes bail on.
 fn strict_literal_object(object: &ObjectExpression<'_>) -> Option<StaticSzObject> {
+    strict_literal_object_diagnosed(object, "").ok()
+}
+
+/// The same strict-literal walk, naming the first non-literal position.
+///
+/// One walk serves the precompile's verdict and the szr diagnostic that has
+/// to tell the author WHERE their config stopped being static. `Err` carries
+/// the dot-joined key path under `prefix`; a shape with no key to name (a
+/// spread, a computed key) reports the object holding it.
+fn strict_literal_object_diagnosed(
+    object: &ObjectExpression<'_>,
+    prefix: &str,
+) -> Result<StaticSzObject, String> {
+    let holder = || {
+        if prefix.is_empty() {
+            String::from("config")
+        } else {
+            prefix.to_string()
+        }
+    };
     let mut properties = Vec::new();
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(entry) = property else {
-            return None;
+            return Err(holder());
         };
         if entry.computed {
-            return None;
+            return Err(holder());
         }
-        let key = static_property_key(&entry.key)?;
-        let value = strict_literal_value(&entry.value)?;
+        let Some(key) = static_property_key(&entry.key) else {
+            return Err(holder());
+        };
+        let path = if prefix.is_empty() {
+            key.clone()
+        } else {
+            format!("{prefix}.{key}")
+        };
+        let value = strict_literal_value_diagnosed(&entry.value, &path)?;
         properties.push(super::StaticSzProperty {
             key,
             value,
             span: text_span(entry.span),
         });
     }
-    Some(StaticSzObject { properties })
+    Ok(StaticSzObject { properties })
 }
 
-/// One literal value for `strict_literal_object`.
-fn strict_literal_value(expression: &Expression<'_>) -> Option<StaticSzValue> {
+/// One literal value for `strict_literal_object_diagnosed`.
+fn strict_literal_value_diagnosed(
+    expression: &Expression<'_>,
+    path: &str,
+) -> Result<StaticSzValue, String> {
     match unwrap_expression(expression) {
-        Expression::StringLiteral(literal) => {
-            Some(StaticSzValue::String(literal.value.to_string()))
-        }
-        Expression::NumericLiteral(literal) => Some(StaticSzValue::Number(literal.value)),
-        Expression::BooleanLiteral(literal) => Some(StaticSzValue::Boolean(literal.value)),
+        Expression::StringLiteral(literal) => Ok(StaticSzValue::String(literal.value.to_string())),
+        Expression::NumericLiteral(literal) => Ok(StaticSzValue::Number(literal.value)),
+        Expression::BooleanLiteral(literal) => Ok(StaticSzValue::Boolean(literal.value)),
         Expression::UnaryExpression(unary) => {
             if unary.operator != UnaryOperator::UnaryNegation {
-                return None;
+                return Err(path.to_string());
             }
             match unwrap_expression(&unary.argument) {
-                Expression::NumericLiteral(literal) => Some(StaticSzValue::Number(-literal.value)),
-                _ => None,
+                Expression::NumericLiteral(literal) => Ok(StaticSzValue::Number(-literal.value)),
+                _ => Err(path.to_string()),
             }
         }
         Expression::ObjectExpression(nested) => {
-            strict_literal_object(nested).map(StaticSzValue::Object)
+            strict_literal_object_diagnosed(nested, path).map(StaticSzValue::Object)
         }
-        _ => None,
+        _ => Err(path.to_string()),
     }
 }
 

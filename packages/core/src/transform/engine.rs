@@ -528,12 +528,19 @@ fn site_fallback_diagnostics(
                 RuntimeFallbackKindIr::Import => SzFallbackKind::Import,
                 RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
                 RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
+                RuntimeFallbackKindIr::SzvFactory => SzFallbackKind::SzvFactory,
             };
             let site = match fallback.site {
                 SzFallbackSiteIr::Szr => SzFallbackSite::Szr,
                 SzFallbackSiteIr::Szv => SzFallbackSite::Szv,
             };
-            format_sz_fallback_diagnostic(site, &format!("{line}:{column}"), kind, &fallback.detail)
+            format_sz_fallback_diagnostic(
+                site,
+                &format!("{line}:{column}"),
+                kind,
+                &fallback.detail,
+                &fallback.path,
+            )
         })
         .collect()
 }
@@ -568,9 +575,13 @@ fn runtime_fallback_diagnostics(
             RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
             RuntimeFallbackKindIr::Import => SzFallbackKind::Import,
             RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
-            RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
+            // An sz attribute never carries factory-level knowledge; the
+            // variant exists for the szr site alone.
+            RuntimeFallbackKindIr::Other | RuntimeFallbackKindIr::SzvFactory => {
+                SzFallbackKind::Other
+            }
         };
-        let reason = sz_fallback_reason(kind, &diagnostic.detail);
+        let reason = sz_fallback_reason(kind, &diagnostic.detail, "");
         let suggestion = sz_fallback_suggestion(kind);
         out.push(format!(
             "sz fallback at {line}:{column}: {reason}.
@@ -1047,6 +1058,64 @@ mod tests {
         assert!(diagnostics.contains("member expression"), "{diagnostics}");
         assert!(diagnostics.contains("AwaitExpression"), "{diagnostics}");
         assert!(diagnostics.contains("szv catalog at 5:"), "{diagnostics}");
+    }
+
+    #[test]
+    fn static_engine_names_the_disqualifying_config_path_for_a_known_szv_factory() {
+        // `szr(t({...}))` where `t` IS an szv declared lines above used to
+        // render "function call `t()` result is unknown" and suggest
+        // converting to szv() — circular advice that cost a field user the
+        // hunt for WHY the factory did not precompile. When the parser SAW
+        // the declaration and disqualified its config, the diagnostic says
+        // so and names the position in the config that disqualified.
+        let file = TransformFile {
+            filename: "/repo/src/Tag.tsx".to_string(),
+            source: [
+                "import { szr, szv } from 'csszyx';",
+                "const t = szv({ variants: { c: { blue: { color: 'blue-500', 'desktop-sm': { p: 4 } } } } });",
+                "export const A = () => <div className={szr(t({ c: 'blue' }))} />;",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("szr fallback at 3:44: szv factory `t()` did not precompile"),
+            "{diagnostics}"
+        );
+        assert!(
+            diagnostics.contains("config disqualified at `variants.c.blue.desktop-sm`"),
+            "{diagnostics}"
+        );
+        // The old advice was circular — the author is already writing szv().
+        assert!(!diagnostics.contains("convert to szv()"), "{diagnostics}");
+    }
+
+    #[test]
+    fn static_engine_keeps_the_generic_call_wording_for_a_qualified_factory() {
+        // A factory whose CONFIG is fine can still keep its runtime path for
+        // usage reasons (here: an extra reference fails the accounting).
+        // Claiming "config disqualified" there would send the author to a
+        // config with nothing wrong in it, so those keep the generic wording.
+        let file = TransformFile {
+            filename: "/repo/src/Ok.tsx".to_string(),
+            source: [
+                "import { szr, szv } from 'csszyx';",
+                "const t = szv({ variants: { c: { blue: { bg: 'blue-500' } } } });",
+                "console.log(t);",
+                "export const A = () => <div className={szr(t({ c: 'blue' }))} />;",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("function call `t()` result is unknown at build time"),
+            "{diagnostics}"
+        );
+        assert!(!diagnostics.contains("did not precompile"), "{diagnostics}");
     }
 
     #[test]

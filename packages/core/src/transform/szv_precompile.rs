@@ -76,6 +76,18 @@ fn js_object_key_order<T>(entries: Vec<(String, T)>) -> Vec<(String, T)> {
 /// the variants, string/boolean/safe-integer defaults. Overlap is checked
 /// separately so the two failure modes stay distinguishable in tests.
 pub(crate) fn static_szv_config_from_object(object: &StaticSzObject) -> Option<StaticSzvConfig> {
+    static_szv_config_from_object_diagnosed(object).ok()
+}
+
+/// The same extraction, naming the position that broke the shape.
+///
+/// One walk serves both askers: the precompile only needs the verdict, but
+/// the szr diagnostic needs to tell the author WHERE the config disqualified,
+/// and a separate diagnostic walk would be the subset-copy drift this module
+/// bans everywhere else. `Err` carries the dot-joined key path.
+pub(crate) fn static_szv_config_from_object_diagnosed(
+    object: &StaticSzObject,
+) -> Result<StaticSzvConfig, String> {
     let mut base: Option<StaticSzObject> = None;
     let mut variants: Vec<(String, Vec<(String, StaticSzObject)>)> = Vec::new();
     let mut defaults: Option<Vec<(String, String)>> = None;
@@ -83,20 +95,20 @@ pub(crate) fn static_szv_config_from_object(object: &StaticSzObject) -> Option<S
         match property.key.as_str() {
             "base" => match &property.value {
                 StaticSzValue::Object(value) => base = Some(value.clone()),
-                _ => return None,
+                _ => return Err(String::from("base")),
             },
             "variants" => {
                 let StaticSzValue::Object(dimensions) = &property.value else {
-                    return None;
+                    return Err(String::from("variants"));
                 };
                 for dimension in &dimensions.properties {
                     let StaticSzValue::Object(values) = &dimension.value else {
-                        return None;
+                        return Err(format!("variants.{}", dimension.key));
                     };
                     let mut leaves: Vec<(String, StaticSzObject)> = Vec::new();
                     for value in &values.properties {
                         let StaticSzValue::Object(leaf) = &value.value else {
-                            return None;
+                            return Err(format!("variants.{}.{}", dimension.key, value.key));
                         };
                         leaves.push((value.key.clone(), leaf.clone()));
                     }
@@ -105,19 +117,21 @@ pub(crate) fn static_szv_config_from_object(object: &StaticSzObject) -> Option<S
             }
             "defaultVariants" => {
                 let StaticSzValue::Object(entries) = &property.value else {
-                    return None;
+                    return Err(String::from("defaultVariants"));
                 };
                 let mut normalized: Vec<(String, String)> = Vec::new();
                 for entry in &entries.properties {
-                    let text = parity_safe_scalar_string(&entry.value)?;
+                    let Some(text) = parity_safe_scalar_string(&entry.value) else {
+                        return Err(format!("defaultVariants.{}", entry.key));
+                    };
                     normalized.push((entry.key.clone(), text));
                 }
                 defaults = Some(normalized);
             }
-            _ => return None,
+            other => return Err(other.to_string()),
         }
     }
-    Some(StaticSzvConfig {
+    Ok(StaticSzvConfig {
         base,
         variants: js_object_key_order(
             variants
@@ -218,8 +232,15 @@ fn leaf_paths_conflict(a: &[String], b: &[String]) -> bool {
 const SPECIAL_ALLOWED_SZ_KEYS: [&str; 4] =
     ["alignContent", "snapType", "snapAlign", "snapStrictness"];
 
-fn branch_keys_canonicalizable(branch: &StaticSzObject) -> bool {
+/// The key walk behind the overlap check, naming the first position that
+/// stops the branch canonicalizing — a property-map entry or a known variant
+/// everywhere, mirrors `branchKeysCanonicalizable`. One walk serves the
+/// verdict and the szr diagnostic; a separate diagnostic copy would be the
+/// subset-copy drift this module bans.
+/// The returned path is dot-joined under `prefix` in the author's raw keys.
+fn branch_disqualify_path(branch: &StaticSzObject, prefix: &str) -> Option<String> {
     for property in &branch.properties {
+        let path = joined_config_path(prefix, &property.key);
         // A nested object under a PROPERTY key is the fusion form, and
         // `collect_canonical_leaf_paths` folds the whole subtree onto the
         // property's own path — its children never become paths, so they need
@@ -235,19 +256,17 @@ fn branch_keys_canonicalizable(branch: &StaticSzObject) -> bool {
         // A bare `op` fuses into whichever color-bearing key it meets at
         // lowering; per-key compilation cannot represent that.
         if property.key == "op" {
-            return false;
+            return Some(path);
         }
         // The `css` escape hatch is a NAMESPACE: each child is an arbitrary
         // CSS property emitting its own class. One level only. Mirrors the
         // TypeScript walk.
         if property.key == "css" {
             if let StaticSzValue::Object(declarations) = &property.value {
-                if declarations
-                    .properties
-                    .iter()
-                    .any(|declaration| matches!(declaration.value, StaticSzValue::Object(_)))
-                {
-                    return false;
+                for declaration in &declarations.properties {
+                    if matches!(declaration.value, StaticSzValue::Object(_)) {
+                        return Some(joined_config_path(&path, &declaration.key));
+                    }
                 }
                 continue;
             }
@@ -256,29 +275,51 @@ fn branch_keys_canonicalizable(branch: &StaticSzObject) -> bool {
             && !is_known_variant(&property.key)
             && !SPECIAL_ALLOWED_SZ_KEYS.contains(&property.key.as_str())
         {
-            return false;
+            return Some(path);
         }
         if let StaticSzValue::Object(nested) = &property.value {
-            if !branch_keys_canonicalizable(nested) {
-                return false;
+            if let Some(inner) = branch_disqualify_path(nested, &path) {
+                return Some(inner);
             }
         }
     }
-    true
+    None
+}
+
+/// Join one raw key under a dot-joined config path.
+fn joined_config_path(prefix: &str, key: &str) -> String {
+    if prefix.is_empty() {
+        key.to_string()
+    } else {
+        format!("{prefix}.{key}")
+    }
 }
 
 /// Whether the config's co-occurring branches are free of canonical overlap.
 /// Mirrors `szvConfigFreeOfOverlap`.
 pub(crate) fn szv_config_free_of_overlap(config: &StaticSzvConfig) -> bool {
+    overlap_disqualify_path(config).is_none()
+}
+
+/// The same overlap decision, naming the position that broke it.
+///
+/// One walk serves the verdict and the szr diagnostic. The path names the
+/// BRANCH whose arrival made the config unrepresentable (or, for a key that
+/// cannot canonicalize, the key itself) — for a pairwise conflict the second
+/// branch in declaration order is reported, since the author reading top to
+/// bottom meets the conflict there.
+pub(crate) fn overlap_disqualify_path(config: &StaticSzvConfig) -> Option<String> {
     if let Some(base) = &config.base {
-        if !branch_keys_canonicalizable(base) {
-            return false;
+        if let Some(path) = branch_disqualify_path(base, "base") {
+            return Some(path);
         }
     }
-    for (_, leaves) in &config.variants {
-        for (_, leaf) in leaves {
-            if !branch_keys_canonicalizable(leaf) {
-                return false;
+    for (dimension, leaves) in &config.variants {
+        for (value, leaf) in leaves {
+            if let Some(path) =
+                branch_disqualify_path(leaf, &format!("variants.{dimension}.{value}"))
+            {
+                return Some(path);
             }
         }
     }
@@ -286,40 +327,40 @@ pub(crate) fn szv_config_free_of_overlap(config: &StaticSzvConfig) -> bool {
     if let Some(base) = &config.base {
         collect_canonical_leaf_paths(base, "", &mut base_paths);
     }
-    let per_dimension: Vec<Vec<Vec<String>>> = config
+    let per_dimension: Vec<Vec<(String, Vec<String>)>> = config
         .variants
         .iter()
-        .map(|(_, leaves)| {
+        .map(|(dimension, leaves)| {
             leaves
                 .iter()
-                .map(|(_, leaf)| {
+                .map(|(value, leaf)| {
                     let mut paths = Vec::new();
                     collect_canonical_leaf_paths(leaf, "", &mut paths);
-                    paths
+                    (format!("variants.{dimension}.{value}"), paths)
                 })
                 .collect()
         })
         .collect();
 
     for dimension in &per_dimension {
-        for leaf in dimension {
+        for (position, leaf) in dimension {
             if leaf_paths_conflict(&base_paths, leaf) {
-                return false;
+                return Some(position.clone());
             }
         }
     }
     for i in 0..per_dimension.len() {
         for j in (i + 1)..per_dimension.len() {
-            for leaf_a in &per_dimension[i] {
-                for leaf_b in &per_dimension[j] {
+            for (_, leaf_a) in &per_dimension[i] {
+                for (position_b, leaf_b) in &per_dimension[j] {
                     if leaf_paths_conflict(leaf_a, leaf_b) {
-                        return false;
+                        return Some(position_b.clone());
                     }
                 }
             }
         }
     }
-    true
+    None
 }
 
 /// Compile a validated, overlap-free config into its table.
@@ -964,5 +1005,135 @@ mod tests {
         );
         assert_eq!(count_word_occurrences("", "cardSz"), 0);
         assert_eq!(count_word_occurrences("x", ""), 0);
+    }
+
+    #[test]
+    fn shape_disqualify_paths_name_the_first_broken_rule() {
+        let err = |entries: Vec<StaticSzProperty>| match static_szv_config_from_object_diagnosed(
+            &object(entries),
+        ) {
+            Ok(_) => panic!("expected a shape disqualification"),
+            Err(path) => path,
+        };
+        assert_eq!(err(vec![entry("Variants", nested(vec![]))]), "Variants");
+        assert_eq!(err(vec![entry("base", text("x"))]), "base");
+        assert_eq!(err(vec![entry("variants", text("x"))]), "variants");
+        assert_eq!(
+            err(vec![entry("variants", nested(vec![entry("c", text("x"))]))]),
+            "variants.c"
+        );
+        assert_eq!(
+            err(vec![entry(
+                "variants",
+                nested(vec![entry("c", nested(vec![entry("blue", text("x"))]))]),
+            )]),
+            "variants.c.blue"
+        );
+        assert_eq!(
+            err(vec![entry("defaultVariants", text("x"))]),
+            "defaultVariants"
+        );
+        assert_eq!(
+            err(vec![entry(
+                "defaultVariants",
+                nested(vec![entry("c", number(1.5))]),
+            )]),
+            "defaultVariants.c"
+        );
+    }
+
+    #[test]
+    fn overlap_disqualify_paths_name_the_key_that_cannot_canonicalize() {
+        let leaf_config = |leaf: Vec<StaticSzProperty>| {
+            config_from(vec![entry(
+                "variants",
+                nested(vec![entry("c", nested(vec![entry("blue", nested(leaf))]))]),
+            )])
+            .expect("shape qualifies")
+        };
+        // A bare `op` fuses at lowering; per-key compilation cannot hold it.
+        assert_eq!(
+            overlap_disqualify_path(&leaf_config(vec![entry("op", number(35.0))])),
+            Some(String::from("variants.c.blue.op"))
+        );
+        // An unknown key nested under a known variant is named in full.
+        assert_eq!(
+            overlap_disqualify_path(&leaf_config(vec![entry(
+                "hover",
+                nested(vec![entry(
+                    "desktop-sm",
+                    nested(vec![entry("p", number(4.0))])
+                )]),
+            )])),
+            Some(String::from("variants.c.blue.hover.desktop-sm"))
+        );
+        // The css namespace is one level deep; a nested declaration is named.
+        assert_eq!(
+            overlap_disqualify_path(&leaf_config(vec![entry(
+                "css",
+                nested(vec![entry("margin", nested(vec![entry("x", number(1.0))]))]),
+            )])),
+            Some(String::from("variants.c.blue.css.margin"))
+        );
+        // The base branch reports under its own prefix.
+        let base_config = config_from(vec![entry("base", nested(vec![entry("op", number(35.0))]))])
+            .expect("shape qualifies");
+        assert_eq!(
+            overlap_disqualify_path(&base_config),
+            Some(String::from("base.op"))
+        );
+    }
+
+    #[test]
+    fn overlap_disqualify_paths_name_the_conflicting_branch() {
+        // Base × leaf: the leaf whose arrival made the config unrepresentable.
+        let base_conflict = config_from(vec![
+            entry("base", nested(vec![entry("p", number(2.0))])),
+            entry(
+                "variants",
+                nested(vec![entry(
+                    "pad",
+                    nested(vec![entry("sm", nested(vec![entry("p", number(4.0))]))]),
+                )]),
+            ),
+        ])
+        .expect("shape qualifies");
+        assert_eq!(
+            overlap_disqualify_path(&base_conflict),
+            Some(String::from("variants.pad.sm"))
+        );
+        // Leaf × leaf across dimensions: the second branch in declaration
+        // order, where a top-to-bottom reader meets the conflict.
+        let cross_conflict = config_from(vec![entry(
+            "variants",
+            nested(vec![
+                entry(
+                    "a",
+                    nested(vec![entry("x", nested(vec![entry("p", number(2.0))]))]),
+                ),
+                entry(
+                    "b",
+                    nested(vec![entry("y", nested(vec![entry("p", number(4.0))]))]),
+                ),
+            ]),
+        )])
+        .expect("shape qualifies");
+        assert_eq!(
+            overlap_disqualify_path(&cross_conflict),
+            Some(String::from("variants.b.y"))
+        );
+        // A clean config has nothing to name.
+        let clean = config_from(vec![entry(
+            "variants",
+            nested(vec![entry(
+                "tone",
+                nested(vec![entry(
+                    "primary",
+                    nested(vec![entry("bg", text("blue-500"))]),
+                )]),
+            )]),
+        )])
+        .expect("shape qualifies");
+        assert_eq!(overlap_disqualify_path(&clean), None);
     }
 }

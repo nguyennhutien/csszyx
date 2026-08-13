@@ -10,25 +10,27 @@ mod sz_fallback_matrix_tests {
     };
 
     /// Every kind, so a new variant cannot be added without extending these.
-    const ALL_KINDS: [SzFallbackKind; 4] = [
+    const ALL_KINDS: [SzFallbackKind; 6] = [
         SzFallbackKind::Call,
         SzFallbackKind::Identifier,
+        SzFallbackKind::Import,
         SzFallbackKind::Member,
         SzFallbackKind::Other,
+        SzFallbackKind::SzvFactory,
     ];
 
     #[test]
     fn reasons_carrying_a_detail_substitute_it() {
         assert_eq!(
-            sz_fallback_reason(SzFallbackKind::Call, "makeSz"),
+            sz_fallback_reason(SzFallbackKind::Call, "makeSz", ""),
             "function call `makeSz()` result is unknown at build time"
         );
         assert_eq!(
-            sz_fallback_reason(SzFallbackKind::Identifier, "cardSz"),
+            sz_fallback_reason(SzFallbackKind::Identifier, "cardSz", ""),
             "identifier `cardSz` could not be resolved to a static value"
         );
         assert_eq!(
-            sz_fallback_reason(SzFallbackKind::Other, "ConditionalExpression"),
+            sz_fallback_reason(SzFallbackKind::Other, "ConditionalExpression", ""),
             "expression of type `ConditionalExpression` is not statically analyzable"
         );
     }
@@ -36,7 +38,7 @@ mod sz_fallback_matrix_tests {
     #[test]
     fn a_reason_without_a_placeholder_ignores_the_detail() {
         assert_eq!(
-            sz_fallback_reason(SzFallbackKind::Member, "ignored"),
+            sz_fallback_reason(SzFallbackKind::Member, "ignored", "ignored"),
             "member expression is not statically resolvable"
         );
     }
@@ -46,8 +48,9 @@ mod sz_fallback_matrix_tests {
         // A brace surviving into output means the generator escaped wrongly and
         // the reader would see `{detail}` in their build log.
         for kind in ALL_KINDS {
-            let reason = sz_fallback_reason(kind, "x");
+            let reason = sz_fallback_reason(kind, "x", "p");
             assert!(!reason.contains("{detail}"), "{reason}");
+            assert!(!reason.contains("{path}"), "{reason}");
             assert!(!reason.contains('{'), "{reason}");
             assert!(!reason.contains('}'), "{reason}");
         }
@@ -70,7 +73,7 @@ mod sz_fallback_matrix_tests {
         // pointless and hide a copy-paste slip in the matrix.
         let reasons: Vec<String> = ALL_KINDS
             .iter()
-            .map(|kind| sz_fallback_reason(*kind, "detail"))
+            .map(|kind| sz_fallback_reason(*kind, "detail", "path"))
             .collect();
         for (index, reason) in reasons.iter().enumerate() {
             assert!(

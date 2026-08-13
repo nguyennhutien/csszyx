@@ -26,6 +26,7 @@ import {
     SZ_FALLBACK_DETAIL_PLACEHOLDER,
     SZ_FALLBACK_KINDS,
     SZ_FALLBACK_MATRIX,
+    SZ_FALLBACK_PATH_PLACEHOLDER,
     SZ_FALLBACK_UNKNOWN_CALLEE,
     szsUnsupportedDiagnostic,
 } from '../packages/compiler/src/sz-fallback-matrix.js';
@@ -63,7 +64,10 @@ export function escapeRustFormat(text) {
  * @returns {string} PascalCase variant name.
  */
 function variantName(kind) {
-    return kind.charAt(0).toUpperCase() + kind.slice(1);
+    return kind
+        .split('-')
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+        .join('');
 }
 
 /**
@@ -78,17 +82,26 @@ function variantName(kind) {
  */
 export function renderReasonArm(kind) {
     const { reason } = SZ_FALLBACK_MATRIX[kind];
-    const parts = reason.split(SZ_FALLBACK_DETAIL_PLACEHOLDER);
-    if (parts.length === 1) {
+    // Each placeholder becomes one inline named argument, so a repeat would
+    // silently diverge from the TypeScript split/join substitution.
+    for (const placeholder of [SZ_FALLBACK_DETAIL_PLACEHOLDER, SZ_FALLBACK_PATH_PLACEHOLDER]) {
+        if (reason.split(placeholder).length > 2) {
+            throw new Error(
+                `[gen-sz-fallback-matrix] kind "${kind}" repeats ${placeholder}; ` +
+                    'the Rust renderer emits one inline argument per placeholder.',
+            );
+        }
+    }
+    if (
+        !reason.includes(SZ_FALLBACK_DETAIL_PLACEHOLDER) &&
+        !reason.includes(SZ_FALLBACK_PATH_PLACEHOLDER)
+    ) {
         return `String::from("${escapeRustString(reason)}")`;
     }
-    if (parts.length > 2) {
-        throw new Error(
-            `[gen-sz-fallback-matrix] kind "${kind}" repeats ${SZ_FALLBACK_DETAIL_PLACEHOLDER}; ` +
-                'the Rust renderer emits one inline argument, so a repeat would silently diverge.',
-        );
-    }
-    const template = parts.map(escapeRustFormat).join('{detail}');
+    const template = reason
+        .split(SZ_FALLBACK_DETAIL_PLACEHOLDER)
+        .map(part => part.split(SZ_FALLBACK_PATH_PLACEHOLDER).map(escapeRustFormat).join('{path}'))
+        .join('{detail}');
     return `format!("${template}")`;
 }
 
@@ -191,8 +204,9 @@ pub(crate) const SZ_FALLBACK_UNKNOWN_CALLEE: &str = "${escapeRustString(
 /// * \`kind\` - Classified shape of the expression.
 /// * \`detail\` - Callee name, identifier name, or node type. Ignored by kinds
 ///   whose reason carries no placeholder.
-pub(crate) fn sz_fallback_reason(kind: SzFallbackKind, detail: &str) -> String {
-    let _ = detail;
+/// * \`path\` - Config position, dot-joined. Only the \`SzvFactory\` kind reads it.
+pub(crate) fn sz_fallback_reason(kind: SzFallbackKind, detail: &str, path: &str) -> String {
+    let _ = (detail, path);
     match kind {
 ${reasonArms}
     }
@@ -231,13 +245,15 @@ pub(crate) fn szs_unsupported_diagnostic(filename: &str) -> String {
 /// * \`position\` - \`line:column\`, 1-based.
 /// * \`kind\` - Classified shape of the expression.
 /// * \`detail\` - Callee name, identifier name, or node type.
+/// * \`path\` - Config position, dot-joined. Only the \`SzvFactory\` kind reads it.
 pub(crate) fn format_sz_fallback_diagnostic(
     site: SzFallbackSite,
     position: &str,
     kind: SzFallbackKind,
     detail: &str,
+    path: &str,
 ) -> String {
-    let reason = sz_fallback_reason(kind, detail);
+    let reason = sz_fallback_reason(kind, detail, path);
     match site {
 ${RUST_SITES.map(site => renderSiteArm(site)).join('\n')}
     }
