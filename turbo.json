@@ -5,7 +5,13 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "lib/**", "pkg/**", "pkg-node/**"],
+      "outputs": [
+        "dist/**",
+        "lib/**",
+        "pkg/**",
+        "pkg-node/**",
+        "pkg-parser/**"
+      ],
       "env": ["NODE_ENV"]
     },
     "dev": {
