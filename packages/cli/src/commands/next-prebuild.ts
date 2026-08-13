@@ -21,7 +21,7 @@ export interface NextPrebuildCommandOptions {
     cwd?: string;
     root?: string;
     mode?: 'development' | 'production';
-    parserMode?: 'rust' | 'oxc' | 'babel';
+    parserMode?: 'rust' | 'wasm';
     outputFile?: string;
     cacheDir?: string;
     pattern?: string;
@@ -174,12 +174,12 @@ function normalizeMode(mode: NextPrebuildCommandOptions['mode']): 'development' 
 
 function normalizeParserMode(
     parserMode: NextPrebuildCommandOptions['parserMode'],
-): 'rust' | 'oxc' | 'babel' | undefined {
+): 'rust' | 'wasm' | undefined {
     if (parserMode === undefined) {
         return undefined;
     }
-    if (parserMode === 'rust' || parserMode === 'oxc' || parserMode === 'babel') {
+    if (parserMode === 'rust' || parserMode === 'wasm') {
         return parserMode;
     }
-    throw new Error(`Invalid --parser-mode "${parserMode}". Expected "rust", "oxc", or "babel".`);
+    throw new Error(`Invalid --parser-mode "${parserMode}". Expected "rust" or "wasm".`);
 }

@@ -86,7 +86,7 @@ interface CacNextPrebuildOptions {
     cwd?: string;
     root?: string;
     mode?: 'development' | 'production';
-    parserMode?: 'rust' | 'oxc' | 'babel';
+    parserMode?: 'rust' | 'wasm';
     outputFile?: string;
     cacheDir?: string;
     ignore?: string;
@@ -97,7 +97,7 @@ interface CacNextPrebuildOptions {
 interface CacNextWatchOptions {
     cwd?: string;
     root?: string;
-    parserMode?: 'rust' | 'oxc' | 'babel';
+    parserMode?: 'rust' | 'wasm';
     outputFile?: string;
     cacheDir?: string;
     ignore?: string;
@@ -286,7 +286,7 @@ cli.command(
     .option('--root <dir>', 'Next app root (defaults to cwd)')
     .option('--cwd <dir>', 'Current working directory')
     .option('--mode <mode>', 'development | production (default: production)')
-    .option('--parser-mode <mode>', 'rust | oxc | babel (default: rust)')
+    .option('--parser-mode <mode>', 'rust | wasm (default: rust)')
     .option(
         '--output-file <path>',
         'Tailwind @source safelist output (default: csszyx-classes.html)',
@@ -308,7 +308,7 @@ cli.command(
 cli.command('next-watch [pattern]', 'Maintain the Next.js Turbopack csszyx safelist')
     .option('--root <dir>', 'Next app root (defaults to cwd)')
     .option('--cwd <dir>', 'Current working directory')
-    .option('--parser-mode <mode>', 'rust | oxc | babel (default: rust)')
+    .option('--parser-mode <mode>', 'rust | wasm (default: rust)')
     .option(
         '--output-file <path>',
         'Tailwind @source safelist output (default: csszyx-classes.html)',

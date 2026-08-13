@@ -12,8 +12,8 @@ import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
-import { transformOxc } from '../packages/compiler/src/transform-oxc.js';
 import { transformRust, transformRustBatch } from '../packages/compiler/src/transform-rust.js';
+import { transformWasm } from '../packages/compiler/src/transform-wasm.js';
 import { loadNativeBinding } from '../packages/core/native/index.js';
 
 type ParserMode = 'oxc' | 'rust' | 'rust-batch';
@@ -289,13 +289,13 @@ function transformFixtures(
     let transformedFiles = 0;
     const outputChunks: string[] = [];
 
-    let results: ReturnType<typeof transformOxc>[];
+    let results: ReturnType<typeof transformWasm>[];
     if (parser === 'rust-batch') {
         results = transformRustBatch(fixtures, { mangleVars });
     } else if (parser === 'rust') {
         results = fixtures.map(file => transformRust(file.source, file.filename, { mangleVars }));
     } else {
-        results = fixtures.map(file => transformOxc(file.source, file.filename, { mangleVars }));
+        results = fixtures.map(file => transformWasm(file.source, file.filename, { mangleVars }));
     }
 
     for (const result of results) {

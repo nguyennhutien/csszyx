@@ -28,7 +28,7 @@ import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 
 import { type PluginOption, build as viteBuild } from 'vite';
 
-import { transformOxc } from '../packages/compiler/src/transform-oxc.js';
+import { transformWasm } from '../packages/compiler/src/transform-wasm.js';
 import {
     planGlobalVarAliases,
     rewriteGlobalVarCssAliases,
@@ -306,8 +306,8 @@ function runPipeline(fixture: Fixture): OutputMetrics {
         plan,
         filePath: '/bench/theme.css',
     });
-    const disabledSource = transformOxc(fixture.source, '/bench/App.tsx');
-    const aliasSource = transformOxc(fixture.source, '/bench/App.tsx', {
+    const disabledSource = transformWasm(fixture.source, '/bench/App.tsx');
+    const aliasSource = transformWasm(fixture.source, '/bench/App.tsx', {
         globalVarAliases: plan.aliases,
     });
     const disabledOutput = `${disabledSource.code}\n${fixture.css}`;

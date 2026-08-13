@@ -129,7 +129,7 @@ describe('next-prebuild non-json output paths', () => {
         writeFileSync(join(cwd, 'package.json'), '{"name":"a","private":true}');
         mkdirSync(join(cwd, 'app'));
         writeFileSync(join(cwd, 'app/page.tsx'), 'export default () => <div sz={{ p: 4 }} />;');
-        const code = await nextPrebuild({ root: cwd, cwd, parserMode: 'babel' });
+        const code = await nextPrebuild({ root: cwd, cwd, parserMode: 'wasm' });
         expect(code).toBe(0);
         expect(logs.join('\n')).toContain('next prebuild done');
     }, 15000);

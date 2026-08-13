@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { type SzObject, transform } from '../../compiler/src/transform.js';
+import { type SzObject, transform } from '../../compiler/src/transform-core.js';
 import { classNameToSzObject } from '../src/migrate/variant-parser.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parseClass } from '../packages/cli/src/migrate/class-parser.js';
-import { transform } from '../packages/compiler/src/transform.js';
+import { transform } from '../packages/compiler/src/transform-core.js';
 import { classToSzCandidates } from './check-corpus-candidates.js';
 
 // ── Try round-trip for a single class ─────────────────────────────────────
