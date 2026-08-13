@@ -198,6 +198,7 @@ fn transform_fast_static_ir_with_options(
             uses_color_var: false,
             uses_spacing_var: false,
             uses_unit_var: false,
+            uses_bool_class: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,
             timings: TransformTimings {
@@ -383,6 +384,18 @@ fn transform_static_classes_with_options(
                 )
             })
         });
+    // Array elements carry their conditional on the part, so both homes count.
+    let uses_bool_class = transformed
+        && parsed.ir.sz_attributes.iter().any(|attr| {
+            attr.ternaries
+                .iter()
+                .chain(
+                    attr.array_parts
+                        .iter()
+                        .filter_map(|part| part.ternary.as_ref()),
+                )
+                .any(|ternary| ternary.bool_class_key.is_some())
+        });
 
     // A budget-tripped walk produced a PARTIAL IR: whichever classes happen to
     // sit before the cut would flow into the safelist and the rest silently
@@ -418,6 +431,7 @@ fn transform_static_classes_with_options(
             uses_color_var,
             uses_spacing_var,
             uses_unit_var,
+            uses_bool_class,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: parsed.ast_budget_exceeded,
             timings: TransformTimings {
@@ -813,6 +827,7 @@ fn noop_result(file: &TransformFile) -> TransformResult {
             uses_color_var: false,
             uses_spacing_var: false,
             uses_unit_var: false,
+            uses_bool_class: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,
             timings: TransformTimings::default(),
@@ -851,6 +866,32 @@ mod tests {
             relativize_diagnostic_path("src/App.tsx", None),
             "src/App.tsx"
         );
+    }
+
+    #[test]
+    fn transform_file_reports_the_bool_class_helper_it_emitted() {
+        // The unplugin injects the runtime import from this flag; without it the
+        // emitted call is an undefined identifier at runtime.
+        let attribute = transform_file(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ on }) => <div sz={{ borderB: on }} />;".to_string(),
+        });
+        assert!(attribute.metadata.uses_bool_class);
+        assert!(attribute.code.contains("__szBoolClass"));
+        assert_eq!(attribute.classes, ["border-b"]);
+
+        let array = transform_file(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ on }) => <div sz={[{ borderB: on }]} />;".to_string(),
+        });
+        assert!(array.metadata.uses_bool_class);
+
+        let unrelated = transform_file(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ v }) => <div sz={{ w: v }} />;".to_string(),
+        });
+        assert!(!unrelated.metadata.uses_bool_class);
+        assert!(unrelated.metadata.uses_spacing_var);
     }
 
     #[test]

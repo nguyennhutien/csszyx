@@ -408,6 +408,13 @@ pub struct StaticTernaryIr {
     pub consequent_classes: Vec<String>,
     /// Classes produced by lowering the alternate branch, in source order.
     pub alternate_classes: Vec<String>,
+    /// The sz key when this conditional is a boolean-only key carrying a
+    /// runtime value, in which case `test_span` covers that value and the
+    /// rewrite emits `__szBoolClass` instead of a `test ? … : …` expression:
+    /// only a boolean may toggle the class, and the helper says so for
+    /// anything else rather than styling the wrong property.
+    #[serde(default)]
+    pub bool_class_key: Option<String>,
 }
 
 /// One item from an `sz={[...]}` later-wins composition.

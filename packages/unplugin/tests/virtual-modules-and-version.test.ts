@@ -92,6 +92,16 @@ describe('injectNextRuntimeImports remaining helpers', () => {
         );
     });
 
+    it('injects __szBoolClass for a dynamic boolean-only key', async () => {
+        // The compiled call is an undefined identifier without this import, so
+        // the flag has to survive all the way from the engine metadata.
+        const { injectNextRuntimeImports } = await import('../src/next-runtime-injection');
+        const code = 'export const x = 1;\n';
+        const result = injectNextRuntimeImports(code, { usesBoolClass: true });
+        expect(result.injected).toEqual(['__szBoolClass']);
+        expect(result.code).toContain("import { __szBoolClass } from '@csszyx/runtime';");
+    });
+
     it('returns the code untouched when every helper is already imported', async () => {
         const { injectNextRuntimeImports } = await import('../src/next-runtime-injection');
         const code = "import { _sz } from '@csszyx/runtime';\nexport const x = 1;\n";

@@ -94,6 +94,8 @@ export interface NativeTransformResult {
         usesSpacingVar?: boolean;
         /** Whether the emitted code calls the __szUnitVar runtime helper. */
         usesUnitVar?: boolean;
+        /** Whether the emitted code calls the __szBoolClass runtime helper. */
+        usesBoolClass?: boolean;
         /** Producer identity for cache safety. */
         producer: 'rust';
         /** Whether native AST budget protection fired. */

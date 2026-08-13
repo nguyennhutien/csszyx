@@ -4024,6 +4024,8 @@ export interface SourceTransformResult {
     usesColorVar: boolean;
     usesSpacingVar: boolean;
     usesUnitVar: boolean;
+    /** Whether the source needs the bool-class runtime helper. */
+    usesBoolClass: boolean;
     /** Classes generated from sz syntax. */
     classes: Set<string>;
     /** Raw className/class strings collected for Tailwind discovery only. */

@@ -112,6 +112,9 @@ pub struct TransformMetadata {
     /// Whether the result imports the runtime unit-var helper (angle/duration).
     #[serde(default)]
     pub uses_unit_var: bool,
+    /// Whether the result imports the runtime bool-class helper (boolean-only keys).
+    #[serde(default)]
+    pub uses_bool_class: bool,
     /// Producer identity for cache safety.
     pub producer: TransformProducer,
     /// Whether native AST budget protection fired.

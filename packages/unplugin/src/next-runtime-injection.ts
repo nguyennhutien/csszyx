@@ -13,7 +13,8 @@ export type NextRuntimeHelper =
     | '__szvPick1'
     | '__szColorVar'
     | '__szSpacingVar'
-    | '__szUnitVar';
+    | '__szUnitVar'
+    | '__szBoolClass';
 
 /** Runtime helper usage flags from a compiler transform result. */
 export interface NextRuntimeImportUsage {
@@ -27,6 +28,7 @@ export interface NextRuntimeImportUsage {
     usesColorVar?: boolean;
     usesSpacingVar?: boolean;
     usesUnitVar?: boolean;
+    usesBoolClass?: boolean;
 }
 
 /** Result of runtime helper import injection. */
@@ -69,6 +71,7 @@ export function runtimeHelperGroupsFromUsage(usage: NextRuntimeImportUsage): Run
     if (usage.usesColorVar) append('__szColorVar');
     if (usage.usesSpacingVar) append('__szSpacingVar');
     if (usage.usesUnitVar) append('__szUnitVar');
+    if (usage.usesBoolClass) append('__szBoolClass');
     return groups;
 }
 

@@ -4236,6 +4236,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         usesColorVar: boolean;
         usesSpacingVar: boolean;
         usesUnitVar: boolean;
+        usesBoolClass: boolean;
         szClasses?: Set<string>;
     }
 
@@ -4259,6 +4260,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesColorVar: false,
             usesSpacingVar: false,
             usesUnitVar: false,
+            usesBoolClass: false,
         };
     }
 
@@ -4349,6 +4351,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesColorVar: result.usesColorVar,
             usesSpacingVar: result.usesSpacingVar,
             usesUnitVar: result.usesUnitVar,
+            usesBoolClass: result.usesBoolClass,
             szClasses: result.classes,
         };
     }

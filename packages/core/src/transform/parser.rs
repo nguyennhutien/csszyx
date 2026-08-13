@@ -2031,6 +2031,7 @@ fn static_ternary_from_conditional(
             test_span: text_span(conditional.test.span()),
             consequent_classes,
             alternate_classes,
+            bool_class_key: None,
         },
         text_span(conditional.span),
     ))
@@ -2248,6 +2249,7 @@ fn static_array_ternary_from_conditional(
         test_span: text_span(conditional.test.span()),
         consequent_classes: branch_classes(&conditional.consequent)?,
         alternate_classes: branch_classes(&conditional.alternate)?,
+        bool_class_key: None,
     })
 }
 
@@ -3640,6 +3642,21 @@ fn partial_object_from_object_expression(
                 if !is_runtime_expression(&property.value) {
                     return None;
                 }
+
+                // A key whose literal vocabulary is a boolean has no usable
+                // css-var form: React drops booleans in `style`, so the
+                // variable is never set, and the valued utility resolves to a
+                // different CSS property than the bare class. Lower the value
+                // as a conditional class through the runtime helper instead.
+                if let Some(ternary) = bool_class_ternary_from_property(
+                    &key,
+                    text_span(unwrap_expression(&property.value).span()),
+                    variant_keys,
+                ) {
+                    set_partial_ternary(&mut partial, ternary);
+                    continue;
+                }
+
                 // Slice the UNWRAPPED expression span: `sz={{ p: (pad) }}` must
                 // emit `calc(${pad} …)` like the JS engines, not `calc(${(pad)} …)`
                 // — redundant parens broke rust==oxc byte parity.
@@ -3751,6 +3768,7 @@ fn conditional_spread_ternary_from_object_expression(
         test_span: text_span(conditional.test.span()),
         consequent_classes: consequent,
         alternate_classes: alternate,
+        bool_class_key: None,
     })
 }
 
@@ -3786,6 +3804,7 @@ fn conditional_class_from_property(
         test_span: text_span(conditional.test.span()),
         consequent_classes: conditional_property_classes(key, consequent, variant_keys),
         alternate_classes: conditional_property_classes(key, alternate, variant_keys),
+        bool_class_key: None,
     })
 }
 
@@ -3807,6 +3826,7 @@ fn nullable_conditional_class_from_property(
                 test_span: text_span(conditional.test.span()),
                 consequent_classes: Vec::new(),
                 alternate_classes: Vec::new(),
+                bool_class_key: None,
             },
             None,
         ));
@@ -3822,6 +3842,13 @@ fn nullable_conditional_class_from_property(
             (conditional_property_classes(key, value, variant_keys), None)
         } else {
             if !is_runtime_expression(present) {
+                return None;
+            }
+            // A boolean-only key has no css-var form to guard with a companion
+            // conditional. Decline the whole shape so the caller lowers the
+            // conditional itself as the helper's argument: `undefined` there
+            // resolves to no class, which is what this branch encodes anyway.
+            if super::generated::tables::is_boolean_only_dynamic(key) {
                 return None;
             }
             let mut prop =
@@ -3842,6 +3869,7 @@ fn nullable_conditional_class_from_property(
             } else {
                 present_classes
             },
+            bool_class_key: None,
         },
         dynamic_prop,
     ))
@@ -3968,6 +3996,7 @@ fn color_opacity_ternary_from_object(
                     Some(alternate),
                     variant_keys,
                 ),
+                bool_class_key: None,
             })
         }
         (Some(conditional), None) => {
@@ -3995,6 +4024,7 @@ fn color_opacity_ternary_from_object(
                     static_op,
                     variant_keys,
                 ),
+                bool_class_key: None,
             })
         }
         _ => None,
@@ -4032,6 +4062,32 @@ fn color_opacity_branch_classes(
         }],
     };
     lower_static_sz_object(&wrap_in_variant_keys(variant_keys, leaf))
+}
+
+/// Lower a runtime value on a boolean-only key into a conditional bare class,
+/// or `None` when the key takes real values and keeps the css-var lane.
+///
+/// `test_span` carries the runtime value rather than a condition: the rewrite
+/// passes it to `__szBoolClass`, which returns the class for `true`, nothing
+/// for the absent shapes, and warns for anything else.
+fn bool_class_ternary_from_property(
+    key: &str,
+    expression_span: TextSpan,
+    variant_keys: &[String],
+) -> Option<StaticTernaryIr> {
+    if !super::generated::tables::is_boolean_only_dynamic(key) {
+        return None;
+    }
+    Some(StaticTernaryIr {
+        test_span: expression_span,
+        consequent_classes: conditional_property_classes(
+            key,
+            StaticSzValue::Boolean(true),
+            variant_keys,
+        ),
+        alternate_classes: Vec::new(),
+        bool_class_key: Some(key.to_string()),
+    })
 }
 
 fn dynamic_css_var_from_property(
@@ -5013,6 +5069,44 @@ export const cls = szr(localCard({ pad: 'sm' }));";
         assert!(parsed.diagnostics.is_empty());
         assert_eq!(parsed.ir.sz_attributes.len(), 1);
         assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["p-4"]);
+    }
+
+    #[test]
+    fn parser_shell_lowers_a_dynamic_boolean_only_key_to_a_bool_class_conditional() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ on }) => <div sz={{ borderB: on }} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(
+            attribute.dynamic_css_vars.is_empty(),
+            "a boolean-only key must never take the css-var lane"
+        );
+        let ternary = &attribute.ternaries[0];
+        assert_eq!(ternary.bool_class_key.as_deref(), Some("borderB"));
+        assert_eq!(ternary.consequent_classes, ["border-b"]);
+        assert!(ternary.alternate_classes.is_empty());
+        // The bare class must reach the safelist, or Tailwind emits no rule for
+        // it and the toggle styles nothing.
+        assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["border-b"]);
+    }
+
+    #[test]
+    fn parser_shell_keeps_value_typed_keys_on_the_css_var_lane() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ v }) => <div sz={{ z: v, w: v, bg: v, p: v }} />;"
+                .to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(attribute.ternaries.is_empty());
+        assert_eq!(attribute.dynamic_css_vars.len(), 4);
     }
 
     #[test]
