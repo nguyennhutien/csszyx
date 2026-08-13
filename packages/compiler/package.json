@@ -77,9 +77,6 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@babel/core": "^8.0.1",
-    "@babel/traverse": "^8.0.4",
-    "@babel/types": "^8.0.4",
     "@csszyx/core": "workspace:*",
     "magic-string": "1.1.0",
     "oxc-parser": "0.140.0"
