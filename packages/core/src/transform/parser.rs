@@ -6962,4 +6962,213 @@ export const cls = szr(localCard({ pad: 'sm' }));";
     fn parser_shell_defaults_unknown_extensions_to_tsx() {
         assert!(source_type_for_path("/repo/src/App.unknown").is_jsx());
     }
+
+    /// Safelist candidates must survive the wrappers TypeScript authors write.
+    ///
+    /// These sz values all fall back to the runtime, which is correct and
+    /// keeps the page rendering. What must ALSO happen is that the classes
+    /// visible inside them reach the safelist, because Tailwind is configured
+    /// with `source(none)` and generates a rule only for a class some build
+    /// step named. Miss one and the element gets the right class attribute
+    /// with no rule behind it: nothing renders, nothing warns, and the value
+    /// still "works" in every unit test that only looks at the markup.
+    ///
+    /// Every row is a wrapper or spread shape that reaches the collector
+    /// through its own arm, so one row per arm is what keeps them all alive.
+    #[test]
+    fn safelist_candidates_survive_typescript_wrappers_and_spreads() {
+        for (what, source, expected) in [
+            (
+                "as const around the whole value",
+                "const A = ({ base }) => <div sz={{ ...base, p: 4 } as const} />;",
+                vec!["p-4"],
+            ),
+            (
+                "satisfies around the whole value",
+                "const A = ({ base }) => <div sz={{ ...base, p: 4 } satisfies Sz} />;",
+                vec!["p-4"],
+            ),
+            (
+                "a non-null assertion around the whole value",
+                "const A = ({ base }) => <div sz={{ ...base, p: 4 }!} />;",
+                vec!["p-4"],
+            ),
+            (
+                "parentheses around the whole value",
+                "const A = ({ base }) => <div sz={({ ...base, p: 4 })} />;",
+                vec!["p-4"],
+            ),
+            (
+                "a wrapper on the spread argument itself",
+                "const BASE = { m: 2 } as const;\nconst A = ({ rest }) => <div sz={{ ...(BASE as const), p: 4, ...rest }} />;",
+                vec!["m-2", "p-4"],
+            ),
+            (
+                "a guarded object inside an array with a spread",
+                "const BASE = { m: 2 } as const;\nconst A = ({ rest, cond }) => <div sz={[BASE, cond && { p: 4 }, ...rest]} />;",
+                vec!["m-2", "p-4"],
+            ),
+            (
+                "a named object inside an array with a spread",
+                "const BASE = { m: 2 };\nconst A = ({ rest }) => <div sz={[BASE, ...rest]} />;",
+                vec!["m-2"],
+            ),
+            (
+                "a parametric variant nested under a spread",
+                "const A = ({ x }) => <div sz={{ ...x, 'data-[open]': { p: 4 } }} />;",
+                vec!["data-[open]:p-4"],
+            ),
+            (
+                "a nested value object under a property key",
+                "const A = ({ x }) => <div sz={{ ...x, bg: { color: 'black' } }} />;",
+                vec!["bg-black"],
+            ),
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let lowered = lower_source_ir_classes(&parsed.ir);
+
+            for class in expected {
+                assert!(
+                    lowered.classes.iter().any(|found| found == class),
+                    "{what}: expected {class} in the safelist, got {:?}\n{source}",
+                    lowered.classes
+                );
+            }
+        }
+    }
+
+    /// A spread of a named object stays STATIC through its wrappers.
+    ///
+    /// This shape is the ordinary way a component library shares a base style,
+    /// and losing a wrapper here costs more than the safelist: the value stops
+    /// resolving at build time, so the whole attribute falls back to a runtime
+    /// call that a zero-runtime build was never meant to make. The assertion
+    /// is on the resolved half — no fallback, both halves of the merged object
+    /// present — because a candidate-only check would still pass while the
+    /// static resolution quietly disappeared.
+    #[test]
+    fn a_spread_of_a_named_object_resolves_through_its_wrappers() {
+        for (what, source) in [
+            (
+                "as const",
+                "const BASE = { m: 2 };\nconst A = () => <div sz={{ ...(BASE as const), p: 4 }} />;",
+            ),
+            (
+                "satisfies",
+                "const BASE = { m: 2 };\nconst A = () => <div sz={{ ...(BASE satisfies Sz), p: 4 }} />;",
+            ),
+            (
+                "a non-null assertion",
+                "const BASE = { m: 2 };\nconst A = () => <div sz={{ ...BASE!, p: 4 }} />;",
+            ),
+            (
+                "parentheses",
+                "const BASE = { m: 2 };\nconst A = () => <div sz={{ ...(BASE), p: 4 }} />;",
+            ),
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let lowered = lower_source_ir_classes(&parsed.ir);
+
+            assert!(
+                !parsed.ir.sz_attributes[0].runtime_fallback,
+                "{what}: must resolve at build time"
+            );
+            assert_eq!(lowered.classes, ["m-2", "p-4"], "{what}");
+        }
+    }
+
+    /// An array element that could be an object at runtime is NOT provable.
+    ///
+    /// The bundler reads this flag to pick between the full `_szPart` and a
+    /// string-only slim build. Claiming an unknown element is provably a
+    /// string ships the slim helper, which has no object lowering at all, so
+    /// `sz={["btn", extraStyles]}` renders the string and drops every style
+    /// in the object beside it. The flag only ever fails in that direction,
+    /// which is why the true case is asserted alongside it.
+    #[test]
+    fn an_array_element_that_might_be_an_object_is_not_provable() {
+        for source in [
+            // A bare identifier: nothing here says it is not an object.
+            "const A = ({ extra }) => <div sz={['btn', extra]} />;",
+            // A member expression is just as opaque.
+            "const A = ({ theme }) => <div sz={['btn', theme.extra]} />;",
+            // One object branch is enough to disqualify the whole ternary.
+            "const A = ({ on, extra }) => <div sz={['btn', on ? 'a' : extra]} />;",
+            // A call result is unknown at build time.
+            "const A = ({ make }) => <div sz={['btn', make()]} />;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let parts = &parsed.ir.sz_attributes[0].array_parts;
+            assert!(
+                parts.iter().any(|part| part.dynamic_span.is_some()),
+                "fixture must produce a dynamic part: {source}"
+            );
+            assert!(
+                parts
+                    .iter()
+                    .filter(|part| part.dynamic_span.is_some())
+                    .all(|part| !part.dynamic_provable),
+                "an opaque element must not be called provable: {source}"
+            );
+        }
+
+        // The other direction, so the flag cannot be pinned by refusing every
+        // element: a template literal is a string by construction.
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const A = ({ n }) => <div sz={['btn', `pad-${n}`]} />;".to_string(),
+        });
+        assert!(parsed.ir.sz_attributes[0]
+            .array_parts
+            .iter()
+            .filter(|part| part.dynamic_span.is_some())
+            .all(|part| part.dynamic_provable));
+    }
+
+    /// Only `&&` makes an array element a conditional style.
+    ///
+    /// `a && obj` applies obj when a is truthy; `a || obj` and `a ?? obj`
+    /// apply it when a is FALSY. Reading the last two as guards keeps the
+    /// object but inverts the condition, so the styles land on exactly the
+    /// renders that were supposed to go without them — a bug that looks like
+    /// application logic rather than compilation.
+    #[test]
+    fn only_an_and_guard_becomes_a_conditional_array_part() {
+        for source in [
+            "const A = ({ cond }) => <div sz={[cond ?? { p: 8 }]} />;",
+            "const A = ({ cond }) => <div sz={[cond || { p: 8 }]} />;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let parts = &parsed.ir.sz_attributes[0].array_parts;
+            assert_eq!(parts.len(), 1, "{source}");
+            assert!(
+                parts[0].condition_span.is_none(),
+                "{source} must not compile as a guarded part"
+            );
+            assert!(
+                parts[0].dynamic_span.is_some(),
+                "{source} must stay a runtime element"
+            );
+        }
+
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const A = ({ cond }) => <div sz={[cond && { p: 8 }]} />;".to_string(),
+        });
+        let parts = &parsed.ir.sz_attributes[0].array_parts;
+        assert!(parts[0].condition_span.is_some(), "&& IS a guard");
+        assert_eq!(parts[0].classes, ["p-8"]);
+    }
 }

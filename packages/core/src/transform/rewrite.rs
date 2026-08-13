@@ -1860,6 +1860,26 @@ mod tests {
         );
     }
 
+    /// One array element holding BOTH fixed classes and a conditional one.
+    ///
+    /// Every other array fixture is a part that is entirely static or entirely
+    /// conditional, so the two contributions are never emitted from the same
+    /// part and nothing catches the fixed half being dropped. The author sees
+    /// their conditional colour work perfectly while the padding beside it
+    /// never appears, which reads as a Tailwind problem rather than a compiler
+    /// one.
+    #[test]
+    fn an_array_part_emits_its_fixed_classes_next_to_its_conditional_one() {
+        let source =
+            "const App = ({ active }) => <div sz={[{ p: 2, color: active ? 'red-500' : 'blue-500' }]} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = ({ active }) => <div className={_szcn(\"p-2\", active ? \"text-red-500\" : \"text-blue-500\")} />;"
+        );
+    }
+
     #[test]
     fn rewrites_each_dynamic_css_var_category() {
         let source = "const App = ({ color, angle, milliseconds, value }) => <div sz={{ bg: color, rotate: angle, duration: milliseconds, opacity: value }} />;";
