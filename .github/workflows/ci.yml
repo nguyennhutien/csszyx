@@ -391,6 +391,18 @@ jobs:
       - name: Smoke native engine package
         run: pnpm --filter @csszyx/core native:engine:smoke
 
+      # Wasm-lane smoke: one real vite+tailwind production build through each
+      # artifact of the native engine (CSSZYX_PARSER=rust, then =wasm), CSS
+      # compared byte for byte. The wasm lane is the degrade path almost no
+      # field machine exercises — the default lane is native, so silence from
+      # users would mean "nobody ran it", not "it works". Every PR runs it
+      # here instead. The turbo build fills the playground's dependency
+      # closure, which an --affected-scoped test run may not have built.
+      - name: Smoke wasm parser lane
+        run: |
+          pnpm exec turbo run build --filter='...@csszyx/playground-vite-react'
+          bash scripts/smoke-wasm-lane.sh
+
       - name: Upload coverage
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
         if: always()

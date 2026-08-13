@@ -140,6 +140,9 @@ pnpm build
 echo "[verify-like-ci] Package size gate (user-shipped gzip budgets)..."
 pnpm check:package-size
 
+echo "[verify-like-ci] Wasm-lane smoke (real vite build through both engine artifacts)..."
+bash scripts/smoke-wasm-lane.sh
+
 if [ "$SKIP_E2E" -eq 0 ]; then
     echo "[verify-like-ci] Playwright e2e (full suite — slowest step)..."
     pnpm --filter @csszyx/e2e exec playwright test
