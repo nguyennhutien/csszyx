@@ -12,6 +12,11 @@
 export { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 export { CsszyxCompiler } from './compiler.js';
 export {
+    type CrossModuleExportKind,
+    type CrossModuleRegistryEntry,
+    extractCrossModuleRegistryEntries,
+} from './cross-module-extract.js';
+export {
     type GlobalVarUsageDiagnostic,
     type GlobalVarUsageKind,
     type GlobalVarUsageLocation,
@@ -81,14 +86,7 @@ export {
     SPECIAL_VARIANTS,
     SUGGESTION_MAP,
 } from './transform-core.js';
-export {
-    type CrossModuleExportKind,
-    type CrossModuleRegistryEntry,
-    extractCrossModuleRegistryEntries,
-    OxcNotImplementedError,
-    type TransformOxcResult,
-    transformOxc,
-} from './transform-oxc.js';
+export { OxcNotImplementedError, type TransformOxcResult, transformOxc } from './transform-oxc.js';
 export {
     ensureRustTransformAvailable,
     isRustTransformAvailable,

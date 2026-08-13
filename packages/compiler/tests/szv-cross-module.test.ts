@@ -13,8 +13,9 @@
  * contract is independent of how the bundler resolved the paths.
  */
 import { describe, expect, it } from 'vitest';
+import { extractCrossModuleRegistryEntries } from '../src/cross-module-extract.js';
 import { transformSourceCode } from '../src/transform.js';
-import { extractCrossModuleRegistryEntries, transformOxc } from '../src/transform-oxc.js';
+import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
 
 type Engine = (
