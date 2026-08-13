@@ -1,15 +1,44 @@
 /**
- * Tests for the AST budget guard. Files larger than AST_BUDGET nodes
- * abort with ASTBudgetExceededError instead of OOM-ing the build.
+ * Tests for the AST budget guard.
+ *
+ * The engine's contract: a file whose parser-path IR walk exceeds the budget
+ * is LEFT UNCHANGED and contributes no classes, with one diagnostic naming
+ * `build.astBudgetLimit` — never a thrown error, and never a half-rewritten
+ * file. A static-sz file never consults the budget at all: the fast path
+ * extracts it without a full parse, which is the point of having one.
  */
 
 import { describe, expect, it } from 'vitest';
 
-import { AST_BUDGET, ASTBudgetExceededError } from '../src/ast-budget.js';
-import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
+import { AST_BUDGET } from '../src/ast-budget.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 describe('AST budget guard', () => {
+    /**
+     * A source the fast path cannot claim (dynamic sz value), so the parser
+     * runs and the budget applies.
+     *
+     * @returns Source string on the parser path.
+     */
+    function parserPathSource(): string {
+        const rows = Array.from({ length: 200 }, (_, i) => `<i sz={{ p: ${i % 9} }} />`).join('');
+        return `export const Big = ({ x }) => <div sz={{ w: x }}>${rows}</div>;`;
+    }
+
+    /** The engine's over-budget contract, shared by every trip-site test.
+     *
+     * @param result - Transform result of an over-budget file.
+     * @param filename - Filename the diagnostic must name.
+     */
+    function expectBudgetTrip(result: ReturnType<typeof transformSource>, filename: string): void {
+        expect(result.transformed).toBe(false);
+        expect(result.classes.size).toBe(0);
+        expect(result.diagnostics.some(d => d.includes('AST budget exceeded'))).toBe(true);
+        expect(result.diagnostics.some(d => d.includes(filename))).toBe(true);
+        expect(result.diagnostics.some(d => d.includes('astBudgetLimit'))).toBe(true);
+    }
+
     /**
      * Builds a wide AST that exceeds the budget without hitting parser recursion.
      *
@@ -28,59 +57,35 @@ describe('AST budget guard', () => {
 
     it('passes through small files unchanged', () => {
         const source = "<div sz={{ p: 4, bg: 'red-500' }}>hi</div>";
-        const result = transformSourceCode(source);
+        const result = transformSource(source);
         expect(result.transformed).toBe(true);
         expect(result.code).toContain('className');
     });
 
-    it('throws ASTBudgetExceededError on a synthetic over-budget file', () => {
-        // Wide flat array (60k literals) — comfortably overshoots 50k AST
-        // nodes. Avoid deep nesting (binary chains, deeply nested JSX) which
-        // hits Babel parser's recursion limit before the AST is built.
-        const literals = Array.from({ length: 60_000 }, (_, i) => i).join(', ');
-        const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
-
-        expect(() => transformSourceCode(source, 'huge.tsx')).toThrow(ASTBudgetExceededError);
+    it('leaves a synthetic over-budget file unchanged, with the diagnostic', () => {
+        const source = parserPathSource();
+        const result = transformSource(source, 'huge.tsx', { astBudget: 40 });
+        expect(result.code).toBe(source);
+        expectBudgetTrip(result, 'huge.tsx');
     });
 
-    it('error message includes filename + node count', () => {
-        // Use a wide flat array (60k literals) instead of a deep binary
-        // expression: deep chains hit Babel parser's recursion limit before
-        // the AST is even built, so we never get to the budget check.
-        const literals = Array.from({ length: 60_000 }, (_, i) => i).join(', ');
-        const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
-
-        let caught: ASTBudgetExceededError | undefined;
-        try {
-            transformSourceCode(source, 'src/generated/big.tsx');
-        } catch (e) {
-            caught = e as ASTBudgetExceededError;
-        }
-
-        expect(caught).toBeInstanceOf(ASTBudgetExceededError);
-        expect(caught?.filename).toBe('src/generated/big.tsx');
-        expect(caught?.nodeCount).toBeGreaterThan(AST_BUDGET);
-        expect(caught?.message).toContain('src/generated/big.tsx');
-        expect(caught?.message).toContain(String(AST_BUDGET));
+    it('the diagnostic names the file, on both artifacts identically', () => {
+        const source = parserPathSource();
+        const native = transformSource(source, 'src/generated/big.tsx', { astBudget: 40 });
+        const wasm = transformWasm(source, 'src/generated/big.tsx', { astBudget: 40 });
+        expectBudgetTrip(native, 'src/generated/big.tsx');
+        expect(wasm.diagnostics).toEqual(native.diagnostics);
     });
 
-    it('falls back to <anonymous> when called without filename', () => {
-        // Use a wide flat array (60k literals) instead of a deep binary
-        // expression: deep chains hit Babel parser's recursion limit before
-        // the AST is even built, so we never get to the budget check.
+    it('a static-sz file never consults the budget — the fast path owns it', () => {
+        // The historic Babel lane threw here; the engine deliberately does
+        // not: a wide flat array with a static sz object is extracted without
+        // a full parse, so 60k literals cost nothing.
         const literals = Array.from({ length: 60_000 }, (_, i) => i).join(', ');
         const source = `const data = [${literals}]; const App = () => <div sz={{ p: 1 }}>x</div>;`;
-
-        let caught: ASTBudgetExceededError | undefined;
-        try {
-            transformSourceCode(source);
-        } catch (e) {
-            caught = e as ASTBudgetExceededError;
-        }
-
-        expect(caught).toBeInstanceOf(ASTBudgetExceededError);
-        expect(caught?.filename).toBeUndefined();
-        expect(caught?.message).toContain('<anonymous>');
+        const result = transformSource(source, 'huge.tsx');
+        expect(result.transformed).toBe(true);
+        expect([...result.classes]).toContain('p-1');
     });
 
     it('does not throw for budget errors when source has no sz token (fast-path)', () => {
@@ -88,7 +93,7 @@ describe('AST budget guard', () => {
         // no `sz` substring slips through unchecked. That's intentional —
         // we never traverse it, so the budget concern doesn't apply.
         const source = '1' + '+ 1'.repeat(30_000);
-        expect(() => transformSourceCode(source)).not.toThrow();
+        expect(() => transformSource(source)).not.toThrow();
     });
 
     it('returns invalid syntax unchanged when source has no sz token', () => {
@@ -97,7 +102,7 @@ describe('AST budget guard', () => {
         // or syntactically invalid for the TSX parser, but they are outside
         // csszyx's transform surface when they have no `sz` marker.
         const source = 'const broken = ;';
-        const result = transformSourceCode(source, 'broken-generated.ts');
+        const result = transformSource(source, 'broken-generated.ts');
 
         expect(result.transformed).toBe(false);
         expect(result.code).toBe(source);
@@ -106,90 +111,50 @@ describe('AST budget guard', () => {
     });
 
     it('enforces the budget when an incidental sz marker forces parsing', () => {
-        // Current prefilter is intentionally cheap (`source.includes("sz")`).
-        // If a future OXC path narrows that prefilter, this test is the debate
-        // point: either keep this conservative protection or consciously update
-        // the contract with an equivalent "definitely no csszyx syntax" scanner.
+        // The cheap prefilter (`includes("sz")`) sends this to the parser,
+        // which walks the 60k-literal array and trips the cap — the guard
+        // protects generated files that merely CONTAIN the letters "sz".
         const source = wideArraySource(60_000, 'const szMarker = true;');
-
-        expect(() => transformSourceCode(source, 'huge-with-sz-marker.ts')).toThrow(
-            ASTBudgetExceededError,
+        expectBudgetTrip(
+            transformSource(source, 'huge-with-sz-marker.ts'),
+            'huge-with-sz-marker.ts',
         );
     });
 
-    it('applies the same budget to szRecover-only files', () => {
-        // szRecover is a csszyx transform surface even when there is no `sz`
-        // prop. The budget must protect recovery-token generation too.
-        const source = wideArraySource(
-            60_000,
-            'const App = () => <section szRecover="csr">x</section>;',
-        );
-
-        expect(() => transformSourceCode(source, 'huge-recovery.tsx')).toThrow(
-            ASTBudgetExceededError,
-        );
+    it('applies the budget to parser-path szRecover files too', () => {
+        // szRecover is a csszyx transform surface even without an sz prop;
+        // on the parser path the budget must protect it as well.
+        const source = `export const App = ({ x }) => (<section szRecover="csr"><div sz={{ w: x }} />${Array.from({ length: 200 }, () => '<i sz={{ p: 1 }} />').join('')}</section>);`;
+        const result = transformSource(source, 'huge-recovery.tsx', { astBudget: 40 });
+        expectBudgetTrip(result, 'huge-recovery.tsx');
     });
 
-    it('respects an `astBudget` override raised above the default', () => {
-        // Source ~60k nodes — exceeds default 50k but fits a 100k override.
-        const source = wideArraySource(60_000, 'const App = () => <div sz={{ p: 1 }}>x</div>;');
+    it('respects an `astBudget` override raised above a tripping value', () => {
+        const source = parserPathSource();
 
-        // Default budget: throws.
-        expect(() => transformSourceCode(source, 'huge.tsx')).toThrow(ASTBudgetExceededError);
+        // Low budget: trips.
+        expectBudgetTrip(transformSource(source, 'huge.tsx', { astBudget: 40 }), 'huge.tsx');
 
-        // Raised budget: passes.
-        expect(() => transformSourceCode(source, 'huge.tsx', { astBudget: 100_000 })).not.toThrow();
+        // Raised budget: transforms.
+        const raised = transformSource(source, 'huge.tsx', { astBudget: 100_000 });
+        expect(raised.transformed).toBe(true);
+        expect(raised.diagnostics.some(d => d.includes('AST budget exceeded'))).toBe(false);
     });
 
     it('respects an `astBudget` override lowered below the default', () => {
-        // Source ~3k nodes — well under 50k default but over a 1k override.
-        const source = wideArraySource(3000, 'const App = () => <div sz={{ p: 1 }}>x</div>;');
+        const source = parserPathSource();
 
-        // Default budget: passes.
-        expect(() => transformSourceCode(source, 'small.tsx')).not.toThrow();
+        // Default budget: transforms.
+        const roomy = transformSource(source, 'small.tsx');
+        expect(roomy.transformed).toBe(true);
 
-        // Lowered budget: throws.
-        expect(() => transformSourceCode(source, 'small.tsx', { astBudget: 1_000 })).toThrow(
-            ASTBudgetExceededError,
-        );
+        // Lowered budget: trips.
+        expectBudgetTrip(transformSource(source, 'small.tsx', { astBudget: 40 }), 'small.tsx');
     });
 
-    it('error reports the effective budget (not just the default)', () => {
-        const source = wideArraySource(60_000, 'const App = () => <div sz={{ p: 1 }}>x</div>;');
-
-        let caught: ASTBudgetExceededError | undefined;
-        try {
-            transformSourceCode(source, 'big.tsx', { astBudget: 55_000 });
-        } catch (e) {
-            caught = e as ASTBudgetExceededError;
-        }
-        expect(caught?.budget).toBe(55_000);
-        expect(caught?.message).toContain('55000');
-    });
-
-    it('applies the same budget contract to the oxc transform', () => {
-        const source = wideArraySource(3000, 'const App = () => <div sz={{ p: 1 }}>x</div>;');
-
-        expect(() => transformOxc(source, 'small.tsx')).not.toThrow();
-        expect(() => transformOxc(source, 'small.tsx', { astBudget: 1_000 })).toThrow(
-            ASTBudgetExceededError,
-        );
-    });
-
-    it('throws ASTBudgetExceededError on an over-budget oxc file', () => {
-        const source = wideArraySource(60_000, 'const App = () => <div sz={{ p: 1 }}>x</div>;');
-
-        let caught: ASTBudgetExceededError | undefined;
-        try {
-            transformOxc(source, 'src/generated/huge-oxc.tsx');
-        } catch (e) {
-            caught = e as ASTBudgetExceededError;
-        }
-
-        expect(caught).toBeInstanceOf(ASTBudgetExceededError);
-        expect(caught?.filename).toBe('src/generated/huge-oxc.tsx');
-        expect(caught?.nodeCount).toBeGreaterThan(AST_BUDGET);
-        expect(caught?.budget).toBe(AST_BUDGET);
-        expect(caught?.message).toContain('src/generated/huge-oxc.tsx');
+    it('raising the budget silences the diagnostic on the same file', () => {
+        const source = wideArraySource(60_000, 'const szMarker = true;');
+        const raised = transformSource(source, 'huge-with-sz-marker.ts', { astBudget: 500_000 });
+        expect(raised.diagnostics).toEqual([]);
     });
 });

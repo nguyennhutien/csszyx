@@ -24,7 +24,7 @@ const WINDOWS_PATH_SEPARATOR = String.fromCodePoint(92);
 export interface NextWatchCommandOptions {
     cwd?: string;
     root?: string;
-    parserMode?: 'rust' | 'oxc' | 'babel';
+    parserMode?: 'rust' | 'wasm';
     outputFile?: string;
     cacheDir?: string;
     pattern?: string;
@@ -310,14 +310,14 @@ function normalizeGlobPath(value: string): string {
  */
 function normalizeParserMode(
     parserMode: NextWatchCommandOptions['parserMode'],
-): 'rust' | 'oxc' | 'babel' | undefined {
+): 'rust' | 'wasm' | undefined {
     if (parserMode === undefined) {
         return undefined;
     }
-    if (parserMode === 'rust' || parserMode === 'oxc' || parserMode === 'babel') {
+    if (parserMode === 'rust' || parserMode === 'wasm') {
         return parserMode;
     }
-    throw new Error(`Invalid --parser-mode "${parserMode}". Expected "rust", "oxc", or "babel".`);
+    throw new Error(`Invalid --parser-mode "${parserMode}". Expected "rust" or "wasm".`);
 }
 
 /**

@@ -16,10 +16,10 @@
  * (lower.rs), which must agree shape for shape.
  */
 import { describe, expect, it } from 'vitest';
-import { transformSourceCode } from '../src/transform.js';
 import { variantStringPrefix } from '../src/transform-core.js';
-import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 /** [sz object source, expected className] — the Tailwind-valid output. */
 const VARIANT_STRING_CASES: ReadonlyArray<readonly [string, string]> = [
@@ -92,8 +92,8 @@ function classNameFor(
 }
 
 const LANES = [
-    ['babel', transformSourceCode],
-    ['oxc', transformOxc],
+    ['babel', transformSource],
+    ['oxc', transformWasm],
 ] as const;
 
 describe.each(LANES)('%s lane', (_lane, transform) => {

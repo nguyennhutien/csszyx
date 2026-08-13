@@ -16,9 +16,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadNativeBinding } from '../../core/native/index.js';
-import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 /**
  * Extract the transformed JSX element for stable comparison.
@@ -93,8 +93,8 @@ describe('className expression + static sz merges (never overwritten)', () => {
 
     for (const fixture of FIXTURES) {
         it(`oxc merges and matches babel — ${fixture.name}`, () => {
-            const oxc = transformOxc(fixture.tsx, 'F.tsx');
-            const babel = transformSourceCode(fixture.tsx, 'F.tsx');
+            const oxc = transformWasm(fixture.tsx, 'F.tsx');
+            const babel = transformSource(fixture.tsx, 'F.tsx');
             expect(element(oxc.code), 'oxc keeps the expression').toContain(fixture.expectMerge);
             expect(element(babel.code), 'babel keeps the expression').toContain(
                 fixture.expectMerge,
@@ -107,7 +107,7 @@ describe('className expression + static sz merges (never overwritten)', () => {
         it.skipIf(!isRustTransformAvailable())(
             `rust is byte-identical to oxc — ${fixture.name}`,
             () => {
-                const oxc = transformOxc(fixture.tsx, 'F.tsx');
+                const oxc = transformWasm(fixture.tsx, 'F.tsx');
                 const rust = transformRust(fixture.tsx, 'F.tsx');
                 expect(element(rust.code)).toBe(element(oxc.code));
                 expect([...rust.classes]).toEqual([...oxc.classes]);
@@ -117,26 +117,28 @@ describe('className expression + static sz merges (never overwritten)', () => {
 
     it('string-literal className still merges into one static string', () => {
         const tsx = 'export const A = () => <Row className="static-x" sz={{ p: 4 }} />;';
-        for (const engine of [transformOxc, transformSourceCode]) {
+        for (const engine of [transformWasm, transformSource]) {
             const out = element(engine(tsx, 'F.tsx').code);
             expect(out).toContain('className="static-x p-4"');
             expect(out).not.toContain('_szMerge');
         }
     });
 
-    it('merges a valueless className as an empty string (oxc)', () => {
+    it('leaves a valueless className beside the compiled one', () => {
         // `<div className sz={...}>` gives the attribute the value `true`,
-        // which carries no classes. Oxc folds it into the merge as `""`;
-        // babel and the native engine do not treat it as a mergeable
-        // className at all and leave the bare attribute beside the compiled
-        // one, so this shape is pinned for the oxc lane only.
+        // which carries no classes. The engine does not treat it as a
+        // mergeable className and emits its own attribute after it — React
+        // resolves duplicate props last-wins, so the compiled value applies.
+        // (The deleted oxc lane used to fold it into the merge as `""`.)
         const tsx = 'export const A = ({ r }) => <Row className sz={{ ...r }} />;';
-        expect(element(transformOxc(tsx, 'F.tsx').code)).toContain('_szMerge("", _sz({ ...r }))');
+        expect(element(transformWasm(tsx, 'F.tsx').code)).toContain(
+            'className className={_sz({ ...r })}',
+        );
     });
 
     it('sets the runtime/merge flags so the import gets injected (oxc)', () => {
         const tsx = 'export const A = ({ c }) => <Row className={c} sz={{ p: 4 }} />;';
-        const result = transformOxc(tsx, 'F.tsx');
+        const result = transformWasm(tsx, 'F.tsx');
         expect(result.metadata?.usesRuntime ?? result.usesRuntime).toBe(true);
         expect(result.metadata?.usesMerge ?? result.usesMerge).toBe(true);
     });

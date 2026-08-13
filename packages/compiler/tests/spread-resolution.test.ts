@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { transformSourceCode } from '../src/transform.js';
+import { transformSource } from '../src/transform-select.js';
 
 /**
  * Tests for local-variable spread resolution in sz props.
@@ -23,7 +23,7 @@ describe('spread resolution', () => {
                 const item = { p: 3, rounded: 'md' };
                 const A = () => <div sz={item} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.transformed).toBe(true);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('className="p-3 rounded-md"');
@@ -34,7 +34,7 @@ describe('spread resolution', () => {
                 const item = { p: 3, rounded: 'md' } as const;
                 const A = () => <div sz={item} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.transformed).toBe(true);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('className="p-3 rounded-md"');
@@ -47,7 +47,7 @@ describe('spread resolution', () => {
                 const base = { p: 4, bg: 'blue-500' };
                 const A = () => <div sz={{ ...base }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.transformed).toBe(true);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('className="p-4 bg-blue-500"');
@@ -58,7 +58,7 @@ describe('spread resolution', () => {
                 const base = { p: 4, bg: 'blue-500' } as const;
                 const A = () => <div sz={{ ...base }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.transformed).toBe(true);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('className="p-4 bg-blue-500"');
@@ -69,7 +69,7 @@ describe('spread resolution', () => {
                 let base = { rounded: 'md', text: 'sm' };
                 const A = () => <div sz={{ ...base }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.transformed).toBe(true);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('className="rounded-md text-sm"');
@@ -80,7 +80,7 @@ describe('spread resolution', () => {
                 const card = { p: 4, shadow: 'md' };
                 const A = () => <div sz={{ ...card }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.classes.has('p-4')).toBe(true);
             expect(result.classes.has('shadow-md')).toBe(true);
         });
@@ -94,7 +94,7 @@ describe('spread resolution', () => {
                 const base = { display: "flex", gap: 2 };
                 const A = () => <div sz={{ ...base, mt: 4 }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('flex');
             expect(result.code).toContain('gap-2');
@@ -106,7 +106,7 @@ describe('spread resolution', () => {
                 const base = { p: 4, bg: 'blue-500' };
                 const A = () => <div sz={{ ...base, p: 8 }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.usesRuntime).toBe(false);
             // p-8 wins over p-4 from spread
             expect(result.code).toContain('p-8');
@@ -119,7 +119,7 @@ describe('spread resolution', () => {
                 const over = { p: 8 };
                 const A = () => <div sz={{ p: 4, ...over }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('p-8');
             expect(result.code).not.toContain('p-4');
@@ -135,7 +135,7 @@ describe('spread resolution', () => {
                 const color = { bg: 'blue-500', color: 'white' };
                 const A = () => <div sz={{ ...layout, ...color }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('flex');
             expect(result.code).toContain('gap-4');
@@ -149,7 +149,7 @@ describe('spread resolution', () => {
                 const b = { p: 6 };
                 const A = () => <div sz={{ ...a, ...b }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('p-6');
             expect(result.code).not.toContain('p-2');
@@ -166,7 +166,7 @@ describe('spread resolution', () => {
                 const extended = { ...base, rounded: 'lg' };
                 const A = () => <div sz={{ ...extended, mt: 2 }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('p-4');
             expect(result.code).toContain('rounded-lg');
@@ -182,7 +182,7 @@ describe('spread resolution', () => {
                 const interactive = { cursor: 'pointer', hover: { opacity: 75 } };
                 const A = () => <button sz={{ ...interactive, px: 4 }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('cursor-pointer');
             expect(result.code).toContain('hover:opacity-75');
@@ -198,7 +198,7 @@ describe('spread resolution', () => {
                 const base = { p: 4, rounded: 'md' };
                 const A = () => <div sz={[{ ...base }, isActive && { bg: 'blue-500' }]} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('p-4');
             expect(result.code).toContain('rounded-md');
@@ -213,7 +213,7 @@ describe('spread resolution', () => {
                 const base = { rounded: 'lg', p: 4 };
                 const A = ({ color }) => <div sz={{ ...base, bg: color }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.transformed).toBe(true);
             // CSS var path: no _sz() runtime
             expect(result.usesRuntime).toBe(false);
@@ -233,7 +233,7 @@ describe('spread resolution', () => {
                 import { baseStyle } from './styles';
                 const A = () => <div sz={{ ...baseStyle, p: 4 }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             // Falls back — does not crash, does not produce [object Object]
             expect(result.code).not.toContain('[object Object]');
         });
@@ -242,7 +242,7 @@ describe('spread resolution', () => {
             const src = `
                 const A = ({ getStyle }) => <div sz={{ ...getStyle(), p: 4 }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.code).not.toContain('[object Object]');
         });
 
@@ -251,7 +251,7 @@ describe('spread resolution', () => {
                 const notAnObject = 'some-class';
                 const A = () => <div sz={{ ...notAnObject, p: 4 }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.code).not.toContain('[object Object]');
         });
     });
@@ -264,7 +264,7 @@ describe('spread resolution', () => {
                 const card = { p: 6, rounded: 'xl', shadow: 'lg' };
                 const A = () => <div sz={{ ...card, mt: 4 }} />;
             `;
-            const result = transformSourceCode(src);
+            const result = transformSource(src);
             expect(result.usesRuntime).toBe(false);
             expect(result.usesMerge).toBe(false);
             expect(result.code).not.toContain('_sz(');
@@ -282,7 +282,7 @@ describe('sz={{ ...(cond ? varA : varB), key: val }}', () => {
             const inactive = { bg: 'gray-100', color: 'gray-600' };
             const A = ({ isActive }) => <div sz={{ ...(isActive ? active : inactive), p: 4 }} />;
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.transformed).toBe(true);
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('isActive ?');
@@ -300,7 +300,7 @@ describe('sz={{ ...(cond ? varA : varB), key: val }}', () => {
                 <button sz={{ ...(isPrimary ? primary : ghost), px: 4, py: 2, rounded: 'md' }} />
             );
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('isPrimary ?');
         expect(result.code).toContain('bg-blue-600');
@@ -316,7 +316,7 @@ describe('sz={{ ...(cond ? varA : varB), key: val }}', () => {
             const off = { opacity: 0   } as const;
             const A = ({ show }) => <div sz={{ ...(show ? on : off), transition: 'opacity' }} />;
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('show ?');
         expect(result.code).toContain('opacity-100');
@@ -331,7 +331,7 @@ describe('sz={{ ...(cond ? varA : varB), key: val }}', () => {
             const passive = { ...base, bg: 'gray-100',  borderColor: 'gray-300' } as const;
             const A = ({ on }) => <div sz={{ ...(on ? active : passive), p: 3 }} />;
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('on ?');
         expect(result.code).toContain('bg-blue-500');
@@ -348,7 +348,7 @@ describe('sz={{ ...(cond ? varA : varB), key: val }}', () => {
             const b = { bg: 'gray-100' };
             const A = ({ cond, deg }) => <div sz={{ ...(cond ? a : b), rotate: deg }} />;
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         // Falls back — no build-time resolution possible for dynamic rotate
         expect(result.usesRuntime).toBe(true);
     });
@@ -365,7 +365,7 @@ describe('sz={cond ? CONST_A : CONST_B} — direct ternary with module-level con
             const CIRCLE = { size: 16, rounded: 'full' } as const;
             const A = ({ circle }) => <div sz={circle ? CIRCLE : SQUARE} />;
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.transformed).toBe(true);
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('circle ?');
@@ -379,7 +379,7 @@ describe('sz={cond ? CONST_A : CONST_B} — direct ternary with module-level con
             const B_STYLE = { size: 24, bgImg: { gradient: 'linear', dir: 'to-br' }, rounded: 'full' } as const;
             const A = ({ toggle }) => <div sz={toggle ? A_STYLE : B_STYLE} />;
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('toggle ?');
         expect(result.code).toContain('rounded-xl');
@@ -392,7 +392,7 @@ describe('sz={cond ? CONST_A : CONST_B} — direct ternary with module-level con
             const OFF = { opacity: 0,   scale: 75  } as const;
             const A = ({ visible }) => <div sz={visible ? ON : OFF} />;
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('opacity-100');
         expect(result.code).toContain('opacity-0');
@@ -406,7 +406,7 @@ describe('sz={cond ? CONST_A : CONST_B} — direct ternary with module-level con
                 return <div sz={toggle ? LOCAL : OTHER} />;
             };
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         // Compiler resolves local bindings — no runtime needed
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('p-4 bg-blue-500');
@@ -418,7 +418,7 @@ describe('sz={cond ? CONST_A : CONST_B} — direct ternary with module-level con
             const STATIC = { p: 4 } as const;
             const A = ({ toggle }) => <div sz={toggle ? STATIC : getDynamic()} />;
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.usesRuntime).toBe(true);
     });
 });
@@ -434,7 +434,7 @@ describe('spread inside variant value (DRY base prop pattern)', () => {
             const maskBase = { bgImg: 'url(/mask.svg)', bgSize: 'contain', bgRepeat: 'no-repeat' } as const;
             const A = () => <div sz={{ before: { ...maskBase, content: "''" } }} />;
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('before:bg-[url(/mask.svg)]');
         expect(result.code).toContain('before:bg-contain');
@@ -447,7 +447,7 @@ describe('spread inside variant value (DRY base prop pattern)', () => {
             const maskBase = { bgImg: 'url(/mask.svg)', bgSize: 'contain' } as const;
             const A = () => <div sz={{ after: { ...maskBase, content: "''" } }} />;
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('after:bg-[url(/mask.svg)]');
         expect(result.code).toContain('after:bg-contain');
@@ -458,7 +458,7 @@ describe('spread inside variant value (DRY base prop pattern)', () => {
             const hoverStyles = { bg: 'blue-600', scale: 105 } as const;
             const A = () => <div sz={{ bg: 'blue-500', hover: { ...hoverStyles } }} />;
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('bg-blue-500');
         expect(result.code).toContain('hover:bg-blue-600');
@@ -476,7 +476,7 @@ describe('spread inside variant value (DRY base prop pattern)', () => {
                 }} />
             );
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('before:bg-[url(/sprite.svg)]');
         expect(result.code).toContain('after:bg-[url(/sprite.svg)]');
@@ -487,7 +487,7 @@ describe('spread inside variant value (DRY base prop pattern)', () => {
             const base = { p: 4, rounded: 'md' } as const;
             const A = () => <div sz={{ md: { ...base, bg: 'blue-500' } }} />;
         `;
-        const result = transformSourceCode(src);
+        const result = transformSource(src);
         expect(result.usesRuntime).toBe(false);
         expect(result.code).toContain('md:p-4');
         expect(result.code).toContain('md:rounded-md');
@@ -500,6 +500,6 @@ describe('spread inside variant value (DRY base prop pattern)', () => {
             const A = () => <div sz={{ before: { ...maskBase, content: "''" } }} />;
         `;
         // Imported binding is unresolvable → falls back to runtime, no crash
-        expect(() => transformSourceCode(src)).not.toThrow();
+        expect(() => transformSource(src)).not.toThrow();
     });
 });

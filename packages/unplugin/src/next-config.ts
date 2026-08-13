@@ -22,8 +22,9 @@
 
 /** Options forwarded to the csszyx Next Turbopack loader. */
 export interface CsszyxTurbopackOptions {
-    /** Parser lane for the loader. Defaults to `'rust'` (the shipped default). */
-    parserMode?: 'rust' | 'oxc';
+    /** Parser lane for the loader — the native addon or its wasm build.
+     * Defaults to `'rust'` (the shipped default). */
+    parserMode?: 'rust' | 'wasm';
     /**
      * Safelist HTML path Tailwind `@source` reads. Must match the
      * `csszyx next prebuild --output-file` / `csszyx next watch` path.

@@ -20,7 +20,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { extractCrossModuleRegistryEntries } from '../src/transform-oxc.js';
+import { extractCrossModuleRegistryEntries } from '../src/cross-module-extract.js';
 
 /**
  * Extract, keeping only the plain-object entries.

@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 const collisionSource =
     'const A=({width,cond,flex})=><div sz={{w:width}} {...(cond?{style:{flex,},}:{})}/>;';
 const diagnosticMarker = 'possible style override';
 
 function babelDiagnostics(source: string): string[] {
-    return transformSourceCode(source, 'probe.tsx').diagnostics;
+    return transformSource(source, 'probe.tsx').diagnostics;
 }
 
 function oxcDiagnostics(source: string): string[] {
-    return transformOxc(source, 'probe.tsx').diagnostics;
+    return transformWasm(source, 'probe.tsx').diagnostics;
 }
 
 describe('style supplied by a prop spread beside runtime sz values', () => {
@@ -24,7 +24,7 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
     });
 
     it('injects generated style into every conditional branch exactly once', () => {
-        for (const transform of [transformSourceCode, transformOxc]) {
+        for (const transform of [transformSource, transformWasm]) {
             const result = transform(collisionSource, 'probe.tsx');
             expect(result.code.match(/__szSpacingVar/g)).toHaveLength(2);
             expect(result.code).not.toMatch(/\sstyle=\{\{/);
@@ -32,7 +32,7 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
     });
 
     it.runIf(isRustTransformAvailable())('rust is byte-identical to oxc for safe branches', () => {
-        const oxc = transformOxc(collisionSource, 'probe.tsx');
+        const oxc = transformWasm(collisionSource, 'probe.tsx');
         const rust = transformRust(collisionSource, 'probe.tsx');
         expect(rust.code).toBe(oxc.code);
         expect(rust.diagnostics).toEqual(oxc.diagnostics);
@@ -61,7 +61,7 @@ describe('style supplied by a prop spread beside runtime sz values', () => {
 
     it('merges a safe expression-valued style without an explicit style attribute', () => {
         const source = 'const A=({width,base})=><div sz={{w:width}} {...{style:base,id:"x"}}/>;';
-        for (const transform of [transformSourceCode, transformOxc]) {
+        for (const transform of [transformSource, transformWasm]) {
             const result = transform(source, 'probe.tsx');
             expect(result.diagnostics.join('\n')).not.toContain(diagnosticMarker);
             expect(result.code).toMatch(/\.\.\.\(?base\)?/);

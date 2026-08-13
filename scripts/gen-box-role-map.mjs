@@ -23,11 +23,11 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { transform } from '../packages/compiler/src/transform.js';
 import {
     BOOLEAN_SHORTHANDS,
     PROPERTY_MAP,
     REMOVED_BOOLEAN_SUGAR,
+    transform,
 } from '../packages/compiler/src/transform-core.js';
 
 const repoRoot = join(fileURLToPath(import.meta.url), '..', '..');

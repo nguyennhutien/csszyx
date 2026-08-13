@@ -81,9 +81,10 @@ const manifest = builder.build();
 
 ### Transform
 
-Two layers — a pure object compile (`transform`) and two source-string
-transforms (`transformSourceCode` for the Babel path, `transformOxc` for
-the oxc-parser + magic-string path).
+Two layers — a pure object compile (`transform`) and the source-string
+transform of the ONE engine, reachable as `transformRust` (native addon),
+`transformWasm` (the same engine compiled to WebAssembly) or
+`transformSource` (picks whichever this host can run).
 
 #### `transform(szProp: SzObject, prefix?: string, mangleMap?: Record<string, string>): TransformResult`
 
@@ -91,28 +92,27 @@ Pure compile from a sz object to `{ className, attributes }`. Browser-safe
 (no parser dependency); also exposed at `@csszyx/compiler/browser` for
 runtime consumers like `@csszyx/dynamic`.
 
-#### `transformSourceCode(source: string, filename?: string, options?: TransformSourceCodeOptions): { code, transformed, usesRuntime, usesMerge, usesColorVar, classes, rawClassNames, diagnostics, recoveryTokens }`
+#### `transformSource(source: string, filename?: string, options?: TransformSourceCodeOptions): SourceTransformResult`
 
-Babel-based source transform. Parses TSX/JSX, walks the AST, rewrites
-`sz`/`szRecover`/`_sz` constructs, emits the new source via Babel's
-code generator. Retained as the final compatibility fallback.
+Runs the engine through whichever artifact this host can load: the
+native addon when present, the WebAssembly build otherwise. Same
+signature the removed Babel-era `transformSourceCode` had, so most
+callers migrate by renaming.
 
-#### `transformOxc(source: string, filename?: string, options?: TransformSourceCodeOptions): TransformOxcResult` _(since v0.8.0)_
+#### `transformRust(source: string, filename?: string, options?: TransformSourceCodeOptions): SourceTransformResult` _(default since v0.9.0)_
 
-oxc-parser + magic-string source transform. Same return shape as
-`transformSourceCode` so consumers (and the parity harness) can diff
-both implementations cleanly. JavaScript fallback when the native Rust
-engine is unavailable (e.g. unsupported platform). Set
-`build.parser: 'oxc'` to use this path.
+The native addon via napi-rs. Fastest path. Requires the matching
+optional `@csszyx/core-*` platform package; a missing package surfaces
+`CsszyxNativeUnavailableError`.
 
-#### `transformRust(source: string, filename?: string, options?: TransformSourceCodeOptions): TransformRustResult` _(default since v0.9.0)_
+#### `transformWasm(source: string, filename?: string, options?: TransformSourceCodeOptions): SourceTransformResult`
 
-Native Rust engine via napi-rs. Fastest parser path. Requires the
-matching optional `@csszyx/core-*` platform package. Missing native
-packages surface `CsszyxNativeUnavailableError`.
+The same engine compiled to WebAssembly, shipped inside `@csszyx/core`
+itself — identical output to the native addon, loaded lazily only when
+asked for.
 
-All three transform paths preserve every byte the user wrote outside the
-touched `sz`/`szRecover` ranges.
+Both artifacts preserve every byte the user wrote outside the touched
+`sz`/`szRecover` ranges.
 
 #### `isValidSzProp(szProp: unknown): boolean`
 

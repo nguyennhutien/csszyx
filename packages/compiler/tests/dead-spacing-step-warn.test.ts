@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { type SzObject, setSzWarnLocation, transform } from '../src/transform.js';
+import { type SzObject, setSzWarnLocation, transform } from '../src/transform-core.js';
 
 /**
  * Tailwind's bare spacing syntax only accepts quarter steps (multiples of

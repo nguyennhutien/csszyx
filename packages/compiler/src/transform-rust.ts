@@ -9,7 +9,7 @@ import type {
     GlobalVarAliasTableInput,
     SourceTransformResult,
     TransformSourceCodeOptions,
-} from './transform.js';
+} from './transform-core.js';
 
 /**
  * Source file passed to the Rust native batch transform.
@@ -50,7 +50,10 @@ export function transformRust(
     filename?: string,
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult {
-    const [result] = transformRustBatch([{ filename, source }], options);
+    // The single-file path names an unnamed module `<anonymous>` — the same
+    // answer the shared JS channel always gave — while the BATCH default stays
+    // index-based so recovery tokens keep unique per-file inputs.
+    const [result] = transformRustBatch([{ filename: filename ?? '<anonymous>', source }], options);
     if (!result) {
         throw new OxcRustNotImplementedError('native transform returned no result');
     }

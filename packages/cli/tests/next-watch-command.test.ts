@@ -56,7 +56,7 @@ describe('csszyx next-watch command', () => {
         const session = await startNextWatch({
             root,
             cwd: root,
-            parserMode: 'babel',
+            parserMode: 'wasm',
             debounceMs: 10,
             silent: true,
         });
@@ -101,7 +101,7 @@ describe('csszyx next-watch command', () => {
                 root,
                 cwd: root,
                 pattern: 'src/**/*.tsx',
-                parserMode: 'babel',
+                parserMode: 'wasm',
                 silent: true,
             }),
         ).rejects.toThrow('No source files matched');
@@ -129,7 +129,7 @@ describe('csszyx next-watch command', () => {
             startNextWatch({
                 root,
                 cwd: root,
-                parserMode: 'babel',
+                parserMode: 'wasm',
                 debounceMs: '-1',
                 silent: true,
             }),

@@ -12,9 +12,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
-import { transformSourceCode } from '../packages/compiler/src/transform.js';
-import { transformOxc } from '../packages/compiler/src/transform-oxc.js';
 import { transformRust, transformRustBatch } from '../packages/compiler/src/transform-rust.js';
+import { transformSource } from '../packages/compiler/src/transform-select.js';
+import { transformWasm } from '../packages/compiler/src/transform-wasm.js';
 import {
     loadNativeBinding,
     type NativeTransformResult,
@@ -230,7 +230,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
                 opts,
                 () => {
                     for (const file of szFiles) {
-                        transformOxc(file.source, file.filename);
+                        transformWasm(file.source, file.filename);
                     }
                 },
                 'Baseline: transform every sz file with oxc and do no cache I/O.',
@@ -248,7 +248,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
                         const cacheRoot = resolveTransformCacheDir(root);
                         for (const file of szFiles) {
                             const input = cacheInput(file.filename, file.source);
-                            const result = transformOxc(file.source, file.filename);
+                            const result = transformWasm(file.source, file.filename);
                             writeTransformCache(cacheRoot, input, result);
                         }
                     } finally {
@@ -266,7 +266,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
                 writeTransformCache(
                     warmCacheRoot,
                     cacheInput(file.filename, file.source),
-                    transformOxc(file.source, file.filename),
+                    transformWasm(file.source, file.filename),
                 );
             }
             stats.push(
@@ -292,12 +292,12 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
             rmSync(warmRoot, { recursive: true, force: true });
         }
 
-        const memoryCache = new Map<string, ReturnType<typeof transformOxc>>();
+        const memoryCache = new Map<string, ReturnType<typeof transformWasm>>();
         for (const file of szFiles) {
             const input = cacheInput(file.filename, file.source);
             memoryCache.set(
                 createTransformCacheKey(input).key,
-                transformOxc(file.source, file.filename),
+                transformWasm(file.source, file.filename),
             );
         }
         stats.push(
@@ -345,7 +345,7 @@ function runCacheBenchmarks(opts: CliOptions): BenchStats[] {
                 opts,
                 () => {
                     for (const file of noSzFiles) {
-                        transformOxc(file.source, file.filename);
+                        transformWasm(file.source, file.filename);
                     }
                 },
                 'Compiler-only no-sz fast path for comparison; real unplugin skips before this.',
@@ -371,25 +371,25 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
         const files = repeated.slice(0, size);
         stats.push(
             measureCase(
-                `parser/${size}/babel-transformSourceCode`,
+                `parser/${size}/babel-transformSource`,
                 size,
                 opts,
                 () => {
                     for (const file of files) {
-                        transformSourceCode(file.source, file.filename);
+                        transformSource(file.source, file.filename);
                     }
                 },
-                'Babel compatibility path via transformSourceCode().',
+                'Babel compatibility path via transformSource().',
             ),
         );
         stats.push(
             measureCase(
-                `parser/${size}/oxc-transformOxc`,
+                `parser/${size}/oxc-transformWasm`,
                 size,
                 opts,
                 () => {
                     for (const file of files) {
-                        transformOxc(file.source, file.filename);
+                        transformWasm(file.source, file.filename);
                     }
                 },
                 'Default oxc-parser + magic-string path.',
@@ -450,12 +450,12 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
     const hmrFiles = createHmrFiles(opts.hmrEdits);
     stats.push(
         measureCase(
-            'parser/hmr/oxc-transformOxc',
+            'parser/hmr/oxc-transformWasm',
             opts.hmrEdits,
             opts,
             () => {
                 for (const file of hmrFiles) {
-                    transformOxc(file.source, file.filename);
+                    transformWasm(file.source, file.filename);
                 }
             },
             'HMR-shaped baseline: one edited file per transform call through oxc-JS.',
@@ -515,7 +515,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 1,
                 opts,
                 () => {
-                    transformSourceCode(fixture.source, `/bench/${fixture.name}.tsx`);
+                    transformSource(fixture.source, `/bench/${fixture.name}.tsx`);
                 },
                 'Single-fixture Babel path timing.',
             ),
@@ -526,7 +526,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 1,
                 opts,
                 () => {
-                    transformOxc(fixture.source, `/bench/${fixture.name}.tsx`);
+                    transformWasm(fixture.source, `/bench/${fixture.name}.tsx`);
                 },
                 'Single-fixture oxc path timing.',
             ),
@@ -975,8 +975,8 @@ function renderParserReport(
     const rows = stats.map(stat => tableRow(stat)).join('\n');
     const speedups = options.sizes
         .map(size => {
-            const babel = findStat(stats, `parser/${size}/babel-transformSourceCode`);
-            const oxc = findStat(stats, `parser/${size}/oxc-transformOxc`);
+            const babel = findStat(stats, `parser/${size}/babel-transformSource`);
+            const oxc = findStat(stats, `parser/${size}/oxc-transformWasm`);
             const rust = findStat(stats, `parser/${size}/rust-transformRust`);
             const rustBatch = findStat(stats, `parser/${size}/rust-transformRustBatch`);
             const oxcRatio = `oxc is ${formatRatio(babel.medianMs / oxc.medianMs)}x faster than Babel`;
@@ -1094,7 +1094,7 @@ Parser paths: ${staticParserPathSummary || 'none'}.
  * @returns markdown bullet list
  */
 function renderHmrSummary(stats: BenchStats[]): string {
-    const oxc = findStat(stats, 'parser/hmr/oxc-transformOxc');
+    const oxc = findStat(stats, 'parser/hmr/oxc-transformWasm');
     const rust = findStat(stats, 'parser/hmr/rust-transformRust');
     const rustBatch = findStat(stats, 'parser/hmr/rust-transformRustBatch1');
     if (rust.status !== 'measured' || rustBatch.status !== 'measured') {

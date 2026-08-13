@@ -3,7 +3,7 @@
  * Profile csszyx compiler hot paths before adding any memoization.
  *
  * Phase A for roadmap item #25. This script is intentionally read-only:
- * it measures existing `transformSourceCode()` behavior against local source
+ * it measures existing `transformSource()` behavior against local source
  * files and synthetic `sz={{...}}` fixtures derived from pinned corpus-combo
  * snapshots.
  *
@@ -16,13 +16,13 @@ import { type Dirent, existsSync, readdirSync, readFileSync, statSync } from 'no
 import { join, relative, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
-
-import { transform, transformSourceCode } from '../packages/compiler/src/transform.js';
 import {
     PROPERTY_MAP,
     type SzObject,
     type SzValue,
+    transform,
 } from '../packages/compiler/src/transform-core.js';
+import { transformSource } from '../packages/compiler/src/transform-select.js';
 
 /**
  * CLI options for the profiler.
@@ -304,8 +304,7 @@ function profileSourceFiles(files: string[], iterations: number): TransformTimin
         let transformed = false;
         for (let i = 0; i < iterations; i++) {
             transformed =
-                withSilencedWarnings(() => transformSourceCode(code, file).transformed) ||
-                transformed;
+                withSilencedWarnings(() => transformSource(code, file).transformed) || transformed;
         }
         const ms = (performance.now() - start) / iterations;
         timings.push({
@@ -538,8 +537,7 @@ function profileCorpusFixtures(fixtures: CorpusFixture[], iterations: number): T
             for (let i = 0; i < iterations; i++) {
                 transformed =
                     withSilencedWarnings(
-                        () =>
-                            transformSourceCode(fixture.source, `${fixture.name}.tsx`).transformed,
+                        () => transformSource(fixture.source, `${fixture.name}.tsx`).transformed,
                     ) || transformed;
             }
             return {

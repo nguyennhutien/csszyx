@@ -14,9 +14,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadNativeBinding } from '../../core/native/index.js';
-import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 /**
  * Strip the JSX element from a transform result for stable comparison.
@@ -33,7 +33,7 @@ function element(code: string): string {
  * @returns the transformed `<div .../>` element.
  */
 function babel(code: string): string {
-    return element(transformSourceCode(code, 'F.tsx').code);
+    return element(transformSource(code, 'F.tsx').code);
 }
 
 /**
@@ -42,7 +42,7 @@ function babel(code: string): string {
  * @returns the transformed `<div .../>` element.
  */
 function oxc(code: string): string {
-    const r = transformOxc(code, 'F.tsx');
+    const r = transformWasm(code, 'F.tsx');
     return element(typeof r === 'string' ? r : r.code);
 }
 
@@ -176,10 +176,10 @@ describe('nested finite-conditional parity', () => {
                 expect(rust(fixture.src), 'rust vs babel code').toBe(babel(fixture.src));
                 const rustClasses = orderedClassesOf(transformRust(fixture.src, 'F.tsx'));
                 expect(rustClasses, 'rust vs oxc class ORDER').toEqual(
-                    orderedClassesOf(transformOxc(fixture.src, 'F.tsx')),
+                    orderedClassesOf(transformWasm(fixture.src, 'F.tsx')),
                 );
                 expect(rustClasses, 'rust vs babel class ORDER').toEqual(
-                    orderedClassesOf(transformSourceCode(fixture.src, 'F.tsx')),
+                    orderedClassesOf(transformSource(fixture.src, 'F.tsx')),
                 );
             },
         );
@@ -265,10 +265,10 @@ describe('multi-ternary parity (property conditionals append template segments)'
             const b = babel(fixture.src);
             expect(b, 'babel must not fall back to the runtime helper').not.toContain('_sz(');
             expect(normalizeStyleBraces(oxc(fixture.src))).toBe(normalizeStyleBraces(b));
-            expect(orderedClassesOf(transformOxc(fixture.src, 'F.tsx')), 'class ORDER').toEqual(
-                orderedClassesOf(transformSourceCode(fixture.src, 'F.tsx')),
+            expect(orderedClassesOf(transformWasm(fixture.src, 'F.tsx')), 'class ORDER').toEqual(
+                orderedClassesOf(transformSource(fixture.src, 'F.tsx')),
             );
-            expect(orderedClassesOf(transformSourceCode(fixture.src, 'F.tsx'))).toEqual(
+            expect(orderedClassesOf(transformSource(fixture.src, 'F.tsx'))).toEqual(
                 fixture.ordered,
             );
         });
@@ -278,7 +278,7 @@ describe('multi-ternary parity (property conditionals append template segments)'
                 normalizeStyleBraces(babel(fixture.src)),
             );
             expect(orderedClassesOf(transformRust(fixture.src, 'F.tsx'))).toEqual(
-                orderedClassesOf(transformSourceCode(fixture.src, 'F.tsx')),
+                orderedClassesOf(transformSource(fixture.src, 'F.tsx')),
             );
         });
     }
@@ -293,8 +293,8 @@ describe('punt-path candidate parity (path-aware collectors)', () => {
         'const App = ({ rest, a }) => <div sz={{ ...rest, bg: { color: "black", op: a ? 30 : 100 }, hover: { m: 2 } }} />;';
 
     it('babel and oxc collect identical, junk-free candidates', () => {
-        const b = orderedClassesOf(transformSourceCode(punted, 'F.tsx'));
-        const o = orderedClassesOf(transformOxc(punted, 'F.tsx'));
+        const b = orderedClassesOf(transformSource(punted, 'F.tsx'));
+        const o = orderedClassesOf(transformWasm(punted, 'F.tsx'));
         expect(b).toEqual(['bg-black/30', 'bg-black/100', 'hover:m-2']);
         expect(o).toEqual(b);
     });

@@ -23,15 +23,15 @@ import {
     countSzrWordOccurrencesOutsideComments,
     szrRewriteProofHolds,
 } from '../src/szr-import-rewrite.js';
-import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 type Engine = (source: string, filename?: string) => { code?: string };
 
 const LANES: ReadonlyArray<readonly [string, Engine]> = [
-    ['babel', transformSourceCode],
-    ['oxc', transformOxc as Engine],
+    ['babel', transformSource],
+    ['oxc', transformWasm as Engine],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
 ];
 

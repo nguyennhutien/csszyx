@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { transformSourceCode } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  *
  * The actual Vite plugin integration is tested by E2E (packages/e2e).
  * Here we test the pure logic in isolation using the same primitives
- * (transformSourceCode + fs) without spinning up a real Vite server.
+ * (transformSource + fs) without spinning up a real Vite server.
  */
 describe('HMR incremental class discovery', () => {
     let tmpDir: string, safelistPath: string;
@@ -84,9 +84,9 @@ describe('HMR incremental class discovery', () => {
             return { wrote: false, newClasses: [] };
         }
 
-        let result: ReturnType<typeof transformSourceCode>;
+        let result: ReturnType<typeof transformSource>;
         try {
-            result = transformSourceCode(fileContent);
+            result = transformSource(fileContent);
         } catch {
             return { wrote: false, newClasses: [] };
         }
@@ -197,7 +197,7 @@ describe('HMR incremental class discovery', () => {
         writeSafelistFile(classes, tmpDir);
         const statBefore = fs.statSync(safelistPath).mtimeMs;
 
-        // Intentionally broken JSX — transformSourceCode should not throw but may return untransformed
+        // Intentionally broken JSX — transformSource should not throw but may return untransformed
         const broken = 'const el = <div sz={{ p: !!!invalid }}} />;';
         // We expect this to be a no-op (either skipped or returns !transformed)
         const { wrote } = simulateHotUpdate(broken, classes, tmpDir);

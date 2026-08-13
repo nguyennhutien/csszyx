@@ -42,7 +42,7 @@ describe('startNextWatch failure normalization', () => {
             return fake;
         }) as never;
 
-        const session = await startNextWatch({ cwd, parserMode: 'babel' }, { watch: factory });
+        const session = await startNextWatch({ cwd, parserMode: 'wasm' }, { watch: factory });
         // Emit a NON-Error runtime failure — reportFailure must wrap it.
         emitter.emit('error', 'raw string failure');
         const error = await session.failure;

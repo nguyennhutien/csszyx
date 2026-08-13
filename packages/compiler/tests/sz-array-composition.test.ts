@@ -20,9 +20,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
     isRustTransformAvailable,
-    transformOxc,
     transformRust,
-    transformSourceCode,
+    transformSource,
+    transformWasm,
 } from '../src/index.js';
 
 const PRELUDE = `const BASE = { p: 2, m: 1 };
@@ -43,8 +43,8 @@ function norm(code: string): string {
 
 function run(engine: 'oxc' | 'babel' | 'rust', attr: string) {
     const source = `${PRELUDE}export const A = () => <div ${attr} />;`;
-    let fn = transformSourceCode;
-    if (engine === 'oxc') fn = transformOxc;
+    let fn = transformSource;
+    if (engine === 'oxc') fn = transformWasm;
     else if (engine === 'rust') fn = transformRust;
     const result = fn(source, 'array.tsx');
     return {

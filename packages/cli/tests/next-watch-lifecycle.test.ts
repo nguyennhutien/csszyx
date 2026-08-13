@@ -41,7 +41,7 @@ describe('nextWatch command lifecycle', () => {
         mkdirSync(join(cwd, 'app'));
         writeFileSync(join(cwd, 'app/page.tsx'), 'export default () => <div sz={{ p: 4 }} />;');
 
-        const running = nextWatch({ cwd, parserMode: 'babel', debounceMs: 5 });
+        const running = nextWatch({ cwd, parserMode: 'wasm', debounceMs: 5 });
         // Give the watcher a moment to reach ready, then signal shutdown.
         await new Promise(resolve => setTimeout(resolve, 400));
         process.emit('SIGINT');
@@ -58,7 +58,7 @@ describe('watcher failure and startup-error paths', () => {
         mkdirSync(join(cwd, 'app'));
         writeFileSync(join(cwd, 'app/page.tsx'), 'export default () => <div sz={{ p: 4 }} />;');
         const { startNextWatch } = await import('../src/commands/next-watch.js');
-        const session = await startNextWatch({ cwd, parserMode: 'babel' });
+        const session = await startNextWatch({ cwd, parserMode: 'wasm' });
         // Simulate a chokidar runtime failure after readiness.
         // Reach the internal watcher through the failure wiring: emit via a
         // filesystem error is racy, so drive the public close after a failure
@@ -89,7 +89,7 @@ describe('watcher failure and startup-error paths', () => {
             return fake;
         }) as never;
         await expect(
-            startNextWatch({ cwd, parserMode: 'babel' }, { watch: factory }),
+            startNextWatch({ cwd, parserMode: 'wasm' }, { watch: factory }),
         ).rejects.toThrow('boot failed');
     }, 20000);
 });

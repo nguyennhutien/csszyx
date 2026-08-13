@@ -642,9 +642,14 @@ fn unknown_property_diagnostics(
     // are all clean reaches none of the branches below, and must not pay a pass
     // over its own source for a table nobody reads.
     let mut lines: Option<LineIndex> = None;
-    for attr in &ir.sz_attributes {
+    // sz props first, then the catalog objects (szv leaves + static szr
+    // arguments) through the SAME unknown/numeric emission — a typo inside a
+    // catalog must be as findable by `csszyx check` as one on an element.
+    let attribute_objects = ir.sz_attributes.iter().map(|attr| &attr.object);
+    let catalog_objects = ir.catalog_sz_objects.iter();
+    for object in attribute_objects.chain(catalog_objects) {
         unknown.clear();
-        collect_unknown_sz_keys(&attr.object, &mut unknown);
+        collect_unknown_sz_keys(object, &mut unknown);
         for (key, offset) in &unknown {
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
@@ -652,7 +657,17 @@ fn unknown_property_diagnostics(
             // A numeric key is almost never a typo — it means an array or a spread
             // reached `sz`. Match the JS engines' wording so a `build.parser` flip
             // does not change the diagnostic text.
-            if is_numeric_key(key) {
+            if let Some(note) = super::generated::tables::key_migration_note(key) {
+                // Wording mirrors the runtime channel's unknownSzPropertyMessage
+                // so the same key reads the same everywhere.
+                out.push(format!(
+                    "[csszyx] \"{key}\" was removed at {location}:{line}: {note}."
+                ));
+            } else if let Some(suggestion) = super::generated::tables::key_suggestion(key) {
+                out.push(format!(
+                    "[csszyx] Use the canonical key \"{suggestion}\" instead of \"{key}\" at {location}:{line}."
+                ));
+            } else if is_numeric_key(key) {
                 out.push(format!(
                     "[csszyx] sz received a numeric key \"{key}\" at {location}:{line}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored."
                 ));
@@ -667,7 +682,7 @@ fn unknown_property_diagnostics(
             }
         }
         dead_steps.clear();
-        super::lower::collect_dead_spacing_steps(&attr.object, &mut dead_steps);
+        super::lower::collect_dead_spacing_steps(object, &mut dead_steps);
         for (key, value, offset) in &dead_steps {
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
@@ -679,7 +694,7 @@ fn unknown_property_diagnostics(
             ));
         }
         property_objects.clear();
-        super::lower::collect_property_object_values(&attr.object, &mut property_objects);
+        super::lower::collect_property_object_values(object, &mut property_objects);
         for (key, nested, offset) in &property_objects {
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
@@ -691,7 +706,7 @@ fn unknown_property_diagnostics(
             ));
         }
         mask_members.clear();
-        super::lower::collect_unknown_mask_slot_members(&attr.object, &mut mask_members);
+        super::lower::collect_unknown_mask_slot_members(object, &mut mask_members);
         for (owner, member, allowed, offset) in &mask_members {
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
@@ -964,6 +979,41 @@ mod tests {
             diagnostic.contains("object literal contains a runtime value")
                 && diagnostic.contains("deferred to _szPart")
         }));
+    }
+
+    #[test]
+    fn diagnostics_render_migration_note_and_canonical_suggestion() {
+        let file = TransformFile {
+            filename: "/repo/src/Diagnostics.tsx".to_string(),
+            source: "const App = () => <div sz={{ maskFrom: 1, backgroundColor: \"red-500\" }} />;"
+                .to_string(),
+        };
+        let result = transform_static_classes_with_options(
+            &file,
+            0,
+            std::time::Instant::now(),
+            TransformOptions {
+                root_dir: Some("/repo/".to_string()),
+                ..TransformOptions::default()
+            },
+        );
+
+        assert!(
+            result.diagnostics.iter().any(|diagnostic| {
+                diagnostic.contains("\"maskFrom\" was removed at src/Diagnostics.tsx:1:")
+            }),
+            "{:?}",
+            result.diagnostics
+        );
+        assert!(
+            result.diagnostics.iter().any(|diagnostic| {
+                diagnostic.contains(
+                    "Use the canonical key \"bg\" instead of \"backgroundColor\" at src/Diagnostics.tsx:1",
+                )
+            }),
+            "{:?}",
+            result.diagnostics
+        );
     }
 
     #[test]

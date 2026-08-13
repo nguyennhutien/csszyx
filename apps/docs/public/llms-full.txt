@@ -3905,15 +3905,17 @@ csszyx has two worlds; pick by "is the value set finite and known at build time?
 - **Runtime (`dynamic()`):** unbounded values (CMS color, user `#hex`). CSS is
   generated + injected in the browser via insertRule. Escape hatch only.
 
-Engines (BUILD-TIME parse of JSX source only): Rust native (default) → oxc (JS
-fallback) → babel (last resort). All three emit IDENTICAL classes (parity-gated) —
-engine only affects build speed, never output. The native binary ships as
-per-platform optional deps (`@csszyx/core-*`); if it's missing (unsupported arch,
-omitted optional deps, cross-platform frozen lockfile) the DEFAULT `rust` auto-
-degrades to `oxc` with a one-time warning — builds still succeed with identical
-classes. An EXPLICIT `parser:'rust'` (config or `CSSZYX_PARSER=rust`) hard-fails
-instead. Don't tell users a missing native binary breaks csszyx or changes
-classes; tell them to ignore the warning or set `build.parser:'oxc'`. The RUNTIME
+Engine (BUILD-TIME parse of JSX source only): ONE engine, two artifacts —
+`rust` (native addon, default) and `wasm` (the same engine compiled to
+WebAssembly, shipped inside `@csszyx/core`). Identical output by construction
+(same source, gate-pinned) — the artifact only affects build speed. The native
+binary ships as per-platform optional deps (`@csszyx/core-*`); if it's missing
+(unsupported arch, omitted optional deps, cross-platform frozen lockfile) the
+DEFAULT `rust` auto-degrades to `wasm` with a one-time warning — builds still
+succeed with identical classes. An EXPLICIT `parser:'rust'` (config or
+`CSSZYX_PARSER=rust`) hard-fails instead. Don't tell users a missing native
+binary breaks csszyx or changes classes; tell them to ignore the warning or set
+`build.parser:'wasm'`. The former `'oxc'`/`'babel'` values were removed. The RUNTIME
 has no parser: `_sz`/`szr`/`szv`/`splitBox` are plain JS; `dynamic()` lowers an sz
 OBJECT via `@csszyx/compiler/browser` (pure JS, no JSX parsing).
 

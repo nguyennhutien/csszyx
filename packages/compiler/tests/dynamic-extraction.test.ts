@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { transformSourceCode } from '../src/transform.js';
+import { transformSource } from '../src/transform-select.js';
 
 /**
  * Tests for Layer-1 prescan: the compiler's CallExpression visitor extracts
@@ -17,7 +17,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                 import { dynamic } from '@csszyx/dynamic';
                 const A = () => <div className={dynamic({ p: 4, rounded: 'md' })} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.classes.has('p-4')).toBe(true);
             expect(r.classes.has('rounded-md')).toBe(true);
         });
@@ -27,7 +27,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                 import { dynamic } from '@csszyx/dynamic';
                 const A = () => <div className={dynamic({ bg: 'blue-500', hover: { bg: 'blue-600' } })} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.classes.has('bg-blue-500')).toBe(true);
             expect(r.classes.has('hover:bg-blue-600')).toBe(true);
         });
@@ -37,7 +37,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                 import { dynamic } from '@csszyx/dynamic';
                 const A = () => <div className={dynamic({ bg: '#2dd597', w: '60%' })} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.classes.has('bg-[#2dd597]')).toBe(true);
             expect(r.classes.has('w-[60%]')).toBe(true);
         });
@@ -52,7 +52,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                     </div>
                 );
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.classes.has('p-2')).toBe(true);
             expect(r.classes.has('text-sm')).toBe(true);
             expect(r.classes.has('m-4')).toBe(true);
@@ -69,7 +69,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                 const boxStyles = { w: 7, h: 8, rounded: 'sm' };
                 const A = () => <div className={dynamic(boxStyles)} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.classes.has('w-7')).toBe(true);
             expect(r.classes.has('h-8')).toBe(true);
             expect(r.classes.has('rounded-sm')).toBe(true);
@@ -81,7 +81,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                 const overlayStyles = { opacity: 50, bg: 'black' } as const;
                 const A = () => <div className={dynamic(overlayStyles)} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.classes.has('opacity-50')).toBe(true);
             expect(r.classes.has('bg-black')).toBe(true);
         });
@@ -94,7 +94,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                 const boxStyles = { p: 4, rounded: 'md' } as const;
                 const A = () => <div className={dynamic(boxStyles as any)} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.classes.has('p-4')).toBe(true);
             expect(r.classes.has('rounded-md')).toBe(true);
         });
@@ -106,7 +106,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                 const adjStyles = { w: 10, h: 6, rounded: 'sm' } as const;
                 const A = () => <div className={dynamic(adjStyles as SzObject)} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.classes.has('w-10')).toBe(true);
             expect(r.classes.has('h-6')).toBe(true);
             expect(r.classes.has('rounded-sm')).toBe(true);
@@ -119,7 +119,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                 const A = () => <div className={dynamic(boxStyles)} />;
             `;
             // Should not throw; unresolvable identifier is silently skipped
-            expect(() => transformSourceCode(src)).not.toThrow();
+            expect(() => transformSource(src)).not.toThrow();
         });
     });
 
@@ -131,7 +131,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                 import { dynamic } from '@csszyx/dynamic';
                 const A = ({ styles }) => <div className={dynamic(styles)} />;
             `;
-            expect(() => transformSourceCode(src)).not.toThrow();
+            expect(() => transformSource(src)).not.toThrow();
         });
 
         it('does not crash when arg is a function call result', () => {
@@ -139,7 +139,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                 import { dynamic } from '@csszyx/dynamic';
                 const A = () => <div className={dynamic(getStyles())} />;
             `;
-            expect(() => transformSourceCode(src)).not.toThrow();
+            expect(() => transformSource(src)).not.toThrow();
         });
 
         it('does not crash when arg is a ternary expression', () => {
@@ -147,7 +147,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                 import { dynamic } from '@csszyx/dynamic';
                 const A = ({ active }) => <div className={dynamic(active ? { bg: 'blue-500' } : { bg: 'gray-200' })} />;
             `;
-            expect(() => transformSourceCode(src)).not.toThrow();
+            expect(() => transformSource(src)).not.toThrow();
         });
 
         it('does not crash when object has computed/dynamic values', () => {
@@ -156,7 +156,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                 const size = 4;
                 const A = () => <div className={dynamic({ w: Math.round(size / 4) })} />;
             `;
-            expect(() => transformSourceCode(src)).not.toThrow();
+            expect(() => transformSource(src)).not.toThrow();
         });
     });
 
@@ -172,7 +172,7 @@ describe('dynamic() class extraction (Layer-1 prescan)', () => {
                     </div>
                 );
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.classes.has('p-8')).toBe(true);
             expect(r.classes.has('w-7')).toBe(true);
             expect(r.classes.has('h-8')).toBe(true);

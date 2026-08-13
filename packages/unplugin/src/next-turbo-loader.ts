@@ -50,7 +50,6 @@ export interface NextTurboLoaderOptions {
     nativeVersion?: string;
     mode?: 'development' | 'production';
     astBudget?: number;
-    allowBabelFallback?: boolean;
     allowProductionMangling?: boolean;
     materializeSafelist?: boolean;
     writeOptions?: AtomicWriteOptions;
@@ -151,7 +150,6 @@ export function runNextTurboLoader(
             options.compilerVersion ??
             readPackageVersion('../../compiler/package.json', import.meta.url),
         astBudget: options.astBudget,
-        allowBabelFallback: options.allowBabelFallback,
     });
     const injected = injectNextRuntimeImports(transform.result.code, transform.result);
     // szcn theme groups. The other lanes import a virtual module the plugin

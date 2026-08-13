@@ -13,7 +13,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { transformSourceCode } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler';
 import fg from 'fast-glob';
 
 import {
@@ -220,11 +220,12 @@ interface SzDiagnostics {
 /**
  * Lower every candidate file once, capturing diagnostics and class origins.
  *
- * The compiler reports unknown and aliased sz keys through `console.warn`,
- * tagged `[csszyx]` and carrying `at <file>:<line>` once `rootDir` is set.
- * They are captured into a structured report here rather than streaming one by
- * one, which is also why the swap is undone in a `finally`: leaving a project
- * scan's console patched behind would silence every later warning.
+ * The engine reports unknown and aliased sz keys — on elements AND inside
+ * szv()/szr() catalogs — through each result's `diagnostics`, tagged
+ * `[csszyx]` and carrying `at <file>:<line>` once `rootDir` is set. Reading
+ * the per-result channel (rather than the console latch the deleted
+ * TypeScript lanes used) means nothing global is patched and nothing later is
+ * silenced.
  *
  * @param files - Absolute paths to scan.
  * @param cwd - Project root, for relative reporting.
@@ -235,24 +236,19 @@ async function collectSzDiagnostics(files: string[], cwd: string): Promise<SzDia
     // One origin per class is enough to point at: the report answers "where did
     // this come from", not "everywhere it appears".
     const classOrigins = new Map<string, string>();
-    let currentFile = '';
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]): void => {
-        const message = args.map(String).join(' ');
-        if (message.startsWith('[csszyx]')) {
-            issues.push({ file: currentFile, message: message.replace(/^\[csszyx\]\s*/, '') });
-        }
-    };
 
-    try {
-        for (const file of files) {
-            const source = await readSzSource(file);
-            if (source === null) continue;
-            currentFile = path.relative(cwd, file);
-            recordFileClasses(source, file, cwd, currentFile, classOrigins);
+    for (const file of files) {
+        const source = await readSzSource(file);
+        if (source === null) continue;
+        const currentFile = path.relative(cwd, file);
+        for (const message of recordFileClasses(source, file, cwd, currentFile, classOrigins)) {
+            if (message.startsWith('[csszyx]')) {
+                issues.push({
+                    file: currentFile,
+                    message: message.replace(/^\[csszyx\]\s*/, ''),
+                });
+            }
         }
-    } finally {
-        console.warn = originalWarn;
     }
     return { issues, classOrigins };
 }
@@ -269,6 +265,7 @@ async function collectSzDiagnostics(files: string[], cwd: string): Promise<SzDia
  * @param cwd - Project root.
  * @param relativePath - Path as reported to the user.
  * @param classOrigins - Origins map, extended in place.
+ * @returns The file's compiler diagnostics (empty when unreadable).
  */
 function recordFileClasses(
     source: string,
@@ -276,14 +273,16 @@ function recordFileClasses(
     cwd: string,
     relativePath: string,
     classOrigins: Map<string, string>,
-): void {
+): string[] {
     try {
-        const result = transformSourceCode(source, file, { rootDir: cwd });
+        const result = transformSource(source, file, { rootDir: cwd });
         for (const token of result.classes) {
             if (!classOrigins.has(token)) classOrigins.set(token, relativePath);
         }
+        return result.diagnostics;
     } catch {
-        // Unreadable by the reference parser; see the note above.
+        // Unreadable by the engine; see the note above.
+        return [];
     }
 }
 
@@ -291,8 +290,8 @@ function recordFileClasses(
  * Scan the project for unknown/aliased `sz` keys and report them in one pass.
  *
  * Sets `process.exitCode` to 1 when any issue is found so the command can gate
- * CI. The check is engine-independent — every parser flags the same unknown
- * keys — so it runs the reference (Babel) lowering regardless of `build.parser`.
+ * CI. The scan runs the engine itself (native when available, wasm
+ * otherwise), so what it flags is exactly what the build flags.
  *
  * @param options - scan options.
  */

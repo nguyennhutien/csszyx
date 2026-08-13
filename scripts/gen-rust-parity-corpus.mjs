@@ -21,7 +21,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { transform } from '../packages/compiler/src/transform.js';
+import { transform } from '../packages/compiler/src/transform-core.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outFile = resolve(here, '../packages/core/tests/fixtures/parity-corpus.json');

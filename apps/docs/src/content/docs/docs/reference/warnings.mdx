@@ -94,7 +94,7 @@ itself.
 ## sz — unresolved expressions
 
 These fire when the compiler cannot read the value you put in `sz={…}`. All
-three engines emit identical wording.
+both engine artifacts emit identical wording.
 
 **What each kind means:**
 
@@ -152,7 +152,6 @@ other cause is `build.importedStaticSz` being turned off. See
 | `[csszyx] possible style override at {filename}: this element spreads props that may contain style, while sz emits an explicit style attribute. Move the spread style to an explicit style prop so csszyx can merge both values.` | nudge | Pass `style` explicitly so both values merge. |
 | `[csszyx] szRecover at {filename}: only string-literal values ("csr" \| "dev-only") are supported. Dynamic values disable token emission for this element.` | nudge | Use a literal. |
 | `[csszyx] szRecover at {filename}: unknown mode "{value}" — expected "csr" or "dev-only". Token emission skipped.` | nudge | Use `"csr"` or `"dev-only"`. |
-| `[csszyx] AST transform failed, falling back to original code:` | ungated | A bug — the file ships untransformed. Please report it. |
 
 `{filename}` is `<anonymous>` when the compiler was called without one.
 
@@ -415,10 +414,8 @@ These are informational and always print to stderr, once.
 
 | Message |
 | --- |
-| `[csszyx] active parser: rust (native engine)` · `[csszyx] active parser: wasm (wasm build of the native engine)` · `[csszyx] active parser: wasm (degraded from default ``rust``: same engine, wasm build)` · `[csszyx] active parser: oxc (degraded from default ``rust``: no native binary for this platform)` |
+| `[csszyx] active parser: rust (native engine)` · `[csszyx] active parser: wasm (wasm build of the native engine)` · `[csszyx] active parser: wasm (degraded from default ``rust``: same engine, wasm build)` |
 | `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, so the default ``rust`` parser fell back to its wasm build. Same engine, same output; only parse speed differs. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
-| `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, and the wasm build of the engine is missing too, so the default ``rust`` parser fell back to ``oxc``. Parse speed differs, and so does one shape: a const a file declares and then uses as an sz value compiles to a static utility under ``rust`` and to a runtime CSS variable under ``oxc``. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
-| `[csszyx] oxc parser fell back to Babel for {filename}: {reason} ({n} file(s) so far). Output is still correct; this usually means the file uses a syntax the oxc lane does not yet handle.` |
 | `[csszyx] parse error in {filename}: the native engine could not fully scan this file ({n} syntax error(s))` |
 
 One more engine report comes from the browser runtime rather than the build:
@@ -589,29 +586,22 @@ The Svelte and Vue adapters print a parse failure only when `debug` is enabled:
 - `[csszyx/svelte] Failed to parse sz object: {source}`
 - `[csszyx/vue] Failed to parse sz object: {source}`
 
-## Where the engines differ
+## One engine, two artifacts
 
-csszyx has three compile engines — the native Rust engine (default), oxc, and
-Babel — selected by `build.parser`. Their **classes** are parity-tested and the
-wording is byte-identical, with these exceptions:
+csszyx compiles with ONE engine that ships as two artifacts, selected by
+`build.parser`: `rust` (the native addon, the default) and `wasm` (the same
+engine compiled to WebAssembly, shipped inside `@csszyx/core` — also the
+automatic fallback when the native binary is absent). Because both are
+compilations of the same source, their classes, code and diagnostics are
+identical; the frozen parse corpus and a per-PR full-build smoke pin that
+byte for byte.
 
-| Case | Babel / oxc | Native engine |
-| --- | --- | --- |
-| AST budget exceeded | Thrown error naming `exclude` and `astBudgetLimit` | A diagnostic naming ``build.astBudgetLimit`` and noting the file contributes no classes |
-| A const the file declares, used as a scalar sz value — `const x = 4` then `sz={{ p: x }}` | A runtime CSS variable plus an inline `style`: `p-(--_sz-p)` | The value is read at build time: `p-4` |
-| A computed key whose const resolves to a property name — `const k = 'p'` then `sz={{ [k]: 4 }}` | A class built from the identifier name, `k-4`, which styles nothing | No class |
-
-The first is recognised by the plugin and reported the same way. The other two
-are real output differences; the native engine's answer is the intended one,
-and the two JavaScript engines have yet to catch up. Both are pinned by the
-parse-parity corpus so neither side can drift further without the gate saying so.
-
-One case is deliberately unspecified: when you call the compiler API directly
-with **no filename**, each lane substitutes its own stand-in. Babel and oxc say
-`<anonymous>`; the native lane is reached through a batch wrapper that
-substitutes `file-<index>.tsx`, and that stand-in also seeds recovery-token
-generation. A real build always passes a path, so this only shows up in direct
-API use.
+Upgrading from a version that still had the TypeScript engines (`'oxc'` /
+`'babel'` values): those lanes deferred a const the file declares to a runtime
+CSS variable where the engine reads it at build time (`const x = 4` then
+`sz={{ p: x }}` now compiles to `p-4`), and Babel emitted an identifier-named
+class for a computed key (`k-4`) where the engine emits none. The engine's
+answers were the intended ones; the pinned expectations moved with it.
 
 <Aside type="tip" title="Still stuck?">
 Run `npx @csszyx/cli check` first — it turns "some element is unstyled" into a

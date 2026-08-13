@@ -7,7 +7,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { type SzObject, transform } from '../src/transform.js';
+import { type SzObject, transform } from '../src/transform-core.js';
 
 /**
  * Helper to transform an sz object and return the className string.

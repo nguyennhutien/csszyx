@@ -49,7 +49,7 @@ describe('bin next-prebuild dispatch (real command)', () => {
             '--cwd',
             cwd,
             '--parser-mode',
-            'babel',
+            'wasm',
             '--ignore',
             '**/vendor/**,**/__x__/**',
         ];

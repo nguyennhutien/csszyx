@@ -24,8 +24,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseClass } from '../packages/cli/src/migrate/class-parser.js';
 import { classNameToSzObject } from '../packages/cli/src/migrate/variant-parser.js';
-import { transform } from '../packages/compiler/src/transform.js';
-import { BOOLEAN_SHORTHANDS, PROPERTY_MAP } from '../packages/compiler/src/transform-core.js';
+import {
+    BOOLEAN_SHORTHANDS,
+    PROPERTY_MAP,
+    transform,
+} from '../packages/compiler/src/transform-core.js';
 
 const repoRoot = join(fileURLToPath(import.meta.url), '..', '..');
 const snippetsDir = join(repoRoot, 'docs/specs/snippets');

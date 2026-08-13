@@ -1,6 +1,6 @@
 /**
  * Rust transform parity — tracks how many fixtures the Rust native engine
- * matches `transformOxc` (the v0.8.0 production baseline). Mirrors the
+ * matches `transformWasm` (the v0.8.0 production baseline). Mirrors the
  * Phase D oxc-vs-Babel parity playbook: each fixture carries an
  * `expected` state, flips from `pending` to `parity` or `rust-ahead` as the
  * Rust engine grows coverage, and catches drift in both directions.
@@ -70,7 +70,7 @@ const fixtures: readonly RustParityFixture[] = [
         name: 'static-spread-literal',
         source: 'const X = () => <div sz={{ ...{ p: 4 }, m: 2 }} />;',
         filename: 'spread-literal.tsx',
-        expected: 'rust-ahead',
+        expected: 'parity',
     },
     {
         name: 'sz-recover-csr',

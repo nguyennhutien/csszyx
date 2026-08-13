@@ -37,7 +37,7 @@ describe('csszyx next-prebuild command', () => {
                 root,
                 cwd: root,
                 mode: 'production',
-                parserMode: 'babel',
+                parserMode: 'wasm',
                 json: true,
             });
             expect(code).toBe(0);
@@ -78,7 +78,7 @@ describe('csszyx next-prebuild command', () => {
                 root,
                 cwd: root,
                 mode: 'development',
-                parserMode: 'babel',
+                parserMode: 'wasm',
                 json: true,
             });
             expect(code).toBe(0);
@@ -129,7 +129,7 @@ describe('csszyx next-prebuild command', () => {
                 root,
                 cwd: root,
                 mode: 'production',
-                parserMode: 'babel',
+                parserMode: 'wasm',
                 json: true,
                 extraIgnore: ['**/__skip__/**'],
             });

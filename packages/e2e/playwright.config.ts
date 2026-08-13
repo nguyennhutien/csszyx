@@ -22,6 +22,15 @@ export default defineConfig({
 
         /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
         trace: 'on-first-retry',
+
+        /* Containers cap /dev/shm at 64MB by default; Chromium keeps its
+         * renderer buffers there and dies with "Target crashed" once a few
+         * pages run in parallel. Writing them to /tmp instead trades a little
+         * speed for not crashing — same flag Playwright's own Docker docs
+         * recommend. */
+        launchOptions: {
+            args: ['--disable-dev-shm-usage'],
+        },
     },
 
     /* Configure projects for major browsers */

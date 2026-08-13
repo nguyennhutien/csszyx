@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { transformSourceCode } from '../src/transform.js';
+import { transformSource } from '../src/transform-select.js';
 
-describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
+describe('CSS Variable Auto-Compile (transformSource)', () => {
     describe('dynamic spacing values', () => {
         it('should compile dynamic p to CSS variable class + style', () => {
             const source = 'const App = () => <div sz={{ p: dynamicValue }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('p-(--_sz-p)');
             expect(result.code).toContain('style');
@@ -15,14 +15,14 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
 
         it('should compile dynamic margin to CSS variable', () => {
             const source = 'const App = () => <div sz={{ m: spacingVar }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('m-(--_sz-m)');
         });
 
         it('should compile dynamic gap', () => {
             const source = 'const App = () => <div sz={{ gap: gapSize }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('gap-(--_sz-gap)');
         });
@@ -47,7 +47,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
                 ['p-4', 'm-(--_sz-m)'],
             ],
         ])('should keep %s alongside CSS variables', (_label, source, expectedCode) => {
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             for (const fragment of expectedCode) expect(result.code).toContain(fragment);
         });
@@ -56,7 +56,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
     describe('dynamic color values', () => {
         it('should compile dynamic bg color', () => {
             const source = 'const App = () => <div sz={{ bg: colorVar }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('bg-(--_sz-bg)');
             expect(result.usesColorVar).toBe(true);
@@ -64,7 +64,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
 
         it('should compile dynamic text color', () => {
             const source = 'const App = () => <div sz={{ color: textColor }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('text-(--_sz-color)');
         });
@@ -73,14 +73,14 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
     describe('dynamic unitless values', () => {
         it('should compile dynamic opacity', () => {
             const source = 'const App = () => <div sz={{ opacity: level }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('opacity-(--_sz-opacity)');
         });
 
         it('should compile dynamic z-index', () => {
             const source = 'const App = () => <div sz={{ z: zLevel }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('z-(--_sz-z)');
         });
@@ -91,7 +91,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
                 const source =
                     `const App = ({ flex }) => <div sz={{ ` +
                     `flex: typeof flex === 'number' ? flex : ${absentValue} }} />`;
-                const result = transformSourceCode(source);
+                const result = transformSource(source);
                 expect(result.code).toContain(
                     `typeof flex === 'number' ? "flex-(--_sz-flex)" : undefined`,
                 );
@@ -106,7 +106,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         it('preserves zero as a valid dynamic utility value', () => {
             const source =
                 'const App = ({ flex }) => <div sz={{ flex: flex === undefined ? 0 : flex }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.code).toContain('flex-(--_sz-flex)');
             expect(result.code).not.toContain('? undefined :');
         });
@@ -115,7 +115,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
     describe('spread fallback', () => {
         it('should fall back to _sz() for spread expressions', () => {
             const source = 'const App = () => <div sz={{ ...dynamicObj }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('_sz(');
             expect(result.usesRuntime).toBe(true);
@@ -125,7 +125,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
     describe('static objects still work', () => {
         it('should compile fully static objects normally', () => {
             const source = "const App = () => <div sz={{ p: 4, bg: 'blue-500' }} />";
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('p-4 bg-blue-500');
             expect(result.code).not.toContain('style');
@@ -134,7 +134,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
 
         it('should compile static string values normally', () => {
             const source = 'const App = () => <div sz="p-4 bg-blue-500" />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('className');
         });
@@ -143,7 +143,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
     describe('dynamic responsive variants', () => {
         it('should handle dynamic values in responsive variants', () => {
             const source = 'const App = () => <div sz={{ p: 4, md: { p: dynamicPad } }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('p-4');
             // The variant should produce a CSS variable class
@@ -158,7 +158,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
     describe('multiple dynamic props on same element', () => {
         it('should compile two dynamic spacing props', () => {
             const source = 'const App = () => <div sz={{ p: padVal, m: marVal }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('p-(--_sz-p)');
             expect(result.code).toContain('m-(--_sz-m)');
@@ -167,7 +167,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         it('should compile three dynamic props of mixed categories', () => {
             const source =
                 'const App = () => <div sz={{ p: padVal, bg: colorVal, opacity: opVal }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('p-(--_sz-p)');
             expect(result.code).toContain('bg-(--_sz-bg)');
@@ -176,7 +176,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
 
         it('should generate separate style vars for each dynamic prop', () => {
             const source = 'const App = () => <div sz={{ w: widthVal, h: heightVal }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('--_sz-w');
             expect(result.code).toContain('--_sz-h');
@@ -187,7 +187,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         it('should handle static variant + dynamic base', () => {
             const source =
                 "const App = () => <div sz={{ p: dynamicPad, hover: { bg: 'blue-500' } }} />";
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('hover:bg-blue-500');
             expect(result.code).toContain('p-(--_sz-p)');
@@ -195,7 +195,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
 
         it('should handle all-static object (no CSS vars needed)', () => {
             const source = "const App = () => <div sz={{ p: 4, m: 2, bg: 'red-500' }} />";
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).not.toContain('(--_sz');
             expect(result.code).not.toContain('style');
@@ -204,7 +204,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         it('should keep static hover + dynamic dark', () => {
             const source =
                 "const App = () => <div sz={{ hover: { bg: 'blue-500' }, dark: { bg: darkBg } }} />";
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('hover:bg-blue-500');
         });
@@ -213,28 +213,28 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
     describe('dynamic color with special handling', () => {
         it('should flag usesColorVar for bg', () => {
             const source = 'const App = () => <div sz={{ bg: themeColor }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.usesColorVar).toBe(true);
         });
 
         it('should flag usesColorVar for borderColor', () => {
             const source = 'const App = () => <div sz={{ borderColor: borderVal }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.usesColorVar).toBe(true);
         });
 
         it('should NOT flag usesColorVar for spacing', () => {
             const source = 'const App = () => <div sz={{ p: padVal }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.usesColorVar).toBeFalsy();
         });
 
         it('should NOT flag usesColorVar for unitless', () => {
             const source = 'const App = () => <div sz={{ opacity: opVal }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.usesColorVar).toBeFalsy();
         });
@@ -245,7 +245,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
             // Both branches are static literals → compile each branch at build time.
             // No CSS variable or inline style needed — the ternary itself selects the class.
             const source = 'const App = () => <div sz={{ p: isLarge ? 8 : 4 }} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('isLarge ? "p-8" : "p-4"');
             expect(result.code).not.toContain('(--_sz');
@@ -265,7 +265,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
                 '(--_sz',
             ],
         ])('should use a CSS variable for %s', (_label, source, expectedCode) => {
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain(expectedCode);
         });
@@ -274,13 +274,13 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
     describe('no-transform cases', () => {
         it('should not transform non-sz JSX', () => {
             const source = 'const App = () => <div className="p-4" />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(false);
         });
 
         it('rewrites an empty sz to className={undefined} (renders no class attribute)', () => {
             const source = 'const App = () => <div sz={{}} />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             // An sz that lowers to zero classes emits `className={undefined}` so the
             // DOM has no `class` attribute, instead of the noisy `class=""`.
@@ -290,14 +290,14 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
 
         it('should handle sz string passthrough', () => {
             const source = 'const App = () => <div sz="flex p-4" />';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('className');
         });
 
         it('should handle dynamic width and height together', () => {
             const source = "const App = () => <div sz={{ w: w, h: h, bg: 'blue-500' }} />";
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('bg-blue-500');
             expect(result.code).toContain('(--_sz');
@@ -311,7 +311,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         // These lock the reference behavior — a babel regression here would
         // silently re-open the vui finding-1 class of missing CSS.
         it('keeps the var class beside a finite ternary', () => {
-            const result = transformSourceCode(
+            const result = transformSource(
                 'const A = ({ w, on }) => <div sz={{ w: w, p: on ? 2 : 4 }} />;',
             );
             expect([...result.classes]).toEqual(
@@ -321,7 +321,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         });
 
         it('keeps a variant-prefixed var class beside a nullable ternary', () => {
-            const result = transformSourceCode(
+            const result = transformSource(
                 'const A = ({ w, on }) => <div sz={{ hover: { w: w }, p: on ? 2 : undefined }} />;',
             );
             expect([...result.classes]).toEqual(
@@ -330,7 +330,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         });
 
         it('keeps the var class beside TWO nullable ternaries', () => {
-            const result = transformSourceCode(
+            const result = transformSource(
                 'const A = ({ w, a, b }) => <div sz={{ w: w, p: a ? 2 : undefined, m: b ? 4 : undefined }} />;',
             );
             expect([...result.classes]).toEqual(
@@ -341,7 +341,7 @@ describe('CSS Variable Auto-Compile (transformSourceCode)', () => {
         });
 
         it('merges var + nullable ternary into an existing className', () => {
-            const result = transformSourceCode(
+            const result = transformSource(
                 'const A = ({ w, f, on }) => <div className="x" sz={{ w: w, flex: on ? f : undefined }} />;',
             );
             expect(result.code).toContain('_szMerge("x", `w-(--_sz-w) ${on ?');

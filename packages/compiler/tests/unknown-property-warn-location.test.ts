@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     isRustTransformAvailable,
-    transformOxc,
     transformRust,
-    transformSourceCode,
+    transformSource,
+    transformWasm,
 } from '../src/index.js';
 import { setSzWarnLocation, transform } from '../src/transform-core.js';
 
@@ -18,11 +18,12 @@ function captureWarnings(action: () => void): string[] {
 }
 
 /**
- * The dev-mode "Unknown property" warning must point at the offending sz prop —
+ * The "Unknown property" report must point at the offending sz prop —
  * relative to the project root, with a line — so it is findable in a large
- * codebase. The build engines (oxc + babel) attach the location; the runtime
- * path (no source file) keeps the location-free message; and the location must
- * never leak from a build transform to an unrelated later call.
+ * codebase. Both engine artifacts attach the location in their DIAGNOSTICS;
+ * the runtime path (no source file) keeps the location-free console warning,
+ * and the location must never leak from a build transform to an unrelated
+ * later call.
  */
 describe('unknown-property warning — source location', () => {
     let warn: ReturnType<typeof vi.spyOn>;
@@ -38,25 +39,27 @@ describe('unknown-property warning — source location', () => {
 
     const fixtureSrc = 'export const A = () => (\n  <div sz={{ xyzzy: 4, p: 2 }} />\n);';
 
-    it('oxc attaches relativePath:line for the sz prop', () => {
-        transformOxc(fixtureSrc, '/proj/src/components/Foo.tsx', { rootDir: '/proj' });
-        const messages = warn.mock.calls.map(c => String(c[0]));
+    it('the wasm artifact attaches relativePath:line for the sz prop', () => {
+        const result = transformWasm(fixtureSrc, '/proj/src/components/Foo.tsx', {
+            rootDir: '/proj',
+        });
+        const messages = result.diagnostics;
         expect(messages.some(m => m.includes('Unknown property "xyzzy"'))).toBe(true);
         expect(messages.some(m => m.includes('at src/components/Foo.tsx:2.'))).toBe(true);
         // The relativized path must not contain the absolute root prefix.
         expect(messages.every(m => !m.includes('/proj/src'))).toBe(true);
     });
 
-    it('babel attaches relativePath:line for the sz prop', () => {
-        transformSourceCode(fixtureSrc, '/proj/src/components/Bar.tsx', { rootDir: '/proj' });
-        const messages = warn.mock.calls.map(c => String(c[0]));
-        expect(messages.some(m => m.includes('at src/components/Bar.tsx:2.'))).toBe(true);
+    it('the selected engine attaches relativePath:line for the sz prop', () => {
+        const result = transformSource(fixtureSrc, '/proj/src/components/Bar.tsx', {
+            rootDir: '/proj',
+        });
+        expect(result.diagnostics.some(m => m.includes('at src/components/Bar.tsx:2.'))).toBe(true);
     });
 
     it('falls back to the raw filename when no rootDir is given', () => {
-        transformOxc(fixtureSrc, 'standalone/Baz.tsx');
-        const messages = warn.mock.calls.map(c => String(c[0]));
-        expect(messages.some(m => m.includes('at standalone/Baz.tsx:2.'))).toBe(true);
+        const result = transformWasm(fixtureSrc, 'standalone/Baz.tsx');
+        expect(result.diagnostics.some(m => m.includes('at standalone/Baz.tsx:2.'))).toBe(true);
     });
 
     it('runtime path (no source file) has no build location but keeps the core message', () => {
@@ -73,7 +76,7 @@ describe('unknown-property warning — source location', () => {
     });
 
     it('does not leak a build location into a later runtime transform', () => {
-        transformOxc(fixtureSrc, '/proj/src/components/Foo.tsx', { rootDir: '/proj' });
+        transformWasm(fixtureSrc, '/proj/src/components/Foo.tsx', { rootDir: '/proj' });
         warn.mockClear();
         transform({ qqq: 9 });
         const messages = warn.mock.calls.map(c => String(c[0]));
@@ -82,13 +85,12 @@ describe('unknown-property warning — source location', () => {
         expect(messages.every(m => !m.includes('Foo.tsx'))).toBe(true);
     });
 
-    it('a suggestion warning is also located', () => {
-        // `op` is a removed/aliased key that triggers the suggestion branch.
+    it('a suggestion-worthy key is also located', () => {
+        // `op` is a removed/aliased key; whichever branch fires must carry
+        // the location in the diagnostics.
         const opSrc = 'export const A = () => <div sz={{ op: 50 }} />;';
-        transformOxc(opSrc, '/proj/src/X.tsx', { rootDir: '/proj' });
-        const messages = warn.mock.calls.map(c => String(c[0]));
-        // Whichever canonical-key/unknown branch fires, it must carry the location.
-        expect(messages.some(m => m.includes('at src/X.tsx'))).toBe(true);
+        const result = transformWasm(opSrc, '/proj/src/X.tsx', { rootDir: '/proj' });
+        expect(result.diagnostics.some(m => m.includes('at src/X.tsx'))).toBe(true);
     });
 
     it.each(['textEllipsis', 'textClip'])(
@@ -96,14 +98,16 @@ describe('unknown-property warning — source location', () => {
         key => {
             const source = `export const A = () => <div sz={{ ${key}: true }} />;`;
             expect(
-                transformSourceCode(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code,
+                transformSource(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code,
             ).toContain(key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip');
-            expect(transformOxc(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code).toContain(
-                key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip',
-            );
-            expect(warn.mock.calls.some(call => String(call[0]).includes('Unknown property'))).toBe(
-                false,
-            );
+            expect(
+                transformWasm(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).code,
+            ).toContain(key === 'textEllipsis' ? 'text-ellipsis' : 'text-clip');
+            const all = [
+                ...transformSource(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).diagnostics,
+                ...transformWasm(source, '/proj/src/Text.tsx', { rootDir: '/proj' }).diagnostics,
+            ];
+            expect(all.some(m => m.includes('Unknown property'))).toBe(false);
         },
     );
 });
@@ -121,17 +125,10 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
     const rustAvailable = isRustTransformAvailable();
     const runOr = rustAvailable ? it : it.skip;
 
-    const oxcWarns = (key: string, value: string): boolean => {
-        const calls: string[] = [];
-        const spy = vi.spyOn(console, 'warn').mockImplementation(m => {
-            calls.push(String(m));
-        });
-        transformOxc(`export const A = () => <div sz={{ ${key}: ${value} }} />;`, '/p/F.tsx', {
+    const wasmWarns = (key: string, value: string): boolean =>
+        transformWasm(`export const A = () => <div sz={{ ${key}: ${value} }} />;`, '/p/F.tsx', {
             rootDir: '/p',
-        });
-        spy.mockRestore();
-        return calls.some(m => m.includes('Unknown property'));
-    };
+        }).diagnostics.some(m => m.includes('Unknown property'));
 
     const rustWarns = (key: string, value: string): boolean =>
         transformRust(`export const A = () => <div sz={{ ${key}: ${value} }} />;`, '/p/F.tsx', {
@@ -153,7 +150,7 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
         ).toBe(true);
     });
 
-    runOr('never over-warns relative to oxc across a broad key/value matrix', () => {
+    runOr('the artifacts agree on every key in the broad warn matrix', () => {
         const keys = [
             // valid: real props, variants, special-cased keys, removed sugar
             'm',
@@ -216,7 +213,7 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
         const overWarns: string[] = [];
         for (const key of keys) {
             for (const value of ['"x"', '4', 'true']) {
-                if (rustWarns(key, value) && !oxcWarns(key, value)) {
+                if (rustWarns(key, value) && !wasmWarns(key, value)) {
                     overWarns.push(`${key}:${value}`);
                 }
             }
@@ -286,21 +283,6 @@ describe('project-scan hint — prints the CLI command for location-less warning
         expect(hint).toContain('no source location');
     });
 
-    it('keeps the build-context wording when a location IS present', async () => {
-        vi.resetModules();
-        const calls: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation(m => {
-            calls.push(String(m));
-        });
-        const { transformOxc } = await import('../src/index.js');
-        transformOxc('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
-            rootDir: '/p',
-        });
-        const hint = calls.find(m => m.includes('npx @csszyx/cli check'));
-        expect(hint).toBeDefined();
-        expect(hint).toContain('as you open them');
-    });
-
     it('stays silent when CSSZYX_NO_PROJECT_SCAN_HINT is set', async () => {
         vi.resetModules();
         const prev = process.env.CSSZYX_NO_PROJECT_SCAN_HINT;
@@ -331,12 +313,12 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
         setSzWarnLocation(undefined);
     });
 
-    it('oxc names the array/spread cause and keeps the location', () => {
-        const calls = captureWarnings(() =>
-            transformOxc('export const A = () => <div sz={{ 4: true }} />;', '/p/F.tsx', {
-                rootDir: '/p',
-            }),
-        );
+    it('the wasm artifact names the array/spread cause and keeps the location', () => {
+        const calls = transformWasm(
+            'export const A = () => <div sz={{ 4: true }} />;',
+            '/p/F.tsx',
+            { rootDir: '/p' },
+        ).diagnostics;
         const msg = calls.find(m => m.includes('numeric key "4"'));
         expect(msg).toBeDefined();
         expect(msg).toContain('an array or a spread');
@@ -365,11 +347,11 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
     });
 
     it('a real word typo still says "Check for typos"', () => {
-        const calls = captureWarnings(() =>
-            transformOxc('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
-                rootDir: '/p',
-            }),
-        );
+        const calls = transformWasm(
+            'export const A = () => <div sz={{ xyzzy: 4 }} />;',
+            '/p/F.tsx',
+            { rootDir: '/p' },
+        ).diagnostics;
         const msg = calls.find(m => m.includes('Unknown property "xyzzy"'));
         expect(msg).toBeDefined();
         expect(msg).toContain('Check for typos');
@@ -385,69 +367,58 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
  * call. `dynamic()` stays location-less — its values are runtime, out of scope.
  */
 describe('szv/szr catalog warnings carry a source location (for csszyx check)', () => {
-    afterEach(() => {
-        vi.restoreAllMocks();
-        setSzWarnLocation(undefined);
-    });
-
-    const warnsFor = (src: string): string[] => {
-        const calls: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation(m => {
-            calls.push(String(m));
-        });
-        transformSourceCode(src, '/proj/src/F.tsx', { rootDir: '/proj' });
-        return calls;
-    };
-
-    it('an unknown key in a szv variant is located at the szv() call', () => {
-        const calls = warnsFor(
+    it('an unknown key in a szv variant is located at its own line', () => {
+        const result = transformSource(
             'import { szv } from "@csszyx/runtime";\n' +
                 'const s = szv({ variants: { c: { x: { xyzzy: 5, p: 4 } } } });',
+            '/proj/src/F.tsx',
+            { rootDir: '/proj' },
         );
-        const msg = calls.find(m => m.includes('Unknown property "xyzzy"'));
-        expect(msg).toBeDefined();
+        const msg = result.diagnostics.find(m => m.includes('Unknown property "xyzzy"'));
+        expect(msg, result.diagnostics.join('\n')).toBeDefined();
         expect(msg).toContain('at src/F.tsx:2');
     });
 
-    it('a numeric key in a szv variant is located and uses the array/spread message', () => {
-        const calls = warnsFor(
+    it('a numeric key in a szv variant uses the array/spread message, located', () => {
+        const result = transformSource(
             'import { szv } from "@csszyx/runtime";\n' +
                 'const s = szv({ variants: { c: { x: { 4: true, p: 4 } } } });',
+            '/proj/src/F.tsx',
+            { rootDir: '/proj' },
         );
-        const msg = calls.find(m => m.includes('numeric key "4"'));
-        expect(msg).toBeDefined();
+        const msg = result.diagnostics.find(m => m.includes('numeric key "4"'));
+        expect(msg, result.diagnostics.join('\n')).toBeDefined();
         expect(msg).toContain('at src/F.tsx:2');
         expect(msg).toContain('an array or a spread');
     });
 
     it('an unknown key in a static szr() argument is located at the szr() call', () => {
-        const calls = warnsFor(
-            'import { szr } from "@csszyx/runtime";\n' + 'const c = szr({ nope: 1, m: 2 });',
+        const result = transformSource(
+            'import { szr } from "@csszyx/runtime";\nconst c = szr({ nope: 1, m: 2 });',
+            '/proj/src/F.tsx',
+            { rootDir: '/proj' },
         );
-        const msg = calls.find(m => m.includes('Unknown property "nope"'));
-        expect(msg).toBeDefined();
+        const msg = result.diagnostics.find(m => m.includes('Unknown property "nope"'));
+        expect(msg, result.diagnostics.join('\n')).toBeDefined();
         expect(msg).toContain('at src/F.tsx:2');
     });
 
-    it('dynamic() keeps the location-less message (runtime, out of scope)', () => {
-        const calls = warnsFor(
+    it('dynamic() contributes no build diagnostic (runtime, out of scope)', () => {
+        const result = transformSource(
             'import { dynamic } from "csszyx";\nconst d = dynamic({ badkey: 1 });',
+            '/proj/src/F.tsx',
+            { rootDir: '/proj' },
         );
-        const msg = calls.find(m => m.includes('Unknown property "badkey"'));
-        expect(msg).toBeDefined();
-        expect(msg).not.toContain(' at ');
+        expect(result.diagnostics.some(m => m.includes('badkey'))).toBe(false);
     });
 
-    it('the catalog location does not leak into a later sz prop warning', () => {
-        const calls = warnsFor(
+    it('both artifacts agree on the catalog diagnostics', () => {
+        const src =
             'import { szv } from "@csszyx/runtime";\n' +
-                'const s = szv({ variants: { c: { x: { xyzzy: 5 } } } });\n' +
-                'export const A = () => <div sz={{ zzz: 1 }} />;',
-        );
-        // The sz prop on line 3 must report its OWN line, not the szv() line 2.
-        const msg = calls.find(m => m.includes('Unknown property "zzz"'));
-        expect(msg).toBeDefined();
-        expect(msg).toContain('at src/F.tsx:3');
+            'const s = szv({ variants: { c: { x: { xyzzy: 5 } } } });';
+        const native = transformSource(src, '/proj/src/F.tsx', { rootDir: '/proj' });
+        const wasm = transformWasm(src, '/proj/src/F.tsx', { rootDir: '/proj' });
+        expect(wasm.diagnostics).toEqual(native.diagnostics);
     });
 });
 
@@ -502,15 +473,11 @@ describe('runtime sz warnings carry object shape + user stack frame', () => {
         expect(shape.endsWith('...')).toBe(true);
     });
 
-    it('does NOT attach shape/frame to a located build warning', () => {
-        const calls: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation(m => {
-            calls.push(String(m));
-        });
-        transformOxc('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
-            rootDir: '/p',
-        });
-        const msg = calls.find(m => m.includes('xyzzy')) ?? '';
+    it('does NOT attach shape/frame to a located build diagnostic', () => {
+        const msg =
+            transformWasm('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
+                rootDir: '/p',
+            }).diagnostics.find(m => m.includes('xyzzy')) ?? '';
         expect(msg).toContain('at F.tsx:1');
         expect(msg).not.toContain('sz object was');
     });
@@ -542,7 +509,7 @@ describe('CSSZYX_QUIET_SZ_WARNINGS opt-out', () => {
     it('is silent on the build path when set to 1', () => {
         process.env.CSSZYX_QUIET_SZ_WARNINGS = '1';
         const calls = captureWarnings(() =>
-            transformOxc('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
+            transformWasm('export const A = () => <div sz={{ xyzzy: 4 }} />;', '/p/F.tsx', {
                 rootDir: '/p',
             }),
         );

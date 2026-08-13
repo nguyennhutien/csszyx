@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { transformSourceCode } from '../src/transform.js';
+import { transformSource } from '../src/transform-select.js';
 
 /**
  * Edge-case tests for all patterns of using named variables as sz prop values.
@@ -23,7 +23,7 @@ describe('variable naming edge cases', () => {
                 const styles = { p: 4, rounded: 'lg' };
                 const A = () => <div sz={styles} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('className="p-4 rounded-lg"');
         });
@@ -33,7 +33,7 @@ describe('variable naming edge cases', () => {
                 const styles = { p: 4, rounded: 'lg' } as const;
                 const A = () => <div sz={styles} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('className="p-4 rounded-lg"');
         });
@@ -43,7 +43,7 @@ describe('variable naming edge cases', () => {
                 const styles = { p: 4, rounded: 'lg' } satisfies Record<string, unknown>;
                 const A = () => <div sz={styles} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('className="p-4 rounded-lg"');
         });
@@ -53,7 +53,7 @@ describe('variable naming edge cases', () => {
                 const styles: { p: number; rounded: string } = { p: 4, rounded: 'lg' };
                 const A = () => <div sz={styles} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('className="p-4 rounded-lg"');
         });
@@ -63,7 +63,7 @@ describe('variable naming edge cases', () => {
                 let styles = { p: 4, rounded: 'lg' };
                 const A = () => <div sz={styles} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('className="p-4 rounded-lg"');
         });
@@ -73,7 +73,7 @@ describe('variable naming edge cases', () => {
                 const styles = { p: 4, hover: { bg: 'blue-500' } } as const;
                 const A = () => <div sz={styles} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('p-4');
             expect(r.code).toContain('hover:bg-blue-500');
@@ -85,7 +85,7 @@ describe('variable naming edge cases', () => {
                 const extended = { ...base, rounded: 'lg' };
                 const A = () => <div sz={extended} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('p-4');
             expect(r.code).toContain('rounded-lg');
@@ -100,7 +100,7 @@ describe('variable naming edge cases', () => {
                 const base = { p: 4, rounded: 'lg' };
                 const A = () => <div sz={[base]} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
             expect(r.code).toContain('p-4');
             expect(r.code).toContain('rounded-lg');
@@ -111,7 +111,7 @@ describe('variable naming edge cases', () => {
                 const base = { p: 4 };
                 const A = () => <div sz={[base, { rounded: 'lg' }]} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
             expect(r.code).toContain('p-4');
             expect(r.code).toContain('rounded-lg');
@@ -123,7 +123,7 @@ describe('variable naming edge cases', () => {
                 const color = { bg: 'blue-500' };
                 const A = () => <div sz={[layout, color]} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
             expect(r.code).toContain('flex');
             expect(r.code).toContain('gap-4');
@@ -135,7 +135,7 @@ describe('variable naming edge cases', () => {
                 const active = { bg: 'blue-500', color: 'white' };
                 const A = ({ isActive }) => <div sz={[{ p: 4 }, isActive && active]} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
             expect(r.code).toContain('p-4');
             expect(r.code).toContain('bg-blue-500');
@@ -146,7 +146,7 @@ describe('variable naming edge cases', () => {
                 const active = { bg: 'blue-500' } as const;
                 const A = ({ on }) => <div sz={[{ p: 4 }, on && active]} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
             expect(r.code).toContain('bg-blue-500');
         });
@@ -157,7 +157,7 @@ describe('variable naming edge cases', () => {
                 const spacing = { p: 4, gap: 2 };
                 const A = () => <div sz={[layout, spacing]} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('flex');
@@ -174,7 +174,7 @@ describe('variable naming edge cases', () => {
                 const inactive = { bg: 'gray-200', color: 'gray-700' };
                 const A = ({ on }) => <div sz={on ? active : inactive} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
             expect(r.code).toContain('bg-blue-500');
             expect(r.code).toContain('bg-gray-200');
@@ -185,7 +185,7 @@ describe('variable naming edge cases', () => {
                 const active = { bg: 'blue-500' };
                 const A = ({ on }) => <div sz={on ? active : { bg: 'gray-200' }} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
             expect(r.code).toContain('bg-blue-500');
             expect(r.code).toContain('bg-gray-200');
@@ -200,7 +200,7 @@ describe('variable naming edge cases', () => {
                 const item = { p: 4, rounded: 'md' } as const;
                 const A = () => <div sz={{ ...item }} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('p-4');
             expect(r.code).toContain('rounded-md');
@@ -211,7 +211,7 @@ describe('variable naming edge cases', () => {
                 const base = { p: 4, rounded: 'md', bg: 'white' } as const;
                 const A = () => <div sz={{ ...base, p: 8 }} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('p-8');
             expect(r.code).not.toContain('p-4');
@@ -222,7 +222,7 @@ describe('variable naming edge cases', () => {
                 const base = { p: 4 } as const;
                 const A = ({ on }) => <div sz={[{ ...base, rounded: 'lg' }, on && { bg: 'blue-500' }]} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
             expect(r.code).toContain('p-4');
             expect(r.code).toContain('rounded-lg');
@@ -243,7 +243,7 @@ describe('variable naming edge cases', () => {
                     },
                 });
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.classes.has('h-9')).toBe(true);
             expect(r.classes.has('h-11')).toBe(true);
             expect(r.classes.has('bg-blue-600')).toBe(true);
@@ -267,7 +267,7 @@ describe('variable naming edge cases', () => {
                     defaultVariants: { idx: 0, color: 'normal' },
                 });
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.classes.has('opacity-50')).toBe(true);
             expect(r.classes.has('opacity-70')).toBe(true);
             expect(r.classes.has('opacity-90')).toBe(true);
@@ -286,7 +286,7 @@ describe('variable naming edge cases', () => {
                     },
                 });
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.classes.has('w-7')).toBe(true);
             expect(r.classes.has('h-8')).toBe(true);
             expect(r.classes.has('h-5')).toBe(true);
@@ -308,7 +308,7 @@ describe('variable naming edge cases', () => {
                 });
                 const A = () => <button sz={btn({ intent: 'primary' })} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
         });
 
@@ -322,7 +322,7 @@ describe('variable naming edge cases', () => {
                 });
                 const A = () => <button sz={btn({ intent: 'primary' })} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
         });
     });
@@ -335,7 +335,7 @@ describe('variable naming edge cases', () => {
                 import { baseStyles } from './styles';
                 const A = () => <div sz={baseStyles} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
         });
 
@@ -344,7 +344,7 @@ describe('variable naming edge cases', () => {
                 const styles = getStyles();
                 const A = () => <div sz={styles} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
         });
 
@@ -353,7 +353,7 @@ describe('variable naming edge cases', () => {
                 const styles = isActive ? { p: 4 } : { p: 2 };
                 const A = () => <div sz={styles} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.code).not.toContain('[object Object]');
         });
     });
@@ -366,7 +366,7 @@ describe('variable naming edge cases', () => {
                 const buttonBase = { px: 4, py: 2 } as const;
                 const A = () => <button sz={buttonBase} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('px-4');
         });
@@ -376,7 +376,7 @@ describe('variable naming edge cases', () => {
                 const CARD_STYLES = { p: 6, shadow: 'md' } as const;
                 const A = () => <div sz={CARD_STYLES} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('p-6');
         });
@@ -386,7 +386,7 @@ describe('variable naming edge cases', () => {
                 const _item = { p: 2, rounded: 'sm' } as const;
                 const A = () => <div sz={_item} />;
             `;
-            const r = transformSourceCode(src);
+            const r = transformSource(src);
             expect(r.usesRuntime).toBe(false);
             expect(r.code).toContain('p-2');
         });

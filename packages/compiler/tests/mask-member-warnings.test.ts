@@ -9,10 +9,27 @@
  * channel), the native engine mirrors it as a diagnostic.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { transformSourceCode } from '../src/transform.js';
 import { __resetSzWarnDedupForTests, setSzWarnLocation, transform } from '../src/transform-core.js';
-import { transformOxc } from '../src/transform-oxc.js';
-import { captureWarnings, ENGINES, type TriEngine } from './tri-engine-harness.js';
+import { captureWarnings, ENGINES } from './tri-engine-harness.js';
+
+/**
+ * Collect console warnings emitted synchronously by one runtime call.
+ *
+ * @param action - Call that may warn through the runtime dev channel.
+ * @returns Captured warning strings.
+ */
+function captureRuntimeWarnings(action: () => void): string[] {
+    const calls: string[] = [];
+    const spy = vi.spyOn(console, 'warn').mockImplementation(m => {
+        calls.push(String(m));
+    });
+    try {
+        action();
+    } finally {
+        spy.mockRestore();
+    }
+    return calls;
+}
 
 beforeEach(() => {
     // The shared JS warning set de-duplicates process-wide; without the reset,
@@ -87,22 +104,22 @@ describe('mask slot member warnings', () => {
     });
 });
 
+// The migration notes live on the runtime dev channel (`transform()` in
+// transform-core) — the engine's build diagnostics carry the generic
+// unknown-property message only, which is what default-lane users always saw.
+// Porting the notes into the engine diagnostics is tracked alongside the
+// szv/szr catalog-warning port; until then these specs pin the channel that
+// has them.
 describe('removed mask keys carry migration notes', () => {
     it('names the shape that replaced maskVia', () => {
-        const { warnings } = captureWarnings(
-            transformSourceCode as TriEngine,
-            "export const A = () => <div sz={{ maskVia: '50%' }} />;",
-        );
+        const warnings = captureRuntimeWarnings(() => transform({ maskVia: '50%' }));
         const hit = warnings.find(message => message.includes('"maskVia" was removed'));
         expect(hit, warnings.join('\n')).toBeDefined();
         expect(hit).toContain('masks have no via stop in Tailwind');
     });
 
     it('points maskShape at maskRadial', () => {
-        const { warnings } = captureWarnings(
-            transformOxc as TriEngine,
-            "export const A = () => <div sz={{ maskShape: 'circle' }} />;",
-        );
+        const warnings = captureRuntimeWarnings(() => transform({ maskShape: 'circle' }));
         const hit = warnings.find(message => message.includes('"maskShape" was removed'));
         expect(hit, warnings.join('\n')).toBeDefined();
         expect(hit).toContain('maskRadial');
@@ -116,10 +133,7 @@ describe('the mask layer-value warning fires in a browser dev context', () => {
         // component is exactly where a migrated value shows up.
         (globalThis as { window?: object }).window = {};
         try {
-            const { warnings } = captureWarnings(
-                transformSourceCode as TriEngine,
-                "export const A = () => <div sz={{ mask: 'linear-45' }} />;",
-            );
+            const warnings = captureRuntimeWarnings(() => transform({ mask: 'linear-45' }));
             const hit = warnings.find(message => message.includes('gradient layers moved to'));
             expect(hit, warnings.join('\n')).toBeDefined();
             expect(hit).toContain('maskLinear');

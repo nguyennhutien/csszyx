@@ -478,17 +478,17 @@ export interface BuildConfig {
     /**
      * Source parser used for JSX/TSX sz transforms.
      *
-     * `rust` is the default parser. The Rust engine ships through the
-     * matching optional `@csszyx/core-*` platform package. The package
-     * installs automatically as an optional dependency on supported
-     * platforms; when missing, csszyx fails loudly with an actionable error
-     * rather than silently falling back. Set this option to `oxc` to keep
-     * the previous JavaScript oxc-parser path, or to `babel` as a final
-     * compatibility escape hatch.
+     * One engine, two artifacts. `rust` is the default parser. It is the
+     * native addon, shipped through the matching optional `@csszyx/core-*`
+     * platform package. `wasm` is the same engine compiled to WebAssembly and shipped
+     * inside `@csszyx/core` itself — an inherited-default `rust` degrades to
+     * it automatically when the native binary is absent, and pinning it is
+     * useful where native addons cannot load at all. An explicit choice of
+     * either fails loudly instead of degrading.
      *
      * @default "rust"
      */
-    parser?: 'babel' | 'oxc' | 'rust';
+    parser?: 'rust' | 'wasm';
 
     /**
      * CSS file(s) to scan for Tailwind v4 @theme blocks.

@@ -19,9 +19,9 @@ import {
     SZ_FALLBACK_SZV_SUGGESTION,
     szsUnsupportedDiagnostic,
 } from '../src/sz-fallback-matrix.js';
-import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 const RUNTIME_IMPORT = "import { szr, szv, dynamic } from '@csszyx/runtime';\n";
 const VUI_IMPORT = "import { Popup } from '@vbd/vui';\n";
@@ -59,8 +59,8 @@ const SZS_WARNING_SOURCES: ReadonlyArray<readonly [string, string]> = [
 type Engine = (source: string, filename?: string) => { diagnostics?: string[] };
 
 const LANES: ReadonlyArray<readonly [string, Engine]> = [
-    ['babel', transformSourceCode],
-    ['oxc', transformOxc as Engine],
+    ['babel', transformSource],
+    ['oxc', transformWasm as Engine],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
 ];
 

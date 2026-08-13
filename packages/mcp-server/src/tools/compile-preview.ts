@@ -11,7 +11,7 @@
  * runtime helpers survived, so the shape can be checked before it ships.
  */
 
-import { transformSourceCode } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler';
 import { z } from 'zod';
 
 export const compilePreviewSchema = z.object({
@@ -93,7 +93,7 @@ function restoreEnv(name: string, value: string | undefined): void {
 function compileWithDiagnostics(
     source: string,
     filename: string,
-): { result: ReturnType<typeof transformSourceCode>; warnings: string[] } {
+): { result: ReturnType<typeof transformSource>; warnings: string[] } {
     const warnings: string[] = [];
     const originalWarn = console.warn;
     const originalNodeEnv = process.env.NODE_ENV;
@@ -104,7 +104,7 @@ function compileWithDiagnostics(
     process.env.NODE_ENV = 'development';
     delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
     try {
-        return { result: transformSourceCode(source, filename), warnings };
+        return { result: transformSource(source, filename), warnings };
     } finally {
         console.warn = originalWarn;
         restoreEnv('NODE_ENV', originalNodeEnv);

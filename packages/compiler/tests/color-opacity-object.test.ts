@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type SzObject, transform } from '../src/transform.js';
+import { type SzObject, transform } from '../src/transform-core.js';
 
 describe('Color Opacity Object Form', () => {
     describe('static color object', () => {

@@ -82,6 +82,12 @@ pub struct SourceIr {
     /// Diagnostics from `szs` attributes (host misuse / unsupported shapes).
     #[serde(default)]
     pub szs_diagnostics: Vec<String>,
+    /// Static objects read out of `szv()` catalogs (base + each variant leaf)
+    /// and static `szr()` arguments — recorded so the engine can run the same
+    /// unknown/numeric key checks an `sz` prop gets. Keys keep their source
+    /// offsets, so the diagnostics carry real line numbers.
+    #[serde(default)]
+    pub catalog_sz_objects: Vec<StaticSzObject>,
 }
 
 /// One compiled `szs` slot.
@@ -137,6 +143,7 @@ impl SourceIr {
             jsx_opening_elements: Vec::new(),
             szs_attributes: Vec::new(),
             szs_diagnostics: Vec::new(),
+            catalog_sz_objects: Vec::new(),
         }
     }
 
@@ -692,6 +699,7 @@ mod tests {
             }],
             szs_attributes: Vec::new(),
             szs_diagnostics: Vec::new(),
+            catalog_sz_objects: Vec::new(),
         };
 
         assert!(!ir.is_noop());

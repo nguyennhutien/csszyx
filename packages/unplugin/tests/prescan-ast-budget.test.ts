@@ -178,7 +178,7 @@ describe('prescan AST budget', () => {
         );
     });
 
-    it('oxc prescan extracts a real page file the transform-hook budget would reject', () => {
+    it('wasm prescan extracts a real page file the transform-hook budget would reject', () => {
         const root = tempRoot();
         // >50k AST nodes for the JS engines (the compiler-level default throws
         // ASTBudgetExceededError on this shape), yet well under the prescan cap.
@@ -190,7 +190,7 @@ export const Page = () => (<div>${'<span className="cell">x</span>'.repeat(30_00
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         const [prePlugin] = vitePlugin({
-            build: { parser: 'oxc', cache: false },
+            build: { parser: 'wasm', cache: false },
         }) as ViteConfigHook[];
         prePlugin.configResolved?.({ root });
 

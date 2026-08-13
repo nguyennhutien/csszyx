@@ -3497,6 +3497,7 @@ mod tests {
             jsx_opening_elements: Vec::new(),
             szs_attributes: Vec::new(),
             szs_diagnostics: Vec::new(),
+            catalog_sz_objects: Vec::new(),
         };
 
         let lowered = lower_source_ir_classes(&ir);

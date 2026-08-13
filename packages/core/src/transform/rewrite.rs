@@ -630,6 +630,33 @@ fn apply_dynamic_style_props(
                     ..UpdateOptions::default()
                 },
             );
+        } else {
+            // A STRING style attribute has no expression to spread — and
+            // leaving it alone would ship a class that references a CSS
+            // variable nothing ever sets. React rejects string styles anyway,
+            // so the moment anything merges into one it must become an
+            // object: kebab-case declarations camelize, custom properties
+            // keep their literal name as a quoted key, values become string
+            // literals — the same conversion the JS lanes always applied.
+            let attr_source = &source
+                [style_attr.attribute_span.start as usize..style_attr.attribute_span.end as usize];
+            if let Some(existing) = style_string_value(attr_source) {
+                let merged = style_string_props(existing);
+                let combined = if merged.is_empty() {
+                    props
+                } else {
+                    format!("{merged}, {props}")
+                };
+                magic.update_with(
+                    style_attr.attribute_span.start as usize,
+                    style_attr.attribute_span.end as usize,
+                    format!("style={{{{{combined}}}}}"),
+                    UpdateOptions {
+                        overwrite: true,
+                        ..UpdateOptions::default()
+                    },
+                );
+            }
         }
         return;
     }
@@ -639,6 +666,62 @@ fn apply_dynamic_style_props(
         |offset| offset as usize,
     );
     magic.append_right(insert_at, format!(" style={{{{{props}}}}}"));
+}
+
+/// The quoted value of a string attribute: `style="color: red"` → `color: red`.
+fn style_string_value(attr_source: &str) -> Option<&str> {
+    let quote_at = attr_source.find(['"', '\''])?;
+    let quote = attr_source.as_bytes()[quote_at] as char;
+    let rest = &attr_source[quote_at + 1..];
+    let end = rest.find(quote)?;
+    Some(&rest[..end])
+}
+
+/// `color: red; margin-top: 10px` → `color: "red", marginTop: "10px"`.
+///
+/// Mirrors the conversion the JS lanes applied: split on `;`, split each
+/// declaration on its first `:`, camelize `-x` runs in the key (so
+/// `-webkit-line-clamp` becomes `WebkitLineClamp`), keep `--custom` names as
+/// quoted keys, and quote every value. Declarations without a colon are
+/// skipped, exactly as before.
+fn style_string_props(css: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    for decl in css.split(';') {
+        let decl = decl.trim();
+        if decl.is_empty() {
+            continue;
+        }
+        let Some(idx) = decl.find(':') else { continue };
+        let prop = decl[..idx].trim();
+        let value = decl[idx + 1..].trim();
+        if prop.is_empty() {
+            continue;
+        }
+        let key = if prop.starts_with("--") {
+            format!("\"{prop}\"")
+        } else {
+            let mut key = String::with_capacity(prop.len());
+            let mut upper = false;
+            for ch in prop.chars() {
+                if ch == '-' {
+                    upper = true;
+                } else if upper {
+                    if ch.is_ascii_lowercase() {
+                        key.push(ch.to_ascii_uppercase());
+                    } else {
+                        key.push('-');
+                        key.push(ch);
+                    }
+                    upper = false;
+                } else {
+                    key.push(ch);
+                }
+            }
+            key
+        };
+        out.push(format!("{key}: \"{}\"", value.replace('"', "\\\"")));
+    }
+    out.join(", ")
 }
 
 fn safe_style_spread_source(
@@ -1181,6 +1264,56 @@ mod tests {
             rewritten,
             "const App = () => <div style={{...{ color: \"red\" }, \"--_sz-p\": __szSpacingVar(padVal, \"p\")}} className=\"p-(--_sz-p)\" />;"
         );
+    }
+
+    #[test]
+    fn merges_dynamic_style_vars_into_existing_string_style_attribute() {
+        // Kebab-case declarations camelize, `--custom` names stay quoted,
+        // values become string literals — the conversion the JS lanes applied
+        // when a string `style` attribute met an injected css variable.
+        let cases = [
+            (
+                "const A=({pad})=><div style=\"color: red; margin-top: 10px\" sz={{p:pad}}/>;",
+                "const A=({pad})=><div style={{color: \"red\", marginTop: \"10px\", \"--_sz-p\": __szSpacingVar(pad, \"p\")}} className=\"p-(--_sz-p)\"/>;",
+            ),
+            (
+                "const A=({pad})=><div style=\"--brand: teal; -webkit-line-clamp: 2\" sz={{p:pad}}/>;",
+                "const A=({pad})=><div style={{\"--brand\": \"teal\", WebkitLineClamp: \"2\", \"--_sz-p\": __szSpacingVar(pad, \"p\")}} className=\"p-(--_sz-p)\"/>;",
+            ),
+            // An empty string style contributes nothing; the injected vars
+            // stand alone instead of trailing a dangling comma.
+            (
+                "const A=({pad})=><div style=\"\" sz={{p:pad}}/>;",
+                "const A=({pad})=><div style={{\"--_sz-p\": __szSpacingVar(pad, \"p\")}} className=\"p-(--_sz-p)\"/>;",
+            ),
+            // Declarations without a colon or without a property name are
+            // skipped; a quote inside a value is escaped, not truncated.
+            (
+                "const A=({pad})=><div style='oops; : red; content: \"x\"' sz={{p:pad}}/>;",
+                "const A=({pad})=><div style={{content: \"\\\"x\\\"\", \"--_sz-p\": __szSpacingVar(pad, \"p\")}} className=\"p-(--_sz-p)\"/>;",
+            ),
+            // A dash followed by a non-letter cannot camelize, so the dash
+            // survives in the key exactly as the JS conversion kept it.
+            (
+                "const A=({pad})=><div style=\"grid-2col: a\" sz={{p:pad}}/>;",
+                "const A=({pad})=><div style={{grid-2col: \"a\", \"--_sz-p\": __szSpacingVar(pad, \"p\")}} className=\"p-(--_sz-p)\"/>;",
+            ),
+        ];
+
+        for (source, expected) in cases {
+            let rewritten = rewrite(source).expect("rewritten");
+            assert_eq!(rewritten, expected, "{source}");
+        }
+    }
+
+    #[test]
+    fn leaves_a_bare_style_attribute_alone() {
+        // `style` with no value has no string to merge into; the attribute
+        // survives untouched rather than being rewritten into garbage.
+        let source = "const A=({pad})=><div style sz={{p:pad}}/>;";
+        let rewritten = rewrite(source).expect("rewritten");
+        assert!(rewritten.contains("style"), "{rewritten}");
+        assert!(!rewritten.contains("style={{"), "{rewritten}");
     }
 
     #[test]

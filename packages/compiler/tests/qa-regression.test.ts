@@ -8,10 +8,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { transform } from '../src/transform-core.js';
-import { transformOxc } from '../src/transform-oxc.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 function warnsSpread(source: string): boolean {
-    return transformOxc(source, 'App.tsx').diagnostics.some(d =>
+    return transformWasm(source, 'App.tsx').diagnostics.some(d =>
         d.includes('unresolvable sz spread'),
     );
 }
@@ -97,18 +97,18 @@ describe('a finite ternary in a value sub-property expands into both branches', 
         'const X = ({ c }) => <div sz={{ bg: { color: "black", op: c ? 30 : 100 } }} />;';
 
     it('never emits the dead bg:op-N modifier', () => {
-        const { code } = transformOxc(source, 'App.tsx');
+        const { code } = transformWasm(source, 'App.tsx');
         expect(code).not.toContain('bg:op-');
     });
 
     it('expands statically — no runtime fallback', () => {
-        const { code } = transformOxc(source, 'App.tsx');
+        const { code } = transformWasm(source, 'App.tsx');
         expect(code).not.toContain('_sz(');
         expect(code).toContain('c ? "bg-black/30" : "bg-black/100"');
     });
 
     it('matches the babel engine (parity)', () => {
-        const oxc = transformOxc(source, 'App.tsx').code;
+        const oxc = transformWasm(source, 'App.tsx').code;
         const babel = transform({ bg: { color: 'black', op: 30 } }); // sanity: branch is real
         expect(babel.className).toBe('bg-black/30');
         expect(oxc).toContain('bg-black/30');

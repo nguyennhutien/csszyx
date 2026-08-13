@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { type SzObject, transform } from '../src/transform.js';
+import { type SzObject, transform } from '../src/transform-core.js';
 
 /**
  * Alignment sz-keys take csszyx's short value form (start/end/between/around/

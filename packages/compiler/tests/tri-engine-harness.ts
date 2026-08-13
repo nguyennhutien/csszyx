@@ -1,26 +1,20 @@
 /**
- * Shared tri-engine harness for parity suites.
+ * Shared engine harness for parity suites.
  *
- * Eight test files each rebuilt the same three pieces — the engine table with
- * its rust-availability spread, the transform-and-compare loop, and the
- * console-warning capture with its noise filter. Copies drift (two mask suites
- * carried 30 byte-identical lines differing only in an unused filename
- * literal), and every copy re-decides whether a missing rust lane is an error.
- * One module owns all three now.
+ * Historically three hand-written engines; today one engine, two artifacts —
+ * the native addon and the wasm build. The harness keeps its shape (an engine
+ * table, the transform-and-compare loop, the warning capture) because the
+ * parity QUESTION survives the consolidation: the two artifacts of the engine
+ * must answer identically, and every suite that asserted cross-engine
+ * agreement now asserts cross-artifact agreement through the same calls.
  *
- * NOT a `.test.ts` file on purpose, like `oxc-parity-harness.ts`: vitest must
- * not collect it as a suite.
+ * NOT a `.test.ts` file on purpose: vitest must not collect it as a suite.
  */
 import { expect } from 'vitest';
 
-import {
-    isRustTransformAvailable,
-    transformOxc,
-    transformRust,
-    transformSourceCode,
-} from '../src/index.js';
+import { isRustTransformAvailable, transformRust, transformWasm } from '../src/index.js';
 
-/** The result surface parity assertions read, common to all three engines. */
+/** The result surface parity assertions read, common to both artifacts. */
 export interface TriEngineResult {
     code?: string;
     diagnostics?: string[];
@@ -41,20 +35,18 @@ if (process.env.CI && !isRustTransformAvailable()) {
     );
 }
 
-/** The three lanes, rust included whenever the native binding is present. */
+/** Both artifacts of the engine, native included whenever the binding is present. */
 export const ENGINES: ReadonlyArray<readonly [string, TriEngine]> = [
-    ['babel', transformSourceCode as TriEngine],
-    ['oxc', transformOxc as TriEngine],
+    ['wasm', transformWasm as TriEngine],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as TriEngine]] as const) : []),
 ];
 
 /**
  * Collapse whitespace runs so an emit can be substring-matched across engines.
  *
- * The babel lane re-prints the module from its AST — one property per line —
- * while the span-based engines splice into the original text and keep the
- * author's formatting. The emitted code is equivalent; only line breaks and
- * indentation differ, so every cross-engine substring assertion needs this.
+ * Both artifacts splice into the original text, but historical fixtures were
+ * written against a lane that re-printed from its AST, so assertions still
+ * normalize whitespace before substring-matching.
  *
  * @param code - One engine's emitted module.
  * @returns The same code with every whitespace run collapsed to one space.

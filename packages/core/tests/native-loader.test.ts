@@ -30,9 +30,7 @@ describe('@csszyx/core/native loader', () => {
         } catch (err) {
             expect(err).toBeInstanceOf(CsszyxNativeUnavailableError);
             expect((err as CsszyxNativeUnavailableError).code).toBe('CSSZYX_NATIVE_UNAVAILABLE');
-            expect((err as CsszyxNativeUnavailableError).message).toContain(
-                'build.parser: "oxc" or "babel"',
-            );
+            expect((err as CsszyxNativeUnavailableError).message).toContain('build.parser: "wasm"');
             return;
         }
     });

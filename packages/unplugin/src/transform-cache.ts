@@ -15,7 +15,7 @@ import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@
 const CACHE_SCHEMA_VERSION = 16;
 
 /** Parser implementation that produced a cache entry. */
-export type TransformCacheProducer = 'babel' | 'babel-fallback' | 'oxc' | 'rust' | 'wasm';
+export type TransformCacheProducer = 'rust' | 'wasm';
 
 /** Transform result shape that can be serialized into the on-disk cache. */
 export type CacheableTransformResult = SourceTransformResult;

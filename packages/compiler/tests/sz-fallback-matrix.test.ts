@@ -20,9 +20,9 @@ import {
     szFallbackConsequenceOf,
     szsUnsupportedDiagnostic,
 } from '../src/sz-fallback-matrix.js';
-import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 import { captureWarnings, ENGINES } from './tri-engine-harness.js';
 
 /** Sources that drive each classification arm through a real transform. */
@@ -173,8 +173,8 @@ describe('szFallbackConsequenceOf', () => {
 describe('engine parity for sz fallback diagnostics', () => {
     for (const [label, source] of FALLBACK_SOURCES) {
         it(`babel and oxc agree on ${label}`, () => {
-            const babel = transformSourceCode(source, '/p/t.tsx').diagnostics ?? [];
-            const oxc = transformOxc(source, '/p/t.tsx').diagnostics ?? [];
+            const babel = transformSource(source, '/p/t.tsx').diagnostics ?? [];
+            const oxc = transformWasm(source, '/p/t.tsx').diagnostics ?? [];
 
             // Both lanes must report the same thing, in the same words: this is
             // the whole reason the matrix is shared rather than copied.
@@ -184,7 +184,7 @@ describe('engine parity for sz fallback diagnostics', () => {
     }
 
     it('names the callee when the call has a readable name', () => {
-        const diagnostics = transformSourceCode(
+        const diagnostics = transformSource(
             'export const A = () => <div sz={makeSz()} />;',
             '/p/t.tsx',
         ).diagnostics;
@@ -192,7 +192,7 @@ describe('engine parity for sz fallback diagnostics', () => {
     });
 
     it('falls back to the stand-in name for an unreadable callee', () => {
-        const diagnostics = transformSourceCode(
+        const diagnostics = transformSource(
             'export const A = ({ c }) => <div sz={(c ? f : g)()} />;',
             '/p/t.tsx',
         ).diagnostics;
@@ -207,15 +207,15 @@ describe('engine parity for sz fallback diagnostics', () => {
         // `computed`, so they agree — recorded here so the shared behaviour is
         // deliberate rather than rediscovered as a parity surprise.
         const source = 'export const A = () => <div sz={table[key]()} />;';
-        const babel = transformSourceCode(source, '/p/t.tsx').diagnostics ?? [];
+        const babel = transformSource(source, '/p/t.tsx').diagnostics ?? [];
         expect(babel[0]).toContain('function call `key()`');
-        expect(transformOxc(source, '/p/t.tsx').diagnostics ?? []).toEqual(babel);
+        expect(transformWasm(source, '/p/t.tsx').diagnostics ?? []).toEqual(babel);
     });
 
     it('reports no fallback for a statically resolvable sz prop', () => {
         const source = 'export const A = () => <div sz={{ p: 4 }} />;';
-        expect(transformSourceCode(source, '/p/t.tsx').diagnostics ?? []).toEqual([]);
-        expect(transformOxc(source, '/p/t.tsx').diagnostics ?? []).toEqual([]);
+        expect(transformSource(source, '/p/t.tsx').diagnostics ?? []).toEqual([]);
+        expect(transformWasm(source, '/p/t.tsx').diagnostics ?? []).toEqual([]);
     });
 });
 
@@ -273,7 +273,7 @@ describe('engine parity for the sz consequence split', () => {
 describe.skipIf(!isRustTransformAvailable())('rust lane parity for sz fallback diagnostics', () => {
     for (const [label, source] of FALLBACK_SOURCES) {
         it(`rust and babel agree on ${label}`, () => {
-            const babel = transformSourceCode(source, '/p/t.tsx').diagnostics ?? [];
+            const babel = transformSource(source, '/p/t.tsx').diagnostics ?? [];
             const rust = transformRust(source, '/p/t.tsx').diagnostics ?? [];
             expect(rust).toEqual(babel);
             expect(babel.length).toBeGreaterThan(0);

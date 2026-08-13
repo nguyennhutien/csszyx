@@ -1,19 +1,19 @@
-import { transformSourceCode } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
 
 import { mangleCodeClassesSync } from '../src/unplugin.js';
 
 /**
- * Tests for the compiler's transformSourceCode function as used by the unplugin.
+ * Tests for the compiler's transformSource function as used by the unplugin.
  *
- * The pre-plugin calls transformSourceCode() on .tsx/.jsx files containing
+ * The pre-plugin calls transformSource() on .tsx/.jsx files containing
  * sz props. These tests verify the AST transform produces correct output.
  */
-describe('transformSourceCode (compiler AST transform)', () => {
+describe('transformSource (compiler AST transform)', () => {
     describe('static string sz prop', () => {
         it('should convert sz="..." to className="..."', () => {
             const source = 'const el = <div sz="p-4 bg-red-500" />;';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('className=');
@@ -25,7 +25,7 @@ describe('transformSourceCode (compiler AST transform)', () => {
     describe('static object sz prop', () => {
         it('should compile static sz object to className string', () => {
             const source = 'const el = <div sz={{ p: 4, bg: "red-500" }} />;';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toContain('className=');
@@ -35,7 +35,7 @@ describe('transformSourceCode (compiler AST transform)', () => {
 
         it('should handle nested variant objects', () => {
             const source = 'const el = <div sz={{ p: 4, hover: { bg: "blue-600" } }} />;';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('className=');
             expect(result.code).toContain('p-4');
@@ -44,7 +44,7 @@ describe('transformSourceCode (compiler AST transform)', () => {
 
         it('should handle multiple properties', () => {
             const source = 'const el = <div sz={{ m: 2, p: 4, text: "lg", font: "bold" }} />;';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('m-2');
             expect(result.code).toContain('p-4');
@@ -56,7 +56,7 @@ describe('transformSourceCode (compiler AST transform)', () => {
     describe('dynamic sz prop (runtime fallback)', () => {
         it('should wrap dynamic expressions with _sz()', () => {
             const source = 'const el = <div sz={dynamicStyles} />;';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.usesRuntime).toBe(true);
             expect(result.code).toContain('_sz(dynamicStyles)');
@@ -65,7 +65,7 @@ describe('transformSourceCode (compiler AST transform)', () => {
 
         it('should wrap function call with _sz()', () => {
             const source = 'const el = <div sz={getStyles()} />;';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.usesRuntime).toBe(true);
             expect(result.code).toContain('_sz(getStyles())');
@@ -75,7 +75,7 @@ describe('transformSourceCode (compiler AST transform)', () => {
     describe('files without sz', () => {
         it('should skip files without sz keyword', () => {
             const source = 'const el = <div className="p-4" />;';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(false);
             expect(result.usesRuntime).toBe(false);
             expect(result.code).toBe(source);
@@ -83,7 +83,7 @@ describe('transformSourceCode (compiler AST transform)', () => {
 
         it('should skip plain JS files', () => {
             const source = 'export const config = { key: "value" };';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(false);
             expect(result.code).toBe(source);
         });
@@ -95,7 +95,7 @@ describe('transformSourceCode (compiler AST transform)', () => {
 const a = <div sz={{ p: 4 }} />;
 const b = <span sz="text-lg" />;
 `;
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('p-4');
             expect(result.code).toContain('text-lg');
@@ -103,7 +103,7 @@ const b = <span sz="text-lg" />;
 
         it('should handle sz with empty object', () => {
             const source = 'const el = <div sz={{}} />;';
-            const result = transformSourceCode(source);
+            const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('className=');
         });

@@ -33,8 +33,7 @@ through a three-tier engine pipeline:
 | Tier | Engine | When |
 | --- | --- | --- |
 | 1 (default) | **Rust** (native) | the default parser |
-| 2 (fallback) | **oxc** (pure JS) | when the native binary is unavailable for a platform |
-| 3 (last resort) | **babel** | a final compatibility safety net |
+| 2 (fallback) | **wasm** — the same engine compiled to WebAssembly | when the native binary is unavailable for a platform |
 
 The **runtime** (browser) never uses any of these — there is no parser at
 runtime. The runtime helpers are plain JavaScript; `dynamic()`'s sz-object
