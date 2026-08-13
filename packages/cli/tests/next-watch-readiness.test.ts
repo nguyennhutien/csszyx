@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import {
+    chmodSync,
     existsSync,
     mkdirSync,
     mkdtempSync,
@@ -60,9 +61,14 @@ interface FakeWatcher {
  *
  * @param shardsDir Directory the session materializes its shards into.
  * @param deliver Whether the watcher ever reports anything after `ready`.
+ * @param beforeDelivery Runs once, just before the first event is reported.
  * @returns The watcher plus the log of what it reported.
  */
-function createLateWatcher(shardsDir: string, deliver: boolean): FakeWatcher {
+function createLateWatcher(
+    shardsDir: string,
+    deliver: boolean,
+    beforeDelivery?: () => void,
+): FakeWatcher {
     const emitter = new EventEmitter();
     const delivered: string[] = [];
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -82,6 +88,9 @@ function createLateWatcher(shardsDir: string, deliver: boolean): FakeWatcher {
             for (const name of current) {
                 if (!known.has(name)) {
                     known.add(name);
+                    if (delivered.length === 0) {
+                        beforeDelivery?.();
+                    }
                     delivered.push(name);
                     emitter.emit('all', 'add', join(shardsDir, name));
                 }
@@ -156,6 +165,58 @@ describe('csszyx next-watch readiness', () => {
             expect(existsSync(session.safelistOutputPath)).toBe(true);
         } finally {
             await session.close();
+            stop();
+        }
+    }, 30_000);
+
+    it('starts when the shards directory refuses the probe', async () => {
+        const root = tempRoot();
+        const shardsDir = join(root, '.csszyx/cache/safelist-shards');
+        const { factory, stop } = createLateWatcher(shardsDir, true);
+
+        // The factory runs after the prebuild has filled the directory and
+        // before readiness writes anything into it, which is the only moment
+        // that can make the probe write fail on purpose.
+        const sealingFactory = (): FSWatcher => {
+            const watcher = factory();
+            chmodSync(shardsDir, 0o500);
+            return watcher;
+        };
+
+        let session: Awaited<ReturnType<typeof startNextWatch>> | undefined;
+        try {
+            session = await startNextWatch(
+                { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+                { watch: sealingFactory, deliveryProbeTimeoutMs: 150 },
+            );
+            expect(existsSync(session.safelistOutputPath)).toBe(true);
+        } finally {
+            chmodSync(shardsDir, 0o700);
+            await session?.close();
+            stop();
+        }
+    }, 30_000);
+
+    it('starts when the probe cannot be removed', async () => {
+        const root = tempRoot();
+        const shardsDir = join(root, '.csszyx/cache/safelist-shards');
+        // Sealing the directory once the probe is already in it leaves the
+        // session holding a file it is not allowed to delete. Failing there
+        // would abort a startup whose watch is otherwise proven working.
+        const { factory, stop } = createLateWatcher(shardsDir, true, () =>
+            chmodSync(shardsDir, 0o500),
+        );
+
+        let session: Awaited<ReturnType<typeof startNextWatch>> | undefined;
+        try {
+            session = await startNextWatch(
+                { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+                { watch: factory },
+            );
+            expect(existsSync(session.safelistOutputPath)).toBe(true);
+        } finally {
+            chmodSync(shardsDir, 0o700);
+            await session?.close();
             stop();
         }
     }, 30_000);

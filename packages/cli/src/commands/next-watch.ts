@@ -284,18 +284,10 @@ async function waitForWatcherDelivery(
     probePath: string,
     timeoutMs: number,
 ): Promise<void> {
-    if (timeoutMs <= 0) {
-        return;
-    }
-
     await new Promise<void>(resolve => {
         let timer: ReturnType<typeof setTimeout> | undefined;
-        let settled = false;
+        // Every step here is idempotent, so the two callers race harmlessly.
         const finish = (): void => {
-            if (settled) {
-                return;
-            }
-            settled = true;
             if (timer !== undefined) {
                 clearTimeout(timer);
             }
