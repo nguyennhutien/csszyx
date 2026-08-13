@@ -542,8 +542,8 @@ A **statically lowered** `sz` that resolves to zero classes — `sz={{}}`,
 `sz={[]}`, or the empty branch of a conditional like `sz={cond ? { pl: 4 } : {}}`
 — now compiles to `className={undefined}` (or `className={cond ? "pl-4" :
 undefined}`), so the framework omits the `class` attribute entirely instead of
-emitting `class=""`. This holds on all three engines (Babel, oxc, and the native
-Rust core).
+emitting `class=""`. This holds on both artifacts of the
+engine (native and wasm).
 
 One case still emits `class=""`: a conditional that **can't be lowered at build
 time** (for example a dynamic ternary whose value isn't statically resolvable)

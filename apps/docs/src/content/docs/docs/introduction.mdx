@@ -38,7 +38,7 @@ CSSzyx solves this with object syntax:
 1. **Pre-scan** — Walk source files at startup, write `csszyx-classes.html` so
    Tailwind JIT can discover every sz-generated class name before compilation begins.
 
-2. **JSX Transform** — `sz={{ p: 4, hover: { bg: 'blue-500' } }}` → `className="p-4 hover:bg-blue-500"` (Babel AST).
+2. **JSX Transform** — `sz={{ p: 4, hover: { bg: 'blue-500' } }}` → `className="p-4 hover:bg-blue-500"` (native engine).
    Also injects the `@source` directive into your CSS entry and auto-imports
    `csszyx/lite` runtime helpers where needed.
 
@@ -95,7 +95,7 @@ hydrating.
 <FileTree>
 - packages
   - csszyx/ Umbrella — csszyx/vite, csszyx/webpack, csszyx/lite
-  - compiler/ sz → Tailwind class transform (TypeScript, Babel AST)
+  - compiler/ sz → Tailwind class transform (native engine + shared TypeScript lowering)
   - runtime/ _sz, _szMerge + SSR hydration guards
   - core/ Encoder, SHA-256 checksum, collision detection (Rust/WASM)
   - unplugin/ Unified plugin: Vite + Webpack + esbuild

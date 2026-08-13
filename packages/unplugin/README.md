@@ -66,7 +66,7 @@ module.exports = {
 
 ## Features
 
-- **sz prop transform** -- Compiles `sz={{ }}` objects into `className` strings. Defaults to the **native Rust engine** through the optional `@csszyx/core-*` platform package; opt back into the previous oxc-parser JavaScript path with `build.parser: "oxc"`, or fall through to Babel with `build.parser: "babel"`.
+- **sz prop transform** -- Compiles `sz={{ }}` objects into `className` strings with ONE engine that ships as two artifacts: the **native Rust addon** (default, through the optional `@csszyx/core-*` platform package) and the same engine compiled to **WebAssembly** (shipped inside `@csszyx/core`, the automatic fallback when the native binary is absent — pin it with `build.parser: "wasm"`).
 - **HTML injection** -- Injects mangle maps and checksums for SSR hydration
 - **HMR support** -- Updates styles instantly during development
 - **CSS mangling** -- Compresses owned class names (e.g., `text-center` -> `z`) while retaining names shared with source-visible `class`/`className` strings and template quasis
@@ -89,23 +89,20 @@ Per project:
 
 ```ts
 csszyx({
-  build: { parser: "oxc" }, // JavaScript oxc parser, no native addon
+  build: { parser: "wasm" }, // the engine's WebAssembly build, no native addon
 });
 ```
 
 Per build:
 
 ```bash
-CSSZYX_PARSER=oxc pnpm build
+CSSZYX_PARSER=wasm pnpm build
 ```
 
-The default `rust` path uses the native engine and shares the same
-`className` output shape as the JavaScript parsers. `build.parser: "oxc"`
-uses the previous JavaScript oxc-parser path with surgical magic-string
-edits to preserve source formatting outside touched ranges.
-`build.parser: "babel"` routes prescan, transform, and HMR discovery
-through the legacy Babel implementation as a final compatibility escape
-hatch.
+Both values run the same engine, so output is identical; only parse speed
+differs. The former `"oxc"` and `"babel"` TypeScript lanes were removed —
+a config still naming them is ignored like an invalid env value and the
+build runs on the default.
 
 ## License
 

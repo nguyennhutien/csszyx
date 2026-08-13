@@ -179,7 +179,7 @@ track the current published version, CI, and SonarCloud quality gate; run
 
 - **Tailwind:** v4 only (v3 planned)
 - **Release cadence:** automated via [release-please](https://github.com/googleapis/release-please-action); see [CHANGELOG](./packages/csszyx/CHANGELOG.md)
-- **Build pipeline:** source transform uses the native Rust engine (`@csszyx/core-*` napi-rs addon) by default. The JavaScript `oxc-parser` path is available via `build.parser: 'oxc'` or `CSSZYX_PARSER=oxc` for platforms without native binaries. Babel remains as a final compatibility escape hatch via `build.parser: 'babel'`.
+- **Build pipeline:** source transform runs ONE engine shipped as two artifacts — the native Rust addon (`@csszyx/core-*`, default) and the same engine compiled to WebAssembly inside `@csszyx/core`, which any platform without a native binary falls back to automatically (`build.parser: 'wasm'` pins it).
 
 ## Contributing
 
