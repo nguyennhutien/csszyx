@@ -15,7 +15,7 @@
  * encoding is exactly the drift the parity gates exist to catch.
  */
 import { createRequire } from 'node:module';
-import type { SourceTransformResult, TransformSourceCodeOptions } from './transform.js';
+import type { SourceTransformResult, TransformSourceCodeOptions } from './transform-core.js';
 import {
     aggregateCssVariableMap,
     encodeCrossModuleStatics,
@@ -115,7 +115,8 @@ export function transformWasm(
     filename?: string,
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult {
-    const [result] = transformWasmBatch([{ filename, source }], options);
+    // Mirrors transformRust: an unnamed single file is `<anonymous>`.
+    const [result] = transformWasmBatch([{ filename: filename ?? '<anonymous>', source }], options);
     if (!result) {
         throw new WasmTransformUnavailableError('wasm transform returned no result');
     }

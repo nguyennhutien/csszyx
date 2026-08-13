@@ -4,7 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { isValidSzProp, normalizeClassName, transform } from '../src/transform.js';
+import { isValidSzProp, normalizeClassName, transform } from '../src/transform-core.js';
 
 describe('transform', () => {
     it('should transform simple properties', () => {

@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    ASTBudgetExceededError,
     ensureRustTransformAvailable,
     isRustTransformAvailable,
     OxcRustNotImplementedError,
-    transformOxc,
     transformRust,
     transformRustBatch,
+    transformWasm,
 } from '../src/index.js';
 
 describe('isRustTransformAvailable — non-throwing native probe', () => {
@@ -127,9 +126,11 @@ export const App = () => (<div>${'<span className="cell">x</span>'.repeat(30_000
         expect([...result.diagnostics].some(d => d.includes('AST budget exceeded'))).toBe(false);
     });
 
-    it('oxc accepts the same raised budget (both lanes obey one knob)', () => {
-        expect(() => transformOxc(bigSource, '/repo/src/Big.tsx')).toThrow(ASTBudgetExceededError);
-        const raised = transformOxc(bigSource, '/repo/src/Big.tsx', { astBudget: 2_000_000 });
+    it('the wasm artifact obeys the same budget knob', () => {
+        const tripped = transformWasm(bigSource, '/repo/src/Big.tsx');
+        expect(tripped.diagnostics.some(d => d.includes('AST budget exceeded'))).toBe(true);
+        expect(tripped.classes.size).toBe(0);
+        const raised = transformWasm(bigSource, '/repo/src/Big.tsx', { astBudget: 2_000_000 });
         expect(raised.classes.has('mx-0')).toBe(true);
     });
 });

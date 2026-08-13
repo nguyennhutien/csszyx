@@ -1,8 +1,8 @@
 import { generate_token, version as getWasmVersion, init, transform_sz } from '@csszyx/core';
 
 import { stripInvalidColorStrings } from './color-validation.js';
-import type { SzObject } from './transform.js';
-import { transform as jsTransform } from './transform.js';
+import type { SzObject } from './transform-core.js';
+import { transform as jsTransform } from './transform-core.js';
 
 /**
  * Fold one UTF-16 code unit into the legacy signed-int32 recovery hash.

@@ -478,9 +478,9 @@ export interface BuildConfig {
     /**
      * Source parser used for JSX/TSX sz transforms.
      *
-     * One engine, two artifacts. `rust` is the default: the native addon
-     * shipped through the matching optional `@csszyx/core-*` platform
-     * package. `wasm` is the same engine compiled to WebAssembly and shipped
+     * One engine, two artifacts. `rust` is the default parser. It is the
+     * native addon, shipped through the matching optional `@csszyx/core-*`
+     * platform package. `wasm` is the same engine compiled to WebAssembly and shipped
      * inside `@csszyx/core` itself — an inherited-default `rust` degrades to
      * it automatically when the native binary is absent, and pinning it is
      * useful where native addons cannot load at all. An explicit choice of

@@ -20,13 +20,13 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadNativeBinding } from '../../core/native/index.js';
-import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 const ENGINES = [
-    ['babel', transformSourceCode],
-    ['oxc', transformOxc],
+    ['babel', transformSource],
+    ['oxc', transformWasm],
 ] as const;
 
 describe('safelist scan robustness', () => {

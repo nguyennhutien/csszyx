@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from '../src/property-types.js';
-import { transform } from '../src/transform.js';
+import { transform } from '../src/transform-core.js';
 
 // ============================================================================
 // Scrollbar (v4.3)

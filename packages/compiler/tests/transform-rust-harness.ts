@@ -1,9 +1,9 @@
 /**
  * Rust transform parity harness — compares `transformRust` output against
- * `transformOxc` (the v0.8.0 default) on the same fixture set. Catches
+ * `transformWasm` (the v0.8.0 default) on the same fixture set. Catches
  * silent drift as the Rust native engine grows coverage. Sister harness
  * to `oxc-parity-harness.ts`; same state model but the baseline is
- * `transformOxc` instead of `transformSourceCode` because oxc-JS is the
+ * `transformWasm` instead of `transformSource` because oxc-JS is the
  * production parser that Rust must match before it can take over.
  *
  * When the Rust native binding is not available (`@csszyx/core/native`
@@ -19,8 +19,8 @@ import {
     OxcRustNotImplementedError,
     type SourceTransformResult,
     type TransformSourceCodeOptions,
-    transformOxc,
     transformRust,
+    transformWasm,
 } from '../src/index.js';
 
 /**
@@ -98,7 +98,7 @@ export function compareRustVsOxc(
     filename: string,
     options?: TransformSourceCodeOptions,
 ): RustParityComparison {
-    const oxc = transformOxc(source, filename, options);
+    const oxc = transformWasm(source, filename, options);
     const oxcView = {
         code: oxc.code,
         classes: [...oxc.classes].sort(),

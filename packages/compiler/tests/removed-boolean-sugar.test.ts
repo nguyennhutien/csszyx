@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import { type SzObject, transform } from '../src/transform.js';
-import { __resetSzWarnDedupForTests } from '../src/transform-core.js';
+import { __resetSzWarnDedupForTests, type SzObject, transform } from '../src/transform-core.js';
 
 const t = (sz: SzObject): string => transform(sz).className;
 

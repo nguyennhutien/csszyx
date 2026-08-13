@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { transformOxc, transformRust, transformSourceCode } from '../src/index.js';
+import { transformRust, transformSource, transformWasm } from '../src/index.js';
 
-type Transform = typeof transformSourceCode;
+type Transform = typeof transformSource;
 
 const engines: ReadonlyArray<[string, Transform]> = [
-    ['babel', transformSourceCode],
-    ['oxc', transformOxc],
+    ['babel', transformSource],
+    ['oxc', transformWasm],
     ['rust', transformRust],
 ];
 

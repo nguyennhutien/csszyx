@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { transformOxc, transformSourceCode } from '../src/index.js';
+import { transformSource, transformWasm } from '../src/index.js';
 
-// szv catalog extraction lives in three engines (Babel `transformSourceCode`,
-// oxc `transformOxc`, Rust — covered by its own cargo tests). These lock the
+// szv catalog extraction lives in three engines (Babel `transformSource`,
+// oxc `transformWasm`, Rust — covered by its own cargo tests). These lock the
 // build-time safelist behaviour for the two JS engines AND assert they agree, so
 // a regression in one surfaces here instead of as silent dead classes in a
 // consumer. The matrix is deliberately wide: it was a wide pass that found the
@@ -10,8 +10,8 @@ import { transformOxc, transformSourceCode } from '../src/index.js';
 
 const IMPORT = "import { szv } from 'csszyx';";
 const sorted = (classes: Set<string>) => [...classes].sort();
-const babel = (src: string) => sorted(transformSourceCode(`${IMPORT} ${src}`).classes);
-const oxc = (src: string) => sorted(transformOxc(`${IMPORT} ${src}`).classes);
+const babel = (src: string) => sorted(transformSource(`${IMPORT} ${src}`).classes);
+const oxc = (src: string) => sorted(transformWasm(`${IMPORT} ${src}`).classes);
 
 describe('szv extraction — Babel engine', () => {
     it('extracts base + every variant value (no usage required)', () => {
@@ -213,14 +213,19 @@ describe('szv extraction — transformed flag must not gate class collection', (
     const szvOnly = `${IMPORT} const b = szv({ variants: { s: { x: { p: 4 } } } });`;
 
     it('oxc reports transformed=false but still extracts the catalog', () => {
-        const r = transformOxc(szvOnly);
+        const r = transformWasm(szvOnly);
         expect(r.transformed).toBe(false);
         expect(r.classes.size).toBeGreaterThan(0);
     });
 
-    it('Babel reports transformed=true for the same szv-only file', () => {
-        const r = transformSourceCode(szvOnly);
-        expect(r.transformed).toBe(true);
+    it('the engine collects classes from an szv-only file regardless of the flag', () => {
+        // The Babel lane rewrote the szv table in place and reported
+        // transformed=true; the engine leaves an szv-only file's code alone
+        // (transformed=false) — the CONTRACT this suite exists for is that
+        // class collection is not gated on either answer.
+        const r = transformSource(szvOnly);
+        expect(r.transformed).toBe(false);
+        expect(r.code).toBe(szvOnly);
         expect(r.classes.size).toBeGreaterThan(0);
     });
 });
@@ -256,8 +261,8 @@ describe('szv extraction — TypeScript wrappers are looked through', () => {
 
     for (const [name, source] of wrapped) {
         it(`extracts through ${name} (both JS engines agree)`, () => {
-            const babel = [...transformSourceCode(source, 'F.tsx').classes].sort();
-            const oxc = [...transformOxc(source, 'F.tsx').classes].sort();
+            const babel = [...transformSource(source, 'F.tsx').classes].sort();
+            const oxc = [...transformWasm(source, 'F.tsx').classes].sort();
             expect(babel, 'babel extracts the catalog').toContain('bg-tag-blue');
             expect(oxc, 'oxc extracts the catalog').toEqual(babel);
         });
@@ -289,8 +294,8 @@ describe('szr literal-arg extraction', () => {
 
     for (const [name, source, expected] of shapes) {
         it(`extracts a ${name} (both JS engines agree)`, () => {
-            const babel = [...transformSourceCode(source, 'F.tsx').classes].sort();
-            const oxc = [...transformOxc(source, 'F.tsx').classes].sort();
+            const babel = [...transformSource(source, 'F.tsx').classes].sort();
+            const oxc = [...transformWasm(source, 'F.tsx').classes].sort();
             expect(babel).toEqual(expected);
             expect(oxc).toEqual(expected);
         });
@@ -299,7 +304,7 @@ describe('szr literal-arg extraction', () => {
     it('a runtime-dependent szr arg extracts nothing (no false candidates)', () => {
         const source =
             'import {szr} from "@csszyx/runtime"; export const f = (x) => szr({ p: x });';
-        expect([...transformSourceCode(source, 'F.tsx').classes]).toEqual([]);
-        expect([...transformOxc(source, 'F.tsx').classes]).toEqual([]);
+        expect([...transformSource(source, 'F.tsx').classes]).toEqual([]);
+        expect([...transformWasm(source, 'F.tsx').classes]).toEqual([]);
     });
 });

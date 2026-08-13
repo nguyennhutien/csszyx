@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { transform } from '../src/transform.js';
+import { transform } from '../src/transform-core.js';
 
 const t = (sz: Parameters<typeof transform>[0]): string => transform(sz).className;
 

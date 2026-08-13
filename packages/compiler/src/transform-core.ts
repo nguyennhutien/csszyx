@@ -12,6 +12,7 @@ import {
     warnStringColorOpacity,
     warnUnrecognizedColor,
 } from './color-validation.js';
+import type { TokenData } from './manifest.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
 import { szDevWarningsEnabled } from './sz-dev-warnings.js';
 import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
@@ -3814,4 +3815,127 @@ export function isValidSzProp(szProp: unknown): szProp is SzObject {
  */
 export function normalizeClassName(className: string): string {
     return className.split(/\s+/).filter(Boolean).join(' ');
+}
+
+/**
+ * Options for {@link transformSourceCode}.
+ */
+export interface TransformSourceCodeOptions {
+    /**
+     * Override the AST node budget. Files larger than this throw
+     * {@link ASTBudgetExceededError}. Defaults to {@link AST_BUDGET} (50 000).
+     * Useful for repos with legitimately large generated files (json-as-ts
+     * fixtures, GraphQL schema snapshots) that exceed the default cap but
+     * are still safe to transform.
+     */
+    astBudget?: number;
+
+    /**
+     * Statically resolved szv factories imported from OTHER modules, keyed by
+     * the import specifier exactly as this file writes it, then by exported
+     * name. Built once by the bundler plugin from its prescan registry and fed
+     * to every engine identically, so cross-module knowledge can never differ
+     * per parser. Value shape is the same literal-only config contract the
+     * local precompile enforces.
+     */
+    crossModuleStatics?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+
+    /**
+     * Static sz OBJECTS a module imports, keyed by import specifier then by
+     * EXPORT name — the bundler's registry, filtered to what this file can see.
+     *
+     * Separate from {@link crossModuleStatics} because the two are not the same
+     * thing: an szv config is a variant table the engine compiles and picks
+     * from, an sz object is a value it lowers. One untagged map would leave
+     * every reader guessing which machinery applies.
+     */
+    crossModuleSzObjects?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+
+    /**
+     * Opt into tiered CSS custom property names for parser paths that support
+     * the CSS variable system. Unsupported parser paths must preserve existing
+     * `--_sz-*` output until they explicitly port this option.
+     *
+     * @default false
+     */
+    mangleVars?: boolean;
+
+    /**
+     * Maximum cascade depth for component-tier CSS variable hoisting.
+     *
+     * Only used when `mangleVars` is enabled. Defaults to 5 to keep the
+     * invalidation surface bounded.
+     */
+    mangleVarHoistMaxDepth?: number;
+
+    /**
+     * Explicit app-owned global CSS custom-property aliases. Parser paths that
+     * support aliasing rewrite exact static sz string values from original
+     * token names to aliases, for example `--brand-primary` -> `---gz`.
+     */
+    globalVarAliases?: GlobalVarAliasTableInput;
+
+    /**
+     * Project root used only to render diagnostic file paths relative to it (so a
+     * dev-mode "Unknown property" warning reads `src/Foo.tsx:12`, not an absolute
+     * path). When omitted, diagnostics fall back to the filename as given.
+     */
+    rootDir?: string;
+}
+
+/**
+ * Accepted input shapes for global CSS custom-property alias tables.
+ */
+export type GlobalVarAliasTableInput =
+    | ReadonlyMap<string, string>
+    | ReadonlyArray<readonly [string, string]>
+    | Readonly<Record<string, string>>;
+
+/**
+ * CSS custom-property mangle metadata. Most originals map to one mangled name,
+ * but the same original can legitimately appear in both scoped and hoisted
+ * tiers in one build, e.g. `--_sz-p` -> `--sz` and `--cz`.
+ */
+export type CssVariableMangleValue = string | string[];
+
+/**
+ * Source transform result shared by the Babel and oxc parser paths.
+ */
+export interface SourceTransformResult {
+    /** Rewritten source code. */
+    code: string;
+    /** Whether csszyx changed the source. */
+    transformed: boolean;
+    /** Whether the source needs the _sz runtime helper. */
+    usesRuntime: boolean;
+    /** Whether the source needs the _szMerge runtime helper. */
+    usesMerge: boolean;
+    /** Whether the source needs the szcn runtime helper (sz array composition). */
+    usesSzcn: boolean;
+    /** Whether the source needs the _szPart runtime helper (dynamic array elements). */
+    usesSzPart: boolean;
+    /** Whether the source needs the __szvPick runtime helper (precompiled szv tables). */
+    usesSzvPick: boolean;
+    /** Whether the source needs the __szvPick1 single-dimension runtime helper. */
+    usesSzvPick1: boolean;
+    /**
+     * True when every emitted `_szPart` argument is provably a string or
+     * falsy (vacuously true with none). Lets the bundler import the merge
+     * helpers from the compiler-free entry.
+     */
+    szPartArgsProvable: boolean;
+    /** Whether the source needs the color-var runtime helper. */
+    usesColorVar: boolean;
+    usesSpacingVar: boolean;
+    usesUnitVar: boolean;
+    /** Classes generated from sz syntax. */
+    classes: Set<string>;
+    /** Raw className/class strings collected for Tailwind discovery only. */
+    rawClassNames: Set<string>;
+    /** Compiler diagnostics to emit in development. */
+    diagnostics: string[];
+    /** Recovery tokens emitted by szRecover attributes. */
+    recoveryTokens: Map<string, TokenData>;
+    /** CSS custom property original-to-mangled names emitted by mangleVars. */
+    cssVariableMap: Map<string, CssVariableMangleValue>;
 }

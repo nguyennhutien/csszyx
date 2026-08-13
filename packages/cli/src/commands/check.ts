@@ -13,7 +13,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { transformSourceCode } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler';
 import fg from 'fast-glob';
 
 import {
@@ -278,7 +278,7 @@ function recordFileClasses(
     classOrigins: Map<string, string>,
 ): void {
     try {
-        const result = transformSourceCode(source, file, { rootDir: cwd });
+        const result = transformSource(source, file, { rootDir: cwd });
         for (const token of result.classes) {
             if (!classOrigins.has(token)) classOrigins.set(token, relativePath);
         }

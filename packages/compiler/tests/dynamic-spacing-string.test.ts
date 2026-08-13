@@ -8,12 +8,12 @@
  * best-effort safelist of partially-static array elements.
  */
 import { describe, expect, it } from 'vitest';
-import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 const ENGINES = [
-    ['babel', (jsx: string) => transformSourceCode(jsx, 'probe.tsx', {})],
-    ['oxc', (jsx: string) => transformOxc(jsx, 'probe.tsx', {})],
+    ['babel', (jsx: string) => transformSource(jsx, 'probe.tsx', {})],
+    ['oxc', (jsx: string) => transformWasm(jsx, 'probe.tsx', {})],
 ] as const;
 
 describe.each(ENGINES)('dynamic spacing/unit lowering (%s)', (_name, run) => {
@@ -79,8 +79,8 @@ describe('engine parity for the report scenarios', () => {
                 '<div sz={[{ py: 2, border: true, opacity: on ? 50 : 100 }, other]} />;',
         ],
     ])('babel and oxc agree on classes and diagnostics: %s', jsx => {
-        const babel = transformSourceCode(jsx, 'probe.tsx', {});
-        const oxc = transformOxc(jsx, 'probe.tsx', {});
+        const babel = transformSource(jsx, 'probe.tsx', {});
+        const oxc = transformWasm(jsx, 'probe.tsx', {});
         expect([...babel.classes].sort()).toEqual([...oxc.classes].sort());
         expect(babel.diagnostics).toEqual(oxc.diagnostics);
     });

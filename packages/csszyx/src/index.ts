@@ -21,7 +21,7 @@ export {
     type SzObject,
     serializeManifest,
     transform,
-    transformSourceCode,
+    transformSource,
     validateSzRecover,
 } from '@csszyx/compiler';
 // === Core WASM ===

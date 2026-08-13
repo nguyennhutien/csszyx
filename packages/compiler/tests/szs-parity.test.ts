@@ -20,9 +20,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { loadNativeBinding } from '../../core/native/index.js';
-import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 interface EngineOutput {
     code: string;
@@ -37,8 +37,8 @@ interface EngineOutput {
  * @returns code, ordered classes, and diagnostic count.
  */
 function run(engine: 'babel' | 'oxc' | 'rust', tsx: string): EngineOutput {
-    let result = transformSourceCode(tsx, 'F.tsx');
-    if (engine === 'oxc') result = transformOxc(tsx, 'F.tsx');
+    let result = transformSource(tsx, 'F.tsx');
+    if (engine === 'oxc') result = transformWasm(tsx, 'F.tsx');
     else if (engine === 'rust') result = transformRust(tsx, 'F.tsx');
     return {
         code: typeof result === 'string' ? result : result.code,

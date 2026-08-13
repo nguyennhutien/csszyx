@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { parseStaticObjectLiteral } from '../src/static-object-parser.js';
-import { transform } from '../src/transform.js';
+import { transform } from '../src/transform-core.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DOCS_REF = join(__dirname, '../../../apps/docs/src/content/docs/docs/reference');

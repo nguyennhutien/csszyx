@@ -19,10 +19,9 @@
  * introduce.
  */
 import { describe, expect, it } from 'vitest';
-
-import { transformSourceCode } from '../src/transform.js';
-import { OxcNotImplementedError, transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 /** Cross-module sz objects, keyed by specifier then export name. */
 type SzObjectRegistry = Record<string, Record<string, Record<string, unknown>>>;
@@ -34,8 +33,8 @@ type Engine = (
 ) => { code?: string; classes?: Set<string>; diagnostics?: string[] };
 
 const ENGINES: ReadonlyArray<readonly [string, Engine]> = [
-    ['babel', transformSourceCode as Engine],
-    ['oxc', transformOxc as Engine],
+    ['babel', transformSource as Engine],
+    ['oxc', transformWasm as Engine],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
 ];
 
@@ -249,25 +248,23 @@ describe('where the resolved binding is used', () => {
         // and `local` is a different binding whose initializer merely mentions
         // it. Following that would mean folding arbitrary local dataflow.
         const out = run(
-            transformSourceCode as Engine,
+            transformSource as Engine,
             'const local = { ...cardSz };\nexport const A = () => <div sz={local} />;',
         );
         expect(out.code).toContain('_sz(local)');
         expect(out.classes).toEqual([]);
     });
 
-    it('oxc reports the same case as unsupported, so the plugin falls back', () => {
-        // Not a divergence: an object spread inside an sz object is a shape the
-        // oxc lane declines to read, and declining is how it hands the file to
-        // Babel — which produces the assertion above. Pinned so that a lane
-        // which starts ANSWERING here is noticed, since answering differently
-        // from Babel is the failure this contract exists to prevent.
-        const tsx =
-            "import { cardSz } from './styles';\nconst local = { ...cardSz };\n" +
-            'export const A = () => <div sz={local} />;';
-        expect(() => transformOxc(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY })).toThrow(
-            OxcNotImplementedError,
+    it('wasm keeps the runtime path when a local const re-wraps the import', () => {
+        // The artifacts answer this case identically: a spread re-wrap is not
+        // statically readable, so the value stays on the runtime path instead
+        // of being resolved through the registry.
+        const out = run(
+            transformWasm as Engine,
+            'const local = { ...cardSz };\nexport const A = () => <div sz={local} />;',
         );
+        expect(out.code).toContain('_sz(local)');
+        expect(out.classes).toEqual([]);
     });
 
     if (isRustTransformAvailable()) {
@@ -291,7 +288,7 @@ describe('import shapes the oxc reader has to tell apart', () => {
         const tsx =
             "import { type cardSz } from './styles';\n" +
             'export const A = () => <div sz={{ p: 1 }} />;';
-        const out = transformOxc(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+        const out = transformWasm(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
 
         expect(out.code).toContain('p-1');
         expect(out.code).not.toContain('p-4');
@@ -308,7 +305,7 @@ describe('import shapes the oxc reader has to tell apart', () => {
             'const holder = { cardSz };\n' +
             'holder.cardSz = { p: 9 };\n' +
             'export const A = () => <div sz={cardSz} />;';
-        const out = transformOxc(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+        const out = transformWasm(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
 
         expect(out.code).toContain('p-4');
     });
@@ -320,7 +317,7 @@ describe('import shapes the oxc reader has to tell apart', () => {
         const tsx =
             'import { "card-sz" as card } from \'./styles\';\n' +
             'export const A = () => <div sz={card} />;';
-        const out = transformOxc(tsx, '/p/Card.tsx', {
+        const out = transformWasm(tsx, '/p/Card.tsx', {
             crossModuleSzObjects: { './styles': { 'card-sz': { p: 4 } } },
         });
 
@@ -337,7 +334,7 @@ describe('an export named by a string literal', () => {
         const tsx =
             'import { "card-sz" as card } from \'./styles\';\n' +
             'export const A = () => <div sz={card} />;';
-        const out = transformSourceCode(tsx, '/p/Card.tsx', {
+        const out = transformSource(tsx, '/p/Card.tsx', {
             crossModuleSzObjects: { './styles': { 'card-sz': { p: 4 } } },
         } as never);
 

@@ -152,7 +152,6 @@ other cause is `build.importedStaticSz` being turned off. See
 | `[csszyx] possible style override at {filename}: this element spreads props that may contain style, while sz emits an explicit style attribute. Move the spread style to an explicit style prop so csszyx can merge both values.` | nudge | Pass `style` explicitly so both values merge. |
 | `[csszyx] szRecover at {filename}: only string-literal values ("csr" \| "dev-only") are supported. Dynamic values disable token emission for this element.` | nudge | Use a literal. |
 | `[csszyx] szRecover at {filename}: unknown mode "{value}" — expected "csr" or "dev-only". Token emission skipped.` | nudge | Use `"csr"` or `"dev-only"`. |
-| `[csszyx] AST transform failed, falling back to original code:` | ungated | A bug — the file ships untransformed. Please report it. |
 
 `{filename}` is `<anonymous>` when the compiler was called without one.
 

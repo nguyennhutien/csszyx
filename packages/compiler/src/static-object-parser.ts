@@ -1,6 +1,6 @@
 import { parseSync } from 'oxc-parser';
 
-import type { SzObject } from './transform.js';
+import type { SzObject } from './transform-core.js';
 
 /** Recursively supported value domain for adapter object literals. */
 type StaticValue =

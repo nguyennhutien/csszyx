@@ -14,9 +14,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { extractCrossModuleRegistryEntries } from '../src/cross-module-extract.js';
-import { transformSourceCode } from '../src/transform.js';
-import { transformOxc } from '../src/transform-oxc.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
+import { transformSource } from '../src/transform-select.js';
+import { transformWasm } from '../src/transform-wasm.js';
 
 type Engine = (
     source: string,
@@ -25,8 +25,8 @@ type Engine = (
 ) => { code?: string; usesSzvPick?: boolean };
 
 const LANES: ReadonlyArray<readonly [string, Engine]> = [
-    ['babel', transformSourceCode as Engine],
-    ['oxc', transformOxc as Engine],
+    ['babel', transformSource as Engine],
+    ['oxc', transformWasm as Engine],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
 ];
 

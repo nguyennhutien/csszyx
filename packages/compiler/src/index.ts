@@ -23,12 +23,6 @@ export {
     type ScanGlobalVarUsagesOptions,
     scanGlobalVarUsages,
 } from './global-var-diagnostics.js';
-// Export hoisting utilities
-export {
-    buildParentMap,
-    type CSSVarUsage,
-    hoistCSSVariables,
-} from './hoisting.js';
 // Export manifest generation
 export {
     ManifestBuilder,
@@ -65,28 +59,24 @@ export {
     type SzFallbackConsequence,
     szFallbackConsequenceOf,
 } from './sz-fallback-matrix.js';
+// Export transform-core constants needed by MCP and CLI
 export {
+    BOOLEAN_SHORTHANDS,
     type CssVariableMangleValue,
     type GlobalVarAliasTableInput,
     isValidSzProp,
+    KNOWN_VARIANTS,
     normalizeClassName,
+    PROPERTY_MAP,
+    REMOVED_BOOLEAN_SUGAR,
     type SourceTransformResult,
+    SPECIAL_VARIANTS,
+    SUGGESTION_MAP,
     type SzObject,
     type SzValue,
     type TransformSourceCodeOptions,
     transform,
-    transformSourceCode,
-} from './transform.js';
-// Export transform-core constants needed by MCP and CLI
-export {
-    BOOLEAN_SHORTHANDS,
-    KNOWN_VARIANTS,
-    PROPERTY_MAP,
-    REMOVED_BOOLEAN_SUGAR,
-    SPECIAL_VARIANTS,
-    SUGGESTION_MAP,
 } from './transform-core.js';
-export { OxcNotImplementedError, type TransformOxcResult, transformOxc } from './transform-oxc.js';
 export {
     ensureRustTransformAvailable,
     isRustTransformAvailable,
@@ -95,6 +85,7 @@ export {
     transformRust,
     transformRustBatch,
 } from './transform-rust.js';
+export { transformSource } from './transform-select.js';
 export {
     isWasmTransformAvailable,
     transformWasm,

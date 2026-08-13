@@ -24,9 +24,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
     OxcRustNotImplementedError,
-    transformOxc,
     transformRust,
-    transformSourceCode,
+    transformSource,
+    transformWasm,
 } from '../src/index.js';
 
 const IMPORT = "import { szv } from 'csszyx';";
@@ -38,8 +38,8 @@ const IMPORT = "import { szv } from 'csszyx';";
  * @param expected Classes every engine must extract (order-insensitive).
  */
 function expectCatalogParity(source: string, expected: string[]): void {
-    const oxc = [...transformOxc(source, 'catalog.tsx').classes].sort();
-    const babel = [...transformSourceCode(source, 'catalog.tsx').classes].sort();
+    const oxc = [...transformWasm(source, 'catalog.tsx').classes].sort();
+    const babel = [...transformSource(source, 'catalog.tsx').classes].sort();
     const wanted = [...expected].sort();
     expect(oxc, 'oxc classes').toEqual(wanted);
     expect(babel, 'babel classes').toEqual(wanted);
@@ -248,8 +248,8 @@ const P = P;`,
         // bottom out empty — they are here to prove the walk TERMINATES, and
         // the parity assertion proves all engines cap identically.
         const source = `${IMPORT}\n${lines.join('\n')}`;
-        const oxc = [...transformOxc(source, 'catalog.tsx').classes];
-        const babel = [...transformSourceCode(source, 'catalog.tsx').classes];
+        const oxc = [...transformWasm(source, 'catalog.tsx').classes];
+        const babel = [...transformSource(source, 'catalog.tsx').classes];
         for (const classes of [oxc, babel]) {
             expect(classes).toContain('text-red-500');
             expect(classes).toContain('text-blue-500');
