@@ -88,3 +88,163 @@ mod sz_fallback_matrix_tests {
         assert_eq!(SZ_FALLBACK_UNKNOWN_CALLEE, "?");
     }
 }
+
+#[cfg(test)]
+mod diagnostic_table_tests {
+    use super::tables::{key_migration_note, key_suggestion};
+
+    /// The CSS property names the table translates, alias to canonical key.
+    const CANONICAL_KEY_SUGGESTIONS: &[(&str, &str)] = &[
+        ("backgroundColor", "bg"),
+        ("backgroundImage", "bgImg"),
+        ("backgroundSize", "bgSize"),
+        ("backgroundPosition", "bgPos"),
+        ("backgroundRepeat", "bgRepeat"),
+        ("bgAttachment", "bgAttach"),
+        ("bgImage", "bgImg"),
+        ("borderRadius", "rounded"),
+        ("borderTopLeftRadius", "roundedTl"),
+        ("borderTopRightRadius", "roundedTr"),
+        ("borderBottomLeftRadius", "roundedBl"),
+        ("borderBottomRightRadius", "roundedBr"),
+        ("borderWidth", "border"),
+        ("padding", "p"),
+        ("paddingTop", "pt"),
+        ("paddingRight", "pr"),
+        ("paddingBottom", "pb"),
+        ("paddingLeft", "pl"),
+        ("paddingX", "px"),
+        ("paddingY", "py"),
+        ("margin", "m"),
+        ("marginTop", "mt"),
+        ("marginRight", "mr"),
+        ("marginBottom", "mb"),
+        ("marginLeft", "ml"),
+        ("marginX", "mx"),
+        ("marginY", "my"),
+        ("width", "w"),
+        ("height", "h"),
+        ("minWidth", "minW"),
+        ("maxWidth", "maxW"),
+        ("minHeight", "minH"),
+        ("maxHeight", "maxH"),
+        ("aspectRatio", "aspect"),
+        ("boxSizing", "box"),
+        ("boxDecorationBreak", "boxDecoration"),
+        ("objectPosition", "objectPos"),
+        ("zIndex", "z"),
+        (
+            "font",
+            "weight (for font-weight) or fontFamily (for family)",
+        ),
+        ("fontWeight", "weight"),
+        ("fontSize", "text"),
+        ("textDecoration", "decoration"),
+        ("textDecorationColor", "decorationColor"),
+        ("textDecorationStyle", "decorationStyle"),
+        ("textDecorationThickness", "decorationThickness"),
+        ("textUnderlineOffset", "underlineOffset"),
+        ("lineHeight", "leading"),
+        ("letterSpacing", "tracking"),
+        ("textIndent", "indent"),
+        ("verticalAlign", "align"),
+        ("wordBreak", "break"),
+        ("overflowWrap", "wrap"),
+        ("listStyleType", "list"),
+        ("listStylePosition", "listPos"),
+        ("listStyleImage", "listImg"),
+        ("listStyle", "list"),
+        ("listPosition", "listPos"),
+        ("listImage", "listImg"),
+        ("flexBasis", "basis"),
+        ("flexDirection", "flexDir"),
+        ("flexGrow", "grow"),
+        ("flexShrink", "shrink"),
+        ("alignItems", "items"),
+        ("alignContent", "content"),
+        ("alignSelf", "self"),
+        ("justifyContent", "justify"),
+        ("gridTemplateColumns", "gridCols"),
+        ("gridTemplateRows", "gridRows"),
+        ("gridColumn", "col"),
+        ("gridRow", "row"),
+        ("gridAutoFlow", "gridFlow"),
+        ("gridAutoColumns", "autoCols"),
+        ("gridAutoRows", "autoRows"),
+        ("boxShadow", "shadow"),
+        ("mixBlendMode", "mixBlend"),
+        ("backgroundBlendMode", "bgBlend"),
+        ("transitionProperty", "transition"),
+        ("transitionDuration", "duration"),
+        ("transitionTimingFunction", "ease"),
+        ("transitionDelay", "delay"),
+        ("animation", "animate"),
+        ("transformOrigin", "origin"),
+        ("caretColor", "caret"),
+        ("accentColor", "accent"),
+        ("scrollBehavior", "scroll"),
+        ("scrollMargin", "scrollM"),
+        ("scrollPadding", "scrollP"),
+        ("scrollSnapAlign", "snapAlign"),
+        ("scrollSnapStop", "snapStop"),
+        ("scrollSnapType", "snapType"),
+        ("touchAction", "touch"),
+        ("userSelect", "select"),
+        ("captionSide", "caption"),
+        (
+            "scrollbarColor",
+            "scrollbarThumb (thumb color) or scrollbarTrack (track color)",
+        ),
+        ("scrollbarWidth", "scrollbar"),
+        ("flexWrapReverse", "flexWrap: 'wrap-reverse'"),
+        ("flexNowrap", "flexWrap: 'nowrap'"),
+    ];
+
+    /// Every canonical-key suggestion the table offers.
+    ///
+    /// These strings are the whole value of the unknown-key diagnostic: the
+    /// warning fires either way, but without the suggestion it tells an author
+    /// their key is wrong and nothing about what to write instead, which for a
+    /// name like `borderTopLeftRadius` is the difference between a five-second
+    /// fix and a search through the docs. The table is generated, so the entries
+    /// are listed here rather than derived from it — an entry that disappears
+    /// from the generator must fail here rather than pass by agreeing with
+    /// itself.
+    #[test]
+    fn every_css_property_name_maps_to_its_canonical_key() {
+        for (alias, canonical) in CANONICAL_KEY_SUGGESTIONS {
+            assert_eq!(
+                key_suggestion(alias),
+                Some(*canonical),
+                "suggestion for {alias}"
+            );
+        }
+
+        // A key that IS canonical has nothing to suggest, so the lookup must
+        // not answer for everything.
+        for key in ["p", "bg", "display", "notAKeyAtAll"] {
+            assert_eq!(key_suggestion(key), None, "{key}");
+        }
+    }
+
+    /// Every removed key explains where its feature went.
+    ///
+    /// A migration note is the only thing standing between an author whose
+    /// working code stopped working and a silent no-op. Losing one turns a
+    /// removal into an unexplained blank.
+    #[test]
+    fn every_removed_key_carries_its_migration_note() {
+        for (key, note) in [
+            ("maskFrom", "the from stop moved into its layer — maskLinear / maskRadial / maskConic take { from }"),
+            ("maskTo", "the to stop moved into its layer — maskLinear / maskRadial / maskConic take { to }"),
+            ("maskVia", "masks have no via stop in Tailwind — use { from, to } on maskLinear / maskRadial / maskConic"),
+            ("maskShape", "the shape keyword moved to maskRadial — { shape: \"circle\" | \"ellipse\" }"),
+        ] {
+            assert_eq!(key_migration_note(key), Some(note), "note for {key}");
+        }
+
+        for key in ["maskLinear", "p", "bg"] {
+            assert_eq!(key_migration_note(key), None, "{key}");
+        }
+    }
+}

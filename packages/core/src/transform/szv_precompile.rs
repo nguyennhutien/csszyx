@@ -1136,4 +1136,43 @@ mod tests {
         .expect("shape qualifies");
         assert_eq!(overlap_disqualify_path(&clean), None);
     }
+
+    /// A table with more than one entry per level, serialized in full.
+    ///
+    /// The separators only exist once a level holds a second entry, so a
+    /// single-entry table serializes identically whether the separator logic
+    /// works or not. What this produces is emitted verbatim into the bundle as
+    /// a JavaScript object literal, and a missing comma there is a syntax
+    /// error that takes the user's whole build down.
+    #[test]
+    fn a_multi_entry_table_serializes_every_separator() {
+        let table = SzvTable {
+            base: "rounded-lg".to_string(),
+            dimensions: vec![
+                (
+                    "pad".to_string(),
+                    vec![
+                        ("sm".to_string(), "p-2".to_string()),
+                        ("lg".to_string(), "p-8".to_string()),
+                    ],
+                ),
+                (
+                    "tone".to_string(),
+                    vec![
+                        ("red".to_string(), "bg-red-500".to_string()),
+                        ("blue".to_string(), "bg-blue-500".to_string()),
+                    ],
+                ),
+            ],
+            defaults: Some(vec![
+                ("pad".to_string(), "sm".to_string()),
+                ("tone".to_string(), "blue".to_string()),
+            ]),
+        };
+
+        assert_eq!(
+            serialize_szv_table(&table),
+            "{\"base\":\"rounded-lg\",\"d\":{\"pad\":{\"sm\":\"p-2\",\"lg\":\"p-8\"},\"tone\":{\"red\":\"bg-red-500\",\"blue\":\"bg-blue-500\"}},\"defaults\":{\"pad\":\"sm\",\"tone\":\"blue\"}}"
+        );
+    }
 }
