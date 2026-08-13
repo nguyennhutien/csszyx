@@ -287,6 +287,64 @@ const corpus = [
     // so the cross-engine harness covers them instead of a 4-case JS duplicate.
     { bgImg: 'url(/hero.png)' },
     { hover: { start: 2 } },
+    // Keys whose class prefix is NOT the kebab form of the key. The lowering
+    // falls back to kebab when it finds no prefix entry, so for these — and
+    // only these — a lost table entry changes the emitted class instead of
+    // reproducing it. The snippets carry no single-class example for any of
+    // them, so the per-key matrix skips them and this is the only place they
+    // are pinned. Both value shapes, because the colour-opacity form reads
+    // the prefix through a second call site.
+    { ringColor: 'red-500' },
+    { ringColor: { color: 'red-500', op: 50 } },
+    { ringOffsetColor: 'red-500' },
+    { ringOffsetColor: { color: 'red-500', op: 50 } },
+    { insetRingColor: 'red-500' },
+    { insetRingColor: { color: 'red-500', op: 50 } },
+    { borderRColor: 'red-500' },
+    { borderRColor: { color: 'red-500', op: 50 } },
+    { borderBColor: 'red-500' },
+    { borderBColor: { color: 'red-500', op: 50 } },
+    { borderLColor: 'red-500' },
+    { borderLColor: { color: 'red-500', op: 50 } },
+    { borderXColor: 'red-500' },
+    { borderXColor: { color: 'red-500', op: 50 } },
+    { borderYColor: 'red-500' },
+    { borderYColor: { color: 'red-500', op: 50 } },
+    { textOverflow: 'ellipsis' },
+    // Variant aliases that are likewise not the kebab form of their key. The
+    // kebab fallback produces a variant Tailwind does not have, so the rule is
+    // dropped with no error anywhere.
+    { onlyChild: { p: 2 } },
+    { lastChild: { mb: 0 } },
+    { screenPortrait: { p: 2 } },
+    { screenLandscape: { p: 4 } },
+    { '@max2xl': { p: 2 } },
+    // A variant written as a string KEY with a class string as its value. The
+    // key has to be recognised as a variant here, or it is treated as a
+    // property and joined with a dash into a class that does not exist.
+    { 'peer-checked': 'text-red-500' },
+    { 'not-hover': 'underline' },
+    { 'group-hover': 'underline' },
+    { 'aria-checked': 'font-bold' },
+    { 'data-open': 'block' },
+    // Selector-shaped children under group/peer. Only the class form was
+    // covered, and the other three fall into the named-scope branch, where a
+    // scalar child is skipped and the element gets no class at all.
+    { group: { '[data-open]': { p: 2 } } },
+    { group: { ':nth-child(2)': { p: 2 } } },
+    { peer: { '#main': { p: 2 } } },
+    { peer: { '[data-open]': { p: 2 } } },
+    // A fractional number is special-cased for lineHeight alone, so both a
+    // lineHeight case and a non-lineHeight neighbour are needed to pin which
+    // key the special case belongs to.
+    { lineHeight: 1.4 },
+    { aspect: 1.6 },
+    { scale: 1.05 },
+    // Named gradient shapes as plain strings; without them only the object
+    // form was covered, and the string form falls through to a url() wrap.
+    { bgImg: 'radial' },
+    { bgImg: 'conic' },
+    { bgImg: 'linear-to-r' },
 ];
 
 // Merge the hand-curated corpus (first, order preserved) with every documented
