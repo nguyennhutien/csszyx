@@ -28,7 +28,7 @@ describe('Next source transformer', () => {
         return {
             source: 'const App=()=> <div sz={{ p: 4 }} />;',
             filename: '/repo/src/App.tsx',
-            parserMode: 'oxc' as const,
+            parserMode: 'wasm' as const,
             pluginVersion: PLUGIN_VERSION,
             compilerVersion: COMPILER_VERSION,
             ...overrides,
@@ -42,7 +42,7 @@ describe('Next source transformer', () => {
         const second = transformNextSource(input({ cacheRoot }));
 
         expect(first.cacheStatus).toBe('write');
-        expect(first.producer).toBe('oxc');
+        expect(first.producer).toBe('wasm');
         expect(first.result.code).toContain('className="p-4"');
         expect(second.cacheStatus).toBe('hit');
         expect(second.result.code).toBe(first.result.code);
@@ -79,7 +79,7 @@ describe('Next source transformer', () => {
             }),
         );
 
-        expect(first.producer).toBe('oxc');
+        expect(first.producer).toBe('wasm');
         expect(first.cacheStatus).toBe('write');
         expect(first.result.code).toContain('className="p-4"');
         expect(rerun.cacheStatus).toBe('hit');
@@ -89,7 +89,7 @@ describe('Next source transformer', () => {
         expect(() =>
             transformNextSource(
                 input({
-                    parserMode: 'babel',
+                    parserMode: 'wasm',
                     source: 'const App = <div sz={{ p: 4 }}',
                 }),
             ),
@@ -103,7 +103,7 @@ describe('Next source transformer', () => {
     it('does not fail closed when sz= appears only inside a line comment', () => {
         const result = transformNextSource(
             input({
-                parserMode: 'babel',
+                parserMode: 'wasm',
                 source: '// TODO: replace inline sz={{ p: 4 }} with a hook\nexport const X = 1;\n',
                 filename: '/repo/src/CommentOnly.tsx',
             }),
@@ -116,7 +116,7 @@ describe('Next source transformer', () => {
     it('does not fail closed when sz: appears only inside a block comment', () => {
         const result = transformNextSource(
             input({
-                parserMode: 'babel',
+                parserMode: 'wasm',
                 source: '/* future: sz: { p: 4 } */\nexport const Y = 2;\n',
                 filename: '/repo/src/BlockOnly.tsx',
             }),
@@ -129,7 +129,7 @@ describe('Next source transformer', () => {
     it('does not fail closed when sz= appears only inside a string literal', () => {
         const result = transformNextSource(
             input({
-                parserMode: 'babel',
+                parserMode: 'wasm',
                 source: 'export const Z = "sample text sz={{ p: 4 }} not real";\n',
                 filename: '/repo/src/StringOnly.tsx',
             }),
@@ -142,7 +142,7 @@ describe('Next source transformer', () => {
     it('does not fail closed when sz= appears only inside a regex literal', () => {
         const result = transformNextSource(
             input({
-                parserMode: 'babel',
+                parserMode: 'wasm',
                 source: 'export const hasSzText = /sz={{ p: 4 }}/.test(input);\n',
                 filename: '/repo/src/RegexOnly.ts',
             }),
@@ -156,7 +156,7 @@ describe('Next source transformer', () => {
         expect(() =>
             transformNextSource(
                 input({
-                    parserMode: 'babel',
+                    parserMode: 'wasm',
                     source: 'const marker = /sz=/;\nconst App = <div sz={{ p: 4 }}',
                 }),
             ),

@@ -55,7 +55,6 @@ export interface NextPrebuildOptions {
     nativeVersion?: string;
     mode?: 'development' | 'production';
     astBudget?: number;
-    allowBabelFallback?: boolean;
     allowProductionMangling?: boolean;
     writeOptions?: AtomicWriteOptions;
     createdAt?: string;
@@ -159,7 +158,6 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
             pluginVersion: csszyxVersion,
             compilerVersion,
             astBudget: options.astBudget,
-            allowBabelFallback: options.allowBabelFallback,
         });
 
         const metadata = collectNextTransformMetadata(transform.result, source, filename);

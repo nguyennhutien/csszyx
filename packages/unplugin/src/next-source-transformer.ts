@@ -3,11 +3,9 @@ import {
     ensureRustTransformAvailable,
     type SourceTransformResult,
     type TransformSourceCodeOptions,
-    transformOxc,
     transformRust,
-    transformSourceCode,
+    transformWasm,
 } from '@csszyx/compiler';
-import { babelFallbackReason } from './babel-fallback-reason.js';
 import { normalizePathSeparators } from './path-normalization.js';
 import {
     createTransformCacheKey,
@@ -18,7 +16,7 @@ import {
 } from './transform-cache.js';
 
 /** Parser mode supported by the Next Turbopack source transformer. */
-export type NextSourceParserMode = 'babel' | 'oxc' | 'rust';
+export type NextSourceParserMode = 'rust' | 'wasm';
 
 /** Inputs for one fail-closed source transform. */
 export interface NextSourceTransformInput {
@@ -30,7 +28,6 @@ export interface NextSourceTransformInput {
     pluginVersion: string;
     compilerVersion: string;
     astBudget?: number;
-    allowBabelFallback?: boolean;
 }
 
 /** Result of one source transform plus cache metadata for loader diagnostics. */
@@ -250,35 +247,16 @@ function runNextSourceTransform(
     filename: string,
 ): Pick<NextSourceTransformOutput, 'result' | 'producer'> {
     const compilerOptions = input.compilerOptions;
-    if (input.parserMode === 'babel') {
-        return {
-            result: transformSourceCode(input.source, filename, compilerOptions),
-            producer: 'babel',
-        };
-    }
     if (input.parserMode === 'rust') {
         return {
             result: transformRust(input.source, filename, compilerOptions),
             producer: 'rust',
         };
     }
-
-    try {
-        return {
-            result: transformOxc(input.source, filename, compilerOptions),
-            producer: 'oxc',
-        };
-    } catch (error) {
-        if (input.allowBabelFallback === false) {
-            throw error;
-        }
-        const result = transformSourceCode(input.source, filename, compilerOptions);
-        const reason = babelFallbackReason(error);
-        result.diagnostics.push(
-            `[csszyx] oxc parser fell back to Babel for ${filename}: ${reason}`,
-        );
-        return { result, producer: 'babel-fallback' };
-    }
+    return {
+        result: transformWasm(input.source, filename, compilerOptions),
+        producer: 'wasm',
+    };
 }
 
 /**

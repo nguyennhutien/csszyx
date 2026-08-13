@@ -36,7 +36,7 @@ function setup(overrides: Partial<ResolveParserModeInput> & { rustAvailable?: bo
 }
 
 describe('isParserMode', () => {
-    it.each(['rust', 'oxc', 'babel'] as const)('accepts the valid mode %s', mode => {
+    it.each(['rust', 'wasm'] as const)('accepts the valid mode %s', mode => {
         expect(isParserMode(mode)).toBe(true);
     });
 
@@ -59,10 +59,11 @@ describe('resolveParserMode — default-rust graceful degradation', () => {
         expect(probe).toHaveBeenCalledTimes(1);
     });
 
-    it('degrades default rust → oxc when the native binary is NOT available', () => {
+    it('degrades default rust → wasm when the native binary is NOT available', () => {
         const { input, probe } = setup({ rustAvailable: false });
+        input.isWasmAvailable = () => true;
         expect(resolveParserMode(input)).toEqual({
-            parser: 'oxc',
+            parser: 'wasm',
             degraded: true,
             explicit: false,
         });
@@ -103,20 +104,17 @@ describe('resolveParserMode — explicit rust keeps its loud-failure contract', 
 });
 
 describe('resolveParserMode — non-rust parsers never probe', () => {
-    it.each(['oxc', 'babel'] as const)(
-        'config %s resolves without consulting the native probe',
-        mode => {
-            const { input, probe } = setup({ configParser: mode, rustAvailable: false });
-            expect(resolveParserMode(input)).toEqual({
-                parser: mode,
-                degraded: false,
-                explicit: true,
-            });
-            expect(probe).not.toHaveBeenCalled();
-        },
-    );
+    it.each(['wasm'] as const)('config %s resolves without consulting the native probe', mode => {
+        const { input, probe } = setup({ configParser: mode, rustAvailable: false });
+        expect(resolveParserMode(input)).toEqual({
+            parser: mode,
+            degraded: false,
+            explicit: true,
+        });
+        expect(probe).not.toHaveBeenCalled();
+    });
 
-    it.each(['oxc', 'babel'] as const)('env %s resolves without probing', mode => {
+    it.each(['wasm'] as const)('env %s resolves without probing', mode => {
         const { input, probe } = setup({ envParser: mode, rustAvailable: false });
         expect(resolveParserMode(input)).toMatchObject({ parser: mode, explicit: true });
         expect(probe).not.toHaveBeenCalled();
@@ -124,20 +122,15 @@ describe('resolveParserMode — non-rust parsers never probe', () => {
 });
 
 describe('resolveParserMode — precedence (env > config > default)', () => {
-    it('env oxc overrides config rust', () => {
-        const { input } = setup({ envParser: 'oxc', configParser: 'rust' });
-        expect(resolveParserMode(input)).toMatchObject({ parser: 'oxc', explicit: true });
+    it('env wasm overrides config rust', () => {
+        const { input } = setup({ envParser: 'wasm', configParser: 'rust' });
+        expect(resolveParserMode(input)).toMatchObject({ parser: 'wasm', explicit: true });
     });
 
-    it('env babel overrides config rust', () => {
-        const { input } = setup({ envParser: 'babel', configParser: 'rust' });
-        expect(resolveParserMode(input)).toMatchObject({ parser: 'babel' });
-    });
-
-    it('env rust overrides config oxc (and is explicit → no degrade even if unavailable)', () => {
+    it('env rust overrides config wasm (and is explicit → no degrade even if unavailable)', () => {
         const { input, probe } = setup({
             envParser: 'rust',
-            configParser: 'oxc',
+            configParser: 'wasm',
             rustAvailable: false,
         });
         expect(resolveParserMode(input)).toEqual({
@@ -149,8 +142,8 @@ describe('resolveParserMode — precedence (env > config > default)', () => {
     });
 
     it('config wins over default when env is absent', () => {
-        const { input } = setup({ configParser: 'oxc', defaultParser: 'rust' });
-        expect(resolveParserMode(input)).toMatchObject({ parser: 'oxc' });
+        const { input } = setup({ configParser: 'wasm', defaultParser: 'rust' });
+        expect(resolveParserMode(input)).toMatchObject({ parser: 'wasm' });
     });
 });
 
@@ -177,8 +170,8 @@ describe('resolveParserMode — invalid / empty env is ignored (falls through)',
         bad => {
             const { input, probe } = setup({ envParser: bad, rustAvailable: false });
             expect(resolveParserMode(input)).toEqual({
-                parser: 'oxc',
-                degraded: true,
+                parser: 'rust',
+                degraded: false,
                 explicit: false,
             });
             expect(probe).toHaveBeenCalledTimes(1);
@@ -192,7 +185,7 @@ describe('resolveParserMode — invalid / empty env is ignored (falls through)',
 });
 
 describe('resolveParserMode — non-rust defaults', () => {
-    it.each(['oxc', 'babel'] as const)(
+    it.each(['wasm'] as const)(
         'a %s default with no overrides resolves to itself and never probes',
         def => {
             const { input, probe } = setup({ defaultParser: def, rustAvailable: false });
@@ -243,7 +236,7 @@ describe('resolveParserMode — robustness / no hidden side effects', () => {
     });
 
     it('matrix smoke — every (env, config, available) combo returns a valid ParserMode', () => {
-        const envs = [undefined, '', 'foo', 'rust', 'oxc', 'babel'];
+        const envs = [undefined, '', 'foo', 'rust', 'wasm', 'oxc', 'babel'];
         const configs: Array<ParserMode | undefined> = [undefined, 'rust', 'oxc', 'babel'];
         for (const envParser of envs) {
             for (const configParser of configs) {
@@ -290,11 +283,11 @@ describe('resolveParserMode — wasm degrade target', () => {
         expect(wasmProbe).toHaveBeenCalledTimes(1);
     });
 
-    it('falls back to oxc only when the wasm artifact is ALSO missing', () => {
+    it('stays on rust — fail loud downstream — when the wasm artifact is ALSO missing', () => {
         const { input } = wasmSetup(false, false);
         expect(resolveParserMode(input)).toEqual({
-            parser: 'oxc',
-            degraded: true,
+            parser: 'rust',
+            degraded: false,
             explicit: false,
         });
     });
@@ -311,5 +304,23 @@ describe('resolveParserMode — wasm degrade target', () => {
         expect(result).toEqual({ parser: 'wasm', degraded: false, explicit: true });
         expect(probe).not.toHaveBeenCalled();
         expect(wasmProbe).not.toHaveBeenCalled();
+    });
+});
+
+describe('resolveParserMode — rust-only world (oxc/babel removed)', () => {
+    it.each(['oxc', 'babel'] as const)('rejects the removed mode %s', mode => {
+        expect(isParserMode(mode)).toBe(false);
+    });
+
+    it('stays on rust — fail loud — when the wasm artifact is missing too', () => {
+        // With no JavaScript parser left there is nothing to degrade to: the
+        // native error names the missing platform package, which is more
+        // actionable than silently running a lane that cannot load either.
+        const { input } = setup({ rustAvailable: false });
+        expect(resolveParserMode({ ...input, isWasmAvailable: () => false })).toEqual({
+            parser: 'rust',
+            degraded: false,
+            explicit: false,
+        });
     });
 });

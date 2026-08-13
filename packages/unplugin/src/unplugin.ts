@@ -16,10 +16,8 @@ import {
     type TokenData,
     type TransformSourceCodeOptions,
     transform,
-    transformOxc,
     transformRust,
     transformRustBatch,
-    transformSourceCode,
     transformWasm,
 } from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
@@ -40,7 +38,6 @@ import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } fro
 import type { PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
-import { babelFallbackReason } from './babel-fallback-reason.js';
 import { findUnknownConfigKeys, unknownConfigKeysMessage } from './config-keys.js';
 import {
     importedSpecifiersIn,
@@ -397,9 +394,6 @@ let _hasWarnedNativeFallback = false;
 // used to claim an engine the real build never used — which cost a field user
 // an investigation. Each distinct mode announces itself once.
 const _loggedActiveParsers = new Set<string>();
-// Files for which an oxc→Babel fallback has already been reported, so the
-// per-file warning is emitted once per file rather than on every re-transform.
-const _babelFallbackFiles = new Set<string>();
 const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
 const PLUGIN_VERSION = findPackageVersionFromFile(
     fileURLToPath(import.meta.url),
@@ -2670,8 +2664,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // Graceful degradation: when `rust` is only the DEFAULT (not opted into) and no
     // prebuilt native binary is installed for this platform (unsupported arch,
     // optional deps omitted, or a cross-platform frozen lockfile), fall back to
-    // `oxc` — whose classes match on every shape the parity corpus covers — with
-    // a one-time warning that names the shape where they do not,
+    // the wasm build of the same engine — same output, only parse speed
+    // differs — with a one-time warning,
     // instead of hard-failing a build the user never asked to run on `rust`. An
     // EXPLICIT `rust` (env or config) keeps its loud-failure contract.
     const { parser: parserMode, degraded: parserDegraded } = resolveParserMode({
@@ -2702,27 +2696,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         'not omit optional dependencies). Set `build.parser` explicitly to ' +
                         'silence this.',
                 );
-            } else {
-                console.warn(
-                    '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
-                        'platform, and the wasm build of the engine is missing too, so the ' +
-                        'default `rust` parser fell back to `oxc`. Parse speed ' +
-                        'differs, and so does one shape: a const a file declares and then uses as ' +
-                        'an sz value compiles to a static utility under `rust` and to a runtime CSS ' +
-                        'variable under `oxc`. To use the native engine, install the matching ' +
-                        '@csszyx/core-<platform> package (or do not omit optional dependencies). ' +
-                        'Set `build.parser` explicitly to silence this.',
-                );
             }
         }
         if (!_loggedActiveParsers.has(parserMode)) {
             _loggedActiveParsers.add(parserMode);
             let detail: string = parserMode;
             if (parserDegraded) {
-                detail =
-                    parserMode === 'wasm'
-                        ? 'wasm (degraded from default `rust`: same engine, wasm build)'
-                        : 'oxc (degraded from default `rust`: no native binary for this platform)';
+                detail = 'wasm (degraded from default `rust`: same engine, wasm build)';
             } else if (parserMode === 'rust') {
                 detail = 'rust (native engine)';
             } else if (parserMode === 'wasm') {
@@ -2990,10 +2970,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
     /**
      * Runs the configured source transform. Rust is the default parser after
-     * the max-speed pass and routes through the native engine. Oxc is
-     * the documented JavaScript fallback for native-unavailable platforms, and
-     * Babel remains the final compatibility safety net for unexpected
-     * parser/compiler failures on either engine.
+     * the max-speed pass and routes through the native engine; the wasm build
+     * of the same engine covers machines the native addon cannot load on.
      *
      * @param source Source module contents.
      * @param filename Source filename for parser diagnostics.
@@ -3114,75 +3092,25 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         effectiveFilename: string,
         compilerOptions: TransformSourceCodeOptions,
     ): { result: SourceTransformResult; cacheable: boolean } {
-        if (parserMode === 'babel') {
-            return {
-                result: transformSourceCode(source, effectiveFilename, compilerOptions),
-                cacheable: true,
-            };
-        }
         if (parserMode === 'rust') {
             // Honour the documented contract: `rust` is opt-in and never
-            // silently falls back to oxc/Babel. Any failure here surfaces
+            // silently falls back to another lane. Any failure here surfaces
             // to the caller with the same compatibility error the compiler
             // wrapper raises when the native addon is missing for the current
             // host, so misconfigured environments fail loudly instead of
-            // producing oxc output users were not expecting.
+            // producing output from a lane users were not expecting.
             return {
                 result: transformRust(source, effectiveFilename, compilerOptions),
                 cacheable: true,
             };
         }
-        if (parserMode === 'wasm') {
-            // Same engine as `rust`, so the same fail-loud contract: a wasm
-            // load failure mid-build is a broken installation, not a reason
-            // to switch engines silently.
-            return {
-                result: transformWasm(source, effectiveFilename, compilerOptions),
-                cacheable: true,
-            };
-        }
-
-        try {
-            return {
-                result: transformOxc(source, effectiveFilename, compilerOptions),
-                cacheable: true,
-            };
-        } catch (error) {
-            return {
-                result: runBabelFallback(source, effectiveFilename, compilerOptions, error),
-                cacheable: false,
-            };
-        }
-    }
-
-    /**
-     * Runs and reports the compatibility fallback for an Oxc parser failure.
-     * @param source Source module contents.
-     * @param effectiveFilename Normalized source filename.
-     * @param compilerOptions Compiler options.
-     * @param error Oxc parser failure.
-     * @returns Babel compatibility transform result.
-     */
-    function runBabelFallback(
-        source: string,
-        effectiveFilename: string,
-        compilerOptions: TransformSourceCodeOptions,
-        error: unknown,
-    ): SourceTransformResult {
-        const result = transformSourceCode(source, effectiveFilename, compilerOptions);
-        const reason = babelFallbackReason(error);
-        result.diagnostics.push(
-            `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason}`,
-        );
-        if (!_babelFallbackFiles.has(effectiveFilename)) {
-            _babelFallbackFiles.add(effectiveFilename);
-            console.warn(
-                `[csszyx] oxc parser fell back to Babel for ${effectiveFilename}: ${reason} ` +
-                    `(${_babelFallbackFiles.size} file(s) so far). Output is still correct; ` +
-                    'this usually means the file uses a syntax the oxc lane does not yet handle.',
-            );
-        }
-        return result;
+        // `wasm` — same engine as `rust`, so the same fail-loud contract: a
+        // wasm load failure mid-build is a broken installation, not a reason
+        // to switch engines silently.
+        return {
+            result: transformWasm(source, effectiveFilename, compilerOptions),
+            cacheable: true,
+        };
     }
 
     /**

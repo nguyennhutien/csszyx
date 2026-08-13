@@ -48,8 +48,8 @@ describe('transform cache', () => {
         return {
             pluginVersion: PLUGIN_VERSION,
             compilerVersion: COMPILER_VERSION,
-            parserMode: 'oxc',
-            producer: 'oxc',
+            parserMode: 'wasm',
+            producer: 'wasm',
             filename: '/repo/src/App.tsx',
             source: 'const App=()=> <div sz={{ p: 4 }} />;',
             ...overrides,
@@ -114,8 +114,8 @@ describe('transform cache', () => {
         expect(readTransformCache(cacheRoot, input({ source: 'const x = 1;' }))).toBeNull();
         expect(readTransformCache(cacheRoot, input({ pluginVersion: '0.8.1' }))).toBeNull();
         expect(readTransformCache(cacheRoot, input({ compilerVersion: '0.8.1' }))).toBeNull();
-        expect(readTransformCache(cacheRoot, input({ parserMode: 'babel' }))).toBeNull();
-        expect(readTransformCache(cacheRoot, input({ producer: 'babel-fallback' }))).toBeNull();
+        expect(readTransformCache(cacheRoot, input({ parserMode: 'wasm' }))).toBeNull();
+        expect(readTransformCache(cacheRoot, input({ producer: 'rust' }))).toBeNull();
         expect(readTransformCache(cacheRoot, input({ astBudget: 1_000 }))).toBeNull();
         expect(readTransformCache(cacheRoot, input({ mangleVars: true }))).toBeNull();
         expect(readTransformCache(cacheRoot, input({ mangleVarHoistMaxDepth: 3 }))).toBeNull();
@@ -260,10 +260,10 @@ describe('transform cache', () => {
 
     it('plugin wiring writes cache entries by default', () => {
         const root = tempRoot();
-        // Pinned to oxc so this test stays valid in environments without the
+        // Pinned to wasm so this test stays valid in environments without the
         // optional Rust native addon. The cache-wiring assertion does not
         // depend on which parser produced the entry.
-        const [prePlugin] = vitePlugin({ build: { parser: 'oxc' } }) as TransformHook[];
+        const [prePlugin] = vitePlugin({ build: { parser: 'wasm' } }) as TransformHook[];
         prePlugin.configResolved?.({ root });
 
         const id = join(root, 'src/App.tsx');

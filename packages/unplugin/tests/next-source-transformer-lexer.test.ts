@@ -38,7 +38,7 @@ function base(overrides: Partial<Parameters<typeof transformNextSource>[0]> = {}
     return {
         source: 'const value = 1;',
         filename: '/repo/src/plain.ts',
-        parserMode: 'babel' as const,
+        parserMode: 'wasm' as const,
         pluginVersion: PLUGIN_VERSION,
         compilerVersion: COMPILER_VERSION,
         ...overrides,

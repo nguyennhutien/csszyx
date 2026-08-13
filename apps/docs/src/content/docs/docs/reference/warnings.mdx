@@ -415,10 +415,8 @@ These are informational and always print to stderr, once.
 
 | Message |
 | --- |
-| `[csszyx] active parser: rust (native engine)` · `[csszyx] active parser: wasm (wasm build of the native engine)` · `[csszyx] active parser: wasm (degraded from default ``rust``: same engine, wasm build)` · `[csszyx] active parser: oxc (degraded from default ``rust``: no native binary for this platform)` |
+| `[csszyx] active parser: rust (native engine)` · `[csszyx] active parser: wasm (wasm build of the native engine)` · `[csszyx] active parser: wasm (degraded from default ``rust``: same engine, wasm build)` |
 | `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, so the default ``rust`` parser fell back to its wasm build. Same engine, same output; only parse speed differs. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
-| `[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this platform, and the wasm build of the engine is missing too, so the default ``rust`` parser fell back to ``oxc``. Parse speed differs, and so does one shape: a const a file declares and then uses as an sz value compiles to a static utility under ``rust`` and to a runtime CSS variable under ``oxc``. To use the native engine, install the matching @csszyx/core-<platform> package (or do not omit optional dependencies). Set ``build.parser`` explicitly to silence this.` |
-| `[csszyx] oxc parser fell back to Babel for {filename}: {reason} ({n} file(s) so far). Output is still correct; this usually means the file uses a syntax the oxc lane does not yet handle.` |
 | `[csszyx] parse error in {filename}: the native engine could not fully scan this file ({n} syntax error(s))` |
 
 One more engine report comes from the browser runtime rather than the build:

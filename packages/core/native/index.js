@@ -14,7 +14,7 @@ export class CsszyxNativeUnavailableError extends Error {
                 [
                     'csszyx native Rust transform is not available for this install.',
                     packageName ? `Expected optional package: ${packageName}.` : null,
-                    'Use build.parser: "oxc" or "babel" until the native package is installed.',
+                    'The wasm build of the engine (build.parser: "wasm") covers this platform until the native package is installed.',
                 ]
                     .filter(Boolean)
                     .join(' '),
@@ -32,7 +32,7 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
 
     if (!packageName) {
         throw new CsszyxNativeUnavailableError(
-            'csszyx native Rust transform is not available on this platform. Use build.parser: "oxc" or "babel".',
+            'csszyx native Rust transform is not available on this platform. The wasm build of the engine (build.parser: "wasm") covers it.',
             null,
         );
     }
@@ -50,7 +50,7 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
     const binding = loaded?.default ?? loaded;
     if (typeof binding?.transformBatch !== 'function') {
         throw new CsszyxNativeUnavailableError(
-            `csszyx native package ${packageName} does not export transformBatch(). Use build.parser: "oxc" or "babel".`,
+            `csszyx native package ${packageName} does not export transformBatch(). The wasm build of the engine (build.parser: "wasm") still covers this platform.`,
             packageName,
         );
     }

@@ -78,7 +78,7 @@ describe('rust parser real-source canary', () => {
                     'const App=()=> <div sz={{ p: 4 }} />;',
                     join(REPO_ROOT, 'src/App.tsx'),
                 ),
-            ).toThrow('Use build.parser: "oxc" or "babel"');
+            ).toThrow('build.parser: "wasm"');
             return;
         }
 
@@ -124,7 +124,7 @@ describe('rust parser real-source canary', () => {
 
         if (!nativeRustAvailable) {
             expect(() => prePlugin.transform.call({ warn: vi.fn() }, source, id)).toThrow(
-                'Use build.parser: "oxc" or "babel"',
+                'build.parser: "wasm"',
             );
             return;
         }
@@ -143,7 +143,7 @@ describe('rust parser real-source canary', () => {
 
             if (!nativeRustAvailable) {
                 expect(() => prePlugin.transform.call({ warn: vi.fn() }, source, id)).toThrow(
-                    'Use build.parser: "oxc" or "babel"',
+                    'build.parser: "wasm"',
                 );
                 expect(existsSync(resolveTransformCacheDir(root))).toBe(false);
                 return;

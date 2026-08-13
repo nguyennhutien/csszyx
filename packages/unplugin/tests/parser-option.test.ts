@@ -103,7 +103,7 @@ describe('csszyx parser selection', () => {
 
     it('threads explicit global variable aliases into source transforms', () => {
         const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'wasm', cache: false },
             production: {
                 mangleGlobalVars: {
                     enabled: true,
@@ -125,7 +125,7 @@ describe('csszyx parser selection', () => {
     it('encodes custom global alias prefixes in injected layout scripts', () => {
         const hostilePrefix = '--</script>${globalThis.pwned=true}`';
         const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'wasm', cache: false },
             production: {
                 mangleGlobalVars: {
                     enabled: false,
@@ -149,7 +149,7 @@ describe('csszyx parser selection', () => {
 
     it('rewrites CSS assets with the validated explicit global variable alias plan', () => {
         const [prePlugin, postPlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'wasm', cache: false },
             production: {
                 mangleGlobalVars: {
                     enabled: true,
@@ -179,7 +179,7 @@ describe('csszyx parser selection', () => {
 
     it('fails closed when explicit global variable tokens are missing from emitted CSS', () => {
         const [, postPlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'wasm', cache: false },
             production: {
                 mangleGlobalVars: {
                     enabled: true,
@@ -209,7 +209,7 @@ describe('csszyx parser selection', () => {
         const cssPath = join(root, 'tokens.css');
         writeFileSync(cssPath, ':root{--brand-primary:red}.card{color:var(--brand-primary)}');
         const [, postPlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'oxc', cache: false, scanCss: cssPath },
+            build: { emitManifest: true, parser: 'wasm', cache: false, scanCss: cssPath },
             production: {
                 mangleGlobalVars: {
                     enabled: true,
@@ -243,7 +243,7 @@ describe('csszyx parser selection', () => {
 
     it('can skip the standalone global variable map asset', () => {
         const [prePlugin, postPlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'wasm', cache: false },
             production: {
                 mangleGlobalVars: {
                     enabled: true,
@@ -395,7 +395,7 @@ describe('csszyx parser selection', () => {
         );
     });
 
-    it('uses oxc by default', () => {
+    it('uses the native engine by default', () => {
         const [prePlugin] = vitePlugin() as TransformHook[];
         const warn = vi.fn();
         const result = prePlugin.transform.call(
@@ -410,9 +410,9 @@ describe('csszyx parser selection', () => {
         expect(warn).not.toHaveBeenCalled();
     });
 
-    it('lets build.parser opt back into Babel', () => {
+    it('lets build.parser opt into the wasm build explicitly', () => {
         const [prePlugin] = vitePlugin({
-            build: { parser: 'babel' },
+            build: { parser: 'wasm' },
         }) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
@@ -420,27 +420,15 @@ describe('csszyx parser selection', () => {
             '/repo/src/App.tsx',
         ) as { code: string };
 
-        expect(result.code).toContain('const App = () =>');
+        expect(result.code).toContain('const App=()=>');
         expect(result.code).toContain('className="p-4"');
+        expect(result.code).not.toContain(' sz=');
     });
 
-    it('lets CSSZYX_PARSER=babel override the default', () => {
-        process.env.CSSZYX_PARSER = 'babel';
-        const [prePlugin] = vitePlugin() as TransformHook[];
-        const result = prePlugin.transform.call(
-            { warn: vi.fn() },
-            'const App=()=> <div sz={{ p: 4 }} />;',
-            '/repo/src/App.tsx',
-        ) as { code: string };
-
-        expect(result.code).toContain('const App = () =>');
-        expect(result.code).toContain('className="p-4"');
-    });
-
-    it('lets CSSZYX_PARSER=oxc override build.parser=babel', () => {
-        process.env.CSSZYX_PARSER = 'oxc';
+    it('lets CSSZYX_PARSER=wasm override build.parser=rust', () => {
+        process.env.CSSZYX_PARSER = 'wasm';
         const [prePlugin] = vitePlugin({
-            build: { parser: 'babel' },
+            build: { parser: 'rust' },
         }) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
@@ -452,9 +440,9 @@ describe('csszyx parser selection', () => {
         expect(result.code).toContain('className="p-4"');
     });
 
-    it('passes production.mangleVars into the oxc compiler path', () => {
+    it('passes production.mangleVars into the wasm compiler path', () => {
         const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'wasm', cache: false },
             production: { mangleVars: true },
         }) as TransformHook[];
         const result = prePlugin.transform.call(
@@ -468,9 +456,9 @@ describe('csszyx parser selection', () => {
         expect(result.code).toContain('<span className="p-(--cz)" />');
     });
 
-    it('passes production.mangleVarHoistMaxDepth into the oxc compiler path', () => {
+    it('passes production.mangleVarHoistMaxDepth into the wasm compiler path', () => {
         const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'wasm', cache: false },
             production: { mangleVars: true, mangleVarHoistMaxDepth: 1 },
         }) as TransformHook[];
         const result = prePlugin.transform.call(
@@ -490,7 +478,7 @@ describe('csszyx parser selection', () => {
 
     it('preserves mixed scoped and hoisted CSS variable tiers in runtime metadata', () => {
         const [prePlugin, postPlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'wasm', cache: false },
             production: { mangleVars: true },
         }) as [TransformHook, GenerateBundleHook];
         const source =
@@ -520,7 +508,7 @@ describe('csszyx parser selection', () => {
 
     it('replaces per-file CSS variable metadata instead of append-only accumulation', () => {
         const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'wasm', cache: false },
             production: { mangleVars: true },
         }) as TransformHook[];
 
@@ -552,7 +540,7 @@ describe('csszyx parser selection', () => {
     it('fails loudly when CSS variable metadata exceeds the safety cap', () => {
         process.env.CSSZYX_VAR_MANGLE_MAP_MAX_BYTES = '16';
         const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'wasm', cache: false },
             production: { mangleVars: true },
         }) as TransformHook[];
 
@@ -569,7 +557,7 @@ describe('csszyx parser selection', () => {
 
     it('exposes CSS variable hoisting efficacy metrics', () => {
         const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, parser: 'wasm', cache: false },
             production: { mangleVars: true },
         }) as TransformHook[];
 
@@ -683,12 +671,12 @@ describe('csszyx parser selection', () => {
         );
     });
 
-    it('lets CSSZYX_PARSER=rust override build.parser=babel', () => {
+    it('lets CSSZYX_PARSER=rust override build.parser=wasm', () => {
         process.env.CSSZYX_PARSER = 'rust';
 
         if (!nativeRustAvailable) {
             const [prePlugin] = vitePlugin({
-                build: { parser: 'babel' },
+                build: { parser: 'wasm' },
             }) as TransformHook[];
             expect(() =>
                 prePlugin.transform.call(
@@ -696,12 +684,12 @@ describe('csszyx parser selection', () => {
                     'const App=()=> <div sz={{ p: 4 }} />;',
                     '/repo/src/App.tsx',
                 ),
-            ).toThrow('Use build.parser: "oxc" or "babel"');
+            ).toThrow('build.parser: "wasm"');
             return;
         }
 
         const [prePlugin] = vitePlugin({
-            build: { parser: 'babel' },
+            build: { parser: 'wasm' },
         }) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
