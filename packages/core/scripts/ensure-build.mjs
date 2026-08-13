@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Ensure that the wasm-pack build artifacts (pkg/ + pkg-node/) exist.
+// Ensure that the wasm-pack build artifacts (pkg/ + pkg-node/ + pkg-parser/) exist.
 //
 // Why: pkg/ and pkg-node/ are gitignored. They live only in the npm tarball
 // (shipped via the `files` field) and on the local machine after build.
@@ -36,6 +36,9 @@ const REQUIRED_FILES = [
     'pkg-node/csszyx_core.js',
     'pkg-node/csszyx_core.d.ts',
     'pkg-node/csszyx_core_bg.wasm',
+    'pkg-parser/csszyx_core.js',
+    'pkg-parser/csszyx_core.d.ts',
+    'pkg-parser/csszyx_core_bg.wasm',
 ];
 
 const strict = process.argv.includes('--strict');

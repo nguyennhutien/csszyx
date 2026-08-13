@@ -20,9 +20,10 @@ resolve a fake `url(...)`; with other bundlers they silently bloat your CSS.
 ## What's actually happening
 
 Tailwind v4 has **automatic content detection** — no `content: [...]` array. It picks
-a base directory and scans it for class names. In a monorepo, that base **climbs up to
-the workspace root**, so Tailwind scans *every* package — and the files it scans are
-not just your components.
+a base directory and scans **everything under it** for class names. How wide that base
+is depends on the build: a Vite build roots it at the Vite root, while other setups
+root it at the workspace root and scan *every* package. Either way, the files it scans
+are not just your components — a doc or fixture sitting beside your entry counts.
 
 Tailwind ignores `node_modules`, `.gitignore`d files, binaries, CSS, and lockfiles —
 but it does **not** ignore `.md`, `.mdx`, or `.txt`. Documentation is full of class
@@ -45,13 +46,20 @@ templates.
 
 ```css title="src/index.css"
 @import "tailwindcss" source(none);
-@source ".."; /* your package root, relative to this CSS file */
+@source "..";
 ```
 
-`source(none)` turns off the climb-to-the-workspace-root scan; the explicit `@source`
-adds back only your package. This is the most reliable form — a narrowing
-`source("..")` alone is not enough, because automatic detection can still escape the
-base in some bundler pipelines.
+That `@source` is your package root, relative to this CSS file. `source(none)` turns
+off automatic detection entirely; the explicit `@source` adds back only what you name.
+This is the most reliable form — a narrowing `source("..")` alone is not enough,
+because automatic detection can still escape the base in some bundler pipelines.
+
+<Aside type="caution" title="Globs and CSS comments do not mix">
+A CSS block comment ends at the **first** `*` followed by `/` — and every recursive
+glob contains one. Writing `@source "src/**/*.md"` inside a `/* … */` comment closes
+the comment early, and the rest of your stylesheet parses as declarations. Keep globs
+in the directive, not in the note about it.
+</Aside>
 
 <Aside type="tip" title="csszyx init does this for you">
 Running `csszyx init` inside a monorepo writes the scoped form automatically. This

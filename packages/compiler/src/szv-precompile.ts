@@ -167,10 +167,18 @@ function branchKeysCanonicalizable(branch: Record<string, unknown>): boolean {
  * @returns True when the member can participate in overlap analysis.
  */
 function branchKeyCanonicalizable(key: string, value: unknown): boolean {
-    // `op` fuses into whichever color-bearing key it meets and therefore
-    // cannot be represented by independent per-key compilation.
-    if (key === 'op') return false;
     if (key === 'css' && isPlainRecord(value)) return cssDeclarationsCanonicalizable(value);
+    // A nested object under a PROPERTY key is the fusion form, and
+    // `collectCanonicalLeafPaths` folds the whole subtree onto the property's
+    // own path — its children never become paths, so they need no canonical
+    // names. Descending here would judge the `op` in `bg: { color, op }` as if
+    // it sat BESIDE `bg`, which is the one position it cannot hold, and bail a
+    // config the path walk had already handled. Any conflict involving a child
+    // is still caught, at the parent path the subtree folded into.
+    if (PROPERTY_MAP[key] !== undefined && isPlainRecord(value)) return true;
+    // A bare `op` fuses into whichever color-bearing key it meets at lowering,
+    // and per-key compilation cannot represent that.
+    if (key === 'op') return false;
     if (!isCanonicalSzKey(key)) return false;
     return !isPlainRecord(value) || branchKeysCanonicalizable(value);
 }

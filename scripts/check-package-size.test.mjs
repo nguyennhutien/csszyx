@@ -252,13 +252,67 @@ test('entry-closure budgets measure a single entry graph', () => {
     }
 });
 
-test('committed budgets cover the three user-shipped surfaces', () => {
+test('file budgets measure exactly one file, without walking imports', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'csszyx-size-'));
+    try {
+        // The payload CONTAINS what looks like a relative import; a closure
+        // walk would chase the missing './x' and fail. A binary artifact like
+        // a .wasm must be measured as one opaque file.
+        mkdirSync(path.join(root, 'packages/thing'), { recursive: true });
+        writeFileSync(
+            path.join(root, 'packages/thing/artifact.wasm'),
+            '\0asm import "./x" garbage',
+        );
+        const { failures, results } = checkBudgets(
+            [
+                {
+                    name: 'thing wasm artifact',
+                    kind: 'file',
+                    target: 'packages/thing/artifact.wasm',
+                    maxGzipBytes: 1024,
+                },
+            ],
+            root,
+        );
+        assert.equal(failures.length, 0);
+        assert.equal(results[0].files.length, 1);
+        assert.ok(results[0].gzipBytes > 0);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a file budget whose artifact is missing fails instead of passing silently', () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'csszyx-size-'));
+    try {
+        const { failures } = checkBudgets(
+            [
+                {
+                    name: 'thing wasm artifact',
+                    kind: 'file',
+                    target: 'packages/thing/artifact.wasm',
+                    maxGzipBytes: 1024,
+                },
+            ],
+            root,
+        );
+        assert.equal(failures.length, 1);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('committed budgets cover the four user-shipped surfaces', () => {
     const names = SIZE_BUDGETS.map(budget => budget.name);
     assert.equal(new Set(names).size, SIZE_BUDGETS.length, 'budget names must be unique');
-    assert.equal(SIZE_BUDGETS.length, 3);
+    assert.equal(SIZE_BUDGETS.length, 4);
     for (const budget of SIZE_BUDGETS) {
-        assert.ok(['package-exports', 'entry-closure'].includes(budget.kind));
+        assert.ok(['package-exports', 'entry-closure', 'file'].includes(budget.kind));
         assert.ok(Number.isInteger(budget.maxGzipBytes) && budget.maxGzipBytes > 0);
         assert.ok(!path.isAbsolute(budget.target), 'targets are repo-relative');
     }
+    assert.ok(
+        SIZE_BUDGETS.some(budget => budget.kind === 'file' && budget.target.includes('pkg-parser')),
+        'the parser wasm artifact must stay under a byte ceiling',
+    );
 });

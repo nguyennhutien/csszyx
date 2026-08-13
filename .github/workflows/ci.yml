@@ -383,11 +383,28 @@ jobs:
           pnpm exec turbo run test --filter=!@csszyx/e2e
           ${{ needs.detect-changes.outputs.turbo_affected == 'true' && '--affected' || '' }}
 
+      # Wasm-lane smoke: one real vite+tailwind production build through each
+      # artifact of the native engine (CSSZYX_PARSER=rust, then =wasm), CSS
+      # compared byte for byte. The wasm lane is the degrade path almost no
+      # field machine exercises — the default lane is native, so silence from
+      # users would mean "nobody ran it", not "it works". Every PR runs it
+      # here instead. The turbo build fills the playground's dependency
+      # closure, which an --affected-scoped test run may not have built.
+      #
+      # Ordering is load-bearing: the engine-package smoke below DELETES the
+      # host .node it builds before exiting, and this step's rust lane is an
+      # explicit CSSZYX_PARSER=rust, which fails loudly rather than degrade.
+      - name: Smoke wasm parser lane
+        run: |
+          pnpm exec turbo run build --filter='...@csszyx/playground-vite-react'
+          bash scripts/smoke-wasm-lane.sh
+
       # Explicit native-engine package smoke. Unit tests already exercise the
       # Rust parser branch when the host addon exists, but this step verifies
       # the install-style optional package load path and the real N-API
       # transform contract in one place. It cleans the generated .node before
-      # exiting, so it intentionally runs after unit tests.
+      # exiting, so it intentionally runs after unit tests — and after every
+      # other step that needs the native lane, see the wasm smoke above.
       - name: Smoke native engine package
         run: pnpm --filter @csszyx/core native:engine:smoke
 

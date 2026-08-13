@@ -31,18 +31,23 @@
     "./native": {
       "types": "./native/index.d.ts",
       "node": "./native/index.js"
+    },
+    "./parser-wasm": {
+      "types": "./pkg-parser/csszyx_core.d.ts",
+      "node": "./pkg-parser/csszyx_core.js"
     }
   },
   "files": [
     "native",
     "pkg",
-    "pkg-node"
+    "pkg-node",
+    "pkg-parser"
   ],
   "napi": {
     "binaryName": "csszyx-core"
   },
   "scripts": {
-    "build": "node scripts/preflight.mjs && wasm-pack build --mode no-install --target bundler --out-dir pkg && wasm-pack build --mode no-install --target nodejs --out-dir pkg-node && rm -f pkg/.gitignore pkg-node/.gitignore && node scripts/run-wasm-opt.mjs",
+    "build": "node scripts/preflight.mjs && wasm-pack build --mode no-install --target bundler --out-dir pkg && wasm-pack build --mode no-install --target nodejs --out-dir pkg-node && wasm-pack build --mode no-install --target nodejs --out-dir pkg-parser -- --features native-engine && rm -f pkg/.gitignore pkg-node/.gitignore pkg-parser/.gitignore && node scripts/run-wasm-opt.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "native:check": "node scripts/check-native.mjs",

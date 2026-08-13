@@ -26,6 +26,7 @@
  * @module
  */
 
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -99,7 +100,41 @@ export type EmittedClassOracle =
            */
           findDead(classes: readonly string[]): string[];
       }
-    | { ok: false; reason: string };
+    | { ok: false; kind: OracleSkipKind; reason: string };
+
+/**
+ * Why the oracle could not answer, at the granularity a caller must act on.
+ *
+ * `environment` — there was nothing to ask. No Tailwind, a version without a
+ * design system, an entry point that moved. Not a defect in the project, and
+ * failing on it would break every consumer that does not build with Tailwind.
+ *
+ * `stylesheet` — the question WAS asked and could not be answered, because the
+ * project's own entry did not compile. That is a broken configuration, and it
+ * is the case that must not pass quietly: a check that never runs looks exactly
+ * like a check that found nothing.
+ */
+export type OracleSkipKind = 'environment' | 'stylesheet';
+
+/**
+ * A skip nobody needs to act on.
+ *
+ * @param reason - Human-readable cause.
+ * @returns The skip.
+ */
+function environmentSkip(reason: string): EmittedClassOracle {
+    return { ok: false, kind: 'environment', reason };
+}
+
+/**
+ * A skip that means the project's own stylesheet stopped the check.
+ *
+ * @param reason - Human-readable cause.
+ * @returns The skip.
+ */
+function stylesheetSkip(reason: string): EmittedClassOracle {
+    return { ok: false, kind: 'stylesheet', reason };
+}
 
 /**
  * A deliberately unservable class, sent along with every real query.
@@ -174,21 +209,64 @@ const defaultLoader: TailwindLoader = async resolveFrom => {
 };
 
 /**
+ * Map one `@import` specifier onto a file on disk.
+ *
+ * Three kinds arrive here and only the first two used to be handled. A design
+ * system that ships its tokens as a package subpath — `@import
+ * "@acme/ui/sz-theme"` against an exports map — is the ordinary shape for a
+ * monorepo, and both Vite and Tailwind resolve it through node. Reading it as a
+ * path relative to the stylesheet produces a directory that cannot exist, the
+ * compile throws, and the dead-class pass degrades to a skip. Since a skip is
+ * reported rather than failed, such a project keeps "passing" a check that has
+ * never once run.
+ *
+ * `loadModule` below already resolves `@plugin` specifiers this way; this is
+ * the same rule applied to the stylesheet loader.
+ *
+ * @param id - Import specifier as written.
+ * @param base - Directory the importing stylesheet lives in.
+ * @param tailwindRoot - Root of the resolved Tailwind package.
+ * @param resolveFrom - Project directory whose `package.json` anchors packages.
+ * @returns Absolute path to the stylesheet.
+ */
+function resolveStylesheetPath(
+    id: string,
+    base: string,
+    tailwindRoot: string,
+    resolveFrom: string,
+): string {
+    // Anchored rather than a prefix test: `tailwindcss-animate` is a package of
+    // its own, and routing it into the Tailwind package would look for a file
+    // that is not there.
+    if (id === 'tailwindcss' || id.startsWith('tailwindcss/')) {
+        return tailwindPackageStylesheet(id, tailwindRoot);
+    }
+    if (id.startsWith('.') || path.isAbsolute(id)) return path.resolve(base, id);
+    // A bare specifier is ambiguous: CSS reads `@import "theme.css"` as a
+    // sibling file, node reads it as a package. Prefer the file when one is
+    // actually there, so stylesheets that relied on the old behaviour keep
+    // resolving, and fall through to node resolution otherwise.
+    const sibling = path.resolve(base, id);
+    if (existsSync(sibling)) return sibling;
+    return createRequire(path.join(resolveFrom, 'package.json')).resolve(id);
+}
+
+/**
  * Read one stylesheet Tailwind asked for, from the package or from the project.
  *
  * @param id - Import specifier as written.
  * @param base - Directory the importing stylesheet lives in.
  * @param tailwindRoot - Root of the resolved Tailwind package.
+ * @param resolveFrom - Project directory whose `package.json` anchors packages.
  * @returns The stylesheet Tailwind expects back.
  */
 async function loadStylesheet(
     id: string,
     base: string,
     tailwindRoot: string,
+    resolveFrom: string,
 ): Promise<LoadedStylesheet> {
-    const file = id.startsWith('tailwindcss')
-        ? tailwindPackageStylesheet(id, tailwindRoot)
-        : path.resolve(base, id);
+    const file = resolveStylesheetPath(id, base, tailwindRoot, resolveFrom);
     return { path: file, base: path.dirname(file), content: await readFile(file, 'utf8') };
 }
 
@@ -302,22 +380,17 @@ export async function createEmittedClassOracle(
 ): Promise<EmittedClassOracle> {
     const tailwind = await loadTailwind(options.resolveFrom);
     if (tailwind === null) {
-        return {
-            ok: false,
-            reason: `could not resolve tailwindcss from ${options.resolveFrom}`,
-        };
+        return environmentSkip(`could not resolve tailwindcss from ${options.resolveFrom}`);
     }
     if (!tailwind.version.startsWith('4.')) {
-        return {
-            ok: false,
-            reason: `tailwindcss ${tailwind.version} has no design system to ask; the check needs 4.x`,
-        };
+        return environmentSkip(
+            `tailwindcss ${tailwind.version} has no design system to ask; the check needs 4.x`,
+        );
     }
     if (typeof tailwind.loadDesignSystem !== 'function') {
-        return {
-            ok: false,
-            reason: `tailwindcss ${tailwind.version} does not expose __unstable__loadDesignSystem`,
-        };
+        return environmentSkip(
+            `tailwindcss ${tailwind.version} does not expose __unstable__loadDesignSystem`,
+        );
     }
 
     const load = tailwind.loadDesignSystem as (
@@ -329,28 +402,26 @@ export async function createEmittedClassOracle(
     try {
         design = await load(options.css, {
             base: options.cssBase,
-            loadStylesheet: (id, base) => loadStylesheet(id, base, tailwind.root),
+            loadStylesheet: (id, base) =>
+                loadStylesheet(id, base, tailwind.root, options.resolveFrom),
             loadModule: (id, base) => loadModule(id, base, options.resolveFrom),
         });
     } catch (error) {
-        return {
-            ok: false,
-            reason: `the stylesheet did not compile: ${error instanceof Error ? error.message : String(error)}`,
-        };
+        return stylesheetSkip(
+            `the stylesheet did not compile: ${error instanceof Error ? error.message : String(error)}`,
+        );
     }
 
     try {
         if (design.candidatesToCss([SELF_PROOF])[0] !== null) {
-            return {
-                ok: false,
-                reason: 'tailwindcss no longer reports an unservable class as null, so dead classes cannot be told apart',
-            };
+            return environmentSkip(
+                'tailwindcss no longer reports an unservable class as null, so dead classes cannot be told apart',
+            );
         }
     } catch (error) {
-        return {
-            ok: false,
-            reason: `the design system could not be queried: ${error instanceof Error ? error.message : String(error)}`,
-        };
+        return environmentSkip(
+            `the design system could not be queried: ${error instanceof Error ? error.message : String(error)}`,
+        );
     }
 
     return {

@@ -92,6 +92,13 @@ pub use transformer::transform_sz;
 
 use wasm_bindgen::prelude::*;
 
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn error(msg: &str);
+}
+
 /// Initializes the WASM module.
 ///
 /// Should be called once before using any functions.
@@ -107,7 +114,10 @@ use wasm_bindgen::prelude::*;
 #[allow(clippy::missing_const_for_fn)] // wasm_bindgen(start) doesn't support const
 #[wasm_bindgen(start)]
 pub fn init() {
-    // Initialization placeholder - can be extended with panic hooks if needed
+    #[cfg(target_arch = "wasm32")]
+    std::panic::set_hook(Box::new(|info| {
+        error(&format!("WASM PANIC: {info}"));
+    }));
 }
 
 /// Gets the version of csszyx-core.
@@ -118,6 +128,45 @@ pub fn init() {
 #[wasm_bindgen]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+/// Whole-file source transform across the WASM boundary.
+///
+/// One string in, one JSON string out per FILE: crossing the boundary once
+/// per file amortises the serde cost that makes the per-object runtime path
+/// unviable (measured before this shipped).
+///
+/// # Errors
+///
+/// Returns the transform error message when the engine refuses the file.
+#[cfg(feature = "native-engine")]
+#[wasm_bindgen]
+pub fn transform_source(filename: String, source: String) -> Result<String, JsValue> {
+    let files = [transform::TransformFile { filename, source }];
+    let results =
+        transform::transform_batch(&files).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    serde_json::to_string(&results[0]).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Whole-BATCH transform with full options across the WASM boundary.
+///
+/// The lane's main entry: cross-module registries, mangling and recovery all
+/// arrive through `TransformOptions`, and the batch crosses the boundary once
+/// for the whole file set.
+///
+/// # Errors
+///
+/// Returns the decode or transform error message.
+#[cfg(feature = "native-engine")]
+#[wasm_bindgen]
+pub fn transform_batch_json(files_json: &str, options_json: &str) -> Result<String, JsValue> {
+    let files: Vec<transform::TransformFile> =
+        serde_json::from_str(files_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let options: transform::TransformOptions =
+        serde_json::from_str(options_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let results = transform::transform_batch_with_options(&files, options)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    serde_json::to_string(&results).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 #[cfg(test)]
@@ -151,6 +200,42 @@ mod tests {
             "csr",
             "build"
         ));
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn transform_source_crosses_the_boundary_as_json() {
+        let json = transform_source(
+            "/repo/src/App.tsx".to_string(),
+            "export const A = () => <div sz={{ p: 4 }} />;".to_string(),
+        )
+        .expect("engine is available under native-engine");
+        let value: serde_json::Value =
+            serde_json::from_str(&json).expect("boundary payload is JSON");
+        assert_eq!(
+            value["code"].as_str().unwrap(),
+            "export const A = () => <div className=\"p-4\" />;"
+        );
+        assert_eq!(value["classes"][0], "p-4");
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn transform_batch_json_decodes_options_and_keeps_input_order() {
+        let files = r#"[
+            {"filename":"/a.tsx","source":"export const A = () => <div sz={{ p: 2 }} />;"},
+            {"filename":"/b.tsx","source":"export const B = () => <div className=\"x\" />;"}
+        ]"#;
+        let options = r#"{"mangle_vars":false,"mangle_var_hoist_max_depth":null,
+            "global_var_aliases":[],"root_dir":null,"ast_budget":null,
+            "cross_module_statics_json":null,"cross_module_sz_objects_json":null}"#;
+
+        let json = transform_batch_json(files, options).expect("engine is available");
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(value.as_array().unwrap().len(), 2);
+        assert_eq!(value[0]["classes"][0], "p-2");
+        assert_eq!(value[1]["metadata"]["transformed"], false);
     }
 
     #[test]

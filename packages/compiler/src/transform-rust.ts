@@ -166,10 +166,14 @@ export function transformRustBatch(
 /**
  * Normalize compiler alias-table options for the native NAPI object shape.
  *
+ * Shared with the wasm lane (`transform-wasm.ts`) — same engine, same option
+ * normalization; a second copy is exactly the drift the parity gates exist to
+ * catch.
+ *
  * @param input Alias table input.
  * @returns Native alias entries.
  */
-function normalizeGlobalVarAliases(
+export function normalizeGlobalVarAliases(
     input: GlobalVarAliasTableInput | undefined,
 ): Array<{ original: string; alias: string }> {
     if (!input) {
@@ -228,7 +232,7 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
  * @param entries Native original/mangled pairs.
  * @returns Compiler metadata map with one-to-many fanout preserved.
  */
-function aggregateCssVariableMap(
+export function aggregateCssVariableMap(
     entries: Array<{ original: string; mangled: string }>,
 ): Map<string, CssVariableMangleValue> {
     const map = new Map<string, CssVariableMangleValue>();
@@ -260,7 +264,7 @@ type OrderedTransportValue = string | number | boolean | Array<[string, OrderedT
  * @param statics - The per-file registry entries, or undefined.
  * @returns JSON payload, or undefined when there is nothing to pass.
  */
-function encodeCrossModuleStatics(
+export function encodeCrossModuleStatics(
     statics: Readonly<Record<string, Readonly<Record<string, unknown>>>> | undefined,
 ): string | undefined {
     if (statics === undefined || Object.keys(statics).length === 0) {

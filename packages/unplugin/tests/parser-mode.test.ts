@@ -27,6 +27,9 @@ function setup(overrides: Partial<ResolveParserModeInput> & { rustAvailable?: bo
         envParser: undefined,
         defaultParser: 'rust',
         isRustAvailable: isRustAvailable ?? probe,
+        // Default the wasm probe to "missing" so the pre-wasm degrade tests
+        // keep exercising the oxc last-resort arm unchanged.
+        isWasmAvailable: () => false,
         ...rest,
     };
     return { input, probe };
@@ -256,5 +259,57 @@ describe('resolveParserMode — robustness / no hidden side effects', () => {
                 }
             }
         }
+    });
+});
+
+describe('resolveParserMode — wasm degrade target', () => {
+    /**
+     * Assemble an input whose wasm probe is countable, on top of {@link setup}.
+     *
+     * @param rustAvailable - what the native probe reports.
+     * @param wasmAvailable - what the wasm probe reports.
+     * @returns input plus both probe spies.
+     */
+    function wasmSetup(rustAvailable: boolean, wasmAvailable: boolean) {
+        const wasmProbe = vi.fn(() => wasmAvailable);
+        const { input, probe } = setup({ rustAvailable });
+        return { input: { ...input, isWasmAvailable: wasmProbe }, probe, wasmProbe };
+    }
+
+    it("accepts 'wasm' as a parser mode", () => {
+        expect(isParserMode('wasm')).toBe(true);
+    });
+
+    it('degrades default rust to wasm — the same engine — when the binary is missing', () => {
+        const { input, wasmProbe } = wasmSetup(false, true);
+        expect(resolveParserMode(input)).toEqual({
+            parser: 'wasm',
+            degraded: true,
+            explicit: false,
+        });
+        expect(wasmProbe).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to oxc only when the wasm artifact is ALSO missing', () => {
+        const { input } = wasmSetup(false, false);
+        expect(resolveParserMode(input)).toEqual({
+            parser: 'oxc',
+            degraded: true,
+            explicit: false,
+        });
+    });
+
+    it('never probes wasm when the native binary is available', () => {
+        const { input, wasmProbe } = wasmSetup(true, true);
+        expect(resolveParserMode(input).parser).toBe('rust');
+        expect(wasmProbe).not.toHaveBeenCalled();
+    });
+
+    it("keeps an explicit 'wasm' choice without probing rust", () => {
+        const { input, probe, wasmProbe } = wasmSetup(true, true);
+        const result = resolveParserMode({ ...input, configParser: 'wasm' });
+        expect(result).toEqual({ parser: 'wasm', degraded: false, explicit: true });
+        expect(probe).not.toHaveBeenCalled();
+        expect(wasmProbe).not.toHaveBeenCalled();
     });
 });

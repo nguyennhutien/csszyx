@@ -141,6 +141,17 @@ const MATRIX: ReadonlyArray<readonly [string, string, 'static' | 'dynamic' | 'ba
         'bail',
     ],
     [
+        // `op` beside a colour key cannot be compiled per key, which is why a
+        // bare `op` leaf bails. Inside one, it is the fusion form itself —
+        // `borderColor: { color, op }` lowers to a single composite class, and
+        // the leaf-path walk already folds the whole subtree onto `borderColor`.
+        // The vocabulary check used to descend anyway and judge that `op` as if
+        // it sat beside its parent.
+        'a colour-fusion op inside one property compiles',
+        "const f = szv({ variants: { c: { blue: { color: 'blue-500', border: true, borderColor: { color: 'blue-500', op: 35 } } } } });\nexport const c = szr(f({ c: 'blue' }));",
+        'static',
+    ],
+    [
         'alias overlap bails too',
         "const cardSz = szv({ base: { lineHeight: 5 }, variants: { t: { a: { leading: 7 } } } });\nexport const cls = szr(cardSz({ t: 'a' }));",
         'bail',

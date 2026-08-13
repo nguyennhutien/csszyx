@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 /**
- * Generates the TS↔Rust *parse-level* parity corpus.
+ * Regenerates the *parse-level* regression corpus from the native engine.
  *
- * The lowering harness (gen-rust-parity-corpus.mjs) compares object→className.
- * This one compares `source .tsx → extracted classes` so the rust parser
- * (the shipped default) cannot diverge from the canonical oxc parser when it
- * pulls sz objects and className strings out of real source.
+ * The oracle IS the engine under test — canonical since 2026-08-12, when the
+ * corpus was re-based off the TypeScript engines it originally mirrored. That
+ * makes this generator a footgun if pointed at a red gate: regenerating
+ * launders whatever the engine does TODAY into the expectation, so a
+ * regression would vanish instead of failing. Run it only to add new source
+ * shapes (append to `sources` below) or after an INTENDED behaviour change,
+ * and let review judge the fixture diff either way.
  *
- * For each source snippet it records the oxc `classes` (sz-derived) and
- * `rawClassNames` (static className strings). `packages/core/tests/
- * parse_parity_corpus.rs` replays the same sources through the native
- * `transform_batch` and asserts the same two sets.
+ * `packages/core/tests/parse_parity_corpus.rs` replays the same sources
+ * through the napi binding; `wasm-parser-parity.test.ts` replays them through
+ * the wasm build. (The lowering corpus, gen-rust-parity-corpus.mjs, is NOT
+ * frozen like this — its oracle is `transform-core.ts`, which stays.)
  *
  * Usage: pnpm gen:parse-parity-corpus
  */
@@ -18,7 +21,10 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { transformSourceCode } from '../packages/compiler/src/transform.js';
+import {
+    isRustTransformAvailable,
+    transformRust,
+} from '../packages/compiler/src/transform-rust.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outFile = resolve(here, '../packages/core/tests/fixtures/parse-parity-corpus.json');
@@ -97,15 +103,29 @@ const sources = [
     'const A = ({ x, y, a, b }) => <div sz={{ p: a ? x : undefined, m: b ? y : undefined }} />;',
     'const A = ({ w, f, on, big }) => <div sz={{ w: w, flex: on ? f : undefined, p: big ? 8 : 2 }} />;',
     'const A = ({ w, f, on, big }) => <div className="x" sz={{ w: w, flex: on ? f : undefined, p: big ? 8 : 2 }} />;',
+
+    // A const DECLARED in the same file, used as a scalar sz value. The corpus
+    // already covers a free identifier (`p: pad`), which every engine defers to
+    // runtime — but not a resolvable one, where the engines disagree about
+    // whether to read it at build time. Without these the gate cannot see the
+    // divergence at all.
+    'const x = 4; const A = () => <div sz={{ p: x }} />;',
+    'const c = "red-500"; const A = () => <div sz={{ bg: c }} />;',
+    'const c = "red-500"; const A = () => <div sz={{ hover: { bg: c } }} />;',
+    'const A = () => { const x = 4; return <div sz={{ p: x }} />; };',
+    // Computed key whose const resolves to a real property name.
+    'const k = "p"; const A = () => <div sz={{ [k]: 4 }} />;',
 ];
 
+if (!isRustTransformAvailable()) {
+    // Recording from a different engine than the one the gate replays would
+    // reintroduce the two-oracle drift this corpus was re-based to remove.
+    console.error('[gen-parse-parity] native engine unavailable — refusing to record.');
+    process.exit(1);
+}
+
 const records = sources.map(source => {
-    // The Babel engine — the canonical reference output, and what the oxc
-    // lane ships when it falls back. Raw transformOxc encodes a lane bail as
-    // "no classes", which recorded silently-wrong expectations for constructs
-    // the oxc lane punts (that hole hid the rust parser dropping dynamic sz
-    // utilities next to a nullable ternary).
-    const result = transformSourceCode(source, 'file.tsx');
+    const result = transformRust(source, 'file.tsx');
     return {
         source,
         classes: sorted(result.classes),

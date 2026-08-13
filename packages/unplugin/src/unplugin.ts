@@ -9,6 +9,7 @@ import {
     type CssVariableMangleValue,
     ensureRustTransformAvailable,
     isRustTransformAvailable,
+    isWasmTransformAvailable,
     type SourceTransformResult,
     sortStrings,
     szFallbackConsequenceOf,
@@ -19,6 +20,7 @@ import {
     transformRust,
     transformRustBatch,
     transformSourceCode,
+    transformWasm,
 } from '@csszyx/compiler';
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { getNativePackageName } from '@csszyx/core/native';
@@ -76,6 +78,7 @@ import {
     createMangleSizeAccount,
     type MangleSizeAccount,
     mangleSizeMessage,
+    recordCodePair,
     recordCssPair,
     resetMangleSizeAccount,
 } from './mangle-size-report.js';
@@ -193,6 +196,14 @@ interface PluginState {
     authoredClasses: Set<string>;
     /** Unresolvable-spread warnings surfaced to the build log in every mode. */
     spreadWarnings: Set<string>;
+    /**
+     * Advisory sz fallbacks this build declined to list.
+     *
+     * Counted so the build can say the list is partial. Printing nothing is not
+     * the same as printing "nothing happened", and a log that names five
+     * fallbacks while holding three back reads as a total.
+     */
+    suppressedAdvisories: number;
     /**
      * Workspace-package files under `/packages/` that use csszyx but were
      * skipped by the hard-ignore (not under any `compileSources` dir). Surfaced at
@@ -664,20 +675,54 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
 }
 
 /**
+ * A `@import "tailwindcss"` / `@import "tailwindcss/<layer>.css"` specifier.
+ *
+ * Global because the modifier scan below inspects every Tailwind import in the
+ * file, not only the first: a split setup imports the layers separately and any
+ * one of them may carry the scoping modifier.
+ */
+const TAILWIND_IMPORT_SPECIFIER = /@import\s+["']tailwindcss(?:\/[^"']*)?["']/g;
+
+/** A `source()` modifier, as a whole word so `nosource(` cannot match. */
+const SOURCE_MODIFIER = /\bsource\(/;
+
+/**
+ * Whether any Tailwind import carries a `source()` modifier.
+ *
+ * Tailwind v4 accepts the import modifiers — `layer()`, `important`, `theme()`,
+ * `prefix()`, `source()` — in any order, so matching one arrangement recognises
+ * only the projects that happen to write it that way. Reading the modifier list
+ * up to the statement terminator is order-independent by construction, and
+ * bounding it at the `;` stops an unscoped import from borrowing the scoping of
+ * an unrelated import further down the file.
+ *
+ * @param css - CSS module source, block comments already stripped.
+ * @returns true when a Tailwind import scopes content detection.
+ */
+function tailwindImportScopesContent(css: string): boolean {
+    for (const match of css.matchAll(TAILWIND_IMPORT_SPECIFIER)) {
+        const modifiersStart = match.index + match[0].length;
+        const terminator = css.indexOf(';', modifiersStart);
+        const modifiers =
+            terminator === -1 ? css.slice(modifiersStart) : css.slice(modifiersStart, terminator);
+        if (SOURCE_MODIFIER.test(modifiers)) return true;
+    }
+    return false;
+}
+
+/**
  * Whether a CSS module scopes Tailwind's content detection — `source(none)` or
- * `source("…")` on the `@import "tailwindcss"`, or any `@source not` exclusion.
+ * `source("…")` on a `@import "tailwindcss"`, or any `@source not` exclusion.
  * A plain additive `@source "…"` does NOT count: it only adds a path, it does
- * not stop the automatic climb-to-the-workspace-root scan. Block comments are
- * stripped first so a commented-out directive does not count.
+ * not stop the automatic scan. Block comments are stripped first so a
+ * commented-out directive does not count.
  *
  * @param code - CSS module source.
  * @returns true when the entry scopes (or excludes from) content detection.
  */
 export function cssHasContentScope(code: string): boolean {
     const s = stripCssBlockComments(code);
-    return (
-        /@import\s+["']tailwindcss(?:\/[^"']*)?["']\s+source\(/.test(s) || /@source\s+not\b/.test(s)
-    );
+    return tailwindImportScopesContent(s) || /@source\s+not\b/.test(s);
 }
 
 /**
@@ -739,19 +784,83 @@ export function shouldWarnUnscopedMonorepo(
 /**
  * Build the unscoped-monorepo warning message: what is wrong, why it matters,
  * the exact two-line fix, the guide link, and how to silence it.
+ *
+ * Describes the detection BASE rather than promising a climb to the workspace
+ * root. Measured on a workspace package built through the Vite plugin, the scan
+ * was rooted at the Vite root: files beside the entry were scanned, the sibling
+ * package and the workspace root were not. Naming a worse failure than the one
+ * that is happening is how an advisory gets discounted — a reader who checks
+ * for phantom classes from sibling packages finds none and stops believing the
+ * rest of the message.
+ *
+ * The suggested snippet carries no CSS comment on purpose. A block comment ends
+ * at the first `*` followed by `/`, which any recursive glob contains, so
+ * inviting the reader to annotate `@source` lines invites a stylesheet that
+ * stops parsing where they documented it.
+ *
  * @returns the warning string.
  */
 export function unscopedMonorepoMessage(): string {
     return (
         '[csszyx] Tailwind content detection is UNSCOPED in a monorepo. Tailwind v4 ' +
-        'climbs to the workspace root and scans sibling packages + docs (.md/.mdx/.txt ' +
-        'are not ignored), which can generate phantom or broken url() classes and fail ' +
-        'the build. Scope it in your Tailwind CSS entry:\n' +
+        'scans every file under its detection base — .md/.mdx/.txt included — so a doc ' +
+        'or fixture holding class-shaped strings becomes CSS, which can generate ' +
+        'phantom or broken url() classes and fail the build. That base is as wide as ' +
+        'the build makes it: a Vite build roots it at the Vite root, other setups at ' +
+        'the workspace root. Scope it in your Tailwind CSS entry:\n' +
         '    @import "tailwindcss" source(none);\n' +
-        '    @source ".";   /* this package, relative to the CSS file */\n' +
-        'csszyx auto-injects @source for its generated classes, so only your own ' +
-        'templates need listing. Guide: https://csszyx.com/docs/monorepo-content-scope/\n' +
+        '    @source ".";\n' +
+        'That @source is your package, relative to the CSS file; csszyx auto-injects ' +
+        'one for the classes it generates, so only your own templates need listing. ' +
+        'Guide: https://csszyx.com/docs/monorepo-content-scope/\n' +
         'Silence (if a broad scan is intentional): csszyx({ contentScopeCheck: false }).'
+    );
+}
+
+/**
+ * Whether a diagnostic is an advisory one — the class a build may hold back.
+ *
+ * Spread warnings, budget bails and `missing-css` fallbacks all describe absent
+ * output and print regardless. What is left says the runtime path was taken
+ * where a compiled one was possible: real, worth acting on, and not a failure.
+ *
+ * @param message - One raw diagnostic line as an engine emitted it.
+ * @returns True when the diagnostic is advisory rather than a build result.
+ */
+export function isAdvisoryDiagnostic(message: string): boolean {
+    return !(
+        message.includes('unresolvable sz spread') ||
+        message.includes('AST budget exceeded') ||
+        szFallbackConsequenceOf(message) === 'missing-css'
+    );
+}
+
+/**
+ * Build the one-line disclosure that the fallback list above is partial.
+ *
+ * Four of the five `sz`-site fallback kinds never print in a production build,
+ * so a log can list the `szr` fallbacks it found and silently hold every
+ * `sz={factory()}` beside them. A consumer counting affected sites from that
+ * log counts a lower bound and has no way to know it — one reported a site
+ * count that was short by half for exactly this reason, and only caught it by
+ * reading sources instead.
+ *
+ * Suppression is the right default; implying zero is not. One line costs
+ * nothing and keeps the difference visible.
+ *
+ * @param count - Advisory fallbacks the build declined to list.
+ * @returns The disclosure, or null when nothing was held back.
+ */
+export function suppressedAdvisoryMessage(count: number): string | null {
+    if (count <= 0) return null;
+    // Count and noun interpolate together so the sentence after them is one
+    // unbroken literal: the docs-sync gate matches verbatim runs, and a
+    // placeholder in the middle splits the run it is trying to match.
+    const held = count === 1 ? '1 advisory sz fallback' : `${count} advisory sz fallbacks`;
+    return (
+        `[csszyx] ${held} not listed above. At an sz prop a fallback is advisory — the ` +
+        'runtime path works and the classes are collected — so a production build keeps the ' +
+        'list short. A development build prints each one with its file and position.'
     );
 }
 
@@ -2561,7 +2670,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // Graceful degradation: when `rust` is only the DEFAULT (not opted into) and no
     // prebuilt native binary is installed for this platform (unsupported arch,
     // optional deps omitted, or a cross-platform frozen lockfile), fall back to
-    // `oxc` — which produces parity-identical classes — with a one-time warning,
+    // `oxc` — whose classes match on every shape the parity corpus covers — with
+    // a one-time warning that names the shape where they do not,
     // instead of hard-failing a build the user never asked to run on `rust`. An
     // EXPLICIT `rust` (env or config) keeps its loud-failure contract.
     const { parser: parserMode, degraded: parserDegraded } = resolveParserMode({
@@ -2569,6 +2679,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         envParser: process.env.CSSZYX_PARSER,
         defaultParser: DEFAULT_BUILD_CONFIG.parser ?? 'rust',
         isRustAvailable: isRustTransformAvailable,
+        isWasmAvailable: isWasmTransformAvailable,
     });
     /**
      * Announce the engine actually in effect (and the native-binary degrade, if
@@ -2582,21 +2693,40 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     function announceActiveParser(): void {
         if (parserDegraded && !_hasWarnedNativeFallback) {
             _hasWarnedNativeFallback = true;
-            console.warn(
-                '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
-                    'platform, so the default `rust` parser fell back to `oxc`. Output classes ' +
-                    'are identical (parity-tested); only parse speed differs. To use the native ' +
-                    'engine, install the matching @csszyx/core-<platform> package (or do not ' +
-                    'omit optional dependencies). Set `build.parser` explicitly to silence this.',
-            );
+            if (parserMode === 'wasm') {
+                console.warn(
+                    '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
+                        'platform, so the default `rust` parser fell back to its wasm build. ' +
+                        'Same engine, same output; only parse speed differs. To use the native ' +
+                        'engine, install the matching @csszyx/core-<platform> package (or do ' +
+                        'not omit optional dependencies). Set `build.parser` explicitly to ' +
+                        'silence this.',
+                );
+            } else {
+                console.warn(
+                    '[csszyx] No prebuilt native binary (@csszyx/core-*) is available for this ' +
+                        'platform, and the wasm build of the engine is missing too, so the ' +
+                        'default `rust` parser fell back to `oxc`. Parse speed ' +
+                        'differs, and so does one shape: a const a file declares and then uses as ' +
+                        'an sz value compiles to a static utility under `rust` and to a runtime CSS ' +
+                        'variable under `oxc`. To use the native engine, install the matching ' +
+                        '@csszyx/core-<platform> package (or do not omit optional dependencies). ' +
+                        'Set `build.parser` explicitly to silence this.',
+                );
+            }
         }
         if (!_loggedActiveParsers.has(parserMode)) {
             _loggedActiveParsers.add(parserMode);
             let detail: string = parserMode;
             if (parserDegraded) {
-                detail = 'oxc (degraded from default `rust`: no native binary for this platform)';
+                detail =
+                    parserMode === 'wasm'
+                        ? 'wasm (degraded from default `rust`: same engine, wasm build)'
+                        : 'oxc (degraded from default `rust`: no native binary for this platform)';
             } else if (parserMode === 'rust') {
                 detail = 'rust (native engine)';
+            } else if (parserMode === 'wasm') {
+                detail = 'wasm (wasm build of the native engine)';
             }
             // stderr (console.warn), not stdout: a consumer like @csszyx/mcp-server
             // runs a stdio JSON-RPC protocol where any stray stdout corrupts the stream.
@@ -2632,6 +2762,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         tailwindEntryScoped: false,
         contentScopeWarningEmitted: false,
         spreadWarnings: new Set<string>(),
+        suppressedAdvisories: 0,
         skippedSzFiles: new Set<string>(),
         skippedSzvExportFiles: new Set<string>(),
         skipWarningEmitted: false,
@@ -2998,6 +3129,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // producing oxc output users were not expecting.
             return {
                 result: transformRust(source, effectiveFilename, compilerOptions),
+                cacheable: true,
+            };
+        }
+        if (parserMode === 'wasm') {
+            // Same engine as `rust`, so the same fail-loud contract: a wasm
+            // load failure mid-build is a broken installation, not a reason
+            // to switch engines silently.
+            return {
+                result: transformWasm(source, effectiveFilename, compilerOptions),
                 cacheable: true,
             };
         }
@@ -4244,21 +4384,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // precisely so a calmer log does not have to cost this report.
             emitMissingCssFallback(quiet, message, id, console.warn);
         }
-        if (
-            quiet !== 'off' ||
-            result.diagnostics.length === 0 ||
-            process.env.NODE_ENV === 'production'
-        ) {
+        const advisories = result.diagnostics.filter(isAdvisoryDiagnostic);
+        if (advisories.length === 0) return;
+        if (quiet !== 'off' || process.env.NODE_ENV === 'production') {
+            // Held back, but counted. These are advisory by design — the
+            // runtime path works and the classes are collected — so a
+            // production build is right not to list them. It is not right to
+            // leave the reader believing the fallbacks it DID list are all of
+            // them, which is how a site that only ever falls back at an sz prop
+            // stays invisible to anyone reading the log.
+            state.suppressedAdvisories += advisories.length;
             return;
         }
-        for (const message of result.diagnostics) {
-            if (
-                message.includes('unresolvable sz spread') ||
-                message.includes('AST budget exceeded') ||
-                szFallbackConsequenceOf(message) === 'missing-css'
-            ) {
-                continue;
-            }
+        for (const message of advisories) {
             warn(`[csszyx] ${id}\n  ${message}`);
         }
     }
@@ -5192,6 +5330,31 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Rewrite one code asset's class strings, weighing what the shortening saved.
+     *
+     * Shared by both output lanes because they do the same thing to the same
+     * kind of asset — a rollup chunk and a webpack `.js` asset — and the
+     * measurement has to agree between them or the advisory's figure depends on
+     * the bundler.
+     *
+     * The map substitution runs on BOTH sides of the comparison. Its bytes are
+     * charged once as `mapCost`, so letting them appear on only the "after"
+     * side would bill the same payload twice and report a cost that is mostly
+     * the map counted again.
+     *
+     * @param source - Asset source as the bundler produced it.
+     * @param shouldMangle - Whether class mangling applies to this output.
+     * @returns The rewritten source.
+     */
+    function rewriteCodeAsset(source: string, shouldMangle: boolean): string {
+        if (!shouldMangle) return replacePlaceholders(source);
+        const before = replacePlaceholders(source);
+        const after = replacePlaceholders(mangleCodeClasses(source));
+        recordCodePair(sizeAccount, before, after);
+        return after;
+    }
+
+    /**
      * Rewrite one emitted CSS asset and collect hybrid-mangle ownership evidence.
      *
      * @param source Original CSS source.
@@ -5247,13 +5410,38 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             collectMangleHybridHazards(state.mangleMap, mangledSources, externalClasses),
         );
         if (message) console.warn(message);
-        reportMangleSize();
     }
 
     /**
-     * Tell the build what mangling actually cost, once every CSS asset has been
-     * weighed. Silent unless the map came out more expensive than the CSS it
-     * bought, so a build that got what it paid for stays quiet.
+     * Say what the build did, once, where a reader is looking.
+     *
+     * Called from each lane's last moment rather than from the passes that
+     * produce the numbers, because WHERE these land decides whether anyone
+     * reads them. On the Vite lane the rewrite happens in `generateBundle`,
+     * which prints ahead of the asset table — so the one figure that answers
+     * "did mangling help" arrived before the table a reader compares to answer
+     * that question, wedged between other `[csszyx]` lines. `closeBundle` runs
+     * after the table.
+     *
+     * Both halves stay quiet when there is nothing to disclose: a build that
+     * got what it paid for and held nothing back prints neither line.
+     */
+    function reportBuildSummary(): void {
+        reportMangleSize();
+        // Blunt mode asked for silence and gets it; `'nudges'` asked for a
+        // calmer log, and one line saying how much was left out is the opposite
+        // of noise — it is what stops the calm log from reading as a clean one.
+        if (resolveQuietMode(quiet) !== 'all') {
+            const message = suppressedAdvisoryMessage(state.suppressedAdvisories);
+            if (message) console.warn(message);
+        }
+        state.suppressedAdvisories = 0;
+    }
+
+    /**
+     * Tell the build what mangling actually cost, once every asset is weighed.
+     *
+     * @see reportBuildSummary for where this lands and why.
      */
     function reportMangleSize(): void {
         const verdict = computeMangleSizeVerdict(
@@ -5291,9 +5479,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         if (!file.endsWith('.js')) return;
 
-        const rewritten = shouldMangle
-            ? replacePlaceholders(mangleCodeClasses(source))
-            : replacePlaceholders(source);
+        const rewritten = rewriteCodeAsset(source, shouldMangle);
         if (rewritten !== source) {
             compilation.updateAsset(file, new compiler.webpack.sources.RawSource(rewritten));
         }
@@ -5358,6 +5544,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
         }
         reportOutputMangleHazards(shouldMangle, mangledSources, externalClasses);
+        // Webpack has no post-write hook in this plugin and prints no asset
+        // table of its own, so the reason the Vite lane defers does not apply:
+        // here the end of asset processing IS the end of the build's output.
+        reportBuildSummary();
     }
 
     /**
@@ -5394,9 +5584,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         if (chunk.type !== 'chunk' || chunk.code === undefined) return;
 
-        const rewritten = shouldMangle
-            ? replacePlaceholders(mangleCodeClasses(chunk.code))
-            : replacePlaceholders(chunk.code);
+        const rewritten = rewriteCodeAsset(chunk.code, shouldMangle);
         if (rewritten !== chunk.code) chunk.code = rewritten;
     }
 
@@ -5480,6 +5668,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             processRollupBundle(bundle, (fileName, source) => {
                 this.emitFile({ type: 'asset', fileName, source });
             });
+        },
+
+        /**
+         * Report what mangling cost, after the bundler has printed its assets.
+         *
+         * Vite's reporter prints the asset table from `writeBundle`, which runs
+         * before this hook — so the size verdict lands where a reader is
+         * already looking at sizes, instead of scrolling past mid-build among
+         * the other diagnostics.
+         */
+        closeBundle() {
+            reportBuildSummary();
         },
     }));
 

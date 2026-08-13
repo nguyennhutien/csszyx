@@ -220,8 +220,20 @@ const SPECIAL_ALLOWED_SZ_KEYS: [&str; 4] =
 
 fn branch_keys_canonicalizable(branch: &StaticSzObject) -> bool {
     for property in &branch.properties {
-        // `op` fuses into whichever color-bearing key it meets at lowering;
-        // per-key compilation cannot represent that.
+        // A nested object under a PROPERTY key is the fusion form, and
+        // `collect_canonical_leaf_paths` folds the whole subtree onto the
+        // property's own path — its children never become paths, so they need
+        // no canonical names. Descending would judge the `op` in
+        // `bg: { color, op }` as if it sat BESIDE `bg`, the one position it
+        // cannot hold. Any conflict involving a child is still caught, at the
+        // parent path the subtree folded into. Mirrors the TypeScript walk.
+        if property_prefix(&property.key).is_some()
+            && matches!(property.value, StaticSzValue::Object(_))
+        {
+            continue;
+        }
+        // A bare `op` fuses into whichever color-bearing key it meets at
+        // lowering; per-key compilation cannot represent that.
         if property.key == "op" {
             return false;
         }
