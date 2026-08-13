@@ -2080,6 +2080,96 @@ mod tests {
         );
     }
 
+    /// A variant object that HAPPENS to set a colour keeps its own checks.
+    ///
+    /// The descent skips a nested object holding a `color` member, because
+    /// that is the documented colour-opacity spelling on a property key. A
+    /// variant like `hover` is not a property key, and `hover: { color: ... }`
+    /// is one of the most common shapes there is — so a guard that stops at
+    /// the colour alone takes the whole variant body out of every check, and
+    /// the typo and the dead spacing step sitting beside it go unmentioned.
+    #[test]
+    fn a_variant_object_setting_a_colour_still_gets_its_own_diagnostics() {
+        let file = TransformFile {
+            filename: "/repo/src/Hover.tsx".to_string(),
+            source: "export const App = () => <div sz={{ hover: { color: 'white', paddng: 4, p: 1.4 } }} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("\"paddng\""),
+            "the typo must still be reported: {diagnostics}"
+        );
+        assert!(
+            diagnostics.contains("not on Tailwind's spacing scale"),
+            "the dead step must still be reported: {diagnostics}"
+        );
+
+        // The colour-opacity form on a real PROPERTY key is the shape the
+        // guard exists for, and must stay quiet.
+        let opacity = transform_static_classes(
+            &TransformFile {
+                filename: "/repo/src/Opacity.tsx".to_string(),
+                source:
+                    "export const App = () => <div sz={{ bg: { color: 'red-500', op: 50 } }} />;"
+                        .to_string(),
+            },
+            0,
+            std::time::Instant::now(),
+        );
+        assert!(opacity.diagnostics.is_empty(), "{:?}", opacity.diagnostics);
+    }
+
+    /// A project-defined variant is not a mistyped property.
+    ///
+    /// The "this is a property, not a variant" warning is aimed at
+    /// `p: { bg: ... }`, where the nested object really does generate nothing.
+    /// A custom breakpoint declared through `@theme` looks the same to the
+    /// checker but is entirely correct, and telling its author their working
+    /// styles generate no CSS sends them to rewrite code that was already
+    /// right.
+    #[test]
+    fn a_custom_theme_variant_is_not_reported_as_a_property() {
+        let custom = transform_static_classes(
+            &TransformFile {
+                filename: "/repo/src/Theme.tsx".to_string(),
+                source: "export const App = () => <div sz={{ tablet: { p: 4 } }} />;".to_string(),
+            },
+            0,
+            std::time::Instant::now(),
+        );
+        assert!(
+            !custom
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.contains("is a property, not a variant")),
+            "{:?}",
+            custom.diagnostics
+        );
+        assert!(custom.classes.iter().any(|class| class == "tablet:p-4"));
+
+        // The real case the warning is for still warns.
+        let property = transform_static_classes(
+            &TransformFile {
+                filename: "/repo/src/Property.tsx".to_string(),
+                source: "export const App = () => <div sz={{ bg: { foo: 1 } }} />;".to_string(),
+            },
+            0,
+            std::time::Instant::now(),
+        );
+        assert!(
+            property
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.contains("is a property, not a variant")),
+            "{:?}",
+            property.diagnostics
+        );
+    }
+
     /// The "unknown property" branch must not borrow the numeric-key wording.
     ///
     /// The two diagnostics send the author in opposite directions: one says a
