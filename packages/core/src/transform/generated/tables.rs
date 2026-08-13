@@ -543,6 +543,31 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
     )
 }
 
+/// Returns true when a key's DYNAMIC value must lower to a conditional bare
+/// class through __szBoolClass instead of the css-var strategy: React drops
+/// booleans in `style`, and the valued utility targets a different CSS
+/// property than the bare class.
+pub(crate) fn is_boolean_only_dynamic(key: &str) -> bool {
+    matches!(
+        key,
+        "border"
+            | "borderT"
+            | "borderR"
+            | "borderB"
+            | "borderL"
+            | "borderX"
+            | "borderY"
+            | "borderS"
+            | "borderE"
+            | "borderBs"
+            | "borderBe"
+            | "ring"
+            | "outline"
+            | "truncate"
+            | "shadow"
+    )
+}
+
 /// Returns true when a property is lowered by a dedicated object branch.
 pub(crate) fn is_known_special_property(key: &str) -> bool {
     matches!(key, "css" | "maskLinear" | "maskRadial" | "maskConic")

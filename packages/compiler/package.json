@@ -45,6 +45,16 @@
         "default": "./dist/transform-core.cjs"
       }
     },
+    "./bool-class": {
+      "import": {
+        "types": "./dist/bool-class.d.mts",
+        "default": "./dist/bool-class.mjs"
+      },
+      "require": {
+        "types": "./dist/bool-class.d.cts",
+        "default": "./dist/bool-class.cjs"
+      }
+    },
     "./color-var": {
       "import": {
         "types": "./dist/color-var.d.mts",

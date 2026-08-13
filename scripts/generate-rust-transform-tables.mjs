@@ -27,6 +27,7 @@ const tables = {
     variantMap: extractStringObject('VARIANT_MAP'),
     booleanToClass: extractStringObject('BOOLEAN_TO_CLASS'),
     booleanShorthands: extractStringSet('BOOLEAN_SHORTHANDS'),
+    booleanOnlyDynamicKeys: extractObjectKeys('BOOLEAN_ONLY_DYNAMIC_VOCABULARY'),
     knownSpecialProperties: extractStringSet('KNOWN_SPECIAL_PROPERTIES'),
     removedBooleanSugar: extractObjectKeys('REMOVED_BOOLEAN_SUGAR'),
     knownVariants: extractStringSet('KNOWN_VARIANTS'),
@@ -135,6 +136,7 @@ function renderRust({
     variantMap,
     booleanToClass,
     booleanShorthands,
+    booleanOnlyDynamicKeys,
     knownSpecialProperties,
     removedBooleanSugar,
     knownVariants,
@@ -196,6 +198,17 @@ ${renderMatchPatterns(booleanShorthands)}
     )
 }
 
+/// Returns true when a key's DYNAMIC value must lower to a conditional bare
+/// class through __szBoolClass instead of the css-var strategy: React drops
+/// booleans in \`style\`, and the valued utility targets a different CSS
+/// property than the bare class.
+pub(crate) fn is_boolean_only_dynamic(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(booleanOnlyDynamicKeys)}
+    )
+}
+
 /// Returns true when a property is lowered by a dedicated object branch.
 pub(crate) fn is_known_special_property(key: &str) -> bool {
     matches!(
@@ -243,7 +256,16 @@ ${renderMatchPatterns(specialVariants)}
 
 function extractObjectKeys(name) {
     const declaration = findVariableDeclaration(name);
-    const initializer = declaration.initializer;
+    // Unwrap `as const` / `satisfies` so a type-locked literal (e.g.
+    // BOOLEAN_ONLY_DYNAMIC_VOCABULARY `as const satisfies SzProps`) extracts
+    // like a plain one.
+    let initializer = declaration.initializer;
+    while (
+        initializer &&
+        (ts.isAsExpression(initializer) || ts.isSatisfiesExpression(initializer))
+    ) {
+        initializer = initializer.expression;
+    }
     if (!initializer || !ts.isObjectLiteralExpression(initializer)) {
         fail(`${name} must be an object literal`);
     }

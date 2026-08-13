@@ -16,6 +16,7 @@ import type { TokenData } from './manifest.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
 import { szDevWarningsEnabled } from './sz-dev-warnings.js';
 import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
+import type { SzProps } from './types/sz-props.js';
 
 // Re-exported so the runtime (which imports from `@csszyx/compiler/browser`,
 // i.e. this module) shares one SzDepthError type, depth limit, and key guard.
@@ -957,6 +958,52 @@ export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
     // Outline
     'outline',
 ]);
+
+// ============================================================================
+// BOOLEAN_ONLY_DYNAMIC_KEYS: keys whose DYNAMIC values lower to a conditional
+// bare class through __szBoolClass, never to the css-var strategy
+// ============================================================================
+// Two stacked defects make the custom-property strategy structurally invalid
+// here: React discards booleans in `style` (the variable is never set, for
+// `true` AND `false`), and the valued utility targets a different CSS property
+// than the bare class (`border-b-(--var)` is border-bottom-COLOR while
+// `border-b` is a WIDTH; `truncate-(--var)` matches nothing at all).
+//
+// This must be an explicit list: the engine's Boolean(true) lowering has an
+// unconditional fallback (any key + true → bare class), so "true maps to a
+// bare class" matches EVERY key and cannot serve as the criterion. Membership
+// is gated by tests/boolean-only-dynamic-keys.test.ts: a member must accept a
+// boolean in the type vocabulary, lower `true` to the bare class, and have a
+// css-var-hostile valued form (color twin or none).
+//
+// divideX/divideY are siblings deliberately left OUT: their dynamic failure
+// shape is unverified in the field and the reporter asked us not to widen.
+//
+// The `satisfies SzProps` literal locks criterion (a) at the declaration
+// site: tsc rejects any member whose vocabulary does not accept `true`.
+const BOOLEAN_ONLY_DYNAMIC_VOCABULARY = {
+    border: true,
+    borderT: true,
+    borderR: true,
+    borderB: true,
+    borderL: true,
+    borderX: true,
+    borderY: true,
+    borderS: true,
+    borderE: true,
+    borderBs: true,
+    borderBe: true,
+    ring: true,
+    outline: true,
+    truncate: true,
+    shadow: true,
+} as const satisfies SzProps;
+
+// Generated into the Rust engine's tables.rs (is_boolean_only_dynamic) by
+// scripts/generate-rust-transform-tables.mjs — run pnpm gen:rust-tables.
+export const BOOLEAN_ONLY_DYNAMIC_KEYS: ReadonlySet<string> = new Set(
+    Object.keys(BOOLEAN_ONLY_DYNAMIC_VOCABULARY),
+);
 
 // Removed boolean-sugar keys → the canonical { key, value } they map to. Used
 // both for the dev-mode deprecation warning and the `csszyx migrate` codemod.
