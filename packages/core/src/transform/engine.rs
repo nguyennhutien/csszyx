@@ -657,7 +657,17 @@ fn unknown_property_diagnostics(
             // A numeric key is almost never a typo — it means an array or a spread
             // reached `sz`. Match the JS engines' wording so a `build.parser` flip
             // does not change the diagnostic text.
-            if is_numeric_key(key) {
+            if let Some(note) = super::generated::tables::key_migration_note(key) {
+                // Wording mirrors the runtime channel's unknownSzPropertyMessage
+                // so the same key reads the same everywhere.
+                out.push(format!(
+                    "[csszyx] \"{key}\" was removed at {location}:{line}: {note}."
+                ));
+            } else if let Some(suggestion) = super::generated::tables::key_suggestion(key) {
+                out.push(format!(
+                    "[csszyx] Use the canonical key \"{suggestion}\" instead of \"{key}\" at {location}:{line}."
+                ));
+            } else if is_numeric_key(key) {
                 out.push(format!(
                     "[csszyx] sz received a numeric key \"{key}\" at {location}:{line}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored."
                 ));
