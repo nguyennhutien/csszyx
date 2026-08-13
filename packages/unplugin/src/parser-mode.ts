@@ -82,7 +82,14 @@ export function resolveParserMode(input: ResolveParserModeInput): ResolveParserM
     // default and the active-parser banner says which lane actually ran.
     const configValid = isParserMode(configParser);
     const explicit = envValid || configValid;
-    const parser: ParserMode = envValid ? envParser : configValid ? configParser : defaultParser;
+    let parser: ParserMode;
+    if (envValid) {
+        parser = envParser;
+    } else if (configValid) {
+        parser = configParser;
+    } else {
+        parser = defaultParser;
+    }
 
     if (parser === 'rust' && !explicit && !isRustAvailable()) {
         // The wasm build of the same engine is the only degrade target. When
