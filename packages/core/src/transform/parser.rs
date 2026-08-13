@@ -2512,21 +2512,17 @@ fn strict_static_selection(
     Some(selection)
 }
 
-/// Evaluate an object expression under the Babel lane's literal-only
-/// vocabulary — string/number/boolean literals, a negated number, nested
-/// objects; TS wrappers and parentheses unwrap. Deliberately NOT the
-/// identifier-resolving extractor: a broader evaluator here would let this
-/// engine qualify a config the JS lanes bail on.
-fn strict_literal_object(object: &ObjectExpression<'_>) -> Option<StaticSzObject> {
-    strict_literal_object_diagnosed(object, "").ok()
-}
-
-/// The same strict-literal walk, naming the first non-literal position.
+/// Evaluate an object expression under the literal-only vocabulary —
+/// string/number/boolean literals, a negated number, nested objects; TS
+/// wrappers and parentheses unwrap. Deliberately NOT the
+/// identifier-resolving extractor: a broader evaluator here would qualify a
+/// config the runtime lowering bails on.
 ///
-/// One walk serves the precompile's verdict and the szr diagnostic that has
-/// to tell the author WHERE their config stopped being static. `Err` carries
-/// the dot-joined key path under `prefix`; a shape with no key to name (a
-/// spread, a computed key) reports the object holding it.
+/// `Err` names the first non-literal position as a dot-joined key path under
+/// `prefix`, because one walk serves both the precompile's verdict and the
+/// szr diagnostic that has to tell the author WHERE their config stopped
+/// being static. A shape with no key to name — a spread, a computed key —
+/// reports the object holding it.
 fn strict_literal_object_diagnosed(
     object: &ObjectExpression<'_>,
     prefix: &str,

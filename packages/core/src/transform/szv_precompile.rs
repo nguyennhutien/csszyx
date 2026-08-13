@@ -287,12 +287,12 @@ fn branch_disqualify_path(branch: &StaticSzObject, prefix: &str) -> Option<Strin
 }
 
 /// Join one raw key under a dot-joined config path.
+///
+/// Every walk starts at a named root — `base`, or `variants.<dimension>.<value>`
+/// — so the prefix is never empty and the result always reads as a full path
+/// from the config root.
 fn joined_config_path(prefix: &str, key: &str) -> String {
-    if prefix.is_empty() {
-        key.to_string()
-    } else {
-        format!("{prefix}.{key}")
-    }
+    format!("{prefix}.{key}")
 }
 
 /// Whether the config's co-occurring branches are free of canonical overlap.
