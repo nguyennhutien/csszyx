@@ -918,10 +918,21 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 self.ir
                     .extracted_classes
                     .extend(lower_static_sz_object(&object));
+                // The same key checks an sz prop gets: a typo inside a static
+                // szr() argument must be findable by `csszyx check`. dynamic()
+                // stays exempt — its runtime dev-warning owns that surface,
+                // and its static argument is often a partial base merged with
+                // runtime values.
+                if callee.name.as_str() == "szr" {
+                    self.ir.catalog_sz_objects.push(object);
+                }
             }
             "szv" => {
-                let Some(classes) = collect_szv_catalog_classes(argument, self.resolve_context())
-                else {
+                let Some(classes) = collect_szv_catalog_classes(
+                    argument,
+                    self.resolve_context(),
+                    &mut self.ir.catalog_sz_objects,
+                ) else {
                     // No catalogue is emitted, so none of the variant classes
                     // are safelisted — under Tailwind `source(none)` that is
                     // silently missing CSS for every variant it can produce.
@@ -1406,6 +1417,7 @@ struct CatalogExtrasBudget {
 fn collect_szv_catalog_classes(
     argument: &Argument<'_>,
     ctx: ResolveContext<'_>,
+    catalog_objects: &mut Vec<StaticSzObject>,
 ) -> Option<Vec<String>> {
     // TypeScript wrappers (`satisfies` / `as` / parens) around the config are
     // type-level only — unwrap so `szv({…} satisfies SzvConfig)` still extracts.
@@ -1444,6 +1456,9 @@ fn collect_szv_catalog_classes(
         .first()
         .cloned()
         .unwrap_or_else(StaticSzObject::empty);
+    if !base.properties.is_empty() {
+        catalog_objects.push(base.clone());
+    }
     let mut classes = lower_static_sz_object(&base);
     for extra in base_candidates.iter().skip(1) {
         classes.extend(lower_static_sz_object(extra));
@@ -1476,6 +1491,9 @@ fn collect_szv_catalog_classes(
                     0,
                     &mut budget,
                 ) {
+                    // The RAW leaf, not the base-merged copy: merging would
+                    // re-report every base key once per variant value.
+                    catalog_objects.push(candidate.clone());
                     let mut merged = base.clone();
                     merge_static_properties(&mut merged.properties, candidate.properties);
                     classes.extend(lower_static_sz_object(&merged));

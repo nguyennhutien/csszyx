@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { transformSourceCode } from '@csszyx/compiler';
+import { transformSource } from '@csszyx/compiler';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -31,7 +31,10 @@ type TransformHook = {
  * @returns code with the runtime import inserted
  */
 function injectRuntimeImportLikePlugin(code: string, symbol: string): string {
-    const directiveMatch = code.match(/^['"]use (client|server)['"];?\s*/);
+    // The engine splices into the author's text and keeps leading
+    // whitespace, so the directive is matched with it (the deleted Babel
+    // lane re-printed modules and always had it at column 0).
+    const directiveMatch = code.match(/^\s*['"]use (client|server)['"];?\s*/);
     const importStmt = `import { ${symbol} } from '@csszyx/runtime';\n`;
     if (!directiveMatch) {
         return `${importStmt}${code}`;
@@ -106,7 +109,7 @@ describe('RSC boundary guard', () => {
                 return <div sz={styles} />;
             }
         `;
-        const result = transformSourceCode(source, SERVER_FILE);
+        const result = transformSource(source, SERVER_FILE);
 
         expect(result.code).toContain('_sz(styles)');
         expect(() => {
@@ -124,7 +127,7 @@ describe('RSC boundary guard', () => {
                 return <div className={className} sz={styles} />;
             }
         `;
-        const result = transformSourceCode(source, SERVER_FILE);
+        const result = transformSource(source, SERVER_FILE);
 
         expect(result.code).toContain('_szMerge');
         expect(() => {
@@ -142,7 +145,7 @@ describe('RSC boundary guard', () => {
                 return <div sz={{ p: 4, bg: 'red-500' }} />;
             }
         `;
-        const result = transformSourceCode(source, SERVER_FILE);
+        const result = transformSource(source, SERVER_FILE);
 
         expect(result.usesRuntime).toBe(false);
         expect(() => assertNoRSCBoundaryViolation(result.code, SERVER_FILE)).not.toThrow();
@@ -154,7 +157,7 @@ describe('RSC boundary guard', () => {
                 return <div sz={styles} />;
             }
         `;
-        const result = transformSourceCode(source, '/repo/app/page.tsx');
+        const result = transformSource(source, '/repo/app/page.tsx');
 
         expect(result.code).toContain('_sz(styles)');
         expect(() => {

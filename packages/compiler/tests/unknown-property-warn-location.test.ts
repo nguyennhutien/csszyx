@@ -366,75 +366,59 @@ describe('numeric sz key — array/spread message, not "Check for typos"', () =>
  * not a line. The catalog walk now points those warnings at the `szv()` / `szr()`
  * call. `dynamic()` stays location-less — its values are runtime, out of scope.
  */
-// ENGINE GAP — tracked as an M4 blocker: the engine does not yet emit
-// catalog-key warnings for szv() variants and static szr() arguments, so
-// `csszyx check` would silently lose that class of findings. These specs are
-// the contract to flip back on once the port lands (wording + located-at
-// expectations already match the engine's diagnostic channel style).
-describe.skip('szv/szr catalog warnings carry a source location (for csszyx check)', () => {
-    afterEach(() => {
-        vi.restoreAllMocks();
-        setSzWarnLocation(undefined);
-    });
-
-    const warnsFor = (src: string): string[] => {
-        const calls: string[] = [];
-        vi.spyOn(console, 'warn').mockImplementation(m => {
-            calls.push(String(m));
-        });
-        transformSource(src, '/proj/src/F.tsx', { rootDir: '/proj' });
-        return calls;
-    };
-
-    it('an unknown key in a szv variant is located at the szv() call', () => {
-        const calls = warnsFor(
+describe('szv/szr catalog warnings carry a source location (for csszyx check)', () => {
+    it('an unknown key in a szv variant is located at its own line', () => {
+        const result = transformSource(
             'import { szv } from "@csszyx/runtime";\n' +
                 'const s = szv({ variants: { c: { x: { xyzzy: 5, p: 4 } } } });',
+            '/proj/src/F.tsx',
+            { rootDir: '/proj' },
         );
-        const msg = calls.find(m => m.includes('Unknown property "xyzzy"'));
-        expect(msg).toBeDefined();
+        const msg = result.diagnostics.find(m => m.includes('Unknown property "xyzzy"'));
+        expect(msg, result.diagnostics.join('\n')).toBeDefined();
         expect(msg).toContain('at src/F.tsx:2');
     });
 
-    it('a numeric key in a szv variant is located and uses the array/spread message', () => {
-        const calls = warnsFor(
+    it('a numeric key in a szv variant uses the array/spread message, located', () => {
+        const result = transformSource(
             'import { szv } from "@csszyx/runtime";\n' +
                 'const s = szv({ variants: { c: { x: { 4: true, p: 4 } } } });',
+            '/proj/src/F.tsx',
+            { rootDir: '/proj' },
         );
-        const msg = calls.find(m => m.includes('numeric key "4"'));
-        expect(msg).toBeDefined();
+        const msg = result.diagnostics.find(m => m.includes('numeric key "4"'));
+        expect(msg, result.diagnostics.join('\n')).toBeDefined();
         expect(msg).toContain('at src/F.tsx:2');
         expect(msg).toContain('an array or a spread');
     });
 
     it('an unknown key in a static szr() argument is located at the szr() call', () => {
-        const calls = warnsFor(
-            'import { szr } from "@csszyx/runtime";\n' + 'const c = szr({ nope: 1, m: 2 });',
+        const result = transformSource(
+            'import { szr } from "@csszyx/runtime";\nconst c = szr({ nope: 1, m: 2 });',
+            '/proj/src/F.tsx',
+            { rootDir: '/proj' },
         );
-        const msg = calls.find(m => m.includes('Unknown property "nope"'));
-        expect(msg).toBeDefined();
+        const msg = result.diagnostics.find(m => m.includes('Unknown property "nope"'));
+        expect(msg, result.diagnostics.join('\n')).toBeDefined();
         expect(msg).toContain('at src/F.tsx:2');
     });
 
-    it('dynamic() keeps the location-less message (runtime, out of scope)', () => {
-        const calls = warnsFor(
+    it('dynamic() contributes no build diagnostic (runtime, out of scope)', () => {
+        const result = transformSource(
             'import { dynamic } from "csszyx";\nconst d = dynamic({ badkey: 1 });',
+            '/proj/src/F.tsx',
+            { rootDir: '/proj' },
         );
-        const msg = calls.find(m => m.includes('Unknown property "badkey"'));
-        expect(msg).toBeDefined();
-        expect(msg).not.toContain(' at ');
+        expect(result.diagnostics.some(m => m.includes('badkey'))).toBe(false);
     });
 
-    it('the catalog location does not leak into a later sz prop warning', () => {
-        const calls = warnsFor(
+    it('both artifacts agree on the catalog diagnostics', () => {
+        const src =
             'import { szv } from "@csszyx/runtime";\n' +
-                'const s = szv({ variants: { c: { x: { xyzzy: 5 } } } });\n' +
-                'export const A = () => <div sz={{ zzz: 1 }} />;',
-        );
-        // The sz prop on line 3 must report its OWN line, not the szv() line 2.
-        const msg = calls.find(m => m.includes('Unknown property "zzz"'));
-        expect(msg).toBeDefined();
-        expect(msg).toContain('at src/F.tsx:3');
+            'const s = szv({ variants: { c: { x: { xyzzy: 5 } } } });';
+        const native = transformSource(src, '/proj/src/F.tsx', { rootDir: '/proj' });
+        const wasm = transformWasm(src, '/proj/src/F.tsx', { rootDir: '/proj' });
+        expect(wasm.diagnostics).toEqual(native.diagnostics);
     });
 });
 

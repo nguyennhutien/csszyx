@@ -642,9 +642,14 @@ fn unknown_property_diagnostics(
     // are all clean reaches none of the branches below, and must not pay a pass
     // over its own source for a table nobody reads.
     let mut lines: Option<LineIndex> = None;
-    for attr in &ir.sz_attributes {
+    // sz props first, then the catalog objects (szv leaves + static szr
+    // arguments) through the SAME unknown/numeric emission — a typo inside a
+    // catalog must be as findable by `csszyx check` as one on an element.
+    let attribute_objects = ir.sz_attributes.iter().map(|attr| &attr.object);
+    let catalog_objects = ir.catalog_sz_objects.iter();
+    for object in attribute_objects.chain(catalog_objects) {
         unknown.clear();
-        collect_unknown_sz_keys(&attr.object, &mut unknown);
+        collect_unknown_sz_keys(object, &mut unknown);
         for (key, offset) in &unknown {
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
@@ -667,7 +672,7 @@ fn unknown_property_diagnostics(
             }
         }
         dead_steps.clear();
-        super::lower::collect_dead_spacing_steps(&attr.object, &mut dead_steps);
+        super::lower::collect_dead_spacing_steps(object, &mut dead_steps);
         for (key, value, offset) in &dead_steps {
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
@@ -679,7 +684,7 @@ fn unknown_property_diagnostics(
             ));
         }
         property_objects.clear();
-        super::lower::collect_property_object_values(&attr.object, &mut property_objects);
+        super::lower::collect_property_object_values(object, &mut property_objects);
         for (key, nested, offset) in &property_objects {
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
@@ -691,7 +696,7 @@ fn unknown_property_diagnostics(
             ));
         }
         mask_members.clear();
-        super::lower::collect_unknown_mask_slot_members(&attr.object, &mut mask_members);
+        super::lower::collect_unknown_mask_slot_members(object, &mut mask_members);
         for (owner, member, allowed, offset) in &mask_members {
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))

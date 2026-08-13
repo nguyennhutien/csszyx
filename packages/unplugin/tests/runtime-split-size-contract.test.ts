@@ -158,11 +158,11 @@ describe('szr import rewrite, end to end', () => {
     it('a compiled szr-strings module bundles without the compiler', async () => {
         // The whole point of the split: compiler proves strings-only, rewrites
         // the import, and the resulting bundle drops ~13 KB gz of transform.
-        const { transformSourceCode } = require('@csszyx/compiler');
+        const { transformSource } = require('@csszyx/compiler');
         const source =
             "import { szr } from '@csszyx/runtime';\n" +
             "export const cls = szr('p-4', true && 'm-2');\n";
-        const compiled = transformSourceCode(source, '/app/Button.tsx').code as string;
+        const compiled = transformSource(source, '/app/Button.tsx').code as string;
         expect(compiled).toContain('@csszyx/runtime/core');
         const probe = await bundleProbe(compiled);
         expect(probe.hasCompiler).toBe(false);
@@ -170,10 +170,10 @@ describe('szr import rewrite, end to end', () => {
     });
 
     it('an szr-objects module keeps the barrel and stays object-capable', async () => {
-        const { transformSourceCode } = require('@csszyx/compiler');
+        const { transformSource } = require('@csszyx/compiler');
         const source =
             "import { szr } from '@csszyx/runtime';\n" + 'export const cls = (cfg) => szr(cfg);\n';
-        const compiled = transformSourceCode(source, '/app/Card.tsx').code ?? source;
+        const compiled = transformSource(source, '/app/Card.tsx').code ?? source;
         expect(compiled).not.toContain('@csszyx/runtime/core');
         const probe = await bundleProbe(compiled);
         expect(probe.hasCompiler).toBe(true);
@@ -189,14 +189,14 @@ describe('szv precompile, end to end', () => {
         // probe appends the exact import the plugin injects — the BARREL form
         // (requiredRuntimeHelpers routes __szvPick there), not a hand-written
         // /core line the plugin never emits.
-        const { transformSourceCode } = require('@csszyx/compiler');
+        const { transformSource } = require('@csszyx/compiler');
         // The single-clause import is the shape people actually write; the
         // compiler splits it, moving szr to the core entry on its own line.
         const source =
             "import { szr, szv } from '@csszyx/runtime';\n" +
             "const cardSz = szv({ base: { rounded: 'lg' }, variants: { pad: { sm: { p: 2 }, lg: { p: 8 } } } });\n" +
             'export const C = (sel) => szr(cardSz(sel), cardSz({ pad: "sm" }));\n';
-        const result = transformSourceCode(source, '/app/Card.tsx');
+        const result = transformSource(source, '/app/Card.tsx');
         expect(result.usesSzvPick).toBe(true);
         const compiled = `import { __szvPick } from '@csszyx/runtime';\n${result.code as string}`;
         expect(compiled).toContain('@csszyx/runtime/core');
