@@ -79,11 +79,8 @@ const runServer = async (label, serverPath) => {
         // that never supplies them runs out the deadline and fails on those
         // same assertions, one deadline later instead of at the first poll.
         const deadline = Date.now() + 30_000;
-        let response;
-        let owned = [];
-        let names = new Set();
         while (true) {
-            response = await responseFor(
+            const response = await responseFor(
                 send('completionInfo', {
                     file: fileName,
                     line: 1,
@@ -91,19 +88,21 @@ const runServer = async (label, serverPath) => {
                 }),
             );
             const entries = response.body?.entries ?? [];
-            owned = entries.filter(
+            const owned = entries.filter(
                 entry =>
                     entry.data?.owner === '@csszyx/ts-plugin' && entry.data?.schema === 1,
             );
-            names = new Set(entries.map(entry => entry.name));
+            const names = new Set(entries.map(entry => entry.name));
             const ready =
                 owned.some(entry => entry.name === 'bg') &&
                 names.has('bg') &&
                 names.has('hover');
-            if (ready || Date.now() >= deadline) break;
+            // Returning the answer that was just read, rather than carrying it
+            // out in variables the loop reassigns every pass. The deadline is
+            // checked here so the last answer is what the assertions see.
+            if (ready || Date.now() >= deadline) return { response, owned, names };
             await new Promise(resolveDelay => setTimeout(resolveDelay, 100));
         }
-        return { response, owned, names };
     } finally {
         child.kill();
     }
