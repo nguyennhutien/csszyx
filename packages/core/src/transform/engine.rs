@@ -1637,6 +1637,22 @@ mod tests {
     }
 
     #[test]
+    fn static_engine_will_not_read_a_member_off_a_scalar_constant() {
+        // The name resolves, but to a string rather than a map, so there is no
+        // property to read. `length` is a real value at run time and inventing
+        // one here would be a different answer than the program's.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const S = 'abc';\nconst X = () => <div sz={{ z: S.length }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(result.code.contains("style={{\"--_sz-z\": S.length}}"));
+        assert!(result.classes.iter().all(|class| class != "z-3"));
+    }
+
+    #[test]
     fn static_engine_will_not_read_a_map_declared_after_its_use() {
         // Reading it would answer with a value the reference cannot see. The
         // bare-identifier walk already refuses this, and the read inherits the

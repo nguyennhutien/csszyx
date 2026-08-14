@@ -287,22 +287,26 @@ async function waitForWatcherDelivery(
     await new Promise<void>(resolve => {
         let timer: ReturnType<typeof setTimeout> | undefined;
         // Every step here is idempotent, so the two callers race harmlessly.
+        // `clearTimeout` accepts undefined, which spares a guard for a state
+        // no caller can reach: the timer is armed before either of them runs.
         const finish = (): void => {
-            if (timer !== undefined) {
-                clearTimeout(timer);
-            }
+            clearTimeout(timer);
             watcher.off('all', onEvent);
             resolve();
         };
-        const onEvent = (_event: string, filePath: string): void => {
-            if (path.resolve(filePath) === probePath) {
-                finish();
-            }
+        // Any event at all, not only the probe's: what is being waited on is
+        // the pipe carrying events, and anything arriving through it proves
+        // that. `ignoreInitial` means nothing is replayed for files that were
+        // already there, so an event here is always a real change. The probe
+        // is what guarantees one will come, not what makes it count.
+        const onEvent = (): void => {
+            finish();
         };
 
         watcher.on('all', onEvent);
         timer = setTimeout(finish, timeoutMs);
-        timer.unref?.();
+        // Unconditional: this is a Node CLI, where a timer always carries it.
+        timer.unref();
 
         try {
             fs.mkdirSync(path.dirname(probePath), { recursive: true });

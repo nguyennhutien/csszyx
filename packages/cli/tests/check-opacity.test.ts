@@ -117,6 +117,28 @@ describe('csszyx check — opacity modifiers judged from the compiled rule', () 
         expect(process.exitCode).toBe(1);
     });
 
+    it('passes over a class the stylesheet has no rule for at all', async () => {
+        // A dead class is the other pass's finding. This one reads compiled
+        // rules, and a class with no rule has nothing to read: it has to be
+        // skipped rather than counted as a surviving modifier or crashed on.
+        // Both findings come out of one scan, so they are asserted together.
+        const cwd = projectWith({
+            'src/app.css': ENTRY_CSS,
+            // Carries a modifier AND has no rule: the theme defines no such
+            // token, so it reaches this pass and has nothing to read.
+            'src/Dead.tsx':
+                "export const D = () => <div sz={{ bg: { color: 'nope-token', op: 30 } }} />;",
+            'src/Broken.tsx':
+                "export const B = () => <div sz={{ bg: { color: 'broken', op: 30 } }} />;",
+        });
+
+        const report = await reportFor(cwd);
+
+        expect(report).toContain('bg-nope-token/30');
+        expect(report).toContain('bg-broken/30');
+        expect(process.exitCode).toBe(1);
+    });
+
     it('stays silent when every modifier survives', async () => {
         const cwd = projectWith({
             'src/app.css': ENTRY_CSS,
