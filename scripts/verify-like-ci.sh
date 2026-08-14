@@ -138,6 +138,19 @@ echo "[verify-like-ci] Rust gates (rustfmt, clippy x3 feature sets, native check
 echo "[verify-like-ci] Rust coverage gate (mirrors the Coverage workflow)..."
 pnpm cov:rust
 
+# The Coverage workflow runs this alongside the rust report above; the Test
+# step below uses turbo and collects nothing, so without this the TypeScript
+# half of the patch-coverage check would have no report to read. Measured at
+# about 40 seconds.
+echo "[verify-like-ci] TypeScript coverage (mirrors the Coverage workflow)..."
+pnpm test:coverage
+
+# Both reports now exist, so the diff can be compared against them. Codecov
+# reports exactly this on the pull request, and nothing here reproduced it — an
+# untested changed line was only ever discovered after a push.
+echo "[verify-like-ci] Patch coverage (changed lines against both coverage reports)..."
+pnpm check:patch-coverage
+
 echo "[verify-like-ci] Running unit tests through turbo (catches missing build deps)..."
 pnpm test:unit
 
