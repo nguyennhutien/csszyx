@@ -2,20 +2,46 @@
 
 ## [0.14.0](https://github.com/nguyennhutien/csszyx/compare/v0.13.0...v0.14.0) (2026-08-14)
 
-
 ### ⚠ BREAKING CHANGES
 
-* `build.parser` and `CSSZYX_PARSER` accept `'rust'` and `'wasm'` only. The `'oxc'` and `'babel'` values are gone, along with the oxc transform branch, the oxc→Babel compatibility fallback, and the degrade-to-oxc last resort. A config still saying `'oxc'`/`'babel'` (reachable from untyped JavaScript) is ignored like an invalid env var: the build runs on the default and the active-parser banner names the lane that actually ran.
+* one engine, two artifacts — remove the babel and oxc parser lanes ([#216](https://github.com/nguyennhutien/csszyx/issues/216))
+* **unplugin:** `build.parser` and `CSSZYX_PARSER` accept `'rust'` and `'wasm'` only. The `'oxc'` and `'babel'` values are gone, along with the oxc transform branch, the oxc→Babel compatibility fallback, and the degrade-to-oxc last resort. A config still saying `'oxc'`/`'babel'` (reachable from untyped JavaScript) is ignored like an invalid env var: the build runs on the default and the active-parser banner names the lane that actually ran. ([#216](https://github.com/nguyennhutien/csszyx/issues/216))
+* **compiler:** transformSourceCode, transformOxc, OxcNotImplementedError, TransformOxcResult, hoistCSSVariables, buildParentMap and CSSVarUsage are no longer exported. transform.ts (the Babel lane), transform-oxc.ts (the oxc lane) and hoisting.ts are deleted; the contract types (SourceTransformResult, TransformSourceCodeOptions, GlobalVarAliasTableInput, CssVariableMangleValue) now live in transform-core. Callers that just want a transform use the new transformSource, which picks the native addon when the host has one and the wasm build otherwise — the same signature transformSourceCode had, so most migrations are a rename. The CLI project scan and the MCP compile preview migrated exactly that way. ([#216](https://github.com/nguyennhutien/csszyx/issues/216))
 
 ### Features
 
-* one engine, two artifacts — remove the babel and oxc parser lanes ([#216](https://github.com/nguyennhutien/csszyx/issues/216)) ([669d7b8](https://github.com/nguyennhutien/csszyx/commit/669d7b8f526083fe54dbf31455a02f2298109177))
-* ship the native engine's wasm build as the parser fallback lane ([#215](https://github.com/nguyennhutien/csszyx/issues/215)) ([04d49a6](https://github.com/nguyennhutien/csszyx/commit/04d49a63a944d591905a8563bb117d103a5b74b6))
-
+* ship the native engine's wasm build as the parser fallback lane ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **unplugin:** say how many fallbacks the build did not list ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **core:** compile the transform engine to wasm as pkg-parser ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **compiler:** expose the wasm engine as a lane ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **unplugin:** degrade the default rust parser to its wasm build ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **core:** put the parser wasm artifact under performance gates ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* one engine, two artifacts — remove the babel and oxc parser lanes ([#216](https://github.com/nguyennhutien/csszyx/issues/216))
+* **unplugin:** run on the engine's two artifacts only ([#216](https://github.com/nguyennhutien/csszyx/issues/216))
+* **compiler:** one engine, two artifacts — the TypeScript parser lanes are gone ([#216](https://github.com/nguyennhutien/csszyx/issues/216))
+* **core:** check catalog keys the way an sz prop is checked ([#216](https://github.com/nguyennhutien/csszyx/issues/216))
+* **core:** suggest the canonical key from engine diagnostics ([#216](https://github.com/nguyennhutien/csszyx/issues/216))
 
 ### Bug Fixes
 
-* the 0.14.0 defect queue ([#222](https://github.com/nguyennhutien/csszyx/issues/222)) ([88b8ca3](https://github.com/nguyennhutien/csszyx/commit/88b8ca317c04f6032c53d214c8422f744669c270))
+* **unplugin:** detect source() wherever it sits in the import ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **unplugin:** describe the scan that happens, not a worse one ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **unplugin:** weigh the class shortening the advisory disclaimed ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **unplugin:** print the size verdict after the asset table ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **cli:** resolve stylesheet imports that name a package ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **cli:** fail when the dead-class check could not run ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **compiler:** compile a colour-fusion op inside its own property ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **unplugin:** stop promising the parser fallback keeps classes ([#215](https://github.com/nguyennhutien/csszyx/issues/215))
+* **cli:** read the engine's diagnostics instead of a console latch ([#216](https://github.com/nguyennhutien/csszyx/issues/216))
+* **core:** drop a redundant clone the strict clippy gate rejects ([#216](https://github.com/nguyennhutien/csszyx/issues/216))
+* the 0.14.0 defect queue ([#222](https://github.com/nguyennhutien/csszyx/issues/222))
+* **compiler:** name the disqualifying config position in the szr factory fallback ([#222](https://github.com/nguyennhutien/csszyx/issues/222))
+* **cli:** judge opacity modifiers from the compiled rule, not the token's text ([#222](https://github.com/nguyennhutien/csszyx/issues/222))
+* **compiler:** add a runtime resolver for dynamic boolean-only keys ([#222](https://github.com/nguyennhutien/csszyx/issues/222))
+* **engine:** lower a dynamic boolean-only key to a conditional class ([#222](https://github.com/nguyennhutien/csszyx/issues/222))
+* **unplugin:** mangle before the bundler hashes the output ([#222](https://github.com/nguyennhutien/csszyx/issues/222))
+* **cli:** prove the watcher delivers before reporting ready ([#222](https://github.com/nguyennhutien/csszyx/issues/222))
+* **engine:** read a static value off a constant map ([#222](https://github.com/nguyennhutien/csszyx/issues/222))
 
 ## [0.13.0](https://github.com/nguyennhutien/csszyx/compare/v0.12.0...v0.13.0) (2026-08-11)
 
