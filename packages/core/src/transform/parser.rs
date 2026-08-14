@@ -21,13 +21,13 @@ use std::collections::HashSet;
 use std::time::Instant;
 
 use super::{
-    lower::{dynamic_css_var_class, lower_static_sz_object},
+    lower::{dynamic_css_var_class, is_removed_sz_key, lower_static_sz_object},
     ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr,
-    RecoveryAttributeIr, RecoveryMode, SafeStyleSpreadExpressionIr, SafeStyleSpreadIr,
-    SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr, StaticArrayPartIr, StaticSzObject,
-    StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr,
-    SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings,
-    UnsupportedRecoveryIr,
+    RecoveryAttributeIr, RecoveryMode, RemovedSzKeyIr, SafeStyleSpreadExpressionIr,
+    SafeStyleSpreadIr, SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr,
+    StaticArrayPartIr, StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr,
+    StyleAttributeIr, SzAttributeIr, SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile,
+    TransformTimings, UnsupportedRecoveryIr,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -707,6 +707,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             runtime_fallback_spread,
             candidate_classes,
             dynamic_css_vars,
+            removed_dynamic_keys,
         ) = match &attr.value {
             Some(JSXAttributeValue::StringLiteral(value)) => (
                 StaticSzObject::empty(),
@@ -717,6 +718,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 Vec::new(),
                 false,
                 false,
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
             ),
@@ -748,6 +750,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         Vec::new(),
                         Vec::new(),
+                        Vec::new(),
                     )
                 } else if let Some((object, value_span, rewrites_empty_class)) =
                     static_object_from_jsx_expression(&container.expression, ctx)
@@ -763,9 +766,15 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         Vec::new(),
                         Vec::new(),
+                        Vec::new(),
                     )
-                } else if let Some((object, value_span, dynamic_css_vars, ternaries)) =
-                    partial_object_from_jsx_expression(&container.expression, ctx)
+                } else if let Some((
+                    object,
+                    value_span,
+                    dynamic_css_vars,
+                    ternaries,
+                    removed_dynamic_keys,
+                )) = partial_object_from_jsx_expression(&container.expression, ctx)
                 {
                     (
                         object,
@@ -778,6 +787,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         Vec::new(),
                         dynamic_css_vars,
+                        removed_dynamic_keys,
                     )
                 } else if let Some((array_parts, value_span)) =
                     static_array_parts_from_jsx_expression(&container.expression, ctx)
@@ -791,6 +801,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         array_parts,
                         false,
                         false,
+                        Vec::new(),
                         Vec::new(),
                         Vec::new(),
                     )
@@ -812,6 +823,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         jsx_expression_has_top_level_spread(&container.expression),
                         candidate_classes,
                         Vec::new(),
+                        Vec::new(),
                     )
                 }
             }
@@ -832,6 +844,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             candidate_classes,
             runtime_fallback_diagnostic,
             dynamic_css_vars,
+            removed_dynamic_keys,
         });
         Some(index)
     }
@@ -3492,17 +3505,21 @@ struct PartialSzObject {
     /// Property-level conditionals in source order — each lowers to one
     /// appended `${cond ? "…" : "…"}` template segment.
     ternaries: Vec<StaticTernaryIr>,
+    removed_dynamic_keys: Vec<RemovedSzKeyIr>,
 }
 
-fn partial_object_from_jsx_expression(
-    expression: &JSXExpression<'_>,
-    ctx: ResolveContext<'_>,
-) -> Option<(
+type PartialObjectResult = (
     StaticSzObject,
     TextSpan,
     Vec<DynamicCssVarIr>,
     Vec<StaticTernaryIr>,
-)> {
+    Vec<RemovedSzKeyIr>,
+);
+
+fn partial_object_from_jsx_expression(
+    expression: &JSXExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<PartialObjectResult> {
     match expression {
         JSXExpression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
@@ -3511,6 +3528,7 @@ fn partial_object_from_jsx_expression(
                 text_span(object.span),
                 partial.dynamic_css_vars,
                 partial.ternaries,
+                partial.removed_dynamic_keys,
             ))
         }
         JSXExpression::TSAsExpression(value) => {
@@ -3532,12 +3550,7 @@ fn partial_object_from_jsx_expression(
 fn partial_object_from_expression(
     expression: &Expression<'_>,
     ctx: ResolveContext<'_>,
-) -> Option<(
-    StaticSzObject,
-    TextSpan,
-    Vec<DynamicCssVarIr>,
-    Vec<StaticTernaryIr>,
-)> {
+) -> Option<PartialObjectResult> {
     match expression {
         Expression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
@@ -3546,6 +3559,7 @@ fn partial_object_from_expression(
                 text_span(object.span),
                 partial.dynamic_css_vars,
                 partial.ternaries,
+                partial.removed_dynamic_keys,
             ))
         }
         Expression::ParenthesizedExpression(value) => {
@@ -3574,6 +3588,7 @@ fn partial_object_from_object_expression(
                 object: StaticSzObject::empty(),
                 dynamic_css_vars: Vec::new(),
                 ternaries: vec![ternary],
+                removed_dynamic_keys: Vec::new(),
             });
         }
     }
@@ -3584,6 +3599,7 @@ fn partial_object_from_object_expression(
         },
         dynamic_css_vars: Vec::new(),
         ternaries: Vec::new(),
+        removed_dynamic_keys: Vec::new(),
     };
 
     for property in &object.properties {
@@ -3598,6 +3614,16 @@ fn partial_object_from_object_expression(
                 }
 
                 let key = static_property_key(&property.key)?;
+                if is_removed_sz_key(&key) {
+                    // Retain only diagnostic identity: no class or CSS variable
+                    // may be emitted, while a literal false was skipped above
+                    // and remains silent like the runtime path.
+                    partial.removed_dynamic_keys.push(RemovedSzKeyIr {
+                        key,
+                        span: text_span(property.span),
+                    });
+                    continue;
+                }
                 if let Expression::ObjectExpression(nested) = &property.value {
                     collect_nested_partial_property(
                         &mut partial,
@@ -3716,6 +3742,9 @@ fn collect_nested_partial_property(
         });
     }
     partial.dynamic_css_vars.extend(nested.dynamic_css_vars);
+    partial
+        .removed_dynamic_keys
+        .extend(nested.removed_dynamic_keys);
     for ternary in nested.ternaries {
         set_partial_ternary(partial, ternary);
     }
@@ -5929,6 +5958,24 @@ export const cls = szr(localCard({ pad: 'sm' }));";
             });
             assert!(parsed.ir.sz_attributes[0].runtime_fallback, "{source}");
         }
+    }
+
+    #[test]
+    fn parser_shell_keeps_removed_dynamic_keys_out_of_css_variables() {
+        let source = "const App=({pad,size})=> <div sz={{ hover: { padding: pad }, fontSize: size, bg: 'red-500' }}/>;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(!attribute.runtime_fallback);
+        assert!(attribute.dynamic_css_vars.is_empty());
+        assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["bg-red-500"]);
+        assert!(attribute
+            .removed_dynamic_keys
+            .iter()
+            .any(|property| property.key == "fontSize"));
     }
 
     #[test]

@@ -63,11 +63,12 @@ describe('migrate normalizes legacy sz prop keys', () => {
         expect(run("<div sz={{ font: 'sans' }} />").code).toBe(
             "<div sz={{ fontFamily: 'sans' }} />",
         );
-        // Round-trip: the canonical keys compile to what `font: <value>` emitted.
-        expect(transform({ weight: 'bold' }).className).toBe(transform({ font: 'bold' }).className);
-        expect(transform({ fontFamily: 'sans' }).className).toBe(
-            transform({ font: 'sans' }).className,
-        );
+        // Migration restores the intended utilities; the removed alias itself
+        // is deliberately a no-op so stale source cannot look supported.
+        expect(transform({ weight: 'bold' }).className).toBe('font-bold');
+        expect(transform({ fontFamily: 'sans' }).className).toBe('font-sans');
+        expect(transform({ font: 'bold' }).className).toBe('');
+        expect(transform({ font: 'sans' }).className).toBe('');
     });
 
     it('leaves a `font` key with a non-literal value for the dev-warn', () => {

@@ -201,8 +201,8 @@ half of that gate and do reach the console.
 | Message | Notes |
 | --- | --- |
 | `[csszyx] Unknown property "{key}" in sz prop{ at LOC}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility.` | The class *is* in the DOM — grep for it. |
-| `[csszyx] "{key}" was removed{ at LOC}: {note}.` | Migration note per key. |
-| `[csszyx] Use the canonical key "{suggestion}" instead of "{key}"{ at LOC}.` | An alias still works; the canonical name is preferred. |
+| `[csszyx] "{key}" was removed{ at LOC}: {note}.` | The removed key emits no class. Apply the replacement shape from the note. |
+| `[csszyx] Use the canonical key "{suggestion}" instead of "{key}"{ at LOC}.` | The alias emits no class; rename it to the canonical key. |
 | `[csszyx] sz received a numeric key "{key}"{ at LOC}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored.` | You probably passed an array to `sz={{ … }}`. |
 | `[csszyx] "{rawKey}" boolean sugar was removed. Use { {key}: '{value}' } instead, or run ``csszyx migrate``.` | **browser too** |
 
@@ -221,6 +221,12 @@ And once per process, a pointer at the whole-project scan:
 
 The parenthetical is `this warning has no source location — the scan reports
 which file and key triggered it` when the warning was unlocated.
+
+Unknown custom keys and removed keys deliberately have different outcomes. A
+brand-new key can still target a project-defined Tailwind `@utility`, so csszyx
+emits its kebab-case class after warning. A key listed as an alias or removed
+migration is not a custom escape hatch: csszyx warns and drops it instead of
+silently preserving obsolete API spellings or leaving dead classes in the DOM.
 
 ### Values that generate no CSS
 

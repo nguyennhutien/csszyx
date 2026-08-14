@@ -344,6 +344,21 @@ export const BOOLEAN_SHORTHANDS = [
     "textEllipsis",
     "truncate"
 ] as const;
+/** Canonical properties lowered by dedicated compiler branches. */
+export const KNOWN_SPECIAL_PROPERTIES = [
+    "alignContent",
+    "css",
+    "fromPos",
+    "maskComposite",
+    "maskConic",
+    "maskLinear",
+    "maskMode",
+    "maskRadial",
+    "maskType",
+    "snapStrictness",
+    "toPos",
+    "viaPos"
+] as const;
 export const KNOWN_VARIANTS = [
     "2xl",
     "@2xl",
@@ -529,7 +544,6 @@ export const SUGGESTION_MAP = {
     "flexGrow": "grow",
     "flexShrink": "shrink",
     "alignItems": "items",
-    "alignContent": "content",
     "alignSelf": "self",
     "justifyContent": "justify",
     "gridTemplateColumns": "gridCols",

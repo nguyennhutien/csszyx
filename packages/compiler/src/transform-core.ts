@@ -618,7 +618,6 @@ export const SUGGESTION_MAP: Record<string, string> = {
     flexGrow: 'grow',
     flexShrink: 'shrink',
     alignItems: 'items',
-    alignContent: 'content',
     alignSelf: 'self',
     justifyContent: 'justify',
     gridTemplateColumns: 'gridCols',
@@ -895,16 +894,22 @@ const ARIA_STATES = new Set([
 // ============================================================================
 // BOOLEAN_SHORTHANDS: Properties that map directly when value is true
 // ============================================================================
-// Object-valued keys lowered by dedicated branches rather than PROPERTY_MAP.
-// This table also feeds native known-key generation so diagnostics cannot drift.
-// `css` plus the three mask layers, which are lowered by a dedicated object
-// branch rather than a PROPERTY_MAP prefix, so they need naming here to be
-// recognised as valid keys.
+// Canonical keys lowered by dedicated branches rather than PROPERTY_MAP. This
+// table feeds native and editor-tooling generation so valid-key diagnostics and
+// completions cannot drift from the compiler.
 export const KNOWN_SPECIAL_PROPERTIES: Set<string> = new Set([
     'css',
     'maskLinear',
     'maskRadial',
     'maskConic',
+    'alignContent',
+    'fromPos',
+    'viaPos',
+    'toPos',
+    'maskComposite',
+    'maskMode',
+    'maskType',
+    'snapStrictness',
 ]);
 
 // Boolean shorthands kept on purpose. A key stays boolean only when it is NOT a
@@ -3829,6 +3834,10 @@ function collectTransformProperty(
     classes: string[],
 ): void {
     if (value === false || value === null || value === undefined) return;
+    if (rawKey in SUGGESTION_MAP || rawKey in MIGRATION_NOTES) {
+        warnUnknownSzProperty(rawKey, szProp);
+        return;
+    }
     warnAlignmentValue(rawKey, value);
     if (collectRemovedBooleanSugar(rawKey, value)) return;
     if (collectObjectProperty(rawKey, value, prefix, classes)) return;

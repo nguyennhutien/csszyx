@@ -166,6 +166,7 @@ describe('unknown-property warning — Rust engine parity (no over-warn)', () =>
             'min',
             'fromPos',
             'alignContent',
+            // removed aliases: both engines must diagnose them
             'backgroundRepeat',
             'listStyle',
             'maskComposite',

@@ -161,7 +161,6 @@ mod diagnostic_table_tests {
         ("flexGrow", "grow"),
         ("flexShrink", "shrink"),
         ("alignItems", "items"),
-        ("alignContent", "content"),
         ("alignSelf", "self"),
         ("justifyContent", "justify"),
         ("gridTemplateColumns", "gridCols"),
@@ -222,7 +221,7 @@ mod diagnostic_table_tests {
 
         // A key that IS canonical has nothing to suggest, so the lookup must
         // not answer for everything.
-        for key in ["p", "bg", "display", "notAKeyAtAll"] {
+        for key in ["p", "bg", "display", "alignContent", "notAKeyAtAll"] {
             assert_eq!(key_suggestion(key), None, "{key}");
         }
     }

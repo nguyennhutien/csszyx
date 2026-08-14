@@ -65,6 +65,7 @@ export {
     type CssVariableMangleValue,
     type GlobalVarAliasTableInput,
     isValidSzProp,
+    KNOWN_SPECIAL_PROPERTIES,
     KNOWN_VARIANTS,
     normalizeClassName,
     PROPERTY_MAP,

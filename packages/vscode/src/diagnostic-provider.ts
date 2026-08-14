@@ -7,6 +7,7 @@
  * Valid keys:
  *   - PROPERTY_MAP keys (p, bg, text, ...)
  *   - BOOLEAN_SHORTHANDS (truncate, grow, ring, container, ...)
+ *   - KNOWN_SPECIAL_PROPERTIES lowered by dedicated compiler branches
  *   - KNOWN_VARIANTS used as top-level keys (hover, sm, dark, ...)
  *   - Arbitrary variant keys ([&:hover], ...)
  *   - `css` (arbitrary CSS escape hatch)
@@ -18,6 +19,7 @@ import * as vscode from 'vscode';
 
 import {
     BOOLEAN_SHORTHANDS,
+    KNOWN_SPECIAL_PROPERTIES,
     KNOWN_VARIANTS,
     MIGRATION_NOTES,
     PROPERTY_MAP,
@@ -57,9 +59,9 @@ const REGEX_SPECIAL_CHARACTERS = new Set([
 const VALID_KEYS = new Set<string>([
     ...Object.keys(PROPERTY_MAP),
     ...BOOLEAN_SHORTHANDS,
+    ...KNOWN_SPECIAL_PROPERTIES,
     ...KNOWN_VARIANTS,
     ...SPECIAL_VARIANTS,
-    'css',
 ]);
 
 /**

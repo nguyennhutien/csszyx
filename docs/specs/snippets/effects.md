@@ -96,7 +96,9 @@ moved into their layer (`{ maskLinear: { from } }` etc.), `maskShape` moved to
 `{ maskRadial: { shape } }`, `maskVia` was removed with no equivalent (Tailwind
 has no via stop for masks), and gradient layer values on `mask`
 (`{ mask: 'linear-45' }`) moved to the layer keys. `mask` carries only a direct
-mask-image: `none`, `url(…)`, a CSS variable, or an arbitrary value.
+mask-image: `none`, `url(…)`, a CSS variable, or an arbitrary value. The
+compiler warns and emits no class for every removed flat key; it never preserves
+them as custom-utility fallbacks.
 
 ### mask-image: Gradient Masks
 

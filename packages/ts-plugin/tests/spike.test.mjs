@@ -496,6 +496,20 @@ test('merge decorates colliding base entries without mutating them', () => {
     assert.strictEqual(bg2.labelDetails.description, 'from types');
 });
 
+test('top-level completion includes canonical dedicated-branch properties', () => {
+    const { buildSzKeyEntries } = require('../dist/completions.js');
+    const { KNOWN_SPECIAL_PROPERTIES } = require('@csszyx/tooling-metadata');
+    const names = buildSzKeyEntries({
+        tsMod: ts,
+        limit: 512,
+        replacementSpan: { start: 0, length: 0 },
+    }).map(entry => entry.name);
+
+    for (const key of KNOWN_SPECIAL_PROPERTIES) {
+        assert.ok(names.includes(key), `expected canonical special property "${key}"`);
+    }
+});
+
 // Preselection: the curated top value carries isRecommended so Tab lands on an
 // sz value even when the unquoted expression position mixes in identifiers.
 test('the first value suggestion is marked recommended', () => {

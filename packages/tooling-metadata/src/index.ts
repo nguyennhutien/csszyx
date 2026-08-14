@@ -23,6 +23,7 @@ export {
 } from './relations';
 export {
     BOOLEAN_SHORTHANDS,
+    KNOWN_SPECIAL_PROPERTIES,
     KNOWN_VARIANTS,
     METADATA_SCHEMA_VERSION,
     MIGRATION_NOTES,

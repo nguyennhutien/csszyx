@@ -94,7 +94,9 @@ IntelliSense, hover, and diagnostics for `sz` props. Supports JSX, TSX, JS, TS, 
 
 - Key + value completions inside `sz={{ ... }}` (variant-aware, depth 1 and 2)
 - Hover preview — shows generated Tailwind className + inline CSS variables via `transform()`
-- Diagnostics — unknown prop keys flagged as warnings; SUGGESTION_MAP hints (e.g. `padding` → `p`)
+- Diagnostics — unknown prop keys flagged as warnings; removed aliases receive
+  canonical migration hints (for example `padding` → `p`) and emit no class,
+  while intentional custom keys remain available to Tailwind `@utility`
 - TextMate grammar injection — syntax highlighting for `sz` attribute
 
 **Settings:**

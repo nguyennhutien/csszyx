@@ -43,7 +43,7 @@ describe('transformSource (compiler AST transform)', () => {
         });
 
         it('should handle multiple properties', () => {
-            const source = 'const el = <div sz={{ m: 2, p: 4, text: "lg", font: "bold" }} />;';
+            const source = 'const el = <div sz={{ m: 2, p: 4, text: "lg", weight: "bold" }} />;';
             const result = transformSource(source);
             expect(result.transformed).toBe(true);
             expect(result.code).toContain('m-2');
