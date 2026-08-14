@@ -27,25 +27,26 @@ const PROPERTY_NAME_CHAR = /[\w-]/;
 /**
  * Whether a character continues a custom property name.
  *
- * Char codes rather than a regex: v8's coverage misattributes the hits of
+ * Code points rather than a regex: v8's coverage misattributes the hits of
  * whatever statement follows a RegExp call in this scanning loop, so the
  * loop stays regex-free to stay measurable.
  *
- * @param code - Char code, NaN past the end of the string.
+ * @param code - Code point, undefined past the end of the string.
  * @returns True for `[A-Za-z0-9_-]`.
  */
-function isNameCharCode(code: number): boolean {
+function isNameCharCode(code: number | undefined): boolean {
     /* v8 ignore next -- attribution artifact, not a gap: the function line
        records every call and each OR arm's branch data is complete; the file
        carries exactly one unmappable segment that lands on the first
        non-excluded line, and it has walked through six rewrites of this
        module. Behaviour is pinned by the unit and end-to-end suites. */
     return (
-        (code >= 48 && code <= 57) ||
-        (code >= 65 && code <= 90) ||
-        (code >= 97 && code <= 122) ||
-        code === 45 ||
-        code === 95
+        code !== undefined &&
+        ((code >= 48 && code <= 57) ||
+            (code >= 65 && code <= 90) ||
+            (code >= 97 && code <= 122) ||
+            code === 45 ||
+            code === 95)
     );
 }
 
@@ -75,7 +76,7 @@ export function collectCustomProperties(css: string): Map<string, string> {
        in here. */
     while (start !== -1) {
         let nameEnd = start + 2;
-        while (isNameCharCode(css.charCodeAt(nameEnd))) {
+        while (isNameCharCode(css.codePointAt(nameEnd))) {
             nameEnd += 1;
         }
         index = nameEnd;
@@ -84,7 +85,7 @@ export function collectCustomProperties(css: string): Map<string, string> {
             continue;
         }
         let cursor = nameEnd;
-        while (css.charCodeAt(cursor) === 32 || css.charCodeAt(cursor) === 9) {
+        while (css.codePointAt(cursor) === 32 || css.codePointAt(cursor) === 9) {
             cursor += 1;
         }
         // A `--name` not followed by a colon is a usage (`var(--name)`), not
@@ -95,11 +96,11 @@ export function collectCustomProperties(css: string): Map<string, string> {
         }
         const valueStart = cursor + 1;
         let valueEnd = valueStart;
-        let code = css.charCodeAt(valueEnd);
-        // Stop on `;`, `{`, `}` or the end of the text (charCodeAt gives NaN).
-        while (!Number.isNaN(code) && code !== 59 && code !== 123 && code !== 125) {
+        let code = css.codePointAt(valueEnd);
+        // Stop on `;`, `{`, `}` or the end of the text, which reads as undefined.
+        while (code !== undefined && code !== 59 && code !== 123 && code !== 125) {
             valueEnd += 1;
-            code = css.charCodeAt(valueEnd);
+            code = css.codePointAt(valueEnd);
         }
         // A `{` means this was a selector-position token, not a declaration.
         if (css[valueEnd] === '{') {

@@ -188,13 +188,47 @@ async function reportDeadClasses(
             origin,
             value: brokenPerOracle[0].get(token) as string,
         }));
+    return printDeadClassReport({
+        dead,
+        broken,
+        acceptedCount: accepted.length,
+        emittedCount: origins.size,
+    });
+}
+
+/** One emitted class that carries an opacity modifier the stylesheet drops. */
+interface BrokenOpacityFinding {
+    token: string;
+    origin: string;
+    value: string;
+}
+
+/** What the dead-class scan concluded, ready to print. */
+interface DeadClassReport {
+    dead: ReadonlyArray<readonly [string, string]>;
+    broken: readonly BrokenOpacityFinding[];
+    acceptedCount: number;
+    emittedCount: number;
+}
+
+/**
+ * Print what the dead-class scan found.
+ *
+ * Split from the scan so each side stays readable on its own: the scan decides
+ * what is dead across every stylesheet, and this decides how to say it.
+ *
+ * @param report - What the scan concluded.
+ * @returns Whether anything was found that should fail the command.
+ */
+function printDeadClassReport(report: DeadClassReport): boolean {
+    const { dead, broken, acceptedCount, emittedCount } = report;
     // Say how many were waved through even on a clean run: an allow list that
     // silently covers a growing pile is the failure mode of every such list.
-    const acceptedNote = accepted.length > 0 ? `, ${accepted.length} accepted` : '';
+    const acceptedNote = acceptedCount > 0 ? `, ${acceptedCount} accepted` : '';
 
     if (dead.length === 0 && broken.length === 0) {
         printSuccess(
-            `Every one of the ${origins.size} emitted class(es) produces CSS under this project's Tailwind${acceptedNote}.`,
+            `Every one of the ${emittedCount} emitted class(es) produces CSS under this project's Tailwind${acceptedNote}.`,
         );
         return false;
     }
