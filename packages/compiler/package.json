@@ -88,14 +88,12 @@
   },
   "dependencies": {
     "@csszyx/core": "workspace:*",
-    "magic-string": "1.1.0",
     "oxc-parser": "0.140.0"
   },
   "devDependencies": {
-    "@types/babel__core": "^7.20.5",
-    "@types/babel__traverse": "^7.28.0",
     "@types/node": "^22.20.1",
     "csstype": "^3.2.3",
+    "magic-string": "1.1.0",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1",
     "vitest": "^4.1.10"
