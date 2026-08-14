@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import test from 'node:test';
 
@@ -360,4 +361,14 @@ test('the final audit still fails for a package that never appears', async () =>
         }),
         /Final npm audit found missing packages/,
     );
+});
+
+test('release publishing requires OIDC without a token fallback', () => {
+    const workflow = readFileSync(
+        new URL('../workflows/release.yml', import.meta.url),
+        'utf8',
+    );
+
+    assert.match(workflow, /CSSZYX_REQUIRE_OIDC:\s*["']1["']/);
+    assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN|secrets\.NPM_TOKEN/);
 });

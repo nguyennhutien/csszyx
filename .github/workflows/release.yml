@@ -302,10 +302,9 @@ jobs:
       needs.release-please.outputs.releases_created == 'true' ||
       (needs.release-please.outputs.recovered != '' && needs.release-please.outputs.recovered != '0') ||
       github.event_name == 'workflow_dispatch'
-    # `npm-publish` environment holds NPM_TOKEN and requires a maintainer
-    # review before the job runs. Even if a malicious workflow change
-    # reaches main, the publish step pauses until @nguyennhutien approves
-    # via the GitHub Actions deployment-review prompt.
+    # `npm-publish` requires a maintainer review before the job runs. Even if a
+    # malicious workflow change reaches main, the publish step pauses until
+    # @nguyennhutien approves via the GitHub Actions deployment-review prompt.
     environment: npm-publish
     runs-on: ubuntu-latest
     permissions:
@@ -390,7 +389,10 @@ jobs:
       - name: Publish to npm
         run: node .github/scripts/publish-workspace.mjs
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Every public package demonstrated trusted publishing in the 0.14.0
+          # release. Refuse a token fallback so a deleted or drifted npm trusted
+          # publisher fails visibly instead of reviving long-lived credentials.
+          CSSZYX_REQUIRE_OIDC: "1"
           # Attach a signed provenance attestation to each published package
           # (npm + pnpm both honour this config). Pairs with id-token: write
           # above; the publish fails closed if the OIDC token is unavailable.

@@ -404,8 +404,10 @@ async function main() {
     const result = await publishPackageSet(packages, {
         isPublished: (pkg) => registryHasVersion(pkg, registry),
         runPublish: runPnpmPublish,
-        // Opt-in until every package has a trusted publisher configured on
-        // npm; flipping it is the last step of the token-to-OIDC migration.
+        // The release workflow sets this after every public package has
+        // demonstrated trusted publishing. Keeping the switch explicit lets
+        // local dry runs exercise either auth-policy branch without weakening
+        // the production release contract.
         requireOidc: process.env.CSSZYX_REQUIRE_OIDC === '1',
     });
     console.log(
