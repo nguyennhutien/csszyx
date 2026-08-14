@@ -106,6 +106,14 @@ export default [
             },
         },
         rules: {
+            // Dead stores. Cheap, and it found two on the day it went in. Note
+            // what it is NOT: the same-named CodeQL query catches shapes this
+            // rule walks past — measured on a loop whose declarations were all
+            // overwritten before any read, which CodeQL reported and this
+            // stayed silent on. It runs here for its own yield, not as cover
+            // for that one.
+            'no-useless-assignment': 'error',
+
             // TS type-aware (Biome cannot do these — no type inference)
             '@typescript-eslint/explicit-function-return-type': [
                 'error',
