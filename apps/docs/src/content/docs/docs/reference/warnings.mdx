@@ -426,10 +426,10 @@ classes, so this costs speed only. Its success counterpart,
 `[csszyx] WASM Core initialized (v{version})`, prints through `console.info`.
 
 <Aside type="note" title="What a parser fallback costs">
-The engines are parity-tested against a shared corpus, so a fallback mostly
-costs parse speed. It is not free of behaviour, though: see
-[Where the engines differ](#where-the-engines-differ) for the shapes that
-compile differently.
+Parse speed, and nothing else. The build lane's two artifacts are one engine
+compiled two ways, so a fallback between them cannot change a class. The
+section that used to list where the engines disagreed went with the TypeScript
+lanes it described.
 </Aside>
 
 ### Budgets and limits

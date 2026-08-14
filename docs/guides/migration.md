@@ -70,17 +70,22 @@ win32-x64-msvc, win32-arm64-msvc.
 ### If your platform is not supported
 
 The build will fail with `CsszyxNativeUnavailableError` showing the
-expected package name. Fall back to the JavaScript parser:
+expected package name. Ask for the WebAssembly build of the same engine,
+which ships inside `@csszyx/core` and needs no per-platform download:
 
 ```ts
 // vite.config.ts / next.config.js
 csszyx({
-  build: { parser: "oxc" },
+  build: { parser: "wasm" },
 });
 ```
 
 Or set the environment variable for a single build:
 
 ```bash
-CSSZYX_PARSER=oxc pnpm build
+CSSZYX_PARSER=wasm pnpm build
 ```
+
+> On v0.9.0 through v0.13.0 the fallback here was `"oxc"`. That lane and
+> `"babel"` were removed in v0.14.0; `"wasm"` replaces both, and unlike
+> them it is the same engine, so it cannot change a class.
