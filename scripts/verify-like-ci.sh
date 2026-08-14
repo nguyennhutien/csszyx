@@ -70,6 +70,20 @@ pnpm check:undocumented-warnings
 echo "[verify-like-ci] Biome preflight (strict — no auto-fix, no unsafe-skip)..."
 pnpm lint:fast
 
+# The repository's own tooling — the generators, the release-please config, the
+# workflow helper scripts — is tested like anything else, and CI runs those
+# suites in jobs this mirror did not reproduce. A generator whose test broke
+# therefore reached CI green from here, which is the divergence this script
+# exists to prevent. They cost under a second in total.
+echo "[verify-like-ci] Repository tooling suites (generators, release config, workflow helpers)..."
+pnpm test:scripts
+node .github/scripts/validate-release-please-config.mjs
+node --test scripts/validate-commit-message-policy.test.mjs
+node --test .github/scripts/publish-workspace.test.mjs
+node --test .github/scripts/detect-pkg-code-changes.test.mjs
+node --test .github/scripts/detect-lock-code-changes.test.mjs
+node packages/core/scripts/validate-native-packages.mjs
+
 # Cheap generated-artefact staleness gates first — these fail in seconds and
 # catch the most common drift (forgetting to regenerate a committed fixture).
 echo "[verify-like-ci] Generated-artefact staleness gates (sz-key fixture, parity corpus, rust tables)..."
@@ -81,6 +95,15 @@ pnpm gen:sz-allowlist:check
 pnpm gen:box-role:check
 pnpm gen:llms:check
 pnpm check:key-corpus
+
+# Builds the addon, loads it the way a consumer does, and removes it again —
+# it owns a whole CI job, so it cleans up after itself. That last part is why
+# it runs BEFORE the shared build below rather than after: run afterwards, it
+# deletes the artifact every later stage resolves, and they fail claiming the
+# platform package was never installed. Catches a binding that compiles
+# without being loadable, which no check further down would notice.
+echo "[verify-like-ci] Native engine smoke (builds, loads and removes its own addon)..."
+env -u RUSTUP_TOOLCHAIN pnpm --filter @csszyx/core native:engine:smoke
 
 echo "[verify-like-ci] Building host native engine (matches CI step)..."
 # `--clean` resolves the current platform before deleting its output. Do not
