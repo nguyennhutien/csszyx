@@ -67,32 +67,42 @@ const runServer = async (label, serverPath) => {
     });
     try {
         send('open', { file: fileName, fileContent: source, projectRootPath: projectRoot });
-        // Ask until the plugin answers rather than sleeping a fixed time and
-        // hoping it has loaded by then. tsserver accepts requests before its
-        // plugins are in place, so a fixed wait is a guess about the machine:
-        // 800 ms was enough here and not on a loaded CI runner, where the base
-        // service answered alone and an empty result read as a plugin that
-        // never loaded. Polling states the condition the test actually needs,
-        // and a plugin that is genuinely broken still fails, one deadline later.
+        // Ask until the answer holds what is being asserted, rather than
+        // sleeping a fixed time and hoping. tsserver accepts requests before
+        // its plugins are in place, so a fixed wait is a guess about the
+        // machine: 800 ms was enough here and not on a loaded CI runner. The
+        // first version of this loop then stopped at the first owned entry,
+        // which is a second guess of the same kind — a partial list is still
+        // an answer, and CI produced one carrying `bg` but not `hover`.
+        //
+        // Waiting for the keys the assertions name is not circular: a plugin
+        // that never supplies them runs out the deadline and fails on those
+        // same assertions, one deadline later instead of at the first poll.
         const deadline = Date.now() + 30_000;
-        let response;
-        let owned = [];
         while (true) {
-            response = await responseFor(
+            const response = await responseFor(
                 send('completionInfo', {
                     file: fileName,
                     line: 1,
                     offset: completionOffset,
                 }),
             );
-            owned = (response.body?.entries ?? []).filter(
+            const entries = response.body?.entries ?? [];
+            const owned = entries.filter(
                 entry =>
                     entry.data?.owner === '@csszyx/ts-plugin' && entry.data?.schema === 1,
             );
-            if (owned.length > 0 || Date.now() >= deadline) break;
+            const names = new Set(entries.map(entry => entry.name));
+            const ready =
+                owned.some(entry => entry.name === 'bg') &&
+                names.has('bg') &&
+                names.has('hover');
+            // Returning the answer that was just read, rather than carrying it
+            // out in variables the loop reassigns every pass. The deadline is
+            // checked here so the last answer is what the assertions see.
+            if (ready || Date.now() >= deadline) return { response, owned, names };
             await new Promise(resolveDelay => setTimeout(resolveDelay, 100));
         }
-        return { response, owned };
     } finally {
         child.kill();
     }
@@ -100,15 +110,18 @@ const runServer = async (label, serverPath) => {
 
 for (const [label, serverPath] of servers) {
     test(`${label} tsserver loads the csszyx plugin`, async () => {
-        const { response, owned } = await runServer(label, serverPath);
+        const { response, owned, names } = await runServer(label, serverPath);
         assert.strictEqual(response.success, true);
-        const names = new Set((response.body?.entries ?? []).map(entry => entry.name));
-        assert.ok(owned.some(entry => entry.name === 'bg'));
+        // Counted in the message: a failure here is either "the plugin never
+        // answered" or "it answered with part of its keys", and the numbers
+        // say which without another run.
+        const seen = `${owned.length} owned of ${names.size} entries`;
+        assert.ok(owned.some(entry => entry.name === 'bg'), `plugin never owned "bg" — ${seen}`);
         // The base service may own a key once project typing finishes, and the
         // plugin deliberately dedupes that entry. Assert the merged protocol
         // result instead of requiring duplicate ownership from the plugin.
-        assert.ok(names.has('bg'));
-        assert.ok(names.has('hover'));
+        assert.ok(names.has('bg'), `merged result lacks "bg" — ${seen}`);
+        assert.ok(names.has('hover'), `merged result lacks "hover" — ${seen}`);
         console.log(`${label} tsserver check passed (${owned.length} csszyx entries)`);
     });
 }

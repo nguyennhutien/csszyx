@@ -136,7 +136,7 @@ interface BuildConfig {
   cacheDir?: string; // Cache directory
   astBudgetLimit?: number; // Max AST nodes per file before the transform skips it (warned; safelist prescan runs at 10x)
   scanCss?: string | string[]; // CSS files/globs with @theme blocks
-  parser?: "rust" | "oxc" | "babel"; // Source-transform parser (default: 'rust' since v0.9.0)
+  parser?: "rust" | "wasm"; // Source-transform engine artifact (default: 'rust' since v0.9.0)
 }
 ```
 
@@ -146,33 +146,35 @@ interface BuildConfig {
 - `outputDir`: `'.csszyx'`
 - `cacheDir`: `'.csszyx/cache'`
 - `astBudgetLimit`: `50000`
-- `parser`: `'rust'` (since v0.9.0; was `'oxc'` before)
+- `parser`: `'rust'` (since v0.9.0)
 
-#### `parser` — source-transform engine
+#### `parser` — which artifact of the engine to load
 
-Since v0.9.0, csszyx uses the native Rust engine by default. The engine
-parses your source, extracts `sz` attributes, and rewrites them via
-surgical `magic-string` edits that preserve the developer's exact
-formatting outside the touched ranges.
+There is one engine. It parses your source, extracts `sz` attributes, and
+rewrites them surgically, preserving the developer's exact formatting
+outside the touched ranges. This setting picks which build of it runs, so
+it decides load behaviour and parse speed — never the classes emitted.
 
-- `'rust'` (default) — native napi-rs addon. Fastest parser path (6-8x
-  faster than oxc in microbenchmarks). Requires the matching optional
-  `@csszyx/core-*` platform package (declared as `optionalDependencies`,
-  installed automatically on supported platforms). Missing native
-  packages surface `CsszyxNativeUnavailableError` with the expected
-  package name and fallback guidance.
-- `'oxc'` — JavaScript fallback. Uses `oxc-parser` + `magic-string`
-  for the same surgical rewrite approach. No native addon required.
-  Use on platforms without native binaries or when debugging parser
-  differences.
-- `'babel'` — final compatibility escape hatch. Routes prescan,
-  transform, and HMR discovery through the legacy Babel implementation.
-  Use only if you hit a corner case the other parsers reject.
+- `'rust'` (default) — native napi-rs addon, the fastest path. Requires
+  the matching optional `@csszyx/core-*` platform package (declared as
+  `optionalDependencies`, installed automatically on supported
+  platforms). A missing package surfaces `CsszyxNativeUnavailableError`
+  with the expected package name.
+- `'wasm'` — the same engine compiled to WebAssembly, shipped inside
+  `@csszyx/core` itself, so it needs no per-platform download. Pin it
+  where native addons cannot load at all.
 
-The `CSSZYX_PARSER=rust|oxc|babel` environment variable overrides this
-setting per build (useful for CI debugging without editing project
-config). Parser paths are expected to produce the same class output;
-formatting differences are limited to the ranges each parser rewrites.
+An inherited default degrades from `'rust'` to `'wasm'` when the native
+package is absent; an explicit `'rust'` fails loudly instead, because an
+explicit choice is never silently swapped.
+
+The `CSSZYX_PARSER=rust|wasm` environment variable overrides this setting
+per build, which is useful for CI debugging without editing project
+config.
+
+The `'oxc'` and `'babel'` TypeScript lanes were removed in v0.14.0. A
+config still naming them is ignored the way an invalid env value is: the
+build runs on the default and says which lane it actually used.
 
 ### File Filters
 
