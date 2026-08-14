@@ -63,7 +63,7 @@ export function escapeRustFormat(text) {
  * @param {string} kind - Kind from the matrix.
  * @returns {string} PascalCase variant name.
  */
-function variantName(kind) {
+export function variantName(kind) {
     return kind
         .split('-')
         .map(part => part.charAt(0).toUpperCase() + part.slice(1))

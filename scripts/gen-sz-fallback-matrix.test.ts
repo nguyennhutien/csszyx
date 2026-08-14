@@ -13,6 +13,7 @@ import {
     generateMatrixSource,
     renderReasonArm,
     renderRust,
+    variantName,
 } from './gen-sz-fallback-matrix.mjs';
 
 describe('sz fallback matrix generation', () => {
@@ -22,10 +23,20 @@ describe('sz fallback matrix generation', () => {
         assert.equal(readFileSync(GENERATED_PATH, 'utf8'), generateMatrixSource());
     });
 
+    it('names a multi-word kind in PascalCase, with no separator left in it', () => {
+        // Spelled out here so the check below can use the generator's own
+        // naming without losing the naming rule itself. A hand-rolled copy of
+        // this rule is what let a kebab-case kind through: capitalising the
+        // first letter alone left the hyphen in the middle, and the count it
+        // then looked for was of a variant that is never emitted.
+        assert.equal(variantName('szv-factory'), 'SzvFactory');
+        assert.equal(variantName('call'), 'Call');
+    });
+
     it('emits one match arm per kind, for both reason and suggestion', () => {
         const source = renderRust();
         for (const kind of SZ_FALLBACK_KINDS) {
-            const variant = kind.charAt(0).toUpperCase() + kind.slice(1);
+            const variant = variantName(kind);
             // Once in the enum, once in each of the two match statements.
             const occurrences = source.split(`SzFallbackKind::${variant}`).length - 1;
             assert.equal(occurrences, 2, `${kind} should appear in both match statements`);
