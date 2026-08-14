@@ -4448,6 +4448,26 @@ fn static_value_from_expression(
             )?;
             static_value_from_expression(initializer, ctx)
         }
+        // A value read off a constant map, e.g. `{ z: LAYER.appChrome }`.
+        // Resolving the object half reuses the arm above, so a map reaches
+        // this point exactly when the bare identifier would have; all that is
+        // added is the read. Only a named property: `LAYER[key]` picks its key
+        // at run time, and no build-time read of the map can be right.
+        Expression::StaticMemberExpression(member) => {
+            match static_value_from_expression(&member.object, ctx)? {
+                // Last match, not first: duplicate keys are kept in source
+                // order on purpose, and the later one is what JavaScript reads.
+                // A property the map does not carry resolves to nothing rather
+                // than to a guess, which leaves the caller on the runtime path.
+                StaticSzValue::Object(object) => object
+                    .properties
+                    .into_iter()
+                    .rev()
+                    .find(|property| property.key == member.property.name.as_str())
+                    .map(|property| property.value),
+                _ => None,
+            }
+        }
         _ => None,
     }
 }

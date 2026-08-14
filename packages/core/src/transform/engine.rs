@@ -1602,6 +1602,86 @@ mod tests {
     }
 
     #[test]
+    fn static_engine_reads_a_value_off_a_local_constant_map() {
+        // A design-token map read by member access. The bare identifier form of
+        // the same constant already folds, so the value being reachable is not
+        // in question — only the indexing step was.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const LAYER = { appChrome: 10 } as const;\nconst X = () => <div sz={{ z: LAYER.appChrome }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(
+            result.code,
+            "const LAYER = { appChrome: 10 } as const;\nconst X = () => <div className=\"z-10\" />;"
+        );
+        assert_eq!(result.classes, vec![String::from("z-10")]);
+        assert!(!result.metadata.uses_runtime);
+    }
+
+    #[test]
+    fn static_engine_reads_through_a_nested_constant_map() {
+        // The read resolves its object half through the same walk, so a map of
+        // maps costs no extra machinery. Pinned because token files are
+        // routinely grouped one level deeper than they are consumed.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const T = { c: { brand: 'blue-500' } } as const;\nconst X = () => <div sz={{ bg: T.c.brand }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(result.classes, vec![String::from("bg-blue-500")]);
+    }
+
+    #[test]
+    fn static_engine_will_not_read_a_map_declared_after_its_use() {
+        // Reading it would answer with a value the reference cannot see. The
+        // bare-identifier walk already refuses this, and the read inherits the
+        // refusal by resolving its object half through that same walk.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = () => <div sz={{ z: LATER.appChrome }} />;\nconst LATER = { appChrome: 10 } as const;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(!result.classes.iter().any(|class| class == "z-10"));
+    }
+
+    #[test]
+    fn static_engine_keeps_a_computed_member_on_the_runtime_path() {
+        // The property is chosen at run time, so no build-time read of the map
+        // can be right. This has to stay on the custom-property path.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const LAYER = { appChrome: 10 } as const;\nconst X = ({ k }) => <div sz={{ z: LAYER[k] }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(result.code.contains("style={{\"--_sz-z\": LAYER[k]}}"));
+        assert!(!result.classes.iter().any(|class| class == "z-10"));
+    }
+
+    #[test]
+    fn static_engine_keeps_a_missing_member_on_the_runtime_path() {
+        // Nothing to read: emitting a class from a key the map does not carry
+        // would invent a value. The runtime path is the honest answer.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const LAYER = { appChrome: 10 } as const;\nconst X = () => <div sz={{ z: LAYER.missing }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(result.code.contains("style={{\"--_sz-z\": LAYER.missing}}"));
+        assert!(!result.classes.iter().any(|class| class == "z-10"));
+    }
+
+    #[test]
     fn static_engine_emits_runtime_helper_for_dynamic_identifier() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
