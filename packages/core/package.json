@@ -60,7 +60,7 @@
     "prepublishOnly": "node scripts/ensure-build.mjs --strict"
   },
   "devDependencies": {
-    "@napi-rs/cli": "3.7.4",
+    "@napi-rs/cli": "3.8.2",
     "vitest": "^4.1.10"
   },
   "optionalDependencies": {
