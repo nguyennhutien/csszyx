@@ -13,6 +13,9 @@ assert.strictEqual(parseConfig(null).maxEntries, DEFAULT_CONFIG.maxEntries);
 assert.deepStrictEqual(parseConfig({ maxEntries: Number.POSITIVE_INFINITY }), DEFAULT_CONFIG);
 assert.strictEqual(parseConfig({ maxEntries: 99_999 }).maxEntries, 2_000);
 assert.strictEqual(parseConfig({ deadlineMs: -10 }).deadlineMs, 1);
+assert.strictEqual(DEFAULT_CONFIG.themeValues, false);
+assert.strictEqual(parseConfig({ themeValues: true }).themeValues, true);
+assert.strictEqual(parseConfig({ themeValues: 'yes' }).themeValues, false);
 assert.ok(Object.isFrozen(parseConfig({})));
 
 const baseEntry = { name: 'bg', kind: 'var', kindModifiers: '', sortText: '1' };

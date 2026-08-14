@@ -26,6 +26,12 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
      */
     function create(info: ts.server.PluginCreateInfo): ts.LanguageService {
         const service = info.languageService;
+        let projectRoot = '';
+        try {
+            projectRoot = info.project.getCurrentDirectory?.() ?? '';
+        } catch {
+            // An unsupported host loses theme completions, never its base service.
+        }
         const projectService = info.project.projectService as unknown as {
             cancellationToken?: { isCancellationRequested?: () => boolean };
         };
@@ -111,15 +117,16 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
                 return prior;
             try {
                 const deadline = performance.now() + config.deadlineMs;
-                const additions = computeSzEntries(
+                const additions = computeSzEntries({
                     tsMod,
-                    service,
+                    languageService: service,
                     fileName,
                     position,
                     config,
                     deadline,
                     isCancellationRequested,
-                );
+                    projectRoot,
+                });
                 if (isCancellationRequested()) return prior;
                 // A deadline overrun still yields whatever bounded entries were
                 // computed — late results are correct, not garbage, so merge
@@ -174,7 +181,7 @@ function init(modules: { typescript: typeof ts }): ts.server.PluginModule {
         // healthy-but-quiet install apart from an unsupported host.
         try {
             info.project.projectService.logger.info(
-                `[csszyx-ts-plugin] activated (completions ${config.enabled ? 'on' : 'off'}, values ${config.values ? 'on' : 'off'})`,
+                `[csszyx-ts-plugin] activated (completions ${config.enabled ? 'on' : 'off'}, values ${config.values ? 'on' : 'off'}, theme values ${config.themeValues ? 'on' : 'off'})`,
             );
         } catch {
             // Logging is diagnostic only and must never break activation.

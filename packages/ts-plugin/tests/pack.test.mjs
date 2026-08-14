@@ -1,6 +1,14 @@
 import assert from 'node:assert';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import {
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    renameSync,
+    rmSync,
+    statSync,
+    writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -71,13 +79,20 @@ assert.throws(
 
 const sourceDirectory = join(install, 'src');
 const sourceFile = join(sourceDirectory, 'probe.tsx');
-const source = 'const Probe = () => <div sz={{  }} />;';
+const themeDirectory = join(install, '.csszyx');
+const themeFile = join(themeDirectory, 'theme.d.ts');
+const renamedThemeFile = join(themeDirectory, 'renamed-theme.d.ts');
+const source = 'const Probe = () => <div sz={{ bg:  }} />;';
 mkdirSync(sourceDirectory, { recursive: true });
+mkdirSync(themeDirectory, { recursive: true });
 writeFileSync(
     join(install, 'tsconfig.json'),
     JSON.stringify({
-        compilerOptions: { jsx: 'react-jsx', plugins: [{ name: '@csszyx/ts-plugin' }] },
-        include: ['src'],
+        compilerOptions: {
+            jsx: 'react-jsx',
+            plugins: [{ name: '@csszyx/ts-plugin', themeValues: true }],
+        },
+        include: ['src', '.csszyx/*.d.ts'],
     }),
 );
 writeFileSync(sourceFile, source);
@@ -88,50 +103,113 @@ const server = spawn(
     { cwd: install, stdio: ['pipe', 'pipe', 'pipe'] },
 );
 let buffer = Buffer.alloc(0);
-const response = new Promise((resolveResponse, reject) => {
-    const timer = setTimeout(() => reject(new Error('packed tsserver timed out')), 8_000);
-    server.stdout.on('data', chunk => {
-        buffer = Buffer.concat([buffer, chunk]);
-        while (true) {
-            const headerEnd = buffer.indexOf('\r\n\r\n');
-            if (headerEnd < 0) return;
-            const header = buffer.subarray(0, headerEnd).toString();
-            const length = Number(/Content-Length: (\d+)/i.exec(header)?.[1]);
-            if (!Number.isFinite(length) || buffer.length < headerEnd + 4 + length) return;
-            const message = JSON.parse(buffer.subarray(headerEnd + 4, headerEnd + 4 + length));
-            buffer = buffer.subarray(headerEnd + 4 + length);
-            if (message.type === 'response' && message.request_seq === 2) {
-                clearTimeout(timer);
-                resolveResponse(message);
-                return;
-            }
-        }
-    });
+let sequence = 0;
+const responses = new Map();
+server.stdout.on('data', chunk => {
+    buffer = Buffer.concat([buffer, chunk]);
+    while (true) {
+        const headerEnd = buffer.indexOf('\r\n\r\n');
+        if (headerEnd < 0) return;
+        const header = buffer.subarray(0, headerEnd).toString();
+        const length = Number(/Content-Length: (\d+)/i.exec(header)?.[1]);
+        if (!Number.isFinite(length) || buffer.length < headerEnd + 4 + length) return;
+        const message = JSON.parse(buffer.subarray(headerEnd + 4, headerEnd + 4 + length));
+        buffer = buffer.subarray(headerEnd + 4 + length);
+        if (message.type === 'response') responses.get(message.request_seq)?.(message);
+    }
 });
-server.stdin.write(
-    `${JSON.stringify({
-        seq: 1,
-        type: 'request',
-        command: 'open',
-        arguments: { file: sourceFile, projectRootPath: install },
-    })}\n`,
+
+const send = (command, args, expectResponse = true) => {
+    const seq = ++sequence;
+    const response = expectResponse
+        ? new Promise((resolveResponse, reject) => {
+              const timer = setTimeout(
+                  () => reject(new Error(`packed tsserver ${command} timed out`)),
+                  30_000,
+              );
+              responses.set(seq, message => {
+                  clearTimeout(timer);
+                  responses.delete(seq);
+                  resolveResponse(message);
+              });
+          })
+        : undefined;
+    server.stdin.write(`${JSON.stringify({ seq, type: 'request', command, arguments: args })}\n`);
+    return response;
+};
+
+send(
+    'open',
+    {
+        file: sourceFile,
+        projectRootPath: install,
+        fileContent: source,
+    },
+    false,
 );
-await new Promise(resolveDelay => setTimeout(resolveDelay, 800));
-server.stdin.write(
-    `${JSON.stringify({
-        seq: 2,
-        type: 'request',
-        command: 'completionInfo',
-        arguments: { file: sourceFile, line: 1, offset: 32 },
-    })}\n`,
-);
+
+const completionNames = async () => {
+    const response = await send('completionInfo', {
+        file: sourceFile,
+        line: 1,
+        offset: source.indexOf('bg:') + 'bg: '.length + 1,
+    });
+    assert.strictEqual(response.success, true);
+    return new Set((response.body?.entries ?? []).map(entry => entry.name));
+};
+const waitForNames = async (predicate, label) => {
+    const deadline = Date.now() + 30_000;
+    let names = new Set();
+    while (Date.now() < deadline) {
+        names = await completionNames();
+        if (predicate(names)) return names;
+        await new Promise(resolveDelay => setTimeout(resolveDelay, 100));
+    }
+    assert.fail(`${label}; saw ${[...names].slice(-10).join(', ')}`);
+};
+const theme = token => `
+declare module '@csszyx/compiler' {
+    interface CustomTheme { colors: '${token}'; }
+}
+export {};
+`;
+
 try {
-    const completionResponse = await response;
+    await waitForNames(names => names.has('red-500') && !names.has('brand'), 'base values load');
+
+    writeFileSync(themeFile, theme('brand'));
+    await send('reloadProjects', {});
+    await waitForNames(names => names.has('brand'), 'added theme declaration refreshes');
+
+    writeFileSync(themeFile, theme('accent'));
+    await send('reloadProjects', {});
+    await waitForNames(
+        names => names.has('accent') && !names.has('brand'),
+        'edited theme declaration refreshes',
+    );
+
+    renameSync(themeFile, renamedThemeFile);
+    await send('reloadProjects', {});
+    await waitForNames(names => !names.has('accent'), 'renamed declaration is removed');
+
+    renameSync(renamedThemeFile, themeFile);
+    await send('reloadProjects', {});
+    await waitForNames(names => names.has('accent'), 'canonical rename restores declaration');
+
+    rmSync(themeFile);
+    await send('reloadProjects', {});
+    await waitForNames(names => !names.has('accent'), 'deleted declaration is removed');
+
+    const completionResponse = await send('completionInfo', {
+        file: sourceFile,
+        line: 1,
+        offset: source.indexOf('bg:') + 'bg: '.length + 1,
+    });
     const owned = (completionResponse.body?.entries ?? []).filter(
         entry => entry.data?.owner === '@csszyx/ts-plugin' && entry.data?.schema === 1,
     );
     // Inlined data survives the pack/install round-trip with zero external deps.
-    assert.ok(owned.some(entry => entry.name === 'bg'));
+    assert.ok(owned.some(entry => entry.name === 'red-500'));
 } finally {
     server.kill();
 }

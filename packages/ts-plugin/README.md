@@ -50,8 +50,19 @@ const card = <Card szs={{ header: { bg: "gray-100", p: 4 } }} />;
 ```
 
 The outer `szs` keys are slot names, so CSS suggestions begin inside a slot's
-object. Theme-aware values, hover, diagnostics, and syntax highlighting are not
-provided by this package.
+object. Generated theme values are available through the opt-in preview below;
+hover, diagnostics, and syntax highlighting are not provided by this package.
+
+### Generated theme values (preview)
+
+Set `themeValues: true` and include `.csszyx/theme.d.ts` in the leaf TypeScript
+project. The plugin adds its custom colors, spacings, fonts, text sizes, font
+weights, radii, shadows, and breakpoints to the existing curated suggestions.
+
+The plugin reads the declaration already present in TypeScript's current
+Program. It does not read CSS, access the filesystem directly, create a watcher,
+or execute Tailwind/config code. Missing, malformed, oversized, or stale
+declarations simply leave the normal suggestions unchanged.
 
 ## Configuration
 
@@ -60,6 +71,7 @@ provided by this package.
   "name": "@csszyx/ts-plugin",
   "enabled": true,
   "values": true,
+  "themeValues": false,
   "maxEntries": 512,
   "deadlineMs": 20,
   "failureThreshold": 3,

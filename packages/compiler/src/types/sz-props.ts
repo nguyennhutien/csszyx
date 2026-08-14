@@ -29,9 +29,9 @@ import type * as CSS from 'csstype';
  *   }
  * }
  *
- * biome-ignore lint/complexity/noBannedTypes: this empty object type is the module-augmentation anchor.
+ * biome-ignore lint/suspicious/noEmptyInterface: this empty interface is the module-augmentation anchor.
  */
-export type CustomTheme = {};
+export interface CustomTheme {}
 
 /** Extracts custom color tokens from CustomTheme, or never if not defined. */
 type CT_Colors = CustomTheme extends { colors: infer T } ? T : never;
@@ -39,6 +39,10 @@ type CT_Colors = CustomTheme extends { colors: infer T } ? T : never;
 type CT_Spacings = CustomTheme extends { spacings: infer T } ? T : never;
 /** Extracts custom font tokens from CustomTheme, or never if not defined. */
 type CT_Fonts = CustomTheme extends { fonts: infer T } ? T : never;
+/** Extracts custom text-size tokens from CustomTheme, or never if not defined. */
+type CT_TextSizes = CustomTheme extends { textSizes: infer T } ? T : never;
+/** Extracts custom font-weight tokens from CustomTheme, or never if not defined. */
+type CT_FontWeights = CustomTheme extends { fontWeights: infer T } ? T : never;
 /** Extracts custom border-radius tokens from CustomTheme, or never if not defined. */
 type CT_Radii = CustomTheme extends { radii: infer T } ? T : never;
 /** Extracts custom shadow tokens from CustomTheme, or never if not defined. */
@@ -872,6 +876,7 @@ export interface TypographyProps {
         | '7xl'
         | '8xl'
         | '9xl'
+        | CT_TextSizes
         | (string & {});
 
     /**
@@ -908,6 +913,7 @@ export interface TypographyProps {
         | 700
         | 800
         | 900
+        | CT_FontWeights
         | (string & {});
     /** Explicit font-family key. Use `font` for the short form */
     fontFamily?: 'sans' | 'serif' | 'mono' | CT_Fonts | (string & {});
@@ -1148,6 +1154,12 @@ export interface BorderProps {
 
     /** @see https://tailwindcss.com/docs/border-color */
     borderColor?: ColorPropValue;
+    borderXColor?: ColorPropValue;
+    borderYColor?: ColorPropValue;
+    borderTColor?: ColorPropValue;
+    borderRColor?: ColorPropValue;
+    borderBColor?: ColorPropValue;
+    borderLColor?: ColorPropValue;
 
     /** @see https://tailwindcss.com/docs/border-style */
     borderStyle?: 'solid' | 'dashed' | 'dotted' | 'double' | 'hidden' | 'none';
@@ -1214,6 +1226,9 @@ export interface EffectsProps {
     insetShadow?: ShadowValue;
     /** Inset shadow color */
     insetShadowColor?: ColorPropValue;
+
+    /** Inset ring color */
+    insetRingColor?: ColorPropValue;
 
     /** Drop shadow color */
     dropShadowColor?: ColorPropValue;

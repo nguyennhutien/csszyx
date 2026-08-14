@@ -71,6 +71,48 @@ const KEY_NAMES = Object.freeze(
     ].filter((name, index, names) => isIdentifier(name) && names.indexOf(name) === index),
 );
 
+/** Inputs for top-level sz key completion construction. */
+export interface SzKeyEntryOptions {
+    readonly tsMod: typeof ts;
+    readonly limit: number;
+    readonly replacementSpan: ts.TextSpan;
+    readonly shouldStop?: () => boolean;
+    readonly exclude?: ReadonlySet<string>;
+    readonly prefix?: string;
+    readonly additionalNames?: readonly string[];
+}
+
+/** Inputs for structured object-form key completion construction. */
+export interface FormKeyEntryOptions {
+    readonly tsMod: typeof ts;
+    readonly form: ObjectValueForm;
+    readonly replacementSpan: ts.TextSpan;
+    readonly exclude?: ReadonlySet<string>;
+    readonly prefix?: string;
+}
+
+/** Inputs for structured object-member value completion construction. */
+export interface MemberValueEntryOptions {
+    readonly tsMod: typeof ts;
+    readonly member: ObjectFormMember;
+    readonly limit: number;
+    readonly replacementSpan: ts.TextSpan;
+    readonly quoted: boolean;
+    readonly shouldStop?: () => boolean;
+    readonly additionalValues?: readonly string[];
+}
+
+/** Inputs for ordinary sz value completion construction. */
+export interface SzValueEntryOptions {
+    readonly tsMod: typeof ts;
+    readonly property: string;
+    readonly limit: number;
+    readonly replacementSpan: ts.TextSpan;
+    readonly quoted: boolean;
+    readonly shouldStop?: () => boolean;
+    readonly additionalValues?: readonly string[];
+}
+
 /** Build one namespaced completion entry.
  * @param tsMod - TypeScript instance injected by the host.
  * @param name - User-visible completion label.
@@ -105,27 +147,23 @@ function entry(
 }
 
 /** Build bounded sz key completions.
- * @param tsMod - TypeScript instance injected by the host.
- * @param limit - Maximum entries to return.
- * @param replacementSpan - Source span replaced on acceptance.
- * @param shouldStop - Cooperative deadline and cancellation check.
- * @param exclude - Sibling keys already assigned in the object; suggesting a
- * key twice in one object is never useful (duplicates override silently).
- * @param prefix - Text inserted before the key, for a slot whose previous
- * property is missing its comma.
+ * @param options - Host types, limits, syntax span, and optional theme keys.
  * @returns Key completion entries, or an empty list for an unsupported schema.
  */
-export function buildSzKeyEntries(
-    tsMod: typeof ts,
-    limit: number,
-    replacementSpan: ts.TextSpan,
-    shouldStop: () => boolean = () => false,
-    exclude?: ReadonlySet<string>,
-    prefix?: string,
-): ts.CompletionEntry[] {
+export function buildSzKeyEntries(options: SzKeyEntryOptions): ts.CompletionEntry[] {
+    const {
+        tsMod,
+        limit,
+        replacementSpan,
+        shouldStop = () => false,
+        exclude,
+        prefix,
+        additionalNames = [],
+    } = options;
     if (METADATA_SCHEMA_VERSION !== 1) return [];
     const result: ts.CompletionEntry[] = [];
-    for (const name of KEY_NAMES) {
+    const names = [...KEY_NAMES, ...additionalNames.filter(name => !KEY_NAMES.includes(name))];
+    for (const name of names) {
         if (result.length % 32 === 0 && shouldStop()) break;
         if (result.length >= limit) break;
         if (exclude?.has(name)) continue;
@@ -146,25 +184,17 @@ export function buildSzKeyEntries(
  * @returns Insert text, or undefined to use the label.
  */
 function keyInsertText(name: string, prefix?: string): string | undefined {
-    return prefix === undefined ? undefined : `${prefix}${name}`;
+    const insertedName = isIdentifier(name) ? name : singleQuoted(name);
+    if (prefix !== undefined) return `${prefix}${insertedName}`;
+    return insertedName === name ? undefined : insertedName;
 }
 
 /** Build key entries for a structured object-value form (e.g. `{ color, op }`).
- * @param tsMod - TypeScript instance injected by the host.
- * @param form - The form whose members are the only valid keys.
- * @param replacementSpan - Source span replaced on acceptance.
- * @param exclude - Members already assigned in the object.
- * @param prefix - Text inserted before the key, for a slot whose previous
- * property is missing its comma.
+ * @param options - Host types, form, syntax span, and sibling exclusions.
  * @returns Member key entries with per-member hints.
  */
-export function buildFormKeyEntries(
-    tsMod: typeof ts,
-    form: ObjectValueForm,
-    replacementSpan: ts.TextSpan,
-    exclude?: ReadonlySet<string>,
-    prefix?: string,
-): ts.CompletionEntry[] {
+export function buildFormKeyEntries(options: FormKeyEntryOptions): ts.CompletionEntry[] {
+    const { tsMod, form, replacementSpan, exclude, prefix } = options;
     if (METADATA_SCHEMA_VERSION !== 1) return [];
     const result: ts.CompletionEntry[] = [];
     for (const member of form.members) {
@@ -183,25 +213,26 @@ export function buildFormKeyEntries(
 }
 
 /** Build value entries from a structured-form member's curated list.
- * @param tsMod - TypeScript instance injected by the host.
- * @param member - The form member owning the value slot.
- * @param limit - Maximum entries to return.
- * @param replacementSpan - Source span replaced on acceptance.
- * @param quoted - Whether the cursor is already inside a string literal.
- * @param shouldStop - Cooperative deadline and cancellation check.
+ * @param options - Host types, member, bounds, syntax state, and theme values.
  * @returns Value completion entries (numbers bare, strings quoted).
  */
-export function buildMemberValueEntries(
-    tsMod: typeof ts,
-    member: ObjectFormMember,
-    limit: number,
-    replacementSpan: ts.TextSpan,
-    quoted: boolean,
-    shouldStop: () => boolean = () => false,
-): ts.CompletionEntry[] {
+export function buildMemberValueEntries(options: MemberValueEntryOptions): ts.CompletionEntry[] {
+    const {
+        tsMod,
+        member,
+        limit,
+        replacementSpan,
+        quoted,
+        shouldStop = () => false,
+        additionalValues = [],
+    } = options;
     if (METADATA_SCHEMA_VERSION !== 1) return [];
     const result: ts.CompletionEntry[] = [];
-    for (const name of member.values.slice(0, limit)) {
+    const values = [
+        ...member.values,
+        ...additionalValues.filter(name => !member.values.includes(name)),
+    ];
+    for (const name of values.slice(0, limit)) {
         if (result.length % 32 === 0 && shouldStop()) break;
         const numeric = name !== '' && Number.isFinite(Number(name));
         result.push(
@@ -220,26 +251,24 @@ export function buildMemberValueEntries(
 }
 
 /** Build bounded values for one sz property.
- * @param tsMod - TypeScript instance injected by the host.
- * @param property - Canonical sz property name.
- * @param limit - Maximum entries to return.
- * @param replacementSpan - Source span replaced on acceptance.
- * @param quoted - Whether the cursor is already inside a string literal.
- * @param shouldStop - Cooperative deadline and cancellation check.
+ * @param options - Host types, property, bounds, syntax state, and theme values.
  * @returns Value completion entries.
  */
-export function buildSzValueEntries(
-    tsMod: typeof ts,
-    property: string,
-    limit: number,
-    replacementSpan: ts.TextSpan,
-    quoted: boolean,
-    shouldStop: () => boolean = () => false,
-): ts.CompletionEntry[] {
+export function buildSzValueEntries(options: SzValueEntryOptions): ts.CompletionEntry[] {
+    const {
+        tsMod,
+        property,
+        limit,
+        replacementSpan,
+        quoted,
+        shouldStop = () => false,
+        additionalValues = [],
+    } = options;
     if (METADATA_SCHEMA_VERSION !== 1) return [];
     // Positives first, then their negative counterparts — the `limit` slice
     // below must never drop a positive to make room for `-4`.
-    const values = valueSuggestionsFor(property);
+    const curated = valueSuggestionsFor(property);
+    const values = [...curated, ...additionalValues.filter(name => !curated.includes(name))];
     const result: ts.CompletionEntry[] = [];
     for (const name of values.slice(0, limit)) {
         if (result.length % 32 === 0 && shouldStop()) break;

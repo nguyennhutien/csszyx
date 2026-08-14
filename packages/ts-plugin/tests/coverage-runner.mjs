@@ -12,8 +12,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const suites = ['spike', 'contract', 'proxy', 'performance'];
+const suites = ['spike', 'contract', 'theme-values', 'proxy', 'performance'];
 
 for (const suite of suites) {
-    execFileSync(process.execPath, [join(here, `${suite}.test.mjs`)], { stdio: 'inherit' });
+    const nodeArgs = suite === 'performance' ? ['--expose-gc'] : [];
+    execFileSync(process.execPath, [...nodeArgs, join(here, `${suite}.test.mjs`)], {
+        stdio: 'inherit',
+    });
 }

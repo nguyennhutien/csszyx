@@ -8,7 +8,14 @@ const ts = require('typescript');
 const { buildSzKeyEntries, buildSzValueEntries } = require('../dist/completions.js');
 const { computeSzEntries } = require('../dist/core.js');
 
-const config = { enabled: true, values: true, maxEntries: 512, deadlineMs: 20, failureThreshold: 3 };
+const config = {
+    enabled: true,
+    values: true,
+    themeValues: false,
+    maxEntries: 512,
+    deadlineMs: 20,
+    failureThreshold: 3,
+};
 
 /** Build a module of N filler lines with an sz probe and a non-sz object at the end.
  * @param {number} lines - Filler line count.
@@ -26,11 +33,22 @@ function makeSource(lines) {
  * @param {string} source - Fixture source.
  * @returns {{ szP50: number, szCpuP99: number, nonSzP50: number }} Percentiles (ms).
  */
-function measure(source) {
+function measure(source, themeValues = false) {
     const fileName = '/virtual/performance.tsx';
-    const files = { [fileName]: source };
+    const themeFileName = '/virtual/.csszyx/theme.d.ts';
+    const files = {
+        [fileName]: source,
+        ...(themeValues
+            ? {
+                  [themeFileName]: `declare module '@csszyx/compiler' {
+                      interface CustomTheme { colors: 'brand'; spacings: 'gutter'; }
+                      interface VariantModifiers { tablet?: SzPropsBase; }
+                  } export {};`,
+              }
+            : {}),
+    };
     const host = {
-        getScriptFileNames: () => [fileName],
+        getScriptFileNames: () => Object.keys(files),
         getScriptVersion: () => '1',
         getScriptSnapshot: file => {
             const content =
@@ -49,15 +67,33 @@ function measure(source) {
     const service = ts.createLanguageService(host);
     const szPosition = source.indexOf('  }}') + 1;
     const nonSzPosition = source.indexOf('plain:') + 'plain:'.length;
+    const activeConfig = { ...config, themeValues };
+
+    const complete = position =>
+        computeSzEntries({
+            tsMod: ts,
+            languageService: service,
+            fileName,
+            position,
+            config: activeConfig,
+            deadline: Number.POSITIVE_INFINITY,
+            projectRoot: '/virtual',
+        });
+
+    // Pay the Program/checker/snapshot initialization before measuring retained
+    // heap or warm-request latency.
+    complete(szPosition);
+    complete(nonSzPosition);
+    globalThis.gc?.();
+    const heapBefore = process.memoryUsage().heapUsed;
 
     const sample = position => {
-        computeSzEntries(ts, service, fileName, position, config, Number.POSITIVE_INFINITY);
         const wallValues = [];
         const cpuValues = [];
         for (let index = 0; index < 2_000; index += 1) {
             const start = performance.now();
             const cpuStart = process.cpuUsage();
-            computeSzEntries(ts, service, fileName, position, config, Number.POSITIVE_INFINITY);
+            complete(position);
             const cpu = process.cpuUsage(cpuStart);
             wallValues.push(performance.now() - start);
             cpuValues.push((cpu.user + cpu.system) / 1_000);
@@ -68,10 +104,14 @@ function measure(source) {
     };
     const sz = sample(szPosition);
     const nonSz = sample(nonSzPosition);
+    globalThis.gc?.();
+    const retainedHeap = Math.max(0, process.memoryUsage().heapUsed - heapBefore);
     return {
         szP50: sz.wallValues[Math.floor(sz.wallValues.length * 0.5)],
+        szP95: sz.wallValues[Math.floor(sz.wallValues.length * 0.95)],
         szCpuP99: sz.cpuValues[Math.floor(sz.cpuValues.length * 0.99)],
         nonSzP50: nonSz.wallValues[Math.floor(nonSz.wallValues.length * 0.5)],
+        retainedHeap,
         service,
         fileName,
         szPosition,
@@ -81,6 +121,7 @@ function measure(source) {
 test('completion latency remains bounded and cancellation-aware', () => {
     const small = measure(makeSource(1_000));
     const large = measure(makeSource(10_000));
+    const themed = measure(makeSource(1_000), true);
 
 // Absolute sanity, generous enough to absorb shared-runner noise: a real
 // blow-up (a per-request whole-file traversal) would cross this by an order of
@@ -91,6 +132,18 @@ test('completion latency remains bounded and cancellation-aware', () => {
     assert.ok(
         large.szCpuP99 <= 8,
         `warm completion CPU p99 ${large.szCpuP99.toFixed(3)}ms exceeds 8ms`,
+    );
+    assert.ok(
+        themed.szCpuP99 <= 8,
+        `theme completion CPU p99 ${themed.szCpuP99.toFixed(3)}ms exceeds 8ms`,
+    );
+    assert.ok(
+        themed.szP95 <= small.szP95 * 4 + 0.5,
+        `theme completion p95 ${themed.szP95.toFixed(3)}ms regressed from ${small.szP95.toFixed(3)}ms`,
+    );
+    assert.ok(
+        themed.retainedHeap <= 4 * 1024 * 1024,
+        `theme completion retained ${(themed.retainedHeap / 1024 / 1024).toFixed(2)} MiB`,
     );
 
 // File-size independence, the property that actually matters: 10x the lines must
@@ -111,27 +164,41 @@ test('completion latency remains bounded and cancellation-aware', () => {
 
 // Cancellation and deadline expiry return before any classification work.
     assert.deepStrictEqual(
-        computeSzEntries(
-            ts,
-            large.service,
-            large.fileName,
-            large.szPosition,
+        computeSzEntries({
+            tsMod: ts,
+            languageService: large.service,
+            fileName: large.fileName,
+            position: large.szPosition,
             config,
-            Number.POSITIVE_INFINITY,
-            () => true,
-        ),
+            deadline: Number.POSITIVE_INFINITY,
+            projectRoot: '/virtual',
+            isCancellationRequested: () => true,
+        }),
         [],
         'pre-cancelled work must return before classification',
     );
     assert.deepStrictEqual(
-        computeSzEntries(ts, large.service, large.fileName, large.szPosition, config, -1),
+        computeSzEntries({
+            tsMod: ts,
+            languageService: large.service,
+            fileName: large.fileName,
+            position: large.szPosition,
+            config,
+            deadline: -1,
+            projectRoot: '/virtual',
+        }),
         [],
         'expired work must return before classification',
     );
     let abortChecks = 0;
-    const abortedEntries = buildSzKeyEntries(ts, 512, { start: 0, length: 0 }, () => {
-        abortChecks += 1;
-        return abortChecks > 1;
+    const abortedEntries = buildSzKeyEntries({
+        tsMod: ts,
+        limit: 512,
+        replacementSpan: { start: 0, length: 0 },
+        shouldStop: () => {
+            abortChecks += 1;
+            return abortChecks > 1;
+        },
     });
     assert.strictEqual(
         abortedEntries.length,
@@ -139,10 +206,16 @@ test('completion latency remains bounded and cancellation-aware', () => {
         'entry construction must stop at its next checkpoint',
     );
     assert.ok(
-        buildSzValueEntries(ts, 'p', 512, { start: 0, length: 0 }, false).length > 0,
+        buildSzValueEntries({
+            tsMod: ts,
+            property: 'p',
+            limit: 512,
+            replacementSpan: { start: 0, length: 0 },
+            quoted: false,
+        }).length > 0,
         'value entry construction must read shared value suggestions',
     );
     console.log(
-        `performance checks passed (sz p50 1k=${small.szP50.toFixed(3)}ms 10k=${large.szP50.toFixed(3)}ms, CPU p99=${large.szCpuP99.toFixed(3)}ms)`,
+        `performance checks passed (sz p50 1k=${small.szP50.toFixed(3)}ms 10k=${large.szP50.toFixed(3)}ms, theme p95=${themed.szP95.toFixed(3)}ms CPU p99=${themed.szCpuP99.toFixed(3)}ms retained=${(themed.retainedHeap / 1024 / 1024).toFixed(2)}MiB)`,
     );
 });

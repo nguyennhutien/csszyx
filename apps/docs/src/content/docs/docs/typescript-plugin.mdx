@@ -16,10 +16,9 @@ There are two ways to get it, depending on your editor:
   [Jump ↓](#other-editors--manual-setup)
 
 :::caution[Preview availability]
-The package is implemented and tested against TypeScript 5.9 and 6.x. Its first
-npm publication and the wider editor/OS certification matrix are still release
-gates. A TypeScript plugin is not a universal LSP — each editor decides whether
-and how project plugins load.
+The package is published and tested against TypeScript 5.9 and 6.x. The wider
+editor/OS certification matrix is still growing. A TypeScript plugin is not a
+universal LSP — each editor decides whether and how project plugins load.
 :::
 
 ## VS Code (recommended)
@@ -55,11 +54,11 @@ express opacity — and inside `bgImg: { … }` it offers `gradient`, `dir`, and
 
 Control completions with the `csszyx.completions` setting:
 
-| Value                  | Behavior                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------- |
-| `"auto"` _(default)_   | The plugin handles typed characters in TypeScript/JavaScript, the extension covers the `{`/`,`/`:` trigger moments and HTML. No duplicates. |
-| `"extension"`          | Disable the plugin and let the extension provide completions in every language. |
-| `"off"`                | No `sz` completions. Hover and diagnostics stay active.                         |
+| Value                | Behavior                                                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"auto"` _(default)_ | The plugin handles typed characters in TypeScript/JavaScript, the extension covers the `{`/`,`/`:` trigger moments and HTML. No duplicates. |
+| `"extension"`        | Disable the plugin and let the extension provide completions in every language.                                                             |
+| `"off"`              | No `sz` completions. Hover and diagnostics stay active.                                                                                     |
 
 ## Other editors / manual setup
 
@@ -152,6 +151,33 @@ the allowed range. You can type a number that is not shown in the dropdown:
 <div sz={{ p: 13, w: 137 }} />
 ```
 
+### Custom theme values (preview)
+
+Theme-aware completion is deliberately opt-in while it is certified across
+TypeScript hosts. First generate and include the declaration as described under
+[`build.scanCss`](/docs/reference/config/#theme-auto-scan-scancss), then enable
+the preview:
+
+```jsonc
+{
+  "include": ["src", ".csszyx/theme.d.ts"],
+  "compilerOptions": {
+    "plugins": [{ "name": "@csszyx/ts-plugin", "themeValues": true }],
+  },
+}
+```
+
+In VS Code with the CSSzyx extension, set `"csszyx.themeValues": true`
+instead. Custom colors, spacings, font families, text sizes, font weights,
+radii, shadows, and breakpoint keys become additive suggestions; built-in
+values are retained and duplicates are removed.
+
+The TypeScript service performs no CSS scan and creates no watcher. It only
+parses the bounded `.csszyx/theme.d.ts` source already in the current TypeScript
+Program. If that file is absent, malformed, oversized, or temporarily stale,
+the plugin fails open to its normal static completions. In a monorepo, each leaf
+project reads only its own `<project>/.csszyx/theme.d.ts`.
+
 If you already opened a string, accepting a completion replaces only the typed
 prefix and does not add a second pair of quotes:
 
@@ -173,6 +199,7 @@ setting Tailwind CSS IntelliSense recommends):
 // settings.json
 "editor.quickSuggestions": { "strings": "on" }
 ```
+
 :::
 
 :::tip[Where the plugin shines]
@@ -249,6 +276,7 @@ should specify only the name; these are the effective defaults:
         "name": "@csszyx/ts-plugin",
         "enabled": true,
         "values": true,
+        "themeValues": false,
         "maxEntries": 512,
         "deadlineMs": 20,
         "failureThreshold": 3,
@@ -258,13 +286,14 @@ should specify only the name; these are the effective defaults:
 }
 ```
 
-| Option             | Default | Plain-language meaning                                                                                                                 |
-| ------------------ | ------: | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `enabled`          |  `true` | Master switch. Set `false` to disable CSSzyx additions without uninstalling.                                                           |
-| `values`           |  `true` | Suggest values after `:`. Key and variant suggestions remain when disabled.                                                            |
-| `maxEntries`       |   `512` | Maximum CSSzyx suggestions added to one request. Prevents noisy, unbounded lists.                                                      |
-| `deadlineMs`       |    `20` | Time budget for CSSzyx work. An over-budget result still returns what it found, and repeated overruns pause the plugin.                |
-| `failureThreshold` |     `3` | Consecutive errors/timeouts before the project circuit breaker pauses CSSzyx work. It re-arms itself after a short cooldown.           |
+| Option             | Default | Plain-language meaning                                                                                                       |
+| ------------------ | ------: | ---------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`          |  `true` | Master switch. Set `false` to disable CSSzyx additions without uninstalling.                                                 |
+| `values`           |  `true` | Suggest values after `:`. Key and variant suggestions remain when disabled.                                                  |
+| `themeValues`      | `false` | Preview values and breakpoints from the leaf project's generated `.csszyx/theme.d.ts`; no CSS scan or watcher.               |
+| `maxEntries`       |   `512` | Maximum CSSzyx suggestions added to one request. Prevents noisy, unbounded lists.                                            |
+| `deadlineMs`       |    `20` | Time budget for CSSzyx work. An over-budget result still returns what it found, and repeated overruns pause the plugin.      |
+| `failureThreshold` |     `3` | Consecutive errors/timeouts before the project circuit breaker pauses CSSzyx work. It re-arms itself after a short cooldown. |
 
 Invalid option values are replaced with bounded defaults. A plugin failure never
 replaces the base TypeScript completion result.
@@ -277,7 +306,7 @@ replaces the base TypeScript completion result.
 | Works outside VS Code                           | Yes (any TS host) | No                      |
 | Hover preview                                   | Not yet           | Yes                     |
 | Diagnostics and syntax highlighting             | No                | Yes                     |
-| Generated `.csszyx/theme.d.ts` types            | Continue to apply | Continue to apply       |
+| Generated `.csszyx/theme.d.ts` completions      | Preview opt-in    | Preview opt-in          |
 
 Inside VS Code the extension **is** the delivery mechanism for the plugin, so
 there is nothing to reconcile: it injects the plugin for TypeScript/JavaScript
@@ -290,8 +319,8 @@ sees). Hover and diagnostics stay active regardless of `csszyx.completions`.
 
 Open the TypeScript Server log and search for `csszyx-ts-plugin`. On activation
 the plugin writes one line, e.g.
-`[csszyx-ts-plugin] activated (completions on, values on)`. If that line is
-absent, the plugin did not load — this tells a healthy-but-quiet install apart
+`[csszyx-ts-plugin] activated (completions on, values on, theme values off)`.
+If that line is absent, the plugin did not load — this tells a healthy-but-quiet install apart
 from a real failure. Run **TypeScript: Open TS Server Log** (enable it first with
 `"typescript.tsserver.log": "verbose"`). Then check `csszyx.completions` is not
 `"off"` or `"extension"`.

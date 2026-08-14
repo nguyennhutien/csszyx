@@ -15,6 +15,7 @@ import {
     PROPERTY_KEYS,
     resolveStyleChain,
     szvStyleChain,
+    THEME_VALUE_PROPERTIES,
     valueSuggestionsFor,
 } from '../src/index.js';
 import {
@@ -29,6 +30,28 @@ describe('isUtilityPropertyKey', () => {
         expect(isUtilityPropertyKey('p')).toBe(true);
         expect(isUtilityPropertyKey('hover')).toBe(false);
         expect(isUtilityPropertyKey('somethingCustom')).toBe(false);
+    });
+});
+
+describe('THEME_VALUE_PROPERTIES', () => {
+    it('maps every theme-fed property to one canonical utility key', () => {
+        for (const [category, properties] of Object.entries(THEME_VALUE_PROPERTIES)) {
+            expect(Object.isFrozen(properties), `${category} must be immutable`).toBe(true);
+            expect(new Set(properties).size, `${category} contains duplicates`).toBe(
+                properties.length,
+            );
+            for (const property of properties) {
+                expect(
+                    PROPERTY_KEYS.has(property),
+                    `${category}.${property} is not canonical`,
+                ).toBe(true);
+            }
+        }
+        expect(THEME_VALUE_PROPERTIES.colors).toEqual(
+            expect.arrayContaining(['borderTColor', 'borderXColor', 'insetRingColor']),
+        );
+        expect(THEME_VALUE_PROPERTIES.textSizes).toEqual(['text']);
+        expect(THEME_VALUE_PROPERTIES.fontWeights).toEqual(['weight']);
     });
 });
 

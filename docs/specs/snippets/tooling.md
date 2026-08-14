@@ -43,11 +43,20 @@ needs "Use Workspace Version".
 - Insert numeric suggestions without quotes and string suggestions with quotes. Suggestions are not validation: Tailwind 4 numeric values are open-ended.
 - Preserve TypeScript's base completions. On cancellation, timeout, or internal failure, return the untouched base result.
 
-Defaults: `enabled: true`, `values: true`, `maxEntries: 512`,
-`deadlineMs: 20`, `failureThreshold: 3`. Usually emit only `{ "name":
+Defaults: `enabled: true`, `values: true`, `themeValues: false`,
+`maxEntries: 512`, `deadlineMs: 20`, `failureThreshold: 3`. Usually emit only `{ "name":
 "@csszyx/ts-plugin" }`; do not add tuning options without a demonstrated need.
 
-**Not provided by this plugin:** theme-aware values, hover previews,
+**Theme preview:** `themeValues: true` adds custom colors, spacings, fonts,
+text sizes, font weights, radii, shadows, and breakpoint keys from the leaf
+project's generated `.csszyx/theme.d.ts`. The declaration must already belong
+to the TypeScript Program. Parsing is AST-based and bounded (128 KiB source,
+2,000 tokens, 128 characters per token); missing/malformed input fails open.
+The plugin performs no CSS/filesystem scan, direct I/O, watcher, network, or
+Tailwind/config execution. VS Code extension users set
+`csszyx.themeValues: true`; the default remains off during host certification.
+
+**Not provided by this plugin:** hover previews,
 diagnostics, syntax highlighting, Tailwind config/plugin execution, network, or
 telemetry. Those capabilities must not be inferred. The plugin is
 self-contained: its metadata is bundled at build time, so it installs with no

@@ -5,8 +5,27 @@
  */
 import type { SzProps, SzsProps } from './sz-props.js';
 
+declare module './sz-props.js' {
+    /** Custom theme tokens used by the augmentation contract fixture. */
+    interface CustomTheme {
+        /** Custom color token. */
+        colors: 'brand';
+        /** Custom font-size token. */
+        textSizes: 'hero';
+        /** Custom font-weight token. */
+        fontWeights: 'book';
+    }
+}
+
 // Known scalar + object props pass.
 const _known: SzProps = { p: 4, bg: 'blue-500', m: 2, color: 'red-500' };
+const _themeTokens: SzProps = {
+    bg: 'brand',
+    text: 'hero',
+    weight: 'book',
+    borderTColor: 'brand',
+    insetRingColor: 'brand',
+};
 
 // Known variant nesting passes.
 const _variant: SzProps = { hover: { bg: 'blue-700' } };
@@ -75,6 +94,7 @@ export {
     _szsRead,
     _szsTypo,
     _szsWrite,
+    _themeTokens,
     _typo,
     _variant,
 };

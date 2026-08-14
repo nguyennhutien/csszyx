@@ -145,6 +145,9 @@ const throwingLoggerProxy = init({ typescript: ts }).create({
         },
     },
     project: {
+        getCurrentDirectory: () => {
+            throw new Error('host project root failure');
+        },
         projectService: {
             logger: { info: () => { throw new Error('host logger failure'); } },
         },

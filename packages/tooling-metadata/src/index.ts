@@ -30,6 +30,8 @@ export {
     PROPERTY_MAP,
     SPECIAL_VARIANTS,
     SUGGESTION_MAP,
+    THEME_VALUE_PROPERTIES,
+    type ThemeValueCategory,
     VALUE_SUGGESTIONS,
 } from './tooling.generated';
 export { negativeValueSuggestions } from './value-suggestions';
