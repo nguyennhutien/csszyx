@@ -114,9 +114,12 @@ describe('a class discovered after the freeze fails the build', () => {
                 join(h.root, 'src/Hand.tsx'),
             ]);
 
-        await expect(async () =>
+        // `buildEnd` is synchronous, so the assertion has to be too. Wrapping
+        // the call in an async arrow turns its throw into a rejection, which
+        // the negative form of this assertion cannot see at all.
+        expect(() =>
             h.hookOf('csszyx:pre', 'buildEnd')?.apply({ warn() {}, error() {} }, []),
-        ).rejects.toThrow('m-3');
+        ).toThrow('m-3');
     });
 
     it('accepts a build whose census matches the prescan', async () => {
@@ -127,7 +130,7 @@ describe('a class discovered after the freeze fails the build', () => {
             .hookOf('csszyx:pre', 'transform')
             ?.apply({ warn() {}, error() {} }, [PRESCANNED_SOURCE, join(h.root, 'src/App.tsx')]);
 
-        await expect(async () =>
+        expect(() =>
             h.hookOf('csszyx:pre', 'buildEnd')?.apply({ warn() {}, error() {} }, []),
         ).not.toThrow();
     });
