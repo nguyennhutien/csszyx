@@ -115,6 +115,15 @@ const sources = [
     'const A = () => { const x = 4; return <div sz={{ p: x }} />; };',
     // Computed key whose const resolves to a real property name.
     'const k = "p"; const A = () => <div sz={{ [k]: 4 }} />;',
+    // A value read off a constant map, which is how token files are normally
+    // consumed. The three refusals belong here as much as the read does: each
+    // one is a case where answering at build time would answer wrongly, and
+    // only a corpus record states that across both engine artifacts.
+    'const L = { z: 10 } as const; const A = () => <div sz={{ z: L.z }} />;',
+    'const T = { c: { brand: "blue-500" } } as const; const A = () => <div sz={{ bg: T.c.brand }} />;',
+    'const L = { z: 10 } as const; const A = ({ k }) => <div sz={{ z: L[k] }} />;',
+    'const L = { z: 10 } as const; const A = () => <div sz={{ z: L.missing }} />;',
+    'const A = () => <div sz={{ z: LATER.z }} />; const LATER = { z: 10 } as const;',
 ];
 
 if (!isRustTransformAvailable()) {
