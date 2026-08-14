@@ -16,6 +16,7 @@ import type { TokenData } from './manifest.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
 import { szDevWarningsEnabled } from './sz-dev-warnings.js';
 import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
+import type { SzProps } from './types/sz-props.js';
 
 // Re-exported so the runtime (which imports from `@csszyx/compiler/browser`,
 // i.e. this module) shares one SzDepthError type, depth limit, and key guard.
@@ -957,6 +958,52 @@ export const BOOLEAN_SHORTHANDS: Set<string> = new Set([
     // Outline
     'outline',
 ]);
+
+// ============================================================================
+// BOOLEAN_ONLY_DYNAMIC_KEYS: keys whose DYNAMIC values lower to a conditional
+// bare class through __szBoolClass, never to the css-var strategy
+// ============================================================================
+// Two stacked defects make the custom-property strategy structurally invalid
+// here: React discards booleans in `style` (the variable is never set, for
+// `true` AND `false`), and the valued utility targets a different CSS property
+// than the bare class (`border-b-(--var)` is border-bottom-COLOR while
+// `border-b` is a WIDTH; `truncate-(--var)` matches nothing at all).
+//
+// This must be an explicit list: the engine's Boolean(true) lowering has an
+// unconditional fallback (any key + true → bare class), so "true maps to a
+// bare class" matches EVERY key and cannot serve as the criterion. Membership
+// is gated by tests/boolean-only-dynamic-keys.test.ts: a member must accept a
+// boolean in the type vocabulary, lower `true` to the bare class, and have a
+// css-var-hostile valued form (color twin or none).
+//
+// divideX/divideY are siblings deliberately left OUT: their dynamic failure
+// shape is unverified in the field and the reporter asked us not to widen.
+//
+// The `satisfies SzProps` literal locks criterion (a) at the declaration
+// site: tsc rejects any member whose vocabulary does not accept `true`.
+const BOOLEAN_ONLY_DYNAMIC_VOCABULARY = {
+    border: true,
+    borderT: true,
+    borderR: true,
+    borderB: true,
+    borderL: true,
+    borderX: true,
+    borderY: true,
+    borderS: true,
+    borderE: true,
+    borderBs: true,
+    borderBe: true,
+    ring: true,
+    outline: true,
+    truncate: true,
+    shadow: true,
+} as const satisfies SzProps;
+
+// Generated into the Rust engine's tables.rs (is_boolean_only_dynamic) by
+// scripts/generate-rust-transform-tables.mjs — run pnpm gen:rust-tables.
+export const BOOLEAN_ONLY_DYNAMIC_KEYS: ReadonlySet<string> = new Set(
+    Object.keys(BOOLEAN_ONLY_DYNAMIC_VOCABULARY),
+);
 
 // Removed boolean-sugar keys → the canonical { key, value } they map to. Used
 // both for the dev-mode deprecation warning and the `csszyx migrate` codemod.
@@ -2316,7 +2363,52 @@ function formatColorObjectBase(color: string): string {
         : normalizeArbitraryValue(color);
 }
 
-/** Warns when a custom theme token may ignore an opacity modifier. */
+/** The one value shape whose opacity modifier cannot survive color-mix(). */
+const BARE_RGB_TRIPLET = /^\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}$/;
+
+/**
+ * What a theme token's variable computes to on the live page, if readable.
+ *
+ * Computed style resolves the whole var() chain, so the answer is the final
+ * value, not the next hop. Off the browser there is no stylesheet to ask and
+ * the probe returns null.
+ *
+ * @param token - Theme token name, e.g. `brand` for `--color-brand`.
+ * @returns The computed value, or null when it cannot be read.
+ */
+function resolvedThemeTokenValue(token: string): string | null {
+    try {
+        const globals = globalThis as {
+            document?: { documentElement?: unknown };
+            getComputedStyle?: (element: unknown) => { getPropertyValue(name: string): string };
+        };
+        const root = globals.document?.documentElement;
+        if (root === undefined || typeof globals.getComputedStyle !== 'function') {
+            return null;
+        }
+        const value = globals.getComputedStyle(root).getPropertyValue(`--color-${token}`).trim();
+        return value === '' ? null : value;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Warns when a custom theme token PROVABLY ignores its opacity modifier.
+ *
+ * Tailwind v4 wraps the modifier in color-mix(), which dims any valid color,
+ * so no token-text heuristic can call a modifier broken — the one that stood
+ * here flagged six working rules in a field user's otherwise-clean run. The
+ * single breaking shape is a token whose var() chain ends in a bare comma
+ * triplet: substituted into color-mix(), the declaration is invalid CSS and
+ * browsers drop it silently. Only a live stylesheet can answer that, so this
+ * warns exactly when the browser's computed value is that triplet and says
+ * nothing anywhere else — off the browser, `csszyx check` owns the exact
+ * verdict from the compiled stylesheet.
+ *
+ * A token that cannot be resolved is not cached: the stylesheet may simply
+ * not have loaded yet, and a later lowering deserves a fresh answer.
+ */
 function warnCustomOpacityToken(color: string, className: string, opacity: string): void {
     if (
         !szDevWarningsEnabled() ||
@@ -2328,13 +2420,17 @@ function warnCustomOpacityToken(color: string, className: string, opacity: strin
     ) {
         return;
     }
+    const resolved = resolvedThemeTokenValue(color);
+    if (resolved === null || !BARE_RGB_TRIPLET.test(resolved)) {
+        return;
+    }
     _warnedOpacityTokens.add(color);
     const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
     console.warn(
-        `[csszyx] "${className}"${at}: the /${opacity} opacity applies only if the ` +
-            `"${color}" theme token is alpha-capable (oklch or space-separated RGB). ` +
-            'A comma-separated RGB triplet, or a token that resolves through its own alpha ' +
-            'variable, silently ignores the modifier — verify the emitted rule.',
+        `[csszyx] "${className}"${at}: the /${opacity} opacity modifier will not apply — ` +
+            `the "${color}" theme token resolves to the bare comma triplet "${resolved}", ` +
+            'which color-mix() cannot dim. Wrap the variable, e.g. ' +
+            `--color-${color}: rgb(var(--your-triplet)).`,
     );
 }
 
@@ -3928,6 +4024,8 @@ export interface SourceTransformResult {
     usesColorVar: boolean;
     usesSpacingVar: boolean;
     usesUnitVar: boolean;
+    /** Whether the source needs the bool-class runtime helper. */
+    usesBoolClass: boolean;
     /** Classes generated from sz syntax. */
     classes: Set<string>;
     /** Raw className/class strings collected for Tailwind discovery only. */

@@ -23,7 +23,7 @@
  * node type into one of these, so the matrix stays free of Babel/oxc/oxc-rust
  * node vocabulary.
  */
-export type SzFallbackKind = 'call' | 'identifier' | 'import' | 'member' | 'other';
+export type SzFallbackKind = 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory';
 
 /** Every kind, in the order the generated Rust match arms are emitted. */
 export const SZ_FALLBACK_KINDS: readonly SzFallbackKind[] = [
@@ -32,6 +32,7 @@ export const SZ_FALLBACK_KINDS: readonly SzFallbackKind[] = [
     'import',
     'member',
     'other',
+    'szv-factory',
 ];
 
 /** One matrix entry: why the fallback happened, and the way out. */
@@ -47,6 +48,15 @@ export interface SzFallbackTemplate {
 
 /** Placeholder substituted with the kind-specific detail. */
 export const SZ_FALLBACK_DETAIL_PLACEHOLDER = '{detail}';
+
+/**
+ * Placeholder substituted with a position inside a config, as a dot-joined
+ * key path (`variants.c.blue.desktop-sm`). Only the `szv-factory` kind
+ * carries it: a config path — unlike a `line:column` — stays meaningful when
+ * the config lives in another module, and it reads the same from every
+ * engine artifact.
+ */
+export const SZ_FALLBACK_PATH_PLACEHOLDER = '{path}';
 
 /**
  * Reason and guidance per expression kind.
@@ -80,6 +90,16 @@ export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTempl
         suggestion:
             'Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().',
     },
+    // The one kind that names WHERE qualification failed instead of what the
+    // expression looked like. `szr(t(...))` where `t` is an szv the build saw
+    // and refused used to render the generic call advice — "convert to
+    // szv()" — which is circular for an author already writing one, and it
+    // named the factory while hiding the position that actually disqualified.
+    'szv-factory': {
+        reason: 'szv factory `{detail}()` did not precompile — its config disqualified at `{path}`',
+        suggestion:
+            'Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().',
+    },
 };
 
 /** A rendered matrix entry, ready to place in a diagnostic. */
@@ -94,12 +114,22 @@ export interface SzFallbackDescription {
  * @param kind - Classified shape of the unresolved expression.
  * @param detail - Callee name, identifier name, or node type. Ignored by kinds
  * whose reason carries no placeholder.
+ * @param path - Config position for the `szv-factory` kind. Ignored by the
+ * others.
  * @returns Reason and suggestion for the diagnostic.
  */
-export function describeSzFallback(kind: SzFallbackKind, detail = ''): SzFallbackDescription {
+export function describeSzFallback(
+    kind: SzFallbackKind,
+    detail = '',
+    path = '',
+): SzFallbackDescription {
     const template = SZ_FALLBACK_MATRIX[kind];
     return {
-        reason: template.reason.split(SZ_FALLBACK_DETAIL_PLACEHOLDER).join(detail),
+        reason: template.reason
+            .split(SZ_FALLBACK_DETAIL_PLACEHOLDER)
+            .join(detail)
+            .split(SZ_FALLBACK_PATH_PLACEHOLDER)
+            .join(path),
         suggestion: template.suggestion,
     };
 }
@@ -287,6 +317,7 @@ export function szsUnsupportedDiagnostic(filename: string): string {
  * @param position - `line:column`, 1-based, as the JS lanes report it.
  * @param kind - Classified shape of the unresolved expression.
  * @param detail - Callee name, identifier name, or node type.
+ * @param path - Config position for the `szv-factory` kind.
  * @returns The diagnostic text, reason and suggestion included.
  */
 export function formatSzFallbackDiagnostic(
@@ -294,8 +325,9 @@ export function formatSzFallbackDiagnostic(
     position: string,
     kind: SzFallbackKind,
     detail = '',
+    path = '',
 ): string {
-    const { reason, suggestion } = describeSzFallback(kind, detail);
+    const { reason, suggestion } = describeSzFallback(kind, detail, path);
     const advice = site === 'szv' ? SZ_FALLBACK_SZV_SUGGESTION : suggestion;
     return `${SITE_LABEL[site]} at ${position}: ${reason}.\n  Suggestion: ${advice}`;
 }

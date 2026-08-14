@@ -198,6 +198,7 @@ fn transform_fast_static_ir_with_options(
             uses_color_var: false,
             uses_spacing_var: false,
             uses_unit_var: false,
+            uses_bool_class: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,
             timings: TransformTimings {
@@ -383,6 +384,18 @@ fn transform_static_classes_with_options(
                 )
             })
         });
+    // Array elements carry their conditional on the part, so both homes count.
+    let uses_bool_class = transformed
+        && parsed.ir.sz_attributes.iter().any(|attr| {
+            attr.ternaries
+                .iter()
+                .chain(
+                    attr.array_parts
+                        .iter()
+                        .filter_map(|part| part.ternary.as_ref()),
+                )
+                .any(|ternary| ternary.bool_class_key.is_some())
+        });
 
     // A budget-tripped walk produced a PARTIAL IR: whichever classes happen to
     // sit before the cut would flow into the safelist and the rest silently
@@ -418,6 +431,7 @@ fn transform_static_classes_with_options(
             uses_color_var,
             uses_spacing_var,
             uses_unit_var,
+            uses_bool_class,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: parsed.ast_budget_exceeded,
             timings: TransformTimings {
@@ -528,12 +542,19 @@ fn site_fallback_diagnostics(
                 RuntimeFallbackKindIr::Import => SzFallbackKind::Import,
                 RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
                 RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
+                RuntimeFallbackKindIr::SzvFactory => SzFallbackKind::SzvFactory,
             };
             let site = match fallback.site {
                 SzFallbackSiteIr::Szr => SzFallbackSite::Szr,
                 SzFallbackSiteIr::Szv => SzFallbackSite::Szv,
             };
-            format_sz_fallback_diagnostic(site, &format!("{line}:{column}"), kind, &fallback.detail)
+            format_sz_fallback_diagnostic(
+                site,
+                &format!("{line}:{column}"),
+                kind,
+                &fallback.detail,
+                &fallback.path,
+            )
         })
         .collect()
 }
@@ -568,9 +589,13 @@ fn runtime_fallback_diagnostics(
             RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
             RuntimeFallbackKindIr::Import => SzFallbackKind::Import,
             RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
-            RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
+            // An sz attribute never carries factory-level knowledge; the
+            // variant exists for the szr site alone.
+            RuntimeFallbackKindIr::Other | RuntimeFallbackKindIr::SzvFactory => {
+                SzFallbackKind::Other
+            }
         };
-        let reason = sz_fallback_reason(kind, &diagnostic.detail);
+        let reason = sz_fallback_reason(kind, &diagnostic.detail, "");
         let suggestion = sz_fallback_suggestion(kind);
         out.push(format!(
             "sz fallback at {line}:{column}: {reason}.
@@ -802,6 +827,7 @@ fn noop_result(file: &TransformFile) -> TransformResult {
             uses_color_var: false,
             uses_spacing_var: false,
             uses_unit_var: false,
+            uses_bool_class: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,
             timings: TransformTimings::default(),
@@ -840,6 +866,32 @@ mod tests {
             relativize_diagnostic_path("src/App.tsx", None),
             "src/App.tsx"
         );
+    }
+
+    #[test]
+    fn transform_file_reports_the_bool_class_helper_it_emitted() {
+        // The unplugin injects the runtime import from this flag; without it the
+        // emitted call is an undefined identifier at runtime.
+        let attribute = transform_file(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ on }) => <div sz={{ borderB: on }} />;".to_string(),
+        });
+        assert!(attribute.metadata.uses_bool_class);
+        assert!(attribute.code.contains("__szBoolClass"));
+        assert_eq!(attribute.classes, ["border-b"]);
+
+        let array = transform_file(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ on }) => <div sz={[{ borderB: on }]} />;".to_string(),
+        });
+        assert!(array.metadata.uses_bool_class);
+
+        let unrelated = transform_file(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ v }) => <div sz={{ w: v }} />;".to_string(),
+        });
+        assert!(!unrelated.metadata.uses_bool_class);
+        assert!(unrelated.metadata.uses_spacing_var);
     }
 
     #[test]
@@ -1050,6 +1102,102 @@ mod tests {
     }
 
     #[test]
+    fn static_engine_names_the_disqualifying_config_path_for_a_known_szv_factory() {
+        // `szr(t({...}))` where `t` IS an szv declared lines above used to
+        // render "function call `t()` result is unknown" and suggest
+        // converting to szv() — circular advice that cost a field user the
+        // hunt for WHY the factory did not precompile. When the parser SAW
+        // the declaration and disqualified its config, the diagnostic says
+        // so and names the position in the config that disqualified.
+        let file = TransformFile {
+            filename: "/repo/src/Tag.tsx".to_string(),
+            source: [
+                "import { szr, szv } from 'csszyx';",
+                "const t = szv({ variants: { c: { blue: { color: 'blue-500', 'desktop-sm': { p: 4 } } } } });",
+                "export const A = () => <div className={szr(t({ c: 'blue' }))} />;",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("szr fallback at 3:44: szv factory `t()` did not precompile"),
+            "{diagnostics}"
+        );
+        assert!(
+            diagnostics.contains("config disqualified at `variants.c.blue.desktop-sm`"),
+            "{diagnostics}"
+        );
+        // The old advice was circular — the author is already writing szv().
+        assert!(!diagnostics.contains("convert to szv()"), "{diagnostics}");
+    }
+
+    #[test]
+    fn static_engine_names_the_enclosing_object_when_a_nested_shape_has_no_key() {
+        // A spread and a bigint key carry no name to report, so the walk names
+        // the object holding them. The path has to keep the nesting: reporting
+        // a bare "config" for something buried three levels down sends the
+        // author back to the top of a factory they already read.
+        for (source_line, expected) in [
+            (
+                "const t = szv({ variants: { c: { blue: { ...base } } } });",
+                "config disqualified at `variants.c.blue`",
+            ),
+            (
+                "const t = szv({ variants: { c: { blue: { 1n: 4 } } } });",
+                "config disqualified at `variants.c.blue`",
+            ),
+            (
+                "const t = szv({ ...spread });",
+                "config disqualified at `config`",
+            ),
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/Nested.tsx".to_string(),
+                source: [
+                    "import { szr, szv } from 'csszyx';",
+                    source_line,
+                    "export const A = () => <div className={szr(t({ c: 'blue' }))} />;",
+                ]
+                .join("\n"),
+            };
+            let result = transform_static_classes(&file, 0, std::time::Instant::now());
+            let diagnostics = result.diagnostics.join("\n");
+            assert!(
+                diagnostics.contains(expected),
+                "expected {expected} for {source_line}, got: {diagnostics}"
+            );
+        }
+    }
+
+    #[test]
+    fn static_engine_keeps_the_generic_call_wording_for_a_qualified_factory() {
+        // A factory whose CONFIG is fine can still keep its runtime path for
+        // usage reasons (here: an extra reference fails the accounting).
+        // Claiming "config disqualified" there would send the author to a
+        // config with nothing wrong in it, so those keep the generic wording.
+        let file = TransformFile {
+            filename: "/repo/src/Ok.tsx".to_string(),
+            source: [
+                "import { szr, szv } from 'csszyx';",
+                "const t = szv({ variants: { c: { blue: { bg: 'blue-500' } } } });",
+                "console.log(t);",
+                "export const A = () => <div className={szr(t({ c: 'blue' }))} />;",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("function call `t()` result is unknown at build time"),
+            "{diagnostics}"
+        );
+        assert!(!diagnostics.contains("did not precompile"), "{diagnostics}");
+    }
+
+    #[test]
     fn static_engine_names_an_imported_binding_apart_from_a_forwarded_prop() {
         // These two read alike in the AST and mean opposite things. An import
         // is a module-level value this build tried to read and could not, so
@@ -1142,6 +1290,14 @@ mod tests {
             "const A=({width})=><div sz={{w:width}} {...{}}/>;",
             "const A=({width,base})=><div sz={{w:width}} {...{style:base}}/>;",
             "const A=({width,cond})=><div sz={{w:width}} {...(cond?{}:{})}/>;",
+            // Wholly static sz beside an opaque spread. This is the single
+            // most common shape in a component library, and it emits no style
+            // attribute at all, so there is nothing for the spread to
+            // override. Warning here would train authors to ignore the
+            // message on the elements where it does mean something. The other
+            // negative cases above are rejected earlier by the safe-spread
+            // check, so this one is what pins the emits-no-style condition.
+            "const A=({props})=><div sz={{p:4}} {...props}/>;",
         ] {
             let result = transform_static_classes(
                 &TransformFile {
@@ -1446,6 +1602,102 @@ mod tests {
     }
 
     #[test]
+    fn static_engine_reads_a_value_off_a_local_constant_map() {
+        // A design-token map read by member access. The bare identifier form of
+        // the same constant already folds, so the value being reachable is not
+        // in question — only the indexing step was.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const LAYER = { appChrome: 10 } as const;\nconst X = () => <div sz={{ z: LAYER.appChrome }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(
+            result.code,
+            "const LAYER = { appChrome: 10 } as const;\nconst X = () => <div className=\"z-10\" />;"
+        );
+        assert_eq!(result.classes, vec![String::from("z-10")]);
+        assert!(!result.metadata.uses_runtime);
+    }
+
+    #[test]
+    fn static_engine_reads_through_a_nested_constant_map() {
+        // The read resolves its object half through the same walk, so a map of
+        // maps costs no extra machinery. Pinned because token files are
+        // routinely grouped one level deeper than they are consumed.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const T = { c: { brand: 'blue-500' } } as const;\nconst X = () => <div sz={{ bg: T.c.brand }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(result.classes, vec![String::from("bg-blue-500")]);
+    }
+
+    #[test]
+    fn static_engine_will_not_read_a_member_off_a_scalar_constant() {
+        // The name resolves, but to a string rather than a map, so there is no
+        // property to read. `length` is a real value at run time and inventing
+        // one here would be a different answer than the program's.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const S = 'abc';\nconst X = () => <div sz={{ z: S.length }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(result.code.contains("style={{\"--_sz-z\": S.length}}"));
+        assert!(result.classes.iter().all(|class| class != "z-3"));
+    }
+
+    #[test]
+    fn static_engine_will_not_read_a_map_declared_after_its_use() {
+        // Reading it would answer with a value the reference cannot see. The
+        // bare-identifier walk already refuses this, and the read inherits the
+        // refusal by resolving its object half through that same walk.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = () => <div sz={{ z: LATER.appChrome }} />;\nconst LATER = { appChrome: 10 } as const;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(!result.classes.iter().any(|class| class == "z-10"));
+    }
+
+    #[test]
+    fn static_engine_keeps_a_computed_member_on_the_runtime_path() {
+        // The property is chosen at run time, so no build-time read of the map
+        // can be right. This has to stay on the custom-property path.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const LAYER = { appChrome: 10 } as const;\nconst X = ({ k }) => <div sz={{ z: LAYER[k] }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(result.code.contains("style={{\"--_sz-z\": LAYER[k]}}"));
+        assert!(!result.classes.iter().any(|class| class == "z-10"));
+    }
+
+    #[test]
+    fn static_engine_keeps_a_missing_member_on_the_runtime_path() {
+        // Nothing to read: emitting a class from a key the map does not carry
+        // would invent a value. The runtime path is the honest answer.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const LAYER = { appChrome: 10 } as const;\nconst X = () => <div sz={{ z: LAYER.missing }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(result.code.contains("style={{\"--_sz-z\": LAYER.missing}}"));
+        assert!(!result.classes.iter().any(|class| class == "z-10"));
+    }
+
+    #[test]
     fn static_engine_emits_runtime_helper_for_dynamic_identifier() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -1620,5 +1872,420 @@ mod tests {
         assert!(!result.metadata.transformed);
         assert!(result.recovery_tokens.is_empty());
         assert!(result.diagnostics.is_empty());
+    }
+
+    /// Global custom-property aliases must reach the PARSER lane too.
+    ///
+    /// The rename is applied in two places, once per lane, and only the fast
+    /// path was pinned. A file that bails to the parser — anything with a
+    /// className expression, a ternary, or a dynamic value — would emit the
+    /// original property name in its class while the emitted variable map
+    /// still describes the alias, so the stylesheet and the markup would name
+    /// two different custom properties and the colour would never apply.
+    #[test]
+    fn global_var_aliases_apply_on_the_parser_lane() {
+        let file = TransformFile {
+            filename: "/repo/src/Alias.tsx".to_string(),
+            source: "const App = ({ cls, on }) => <div className={cls} sz={on ? { bg: '--brand-primary' } : { bg: '--brand-primary' }} />;"
+                .to_string(),
+        };
+        let result = transform_file_with_options(
+            &file,
+            TransformOptions {
+                global_var_aliases: vec![GlobalVarAliasEntry {
+                    original: "--brand-primary".to_string(),
+                    alias: "--g0".to_string(),
+                }],
+                ..TransformOptions::default()
+            },
+        );
+
+        assert_eq!(
+            result.parser_path,
+            ParserPath::Static,
+            "must bail fast path"
+        );
+        assert!(
+            result.classes.iter().all(|class| class == "bg-(--g0)"),
+            "{:?}",
+            result.classes
+        );
+        assert!(!result.code.contains("--brand-primary"), "{}", result.code);
+        assert_eq!(
+            result.css_variable_map,
+            [CssVariableMapEntry {
+                original: "--brand-primary".to_string(),
+                mangled: "--g0".to_string(),
+            }]
+        );
+    }
+
+    /// Every `uses_*` flag on a file that needs NO runtime helper.
+    ///
+    /// The bundler injects a runtime import per flag without re-scanning the
+    /// emitted code, so a flag that reads true on a file needing nothing pulls
+    /// `@csszyx/runtime` into a module that was zero-runtime — the promise the
+    /// RSC/bundle story rests on. Every flag is asserted false here, in one
+    /// place, so no single condition can degrade to a constant true without
+    /// this failing. The fixture goes down the PARSER lane on purpose: a
+    /// `className=` string bails the fast path, which hardcodes the flags to
+    /// false and would prove nothing.
+    #[test]
+    fn a_purely_static_parser_lane_file_claims_no_runtime_helper() {
+        let file = TransformFile {
+            filename: "/repo/src/Static.tsx".to_string(),
+            source:
+                "export const App = () => <div className=\"card\" sz={{ p: 4, bg: 'red-500' }} />;"
+                    .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let metadata = &result.metadata;
+
+        assert!(metadata.transformed, "fixture must reach the rewrite");
+        assert_eq!(result.parser_path, ParserPath::Static);
+        assert!(result.classes.iter().any(|class| class == "p-4"));
+
+        assert!(!metadata.uses_runtime, "no _sz fallback in this file");
+        assert!(!metadata.uses_merge, "className is a literal, not merged");
+        assert!(!metadata.uses_szcn, "no sz array to compose");
+        assert!(!metadata.uses_sz_part, "no dynamic array element");
+        assert!(!metadata.uses_szv_pick, "no szv catalog");
+        assert!(!metadata.uses_szv_pick1, "no szv catalog");
+        assert!(!metadata.uses_color_var, "colour value is a literal token");
+        assert!(!metadata.uses_spacing_var, "spacing value is a literal");
+        assert!(!metadata.uses_unit_var, "no angle or duration value");
+        assert!(!metadata.uses_bool_class, "no conditional boolean key");
+        assert!(
+            metadata.sz_part_args_provable,
+            "vacuously true with no dynamic parts"
+        );
+    }
+
+    /// The same all-false claim on a file the parser could not read.
+    ///
+    /// A rejected file rewrites nothing, so importing a helper into it is both
+    /// useless and a zero-runtime break — and it is the case where a flag
+    /// computed from a partial IR is most likely to read true by accident.
+    #[test]
+    fn a_rejected_file_claims_no_runtime_helper() {
+        let file = TransformFile {
+            filename: "/repo/src/Broken.tsx".to_string(),
+            source:
+                "export const App = ({ on, cls }) => <div className={cls} sz={[{ p: on ? 4 : 8 }]} /"
+                    .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let metadata = &result.metadata;
+
+        assert!(!metadata.transformed, "a rejected file rewrites nothing");
+        for (name, flag) in [
+            ("uses_runtime", metadata.uses_runtime),
+            ("uses_merge", metadata.uses_merge),
+            ("uses_szcn", metadata.uses_szcn),
+            ("uses_sz_part", metadata.uses_sz_part),
+            ("uses_color_var", metadata.uses_color_var),
+            ("uses_spacing_var", metadata.uses_spacing_var),
+            ("uses_unit_var", metadata.uses_unit_var),
+            ("uses_bool_class", metadata.uses_bool_class),
+        ] {
+            assert!(!flag, "{name} must stay false on an untransformed file");
+        }
+    }
+
+    /// True direction for the two composition helpers.
+    ///
+    /// These are the false-negative half of the same contract: the rewrite has
+    /// already spliced `_szcn(...)` / `_szMerge(...)` into the emitted code, so
+    /// a flag that reads false leaves the call without its import and the page
+    /// dies with a ReferenceError on first render.
+    #[test]
+    fn an_sz_array_and_a_merged_class_name_claim_their_helpers() {
+        let array = transform_file(&TransformFile {
+            filename: "/repo/src/Array.tsx".to_string(),
+            source: "export const A = ({ extra }) => <div sz={[{ p: 4 }, extra]} />;".to_string(),
+        });
+        assert!(array.metadata.transformed);
+        assert!(array.code.contains("_szcn("), "{}", array.code);
+        assert!(array.metadata.uses_szcn, "emitted _szcn needs its import");
+        assert!(!array.metadata.uses_merge, "no className on the element");
+
+        let merged = transform_file(&TransformFile {
+            filename: "/repo/src/Merge.tsx".to_string(),
+            source:
+                "export const A = ({ on, base }) => <div className={base} sz={on ? { p: 4 } : { p: 8 }} />;"
+                    .to_string(),
+        });
+        assert!(merged.metadata.transformed);
+        assert!(merged.code.contains("_szMerge("), "{}", merged.code);
+        assert!(merged.metadata.uses_merge, "emitted _szMerge needs import");
+        assert!(!merged.metadata.uses_szcn, "no sz array on the element");
+    }
+
+    /// True direction for the dynamic custom-property categories.
+    ///
+    /// Each category maps to a different runtime helper, so it is not enough
+    /// that "some" var flag is set: the colour fixture emits `__szColorVar`
+    /// only, and the spacing/unit flags must stay false or the module pays for
+    /// imports it never calls. The other two fixtures assert the mirror image.
+    #[test]
+    fn a_dynamic_value_claims_only_its_own_var_helper() {
+        let color = transform_file(&TransformFile {
+            filename: "/repo/src/Color.tsx".to_string(),
+            source: "export const A = ({ tone }) => <div sz={{ color: tone }} />;".to_string(),
+        });
+        assert!(color.code.contains("__szColorVar("), "{}", color.code);
+        assert!(color.metadata.uses_color_var, "emitted helper needs import");
+        assert!(!color.metadata.uses_spacing_var);
+        assert!(!color.metadata.uses_unit_var);
+
+        let spacing = transform_file(&TransformFile {
+            filename: "/repo/src/Spacing.tsx".to_string(),
+            source: "export const A = ({ pad }) => <div sz={{ p: pad }} />;".to_string(),
+        });
+        assert!(spacing.code.contains("__szSpacingVar("), "{}", spacing.code);
+        assert!(spacing.metadata.uses_spacing_var);
+        assert!(!spacing.metadata.uses_color_var);
+        assert!(!spacing.metadata.uses_unit_var);
+
+        let unit = transform_file(&TransformFile {
+            filename: "/repo/src/Unit.tsx".to_string(),
+            source: "export const A = ({ deg }) => <div sz={{ rotate: deg }} />;".to_string(),
+        });
+        assert!(unit.metadata.uses_unit_var);
+        assert!(!unit.metadata.uses_color_var);
+        assert!(!unit.metadata.uses_spacing_var);
+    }
+
+    /// A file the parser rejected must keep its ORIGINAL source.
+    ///
+    /// The safelist is dropped for such a file, so any className the rewrite
+    /// managed to splice in would reach the HTML with no matching rule
+    /// generated — invisible breakage under Tailwind `source(none)`. The
+    /// fixture carries real `sz` so the assertion has something to catch; with
+    /// a source that has no `sz` the rewrite is a no-op either way and the
+    /// check proves nothing.
+    #[test]
+    fn a_parse_error_leaves_real_sz_source_untouched() {
+        let file = TransformFile {
+            filename: "/repo/src/Broken.tsx".to_string(),
+            source: "export const App = () => <div sz={{ p: 4 }} />;\nconst broken = ;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(
+            result.code, file.source,
+            "a rejected file must not be rewritten"
+        );
+        assert!(!result.metadata.transformed);
+        assert!(!result.code.contains("className"));
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.contains("[csszyx] parse error in")),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+
+    /// Same contract for the AST budget: partial walk, no rewrite.
+    #[test]
+    fn a_budget_exceeded_file_leaves_real_sz_source_untouched() {
+        let source = format!(
+            "export const App = () => <><div sz={{{{ p: 4 }}}} />{}</>;",
+            "<span />".repeat(crate::transform::parser::AST_BUDGET + 1)
+        );
+        let file = TransformFile {
+            filename: "/repo/src/Big.tsx".to_string(),
+            source,
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(result.metadata.ast_budget_exceeded);
+        assert_eq!(
+            result.code, file.source,
+            "a budget-tripped file must not be rewritten"
+        );
+        assert!(!result.metadata.transformed);
+        assert!(!result.code.contains("className"));
+        assert!(result.classes.is_empty(), "partial safelists are dropped");
+    }
+
+    /// Ordinary JSX must survive the stack-overflow guard.
+    ///
+    /// The guard counts bracket nesting, and every real file opens and closes
+    /// hundreds of brackets at shallow depth. A depth counter that only ever
+    /// climbs would put every one of them over the limit, so the whole project
+    /// would silently skip transformation while the existing guard test — one
+    /// long run of `{` that never closes — kept passing.
+    #[test]
+    fn ordinary_shallow_jsx_stays_under_the_nesting_guard() {
+        let rows = (0..120)
+            .map(|index| format!("  <li key={{{index}}} sz={{{{ p: 2 }}}}>{{label({index})}}</li>"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let file = TransformFile {
+            filename: "/repo/src/List.tsx".to_string(),
+            source: format!("export const List = () => (\n<ul>\n{rows}\n</ul>\n);"),
+        };
+
+        assert!(
+            super::max_source_nesting_depth(&file.source) <= super::MAX_SOURCE_NESTING_DEPTH,
+            "shallow JSX measured as deeply nested"
+        );
+
+        let result = transform_file(&file);
+
+        assert!(result.metadata.transformed, "a normal file must transform");
+        assert!(result.classes.iter().any(|class| class == "p-2"));
+        assert!(
+            !result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.contains("source nesting exceeded")),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+
+    /// An `sz` attribute the engine cannot read must say so.
+    ///
+    /// The whole collector is one function; if it returns nothing, a bare `sz`
+    /// or an element-valued `sz` is skipped with no class, no rewrite, and no
+    /// word to the author about why their styles vanished.
+    #[test]
+    fn an_unreadable_sz_attribute_is_reported() {
+        let file = TransformFile {
+            filename: "/repo/src/Unsupported.tsx".to_string(),
+            source: "export const App = () => <div sz />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.contains("unsupported dynamic sz attribute")),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+
+    /// A variant object that HAPPENS to set a colour keeps its own checks.
+    ///
+    /// The descent skips a nested object holding a `color` member, because
+    /// that is the documented colour-opacity spelling on a property key. A
+    /// variant like `hover` is not a property key, and `hover: { color: ... }`
+    /// is one of the most common shapes there is — so a guard that stops at
+    /// the colour alone takes the whole variant body out of every check, and
+    /// the typo and the dead spacing step sitting beside it go unmentioned.
+    #[test]
+    fn a_variant_object_setting_a_colour_still_gets_its_own_diagnostics() {
+        let file = TransformFile {
+            filename: "/repo/src/Hover.tsx".to_string(),
+            source: "export const App = () => <div sz={{ hover: { color: 'white', paddng: 4, p: 1.4 } }} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("\"paddng\""),
+            "the typo must still be reported: {diagnostics}"
+        );
+        assert!(
+            diagnostics.contains("not on Tailwind's spacing scale"),
+            "the dead step must still be reported: {diagnostics}"
+        );
+
+        // The colour-opacity form on a real PROPERTY key is the shape the
+        // guard exists for, and must stay quiet.
+        let opacity = transform_static_classes(
+            &TransformFile {
+                filename: "/repo/src/Opacity.tsx".to_string(),
+                source:
+                    "export const App = () => <div sz={{ bg: { color: 'red-500', op: 50 } }} />;"
+                        .to_string(),
+            },
+            0,
+            std::time::Instant::now(),
+        );
+        assert!(opacity.diagnostics.is_empty(), "{:?}", opacity.diagnostics);
+    }
+
+    /// A project-defined variant is not a mistyped property.
+    ///
+    /// The "this is a property, not a variant" warning is aimed at
+    /// `p: { bg: ... }`, where the nested object really does generate nothing.
+    /// A custom breakpoint declared through `@theme` looks the same to the
+    /// checker but is entirely correct, and telling its author their working
+    /// styles generate no CSS sends them to rewrite code that was already
+    /// right.
+    #[test]
+    fn a_custom_theme_variant_is_not_reported_as_a_property() {
+        let custom = transform_static_classes(
+            &TransformFile {
+                filename: "/repo/src/Theme.tsx".to_string(),
+                source: "export const App = () => <div sz={{ tablet: { p: 4 } }} />;".to_string(),
+            },
+            0,
+            std::time::Instant::now(),
+        );
+        assert!(
+            !custom
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.contains("is a property, not a variant")),
+            "{:?}",
+            custom.diagnostics
+        );
+        assert!(custom.classes.iter().any(|class| class == "tablet:p-4"));
+
+        // The real case the warning is for still warns.
+        let property = transform_static_classes(
+            &TransformFile {
+                filename: "/repo/src/Property.tsx".to_string(),
+                source: "export const App = () => <div sz={{ bg: { foo: 1 } }} />;".to_string(),
+            },
+            0,
+            std::time::Instant::now(),
+        );
+        assert!(
+            property
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.contains("is a property, not a variant")),
+            "{:?}",
+            property.diagnostics
+        );
+    }
+
+    /// The "unknown property" branch must not borrow the numeric-key wording.
+    ///
+    /// The two diagnostics send the author in opposite directions: one says a
+    /// key was ignored for being numeric, the other offers the spelling they
+    /// probably meant. A misspelled name routed to the numeric branch reads as
+    /// advice about a problem the code does not have.
+    #[test]
+    fn a_misspelled_key_is_reported_as_unknown_not_numeric() {
+        let file = TransformFile {
+            filename: "/repo/src/Typo.tsx".to_string(),
+            source: "export const App = () => <div sz={{ colr: 'red-500' }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("Unknown property \"colr\""),
+            "{diagnostics}"
+        );
+        assert!(!diagnostics.contains("numeric key"), "{diagnostics}");
     }
 }

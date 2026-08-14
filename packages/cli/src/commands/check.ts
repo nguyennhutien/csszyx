@@ -171,25 +171,97 @@ async function reportDeadClasses(
     const found = [...origins].filter(([token]) => deadPerOracle.every(dead => dead.has(token)));
     const accepted = found.filter(([token]) => vouched.has(token));
     const dead = found.filter(([token]) => !vouched.has(token));
+    // The opacity verdict follows the dead-class consensus rule for the same
+    // reason: one stylesheet serving the modifier is enough for it to be real,
+    // and erring the other way would report working classes.
+    const brokenPerOracle = oracles.map(
+        oracle =>
+            new Map(oracle.findBrokenOpacity(emitted).map(entry => [entry.token, entry.value])),
+    );
+    const broken = [...origins]
+        .filter(
+            ([token]) =>
+                !vouched.has(token) && brokenPerOracle.every(byToken => byToken.has(token)),
+        )
+        .map(([token, origin]) => ({
+            token,
+            origin,
+            value: brokenPerOracle[0].get(token) as string,
+        }));
+    return printDeadClassReport({
+        dead,
+        broken,
+        acceptedCount: accepted.length,
+        emittedCount: origins.size,
+    });
+}
+
+/** One emitted class that carries an opacity modifier the stylesheet drops. */
+interface BrokenOpacityFinding {
+    token: string;
+    origin: string;
+    value: string;
+}
+
+/** What the dead-class scan concluded, ready to print. */
+interface DeadClassReport {
+    dead: ReadonlyArray<readonly [string, string]>;
+    broken: readonly BrokenOpacityFinding[];
+    acceptedCount: number;
+    emittedCount: number;
+}
+
+/**
+ * Print what the dead-class scan found.
+ *
+ * Split from the scan so each side stays readable on its own: the scan decides
+ * what is dead across every stylesheet, and this decides how to say it.
+ *
+ * @param report - What the scan concluded.
+ * @returns Whether anything was found that should fail the command.
+ */
+function printDeadClassReport(report: DeadClassReport): boolean {
+    const { dead, broken, acceptedCount, emittedCount } = report;
     // Say how many were waved through even on a clean run: an allow list that
     // silently covers a growing pile is the failure mode of every such list.
-    const acceptedNote = accepted.length > 0 ? `, ${accepted.length} accepted` : '';
+    const acceptedNote = acceptedCount > 0 ? `, ${acceptedCount} accepted` : '';
 
-    if (dead.length === 0) {
+    if (dead.length === 0 && broken.length === 0) {
         printSuccess(
-            `Every one of the ${origins.size} emitted class(es) produces CSS under this project's Tailwind${acceptedNote}.`,
+            `Every one of the ${emittedCount} emitted class(es) produces CSS under this project's Tailwind${acceptedNote}.`,
         );
         return false;
     }
 
-    printWarn('\nClasses that produce no CSS:');
-    for (const [token, origin] of dead) {
-        printInfo(`  ${token.padEnd(28)} ${origin}`);
+    if (dead.length > 0) {
+        printWarn('\nClasses that produce no CSS:');
+        for (const [token, origin] of dead) {
+            printInfo(`  ${token.padEnd(28)} ${origin}`);
+        }
+        printWarn(
+            `\n✖ ${dead.length} emitted class(es) style nothing. Each is in the DOM and does ` +
+                "nothing: fix the sz key, or define the class with Tailwind's @utility.",
+        );
     }
-    printWarn(
-        `\n✖ ${dead.length} emitted class(es) style nothing. Each is in the DOM and does ` +
-            "nothing: fix the sz key, or define the class with Tailwind's @utility.",
-    );
+
+    if (broken.length > 0) {
+        // Judged from the compiled rule, never from the token's text: Tailwind
+        // v4 wraps the modifier in color-mix(), which dims any valid color, so
+        // the only broken shape is a var() chain ending in a bare comma
+        // triplet — invalid inside color-mix(), silently dropped by browsers.
+        printWarn('\nOpacity modifiers the compiled stylesheet drops:');
+        for (const entry of broken) {
+            printInfo(`  ${entry.token.padEnd(28)} ${entry.origin}`);
+            printInfo(
+                `      its theme token resolves to the bare triplet "${entry.value}", which ` +
+                    'color-mix() cannot dim — wrap the variable, e.g. rgb(var(--your-triplet)).',
+            );
+        }
+        printWarn(
+            `\n✖ ${broken.length} emitted class(es) carry an opacity modifier that does not ` +
+                'survive compilation.',
+        );
+    }
     return true;
 }
 

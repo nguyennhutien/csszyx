@@ -25,18 +25,15 @@ describe('csszyx_validate', () => {
     });
 
     it('surfaces compiler console warnings as warnings', () => {
-        // A custom theme token with an /op modifier is only alpha-capable if
-        // the token itself is — the compiler flags that via console.warn,
-        // which the tool captures instead of letting it vanish into the MCP
-        // server's stderr. (Unique token name: the compiler dedupes this
-        // warning per token per process.)
+        // A spacing value off Tailwind's quarter-step scale generates no CSS —
+        // the compiler flags that via console.warn, which the tool captures
+        // instead of letting it vanish into the MCP server's stderr. (Unique
+        // value: the compiler dedupes this warning per key/value per process.)
         const before = console.warn;
-        const data = JSON.parse(
-            handleValidate({ sz: { bg: { color: 'validatetesttoken', op: 50 } } }).content[0].text,
-        );
+        const data = JSON.parse(handleValidate({ sz: { p: 1.3 } }).content[0].text);
         expect(data.valid).toBe(true);
         expect(data.warnings).toHaveLength(1);
-        expect(data.warnings[0]).toContain('alpha-capable');
+        expect(data.warnings[0]).toContain('spacing scale');
         // The interceptor must not leak past the call.
         expect(console.warn).toBe(before);
     });

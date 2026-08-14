@@ -431,6 +431,21 @@ is not treated as absent—it remains a valid value.
 // absent:  no flex utility and no --_sz-flex value
 ```
 
+Keys whose value is a **boolean** are the exception — `border` and every side,
+`ring`, `outline`, `shadow`, `truncate`. They toggle a bare class rather than
+carrying a value, so a runtime value on them compiles to a conditional class
+instead of a CSS variable. React discards booleans in `style`, and the valued
+utility means something else anyway (`border-b-(--var)` is a border *color*,
+while `border-b` is a *width*):
+
+```tsx
+<div sz={{ borderB: isOpen }} />
+// → className={__szBoolClass(isOpen, "borderB", "border-b")}
+// true → "border-b"; false/null/undefined/"" → no class, silently
+// any other type → the class is omitted and csszyx warns, because the value
+// cannot mean anything here
+```
+
 When the generated CSS variable sits beside one direct object-literal JSX prop
 spread—or one conditional whose branches are object literals—the compiler
 injects it into every branch's `style`. This preserves authored style without

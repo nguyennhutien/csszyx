@@ -67,17 +67,31 @@ const runServer = async (label, serverPath) => {
     });
     try {
         send('open', { file: fileName, fileContent: source, projectRootPath: projectRoot });
-        await new Promise(resolveDelay => setTimeout(resolveDelay, 800));
-        const request = send('completionInfo', {
-            file: fileName,
-            line: 1,
-            offset: completionOffset,
-        });
-        const response = await responseFor(request);
-        const owned = (response.body?.entries ?? []).filter(
-            entry =>
-                entry.data?.owner === '@csszyx/ts-plugin' && entry.data?.schema === 1,
-        );
+        // Ask until the plugin answers rather than sleeping a fixed time and
+        // hoping it has loaded by then. tsserver accepts requests before its
+        // plugins are in place, so a fixed wait is a guess about the machine:
+        // 800 ms was enough here and not on a loaded CI runner, where the base
+        // service answered alone and an empty result read as a plugin that
+        // never loaded. Polling states the condition the test actually needs,
+        // and a plugin that is genuinely broken still fails, one deadline later.
+        const deadline = Date.now() + 30_000;
+        let response;
+        let owned = [];
+        while (true) {
+            response = await responseFor(
+                send('completionInfo', {
+                    file: fileName,
+                    line: 1,
+                    offset: completionOffset,
+                }),
+            );
+            owned = (response.body?.entries ?? []).filter(
+                entry =>
+                    entry.data?.owner === '@csszyx/ts-plugin' && entry.data?.schema === 1,
+            );
+            if (owned.length > 0 || Date.now() >= deadline) break;
+            await new Promise(resolveDelay => setTimeout(resolveDelay, 100));
+        }
         return { response, owned };
     } finally {
         child.kill();

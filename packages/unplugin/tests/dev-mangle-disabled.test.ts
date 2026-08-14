@@ -1,7 +1,11 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { vitePlugin } from '../src/unplugin.js';
 import { freshFixtureRoot } from './fixture-root.js';
+
+const MODULE_SOURCE = 'export const A = () => <div sz={{ p: 4, gap: 8 }} />;';
 
 /**
  * Mangling is a production bundle-size optimization with no value in a dev server,
@@ -29,12 +33,13 @@ async function injectedMangleMap(command: 'serve' | 'build'): Promise<string> {
     };
 
     const root = freshFixtureRoot('dev-mangle');
+    // On disk before `configResolved`: a build settles the mangle map from the
+    // prescan, so a module the prescan never walked would fail the late-census
+    // check instead of reaching the map at all.
+    mkdirSync(`${root}/src`, { recursive: true });
+    writeFileSync(`${root}/src/A.tsx`, MODULE_SOURCE, 'utf8');
     await call('configResolved', { root, command });
-    await call(
-        'transform',
-        'export const A = () => <div sz={{ p: 4, gap: 8 }} />;',
-        `${root}/src/A.tsx`,
-    );
+    await call('transform', MODULE_SOURCE, `${root}/src/A.tsx`);
     await call('buildEnd');
     const out = await call('transformIndexHtml', '<html><head></head><body></body></html>');
     const html = typeof out === 'string' ? out : ((out as { html?: string })?.html ?? '');

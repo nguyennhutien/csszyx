@@ -291,6 +291,11 @@ pub struct SiteFallbackIr {
     pub detail: String,
     /// Byte offset of the unresolved expression, for `line:column`.
     pub offset: u32,
+    /// Disqualifying position inside an szv config, dot-joined, for the
+    /// `SzvFactory` kind. Empty (and absent from the serialized IR) for every
+    /// other kind, so existing IR snapshots keep their bytes.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub path: String,
 }
 
 /// Construct that produced a build-time-unresolvable diagnostic.
@@ -321,6 +326,12 @@ pub enum RuntimeFallbackKindIr {
     Member,
     /// Anything else; `detail` carries the Babel-compatible node type name.
     Other,
+    /// A call whose callee names an szv factory THIS parse saw and refused to
+    /// precompile; `detail` carries the factory name and the site fallback's
+    /// `path` names the disqualifying position inside its config. Only the
+    /// szr site produces it — an sz attribute never carries factory-level
+    /// knowledge.
+    SzvFactory,
 }
 
 /// Why an sz expression was left to the runtime, for the fallback matrix.
@@ -397,6 +408,13 @@ pub struct StaticTernaryIr {
     pub consequent_classes: Vec<String>,
     /// Classes produced by lowering the alternate branch, in source order.
     pub alternate_classes: Vec<String>,
+    /// The sz key when this conditional is a boolean-only key carrying a
+    /// runtime value, in which case `test_span` covers that value and the
+    /// rewrite emits `__szBoolClass` instead of a `test ? … : …` expression:
+    /// only a boolean may toggle the class, and the helper says so for
+    /// anything else rather than styling the wrong property.
+    #[serde(default)]
+    pub bool_class_key: Option<String>,
 }
 
 /// One item from an `sz={[...]}` later-wins composition.

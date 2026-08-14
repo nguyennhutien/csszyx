@@ -101,6 +101,8 @@ pub struct NativeTransformMetadata {
     pub uses_spacing_var: bool,
     /// Whether the result imports the runtime unit-var helper (angle/duration).
     pub uses_unit_var: bool,
+    /// Whether the result imports the runtime bool-class helper.
+    pub uses_bool_class: bool,
     /// Producer identity for cache safety.
     pub producer: String,
     /// Whether native AST budget protection fired.
@@ -246,6 +248,7 @@ impl From<TransformResult> for NativeTransformResult {
                 uses_color_var: result.metadata.uses_color_var,
                 uses_spacing_var: result.metadata.uses_spacing_var,
                 uses_unit_var: result.metadata.uses_unit_var,
+                uses_bool_class: result.metadata.uses_bool_class,
                 producer: producer_to_js(result.metadata.producer).to_string(),
                 ast_budget_exceeded: result.metadata.ast_budget_exceeded,
                 timings: NativeTransformTimings::from(result.metadata.timings),

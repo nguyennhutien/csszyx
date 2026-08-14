@@ -139,6 +139,7 @@ pub fn parse_source_shell_with_registries(
             szr_import: None,
             szr_call_args: Vec::new(),
             pending_szr_fallbacks: Vec::new(),
+            szv_disqualified: Vec::new(),
             szv_candidates: Vec::new(),
             szv_call_sites: Vec::new(),
             szv_type_query_counts: Vec::new(),
@@ -238,6 +239,10 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     /// whether that is a real fallback is decided at finalize, after the szv
     /// precompile has proven (or failed to prove) the argument.
     pending_szr_fallbacks: Vec<PendingSzrFallback>,
+    /// szv factories THIS parse saw and refused: binding name to the
+    /// disqualifying position inside the config, for the szr fallback that
+    /// would otherwise blame the factory with generic call advice.
+    szv_disqualified: Vec<(String, String)>,
     /// File-local `const F = szv(<literal config>)` candidates that passed the
     /// shape and overlap checks (reference accounting is deferred).
     szv_candidates: Vec<SzvFactoryRecord>,
@@ -909,6 +914,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                                     kind,
                                     detail,
                                     offset: fallback_expression_offset(expression),
+                                    path: String::new(),
                                 },
                             });
                         }
@@ -1047,16 +1053,27 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 continue;
             };
             let Expression::ObjectExpression(object) = unwrap_expression(argument) else {
+                self.record_szv_disqualified(&name, String::from("config"));
                 continue;
             };
-            let Some(config_object) = strict_literal_object(object) else {
-                continue;
+            let config_object = match strict_literal_object_diagnosed(object, "") {
+                Ok(config_object) => config_object,
+                Err(path) => {
+                    self.record_szv_disqualified(&name, path);
+                    continue;
+                }
             };
-            let Some(config) = super::szv_precompile::static_szv_config_from_object(&config_object)
-            else {
-                continue;
+            let config = match super::szv_precompile::static_szv_config_from_object_diagnosed(
+                &config_object,
+            ) {
+                Ok(config) => config,
+                Err(path) => {
+                    self.record_szv_disqualified(&name, path);
+                    continue;
+                }
             };
-            if !super::szv_precompile::szv_config_free_of_overlap(&config) {
+            if let Some(path) = super::szv_precompile::overlap_disqualify_path(&config) {
+                self.record_szv_disqualified(&name, path);
                 continue;
             }
             self.szv_candidates.push(SzvFactoryRecord {
@@ -1253,7 +1270,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     /// unproven after the szv precompile, in their recorded (source) order.
     fn emit_pending_szr_fallbacks(&mut self, replaced_spans: &[super::TextSpan]) {
         let pending = std::mem::take(&mut self.pending_szr_fallbacks);
-        for record in pending {
+        for mut record in pending {
             let proven = self
                 .szr_call_args
                 .iter()
@@ -1263,7 +1280,30 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             if proven {
                 continue;
             }
+            // A call to a factory this parse saw declared as szv and refused:
+            // the generic call advice ("convert to szv()") is circular there,
+            // so name the factory as what it is and the config position that
+            // disqualified it. Only CONFIG-level refusals rewrite — a factory
+            // that qualified but kept its runtime path for usage reasons has
+            // nothing wrong in its config to point at.
+            if record.fallback.kind == super::RuntimeFallbackKindIr::Call {
+                if let Some((_, path)) = self
+                    .szv_disqualified
+                    .iter()
+                    .find(|(name, _)| *name == record.fallback.detail)
+                {
+                    record.fallback.kind = super::RuntimeFallbackKindIr::SzvFactory;
+                    record.fallback.path.clone_from(path);
+                }
+            }
             self.ir.site_fallbacks.push(record.fallback);
+        }
+    }
+
+    /// Remember one refused szv factory, first declaration wins.
+    fn record_szv_disqualified(&mut self, name: &str, path: String) {
+        if !self.szv_disqualified.iter().any(|(seen, _)| seen == name) {
+            self.szv_disqualified.push((name.to_string(), path));
         }
     }
 
@@ -1347,6 +1387,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             kind,
             detail,
             offset: fallback_expression_offset(expression),
+            path: String::new(),
         });
     }
 
@@ -1990,6 +2031,7 @@ fn static_ternary_from_conditional(
             test_span: text_span(conditional.test.span()),
             consequent_classes,
             alternate_classes,
+            bool_class_key: None,
         },
         text_span(conditional.span),
     ))
@@ -2207,6 +2249,7 @@ fn static_array_ternary_from_conditional(
         test_span: text_span(conditional.test.span()),
         consequent_classes: branch_classes(&conditional.consequent)?,
         alternate_classes: branch_classes(&conditional.alternate)?,
+        bool_class_key: None,
     })
 }
 
@@ -2469,52 +2512,76 @@ fn strict_static_selection(
     Some(selection)
 }
 
-/// Evaluate an object expression under the Babel lane's literal-only
-/// vocabulary — string/number/boolean literals, a negated number, nested
-/// objects; TS wrappers and parentheses unwrap. Deliberately NOT the
-/// identifier-resolving extractor: a broader evaluator here would let this
-/// engine qualify a config the JS lanes bail on.
-fn strict_literal_object(object: &ObjectExpression<'_>) -> Option<StaticSzObject> {
+/// Evaluate an object expression under the literal-only vocabulary —
+/// string/number/boolean literals, a negated number, nested objects; TS
+/// wrappers and parentheses unwrap. Deliberately NOT the
+/// identifier-resolving extractor: a broader evaluator here would qualify a
+/// config the runtime lowering bails on.
+///
+/// `Err` names the first non-literal position as a dot-joined key path under
+/// `prefix`, because one walk serves both the precompile's verdict and the
+/// szr diagnostic that has to tell the author WHERE their config stopped
+/// being static. A shape with no key to name — a spread, a computed key —
+/// reports the object holding it.
+fn strict_literal_object_diagnosed(
+    object: &ObjectExpression<'_>,
+    prefix: &str,
+) -> Result<StaticSzObject, String> {
+    let holder = || {
+        if prefix.is_empty() {
+            String::from("config")
+        } else {
+            prefix.to_string()
+        }
+    };
     let mut properties = Vec::new();
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(entry) = property else {
-            return None;
+            return Err(holder());
         };
         if entry.computed {
-            return None;
+            return Err(holder());
         }
-        let key = static_property_key(&entry.key)?;
-        let value = strict_literal_value(&entry.value)?;
+        let Some(key) = static_property_key(&entry.key) else {
+            return Err(holder());
+        };
+        let path = if prefix.is_empty() {
+            key.clone()
+        } else {
+            format!("{prefix}.{key}")
+        };
+        let value = strict_literal_value_diagnosed(&entry.value, &path)?;
         properties.push(super::StaticSzProperty {
             key,
             value,
             span: text_span(entry.span),
         });
     }
-    Some(StaticSzObject { properties })
+    Ok(StaticSzObject { properties })
 }
 
-/// One literal value for `strict_literal_object`.
-fn strict_literal_value(expression: &Expression<'_>) -> Option<StaticSzValue> {
+/// One literal value for `strict_literal_object_diagnosed`.
+fn strict_literal_value_diagnosed(
+    expression: &Expression<'_>,
+    path: &str,
+) -> Result<StaticSzValue, String> {
     match unwrap_expression(expression) {
-        Expression::StringLiteral(literal) => {
-            Some(StaticSzValue::String(literal.value.to_string()))
-        }
-        Expression::NumericLiteral(literal) => Some(StaticSzValue::Number(literal.value)),
-        Expression::BooleanLiteral(literal) => Some(StaticSzValue::Boolean(literal.value)),
+        Expression::StringLiteral(literal) => Ok(StaticSzValue::String(literal.value.to_string())),
+        Expression::NumericLiteral(literal) => Ok(StaticSzValue::Number(literal.value)),
+        Expression::BooleanLiteral(literal) => Ok(StaticSzValue::Boolean(literal.value)),
         Expression::UnaryExpression(unary) => {
             if unary.operator != UnaryOperator::UnaryNegation {
-                return None;
+                return Err(path.to_string());
             }
             match unwrap_expression(&unary.argument) {
-                Expression::NumericLiteral(literal) => Some(StaticSzValue::Number(-literal.value)),
-                _ => None,
+                Expression::NumericLiteral(literal) => Ok(StaticSzValue::Number(-literal.value)),
+                _ => Err(path.to_string()),
             }
         }
         Expression::ObjectExpression(nested) => {
-            strict_literal_object(nested).map(StaticSzValue::Object)
+            strict_literal_object_diagnosed(nested, path).map(StaticSzValue::Object)
         }
-        _ => None,
+        _ => Err(path.to_string()),
     }
 }
 
@@ -3571,6 +3638,21 @@ fn partial_object_from_object_expression(
                 if !is_runtime_expression(&property.value) {
                     return None;
                 }
+
+                // A key whose literal vocabulary is a boolean has no usable
+                // css-var form: React drops booleans in `style`, so the
+                // variable is never set, and the valued utility resolves to a
+                // different CSS property than the bare class. Lower the value
+                // as a conditional class through the runtime helper instead.
+                if let Some(ternary) = bool_class_ternary_from_property(
+                    &key,
+                    text_span(unwrap_expression(&property.value).span()),
+                    variant_keys,
+                ) {
+                    set_partial_ternary(&mut partial, ternary);
+                    continue;
+                }
+
                 // Slice the UNWRAPPED expression span: `sz={{ p: (pad) }}` must
                 // emit `calc(${pad} …)` like the JS engines, not `calc(${(pad)} …)`
                 // — redundant parens broke rust==oxc byte parity.
@@ -3682,6 +3764,7 @@ fn conditional_spread_ternary_from_object_expression(
         test_span: text_span(conditional.test.span()),
         consequent_classes: consequent,
         alternate_classes: alternate,
+        bool_class_key: None,
     })
 }
 
@@ -3717,6 +3800,7 @@ fn conditional_class_from_property(
         test_span: text_span(conditional.test.span()),
         consequent_classes: conditional_property_classes(key, consequent, variant_keys),
         alternate_classes: conditional_property_classes(key, alternate, variant_keys),
+        bool_class_key: None,
     })
 }
 
@@ -3738,6 +3822,7 @@ fn nullable_conditional_class_from_property(
                 test_span: text_span(conditional.test.span()),
                 consequent_classes: Vec::new(),
                 alternate_classes: Vec::new(),
+                bool_class_key: None,
             },
             None,
         ));
@@ -3753,6 +3838,13 @@ fn nullable_conditional_class_from_property(
             (conditional_property_classes(key, value, variant_keys), None)
         } else {
             if !is_runtime_expression(present) {
+                return None;
+            }
+            // A boolean-only key has no css-var form to guard with a companion
+            // conditional. Decline the whole shape so the caller lowers the
+            // conditional itself as the helper's argument: `undefined` there
+            // resolves to no class, which is what this branch encodes anyway.
+            if super::generated::tables::is_boolean_only_dynamic(key) {
                 return None;
             }
             let mut prop =
@@ -3773,6 +3865,7 @@ fn nullable_conditional_class_from_property(
             } else {
                 present_classes
             },
+            bool_class_key: None,
         },
         dynamic_prop,
     ))
@@ -3899,6 +3992,7 @@ fn color_opacity_ternary_from_object(
                     Some(alternate),
                     variant_keys,
                 ),
+                bool_class_key: None,
             })
         }
         (Some(conditional), None) => {
@@ -3926,6 +4020,7 @@ fn color_opacity_ternary_from_object(
                     static_op,
                     variant_keys,
                 ),
+                bool_class_key: None,
             })
         }
         _ => None,
@@ -3963,6 +4058,32 @@ fn color_opacity_branch_classes(
         }],
     };
     lower_static_sz_object(&wrap_in_variant_keys(variant_keys, leaf))
+}
+
+/// Lower a runtime value on a boolean-only key into a conditional bare class,
+/// or `None` when the key takes real values and keeps the css-var lane.
+///
+/// `test_span` carries the runtime value rather than a condition: the rewrite
+/// passes it to `__szBoolClass`, which returns the class for `true`, nothing
+/// for the absent shapes, and warns for anything else.
+fn bool_class_ternary_from_property(
+    key: &str,
+    expression_span: TextSpan,
+    variant_keys: &[String],
+) -> Option<StaticTernaryIr> {
+    if !super::generated::tables::is_boolean_only_dynamic(key) {
+        return None;
+    }
+    Some(StaticTernaryIr {
+        test_span: expression_span,
+        consequent_classes: conditional_property_classes(
+            key,
+            StaticSzValue::Boolean(true),
+            variant_keys,
+        ),
+        alternate_classes: Vec::new(),
+        bool_class_key: Some(key.to_string()),
+    })
 }
 
 fn dynamic_css_var_from_property(
@@ -4326,6 +4447,26 @@ fn static_value_from_expression(
                 ctx.program,
             )?;
             static_value_from_expression(initializer, ctx)
+        }
+        // A value read off a constant map, e.g. `{ z: LAYER.appChrome }`.
+        // Resolving the object half reuses the arm above, so a map reaches
+        // this point exactly when the bare identifier would have; all that is
+        // added is the read. Only a named property: `LAYER[key]` picks its key
+        // at run time, and no build-time read of the map can be right.
+        Expression::StaticMemberExpression(member) => {
+            match static_value_from_expression(&member.object, ctx)? {
+                // Last match, not first: duplicate keys are kept in source
+                // order on purpose, and the later one is what JavaScript reads.
+                // A property the map does not carry resolves to nothing rather
+                // than to a guess, which leaves the caller on the runtime path.
+                StaticSzValue::Object(object) => object
+                    .properties
+                    .into_iter()
+                    .rev()
+                    .find(|property| property.key == member.property.name.as_str())
+                    .map(|property| property.value),
+                _ => None,
+            }
         }
         _ => None,
     }
@@ -4944,6 +5085,44 @@ export const cls = szr(localCard({ pad: 'sm' }));";
         assert!(parsed.diagnostics.is_empty());
         assert_eq!(parsed.ir.sz_attributes.len(), 1);
         assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["p-4"]);
+    }
+
+    #[test]
+    fn parser_shell_lowers_a_dynamic_boolean_only_key_to_a_bool_class_conditional() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ on }) => <div sz={{ borderB: on }} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(
+            attribute.dynamic_css_vars.is_empty(),
+            "a boolean-only key must never take the css-var lane"
+        );
+        let ternary = &attribute.ternaries[0];
+        assert_eq!(ternary.bool_class_key.as_deref(), Some("borderB"));
+        assert_eq!(ternary.consequent_classes, ["border-b"]);
+        assert!(ternary.alternate_classes.is_empty());
+        // The bare class must reach the safelist, or Tailwind emits no rule for
+        // it and the toggle styles nothing.
+        assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["border-b"]);
+    }
+
+    #[test]
+    fn parser_shell_keeps_value_typed_keys_on_the_css_var_lane() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ v }) => <div sz={{ z: v, w: v, bg: v, p: v }} />;"
+                .to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(attribute.ternaries.is_empty());
+        assert_eq!(attribute.dynamic_css_vars.len(), 4);
     }
 
     #[test]
@@ -6802,5 +6981,214 @@ export const cls = szr(localCard({ pad: 'sm' }));";
     #[test]
     fn parser_shell_defaults_unknown_extensions_to_tsx() {
         assert!(source_type_for_path("/repo/src/App.unknown").is_jsx());
+    }
+
+    /// Safelist candidates must survive the wrappers TypeScript authors write.
+    ///
+    /// These sz values all fall back to the runtime, which is correct and
+    /// keeps the page rendering. What must ALSO happen is that the classes
+    /// visible inside them reach the safelist, because Tailwind is configured
+    /// with `source(none)` and generates a rule only for a class some build
+    /// step named. Miss one and the element gets the right class attribute
+    /// with no rule behind it: nothing renders, nothing warns, and the value
+    /// still "works" in every unit test that only looks at the markup.
+    ///
+    /// Every row is a wrapper or spread shape that reaches the collector
+    /// through its own arm, so one row per arm is what keeps them all alive.
+    #[test]
+    fn safelist_candidates_survive_typescript_wrappers_and_spreads() {
+        for (what, source, expected) in [
+            (
+                "as const around the whole value",
+                "const A = ({ base }) => <div sz={{ ...base, p: 4 } as const} />;",
+                vec!["p-4"],
+            ),
+            (
+                "satisfies around the whole value",
+                "const A = ({ base }) => <div sz={{ ...base, p: 4 } satisfies Sz} />;",
+                vec!["p-4"],
+            ),
+            (
+                "a non-null assertion around the whole value",
+                "const A = ({ base }) => <div sz={{ ...base, p: 4 }!} />;",
+                vec!["p-4"],
+            ),
+            (
+                "parentheses around the whole value",
+                "const A = ({ base }) => <div sz={({ ...base, p: 4 })} />;",
+                vec!["p-4"],
+            ),
+            (
+                "a wrapper on the spread argument itself",
+                "const BASE = { m: 2 } as const;\nconst A = ({ rest }) => <div sz={{ ...(BASE as const), p: 4, ...rest }} />;",
+                vec!["m-2", "p-4"],
+            ),
+            (
+                "a guarded object inside an array with a spread",
+                "const BASE = { m: 2 } as const;\nconst A = ({ rest, cond }) => <div sz={[BASE, cond && { p: 4 }, ...rest]} />;",
+                vec!["m-2", "p-4"],
+            ),
+            (
+                "a named object inside an array with a spread",
+                "const BASE = { m: 2 };\nconst A = ({ rest }) => <div sz={[BASE, ...rest]} />;",
+                vec!["m-2"],
+            ),
+            (
+                "a parametric variant nested under a spread",
+                "const A = ({ x }) => <div sz={{ ...x, 'data-[open]': { p: 4 } }} />;",
+                vec!["data-[open]:p-4"],
+            ),
+            (
+                "a nested value object under a property key",
+                "const A = ({ x }) => <div sz={{ ...x, bg: { color: 'black' } }} />;",
+                vec!["bg-black"],
+            ),
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let lowered = lower_source_ir_classes(&parsed.ir);
+
+            for class in expected {
+                assert!(
+                    lowered.classes.iter().any(|found| found == class),
+                    "{what}: expected {class} in the safelist, got {:?}\n{source}",
+                    lowered.classes
+                );
+            }
+        }
+    }
+
+    /// A spread of a named object stays STATIC through its wrappers.
+    ///
+    /// This shape is the ordinary way a component library shares a base style,
+    /// and losing a wrapper here costs more than the safelist: the value stops
+    /// resolving at build time, so the whole attribute falls back to a runtime
+    /// call that a zero-runtime build was never meant to make. The assertion
+    /// is on the resolved half — no fallback, both halves of the merged object
+    /// present — because a candidate-only check would still pass while the
+    /// static resolution quietly disappeared.
+    #[test]
+    fn a_spread_of_a_named_object_resolves_through_its_wrappers() {
+        for (what, source) in [
+            (
+                "as const",
+                "const BASE = { m: 2 };\nconst A = () => <div sz={{ ...(BASE as const), p: 4 }} />;",
+            ),
+            (
+                "satisfies",
+                "const BASE = { m: 2 };\nconst A = () => <div sz={{ ...(BASE satisfies Sz), p: 4 }} />;",
+            ),
+            (
+                "a non-null assertion",
+                "const BASE = { m: 2 };\nconst A = () => <div sz={{ ...BASE!, p: 4 }} />;",
+            ),
+            (
+                "parentheses",
+                "const BASE = { m: 2 };\nconst A = () => <div sz={{ ...(BASE), p: 4 }} />;",
+            ),
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let lowered = lower_source_ir_classes(&parsed.ir);
+
+            assert!(
+                !parsed.ir.sz_attributes[0].runtime_fallback,
+                "{what}: must resolve at build time"
+            );
+            assert_eq!(lowered.classes, ["m-2", "p-4"], "{what}");
+        }
+    }
+
+    /// An array element that could be an object at runtime is NOT provable.
+    ///
+    /// The bundler reads this flag to pick between the full `_szPart` and a
+    /// string-only slim build. Claiming an unknown element is provably a
+    /// string ships the slim helper, which has no object lowering at all, so
+    /// `sz={["btn", extraStyles]}` renders the string and drops every style
+    /// in the object beside it. The flag only ever fails in that direction,
+    /// which is why the true case is asserted alongside it.
+    #[test]
+    fn an_array_element_that_might_be_an_object_is_not_provable() {
+        for source in [
+            // A bare identifier: nothing here says it is not an object.
+            "const A = ({ extra }) => <div sz={['btn', extra]} />;",
+            // A member expression is just as opaque.
+            "const A = ({ theme }) => <div sz={['btn', theme.extra]} />;",
+            // One object branch is enough to disqualify the whole ternary.
+            "const A = ({ on, extra }) => <div sz={['btn', on ? 'a' : extra]} />;",
+            // A call result is unknown at build time.
+            "const A = ({ make }) => <div sz={['btn', make()]} />;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let parts = &parsed.ir.sz_attributes[0].array_parts;
+            assert!(
+                parts.iter().any(|part| part.dynamic_span.is_some()),
+                "fixture must produce a dynamic part: {source}"
+            );
+            assert!(
+                parts
+                    .iter()
+                    .filter(|part| part.dynamic_span.is_some())
+                    .all(|part| !part.dynamic_provable),
+                "an opaque element must not be called provable: {source}"
+            );
+        }
+
+        // The other direction, so the flag cannot be pinned by refusing every
+        // element: a template literal is a string by construction.
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const A = ({ n }) => <div sz={['btn', `pad-${n}`]} />;".to_string(),
+        });
+        assert!(parsed.ir.sz_attributes[0]
+            .array_parts
+            .iter()
+            .filter(|part| part.dynamic_span.is_some())
+            .all(|part| part.dynamic_provable));
+    }
+
+    /// Only `&&` makes an array element a conditional style.
+    ///
+    /// `a && obj` applies obj when a is truthy; `a || obj` and `a ?? obj`
+    /// apply it when a is FALSY. Reading the last two as guards keeps the
+    /// object but inverts the condition, so the styles land on exactly the
+    /// renders that were supposed to go without them — a bug that looks like
+    /// application logic rather than compilation.
+    #[test]
+    fn only_an_and_guard_becomes_a_conditional_array_part() {
+        for source in [
+            "const A = ({ cond }) => <div sz={[cond ?? { p: 8 }]} />;",
+            "const A = ({ cond }) => <div sz={[cond || { p: 8 }]} />;",
+        ] {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            let parts = &parsed.ir.sz_attributes[0].array_parts;
+            assert_eq!(parts.len(), 1, "{source}");
+            assert!(
+                parts[0].condition_span.is_none(),
+                "{source} must not compile as a guarded part"
+            );
+            assert!(
+                parts[0].dynamic_span.is_some(),
+                "{source} must stay a runtime element"
+            );
+        }
+
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const A = ({ cond }) => <div sz={[cond && { p: 8 }]} />;".to_string(),
+        });
+        let parts = &parsed.ir.sz_attributes[0].array_parts;
+        assert!(parts[0].condition_span.is_some(), "&& IS a guard");
+        assert_eq!(parts[0].classes, ["p-8"]);
     }
 }

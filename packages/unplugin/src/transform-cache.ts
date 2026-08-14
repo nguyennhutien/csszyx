@@ -12,7 +12,11 @@ import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@
 // font-features-[normal]) and added slot-member diagnostics — a schema-14
 // entry would replay the old class strings and the old warning set for any
 // file whose source hash did not move.
-const CACHE_SCHEMA_VERSION = 16;
+// 17: boolean-only keys now compile to a `__szBoolClass` call — a schema-16
+// entry would replay the old custom-property emit AND resurrect
+// `usesBoolClass` as `undefined`, so the helper import would be missing from
+// a file that calls it.
+const CACHE_SCHEMA_VERSION = 17;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'rust' | 'wasm';
@@ -34,6 +38,7 @@ interface SerializedTransformResult {
     usesColorVar: boolean;
     usesSpacingVar: boolean;
     usesUnitVar: boolean;
+    usesBoolClass: boolean;
     classes: string[];
     rawClassNames: string[];
     diagnostics: string[];
@@ -336,6 +341,7 @@ function serializeResult(result: CacheableTransformResult): SerializedTransformR
         usesColorVar: result.usesColorVar,
         usesSpacingVar: result.usesSpacingVar,
         usesUnitVar: result.usesUnitVar,
+        usesBoolClass: result.usesBoolClass,
         classes: [...result.classes],
         rawClassNames: [...result.rawClassNames],
         diagnostics: [...result.diagnostics],
@@ -364,6 +370,7 @@ function deserializeResult(result: SerializedTransformResult): CacheableTransfor
         usesColorVar: result.usesColorVar,
         usesSpacingVar: result.usesSpacingVar,
         usesUnitVar: result.usesUnitVar,
+        usesBoolClass: result.usesBoolClass,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),
         diagnostics: [...result.diagnostics],

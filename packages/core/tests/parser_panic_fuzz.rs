@@ -97,6 +97,33 @@ mod parser_panic_fuzz {
             "<>{/* */}</>",
             "\\\\\\\\\\\\",
             "<div sz={{ [`${x}`]: 1 }} />",
+            // An array whose only element is a spread: the array-part walk
+            // removes an element it expected to have found.
+            "<div sz={[...rest]} />",
+            "<div sz={[]} />",
+            "<div sz={[,]} />",
+            // A self-referential object in a catalog config. Following the
+            // reference without remembering where it has been recurses until
+            // the stack runs out, which aborts the process outright rather
+            // than raising anything a build can report.
+            "const A = { ...A };\nexport const s = szv({ variants: { a: { b: A } } });",
+            "const A = { ...B };\nconst B = { ...A };\nexport const s = szv({ variants: { a: { b: A } } });",
+            "const A = [A];\nexport const x = () => <div sz={A} />;",
+            // The rewrite-accounting scan subtracts from the position of an
+            // identifier, so an identifier at the very start of the file has
+            // nowhere to subtract from.
+            "szr",
+            "szr(x)",
+            "szr;\nimport { szr } from 'csszyx';",
+            // Values that are pure punctuation: each one is a prefix of a real
+            // syntax the value scanners look for, and stops one byte short of
+            // what they read.
+            "<div sz={{ p: '.' }} />",
+            "<div sz={{ p: '--' }} />",
+            "<div sz={{ p: '-(' }} />",
+            "<div sz={{ content: '\"' }} />",
+            "<div sz={{ p: '/' }} />",
+            "<div sz={{ p: '/50' }} />",
             &unbalanced_open,
             &unbalanced_mix,
             &nested_variants,

@@ -34,6 +34,8 @@ import { pathToFileURL } from 'node:url';
 
 import fg from 'fast-glob';
 
+import { brokenOpacityValue, collectCustomProperties } from './opacity-verdict.js';
+
 /** A stylesheet handed back to Tailwind's loader. */
 interface LoadedStylesheet {
     path: string;
@@ -99,6 +101,16 @@ export type EmittedClassOracle =
            * @returns The subset that styles nothing, in the given order.
            */
           findDead(classes: readonly string[]): string[];
+          /**
+           * Which of these classes carry a slash modifier that provably does
+           * not survive this stylesheet — a color-mix() argument resolving to
+           * a bare comma triplet. Exact by construction: a chain the sheet
+           * cannot prove stays out of the answer.
+           *
+           * @param classes - Emitted class names.
+           * @returns Broken classes with the value that broke them.
+           */
+          findBrokenOpacity(classes: readonly string[]): Array<{ token: string; value: string }>;
       }
     | { ok: false; kind: OracleSkipKind; reason: string };
 
@@ -424,6 +436,8 @@ export async function createEmittedClassOracle(
         );
     }
 
+    const customProperties = collectCustomProperties(options.css);
+
     return {
         ok: true,
         findDead(classes) {
@@ -434,6 +448,20 @@ export async function createEmittedClassOracle(
             if (asked.length === 0) return [];
             const css = design.candidatesToCss(asked);
             return asked.filter((_, index) => css[index] === null);
+        },
+        findBrokenOpacity(classes) {
+            const asked = classes.filter(token => token.includes('/') && !MARKER.test(token));
+            if (asked.length === 0) return [];
+            const css = design.candidatesToCss(asked);
+            const broken: Array<{ token: string; value: string }> = [];
+            asked.forEach((token, index) => {
+                const rule = css[index];
+                // A class with no rule is the dead pass's finding, not this one's.
+                if (rule == null) return;
+                const value = brokenOpacityValue(rule, customProperties);
+                if (value !== null) broken.push({ token, value });
+            });
+            return broken;
         },
     };
 }

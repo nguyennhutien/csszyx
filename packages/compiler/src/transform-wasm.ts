@@ -48,6 +48,7 @@ interface WasmResultJson {
         uses_color_var: boolean;
         uses_spacing_var: boolean;
         uses_unit_var: boolean;
+        uses_bool_class: boolean;
     };
 }
 
@@ -186,6 +187,7 @@ function fromWasmResult(result: WasmResultJson): SourceTransformResult {
         usesColorVar: result.metadata.uses_color_var,
         usesSpacingVar: result.metadata.uses_spacing_var,
         usesUnitVar: result.metadata.uses_unit_var,
+        usesBoolClass: result.metadata.uses_bool_class,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.raw_class_names),
         diagnostics: result.diagnostics,

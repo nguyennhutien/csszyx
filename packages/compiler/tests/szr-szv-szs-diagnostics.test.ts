@@ -34,6 +34,14 @@ const WARNING_CASES: ReadonlyArray<readonly [string, string, string]> = [
     ['szr parenthesized call', 'export const a = szr((mk()));', 'szr fallback at 2:23'],
     ['szr member callee', 'export const a = szr(theme.build());', 'szr fallback at 2:22'],
     ['szr unreadable callee', 'export const a = szr((c ? f : g)());', 'szr fallback at 2:22'],
+    // A factory the parse saw declared as szv and refused: the message names
+    // the factory as what it is and the config position that disqualified,
+    // instead of the circular "convert to szv()" call advice.
+    [
+        'szr call to a disqualified szv factory',
+        "const t = szv({ variants: { c: { blue: { 'desktop-sm': { p: 4 } } } } });\nexport const a = szr(t({ c: 'blue' }));",
+        'szr fallback at 3:22: szv factory `t()` did not precompile — its config disqualified at `variants.c.blue.desktop-sm`',
+    ],
     ['szv identifier', 'export const v = szv(cfg);', 'szv catalog at 2:22'],
     ['szv call', 'export const v = szv(mk());', 'szv catalog at 2:22'],
     ['szv member', 'export const v = szv(cfg.variants);', 'szv catalog at 2:22'],

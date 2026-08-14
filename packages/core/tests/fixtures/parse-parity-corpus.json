@@ -454,5 +454,40 @@
     "source": "const k = \"p\"; const A = () => <div sz={{ [k]: 4 }} />;",
     "classes": [],
     "rawClassNames": []
+  },
+  {
+    "source": "const L = { z: 10 } as const; const A = () => <div sz={{ z: L.z }} />;",
+    "classes": [
+      "z-10"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const T = { c: { brand: \"blue-500\" } } as const; const A = () => <div sz={{ bg: T.c.brand }} />;",
+    "classes": [
+      "bg-blue-500"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const L = { z: 10 } as const; const A = ({ k }) => <div sz={{ z: L[k] }} />;",
+    "classes": [
+      "z-(--_sz-z)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const L = { z: 10 } as const; const A = () => <div sz={{ z: L.missing }} />;",
+    "classes": [
+      "z-(--_sz-z)"
+    ],
+    "rawClassNames": []
+  },
+  {
+    "source": "const A = () => <div sz={{ z: LATER.z }} />; const LATER = { z: 10 } as const;",
+    "classes": [
+      "z-(--_sz-z)"
+    ],
+    "rawClassNames": []
   }
 ]

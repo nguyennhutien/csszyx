@@ -1,7 +1,14 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { allocateMangleTokens, vitePlugin } from '../src/unplugin.js';
 import { freshFixtureRoot } from './fixture-root.js';
+
+// Enough distinct sz classes that the allocator reaches the low single-letter
+// tokens `z`, `y`, `x`, … where a literal `.x`/`.y` collision would happen.
+const MODULE_SOURCE =
+    'export const A = () => <div sz={{ p: 1, m: 2, w: 3, h: 4, gap: 5, inset: 0 }} />;';
 
 /**
  * `production.mangleExclude` lists class names the mangler must never produce as
@@ -26,14 +33,13 @@ async function mangleMapWith(exclude?: string[]): Promise<Record<string, string>
     };
 
     const root = freshFixtureRoot('mangle-exclude');
+    // On disk before `configResolved`: a production build settles the mangle
+    // map from the prescan, so a module the prescan never walked would fail the
+    // late-census check instead of reaching the map at all.
+    mkdirSync(`${root}/src`, { recursive: true });
+    writeFileSync(`${root}/src/A.tsx`, MODULE_SOURCE, 'utf8');
     await call('configResolved', { root, command: 'build' });
-    // Enough distinct sz classes that the allocator reaches the low single-letter
-    // tokens `z`, `y`, `x`, … where a literal `.x`/`.y` collision would happen.
-    await call(
-        'transform',
-        'export const A = () => <div sz={{ p: 1, m: 2, w: 3, h: 4, gap: 5, inset: 0 }} />;',
-        `${root}/src/A.tsx`,
-    );
+    await call('transform', MODULE_SOURCE, `${root}/src/A.tsx`);
     await call('buildEnd');
     const out = await call('transformIndexHtml', '<html><head></head><body></body></html>');
     const html = typeof out === 'string' ? out : ((out as { html?: string })?.html ?? '');

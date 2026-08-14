@@ -42,6 +42,7 @@ interface CompilerFlags {
     usesColorVar: boolean;
     usesSpacingVar: boolean;
     usesUnitVar: boolean;
+    usesBoolClass: boolean;
 }
 
 /**
@@ -59,6 +60,7 @@ const RUNTIME_HELPERS: ReadonlyArray<readonly [string, keyof CompilerFlags]> = [
     ['__szColorVar', 'usesColorVar'],
     ['__szSpacingVar', 'usesSpacingVar'],
     ['__szUnitVar', 'usesUnitVar'],
+    ['__szBoolClass', 'usesBoolClass'],
 ];
 
 /**

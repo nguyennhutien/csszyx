@@ -240,10 +240,7 @@ fn rewrite_array_sz_attribute(
             ));
         }
         if let Some(ternary) = &part.ternary {
-            let test = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
-            let consequent = js_string_literal(&ternary.consequent_classes.join(" "));
-            let alternate = js_string_literal(&ternary.alternate_classes.join(" "));
-            arguments.push(format!("{test} ? {consequent} : {alternate}"));
+            arguments.push(conditional_expression_source(source, ternary));
         }
     }
     // `_szcn` = the unmemoized szcn twin: compiled arrays carry per-render
@@ -392,6 +389,9 @@ fn rewrite_ternary_sz_attribute(
     // "undefined". Only the bare single-ternary value position below uses
     // `undefined` for an empty branch (renders no class attribute).
     let ternary_source = |ternary: &super::StaticTernaryIr| {
+        if ternary.bool_class_key.is_some() {
+            return conditional_expression_source(source, ternary);
+        }
         let test = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
         format!(
             "{test} ? \"{}\" : \"{}\"",
@@ -446,23 +446,32 @@ fn rewrite_ternary_sz_attribute(
     } else {
         let replacement =
             if let ([only_ternary], true) = (ternaries.as_slice(), static_classes.is_empty()) {
-                // Bare value position: an empty branch becomes `undefined` so it
-                // renders no class attribute.
-                let branch = |classes: &[String]| {
-                    let joined = classes.join(" ");
-                    if joined.is_empty() {
-                        "undefined".to_string()
-                    } else {
-                        format!("\"{joined}\"")
-                    }
-                };
-                let test = &source
-                    [only_ternary.test_span.start as usize..only_ternary.test_span.end as usize];
-                format!(
-                    "className={{{test} ? {} : {}}}",
-                    branch(&only_ternary.consequent_classes),
-                    branch(&only_ternary.alternate_classes)
-                )
+                if only_ternary.bool_class_key.is_some() {
+                    // The helper already returns "" for every off value, so the
+                    // value position takes the call unwrapped.
+                    format!(
+                        "className={{{}}}",
+                        conditional_expression_source(source, only_ternary)
+                    )
+                } else {
+                    // Bare value position: an empty branch becomes `undefined` so
+                    // it renders no class attribute.
+                    let branch = |classes: &[String]| {
+                        let joined = classes.join(" ");
+                        if joined.is_empty() {
+                            "undefined".to_string()
+                        } else {
+                            format!("\"{joined}\"")
+                        }
+                    };
+                    let test = &source[only_ternary.test_span.start as usize
+                        ..only_ternary.test_span.end as usize];
+                    format!(
+                        "className={{{test} ? {} : {}}}",
+                        branch(&only_ternary.consequent_classes),
+                        branch(&only_ternary.alternate_classes)
+                    )
+                }
             } else {
                 format!("className={{{}}}", template_literal())
             };
@@ -796,6 +805,25 @@ fn append_object_property(source: &str, has_properties: bool, property: &str) ->
         ", "
     };
     Some(format!("{body}{separator}{property}}}"))
+}
+
+/// Emit one conditional as a JS expression producing its class string.
+///
+/// A boolean-only key's runtime value goes through `__szBoolClass`, which
+/// returns the bare class for `true`, nothing for `false`/null/undefined/"",
+/// and warns instead of styling the wrong property for anything else. Every
+/// other conditional keeps its `test ? "…" : "…"` form.
+fn conditional_expression_source(source: &str, ternary: &super::StaticTernaryIr) -> String {
+    let expression = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
+    let consequent = js_string_literal(&ternary.consequent_classes.join(" "));
+    if let Some(key) = &ternary.bool_class_key {
+        return format!(
+            "__szBoolClass({expression}, {}, {consequent})",
+            js_string_literal(key)
+        );
+    }
+    let alternate = js_string_literal(&ternary.alternate_classes.join(" "));
+    format!("{expression} ? {consequent} : {alternate}")
 }
 
 fn style_prop_source(source: &str, prop: &DynamicCssVarIr) -> String {
@@ -1195,6 +1223,109 @@ mod tests {
         assert_eq!(
             rewritten,
             "const A = ({ width, flex, cond }) => <div className={`h-max w-(--_sz-w) ${cond ? \"flex-(--_sz-flex)\" : \"\"}`} style={{\"--_sz-w\": __szSpacingVar(width, \"w\"), \"--_sz-flex\": cond ? flex : undefined}} />;"
+        );
+    }
+
+    #[test]
+    fn routes_a_dynamic_boolean_only_key_through_the_bool_class_helper() {
+        // React discards booleans in `style`, so `--_sz-border-b` is never set;
+        // and `border-b-(--var)` is a border COLOR while the bare `border-b` is
+        // a WIDTH. The only correct lowering is a conditional bare class.
+        let source = "const A = ({ on }) => <div sz={{ borderB: on }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ on }) => <div className={__szBoolClass(on, \"borderB\", \"border-b\")} />;"
+        );
+    }
+
+    #[test]
+    fn appends_a_bool_class_helper_after_static_classes() {
+        let source =
+            "const A = ({ on }) => <div sz={{ py: 2, borderB: on, borderColor: 'border' }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ on }) => <div className={`py-2 border-border ${__szBoolClass(on, \"borderB\", \"border-b\")}`} />;"
+        );
+    }
+
+    #[test]
+    fn gives_the_bool_class_helper_its_variant_prefixed_class() {
+        let source = "const A = ({ on }) => <div sz={{ hover: { ring: on } }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ on }) => <div className={__szBoolClass(on, \"ring\", \"hover:ring\")} />;"
+        );
+    }
+
+    #[test]
+    fn routes_a_nullable_boolean_only_conditional_through_the_helper() {
+        // The whole conditional rides into the helper: `undefined` resolves to
+        // no class there, so the nullable shape needs no separate lowering.
+        let source =
+            "const A = ({ on, flag }) => <div sz={{ truncate: flag ? on : undefined }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ on, flag }) => <div className={__szBoolClass(flag ? on : undefined, \"truncate\", \"truncate\")} />;"
+        );
+    }
+
+    #[test]
+    fn merges_a_bool_class_helper_into_an_existing_class_name() {
+        let source = "const A = ({ on }) => <div className=\"q\" sz={{ borderB: on }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ on }) => <div className={_szMerge(\"q\", __szBoolClass(on, \"borderB\", \"border-b\"))} />;"
+        );
+    }
+
+    #[test]
+    fn compiles_a_bool_class_array_element_instead_of_deferring_it() {
+        // The css-var lowering forced this element onto the `_szPart` runtime
+        // lane, which never safelists; as a conditional it precompiles and
+        // `border-b` reaches the class list.
+        let source = "const A = ({ on }) => <div sz={[{ borderB: on }]} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ on }) => <div className={_szcn(__szBoolClass(on, \"borderB\", \"border-b\"))} />;"
+        );
+    }
+
+    #[test]
+    fn keeps_a_literal_boolean_ternary_on_the_plain_conditional_lane() {
+        // Already correct before the helper existed: both branches are literals,
+        // so no runtime value needs validating and the bytes must not move.
+        let source = "const A = ({ on }) => <div sz={{ borderB: on ? true : false }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ on }) => <div className={on ? \"border-b\" : undefined} />;"
+        );
+    }
+
+    #[test]
+    fn keeps_value_typed_keys_on_the_css_var_lane() {
+        // The custom-property strategy stays correct wherever the valued
+        // utility means the same thing as the bare one — regression cover so
+        // the boolean-only routing cannot widen past its family.
+        let source = "const A = ({ v }) => <div sz={{ z: v, w: v, bg: v, p: v }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const A = ({ v }) => <div className=\"z-(--_sz-z) w-(--_sz-w) bg-(--_sz-bg) p-(--_sz-p)\" style={{\"--_sz-z\": v, \"--_sz-w\": __szSpacingVar(v, \"w\"), \"--_sz-bg\": __szColorVar(v), \"--_sz-p\": __szSpacingVar(v, \"p\")}} />;"
         );
     }
 
@@ -1726,6 +1857,26 @@ mod tests {
         assert_eq!(
             rewritten,
             "const App = ({ active }) => <div className={_szcn(active ? \"p-2\" : \"p-4\", \"m-1\")} />;"
+        );
+    }
+
+    /// One array element holding BOTH fixed classes and a conditional one.
+    ///
+    /// Every other array fixture is a part that is entirely static or entirely
+    /// conditional, so the two contributions are never emitted from the same
+    /// part and nothing catches the fixed half being dropped. The author sees
+    /// their conditional colour work perfectly while the padding beside it
+    /// never appears, which reads as a Tailwind problem rather than a compiler
+    /// one.
+    #[test]
+    fn an_array_part_emits_its_fixed_classes_next_to_its_conditional_one() {
+        let source =
+            "const App = ({ active }) => <div sz={[{ p: 2, color: active ? 'red-500' : 'blue-500' }]} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert_eq!(
+            rewritten,
+            "const App = ({ active }) => <div className={_szcn(\"p-2\", active ? \"text-red-500\" : \"text-blue-500\")} />;"
         );
     }
 

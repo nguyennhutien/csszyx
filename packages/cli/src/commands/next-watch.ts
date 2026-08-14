@@ -6,6 +6,7 @@
  * owned by the Turbopack loader so the CLI does not duplicate compiler work.
  */
 
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
@@ -43,7 +44,24 @@ export type NextWatchFactory = (
 /** Dependencies that can be replaced by tests. */
 export interface NextWatchDependencies {
     watch?: NextWatchFactory;
+    /**
+     * How long to wait for the watcher to report the readiness probe before
+     * starting anyway. Present so tests can reach the give-up path without
+     * spending the real budget on it.
+     */
+    deliveryProbeTimeoutMs?: number;
 }
+
+/**
+ * Name of the file written to prove the watcher delivers events.
+ *
+ * The shard reader only takes `*.json`, so this never reads as a shard even in
+ * the window before it is removed.
+ */
+const DELIVERY_PROBE_NAME = '.csszyx-watch-probe';
+
+/** How long readiness waits on the probe before giving up and starting. */
+const DELIVERY_PROBE_TIMEOUT_MS = 2000;
 
 /** Active Next watcher session. */
 export interface NextWatchSession {
@@ -126,8 +144,16 @@ export async function startNextWatch(
         ignored: createIgnoredMatcher(root, prebuild.context.safelist.shardsDir, ignore),
     });
 
+    const probePath = path.join(
+        path.resolve(prebuild.context.safelist.shardsDir),
+        DELIVERY_PROBE_NAME,
+    );
+
     fsWatcher.on('all', (event, filePath) => {
         const absolutePath = path.resolve(filePath);
+        if (absolutePath === probePath) {
+            return;
+        }
         if (event === 'add' || event === 'change' || event === 'unlink') {
             if (
                 controller.notify(event as NextSafelistWatchEvent, absolutePath) ||
@@ -143,6 +169,11 @@ export async function startNextWatch(
 
     try {
         await waitForWatcherReady(fsWatcher);
+        await waitForWatcherDelivery(
+            fsWatcher,
+            probePath,
+            dependencies.deliveryProbeTimeoutMs ?? DELIVERY_PROBE_TIMEOUT_MS,
+        );
         controller.start();
     } catch (error) {
         await fsWatcher.close();
@@ -226,6 +257,70 @@ function waitForWatcherReady(watcher: FSWatcher): Promise<void> {
         watcher.once('ready', onReady);
         watcher.once('error', onStartupError);
     });
+}
+
+/**
+ * Wait until the watcher proves it is delivering events.
+ *
+ * A watcher's `ready` means its first scan finished, not that the operating
+ * system has started reporting changes. On macOS the recursive watch is
+ * registered before the stream behind it begins flowing, and writes made in
+ * between are not delayed — they are dropped, with nothing to replay them.
+ * Announcing readiness there means a source edit made moments after startup
+ * never reaches the safelist, so its classes never reach the stylesheet and the
+ * page renders without them, silently. Watching a file this function creates
+ * turns readiness into something the watcher has to demonstrate.
+ *
+ * Giving up is deliberate: a watcher that cannot report its own probe is
+ * already degraded, and refusing to start would take away the prebuilt safelist
+ * the session had produced regardless.
+ *
+ * @param watcher Watcher that has finished its initial scan.
+ * @param probePath File to create and wait for.
+ * @param timeoutMs How long to wait before starting anyway.
+ */
+async function waitForWatcherDelivery(
+    watcher: FSWatcher,
+    probePath: string,
+    timeoutMs: number,
+): Promise<void> {
+    await new Promise<void>(resolve => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        // Every step here is idempotent, so the two callers race harmlessly.
+        // `clearTimeout` accepts undefined, which spares a guard for a state
+        // no caller can reach: the timer is armed before either of them runs.
+        const finish = (): void => {
+            clearTimeout(timer);
+            watcher.off('all', onEvent);
+            resolve();
+        };
+        // Any event at all, not only the probe's: what is being waited on is
+        // the pipe carrying events, and anything arriving through it proves
+        // that. `ignoreInitial` means nothing is replayed for files that were
+        // already there, so an event here is always a real change. The probe
+        // is what guarantees one will come, not what makes it count.
+        const onEvent = (): void => {
+            finish();
+        };
+
+        watcher.on('all', onEvent);
+        timer = setTimeout(finish, timeoutMs);
+        // Unconditional: this is a Node CLI, where a timer always carries it.
+        timer.unref();
+
+        try {
+            fs.mkdirSync(path.dirname(probePath), { recursive: true });
+            fs.writeFileSync(probePath, '', 'utf8');
+        } catch {
+            finish();
+        }
+    });
+
+    try {
+        fs.rmSync(probePath, { force: true });
+    } catch {
+        // A probe left behind is inert: it is not a shard and nothing reads it.
+    }
 }
 
 /**

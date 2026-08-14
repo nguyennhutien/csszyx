@@ -9,6 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+    __resetSzWarnDedupForTests,
     formatSzWarnLocation,
     type SzObject,
     setSzWarnLocation,
@@ -25,6 +26,10 @@ const cls = (sz: SzObject, prefix = ''): string => transform(sz, prefix).classNa
 
 let warnSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
+    // Every warning in here dedupes per token per process, so without this a
+    // "stays silent" assertion passes because an EARLIER test already spent
+    // the one warning that token gets — not because the code stayed silent.
+    __resetSzWarnDedupForTests();
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 afterEach(() => {
@@ -51,12 +56,86 @@ describe('formatOpacity via bg color object', () => {
     it('lowers a color object with no opacity', () => {
         expect(cls({ bg: { color: 'red-500' } })).toBe('bg-red-500');
     });
-    it('nudges when a non-palette custom token carries an opacity modifier', () => {
-        // "brand" is not a --var, not bracketed, has no -NN shade suffix, and is
-        // not an alpha-safe named color → the alpha-capability warning fires.
+    it('stays silent off-browser for a custom token with an opacity modifier', () => {
+        // Tailwind v4 wraps the modifier in color-mix(), which dims any valid
+        // color — the old token-text heuristic here flagged six WORKING rules
+        // in a field user's otherwise-clean run. Off the browser there is no
+        // stylesheet to ask, and `csszyx check` owns the exact verdict, so
+        // the lowering says nothing.
         expect(cls({ bg: { color: 'brand', op: 35 } })).toBe('bg-brand/35');
         const messages = warnSpy.mock.calls.map(c => String(c[0]));
-        expect(messages.some(m => m.includes('alpha-capable'))).toBe(true);
+        expect(messages.some(m => m.includes('opacity'))).toBe(false);
+    });
+
+    describe('opacity advisory in a browser, where the var chain is readable', () => {
+        /**
+         * Fake enough DOM for the advisory's computed-style probe.
+         * @param value - What `--color-brand` computes to on the fake page.
+         * @param run - Assertions to run while the fake DOM is installed.
+         */
+        function withComputedValue(value: string, run: () => void): void {
+            const globals = globalThis as {
+                document?: unknown;
+                getComputedStyle?: unknown;
+            };
+            globals.document = { documentElement: {} };
+            globals.getComputedStyle = () => ({
+                getPropertyValue: (name: string) => (name === '--color-brand' ? value : ''),
+            });
+            try {
+                run();
+            } finally {
+                delete globals.document;
+                delete globals.getComputedStyle;
+            }
+        }
+
+        it('warns when the token resolves to a bare comma triplet', () => {
+            withComputedValue('17, 119, 224', () => {
+                expect(cls({ bg: { color: 'brand', op: 35 } })).toBe('bg-brand/35');
+            });
+            const messages = warnSpy.mock.calls.map(c => String(c[0]));
+            expect(messages.some(m => m.includes('17, 119, 224'))).toBe(true);
+            expect(messages.some(m => m.includes('bg-brand/35'))).toBe(true);
+        });
+
+        it('stays silent for a token that resolves to a real color', () => {
+            withComputedValue('oklch(0.6 0.1 250)', () => {
+                expect(cls({ bg: { color: 'brand', op: 35 } })).toBe('bg-brand/35');
+            });
+            expect(warnSpy.mock.calls.map(c => String(c[0])).some(m => m.includes('opacity'))).toBe(
+                false,
+            );
+        });
+
+        it('stays silent for a token the page does not define', () => {
+            withComputedValue('', () => {
+                expect(cls({ bg: { color: 'brand', op: 35 } })).toBe('bg-brand/35');
+            });
+            expect(warnSpy.mock.calls.map(c => String(c[0])).some(m => m.includes('opacity'))).toBe(
+                false,
+            );
+        });
+
+        it('lowers normally when reading computed style throws', () => {
+            // A detached document, a hardened environment, a stubbed DOM: the
+            // probe is advisory, so a host that refuses to answer must cost the
+            // class nothing.
+            const globals = globalThis as { document?: unknown; getComputedStyle?: unknown };
+            globals.document = { documentElement: {} };
+            globals.getComputedStyle = () => {
+                throw new Error('detached document');
+            };
+            try {
+                expect(cls({ bg: { color: 'brand', op: 35 } })).toBe('bg-brand/35');
+            } finally {
+                delete globals.document;
+                delete globals.getComputedStyle;
+            }
+            expect(warnSpy.mock.calls.map(c => String(c[0])).some(m => m.includes('opacity'))).toBe(
+                false,
+            );
+        });
     });
     it('brackets a CSS-var color with a function and a build-time function color', () => {
         expect(cls({ bg: { color: 'var(--x)' } })).toBe('bg-[var(--x)]');

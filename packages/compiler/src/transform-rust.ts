@@ -212,6 +212,7 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
         usesColorVar: result.metadata.usesColorVar,
         usesSpacingVar: result.metadata.usesSpacingVar ?? false,
         usesUnitVar: result.metadata.usesUnitVar ?? false,
+        usesBoolClass: result.metadata.usesBoolClass ?? false,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),
         diagnostics: result.diagnostics,

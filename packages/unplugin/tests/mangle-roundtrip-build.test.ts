@@ -181,6 +181,36 @@ async function buildWithMangle(parser: 'rust' | 'oxc' | 'babel'): Promise<Mangle
 
 const OWNED_CLASSES = ['m-3', 'mx-0', 'mx-4', 'text-red-500', 'hover:bg-zinc-100'];
 
+/**
+ * Drop every space, tab and newline so a JS object literal reads as its JSON.
+ *
+ * The chunk rewrite runs in `renderChunk` — before the filename hash is taken,
+ * which is the whole point — and the bundler pretty-prints what that hook
+ * returns. The bundled map is therefore the same entries in the same order as
+ * the HTML tag, laid out over several lines rather than as one compact literal.
+ * Class names and tokens contain no whitespace, so collapsing it compares the
+ * payload without depending on the printer.
+ *
+ * @param text Source text.
+ * @returns The text with all whitespace removed.
+ */
+function collapseWhitespace(text: string): string {
+    return text.replaceAll(/[\t\n\r ]/g, '');
+}
+
+/**
+ * Blank out the self-installed map literal so the rest of the chunk can be
+ * checked for class names that escaped mangling.
+ *
+ * @param js Bundled JavaScript.
+ * @param map The final class → token map.
+ * @returns The chunk with the bundled map replaced by a marker.
+ */
+function withoutBundledMap(js: string, map: Record<string, string>): string {
+    const literal = collapseWhitespace(escapeJsonForInlineScript(JSON.stringify(map)));
+    return collapseWhitespace(js).split(literal).join('__BUNDLED_MAP__');
+}
+
 describe('production mangle — real-build round-trip (all parsers)', () => {
     let rust: MangleArtifacts;
     let oxc: MangleArtifacts;
@@ -239,8 +269,7 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
         // The self-installed runtime map legitimately carries every original
         // name as a key; remove that one literal before asserting no other
         // un-mangled occurrence survives in code.
-        const mapLiteral = escapeJsonForInlineScript(JSON.stringify(rust.map));
-        const jsSansMap = rust.js.split(mapLiteral).join('__BUNDLED_MAP__');
+        const jsSansMap = withoutBundledMap(rust.js, rust.map);
         for (const cls of OWNED_CLASSES) {
             const token = rust.map[cls];
             expect(token).toBeTruthy();
@@ -270,11 +299,12 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
         expect(rust.js, 'installer must never clobber the HTML script').toMatch(
             /typeof window\s*!==\s*["']undefined["']\s*&&\s*!window\.__csszyx/,
         );
-        // The bundled map must be the FINAL map — the same literal the HTML
+        // The bundled map must be the FINAL map — the same entries the HTML
         // script carries — substituted after the mangle passes, so its keys
         // are original class names, not re-mangled tokens.
-        const mapLiteral = escapeJsonForInlineScript(JSON.stringify(rust.map));
-        expect(rust.js, 'bundled map must be the final HTML map').toContain(mapLiteral);
+        expect(collapseWhitespace(rust.js), 'bundled map must be the final HTML map').toContain(
+            collapseWhitespace(escapeJsonForInlineScript(JSON.stringify(rust.map))),
+        );
         expect(rust.js, 'placeholders must be substituted').not.toContain('___CSSZYX_');
         expect(oxc.js, 'installer must be parser-independent').toMatch(/window\.__csszyx\s*=/);
     });

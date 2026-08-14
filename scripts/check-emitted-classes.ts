@@ -89,6 +89,35 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
                 },
             ] as const,
     ) as ReadonlyArray<readonly [string, Baseline]>),
+    // ── known-dead: a fraction that no bare utility spells ───────────────────
+    // `lineHeight` already brackets a number Tailwind has no bare spelling for,
+    // and every other key still emits the bare form. The two entries here are
+    // simply the keys a corpus record happens to cover; `p`, `w`, `gap`,
+    // `rotate` and `z` fail the same way on the same input and have no record
+    // yet, so fixing these two alone would be fixing where the light is.
+    //
+    // Bracketing everything is NOT the fix and must not be treated as one:
+    // Tailwind serves `p-[1.4]` and emits `padding: 1.4`, which a browser drops
+    // for want of a unit. That trades a dead class this gate can see for an
+    // invalid declaration it cannot, because the oracle asks whether a rule
+    // exists and not whether the rule is valid. The repair is a per-key value
+    // domain — unitless number, unitless integer, length, angle — that brackets
+    // where the property takes a bare number and reports the value invalid
+    // where it does not, together with the oracle work needed to defend it.
+    [
+        'scale-1.05',
+        {
+            kind: 'known-dead',
+            reason: 'Tailwind serves scale-105 for this value, or scale-[1.05] as an arbitrary one; the bare fraction spells neither',
+        },
+    ],
+    [
+        'aspect-1.6',
+        {
+            kind: 'known-dead',
+            reason: 'Tailwind serves aspect-[1.6], or a ratio such as aspect-16/10; the bare fraction spells neither',
+        },
+    ],
 ]);
 
 /** One corpus record: an sz input and the class string every engine emits. */

@@ -694,4 +694,170 @@ mod tests {
 
         assert!(matches!(triage_source(&file), FastPathTriage::StaticIr(_)));
     }
+
+    /// Every shape that must NOT reach the AST-free scan, one fixture each.
+    ///
+    /// Falling through to the parser is always safe here — the parser handles
+    /// all of these correctly — so the only failure mode worth locking is the
+    /// opposite one: a shape that stops bailing gets compiled by the textual
+    /// scan, which emits classes for code that does not exist and rewrites
+    /// text inside comments and string literals. Each row is its own fixture
+    /// on purpose. A single combined fixture would still report `NeedsParser`
+    /// while all but one of the bail reasons quietly stopped working.
+    #[test]
+    fn every_shape_the_ast_free_scan_cannot_read_bails_to_the_parser() {
+        for (what, source) in [
+            (
+                // The comment scanner must span the whole block, not just its
+                // first line, or the example on line two is compiled for real.
+                "sz on a later line of a JSDoc block",
+                "/**\n * Usage:\n * <Box sz={{ mb: 10 }} />\n */\nexport const A = () => <div id=\"a\" />;",
+            ),
+            (
+                // A `//` inside the comment body must not be read as the end
+                // of it — the rest of the block would then count as code.
+                "sz after a URL inside a JSDoc block",
+                "/**\n * See https://example.com/docs\n * <Box sz={{ mb: 10 }} />\n */\nexport const A = () => <div id=\"a\" />;",
+            ),
+            (
+                // The recorded range has to reach the closing delimiter; one
+                // byte short and the trailing example escapes it.
+                "sz at the very end of a block comment",
+                "/* <Box sz={{ mb: 10 }} /> */\nexport const A = () => <div id=\"a\" />;",
+            ),
+            (
+                // A template literal is data, not code. Compiling it emits
+                // classes for markup that may never render AND edits the
+                // string the program hands to its runtime.
+                "sz inside a template literal",
+                "export const html = `<div sz={{ p: 4 }} />`;\nexport const A = () => <div id=\"a\" />;",
+            ),
+            (
+                // The fast lane cannot emit a recovery token, so an element
+                // asking for one has to go where tokens are emitted; keeping
+                // it here drops the feature with no signal.
+                "szRecover beside a static sz",
+                "export const A = () => <div szRecover=\"csr\" sz={{ p: 4 }} />;",
+            ),
+            (
+                // `level` is a variable. Reading it as a string literal would
+                // freeze a build-time guess into the class name.
+                "an identifier as an sz value",
+                "export const A = ({ level }) => <div sz={{ p: level }} />;",
+            ),
+            (
+                // The scan splits the object on commas, so a comma INSIDE a
+                // string value leaves it holding half a literal.
+                "a comma inside a string value",
+                "export const A = () => <div sz={{ content: ',' }} />;",
+            ),
+            (
+                // `data-sz` is a different attribute that happens to end in
+                // the marker. Treating it as `sz` rewrites an attribute the
+                // author never asked csszyx to touch.
+                "a data-sz attribute",
+                "export const A = () => <div data-sz={{ p: 4 }} />;",
+            ),
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            };
+            assert!(
+                matches!(triage_source(&file), FastPathTriage::NeedsParser(_)),
+                "expected NeedsParser for {what}: {source}"
+            );
+        }
+    }
+
+    /// Sources that must not crash or hang the triage scan.
+    ///
+    /// The lexers here walk raw bytes with hand-written index arithmetic, so
+    /// the interesting inputs are the ones that end mid-token or close as soon
+    /// as they open. A slice past the end aborts the whole build with a panic
+    /// the author cannot act on, and a scan that fails to advance hangs it
+    /// with no output at all — both far worse than the wrong answer.
+    #[test]
+    fn truncated_and_empty_tokens_neither_panic_nor_hang() {
+        // Every fixture carries an `sz` marker: the triage returns a no-op
+        // before it reads a single byte otherwise, and the scanners under test
+        // would never run.
+        for source in [
+            // Ends one byte into what could be a comment opener.
+            "export const A = () => <div sz={{ p: 4 }} />; /**",
+            "export const A = () => <div sz={{ p: 4 }} />; /*",
+            "export const A = () => <div sz={{ p: 4 }} />; /",
+            // The shortest possible block comment: opener and closer share a
+            // star, so a scanner that steps past it never terminates.
+            "/**/ export const A = () => <div sz={{ p: 4 }} />;",
+            "export const A = () => <div sz={{ p: 4 }} />; /**/",
+            // A quote that is the entire value, produced by splitting on the
+            // comma inside a string.
+            "export const A = () => <div sz={{ content: ',' }} />;",
+            "export const A = () => <div sz={{ content: '' }} />;",
+            "export const A = () => <div sz={{ content: ',,' }} />;",
+            // A non-attribute marker near the end, so any over-scaled resume
+            // offset lands past the end of the source.
+            "const s = \"x\";\nexport const A = () => <div data-sz={{ p: 4 }} />;",
+            "const s = \"x\"; // data-sz=",
+            "const s = \"x\"; /* keep */ const t = 'data-sz='",
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            };
+            // The verdict is the parser's business; surviving the scan is not.
+            let _ = triage_source(&file);
+        }
+    }
+
+    /// The fast lane must keep the numbers real code is written with.
+    ///
+    /// Losing these is silent and only costs speed, which is exactly why it
+    /// would never be noticed: the existing fixtures all use a single-digit
+    /// positive integer, so a value scanner that rejects everything else looks
+    /// perfectly healthy.
+    #[test]
+    fn multi_digit_negative_and_decimal_values_stay_on_the_fast_path() {
+        for source in [
+            "export const A = () => <div sz={{ p: 12 }} />;",
+            "export const A = () => <div sz={{ mt: -4 }} />;",
+            "export const A = () => <div sz={{ p: 1.5 }} />;",
+            "export const A = () => <div sz={{ p: 0.5, mt: -12 }} />;",
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            };
+            assert!(
+                matches!(triage_source(&file), FastPathTriage::StaticIr(_)),
+                "expected the AST-free lane for: {source}"
+            );
+        }
+    }
+
+    /// A string value has to be quoted at BOTH ends to be a string.
+    ///
+    /// Dropping the opening-quote requirement turns any identifier whose first
+    /// and last character match — `level`, `sss`, `index`? no, but `level`
+    /// yes — into a literal, and its middle characters become the class.
+    #[test]
+    fn a_value_is_only_a_string_when_it_opens_with_a_quote() {
+        assert_eq!(
+            parse_simple_string("'red-500'"),
+            Some("red-500".to_string())
+        );
+        assert_eq!(
+            parse_simple_string("\"red-500\""),
+            Some("red-500".to_string())
+        );
+        // First and last byte match, but neither is a quote.
+        assert_eq!(parse_simple_string("level"), None);
+        assert_eq!(parse_simple_string("gag"), None);
+        // A lone quote is not a string, and slicing it as one reads past its
+        // own end.
+        assert_eq!(parse_simple_string("'"), None);
+        assert_eq!(parse_simple_string("\""), None);
+        assert_eq!(parse_simple_string(""), None);
+    }
 }

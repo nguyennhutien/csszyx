@@ -155,3 +155,19 @@ fn columns_count_utf16_units_like_the_js_lanes() {
         result.diagnostics[0]
     );
 }
+
+#[test]
+fn szr_disqualified_szv_factory_names_the_config_path() {
+    // Not a Babel capture: this wording shipped after the JS lanes were
+    // removed, so the pin holds the two remaining artifacts (native and wasm)
+    // to one byte-exact string, the same contract the captures above hold.
+    let result = run(concat!(
+        "import { szr, szv } from 'csszyx';\n",
+        "const t = szv({ variants: { c: { blue: { 'desktop-sm': { p: 4 } } } } });\n",
+        "export const A = () => <div className={szr(t({ c: 'blue' }))} />;",
+    ));
+    let expected: Vec<String> = vec![String::from(
+        "szr fallback at 3:44: szv factory `t()` did not precompile — its config disqualified at `variants.c.blue.desktop-sm`.\n  Suggestion: Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().",
+    )];
+    assert_eq!(result.diagnostics, expected, "code was: {}", result.code);
+}

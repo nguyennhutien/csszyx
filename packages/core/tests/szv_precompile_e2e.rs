@@ -201,3 +201,132 @@ fn a_factory_call_in_a_class_attribute_beside_sz_still_precompiles() {
     );
     assert!(result.code.contains("@csszyx/runtime/core"));
 }
+
+/// The metadata must name every picker the splice actually emitted.
+///
+/// The bundler injects the picker import from these flags alone; it never
+/// re-reads the emitted code. A flag left false beside a spliced
+/// `__szvPick(...)` call ships a module that calls an identifier nothing
+/// defined, and the first render throws. Both flags are asserted in both
+/// directions so neither can be pinned to a constant.
+#[test]
+fn the_picker_metadata_matches_the_spliced_call() {
+    let full = run(&format!(
+        "{IMPORTS}{FACTORY}export const x = (sel) => szr(cardSz(sel));\n"
+    ));
+    assert!(full.code.contains("__szvPick(__szvT_cardSz, sel)"));
+    assert!(
+        full.metadata.uses_szv_pick,
+        "a spliced picker needs its import"
+    );
+    assert!(!full.metadata.uses_szv_pick1, "the narrow picker is unused");
+
+    let narrow = run(&format!(
+        "{IMPORTS}const padSz = szv({{ variants: {{ pad: {{ sm: {{ p: 2 }}, lg: {{ p: 8 }} }} }} }});\nexport const x = (size) => szr(padSz({{ pad: size }}));\n"
+    ));
+    assert!(narrow
+        .code
+        .contains("__szvPick1(__szvT_padSz, \"pad\", size)"));
+    assert!(
+        narrow.metadata.uses_szv_pick1,
+        "a spliced narrow picker needs its import"
+    );
+
+    // A wholly static selection collapses to a literal, so neither picker is
+    // emitted and neither may be claimed.
+    let literal = run(&format!(
+        "{IMPORTS}{FACTORY}export const x = szr(cardSz({{ pad: 'sm', tone: 'red' }}));\n"
+    ));
+    assert!(!literal.code.contains("__szvPick"));
+    assert!(!literal.metadata.uses_szv_pick);
+    assert!(!literal.metadata.uses_szv_pick1);
+}
+
+/// A catalog config wrapped for its types is still a catalog.
+///
+/// `szv({...} as const)` is how the config is written whenever the author
+/// wants literal types out of it, which is most of the time. Reading past the
+/// wrapper is what lets the config be compiled at all; without it the whole
+/// catalog goes to the runtime and not one of its variant classes reaches the
+/// safelist, so every variant renders unstyled under `source(none)`.
+#[test]
+fn a_catalog_config_compiles_through_its_type_wrappers() {
+    for (what, config) in [
+        (
+            "as const",
+            "{ variants: { pad: { sm: { p: 2 } } } } as const",
+        ),
+        (
+            "satisfies",
+            "{ variants: { pad: { sm: { p: 2 } } } } satisfies Config",
+        ),
+        ("parentheses", "({ variants: { pad: { sm: { p: 2 } } } })"),
+        (
+            "a non-null assertion",
+            "({ variants: { pad: { sm: { p: 2 } } } })!",
+        ),
+    ] {
+        let result = run(&format!(
+            "{IMPORTS}const padSz = szv({config});\nexport const x = szr(padSz({{ pad: 'sm' }}));\n"
+        ));
+        assert!(
+            result.code.contains("\"p-2\""),
+            "{what}: the config must compile, got:\n{}",
+            result.code
+        );
+    }
+}
+
+/// Negative numbers keep their sign through the compiled table.
+///
+/// A negative margin or inset is ordinary layout code, and the sign lives in
+/// the class name rather than the value, so dropping it produces `m-2` where
+/// the author wrote `-2`. That is a real class Tailwind will happily generate,
+/// pushing the element the opposite way with nothing to indicate why.
+#[test]
+fn negative_values_keep_their_sign_in_the_compiled_table() {
+    let result = run(&format!(
+        "{IMPORTS}const pullSz = szv({{ variants: {{ pull: {{ up: {{ m: -2, top: -4 }} }} }} }});\nexport const x = szr(pullSz({{ pull: 'up' }}));\n"
+    ));
+    assert!(
+        result.code.contains("\"-m-2 -top-4\""),
+        "negative classes expected, got:\n{}",
+        result.code
+    );
+
+    // The same sign question on the SELECTION side: the number the caller
+    // passes has to match the variant key it was written against, and a
+    // dropped sign quietly picks a different variant or none at all.
+    let selected = run(&format!(
+        "{IMPORTS}const stepSz = szv({{ variants: {{ step: {{ '-1': {{ m: 1 }}, '1': {{ m: 3 }} }} }} }});\nexport const x = szr(stepSz({{ step: -1 }}));\n"
+    ));
+    assert!(
+        selected.code.contains("\"m-1\""),
+        "the negative selection must pick its own variant, got:\n{}",
+        selected.code
+    );
+}
+
+/// A boolean leaf in a catalog reaches the safelist.
+///
+/// `{ truncate: true }` is the normal way to switch a boolean utility on in a
+/// variant. This config does not qualify for the compiled table, so the class
+/// reaches CSS only through the lenient catalog walk that collects safelist
+/// candidates — and if the boolean leaf is skipped there, the variant renders
+/// with a class attribute Tailwind was never told to generate a rule for.
+#[test]
+fn a_boolean_leaf_in_a_catalog_reaches_the_safelist() {
+    let result = run(&format!(
+        "{IMPORTS}const clipSz = szv({{ variants: {{ clip: {{ on: {{ truncate: true, italic: false }} }} }} }});\nexport const x = szr(clipSz({{ clip: 'on' }}));\n"
+    ));
+    assert!(
+        result.classes.iter().any(|class| class == "truncate"),
+        "the true leaf must be safelisted, got {:?}",
+        result.classes
+    );
+    assert!(
+        !result.classes.iter().any(|class| class == "italic"),
+        "a false leaf emits nothing, got {:?}",
+        result.classes
+    );
+}

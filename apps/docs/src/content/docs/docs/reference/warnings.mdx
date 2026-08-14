@@ -229,7 +229,7 @@ which file and key triggered it` when the warning was unlocated.
 | `[csszyx] "{key}: {value}"{ at LOC}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value ("{value}rem").` | |
 | `[csszyx] "{key}" is a property, not a variant, but received an object { … }{ at LOC}. This compiles to "{key}:*" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use { color: '...', op: ... }.` | The classic `p: { bg: … }` mistake. |
 | `[csszyx] {rawKey}: '{value}' is a CSS value — use the short form '{hint}' (e.g. { {rawKey}: '{hint}' }). '{rawKey}-{value}' has no Tailwind utility and renders nothing.` | **browser too**. `flex-start → start`, `space-between → between`, … |
-| `[csszyx] "{className}"{ at LOC}: the /{opacity} opacity applies only if the "{color}" theme token is alpha-capable (oklch or space-separated RGB). A comma-separated RGB triplet, or a token that resolves through its own alpha variable, silently ignores the modifier — verify the emitted rule.` | |
+| `[csszyx] "{className}"{ at LOC}: the /{opacity} opacity modifier will not apply — the "{color}" theme token resolves to the bare comma triplet "{value}", which color-mix() cannot dim. Wrap the variable, e.g. --color-{color}: rgb(var(--your-triplet)).` | **browser only** — it needs computed style to resolve the token. `csszyx check` answers the same question from the compiled stylesheet. |
 | `[csszyx] fontSmoothing: '{value}' is not supported — use 'grayscale' or 'subpixel'.` | |
 | `[csszyx] fontStyle: '{value}' is not supported — Tailwind only models 'italic' and 'normal'. For oblique, use css: { fontStyle: '{value}' }.` | |
 
@@ -335,6 +335,7 @@ is not a bug — it is the safe answer when the token is genuinely ambiguous.
 | Message | Production? |
 | --- | --- |
 | `[csszyx] dynamic value on "{key}" is a {type} and cannot be resolved to CSS — the property is omitted. Pass a number, token, or CSS length (for responsive objects, use dynamic()).` | **Yes** — this one is deliberately kept in production, because the property is dropped. |
+| `[csszyx] dynamic value on "{key}" is a {type} — only a boolean can toggle this class, so it is omitted. Write non-boolean values as literals (or use dynamic() for responsive objects).` | **Yes** — same reason. Fires for the boolean-only keys such as `border*`, `ring`, `outline`, `shadow` and `truncate`, where a dynamic value can only ever mean on or off. `false` is a meaningful "off" and stays silent. |
 | `[csszyx] dropped an arbitrary value that could inject CSS: "{utility}". Arbitrary values from untrusted data are not emitted at runtime.` | No — dev only. See [Security](/docs/security/). |
 | ``[csszyx] dynamic() has injected {n}+ unique classes this session. Injected CSS rules are never removed, so continuously varying values (e.g. w-[`${x}px`] per animation frame) grow the CSSOM and slow style recalc. Drive continuously changing values through a CSS variable instead.`` | No — dev only, once. |
 | **Thrown.** `csszyx: manifest fetch failed {status}` | Yes |
