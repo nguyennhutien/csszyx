@@ -1,5 +1,22 @@
 # csszyx
 
+## [0.14.0](https://github.com/nguyennhutien/csszyx/compare/v0.13.0...v0.14.0) (2026-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* `build.parser` and `CSSZYX_PARSER` accept `'rust'` and `'wasm'` only. The `'oxc'` and `'babel'` values are gone, along with the oxc transform branch, the oxc→Babel compatibility fallback, and the degrade-to-oxc last resort. A config still saying `'oxc'`/`'babel'` (reachable from untyped JavaScript) is ignored like an invalid env var: the build runs on the default and the active-parser banner names the lane that actually ran.
+
+### Features
+
+* one engine, two artifacts — remove the babel and oxc parser lanes ([#216](https://github.com/nguyennhutien/csszyx/issues/216)) ([669d7b8](https://github.com/nguyennhutien/csszyx/commit/669d7b8f526083fe54dbf31455a02f2298109177))
+* ship the native engine's wasm build as the parser fallback lane ([#215](https://github.com/nguyennhutien/csszyx/issues/215)) ([04d49a6](https://github.com/nguyennhutien/csszyx/commit/04d49a63a944d591905a8563bb117d103a5b74b6))
+
+
+### Bug Fixes
+
+* the 0.14.0 defect queue ([#222](https://github.com/nguyennhutien/csszyx/issues/222)) ([88b8ca3](https://github.com/nguyennhutien/csszyx/commit/88b8ca317c04f6032c53d214c8422f744669c270))
+
 ## [0.13.0](https://github.com/nguyennhutien/csszyx/compare/v0.12.0...v0.13.0) (2026-08-11)
 
 ### ⚠ BREAKING CHANGES
