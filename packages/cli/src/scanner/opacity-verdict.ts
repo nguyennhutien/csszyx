@@ -64,7 +64,9 @@ function isNameCharCode(code: number | undefined): boolean {
  */
 export function collectCustomProperties(css: string): Map<string, string> {
     const out = new Map<string, string>();
-    let index = 0;
+    // No initial value: every path through the loop below sets it before the
+    // next read, and the loop is the only reader.
+    let index: number;
     let start = css.indexOf('--');
     /* v8 ignore start -- attribution artifact, not a gap: exactly one line of
        this scanning loop reports zero hits while carrying complete both-ways

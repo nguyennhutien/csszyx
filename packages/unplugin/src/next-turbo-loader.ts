@@ -185,7 +185,6 @@ export function runNextTurboLoader(
         source,
         loaderContext.resourcePath,
     );
-    let shardPath: string | null = null;
     let materialized = false;
 
     const shardResult = writeNextSafelistShard(
@@ -193,7 +192,7 @@ export function runNextTurboLoader(
         createNextSafelistShardFromMetadata(metadata, createShardCacheKey(context, metadata)),
         options.writeOptions,
     );
-    shardPath = shardResult.filePath;
+    const shardPath = shardResult.filePath;
 
     // The shard path is canonical for (generation, source path), while
     // `sourceHash` determines whether its contents need replacement. This
