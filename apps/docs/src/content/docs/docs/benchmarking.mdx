@@ -1,0 +1,133 @@
+---
+title: Benchmark a real application
+description: Compare CSSzyx's native and WebAssembly engine artifacts against your own production build without changing production defaults.
+---
+
+Synthetic benchmarks answer whether an engine got faster. They do not answer
+whether that difference matters after your framework, Tailwind, minifier, and
+deployment output are included. CSSzyx therefore ships a repository-only
+benchmark runner for applications that already use CSSzyx.
+
+The runner is development tooling. It is not included in any published runtime,
+compiler, or plugin bundle.
+
+## Run the native/WASM comparison
+
+Run this command from a CSSzyx repository checkout. `--cwd` points at the app
+under test; the app uses its own installed CSSzyx version.
+
+```bash
+pnpm bench:external -- \
+  --cwd ../my-csszyx-app \
+  --build "pnpm build" \
+  --out dist \
+  --modes rust,wasm \
+  --iterations 3 \
+  --warmups 1 \
+  --report .agent/reports/my-app-benchmark.md
+```
+
+`rust` selects the native addon and `wasm` selects the same Rust engine compiled
+to WebAssembly. The runner sets `CSSZYX_PARSER` for each row, records wall time,
+then measures raw, gzip, and Brotli bytes under every explicit `--out` directory.
+It writes the Markdown report plus a machine-readable JSON sibling.
+
+CSSzyx's normal parser banner confirms that the app consumed the requested
+parser. If the banner is absent, the row is retained as `not-observed` rather
+than reported as a failed build. Verify the app's CSSzyx integration before
+using such a row to make a product decision.
+
+## Framework recipes
+
+Vite and most Astro/Solid builds emit browser assets to `dist`:
+
+```bash
+pnpm bench:external -- \
+  --cwd ../vite-app \
+  --build "pnpm build" \
+  --out dist \
+  --modes rust,wasm
+```
+
+```bash
+pnpm bench:external -- \
+  --cwd ../astro-solid-app \
+  --build "pnpm build" \
+  --out dist \
+  --modes rust,wasm
+```
+
+For Next.js, measure `.next/static` when the question is browser transfer size.
+Use the same build lane in every row. If the app requires Webpack, say so in the
+command instead of comparing a Webpack row with a Turbopack row.
+
+```bash
+pnpm bench:external -- \
+  --cwd ../next-app \
+  --build "pnpm next build --webpack" \
+  --out .next/static \
+  --modes rust,wasm
+```
+
+The runner deletes only the output directories explicitly listed in `--out`
+before each build. It refuses the project root, paths outside the project,
+symbolic-link outputs, and directories containing Git-tracked files. It does
+not delete framework caches unless you explicitly name one. This makes the
+default timing a warm-cache production build; use a disposable checkout and an
+additional explicit cache output only when a cold-cache question justifies it.
+
+## Compare `mangleVars` without changing defaults
+
+`production.mangleVars` remains opt-in. To measure it, wire a bench-only env
+override in the app config while preserving the normal production value when
+the variable is absent:
+
+```ts
+const benchMangleVars = process.env.CSSZYX_BENCH_MANGLE_VARS;
+
+export default defineConfig({
+  plugins: [
+    csszyx({
+      production: {
+        mangleVars:
+          benchMangleVars === undefined
+            ? false
+            : benchMangleVars === '1',
+      },
+    }),
+  ],
+});
+```
+
+Then run both values:
+
+```bash
+pnpm bench:external -- \
+  --cwd ../my-csszyx-app \
+  --build "pnpm build" \
+  --out dist \
+  --modes rust,wasm \
+  --mangle-vars off,on
+```
+
+Optionally print `mangleVars=1` from the app config when the bench variable is
+present. The report can then mark the opt-in as observed. Without that signal,
+the build is still measured but is labelled `not-observed`.
+
+Judge this feature by the gzip and Brotli deltas, not raw class-name savings.
+Utility names compress well, while a runtime map or alias metadata can make a
+build larger after compression. A positive delta means the opt-in cost bytes in
+that app.
+
+## Reproducibility checklist
+
+- Pin the app commit, lockfile, Node version, and CSSzyx version.
+- Keep the build command and output list identical across rows.
+- Close unrelated CPU-heavy processes and use at least three measured runs.
+- Treat small differences as noise unless repeated runs stay separated.
+- Use `--trace` only when the app supports `CSSZYX_BENCH_TRACE=1`; trace output
+  may help explain a result but does not replace end-to-end wall time.
+- Keep reports local until the app owner explicitly chooses to share them.
+
+The tool never edits app configuration or source. The user-provided build
+command naturally remains responsible for whatever its own build scripts do.

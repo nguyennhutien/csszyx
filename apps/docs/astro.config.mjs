@@ -209,6 +209,7 @@ export default defineConfig({
                     label: 'Guides',
                     items: [
                         { label: 'Build-Time vs Runtime', slug: 'docs/build-time-vs-runtime' },
+                        { label: 'Benchmark a Real App', slug: 'docs/benchmarking' },
                         { label: 'Reusing Styles', slug: 'docs/reusing-styles' },
                         { label: 'Styling Component Parts', slug: 'docs/compound-components' },
                         { label: 'Box Model Routing', slug: 'docs/box-model-splitbox' },
