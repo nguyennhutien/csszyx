@@ -318,6 +318,38 @@ function readExportSpecifier(
     return entry === null ? null : { ...entry, exportName: exported };
 }
 
+/** The registry key a default export is filed under. */
+const DEFAULT_EXPORT_NAME = 'default';
+
+/**
+ * Read `export default <expression>` into a registry entry.
+ *
+ * The expression is adapted into the declarator shape the one reader takes,
+ * rather than given a reader of its own: a second predicate here is how the
+ * default slot would end up qualifying values the named forms refuse, or the
+ * reverse.
+ *
+ * `isConst` is passed as true, and that is not a shortcut. `export default`
+ * introduces no name to assign to, so the module cannot rebind it after an
+ * importer has been compiled against the value — the live-binding hazard that
+ * keeps `export let` out does not exist here.
+ *
+ * @param statement - The `ExportDefaultDeclaration` node.
+ * @returns The entry to record, or null when the export does not qualify.
+ */
+function readDefaultExport(statement: OxcNode): CrossModuleRegistryEntry | null {
+    const declaration = (statement as unknown as { declaration?: OxcNode }).declaration;
+    if (declaration === undefined) return null;
+    const entry = readCrossModuleDeclarator(
+        {
+            id: { type: 'Identifier', name: DEFAULT_EXPORT_NAME },
+            init: declaration,
+        },
+        true,
+    );
+    return entry === null ? null : { ...entry, exportName: DEFAULT_EXPORT_NAME };
+}
+
 /**
  * Extract every exported szv factory and static sz object from one module, for
  * the bundler's cross-module registry.
@@ -351,6 +383,11 @@ export function extractCrossModuleRegistryEntries(
     const scope = moduleScopeDeclarators(program.body);
     const out: CrossModuleRegistryEntry[] = [];
     for (const statement of program.body) {
+        if (statement.type === 'ExportDefaultDeclaration') {
+            const entry = readDefaultExport(statement);
+            if (entry !== null) out.push(entry);
+            continue;
+        }
         if (statement.type !== 'ExportNamedDeclaration') continue;
         const shaped = statement as unknown as {
             exportKind?: string;

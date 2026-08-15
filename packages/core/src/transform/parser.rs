@@ -3306,6 +3306,14 @@ fn static_object_candidate_from_expression(
     }
 }
 
+/// The registry name a default import resolves against.
+///
+/// Spelled the same in `cross-module-extract.ts`, which files the entry. The
+/// two are not generated from one source because this is not project wording
+/// that can drift: `default` is what ECMAScript calls the slot, and a module
+/// that renamed it would no longer be describing a default export.
+const DEFAULT_EXPORT_SLOT: &str = "default";
+
 /// Narrow the bundler's sz-object registry to this file's LOCAL binding names.
 ///
 /// Resolved once per file rather than per reference: identifier lowering is
@@ -3317,9 +3325,8 @@ fn static_object_candidate_from_expression(
 /// registry would resolve the wrong entry the moment an alias makes the two
 /// differ.
 ///
-/// v1 accepts a named value import and nothing else — a namespace, default or
-/// type-only import keeps the runtime path it has today rather than being
-/// guessed at.
+/// A named or default value import resolves; a namespace or type-only import
+/// keeps the runtime path it has today rather than being guessed at.
 fn collect_imported_sz_objects(
     program: &Program<'_>,
     registry: &super::szv_precompile::CrossModuleSzObjects,
@@ -3346,18 +3353,27 @@ fn collect_imported_sz_objects(
             continue;
         };
         for entry in specifiers {
-            let ImportDeclarationSpecifier::ImportSpecifier(specifier) = entry else {
-                continue;
+            // The name to look the registry up by, paired with the local name
+            // the file refers to it as. A default import names no export at
+            // all, so it resolves against the slot the extractor files
+            // `export default` under; every other form asks for what it wrote.
+            let (imported, local) = match entry {
+                ImportDeclarationSpecifier::ImportSpecifier(specifier) => {
+                    if specifier.import_kind.is_type() {
+                        continue;
+                    }
+                    (specifier.imported.name().to_string(), &specifier.local.name)
+                }
+                ImportDeclarationSpecifier::ImportDefaultSpecifier(specifier) => {
+                    (DEFAULT_EXPORT_SLOT.to_string(), &specifier.local.name)
+                }
+                ImportDeclarationSpecifier::ImportNamespaceSpecifier(_) => continue,
             };
-            if specifier.import_kind.is_type() {
-                continue;
-            }
-            let imported = specifier.imported.name();
             let Some((_, object)) = entries.iter().find(|(name, _)| name.as_str() == imported)
             else {
                 continue;
             };
-            out.push((specifier.local.name.as_str().to_string(), object.clone()));
+            out.push((local.as_str().to_string(), object.clone()));
         }
     }
     out
@@ -4983,6 +4999,47 @@ export const cls = szr(localCard({ pad: 'sm' }));";
     }
 
     #[test]
+    fn parser_lowers_a_default_imported_sz_object() {
+        // The provider wrote `export default { p: 4 }`, which the registry
+        // files under the `default` slot. The local name is the importer's to
+        // choose, so resolution has to go by the slot, never by that name.
+        let registry = vec![(
+            "./styles".into(),
+            vec![("default".into(), cross_module_card())],
+        )];
+
+        for source in [
+            "import cardSz from './styles';\nexport const A = () => <div sz={cardSz} />;",
+            "import anythingAtAll from './styles';\nexport const A = () => <div sz={anythingAtAll} />;",
+        ] {
+            let parsed = parse_with_sz_objects(source, &registry);
+            let attribute = &parsed.ir.sz_attributes[0];
+            assert!(!attribute.runtime_fallback, "{source}");
+            assert_eq!(attribute.object.properties[0].key, "p", "{source}");
+        }
+    }
+
+    #[test]
+    fn parser_keeps_the_default_and_named_slots_apart() {
+        // One module exporting both must answer each importer with its own
+        // half. Collapsing the two would let `import x from` pick up a named
+        // export whenever the module happened to have one.
+        let registry = vec![(
+            "./styles".into(),
+            vec![
+                ("default".into(), cross_module_card()),
+                ("hoverSz".into(), cross_module_layer()),
+            ],
+        )];
+        let source = "import base, { hoverSz } from './styles';\nexport const A = () => <div sz={base} className={String(hoverSz)} />;";
+
+        let parsed = parse_with_sz_objects(source, &registry);
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(attribute.object.properties[0].key, "p");
+    }
+
+    #[test]
     fn parser_refuses_imports_outside_the_named_value_form() {
         let registry = vec![(
             "./styles".into(),
@@ -4991,7 +5048,11 @@ export const cls = szr(localCard({ pad: 'sm' }));";
         let cases = [
             "import type { cardSz } from './styles';",
             "import { type cardSz } from './styles';",
+            // A default import of a module whose registry entry is a NAMED
+            // export. The default slot is a separate entry, and answering from
+            // a named one would resolve a value the importer never asked for.
             "import cardSz from './styles';",
+            "import type cardSz from './styles';",
             // A side-effect import binds no name at all. It still names a
             // module the registry carries, so the collector has to walk past
             // it rather than read specifiers that are not there.

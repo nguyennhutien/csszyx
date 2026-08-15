@@ -149,6 +149,52 @@ describe('an export list, which is the same module saying the same thing', () =>
     });
 });
 
+describe('the default export, which is a slot rather than a name', () => {
+    it('records a default-exported object literal', () => {
+        // `export default` has NO binding to rebind — there is no name to
+        // assign to — so it carries none of the live-binding hazard that keeps
+        // `export let` out. It is the safer of the two, not the riskier.
+        expect(szObjects('export default { p: 4 };')).toEqual({ default: { p: 4 } });
+    });
+
+    it('records a default-exported szv factory', () => {
+        const tsx = [
+            "import { szv } from '@csszyx/runtime';",
+            'export default szv({ base: { p: 4 }, variants: { tone: { a: { m: 2 } } } });',
+        ].join('\n');
+        expect(
+            extractCrossModuleRegistryEntries(tsx, '/p/styles.ts').map(entry => [
+                entry.exportName,
+                entry.kind,
+            ]),
+        ).toEqual([['default', 'szv-config']]);
+    });
+
+    it('records an export list that renames into the default slot', () => {
+        // `export { x as default }` and `export default x` fill one slot, so
+        // they must land on one registry key. Two keys would make the importer
+        // resolve or not by which spelling the provider chose.
+        expect(szObjects('const x = { p: 4 };\nexport { x as default };')).toEqual({
+            default: { p: 4 },
+        });
+    });
+
+    it('sees through the TS assertions a default export may carry', () => {
+        expect(szObjects('export default { p: 4 } as const;')).toEqual({ default: { p: 4 } });
+    });
+
+    it('refuses a default export of a name declared elsewhere', () => {
+        // Following this means folding local dataflow: the identifier could be
+        // reassigned between its declaration and the export, and a per-file
+        // read cannot prove it was not.
+        expect(szObjects('const x = { p: 4 };\nexport default x;')).toEqual({});
+    });
+
+    it('refuses a default export that is not an object', () => {
+        expect(szObjects("export default 'p-4';")).toEqual({});
+    });
+});
+
 describe('what the registry refuses to carry', () => {
     it.each([
         ['a call result', 'export const a = build();'],
@@ -158,7 +204,6 @@ describe('what the registry refuses to carry', () => {
         ['a non-object value', "export const a = 'p-4';"],
         ['a let binding', 'export let a = { p: 4 };'],
         ['a non-exported object', 'const a = { p: 4 };'],
-        ['a default export', 'export default { p: 4 };'],
     ])('refuses %s', (_label, source) => {
         // Refusing costs the optimization and nothing else: the importer keeps
         // the runtime path it has today, and says so.
