@@ -23,6 +23,7 @@ runs:
   using: composite
   steps:
     - name: Restore Astro font cache
+      id: fonts
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
       with:
         # Where Astro's cached-font-fetcher writes. It lives under
@@ -35,3 +36,19 @@ runs:
         # set from a previous config, and Astro would fetch only what is
         # missing — which is correct, but it also means a removed family stays
         # cached forever. An exact key keeps the cache honest about its config.
+
+    # `actions/cache` does not fail on a path that does not exist — it stores
+    # nothing and says nothing. A wrong path would therefore look exactly like
+    # a working cache that always misses, so the hit is printed rather than
+    # left to be inferred. A first run on a new key prints false and is fine;
+    # false on EVERY run means the path is wrong or the build no longer writes
+    # there.
+    - name: Report font cache state
+      shell: bash
+      run: |
+        echo "[astro-fonts] cache-hit: ${{ steps.fonts.outputs.cache-hit || 'false' }}"
+        if [ -d apps/docs/node_modules/.astro/fonts ]; then
+          echo "[astro-fonts] restored $(find apps/docs/node_modules/.astro/fonts -name '*.woff2' | wc -l) font file(s)"
+        else
+          echo "[astro-fonts] no cached fonts yet — the build will fetch them"
+        fi
