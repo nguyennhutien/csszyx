@@ -67,6 +67,9 @@ jobs:
       - name: Build host native engine
         run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
+      - name: Cache Astro fonts
+        uses: ./.github/actions/cache-astro-fonts
+
       - name: Build workspace
         run: pnpm build
 
