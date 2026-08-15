@@ -182,6 +182,97 @@ describe('what v1 refuses, and must keep refusing', () => {
     }
 });
 
+/**
+ * The registry a bundler hands a file importing a token module.
+ *
+ * Separate from {@link REGISTRY} because these are read THROUGH: `LAYER` is a
+ * map somebody reads one key off, not a style anybody applies whole.
+ */
+const TOKEN_REGISTRY: SzObjectRegistry = {
+    './tokens': {
+        LAYER: { modal: 60 },
+        BRAND: { color: 'blue-500', op: 20 },
+    },
+};
+
+/**
+ * Run one engine over a module that imports from `./tokens`.
+ *
+ * @param engine - Engine under test.
+ * @param body - Module body after the import line.
+ * @returns Emitted className, the collected classes, and the emitted code.
+ */
+function runTokens(
+    engine: Engine,
+    body: string,
+): { className: string | undefined; classes: string[]; code: string } {
+    const tsx = `import { LAYER, BRAND } from './tokens';\n${body}`;
+    const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: TOKEN_REGISTRY });
+    const code = result.code ?? '';
+    return {
+        className: /className="([^"]*)"/.exec(code)?.[1],
+        classes: [...(result.classes ?? [])],
+        code,
+    };
+}
+
+describe('an imported map read from inside an sz object', () => {
+    for (const [name, engine] of ENGINES) {
+        it(`${name} folds a property read off an imported map`, () => {
+            const out = runTokens(
+                engine,
+                'export const A = () => <div sz={{ z: LAYER.modal }} />;',
+            );
+            expect(out.className).toBe('z-60');
+        });
+
+        it(`${name} contributes the class rather than a custom property`, () => {
+            // The failure this replaces was not a fallback to `_sz(...)`: an
+            // unresolved value compiles to `--_sz-z`, which is a working
+            // element with no class to generate CSS for. Asserting the class is
+            // collected is what separates the two outcomes.
+            const out = runTokens(
+                engine,
+                'export const A = () => <div sz={{ z: LAYER.modal }} />;',
+            );
+            expect(out.classes).toEqual(['z-60']);
+            expect(out.code).not.toContain('--_sz-z');
+        });
+
+        it(`${name} folds an imported object used as a property value`, () => {
+            const out = runTokens(engine, 'export const A = () => <div sz={{ bg: BRAND }} />;');
+            expect(out.className).toBe('bg-blue-500/20');
+        });
+
+        it(`${name} keeps the custom property for a key the map does not carry`, () => {
+            // Answering here would be a guess: the runtime read yields
+            // undefined, so any class this produced would style an element the
+            // author never asked to style.
+            const out = runTokens(
+                engine,
+                'export const A = () => <div sz={{ z: LAYER.missing }} />;',
+            );
+            expect(out.className).toBe('z-(--_sz-z)');
+        });
+
+        it(`${name} keeps the custom property for a computed read`, () => {
+            const out = runTokens(
+                engine,
+                'export const A = ({ k }) => <div sz={{ z: LAYER[k] }} />;',
+            );
+            expect(out.className).toBe('z-(--_sz-z)');
+        });
+
+        it(`${name} lets a local map shadow the imported one`, () => {
+            const out = runTokens(
+                engine,
+                'export const A = () => { const LAYER = { modal: 10 }; return <div sz={{ z: LAYER.modal }} />; };',
+            );
+            expect(out.className).toBe('z-10');
+        });
+    }
+});
+
 describe('the local alias an import may carry', () => {
     for (const [name, engine] of ENGINES) {
         it(`${name} resolves through a renamed import`, () => {

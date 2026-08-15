@@ -4469,13 +4469,26 @@ fn static_value_from_expression(
         // Nested identifier inside a property value, e.g. `{ p: SIZE }`
         // where SIZE is a local const. Resolve via scope and recurse so
         // R4.2 also handles partial-static cases.
+        //
+        // A local declaration is asked first and its answer is FINAL, even when
+        // that answer is "not static". Falling through to the registry after a
+        // local binding was found would let an import of the same name answer
+        // for a value the code does not read — the local-wins rule the
+        // attribute path already keeps, applied on the route that reaches these
+        // names through a property value instead.
         Expression::Identifier(identifier) => {
-            let initializer = ctx.scope.resolve_initializer_before(
+            if let Some(initializer) = ctx.scope.resolve_initializer_before(
                 &identifier.name,
                 identifier.span.start,
                 ctx.program,
-            )?;
-            static_value_from_expression(initializer, ctx)
+            ) {
+                return static_value_from_expression(initializer, ctx);
+            }
+            // The bundler already narrowed the registry to this file's local
+            // binding names, so an import resolves with one lookup and the
+            // member arm below reads through it exactly as it reads a local map.
+            imported_sz_object(ctx.imported_sz_objects, &identifier.name)
+                .map(|object| StaticSzValue::Object(object.clone()))
         }
         // A value read off a constant map, e.g. `{ z: LAYER.appChrome }`.
         // Resolving the object half reuses the arm above, so a map reaches
@@ -4842,6 +4855,131 @@ export const cls = szr(localCard({ pad: 'sm' }));";
         let attribute = &parsed.ir.sz_attributes[0];
         assert!(!attribute.runtime_fallback);
         assert_eq!(attribute.object.properties[0].key, "m");
+    }
+
+    /// A token map as a provider exports it, in the registry's decoded form.
+    fn cross_module_layer() -> super::StaticSzObject {
+        super::StaticSzObject {
+            properties: vec![super::StaticSzProperty {
+                key: "modal".into(),
+                value: super::StaticSzValue::Number(60.0),
+                span: super::TextSpan { start: 0, end: 0 },
+            }],
+        }
+    }
+
+    /// A colour-with-opacity sub-object, the shape an `sz` VALUE can be.
+    fn cross_module_brand() -> super::StaticSzObject {
+        super::StaticSzObject {
+            properties: vec![
+                super::StaticSzProperty {
+                    key: "color".into(),
+                    value: super::StaticSzValue::String("blue-500".into()),
+                    span: super::TextSpan { start: 0, end: 0 },
+                },
+                super::StaticSzProperty {
+                    key: "op".into(),
+                    value: super::StaticSzValue::Number(20.0),
+                    span: super::TextSpan { start: 0, end: 0 },
+                },
+            ],
+        }
+    }
+
+    /// The registry a bundler hands a file importing both token modules.
+    fn token_registry() -> super::super::szv_precompile::CrossModuleSzObjects {
+        vec![(
+            "./tokens".into(),
+            vec![
+                ("LAYER".into(), cross_module_layer()),
+                ("BRAND".into(), cross_module_brand()),
+            ],
+        )]
+    }
+
+    /// The one static property an attribute lowered, with no CSS variable left.
+    ///
+    /// An unresolved value does NOT reach the runtime-fallback path: it becomes
+    /// a dynamic CSS variable, which is a valid compile that ships a custom
+    /// property instead of a class. Asserting only `!runtime_fallback` would
+    /// therefore pass on today's behaviour and prove nothing.
+    fn single_static_property(attribute: &super::SzAttributeIr) -> (String, super::StaticSzValue) {
+        assert!(
+            attribute.dynamic_css_vars.is_empty(),
+            "value stayed dynamic: {:?}",
+            attribute.dynamic_css_vars,
+        );
+        assert_eq!(attribute.object.properties.len(), 1);
+        let property = &attribute.object.properties[0];
+        (property.key.clone(), property.value.clone())
+    }
+
+    #[test]
+    fn parser_reads_a_property_off_an_imported_map() {
+        let source = "import { LAYER } from './tokens';\nexport const A = () => <div sz={{ z: LAYER.modal }} />;";
+
+        let parsed = parse_with_sz_objects(source, &token_registry());
+        assert_eq!(
+            single_static_property(&parsed.ir.sz_attributes[0]),
+            ("z".to_string(), super::StaticSzValue::Number(60.0)),
+        );
+    }
+
+    #[test]
+    fn parser_lowers_an_imported_object_used_as_a_property_value() {
+        let source =
+            "import { BRAND } from './tokens';\nexport const A = () => <div sz={{ bg: BRAND }} />;";
+
+        let parsed = parse_with_sz_objects(source, &token_registry());
+        assert_eq!(
+            single_static_property(&parsed.ir.sz_attributes[0]),
+            (
+                "bg".to_string(),
+                super::StaticSzValue::Object(cross_module_brand()),
+            ),
+        );
+    }
+
+    #[test]
+    fn parser_prefers_a_local_map_over_an_imported_one() {
+        // The attribute path already pins local-wins for `sz={NAME}`. The value
+        // path reaches the same names by a different route, so it needs its own
+        // pin: an import that started answering ahead of a local declaration
+        // would compile the wrong number with nothing to show for it.
+        let source = "import { LAYER } from './tokens';\nexport const A = () => { const LAYER = { modal: 10 }; return <div sz={{ z: LAYER.modal }} />; };";
+
+        let parsed = parse_with_sz_objects(source, &token_registry());
+        assert_eq!(
+            single_static_property(&parsed.ir.sz_attributes[0]),
+            ("z".to_string(), super::StaticSzValue::Number(10.0)),
+        );
+    }
+
+    #[test]
+    fn parser_refuses_map_reads_it_cannot_answer() {
+        let cases = [
+            // A key the map does not carry. Answering with anything here would
+            // be a guess; the runtime read yields undefined and the author gets
+            // today's fallback diagnostic instead of a wrong class.
+            "export const A = () => <div sz={{ z: LAYER.missing }} />;",
+            // A computed key picks its property at run time, so no build-time
+            // read of the map can be right.
+            "export const A = ({ k }) => <div sz={{ z: LAYER[k] }} />;",
+            // The map is imported from a module the registry does not carry.
+            "export const A = () => <div sz={{ z: OTHER.modal }} />;",
+        ];
+
+        for body in cases {
+            let source =
+                format!("import {{ LAYER }} from './tokens';\nimport {{ OTHER }} from './elsewhere';\n{body}");
+            let parsed = parse_with_sz_objects(&source, &token_registry());
+            let attribute = &parsed.ir.sz_attributes[0];
+            // Refusing means the value keeps the custom property it compiles to
+            // today. The static object must stay empty: a key appearing there
+            // would be a build-time guess at a value only the runtime knows.
+            assert_eq!(attribute.dynamic_css_vars.len(), 1, "{body}");
+            assert!(attribute.object.properties.is_empty(), "{body}");
+        }
     }
 
     #[test]
