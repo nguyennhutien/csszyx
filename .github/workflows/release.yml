@@ -374,6 +374,9 @@ jobs:
       - name: Build WASM core
         run: pnpm --filter @csszyx/core build
 
+      - name: Cache Astro fonts
+        uses: ./.github/actions/cache-astro-fonts
+
       - name: Build all packages
         run: pnpm build
 

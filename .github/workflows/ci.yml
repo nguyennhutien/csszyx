@@ -218,6 +218,9 @@ jobs:
       # fresh checkout and must produce them explicitly.
       # turbo caches build outputs (see "Cache turbo" above), so this
       # step is fast on cache hit and avoids re-running wasm-pack.
+      - name: Cache Astro fonts
+        uses: ./.github/actions/cache-astro-fonts
+
       - name: Build workspace (populate dist for tsc -b)
         run: pnpm build
 
@@ -514,6 +517,9 @@ jobs:
       # built dist/ outputs). turbo's local cache makes the cold cost
       # bearable; subsequent runs that pick up the actions/cache for
       # turbo would be even faster — Phase 4 candidate.
+      - name: Cache Astro fonts
+        uses: ./.github/actions/cache-astro-fonts
+
       - name: Build workspace
         run: pnpm build
 
