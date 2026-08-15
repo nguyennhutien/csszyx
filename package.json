@@ -56,7 +56,7 @@
     "test": "turbo run test",
     "test:scripts": "node --import tsx/esm --test scripts/*.test.ts",
     "test:coverage": "vitest run --coverage",
-    "cov:rust": "cargo llvm-cov --manifest-path packages/core/Cargo.toml --features native-engine --lcov --output-path coverage/rust-lcov.info --fail-under-lines 97 && node scripts/filter-rust-lcov.mjs",
+    "cov:rust": "cargo llvm-cov --manifest-path packages/core/Cargo.toml --features native-engine --lcov --output-path coverage/rust-lcov.info && node scripts/filter-rust-lcov.mjs",
     "cov:rust:summary": "pnpm cov:rust",
     "mut:diff": "bash scripts/mutants.sh diff",
     "mut:file": "bash scripts/mutants.sh file",

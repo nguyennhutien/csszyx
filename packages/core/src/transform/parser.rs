@@ -4656,6 +4656,21 @@ export const cls = szr(card({ pad: 'sm' }));";
     }
 
     #[test]
+    fn parser_shell_stops_collecting_calls_after_ast_budget() {
+        let source = "const before = { nested: true }; szr({ p: 4 });";
+        let parsed = parse_source_shell_with_budget(
+            &TransformFile {
+                filename: "/repo/src/LateCall.tsx".into(),
+                source: source.into(),
+            },
+            8,
+        );
+
+        assert!(parsed.ast_budget_exceeded);
+        assert!(parsed.ir.catalog_sz_objects.is_empty());
+    }
+
+    #[test]
     fn parser_shell_covers_cross_module_import_guards() {
         use crate::transform::{StaticSzObject, StaticSzProperty, StaticSzValue, TextSpan};
 
