@@ -76,6 +76,14 @@ describe('patch coverage', () => {
         );
     });
 
+    it('counts .rs as measurable so a missing rust report cannot read as coverage', () => {
+        // The report and the check are separate steps, and the check has to be
+        // able to tell "this language was never measured" from "this file has
+        // no test" — they call for opposite fixes.
+        assert.ok(isMeasurable('packages/core/src/transform/parser.rs'));
+        assert.ok(isMeasurable('packages/core/src/native.rs'));
+    });
+
     it('defaults the base to the main branch and the reports to the CI set', () => {
         const parsed = parseArgs([]);
 

@@ -222,8 +222,20 @@ function main({ base, reports }) {
             `read from ${present.length} report(s).`,
     );
 
+    // A whole language missing from the reports is a different failure from a
+    // file nobody tested, and saying the second when it is the first blames the
+    // author for a step that did not run. It happened here: vitest cleans
+    // `coverage/` before writing, so a rust report produced BEFORE it was gone
+    // by the time this read, and every changed .rs line came back unmeasured.
+    const measuredExtensions = new Set([...recorded.keys()].map(file => path.extname(file)));
     for (const file of unmeasured) {
-        console.error(`  ${file}: changed, and no coverage report mentions it`);
+        const extension = path.extname(file);
+        console.error(
+            measuredExtensions.has(extension)
+                ? `  ${file}: changed, and no coverage report mentions it`
+                : `  ${file}: changed, and NO report covers ${extension} files at all — ` +
+                      'the run that produces them did not happen, or its output was overwritten',
+        );
     }
     for (const { file, missed } of gaps) {
         console.error(`  ${file}: uncovered changed line(s) ${missed.join(',')}`);
