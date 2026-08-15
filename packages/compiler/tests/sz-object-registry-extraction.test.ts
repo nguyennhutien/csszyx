@@ -69,6 +69,86 @@ describe('exported static sz objects reach the registry', () => {
     });
 });
 
+describe('an export list, which is the same module saying the same thing', () => {
+    it('records a const the module exports through a separate statement', () => {
+        // `export const` and `const` plus `export { }` are one declaration and
+        // one value; only the punctuation differs. Reading the first and not
+        // the second made a style qualify or not by the author's house style,
+        // with nothing in the output to say which rule had applied.
+        expect(szObjects('const cardSz = { p: 4 };\nexport { cardSz };')).toEqual({
+            cardSz: { p: 4 },
+        });
+    });
+
+    it('records under the exported name when the list renames', () => {
+        // The consumer looks the entry up by the name it IMPORTS, which is the
+        // one on the right of `as`. Recording the local name would file the
+        // entry where no importer can find it.
+        expect(szObjects('const local = { p: 4 };\nexport { local as cardSz };')).toEqual({
+            cardSz: { p: 4 },
+        });
+    });
+
+    it('records the same value under every name that exports it', () => {
+        expect(szObjects('const a = { p: 4 };\nexport { a, a as b };')).toEqual({
+            a: { p: 4 },
+            b: { p: 4 },
+        });
+    });
+
+    it('reads a declaration that follows its export statement', () => {
+        // Legal, and the exported value is the same one either way: the export
+        // binds a name, and the name is bound by the time any importer reads it.
+        expect(szObjects('export { cardSz };\nconst cardSz = { p: 4 };')).toEqual({
+            cardSz: { p: 4 },
+        });
+    });
+
+    it('records an szv factory the module exports through a list', () => {
+        // Both kinds go through one reader, so the export list cannot become a
+        // place where a factory qualifies and a plain object does not.
+        const tsx = [
+            "import { szv } from '@csszyx/runtime';",
+            "const table = szv({ base: { p: 4 }, variants: { tone: { a: { bg: 'red-500' } } } });",
+            'export { table };',
+        ].join('\n');
+        expect(
+            extractCrossModuleRegistryEntries(tsx, '/p/styles.ts').map(entry => [
+                entry.exportName,
+                entry.kind,
+            ]),
+        ).toEqual([['table', 'szv-config']]);
+    });
+
+    it('refuses a let the module exports through a list', () => {
+        // Same live-binding hazard as `export let`: the module can rebind it
+        // after an importer has been compiled against the first value, and
+        // nothing in a per-file transform could see that happen.
+        expect(szObjects('let cardSz = { p: 4 };\nexport { cardSz };')).toEqual({});
+    });
+
+    it('refuses a name the export list does not declare in this module', () => {
+        // `import` then `export` is a re-export wearing two statements. The
+        // value lives in another module the registry has not read, so answering
+        // here would answer from a file nobody looked at.
+        expect(szObjects("import { cardSz } from './other';\nexport { cardSz };")).toEqual({});
+    });
+
+    it('refuses a binding declared inside a block rather than at module scope', () => {
+        // Only a module-scope declaration can be what an export list names.
+        expect(szObjects('{ const cardSz = { p: 4 }; }\nexport { cardSz };')).toEqual({});
+    });
+
+    it('refuses an export list that names something re-exported from elsewhere', () => {
+        // `export { x } from './y'` needs the provider module, which this
+        // extractor does not read. Treating the specifier as local would record
+        // whatever happened to share the name in this file.
+        expect(szObjects("const cardSz = { p: 4 };\nexport { cardSz } from './other';")).toEqual(
+            {},
+        );
+    });
+});
+
 describe('what the registry refuses to carry', () => {
     it.each([
         ['a call result', 'export const a = build();'],
