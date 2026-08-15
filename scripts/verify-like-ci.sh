@@ -131,13 +131,6 @@ echo "[verify-like-ci] Rust gates (rustfmt, clippy x3 feature sets, native check
     cargo test --features native-engine
 )
 
-# The Coverage workflow runs this and verify-like-ci did not, so a PR could be
-# green locally and red on a gate the author never saw. It re-runs the same
-# tests under instrumentation — about 13s on a warm target dir, which buys back
-# the round trip through CI that a coverage miss otherwise costs.
-echo "[verify-like-ci] Rust coverage gate (mirrors the Coverage workflow)..."
-pnpm cov:rust
-
 echo "[verify-like-ci] Running unit tests through turbo (catches missing build deps)..."
 pnpm test:unit
 
@@ -172,6 +165,14 @@ pnpm build
 # way that reads as a coverage regression rather than a missing build.
 echo "[verify-like-ci] TypeScript coverage (mirrors the Coverage workflow)..."
 pnpm test:coverage
+
+# AFTER the TypeScript pass, in the order the Coverage workflow uses. Both
+# write into `coverage/`, and vitest cleans that directory before it writes, so
+# running rust first means its report is deleted by the pass that follows it.
+# The gate below then sees one report where it expects two and calls every
+# changed Rust line unmeasured.
+echo "[verify-like-ci] Rust coverage gate (mirrors the Coverage workflow)..."
+pnpm cov:rust
 
 # Both reports exist by now, so the diff can be compared against them. Codecov
 # reports exactly this on the pull request, and nothing here reproduced it — an
