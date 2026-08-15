@@ -122,7 +122,7 @@ type:
 | --- | --- | --- |
 | `call` | ``function call `{detail}()` result is unknown at build time`` | `If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().` |
 | `identifier` | ``identifier `{detail}` could not be resolved to a static value`` | `Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().` |
-| `import` | ``imported binding `{detail}` could not be read at build time`` | `Export it as a const with a static object literal and import it by name — a barrel, a namespace import, or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().` |
+| `import` | ``imported binding `{detail}` could not be read at build time`` | `Export it as a const with a static object literal — a re-export, a barrel file, or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().` |
 | `member` | `member expression is not statically resolvable` | `Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().` |
 | `other` | ``expression of type `{detail}` is not statically analyzable`` | `Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().` |
 

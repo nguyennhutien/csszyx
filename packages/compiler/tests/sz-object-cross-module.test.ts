@@ -150,9 +150,12 @@ describe('what v1 refuses, and must keep refusing', () => {
             expect(result.code ?? '').toContain('_sz(');
         });
 
-        it(`${name} ignores a namespace import, which is out of v1 scope`, () => {
-            const tsx =
-                "import * as S from './styles';\nexport const A = () => <div sz={S.cardSz} />;";
+        it(`${name} ignores the namespace binding used as a whole style`, () => {
+            // `sz={S}` asks for the module's export map as a style. Lowering it
+            // would turn export NAMES into utility keys and emit classes for a
+            // shape the author never wrote, which is worse than not compiling:
+            // the CSS would be generated for them.
+            const tsx = "import * as S from './styles';\nexport const A = () => <div sz={S} />;";
             const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
             expect(result.code ?? '').toContain('_sz(');
         });
@@ -272,6 +275,38 @@ describe('an imported map read from inside an sz object', () => {
                 'export const A = () => { const LAYER = { modal: 10 }; return <div sz={{ z: LAYER.modal }} />; };',
             );
             expect(out.className).toBe('z-10');
+        });
+    }
+});
+
+describe('a namespace import, which is read through rather than applied', () => {
+    for (const [name, engine] of ENGINES) {
+        it(`${name} resolves one style read off the namespace`, () => {
+            const tsx =
+                "import * as S from './styles';\nexport const A = () => <div sz={S.cardSz} />;";
+            const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+            expect(/className="([^"]*)"/.exec(result.code ?? '')?.[1]).toBe('p-4 rounded-lg');
+        });
+
+        it(`${name} contributes the classes read through the namespace`, () => {
+            const tsx =
+                "import * as S from './styles';\nexport const A = () => <div sz={S.cardSz} />;";
+            const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+            expect([...(result.classes ?? [])]).toEqual(['p-4', 'rounded-lg']);
+        });
+
+        it(`${name} keeps the runtime path for an export the module lacks`, () => {
+            const tsx =
+                "import * as S from './styles';\nexport const A = () => <div sz={S.missingSz} />;";
+            const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+            expect(result.code ?? '').toContain('_sz(');
+        });
+
+        it(`${name} keeps the runtime path for a computed read`, () => {
+            const tsx =
+                "import * as S from './styles';\nexport const A = ({ k }) => <div sz={S[k]} />;";
+            const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+            expect(result.code ?? '').toContain('_sz(');
         });
     }
 });

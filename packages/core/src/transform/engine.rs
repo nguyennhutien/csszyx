@@ -1241,7 +1241,12 @@ mod tests {
                 "{diagnostics}"
             );
         }
-        assert!(diagnostics.contains("import it by name"), "{diagnostics}");
+        // A phrase only the import template carries, so the assertion proves
+        // the import SUGGESTION was rendered and not merely its reason line.
+        assert!(
+            diagnostics.contains("build.importedStaticSz: false"),
+            "{diagnostics}"
+        );
         // The forwarded prop keeps the plain wording, and must not be reported
         // as an import just because it is also an unresolved identifier.
         assert!(diagnostics.contains("identifier `sz`"), "{diagnostics}");
