@@ -77,9 +77,6 @@ jobs:
 
       # Tests import built artifacts; without the workspace build ~86 suites fail
       # to import and coverage collapses. turbo caches this.
-      - name: Cache Astro fonts
-        uses: ./.github/actions/cache-astro-fonts
-
       - name: Build workspace
         run: pnpm build
 
