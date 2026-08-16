@@ -1,5 +1,17 @@
 # csszyx
 
+## [0.14.1](https://github.com/nguyennhutien/csszyx/compare/v0.14.0...v0.14.1) (2026-08-16)
+
+
+### Features
+
+* read a style a module shares, however it exports it ([#234](https://github.com/nguyennhutien/csszyx/issues/234)) ([5c47d54](https://github.com/nguyennhutien/csszyx/commit/5c47d543110681e7a8ba3a6a0f125e25b1a2fcc2))
+
+
+### Bug Fixes
+
+* **cli:** wait for the signal handler instead of guessing when it exists ([#236](https://github.com/nguyennhutien/csszyx/issues/236)) ([cf7aced](https://github.com/nguyennhutien/csszyx/commit/cf7aced1a58f0f0bf256ec0dcb294fd3792565a0))
+
 ## [0.14.0](https://github.com/nguyennhutien/csszyx/compare/v0.13.0...v0.14.0) (2026-08-14)
 
 ### ⚠ BREAKING CHANGES
