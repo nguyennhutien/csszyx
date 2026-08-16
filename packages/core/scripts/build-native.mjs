@@ -1,5 +1,24 @@
 #!/usr/bin/env node
 // Build the current host's native platform package.
+//
+// `@napi-rs/cli` is pinned EXACTLY, and 3.8.x is held back on purpose. That
+// line added a filesystem-transaction layer — undocumented; the 3.8.0 notes
+// mention only WASI targets, while `cli.js` grows from 594 KB to 1.9 MB — that
+// writes each output to a temp file and then re-reads it to verify the hash
+// before swapping it in. On a Docker Desktop bind mount (`fakeowner`, magic
+// 0x6a656a63) the re-read does not see the settled contents, so every build
+// aborts with "replacement changed while it was prepared" and leaves the
+// addon deleted, because the smoke script removes it in a `finally`.
+//
+// Measured, not assumed: the same command with the same 3.8.6 succeeds when
+// `--output-dir` points at container-local overlayfs and fails when it points
+// at the mount. 3.8.6 is the latest release and is affected, so upgrading is
+// not the way out, and the CLI exposes no flag or environment variable that
+// turns the layer off. Upstream napi-rs#3444 reports the same machinery
+// misbehaving from 3.7.3 → 3.8.2 and is unanswered.
+//
+// CI is unaffected — runner filesystems are ordinary — so the pin exists to
+// keep local builds and `verify:ci:fast` working. Re-test before raising it.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
