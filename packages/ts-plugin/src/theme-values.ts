@@ -41,10 +41,7 @@ const snapshotCache = new WeakMap<object, WeakMap<object, ThemeSnapshot>>();
  * @returns Slash-normalized path with host-appropriate casing.
  */
 function normalizedPath(tsMod: typeof ts, fileName: string): string {
-    // Not `replaceAll`: this package compiles against `lib: ["es2020"]`
-    // because it is loaded into the host's TypeScript server, and that method
-    // is ES2021. Sonar's S7781 suggestion does not compile here.
-    const slashed = fileName.split('\\').join('/');
+    const slashed = fileName.replaceAll('\\', '/');
     return tsMod.sys.useCaseSensitiveFileNames ? slashed : slashed.toLowerCase();
 }
 
