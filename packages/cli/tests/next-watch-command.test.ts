@@ -2,9 +2,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { watch } from 'chokidar';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { startNextWatch } from '../src/commands/next-watch.js';
+import { type NextWatchFactory, startNextWatch } from '../src/commands/next-watch.js';
 
 const tempDirs: string[] = [];
 
@@ -22,6 +23,14 @@ function tempRoot(): string {
     return dir;
 }
 
+/** How a timed-out wait explains itself. */
+interface WaitOptions {
+    /** How long to keep polling before giving up. */
+    timeoutMs?: number;
+    /** State to attach to the failure, evaluated only when giving up. */
+    describe?: () => string;
+}
+
 /**
  * Wait for a filesystem watcher to reach a state.
  *
@@ -32,10 +41,17 @@ function tempRoot(): string {
  * parallel suite on macOS. A watcher that is genuinely broken never fires, so
  * the extra seconds cost nothing on a real regression.
  *
+ * Giving up attaches the observed state, because a bare deadline is not a
+ * diagnosis. This test has failed twice on CI reporting only that time ran
+ * out, which leaves the two causes — the watcher never delivered the event, or
+ * it delivered and nothing acted on it — indistinguishable from the log. The
+ * state is gathered ONLY on failure, so a passing run pays nothing for it.
+ *
  * @param assertion - Condition to poll until it holds.
- * @param timeoutMs - How long to keep polling before giving up.
+ * @param options - Budget and the state to report when the budget runs out.
  */
-async function waitFor(assertion: () => boolean, timeoutMs = 15_000): Promise<void> {
+async function waitFor(assertion: () => boolean, options: WaitOptions = {}): Promise<void> {
+    const { timeoutMs = 15_000, describe: describeState } = options;
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
         if (assertion()) {
@@ -43,8 +59,91 @@ async function waitFor(assertion: () => boolean, timeoutMs = 15_000): Promise<vo
         }
         await new Promise(resolve => setTimeout(resolve, 20));
     }
-    throw new Error('Timed out waiting for watcher state.');
+    const state = describeState?.();
+    throw new Error(
+        state === undefined
+            ? 'Timed out waiting for watcher state.'
+            : `Timed out waiting for watcher state.\n${state}`,
+    );
 }
+
+/**
+ * A watcher factory that copies every delivered event into `log`.
+ *
+ * Wraps the real chokidar rather than faking it: the question a failure has to
+ * answer is what the REAL watcher delivered, and a fake would answer for
+ * itself instead. Reading the log needs no production surface — the factory is
+ * already injectable for lifecycle tests.
+ *
+ * @param log - Collector the events are appended to, in delivery order.
+ * @returns Factory to pass as the `watch` dependency.
+ */
+function recordingWatch(log: string[]): NextWatchFactory {
+    return (paths, options) => {
+        const watcher = watch(paths, options);
+        const started = Date.now();
+        watcher.on('all', (event, filePath) => {
+            log.push(`+${String(Date.now() - started).padStart(5)}ms ${event} ${filePath}`);
+        });
+        return watcher;
+    };
+}
+
+/** One path a failure report should account for. */
+interface WatchedPath {
+    label: string;
+    path: string;
+    /** Whether the text matters, not just whether the file is there. */
+    content?: boolean;
+}
+
+/**
+ * Render everything needed to tell a deaf watcher from an idle one.
+ *
+ * Which files get their TEXT read is stated per entry rather than inferred
+ * from the extension. The safelist is `csszyx-classes.html`, so an
+ * extension rule written for a `.txt` would have silently dropped the one
+ * value the assertion actually reads.
+ *
+ * @param log - Events the watcher delivered, in order.
+ * @param paths - Files whose state the assertion depends on.
+ * @returns Multi-line report for the failure message.
+ */
+function describeWatchState(log: readonly string[], paths: readonly WatchedPath[]): string {
+    const lines = [
+        log.length === 0
+            ? 'events observed: NONE — the watcher delivered nothing at all'
+            : `events observed: ${log.length}`,
+    ];
+    lines.push(...log.map(entry => `  ${entry}`));
+    for (const { label, path: filePath, content } of paths) {
+        const exists = existsSync(filePath);
+        lines.push(`${label}: ${exists ? 'present' : 'absent'}  ${filePath}`);
+        if (exists && content) {
+            lines.push(`  text: ${JSON.stringify(readFileSync(filePath, 'utf8').slice(0, 400))}`);
+        }
+    }
+    return lines.join('\n');
+}
+
+describe('waitFor reports what it saw', () => {
+    it('names the observed state when it gives up', async () => {
+        // A bare deadline message teaches nothing. This test exists because a
+        // CI failure of the watcher test reported only that time ran out, so
+        // the two candidate causes — the event never arrived, or it arrived
+        // and was not acted on — stayed indistinguishable, and the next
+        // failure would have been equally mute.
+        await expect(
+            waitFor(() => false, { timeoutMs: 30, describe: () => 'events observed: none' }),
+        ).rejects.toThrow('events observed: none');
+    });
+
+    it('still says what it was waiting for', async () => {
+        await expect(waitFor(() => false, { timeoutMs: 30 })).rejects.toThrow(
+            'Timed out waiting for watcher state.',
+        );
+    });
+});
 
 describe('csszyx next-watch command', () => {
     it('materializes a new shard and removes it when its source is deleted', async () => {
@@ -53,19 +152,29 @@ describe('csszyx next-watch command', () => {
         const addedSource = join(root, 'app/Card.tsx');
         writeFileSync(initialSource, 'export const App=()=> <div sz={{ p: 4 }} />;');
 
-        const session = await startNextWatch({
-            root,
-            cwd: root,
-            parserMode: 'wasm',
-            debounceMs: 10,
-            silent: true,
-        });
+        const events: string[] = [];
+        const session = await startNextWatch(
+            {
+                root,
+                cwd: root,
+                parserMode: 'wasm',
+                debounceMs: 10,
+                silent: true,
+            },
+            { watch: recordingWatch(events) },
+        );
         try {
             expect(readFileSync(session.safelistOutputPath, 'utf8')).toContain('p-4');
 
             mkdirSync(join(root, 'app'), { recursive: true });
             writeFileSync(addedSource, 'export const Card=()=> <div />;');
             const shardPath = join(root, '.csszyx/cache/safelist-shards/manual.json');
+            const state = (): string =>
+                describeWatchState(events, [
+                    { label: 'safelist', path: session.safelistOutputPath, content: true },
+                    { label: 'shard', path: shardPath },
+                    { label: 'source', path: addedSource },
+                ]);
             writeFileSync(
                 shardPath,
                 `${JSON.stringify({
@@ -80,13 +189,16 @@ describe('csszyx next-watch command', () => {
                 'utf8',
             );
 
-            await waitFor(() => readFileSync(session.safelistOutputPath, 'utf8').includes('m-2'));
+            await waitFor(() => readFileSync(session.safelistOutputPath, 'utf8').includes('m-2'), {
+                describe: state,
+            });
 
             rmSync(addedSource);
             await waitFor(
                 () =>
                     !readFileSync(session.safelistOutputPath, 'utf8').includes('m-2') &&
                     !existsSync(shardPath),
+                { describe: state },
             );
         } finally {
             await session.close();
