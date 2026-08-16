@@ -175,11 +175,27 @@ pnpm test:coverage
 echo "[verify-like-ci] Rust coverage gate (mirrors the Coverage workflow)..."
 pnpm cov:rust
 
-# Both reports exist by now, so the diff can be compared against them. Codecov
-# reports exactly this on the pull request, and nothing here reproduced it — an
-# untested changed line was only ever discovered after a push.
-echo "[verify-like-ci] Patch coverage (changed lines against both coverage reports)..."
+# The third report the patch gate reads, and the one the Coverage workflow
+# uploads alongside the other two. vitest never runs ts-plugin's node-script
+# suites, so without this the gate reads whatever `packages/ts-plugin/coverage`
+# happened to hold — a stale file passes as coverage, which is how a pull
+# request went green here and then reported missing lines upstream.
+echo "[verify-like-ci] ts-plugin coverage (c8 — mirrors the Coverage workflow)..."
+pnpm --filter @csszyx/ts-plugin test:coverage
+
+# All three reports exist by now, so the diff can be compared against them.
+# Codecov reports exactly this on the pull request, and nothing here reproduced
+# it — an untested changed line was only ever discovered after a push.
+echo "[verify-like-ci] Patch coverage (changed lines against all coverage reports)..."
 pnpm check:patch-coverage
+
+# Sonar rejects new code above a cognitive-complexity of 15 and is the only
+# thing that was checking it, which means the first report of an over-complex
+# function arrived after a push. Scoped to changed files for the same reason
+# Sonar scopes to new code: the existing tree has functions above the line, and
+# a repo-wide gate would fail every run until that backlog is cleared.
+echo "[verify-like-ci] Cognitive complexity of changed files (mirrors Sonar)..."
+node scripts/check-changed-complexity.mjs
 
 # Runs after the build on purpose: the gate measures built dist output, and a
 # missing dist fails it rather than passing it.

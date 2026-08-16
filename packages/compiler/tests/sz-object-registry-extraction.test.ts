@@ -139,6 +139,22 @@ describe('an export list, which is the same module saying the same thing', () =>
         expect(szObjects('{ const cardSz = { p: 4 }; }\nexport { cardSz };')).toEqual({});
     });
 
+    it('refuses a type-only specifier inside a value export list', () => {
+        // `export { type X }` erases at runtime, so no importer can read a
+        // value through it however static the object looks.
+        expect(szObjects('const cardSz = { p: 4 };\nexport { type cardSz };')).toEqual({});
+    });
+
+    it('refuses a whole type-only export statement', () => {
+        expect(szObjects('const cardSz = { p: 4 };\nexport type { cardSz };')).toEqual({});
+    });
+
+    it('refuses an export renamed to a string literal', () => {
+        // Legal, but not a name any importer of a token module writes, and
+        // keying the registry by it would record an entry nobody asks for.
+        expect(szObjects('const cardSz = { p: 4 };\nexport { cardSz as "card-sz" };')).toEqual({});
+    });
+
     it('refuses an export list that names something re-exported from elsewhere', () => {
         // `export { x } from './y'` needs the provider module, which this
         // extractor does not read. Treating the specifier as local would record

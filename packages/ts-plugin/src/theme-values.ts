@@ -41,6 +41,9 @@ const snapshotCache = new WeakMap<object, WeakMap<object, ThemeSnapshot>>();
  * @returns Slash-normalized path with host-appropriate casing.
  */
 function normalizedPath(tsMod: typeof ts, fileName: string): string {
+    // Not `replaceAll`: this package compiles against `lib: ["es2020"]`
+    // because it is loaded into the host's TypeScript server, and that method
+    // is ES2021. Sonar's S7781 suggestion does not compile here.
     const slashed = fileName.split('\\').join('/');
     return tsMod.sys.useCaseSensitiveFileNames ? slashed : slashed.toLowerCase();
 }
@@ -157,30 +160,74 @@ interface AddInterfaceOptions {
 function addInterface(options: AddInterfaceOptions): boolean {
     const { tsMod, declaration, theme, shouldStop } = options;
     if (declaration.name.text === 'CustomTheme') {
-        for (const member of declaration.members) {
-            if (shouldStop()) return false;
-            const name = memberName(tsMod, member);
-            if (!name || !THEME_CATEGORIES.includes(name as ThemeValueCategory)) continue;
-            const values = stringLiteralUnion(
-                tsMod,
-                tsMod.isPropertySignature(member) ? member.type : undefined,
-            );
-            if (!values) continue;
-            const bucket = theme[name as ThemeValueCategory];
-            for (const value of values) {
-                if (THEME_TOKEN.test(value)) bucket.add(value);
-            }
-            if (tokenCount(theme) > MAX_THEME_TOKENS) return false;
+        return addThemeCategories(tsMod, declaration, theme, shouldStop);
+    }
+    if (declaration.name.text === 'VariantModifiers') {
+        return addBreakpoints(tsMod, declaration, theme, shouldStop);
+    }
+    return true;
+}
+
+/** Collect one `CustomTheme` member's token union into its category bucket.
+ * @param tsMod - Host TypeScript instance.
+ * @param member - Interface member to read.
+ * @param theme - Accumulator to fill.
+ */
+function addThemeMember(tsMod: typeof ts, member: ts.TypeElement, theme: MutableTheme): void {
+    const name = memberName(tsMod, member);
+    if (!name || !THEME_CATEGORIES.includes(name as ThemeValueCategory)) return;
+    const values = stringLiteralUnion(
+        tsMod,
+        tsMod.isPropertySignature(member) ? member.type : undefined,
+    );
+    if (!values) return;
+    const bucket = theme[name as ThemeValueCategory];
+    for (const value of values) {
+        if (THEME_TOKEN.test(value)) bucket.add(value);
+    }
+}
+
+/** Read the `CustomTheme` augmentation, one member per category.
+ * @param tsMod - Host TypeScript instance.
+ * @param declaration - The interface being read.
+ * @param theme - Accumulator to fill.
+ * @param shouldStop - Cooperative cancellation/deadline check.
+ * @returns False when cancelled or the global token cap is exceeded.
+ */
+function addThemeCategories(
+    tsMod: typeof ts,
+    declaration: ts.InterfaceDeclaration,
+    theme: MutableTheme,
+    shouldStop: () => boolean,
+): boolean {
+    for (const member of declaration.members) {
+        if (shouldStop()) return false;
+        addThemeMember(tsMod, member, theme);
+        if (tokenCount(theme) > MAX_THEME_TOKENS) return false;
+    }
+    return true;
+}
+
+/** Read the `VariantModifiers` augmentation for breakpoint keys.
+ * @param tsMod - Host TypeScript instance.
+ * @param declaration - The interface being read.
+ * @param theme - Accumulator to fill.
+ * @param shouldStop - Cooperative cancellation/deadline check.
+ * @returns False when cancelled or the global token cap is exceeded.
+ */
+function addBreakpoints(
+    tsMod: typeof ts,
+    declaration: ts.InterfaceDeclaration,
+    theme: MutableTheme,
+    shouldStop: () => boolean,
+): boolean {
+    for (const member of declaration.members) {
+        if (shouldStop()) return false;
+        const name = memberName(tsMod, member);
+        if (name && name.length <= MAX_THEME_TOKEN_LENGTH && BREAKPOINT_TOKEN.test(name)) {
+            theme.breakpoints.add(name);
         }
-    } else if (declaration.name.text === 'VariantModifiers') {
-        for (const member of declaration.members) {
-            if (shouldStop()) return false;
-            const name = memberName(tsMod, member);
-            if (name && name.length <= MAX_THEME_TOKEN_LENGTH && BREAKPOINT_TOKEN.test(name)) {
-                theme.breakpoints.add(name);
-            }
-            if (tokenCount(theme) > MAX_THEME_TOKENS) return false;
-        }
+        if (tokenCount(theme) > MAX_THEME_TOKENS) return false;
     }
     return true;
 }
@@ -202,21 +249,56 @@ function parseThemeSource(
     const theme = mutableTheme();
     for (const statement of sourceFile.statements) {
         if (shouldStop()) return EMPTY_THEME_SNAPSHOT;
-        if (!tsMod.isModuleDeclaration(statement)) continue;
-        if (!tsMod.isStringLiteral(statement.name) || statement.name.text !== '@csszyx/compiler') {
-            continue;
-        }
-        const body = statement.body;
-        if (!body || !tsMod.isModuleBlock(body)) continue;
-        for (const nested of body.statements) {
-            if (shouldStop()) return EMPTY_THEME_SNAPSHOT;
-            if (!tsMod.isInterfaceDeclaration(nested)) continue;
-            if (!addInterface({ tsMod, declaration: nested, theme, shouldStop })) {
-                return EMPTY_THEME_SNAPSHOT;
-            }
-        }
+        const body = compilerModuleBlock(tsMod, statement);
+        if (!body) continue;
+        if (!addModuleBlock(tsMod, body, theme, shouldStop)) return EMPTY_THEME_SNAPSHOT;
     }
-    if (tokenCount(theme) === 0) return EMPTY_THEME_SNAPSHOT;
+    return tokenCount(theme) === 0 ? EMPTY_THEME_SNAPSHOT : freezeTheme(theme);
+}
+
+/** The block of a `declare module '@csszyx/compiler'` statement, if it is one.
+ * @param tsMod - Host TypeScript instance.
+ * @param statement - Top-level statement to classify.
+ * @returns The module block, or undefined for every other statement.
+ */
+function compilerModuleBlock(
+    tsMod: typeof ts,
+    statement: ts.Statement,
+): ts.ModuleBlock | undefined {
+    if (!tsMod.isModuleDeclaration(statement)) return undefined;
+    if (!tsMod.isStringLiteral(statement.name) || statement.name.text !== '@csszyx/compiler') {
+        return undefined;
+    }
+    const body = statement.body;
+    return body && tsMod.isModuleBlock(body) ? body : undefined;
+}
+
+/** Read every augmentation interface inside one module block.
+ * @param tsMod - Host TypeScript instance.
+ * @param body - Module block to walk.
+ * @param theme - Accumulator to fill.
+ * @param shouldStop - Cooperative cancellation/deadline check.
+ * @returns False when cancelled or the global token cap is exceeded.
+ */
+function addModuleBlock(
+    tsMod: typeof ts,
+    body: ts.ModuleBlock,
+    theme: MutableTheme,
+    shouldStop: () => boolean,
+): boolean {
+    for (const nested of body.statements) {
+        if (shouldStop()) return false;
+        if (!tsMod.isInterfaceDeclaration(nested)) continue;
+        if (!addInterface({ tsMod, declaration: nested, theme, shouldStop })) return false;
+    }
+    return true;
+}
+
+/** Freeze the accumulator into the immutable snapshot callers receive.
+ * @param theme - Filled accumulator.
+ * @returns Sorted, frozen snapshot.
+ */
+function freezeTheme(theme: MutableTheme): ThemeSnapshot {
     const freeze = (values: Set<string>): readonly string[] =>
         Object.freeze([...values].sort((left, right) => left.localeCompare(right)));
     return Object.freeze({
