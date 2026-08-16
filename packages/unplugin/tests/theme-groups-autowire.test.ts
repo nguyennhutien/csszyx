@@ -78,7 +78,9 @@ describe('theme groups auto-wiring (real vite build, zero app wiring)', () => {
             resolve: {
                 // Inline the workspace runtime so the built file is
                 // self-contained and executable from the temp dir.
-                alias: { '@csszyx/runtime': resolve(__dirname, '../../runtime/src/index.ts') },
+                alias: {
+                    '@csszyx/runtime': resolve(import.meta.dirname, '../../runtime/src/index.ts'),
+                },
             },
             build: {
                 minify: false,
@@ -158,7 +160,9 @@ export const slotOverride = szcn('text-sub', 'text-danger');
                 }),
             ],
             resolve: {
-                alias: { '@csszyx/runtime': resolve(__dirname, '../../runtime/src/index.ts') },
+                alias: {
+                    '@csszyx/runtime': resolve(import.meta.dirname, '../../runtime/src/index.ts'),
+                },
             },
             build: {
                 minify: false,
@@ -273,7 +277,9 @@ export const acrossFiles = szcn('text-typed', 'text-unlisted');
                 }),
             ],
             resolve: {
-                alias: { '@csszyx/runtime': resolve(__dirname, '../../runtime/src/index.ts') },
+                alias: {
+                    '@csszyx/runtime': resolve(import.meta.dirname, '../../runtime/src/index.ts'),
+                },
             },
             build: {
                 minify: false,

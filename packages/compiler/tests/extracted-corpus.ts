@@ -11,7 +11,7 @@ export interface ExtractedSnippet {
 }
 
 export function extractCorpusSnippets(): ExtractedSnippet[] {
-    const testsDir = path.resolve(__dirname);
+    const testsDir = path.resolve(import.meta.dirname);
     const snippets: ExtractedSnippet[] = [];
 
     for (const file of fs.readdirSync(testsDir).sort()) {

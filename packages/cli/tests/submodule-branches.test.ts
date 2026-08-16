@@ -11,20 +11,20 @@ import { transformHtmlSourceSimple, transformSource } from '../src/migrate/ast-t
 
 describe('HTML class attribute branches', () => {
     it('skips a whitespace-only class attribute', () => {
-        const out = transformHtmlSourceSimple('<div class="   ">x</div>', 'page.html');
+        const out = transformHtmlSourceSimple('<div class="   ">x</div>');
         expect(out.code).toContain('class="   "');
         expect(out.stats.classNamesSkipped).toBe(1);
     });
 
     it('leaves a fully unrecognized class attribute in place and records it', () => {
-        const out = transformHtmlSourceSimple('<div class="totally-unknownx">x</div>', 'page.html');
+        const out = transformHtmlSourceSimple('<div class="totally-unknownx">x</div>');
         expect(out.code).toContain('class="totally-unknownx"');
         expect(out.stats.classesUnrecognized).toContain('totally-unknownx');
         expect(out.changed).toBe(false);
     });
 
     it('splits a partially recognized class into a kept class plus an sz attribute', () => {
-        const out = transformHtmlSourceSimple('<div class="p-4 keepmex">x</div>', 'page.html');
+        const out = transformHtmlSourceSimple('<div class="p-4 keepmex">x</div>');
         expect(out.code).toContain('class="keepmex"');
         expect(out.code).toContain('sz="');
         expect(out.stats.classNamesTransformed).toBe(1);
@@ -33,7 +33,6 @@ describe('HTML class attribute branches', () => {
     it('injects the local runtime script before </body>', () => {
         const out = transformHtmlSourceSimple(
             '<html><head></head><body><div class="p-4">x</div></body></html>',
-            'page.html',
             { injectRuntime: 'local', localPath: 'my-runtime.js', injectFouc: false },
         );
         expect(out.code).toContain('<script src="my-runtime.js"></script>');
@@ -41,7 +40,7 @@ describe('HTML class attribute branches', () => {
     });
 
     it('reads a single-quoted class attribute', () => {
-        const out = transformHtmlSourceSimple("<div class='p-4'>x</div>", 'page.html');
+        const out = transformHtmlSourceSimple("<div class='p-4'>x</div>");
         expect(out.code).toContain('sz=');
     });
 });

@@ -635,7 +635,7 @@ export function disambiguateFont(value: string): ParsedClass | null {
  */
 function disambiguateBorder(value: string): ParsedClass | null {
     if (BORDER_WIDTH_KEYWORDS.has(value) || value === 'px') {
-        return { prop: 'border', value: parseNumericOrString('border', value, false) };
+        return { prop: 'border', value: parseNumericOrString(value, false) };
     }
     if (BORDER_STYLE_KEYWORDS.has(value)) {
         return { prop: 'borderStyle', value };
@@ -1203,12 +1203,11 @@ function signedString(value: string, negative: boolean): string {
 
 /**
  * Parses a value as numeric if possible, otherwise returns as string.
- * @param prefix - The matched Tailwind prefix
  * @param value - The raw value string
  * @param negative - Whether the class has a negative prefix
  * @returns Numeric value or string
  */
-function parseNumericOrString(prefix: string, value: string, negative: boolean): unknown {
+function parseNumericOrString(value: string, negative: boolean): unknown {
     if (value === 'px') {
         return 'px';
     }

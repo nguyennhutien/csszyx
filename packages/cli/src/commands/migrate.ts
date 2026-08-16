@@ -328,7 +328,7 @@ function processMigrationFile(
     const processSource =
         context.resolveTodosPath && !isHtml ? stripSzTodoComments(source) : source;
     const result = isHtml
-        ? transformHtmlSourceSimple(processSource, filePath, {
+        ? transformHtmlSourceSimple(processSource, {
               braces: context.options.braces,
               injectFouc: context.options.injectFouc,
               injectRuntime: context.options.injectRuntime,

@@ -49,7 +49,7 @@ async function bundleProbe(source: string): Promise<BundleProbe> {
             contents: source,
             // Resolve from this package so `@csszyx/runtime` follows the same
             // workspace linking an app would use.
-            resolveDir: __dirname,
+            resolveDir: import.meta.dirname,
             loader: 'js',
         },
         bundle: true,
