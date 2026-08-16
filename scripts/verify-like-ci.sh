@@ -79,6 +79,7 @@ echo "[verify-like-ci] Repository tooling suites (generators, release config, wo
 pnpm test:scripts
 node .github/scripts/validate-release-please-config.mjs
 node --test scripts/validate-commit-message-policy.test.mjs
+node --test scripts/napi-pin.test.mjs
 node --test .github/scripts/publish-workspace.test.mjs
 node --test .github/scripts/detect-pkg-code-changes.test.mjs
 node --test .github/scripts/detect-lock-code-changes.test.mjs
