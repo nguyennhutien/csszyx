@@ -41,9 +41,22 @@ describe('nextWatch command lifecycle', () => {
         mkdirSync(join(cwd, 'app'));
         writeFileSync(join(cwd, 'app/page.tsx'), 'export default () => <div sz={{ p: 4 }} />;');
 
+        // The handler is installed by `waitForShutdown`, which runs only after
+        // startup returns — and startup may spend the whole readiness-probe
+        // budget first. A signal emitted into that gap reaches no handler of
+        // ours; vitest listens for SIGINT too, so the worker running this file
+        // is torn down and the run reports "Worker exited unexpectedly" with
+        // nothing failing. Waiting on the listener itself is what the command
+        // being tested requires, so it is what this waits for.
+        const before = process.listenerCount('SIGINT');
         const running = nextWatch({ cwd, parserMode: 'wasm', debounceMs: 5 });
-        // Give the watcher a moment to reach ready, then signal shutdown.
-        await new Promise(resolve => setTimeout(resolve, 400));
+        const deadline = Date.now() + 15_000;
+        while (process.listenerCount('SIGINT') === before) {
+            if (Date.now() > deadline) {
+                throw new Error('next-watch never installed its SIGINT handler');
+            }
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
         process.emit('SIGINT');
         const code = await running;
         expect(code).toBe(0);

@@ -114,7 +114,7 @@ export function transformTemplate(
             break;
         }
         result += template.slice(cursor, attribute.start);
-        const match = readQuotedSzAttribute(template, attribute.start, attribute.valueStart);
+        const match = readQuotedSzAttribute(template, attribute.valueStart);
         if (!match) {
             result += template.slice(attribute.start, attribute.valueStart);
             cursor = attribute.valueStart;
@@ -190,15 +190,10 @@ function findVueSzAttribute(template: string, from: number): VueSzAttribute | nu
  * Reads a quoted static object attribute without regular-expression backtracking.
  *
  * @param template Vue template source.
- * @param start Start offset including the optional binding prefix.
  * @param valueStart Offset immediately after `sz=`.
  * @returns Parsed attribute, or null when unsupported or malformed.
  */
-function readQuotedSzAttribute(
-    template: string,
-    start: number,
-    valueStart: number,
-): QuotedSzAttribute | null {
+function readQuotedSzAttribute(template: string, valueStart: number): QuotedSzAttribute | null {
     const quote = template.charAt(valueStart);
     if (quote !== '"' && quote !== "'") {
         return null;

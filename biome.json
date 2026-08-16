@@ -105,7 +105,8 @@
                 "useOptionalChain": "warn"
             },
             "correctness": {
-                "noUnusedFunctionParameters": "off",
+                "noGlobalDirnameFilename": "error",
+                "noUnusedFunctionParameters": "error",
                 "noUnusedImports": "error",
                 "useParseIntRadix": "warn"
             },
@@ -119,8 +120,11 @@
                 "noConfusingVoidType": "warn",
                 "noEmptyInterface": "warn",
                 "noExplicitAny": "warn",
+                "noExportsInTest": "error",
+                "noFocusedTests": "error",
                 "noGlobalIsNan": "warn",
                 "noImplicitAnyLet": "error",
+                "noSkippedTests": "error",
                 "noTemplateCurlyInString": "off"
             }
         }

@@ -80,7 +80,9 @@ describe('editing @theme on a running Vite dev server', () => {
             server: { port: 0, host: '127.0.0.1' },
             plugins: [vitePlugin({ build: { cache: false }, production: { mangle: false } })],
             resolve: {
-                alias: { '@csszyx/runtime': resolve(__dirname, '../../runtime/src/index.ts') },
+                alias: {
+                    '@csszyx/runtime': resolve(import.meta.dirname, '../../runtime/src/index.ts'),
+                },
             },
         });
         servers.push(server);

@@ -879,13 +879,11 @@ const FOUC_CSS = `<style>
  * Transform an HTML source file replacing class="..." with sz="..." attributes.
  * Also optionally injects FOUC-prevention CSS and runtime script.
  * @param source - HTML source file content.
- * @param filePath - Path to the source file.
  * @param options - HTML transform options.
  * @returns {TransformResult} Transformed code and stats.
  */
 export function transformHtmlSourceSimple(
     source: string,
-    filePath: string,
     options: HtmlTransformOptions = {},
 ): TransformResult {
     const {
