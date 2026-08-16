@@ -234,3 +234,31 @@ try {
     performance.now = realNow;
 }
 });
+
+// The activation line reports each switch, and every other case here leaves
+// the defaults in place — completions on, values on, theme values off. Without
+// the opposite settings the off-states of the first two and the on-state of the
+// third are never rendered, so a typo in the message would ship unseen.
+const activationLogs = [];
+init({ typescript: ts }).create({
+    config: { enabled: false, values: false, themeValues: true },
+    languageService: {
+        getCompletionsAtPosition: () => base,
+        getProgram: () => undefined,
+    },
+    project: {
+        projectService: {
+            cancellationToken: { isCancellationRequested: () => false },
+            logger: { info: message => activationLogs.push(message) },
+        },
+    },
+});
+assert.ok(
+    activationLogs.some(
+        message =>
+            message.includes('completions off') &&
+            message.includes('values off') &&
+            message.includes('theme values on'),
+    ),
+    'activation must report every switch it was given',
+);

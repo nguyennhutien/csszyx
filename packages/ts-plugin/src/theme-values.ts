@@ -75,7 +75,9 @@ function projectThemeSource(
  * @returns Its static name, or undefined.
  */
 function memberName(tsMod: typeof ts, member: ts.TypeElement): string | undefined {
-    if (!tsMod.isPropertySignature(member) || !member.name) return undefined;
+    // No `!member.name` guard: a property signature's name is required by the
+    // AST type, so testing for it left an arm no input could reach.
+    if (!tsMod.isPropertySignature(member)) return undefined;
     const name = member.name;
     if (tsMod.isIdentifier(name) || tsMod.isStringLiteral(name)) return name.text;
     return undefined;
@@ -174,12 +176,13 @@ function addInterface(options: AddInterfaceOptions): boolean {
  * @param theme - Accumulator to fill.
  */
 function addThemeMember(tsMod: typeof ts, member: ts.TypeElement, theme: MutableTheme): void {
+    // Narrowed here rather than re-tested at the type read: `memberName`
+    // requires a property signature too, so asking twice left an arm no input
+    // could reach. A method signature takes this exit.
+    if (!tsMod.isPropertySignature(member)) return;
     const name = memberName(tsMod, member);
     if (!name || !THEME_CATEGORIES.includes(name as ThemeValueCategory)) return;
-    const values = stringLiteralUnion(
-        tsMod,
-        tsMod.isPropertySignature(member) ? member.type : undefined,
-    );
+    const values = stringLiteralUnion(tsMod, member.type);
     if (!values) return;
     const bucket = theme[name as ThemeValueCategory];
     for (const value of values) {
@@ -269,8 +272,11 @@ function compilerModuleBlock(
     if (!tsMod.isStringLiteral(statement.name) || statement.name.text !== '@csszyx/compiler') {
         return undefined;
     }
-    const body = statement.body;
-    return body && tsMod.isModuleBlock(body) ? body : undefined;
+    // A module named by a string literal carries either no body or a block.
+    // The nested-declaration form needs a dotted identifier name, which the
+    // check above already excluded, so testing for a block again would leave
+    // an arm no input could reach.
+    return statement.body as ts.ModuleBlock | undefined;
 }
 
 /** Read every augmentation interface inside one module block.

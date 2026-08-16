@@ -186,3 +186,152 @@ test('caches by program and source identity without leaking between projects', (
     assert.deepStrictEqual(first.colors, ['one']);
     assert.deepStrictEqual(second.colors, ['two']);
 });
+
+test('gives up wherever cancellation lands, not only before it starts', () => {
+    // The reader checks `shouldStop` at four depths — per top-level statement,
+    // per interface member in each of the two augmentations, and per nested
+    // statement. Cancelling only at the entry point leaves the other three
+    // untaken, so each is driven here by letting the check pass a set number of
+    // times before it trips. Every one of them must yield the empty snapshot
+    // rather than a half-read theme, because a partial snapshot would offer
+    // completions for some tokens and silently omit the rest.
+    const text = declaration({ colors: "'a' | 'b' | 'c'" }).replace(
+        'interface VariantModifiers {',
+        "interface VariantModifiers { tablet: true; desktop: true;",
+    );
+    for (let budget = 0; budget < 8; budget++) {
+        let seen = 0;
+        const snapshot = themeSnapshotForProgram({
+            tsMod: ts,
+            program: program(source('/repo/.csszyx/theme.d.ts', text)),
+            projectRoot: '/repo',
+            shouldStop: () => seen++ >= budget,
+        });
+        assert.strictEqual(snapshot, EMPTY_THEME_SNAPSHOT, `budget ${budget}`);
+    }
+});
+
+test('stops reading once the token cap is passed', () => {
+    // The cap is what keeps a generated declaration from turning into an
+    // unbounded completion list inside the editor process.
+    const many = Array.from({ length: 2100 }, (_, index) => `'c${index}'`).join(' | ');
+    const snapshot = themeSnapshotForProgram({
+        tsMod: ts,
+        program: program(source('/repo/.csszyx/theme.d.ts', declaration({ colors: many }))),
+        projectRoot: '/repo',
+    });
+
+    assert.strictEqual(snapshot, EMPTY_THEME_SNAPSHOT);
+});
+
+test('passes over interface members that are not typed properties', () => {
+    // A method signature and an untyped property both reach the member reader,
+    // and neither carries a string-literal union to collect. Skipping them is
+    // what lets an unrelated augmentation coexist with the generated one.
+    const text = declaration().replace(
+        'interface CustomTheme {',
+        'interface CustomTheme { method(): void; bare;',
+    );
+    const snapshot = themeSnapshotForProgram({
+        tsMod: ts,
+        program: program(source('/repo/.csszyx/theme.d.ts', text)),
+        projectRoot: '/repo',
+    });
+
+    assert.deepStrictEqual(snapshot.colors, ['brand']);
+});
+
+test('ignores module forms and members that carry no augmentation', () => {
+    // A namespace named by an identifier has no string module name; a module
+    // declared without a body has no block to walk; a non-interface statement
+    // inside the block is not an augmentation. All three sit in the same walk
+    // as the real declaration and must be stepped over rather than read.
+    const text = [
+        "declare namespace Local { const x: number; }",
+        "declare module 'no-body';",
+        "declare module '@csszyx/compiler' {",
+        '    type Unrelated = string;',
+        "    interface CustomTheme { colors: 'brand'; }",
+        '}',
+        'export {};',
+    ].join('\n');
+    const snapshot = themeSnapshotForProgram({
+        tsMod: ts,
+        program: program(source('/repo/.csszyx/theme.d.ts', text)),
+        projectRoot: '/repo',
+    });
+
+    assert.deepStrictEqual(snapshot.colors, ['brand']);
+});
+
+test('reads the breakpoint augmentation on its own terms', () => {
+    // `VariantModifiers` has its own member loop, its own cancellation check
+    // and its own cap check, none of which the `CustomTheme` tests reach. An
+    // interface that is neither is stepped over rather than guessed at.
+    const withOther = [
+        "declare module '@csszyx/compiler' {",
+        "    interface Unrelated { colors: 'ignored'; }",
+        // The method signature is not a property and carries no breakpoint;
+        // it reaches the member reader through a different augmentation than
+        // the CustomTheme tests use.
+        "    interface VariantModifiers { tablet: true; desktop: true; helper(): void; }",
+        '}',
+        'export {};',
+    ].join('\n');
+    assert.deepStrictEqual(
+        themeSnapshotForProgram({
+            tsMod: ts,
+            program: program(source('/repo/.csszyx/theme.d.ts', withOther)),
+            projectRoot: '/repo',
+        }).breakpoints,
+        ['desktop', 'tablet'],
+    );
+
+    for (let budget = 0; budget < 6; budget++) {
+        let seen = 0;
+        assert.strictEqual(
+            themeSnapshotForProgram({
+                tsMod: ts,
+                program: program(source('/repo/.csszyx/theme.d.ts', withOther)),
+                projectRoot: '/repo',
+                shouldStop: () => seen++ >= budget,
+            }),
+            EMPTY_THEME_SNAPSHOT,
+            `budget ${budget}`,
+        );
+    }
+
+    const many = Array.from({ length: 2100 }, (_, index) => `    bp${index}: true;`).join('\n');
+    assert.strictEqual(
+        themeSnapshotForProgram({
+            tsMod: ts,
+            program: program(
+                source(
+                    '/repo/.csszyx/theme.d.ts',
+                    `declare module '@csszyx/compiler' {\n    interface VariantModifiers {\n${many}\n    }\n}\nexport {};`,
+                ),
+            ),
+            projectRoot: '/repo',
+        }),
+        EMPTY_THEME_SNAPSHOT,
+    );
+});
+
+test('treats a property with no declared type as carrying no tokens', () => {
+    // `colors;` parses as a property signature whose type is absent. The union
+    // reader has to answer "nothing" for it rather than dereference the type.
+    const untyped = [
+        "declare module '@csszyx/compiler' {",
+        '    interface CustomTheme { colors; spacings: \'gutter\'; }',
+        '}',
+        'export {};',
+    ].join('\n');
+    const snapshot = themeSnapshotForProgram({
+        tsMod: ts,
+        program: program(source('/repo/.csszyx/theme.d.ts', untyped)),
+        projectRoot: '/repo',
+    });
+
+    assert.deepStrictEqual(snapshot.colors, []);
+    assert.deepStrictEqual(snapshot.spacings, ['gutter']);
+});
