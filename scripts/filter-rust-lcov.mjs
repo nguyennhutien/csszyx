@@ -133,12 +133,30 @@ function lineCoverage(lcov) {
     return { found, hit, percent: found === 0 ? 100 : (hit / found) * 100 };
 }
 
+/**
+ * Fail when filtered production coverage does not meet the configured gate.
+ *
+ * The threshold belongs here rather than on `cargo llvm-cov`: the raw report
+ * still contains inline tests and native-unreachable WASM adapters that this
+ * script deliberately removes before Codecov sees the Rust flag.
+ */
+export function assertMinimumLineCoverage(lcov, minimum) {
+    const coverage = lineCoverage(lcov);
+    if (coverage.percent < minimum) {
+        throw new Error(
+            `Rust production line coverage ${coverage.hit}/${coverage.found} ` +
+                `(${coverage.percent.toFixed(2)}%) is below the required ${minimum}%`,
+        );
+    }
+    return coverage;
+}
+
 const isCli = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isCli) {
     const reportPath = resolve(process.argv[2] ?? 'coverage/rust-lcov.info');
     const filtered = filterRustLcov(readFileSync(reportPath, 'utf8'));
     writeFileSync(reportPath, filtered);
-    const coverage = lineCoverage(filtered);
+    const coverage = assertMinimumLineCoverage(filtered, 100);
     console.log(
         `Rust production line coverage: ${coverage.hit}/${coverage.found} (${coverage.percent.toFixed(2)}%)`,
     );

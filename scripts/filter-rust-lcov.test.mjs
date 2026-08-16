@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { filterRustLcov } from './filter-rust-lcov.mjs';
+import { assertMinimumLineCoverage, filterRustLcov } from './filter-rust-lcov.mjs';
 
 test('removes inline test instrumentation while preserving production coverage', () => {
     const source = [
@@ -117,5 +117,18 @@ end_of_record
         error =>
             /\/elsewhere\/csszyx\/packages\/core\/src\/example\.rs/.test(error.message) &&
             /target\/llvm-cov-target/.test(error.message),
+    );
+});
+
+test('accepts a filtered report that meets the production line threshold', () => {
+    const coverage = assertMinimumLineCoverage('LF:2\nLH:2\n', 100);
+
+    assert.deepEqual(coverage, { found: 2, hit: 2, percent: 100 });
+});
+
+test('rejects a filtered report below the production line threshold', () => {
+    assert.throws(
+        () => assertMinimumLineCoverage('LF:2\nLH:1\n', 100),
+        /Rust production line coverage 1\/2 \(50\.00%\) is below the required 100%/,
     );
 });
