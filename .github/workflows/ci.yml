@@ -44,6 +44,11 @@ jobs:
         run: node .github/scripts/validate-release-please-config.mjs
       - name: Test commit-message policy
         run: node --test scripts/validate-commit-message-policy.test.mjs
+      # 3.8.x of @napi-rs/cli breaks native builds on bind-mounted filesystems
+      # only, so this job is the only thing standing between a green Dependabot
+      # PR and an unbuildable local tree. See the test's header for the story.
+      - name: Guard the @napi-rs/cli pin
+        run: node --test scripts/napi-pin.test.mjs
       - name: Test resumable npm publisher
         run: node --test .github/scripts/publish-workspace.test.mjs
       - name: Test package.json content gate
