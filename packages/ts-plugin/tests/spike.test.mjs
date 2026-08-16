@@ -10,14 +10,21 @@ const require = createRequire(import.meta.url);
 const ts = require('typescript');
 const { computeSzEntries } = require('../dist/core.js');
 
-function entriesAtMarker(source, { forceUnresolvedSymbols = false, tsModule = ts } = {}) {
+function entriesAtMarker(
+    source,
+    { forceUnresolvedSymbols = false, tsModule = ts, themeDeclaration, themeValues = false } = {},
+) {
     const marker = source.indexOf('/*|*/');
     assert.ok(marker >= 0, 'source must contain the /*|*/ marker');
     const clean = source.replace('/*|*/', '');
     const fileName = '/virtual/test.tsx';
-    const files = { [fileName]: clean };
+    const themeFileName = '/virtual/.csszyx/theme.d.ts';
+    const files = {
+        [fileName]: clean,
+        ...(themeDeclaration === undefined ? {} : { [themeFileName]: themeDeclaration }),
+    };
     const host = {
-        getScriptFileNames: () => [fileName],
+        getScriptFileNames: () => Object.keys(files),
         getScriptVersion: () => '1',
         getScriptSnapshot: f => {
             const content = files[f] ?? (ts.sys.fileExists(f) ? ts.sys.readFile(f) : undefined);
@@ -44,17 +51,33 @@ function entriesAtMarker(source, { forceUnresolvedSymbols = false, tsModule = ts
         service = Object.create(ls);
         service.getProgram = () => programWithoutSymbols;
     }
-    return computeSzEntries(
-        tsModule,
-        service,
+    return computeSzEntries({
+        tsMod: tsModule,
+        languageService: service,
         fileName,
-        marker,
-        { enabled: true, values: true, maxEntries: 512, deadlineMs: 20, failureThreshold: 3 },
-        Number.POSITIVE_INFINITY,
-    );
+        position: marker,
+        config: {
+            enabled: true,
+            values: true,
+            themeValues,
+            maxEntries: 512,
+            deadlineMs: 20,
+            failureThreshold: 3,
+        },
+        deadline: Number.POSITIVE_INFINITY,
+        projectRoot: '/virtual',
+    });
 }
 
 const namesAtMarker = source => entriesAtMarker(source).map(entry => entry.name);
+
+const generatedTheme = `
+declare module '@csszyx/compiler' {
+    interface CustomTheme { colors: 'brand' | 'red-500'; spacings: 'gutter'; }
+    interface VariantModifiers { tablet?: SzPropsBase; '3xl'?: SzPropsBase; }
+}
+export {};
+`;
 
 // 1. Inside a szv variant object — the type-blind case.
 test('szv innermost variant object offers sz keys', () => {
@@ -100,6 +123,39 @@ test('unquoted value completion inserts a valid string literal', () => {
     const red = entries.find(entry => entry.name === 'red-500');
     assert.strictEqual(red?.insertText, "'red-500'");
     assert.strictEqual(red?.replacementSpan.length, 0);
+});
+
+test('theme values are opt-in, additive, deduped, and syntax-safe', () => {
+    const disabled = entriesAtMarker('const A = () => <div sz={{ bg: /*|*/ }} />;', {
+        themeDeclaration: generatedTheme,
+    });
+    assert.ok(!disabled.some(entry => entry.name === 'brand'));
+
+    const colors = entriesAtMarker('const A = () => <div sz={{ bg: /*|*/ }} />;', {
+        themeDeclaration: generatedTheme,
+        themeValues: true,
+    });
+    assert.strictEqual(colors.filter(entry => entry.name === 'red-500').length, 1);
+    assert.strictEqual(colors.find(entry => entry.name === 'brand')?.insertText, "'brand'");
+
+    const spacing = entriesAtMarker('const A = () => <div sz={{ p: /*|*/ }} />;', {
+        themeDeclaration: generatedTheme,
+        themeValues: true,
+    });
+    assert.ok(spacing.some(entry => entry.name === 'gutter'));
+
+    const members = entriesAtMarker('const A = () => <div sz={{ bg: { color: /*|*/ } }} />;', {
+        themeDeclaration: generatedTheme,
+        themeValues: true,
+    });
+    assert.ok(members.some(entry => entry.name === 'brand'));
+
+    const keys = entriesAtMarker('const A = () => <div sz={{ /*|*/ }} />;', {
+        themeDeclaration: generatedTheme,
+        themeValues: true,
+    });
+    assert.ok(keys.some(entry => entry.name === 'tablet'));
+    assert.strictEqual(keys.find(entry => entry.name === '3xl')?.insertText, "'3xl'");
 });
 
 test('same-spelled unrelated call is rejected', () => {
@@ -413,7 +469,11 @@ test('merge decorates colliding base entries without mutating them', () => {
         isNewIdentifierLocation: false,
         entries: Object.freeze([baseEntry]),
     });
-    const additions = buildSzKeyEntries(ts, 512, { start: 0, length: 0 });
+    const additions = buildSzKeyEntries({
+        tsMod: ts,
+        limit: 512,
+        replacementSpan: { start: 0, length: 0 },
+    });
     const merged = mergeCompletions(prior, additions, 2048);
     const bg = merged.entries.find(entry => entry.name === 'bg' && entry.sortText === '12');
     assert.ok(bg, 'base entry survives with its own sortText');
@@ -434,6 +494,20 @@ test('merge decorates colliding base entries without mutating them', () => {
     const merged2 = mergeCompletions(described, additions, 2048);
     const bg2 = merged2.entries.find(entry => entry.name === 'bg' && entry.sortText === '12');
     assert.strictEqual(bg2.labelDetails.description, 'from types');
+});
+
+test('top-level completion includes canonical dedicated-branch properties', () => {
+    const { buildSzKeyEntries } = require('../dist/completions.js');
+    const { KNOWN_SPECIAL_PROPERTIES } = require('@csszyx/tooling-metadata');
+    const names = buildSzKeyEntries({
+        tsMod: ts,
+        limit: 512,
+        replacementSpan: { start: 0, length: 0 },
+    }).map(entry => entry.name);
+
+    for (const key of KNOWN_SPECIAL_PROPERTIES) {
+        assert.ok(names.includes(key), `expected canonical special property "${key}"`);
+    }
 });
 
 // Preselection: the curated top value carries isRecommended so Tab lands on an

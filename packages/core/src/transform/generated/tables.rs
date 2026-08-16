@@ -427,7 +427,6 @@ pub(crate) fn key_suggestion(key: &str) -> Option<&'static str> {
         "flexGrow" => Some("grow"),
         "flexShrink" => Some("shrink"),
         "alignItems" => Some("items"),
-        "alignContent" => Some("content"),
         "alignSelf" => Some("self"),
         "justifyContent" => Some("justify"),
         "gridTemplateColumns" => Some("gridCols"),
@@ -570,7 +569,21 @@ pub(crate) fn is_boolean_only_dynamic(key: &str) -> bool {
 
 /// Returns true when a property is lowered by a dedicated object branch.
 pub(crate) fn is_known_special_property(key: &str) -> bool {
-    matches!(key, "css" | "maskLinear" | "maskRadial" | "maskConic")
+    matches!(
+        key,
+        "css"
+            | "maskLinear"
+            | "maskRadial"
+            | "maskConic"
+            | "alignContent"
+            | "fromPos"
+            | "viaPos"
+            | "toPos"
+            | "maskComposite"
+            | "maskMode"
+            | "maskType"
+            | "snapStrictness"
+    )
 }
 
 /// Returns true when a key is a removed boolean-sugar alias (flex/absolute/

@@ -1,3 +1,4 @@
+import { KNOWN_SPECIAL_PROPERTIES } from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
 
 import { handleValidate } from '../src/tools/validate';
@@ -63,6 +64,20 @@ describe('csszyx_validate', () => {
             handleValidate({ sz: { p: 4, css: { writingMode: 'vertical-lr' } } }).content[0].text,
         );
         expect(data.valid).toBe(true);
+    });
+
+    it('accepts canonical properties lowered by dedicated compiler branches', () => {
+        const specialEntries = Object.fromEntries(
+            [...KNOWN_SPECIAL_PROPERTIES].map(key => [key, 'test']),
+        );
+        const data = JSON.parse(
+            handleValidate({
+                sz: specialEntries,
+            }).content[0].text,
+        );
+
+        expect(data.valid).toBe(true);
+        expect(data.errors).toBeUndefined();
     });
 
     it('reports multiple errors in a single pass', () => {

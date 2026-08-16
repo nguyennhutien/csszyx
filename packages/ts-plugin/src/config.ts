@@ -2,6 +2,7 @@
 export interface PluginConfig {
     readonly enabled: boolean;
     readonly values: boolean;
+    readonly themeValues: boolean;
     readonly maxEntries: number;
     readonly deadlineMs: number;
     readonly failureThreshold: number;
@@ -10,6 +11,7 @@ export interface PluginConfig {
 export const DEFAULT_CONFIG: PluginConfig = Object.freeze({
     enabled: true,
     values: true,
+    themeValues: false,
     maxEntries: 512,
     deadlineMs: 20,
     failureThreshold: 3,
@@ -29,6 +31,8 @@ export function parseConfig(value: unknown): PluginConfig {
     return Object.freeze({
         enabled: typeof input.enabled === 'boolean' ? input.enabled : DEFAULT_CONFIG.enabled,
         values: typeof input.values === 'boolean' ? input.values : DEFAULT_CONFIG.values,
+        themeValues:
+            typeof input.themeValues === 'boolean' ? input.themeValues : DEFAULT_CONFIG.themeValues,
         maxEntries: boundedInteger(input.maxEntries, DEFAULT_CONFIG.maxEntries, 1, 2_000),
         deadlineMs: boundedInteger(input.deadlineMs, DEFAULT_CONFIG.deadlineMs, 1, 100),
         failureThreshold: boundedInteger(

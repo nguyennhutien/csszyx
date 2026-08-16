@@ -507,6 +507,7 @@ export const COLOR_VALUE_PROPS: readonly string[] = Object.entries(VALUE_SUGGEST
     .filter(([, values]) => values === COLOR_VALUES)
     .map(([key]) => key);
 
+/** Generated-theme declaration categories understood by editor integrations. */
 // ============================================================================
 
 // ============================================================================

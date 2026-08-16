@@ -98,6 +98,7 @@
     "bench:docs-size": "node --import tsx/esm scripts/bench-docs-output-size.ts",
     "bench:vite-react-size": "node --import tsx/esm scripts/bench-vite-react-output-size.ts",
     "bench:docs-hmr": "node --import tsx/esm scripts/bench-docs-hmr.ts",
+    "bench:external": "node --import tsx/esm scripts/bench-external-app.ts",
     "observe:rust-parser-paths": "node --import tsx/esm scripts/observe-rust-parser-paths.ts",
     "pages:build": "bash scripts/build-cf-pages.sh"
   },

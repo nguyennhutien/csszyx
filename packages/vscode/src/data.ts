@@ -7,6 +7,7 @@ import {
     BOOLEAN_SHORTHANDS,
     MIGRATION_NOTES as GENERATED_MIGRATION_NOTES,
     SUGGESTION_MAP as GENERATED_SUGGESTION_MAP,
+    KNOWN_SPECIAL_PROPERTIES,
     KNOWN_VARIANTS,
     PROPERTY_MAP,
     valueSuggestionsFor,
@@ -34,7 +35,7 @@ function doc(tailwindPrefix: string): vscode.MarkdownString {
     return md;
 }
 
-/** CompletionItems for top-level sz prop keys (PROPERTY_MAP + BOOLEAN_SHORTHANDS). */
+/** CompletionItems for every canonical top-level sz property. */
 export const KEY_COMPLETIONS: vscode.CompletionItem[] = [
     // Regular props from PROPERTY_MAP
     ...Object.entries(PROPERTY_MAP).map(([key, twPrefix]) => {
@@ -50,6 +51,14 @@ export const KEY_COMPLETIONS: vscode.CompletionItem[] = [
         item.documentation = new vscode.MarkdownString(`**CSSzyx** boolean shorthand → \`${key}\``);
         item.detail = `sz boolean → ${key}`;
         item.insertText = new vscode.SnippetString(`${key}: true,`);
+        return item;
+    }),
+    // Canonical props with dedicated compiler lowering rather than a prefix.
+    ...KNOWN_SPECIAL_PROPERTIES.filter(key => key !== 'css').map(key => {
+        const item = new vscode.CompletionItem(key, vscode.CompletionItemKind.Property);
+        item.documentation = new vscode.MarkdownString(`**CSSzyx** special sz prop → \`${key}\``);
+        item.detail = 'sz prop';
+        item.insertText = new vscode.SnippetString(`${key}: $1,`);
         return item;
     }),
     // Special: css key for arbitrary CSS
@@ -123,4 +132,4 @@ export function getValueCompletions(key: string): vscode.CompletionItem[] {
 export { SPECIAL_VARIANTS } from '@csszyx/tooling-metadata';
 // Export compiler data for use by diagnostic-provider and hover-provider
 // Re-export for use by diagnostic-provider (avoids a second import of compiler/browser)
-export { BOOLEAN_SHORTHANDS, KNOWN_VARIANTS, PROPERTY_MAP };
+export { BOOLEAN_SHORTHANDS, KNOWN_SPECIAL_PROPERTIES, KNOWN_VARIANTS, PROPERTY_MAP };

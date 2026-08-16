@@ -9,7 +9,7 @@ use std::borrow::Cow;
 use super::{
     generated::tables::{
         boolean_class, is_aria_state, is_known_variant, is_removed_boolean_sugar,
-        is_special_variant, property_prefix, variant_prefix,
+        is_special_variant, key_migration_note, key_suggestion, property_prefix, variant_prefix,
     },
     SourceIr, StaticSzObject, StaticSzValue,
 };
@@ -121,6 +121,13 @@ pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
     merge_text_size_and_leading(classes)
 }
 
+/// Whether a key was removed from the authoring contract and has migration
+/// guidance. Unlike an arbitrary unknown key, these names cannot be custom
+/// utility escape hatches: preserving them would silently keep legacy aliases.
+pub(crate) fn is_removed_sz_key(key: &str) -> bool {
+    key_suggestion(key).is_some() || key_migration_note(key).is_some()
+}
+
 /// Whether a key is a recognized sz property or variant, mirroring the JS
 /// `isKnown` check in transform-core so the native engine warns on the same set
 /// of typo'd keys as the oxc/Babel engines. Generous by construction — a key is
@@ -159,14 +166,10 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
         || key.starts_with('@')
         || variant_string_prefix(key).is_some()
         || variant_prefix(key).is_some()
-        || is_special_cased_property(key)
         || matches!(
             key,
             "min"
                 | "max"
-                | "fromPos"
-                | "viaPos"
-                | "toPos"
                 | "group"
                 | "peer"
                 | "has"
@@ -175,30 +178,6 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
                 | "aria"
                 | "supports"
         )
-}
-
-/// Keys that `format_static_class` handles by a dedicated branch WITHOUT a
-/// `property_prefix` table entry (they map to a fixed Tailwind utility, e.g.
-/// `alignContent` -> `content-*`). They are valid sz keys, so `is_known_sz_key`
-/// must not flag them as typos. Kept beside the format_static_class branches
-/// that own them; the engine parity test (rust warn-set == oxc warn-set) gates
-/// any drift if a new such branch is added without updating this list.
-#[cfg(any(feature = "native-engine", test))]
-fn is_special_cased_property(key: &str) -> bool {
-    matches!(
-        key,
-        "maskLinear"
-            | "maskRadial"
-            | "maskConic"
-            | "alignContent"
-            | "backgroundRepeat"
-            | "listStyle"
-            | "maskComposite"
-            | "maskMode"
-            | "maskType"
-            | "ordinal"
-            | "snapStrictness"
-    )
 }
 
 /// Collect the keys of unrecognized sz properties (likely typos) as
@@ -210,6 +189,13 @@ fn is_special_cased_property(key: &str) -> bool {
 #[cfg(any(feature = "native-engine", test))]
 pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
     for property in &object.properties {
+        if property.value == StaticSzValue::Boolean(false) {
+            continue;
+        }
+        if is_removed_sz_key(&property.key) {
+            out.push((property.key.clone(), property.span.start));
+            continue;
+        }
         if !is_known_sz_key(&property.key) {
             // An OBJECT value means variant nesting, and variant names are
             // open-ended: a `--breakpoint-*` token from the app's `@theme`
@@ -511,6 +497,9 @@ fn split_variant_prefix(class_name: &str) -> (&str, &str) {
 
 fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
     for property in &object.properties {
+        if is_removed_sz_key(&property.key) {
+            continue;
+        }
         match &property.value {
             StaticSzValue::Object(nested) => {
                 if property.key == "css" {
@@ -2075,8 +2064,8 @@ mod tests {
         build_mask_radial_classes, build_mask_slot_classes, build_mask_stop_classes,
         collect_unknown_sz_keys, format_color_opacity_object, format_mask_position,
         format_mask_size, has_slash_opacity, is_known_sz_key, is_mask_layer_value, is_percent,
-        is_tailwind_build_function, is_unsigned_decimal, lower_source_ir_classes,
-        lower_static_sz_object, needs_brackets, variant_string_prefix,
+        is_removed_sz_key, is_tailwind_build_function, is_unsigned_decimal,
+        lower_source_ir_classes, lower_static_sz_object, needs_brackets, variant_string_prefix,
     };
     use crate::transform::{
         ClassAttributeIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
@@ -2113,7 +2102,6 @@ mod tests {
             "max",
             "fromPos",
             "alignContent",
-            "backgroundRepeat",
             "maskMode",
             "snapStrictness",
             "grid",
@@ -2166,6 +2154,54 @@ mod tests {
         let keys: Vec<&str> = out.iter().map(|(k, _)| k.as_str()).collect();
         // Top-level typo + nested typo under a SIMPLE variant, but not `p`.
         assert_eq!(keys, ["xyzzy", "nope"]);
+    }
+
+    #[test]
+    fn removed_keys_are_reported_once_and_emit_nothing() {
+        let object = StaticSzObject {
+            properties: vec![
+                property("padding", StaticSzValue::Number(4.0)),
+                property("maskFrom", StaticSzValue::String("black".to_string())),
+                property("customThing", StaticSzValue::String("active".to_string())),
+            ],
+        };
+        let mut unknown = Vec::new();
+
+        collect_unknown_sz_keys(&object, &mut unknown);
+
+        assert!(is_removed_sz_key("padding"));
+        assert!(is_removed_sz_key("maskFrom"));
+        assert!(!is_removed_sz_key("customThing"));
+        assert_eq!(
+            unknown
+                .iter()
+                .map(|(key, _)| key.as_str())
+                .collect::<Vec<_>>(),
+            ["padding", "maskFrom", "customThing"]
+        );
+        assert_eq!(lower_static_sz_object(&object), ["custom-thing-active"]);
+    }
+
+    #[test]
+    fn removed_object_key_is_reported_at_the_owner_without_descending() {
+        let object = StaticSzObject {
+            properties: vec![property(
+                "padding",
+                object(vec![property("nestedTypo", StaticSzValue::Number(1.0))]),
+            )],
+        };
+        let mut unknown = Vec::new();
+
+        collect_unknown_sz_keys(&object, &mut unknown);
+
+        assert_eq!(
+            unknown
+                .iter()
+                .map(|(key, _)| key.as_str())
+                .collect::<Vec<_>>(),
+            ["padding"]
+        );
+        assert!(lower_static_sz_object(&object).is_empty());
     }
 
     #[test]
@@ -3476,6 +3512,7 @@ mod tests {
                 candidate_classes: Vec::new(),
                 runtime_fallback_diagnostic: None,
                 dynamic_css_vars: Vec::new(),
+                removed_dynamic_keys: Vec::new(),
             }],
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {

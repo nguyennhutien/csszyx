@@ -244,6 +244,12 @@ sz={{ '@container': true, '@md': { display: 'flex' } }}
 { p: 4, bg: 'blue-500', display: 'flex', flexDir: 'col', w: '333px', mt: 4, text: 'lg' }
 ```
 
+Known CSS-name aliases and removed migration keys are rejected rather than
+auto-mapped: the compiler warns and emits no class. Rename the source to the
+canonical key or replacement shape. A truly unknown key is different: it warns
+but still emits a kebab-case candidate so an intentional Tailwind `@utility`
+can serve it.
+
 ## Type safety — unknown keys are TypeScript errors
 
 The `sz` prop type is **closed**: a key that is not a known sz prop or variant is a
@@ -1257,7 +1263,9 @@ moved into their layer (`{ maskLinear: { from } }` etc.), `maskShape` moved to
 `{ maskRadial: { shape } }`, `maskVia` was removed with no equivalent (Tailwind
 has no via stop for masks), and gradient layer values on `mask`
 (`{ mask: 'linear-45' }`) moved to the layer keys. `mask` carries only a direct
-mask-image: `none`, `url(…)`, a CSS variable, or an arbitrary value.
+mask-image: `none`, `url(…)`, a CSS variable, or an arbitrary value. The
+compiler warns and emits no class for every removed flat key; it never preserves
+them as custom-utility fallbacks.
 
 ### mask-image: Gradient Masks
 
@@ -3069,11 +3077,20 @@ needs "Use Workspace Version".
 - Insert numeric suggestions without quotes and string suggestions with quotes. Suggestions are not validation: Tailwind 4 numeric values are open-ended.
 - Preserve TypeScript's base completions. On cancellation, timeout, or internal failure, return the untouched base result.
 
-Defaults: `enabled: true`, `values: true`, `maxEntries: 512`,
-`deadlineMs: 20`, `failureThreshold: 3`. Usually emit only `{ "name":
+Defaults: `enabled: true`, `values: true`, `themeValues: false`,
+`maxEntries: 512`, `deadlineMs: 20`, `failureThreshold: 3`. Usually emit only `{ "name":
 "@csszyx/ts-plugin" }`; do not add tuning options without a demonstrated need.
 
-**Not provided by this plugin:** theme-aware values, hover previews,
+**Theme preview:** `themeValues: true` adds custom colors, spacings, fonts,
+text sizes, font weights, radii, shadows, and breakpoint keys from the leaf
+project's generated `.csszyx/theme.d.ts`. The declaration must already belong
+to the TypeScript Program. Parsing is AST-based and bounded (128 KiB source,
+2,000 tokens, 128 characters per token); missing/malformed input fails open.
+The plugin performs no CSS/filesystem scan, direct I/O, watcher, network, or
+Tailwind/config execution. VS Code extension users set
+`csszyx.themeValues: true`; the default remains off during host certification.
+
+**Not provided by this plugin:** hover previews,
 diagnostics, syntax highlighting, Tailwind config/plugin execution, network, or
 telemetry. Those capabilities must not be inferred. The plugin is
 self-contained: its metadata is bundled at build time, so it installs with no
@@ -3111,7 +3128,9 @@ IntelliSense, hover, and diagnostics for `sz` props. Supports JSX, TSX, JS, TS, 
 
 - Key + value completions inside `sz={{ ... }}` (variant-aware, depth 1 and 2)
 - Hover preview — shows generated Tailwind className + inline CSS variables via `transform()`
-- Diagnostics — unknown prop keys flagged as warnings; SUGGESTION_MAP hints (e.g. `padding` → `p`)
+- Diagnostics — unknown prop keys flagged as warnings; removed aliases receive
+  canonical migration hints (for example `padding` → `p`) and emit no class,
+  while intentional custom keys remain available to Tailwind `@utility`
 - TextMate grammar injection — syntax highlighting for `sz` attribute
 
 **Settings:**

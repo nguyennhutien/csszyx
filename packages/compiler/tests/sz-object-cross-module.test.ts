@@ -150,14 +150,20 @@ describe('what v1 refuses, and must keep refusing', () => {
             expect(result.code ?? '').toContain('_sz(');
         });
 
-        it(`${name} ignores a namespace import, which is out of v1 scope`, () => {
-            const tsx =
-                "import * as S from './styles';\nexport const A = () => <div sz={S.cardSz} />;";
+        it(`${name} ignores the namespace binding used as a whole style`, () => {
+            // `sz={S}` asks for the module's export map as a style. Lowering it
+            // would turn export NAMES into utility keys and emit classes for a
+            // shape the author never wrote, which is worse than not compiling:
+            // the CSS would be generated for them.
+            const tsx = "import * as S from './styles';\nexport const A = () => <div sz={S} />;";
             const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
             expect(result.code ?? '').toContain('_sz(');
         });
 
-        it(`${name} ignores a default import, which is out of v1 scope`, () => {
+        it(`${name} ignores a default import of a module with no default export`, () => {
+            // The default slot is a separate registry entry. Answering it from
+            // a named export would resolve a value the importer never asked
+            // for, and the two names need not even describe the same style.
             const tsx =
                 "import cardSz from './styles';\nexport const A = () => <div sz={cardSz} />;";
             const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
@@ -178,6 +184,174 @@ describe('what v1 refuses, and must keep refusing', () => {
                 expect(result.code ?? '').toContain('_sz(');
                 expect(result.code ?? '').not.toContain('p-4"');
             }
+        });
+    }
+});
+
+/**
+ * The registry a bundler hands a file importing a token module.
+ *
+ * Separate from {@link REGISTRY} because these are read THROUGH: `LAYER` is a
+ * map somebody reads one key off, not a style anybody applies whole.
+ */
+const TOKEN_REGISTRY: SzObjectRegistry = {
+    './tokens': {
+        LAYER: { modal: 60 },
+        BRAND: { color: 'blue-500', op: 20 },
+    },
+};
+
+/**
+ * Run one engine over a module that imports from `./tokens`.
+ *
+ * @param engine - Engine under test.
+ * @param body - Module body after the import line.
+ * @returns Emitted className, the collected classes, and the emitted code.
+ */
+function runTokens(
+    engine: Engine,
+    body: string,
+): { className: string | undefined; classes: string[]; code: string } {
+    const tsx = `import { LAYER, BRAND } from './tokens';\n${body}`;
+    const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: TOKEN_REGISTRY });
+    const code = result.code ?? '';
+    return {
+        className: /className="([^"]*)"/.exec(code)?.[1],
+        classes: [...(result.classes ?? [])],
+        code,
+    };
+}
+
+describe('an imported map read from inside an sz object', () => {
+    for (const [name, engine] of ENGINES) {
+        it(`${name} folds a property read off an imported map`, () => {
+            const out = runTokens(
+                engine,
+                'export const A = () => <div sz={{ z: LAYER.modal }} />;',
+            );
+            expect(out.className).toBe('z-60');
+        });
+
+        it(`${name} contributes the class rather than a custom property`, () => {
+            // The failure this replaces was not a fallback to `_sz(...)`: an
+            // unresolved value compiles to `--_sz-z`, which is a working
+            // element with no class to generate CSS for. Asserting the class is
+            // collected is what separates the two outcomes.
+            const out = runTokens(
+                engine,
+                'export const A = () => <div sz={{ z: LAYER.modal }} />;',
+            );
+            expect(out.classes).toEqual(['z-60']);
+            expect(out.code).not.toContain('--_sz-z');
+        });
+
+        it(`${name} folds an imported object used as a property value`, () => {
+            const out = runTokens(engine, 'export const A = () => <div sz={{ bg: BRAND }} />;');
+            expect(out.className).toBe('bg-blue-500/20');
+        });
+
+        it(`${name} keeps the custom property for a key the map does not carry`, () => {
+            // Answering here would be a guess: the runtime read yields
+            // undefined, so any class this produced would style an element the
+            // author never asked to style.
+            const out = runTokens(
+                engine,
+                'export const A = () => <div sz={{ z: LAYER.missing }} />;',
+            );
+            expect(out.className).toBe('z-(--_sz-z)');
+        });
+
+        it(`${name} keeps the custom property for a computed read`, () => {
+            const out = runTokens(
+                engine,
+                'export const A = ({ k }) => <div sz={{ z: LAYER[k] }} />;',
+            );
+            expect(out.className).toBe('z-(--_sz-z)');
+        });
+
+        it(`${name} lets a local map shadow the imported one`, () => {
+            const out = runTokens(
+                engine,
+                'export const A = () => { const LAYER = { modal: 10 }; return <div sz={{ z: LAYER.modal }} />; };',
+            );
+            expect(out.className).toBe('z-10');
+        });
+    }
+});
+
+describe('a namespace import, which is read through rather than applied', () => {
+    for (const [name, engine] of ENGINES) {
+        it(`${name} resolves one style read off the namespace`, () => {
+            const tsx =
+                "import * as S from './styles';\nexport const A = () => <div sz={S.cardSz} />;";
+            const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+            expect(/className="([^"]*)"/.exec(result.code ?? '')?.[1]).toBe('p-4 rounded-lg');
+        });
+
+        it(`${name} contributes the classes read through the namespace`, () => {
+            const tsx =
+                "import * as S from './styles';\nexport const A = () => <div sz={S.cardSz} />;";
+            const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+            expect([...(result.classes ?? [])]).toEqual(['p-4', 'rounded-lg']);
+        });
+
+        it(`${name} keeps the runtime path for an export the module lacks`, () => {
+            const tsx =
+                "import * as S from './styles';\nexport const A = () => <div sz={S.missingSz} />;";
+            const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+            expect(result.code ?? '').toContain('_sz(');
+        });
+
+        it(`${name} keeps the runtime path for a computed read`, () => {
+            const tsx =
+                "import * as S from './styles';\nexport const A = ({ k }) => <div sz={S[k]} />;";
+            const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: REGISTRY });
+            expect(result.code ?? '').toContain('_sz(');
+        });
+    }
+});
+
+describe('a module that exports its style as the default', () => {
+    /** What the registry holds for `export default { p: 4, rounded: 'lg' }`. */
+    const DEFAULT_REGISTRY: SzObjectRegistry = {
+        './styles': { default: { p: 4, rounded: 'lg' } },
+    };
+
+    for (const [name, engine] of ENGINES) {
+        it(`${name} resolves a default import by slot, not by local name`, () => {
+            // The importer picks the local name, so two files importing the
+            // same default write two different names for one value. Resolution
+            // has to go by the slot or it answers one of them and not the other.
+            for (const local of ['cardSz', 'anythingAtAll']) {
+                const tsx = `import ${local} from './styles';\nexport const A = () => <div sz={${local}} />;`;
+                const result = engine(tsx, '/p/Card.tsx', {
+                    crossModuleSzObjects: DEFAULT_REGISTRY,
+                });
+                expect(/className="([^"]*)"/.exec(result.code ?? '')?.[1]).toBe('p-4 rounded-lg');
+            }
+        });
+
+        it(`${name} contributes the default export's classes`, () => {
+            const tsx =
+                "import cardSz from './styles';\nexport const A = () => <div sz={cardSz} />;";
+            const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: DEFAULT_REGISTRY });
+            expect([...(result.classes ?? [])]).toEqual(['p-4', 'rounded-lg']);
+        });
+
+        it(`${name} ignores a type-only default import`, () => {
+            const tsx =
+                "import type cardSz from './styles';\nexport const A = () => <div sz={cardSz} />;";
+            const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: DEFAULT_REGISTRY });
+            expect(result.code ?? '').toContain('_sz(');
+        });
+
+        it(`${name} keeps the default and named slots apart`, () => {
+            // One module can export both. A named import must not pick up the
+            // default, and the check is that it stays on the runtime path.
+            const tsx =
+                "import { cardSz } from './styles';\nexport const A = () => <div sz={cardSz} />;";
+            const result = engine(tsx, '/p/Card.tsx', { crossModuleSzObjects: DEFAULT_REGISTRY });
+            expect(result.code ?? '').toContain('_sz(');
         });
     }
 });

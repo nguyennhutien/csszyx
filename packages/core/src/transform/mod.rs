@@ -43,7 +43,7 @@ pub use contract::{
 };
 pub use ir::{
     ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, IrError, JsxOpeningElementIr,
-    RecoveryAttributeIr, RuntimeFallbackDiagnosticIr, RuntimeFallbackKindIr,
+    RecoveryAttributeIr, RemovedSzKeyIr, RuntimeFallbackDiagnosticIr, RuntimeFallbackKindIr,
     SafeStyleSpreadExpressionIr, SafeStyleSpreadIr, SafeStyleSpreadObjectIr,
     SafeStyleSpreadValueIr, SiteFallbackIr, SourceIr, StaticArrayPartIr, StaticSzObject,
     StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr,

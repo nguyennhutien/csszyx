@@ -69,6 +69,148 @@ describe('exported static sz objects reach the registry', () => {
     });
 });
 
+describe('an export list, which is the same module saying the same thing', () => {
+    it('records a const the module exports through a separate statement', () => {
+        // `export const` and `const` plus `export { }` are one declaration and
+        // one value; only the punctuation differs. Reading the first and not
+        // the second made a style qualify or not by the author's house style,
+        // with nothing in the output to say which rule had applied.
+        expect(szObjects('const cardSz = { p: 4 };\nexport { cardSz };')).toEqual({
+            cardSz: { p: 4 },
+        });
+    });
+
+    it('records under the exported name when the list renames', () => {
+        // The consumer looks the entry up by the name it IMPORTS, which is the
+        // one on the right of `as`. Recording the local name would file the
+        // entry where no importer can find it.
+        expect(szObjects('const local = { p: 4 };\nexport { local as cardSz };')).toEqual({
+            cardSz: { p: 4 },
+        });
+    });
+
+    it('records the same value under every name that exports it', () => {
+        expect(szObjects('const a = { p: 4 };\nexport { a, a as b };')).toEqual({
+            a: { p: 4 },
+            b: { p: 4 },
+        });
+    });
+
+    it('reads a declaration that follows its export statement', () => {
+        // Legal, and the exported value is the same one either way: the export
+        // binds a name, and the name is bound by the time any importer reads it.
+        expect(szObjects('export { cardSz };\nconst cardSz = { p: 4 };')).toEqual({
+            cardSz: { p: 4 },
+        });
+    });
+
+    it('records an szv factory the module exports through a list', () => {
+        // Both kinds go through one reader, so the export list cannot become a
+        // place where a factory qualifies and a plain object does not.
+        const tsx = [
+            "import { szv } from '@csszyx/runtime';",
+            "const table = szv({ base: { p: 4 }, variants: { tone: { a: { bg: 'red-500' } } } });",
+            'export { table };',
+        ].join('\n');
+        expect(
+            extractCrossModuleRegistryEntries(tsx, '/p/styles.ts').map(entry => [
+                entry.exportName,
+                entry.kind,
+            ]),
+        ).toEqual([['table', 'szv-config']]);
+    });
+
+    it('refuses a let the module exports through a list', () => {
+        // Same live-binding hazard as `export let`: the module can rebind it
+        // after an importer has been compiled against the first value, and
+        // nothing in a per-file transform could see that happen.
+        expect(szObjects('let cardSz = { p: 4 };\nexport { cardSz };')).toEqual({});
+    });
+
+    it('refuses a name the export list does not declare in this module', () => {
+        // `import` then `export` is a re-export wearing two statements. The
+        // value lives in another module the registry has not read, so answering
+        // here would answer from a file nobody looked at.
+        expect(szObjects("import { cardSz } from './other';\nexport { cardSz };")).toEqual({});
+    });
+
+    it('refuses a binding declared inside a block rather than at module scope', () => {
+        // Only a module-scope declaration can be what an export list names.
+        expect(szObjects('{ const cardSz = { p: 4 }; }\nexport { cardSz };')).toEqual({});
+    });
+
+    it('refuses a type-only specifier inside a value export list', () => {
+        // `export { type X }` erases at runtime, so no importer can read a
+        // value through it however static the object looks.
+        expect(szObjects('const cardSz = { p: 4 };\nexport { type cardSz };')).toEqual({});
+    });
+
+    it('refuses a whole type-only export statement', () => {
+        expect(szObjects('const cardSz = { p: 4 };\nexport type { cardSz };')).toEqual({});
+    });
+
+    it('refuses an export renamed to a string literal', () => {
+        // Legal, but not a name any importer of a token module writes, and
+        // keying the registry by it would record an entry nobody asks for.
+        expect(szObjects('const cardSz = { p: 4 };\nexport { cardSz as "card-sz" };')).toEqual({});
+    });
+
+    it('refuses an export list that names something re-exported from elsewhere', () => {
+        // `export { x } from './y'` needs the provider module, which this
+        // extractor does not read. Treating the specifier as local would record
+        // whatever happened to share the name in this file.
+        expect(szObjects("const cardSz = { p: 4 };\nexport { cardSz } from './other';")).toEqual(
+            {},
+        );
+    });
+});
+
+describe('the default export, which is a slot rather than a name', () => {
+    it('records a default-exported object literal', () => {
+        // `export default` has NO binding to rebind — there is no name to
+        // assign to — so it carries none of the live-binding hazard that keeps
+        // `export let` out. It is the safer of the two, not the riskier.
+        expect(szObjects('export default { p: 4 };')).toEqual({ default: { p: 4 } });
+    });
+
+    it('records a default-exported szv factory', () => {
+        const tsx = [
+            "import { szv } from '@csszyx/runtime';",
+            'export default szv({ base: { p: 4 }, variants: { tone: { a: { m: 2 } } } });',
+        ].join('\n');
+        expect(
+            extractCrossModuleRegistryEntries(tsx, '/p/styles.ts').map(entry => [
+                entry.exportName,
+                entry.kind,
+            ]),
+        ).toEqual([['default', 'szv-config']]);
+    });
+
+    it('records an export list that renames into the default slot', () => {
+        // `export { x as default }` and `export default x` fill one slot, so
+        // they must land on one registry key. Two keys would make the importer
+        // resolve or not by which spelling the provider chose.
+        expect(szObjects('const x = { p: 4 };\nexport { x as default };')).toEqual({
+            default: { p: 4 },
+        });
+    });
+
+    it('sees through the TS assertions a default export may carry', () => {
+        expect(szObjects('export default { p: 4 } as const;')).toEqual({ default: { p: 4 } });
+    });
+
+    it('refuses a default export of a name declared elsewhere', () => {
+        // Following this means folding local dataflow: the identifier could be
+        // reassigned between its declaration and the export, and a per-file
+        // read cannot prove it was not.
+        expect(szObjects('const x = { p: 4 };\nexport default x;')).toEqual({});
+    });
+
+    it('refuses a default export that is not an object', () => {
+        expect(szObjects("export default 'p-4';")).toEqual({});
+    });
+});
+
 describe('what the registry refuses to carry', () => {
     it.each([
         ['a call result', 'export const a = build();'],
@@ -78,7 +220,6 @@ describe('what the registry refuses to carry', () => {
         ['a non-object value', "export const a = 'p-4';"],
         ['a let binding', 'export let a = { p: 4 };'],
         ['a non-exported object', 'const a = { p: 4 };'],
-        ['a default export', 'export default { p: 4 };'],
     ])('refuses %s', (_label, source) => {
         // Refusing costs the optimization and nothing else: the importer keeps
         // the runtime path it has today, and says so.

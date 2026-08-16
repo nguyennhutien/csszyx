@@ -76,6 +76,11 @@
           "default": "auto",
           "markdownDescription": "Who provides `sz`/`szv`/`szs` completions. In `auto`, the bundled `@csszyx/ts-plugin` handles TypeScript/JavaScript and the extension handles HTML, so you never see duplicate suggestions."
         },
+        "csszyx.themeValues": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Preview custom `@theme` token and breakpoint completions from the generated `.csszyx/theme.d.ts`. The file must belong to the leaf TypeScript project. No CSS scan or file watcher runs in the TypeScript service."
+        },
         "csszyx.enableDiagnostics": {
           "type": "boolean",
           "default": true,

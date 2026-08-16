@@ -187,14 +187,22 @@ function pluginServes(text: string, cursor: number): boolean {
         readFile: file => files[file] ?? ts.sys.readFile(file),
     };
     const service = ts.createLanguageService(host);
-    const entries = computeSzEntries(
-        ts as never,
-        service as never,
+    const entries = computeSzEntries({
+        tsMod: ts as never,
+        languageService: service as never,
         fileName,
-        cursor,
-        { enabled: true, values: true, maxEntries: 512, deadlineMs: 20, failureThreshold: 3 },
-        Number.POSITIVE_INFINITY,
-    );
+        position: cursor,
+        config: {
+            enabled: true,
+            values: true,
+            themeValues: false,
+            maxEntries: 512,
+            deadlineMs: 20,
+            failureThreshold: 3,
+        },
+        deadline: Number.POSITIVE_INFINITY,
+        projectRoot: '/virtual',
+    });
     return entries.length > 0;
 }
 

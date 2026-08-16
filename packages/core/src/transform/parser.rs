@@ -21,13 +21,13 @@ use std::collections::HashSet;
 use std::time::Instant;
 
 use super::{
-    lower::{dynamic_css_var_class, lower_static_sz_object},
+    lower::{dynamic_css_var_class, is_removed_sz_key, lower_static_sz_object},
     ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr,
-    RecoveryAttributeIr, RecoveryMode, SafeStyleSpreadExpressionIr, SafeStyleSpreadIr,
-    SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr, StaticArrayPartIr, StaticSzObject,
-    StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr,
-    SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings,
-    UnsupportedRecoveryIr,
+    RecoveryAttributeIr, RecoveryMode, RemovedSzKeyIr, SafeStyleSpreadExpressionIr,
+    SafeStyleSpreadIr, SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr,
+    StaticArrayPartIr, StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr,
+    StyleAttributeIr, SzAttributeIr, SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile,
+    TransformTimings, UnsupportedRecoveryIr,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -126,6 +126,8 @@ pub fn parse_source_shell_with_registries(
         timings.scope_ns = elapsed_ns(scope_start);
         let imported_sz_objects =
             collect_imported_sz_objects(&parsed.program, registries.sz_objects);
+        let imported_namespaces =
+            collect_imported_namespaces(&parsed.program, registries.sz_objects);
         let imported_names = collect_imported_names(&parsed.program);
         let mut visitor = CsszyxIrVisitor {
             source: &file.source,
@@ -146,6 +148,7 @@ pub fn parse_source_shell_with_registries(
             szv_gate: file.source.contains("szv(") || !cross_module.is_empty(),
             cross_module,
             imported_sz_objects: &imported_sz_objects,
+            imported_namespaces: &imported_namespaces,
             imported_names: &imported_names,
         };
         let ir_start = Instant::now();
@@ -261,6 +264,9 @@ struct CsszyxIrVisitor<'source, 'ir, 'p> {
     /// binding names, so identifier lowering is one lookup and a file that
     /// imports none of them pays nothing.
     imported_sz_objects: &'p [(String, StaticSzObject)],
+    /// Namespace imports of registry-backed modules, by LOCAL binding name,
+    /// each carrying that module's exports as one object.
+    imported_namespaces: &'p [(String, StaticSzObject)],
     /// Local names this module introduced with an import, any form.
     imported_names: &'p HashSet<String>,
 }
@@ -604,6 +610,8 @@ struct ResolveContext<'p> {
     program: &'p oxc_ast::ast::Program<'p>,
     /// Static sz objects this file imported, by LOCAL binding name.
     imported_sz_objects: &'p [(String, StaticSzObject)],
+    /// Namespace imports of registry-backed modules, by LOCAL binding name.
+    imported_namespaces: &'p [(String, StaticSzObject)],
 }
 
 impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
@@ -612,6 +620,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             scope: self.scope,
             program: self.program,
             imported_sz_objects: self.imported_sz_objects,
+            imported_namespaces: self.imported_namespaces,
         }
     }
 
@@ -707,6 +716,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             runtime_fallback_spread,
             candidate_classes,
             dynamic_css_vars,
+            removed_dynamic_keys,
         ) = match &attr.value {
             Some(JSXAttributeValue::StringLiteral(value)) => (
                 StaticSzObject::empty(),
@@ -717,6 +727,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 Vec::new(),
                 false,
                 false,
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
             ),
@@ -748,6 +759,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         Vec::new(),
                         Vec::new(),
+                        Vec::new(),
                     )
                 } else if let Some((object, value_span, rewrites_empty_class)) =
                     static_object_from_jsx_expression(&container.expression, ctx)
@@ -763,9 +775,15 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         Vec::new(),
                         Vec::new(),
+                        Vec::new(),
                     )
-                } else if let Some((object, value_span, dynamic_css_vars, ternaries)) =
-                    partial_object_from_jsx_expression(&container.expression, ctx)
+                } else if let Some((
+                    object,
+                    value_span,
+                    dynamic_css_vars,
+                    ternaries,
+                    removed_dynamic_keys,
+                )) = partial_object_from_jsx_expression(&container.expression, ctx)
                 {
                     (
                         object,
@@ -778,6 +796,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         Vec::new(),
                         dynamic_css_vars,
+                        removed_dynamic_keys,
                     )
                 } else if let Some((array_parts, value_span)) =
                     static_array_parts_from_jsx_expression(&container.expression, ctx)
@@ -791,6 +810,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         array_parts,
                         false,
                         false,
+                        Vec::new(),
                         Vec::new(),
                         Vec::new(),
                     )
@@ -812,6 +832,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         jsx_expression_has_top_level_spread(&container.expression),
                         candidate_classes,
                         Vec::new(),
+                        Vec::new(),
                     )
                 }
             }
@@ -832,6 +853,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             candidate_classes,
             runtime_fallback_diagnostic,
             dynamic_css_vars,
+            removed_dynamic_keys,
         });
         Some(index)
     }
@@ -3293,6 +3315,14 @@ fn static_object_candidate_from_expression(
     }
 }
 
+/// The registry name a default import resolves against.
+///
+/// Spelled the same in `cross-module-extract.ts`, which files the entry. The
+/// two are not generated from one source because this is not project wording
+/// that can drift: `default` is what ECMAScript calls the slot, and a module
+/// that renamed it would no longer be describing a default export.
+const DEFAULT_EXPORT_SLOT: &str = "default";
+
 /// Narrow the bundler's sz-object registry to this file's LOCAL binding names.
 ///
 /// Resolved once per file rather than per reference: identifier lowering is
@@ -3304,9 +3334,8 @@ fn static_object_candidate_from_expression(
 /// registry would resolve the wrong entry the moment an alias makes the two
 /// differ.
 ///
-/// v1 accepts a named value import and nothing else — a namespace, default or
-/// type-only import keeps the runtime path it has today rather than being
-/// guessed at.
+/// A named or default value import resolves; a namespace or type-only import
+/// keeps the runtime path it has today rather than being guessed at.
 fn collect_imported_sz_objects(
     program: &Program<'_>,
     registry: &super::szv_precompile::CrossModuleSzObjects,
@@ -3333,21 +3362,114 @@ fn collect_imported_sz_objects(
             continue;
         };
         for entry in specifiers {
-            let ImportDeclarationSpecifier::ImportSpecifier(specifier) = entry else {
-                continue;
+            // The name to look the registry up by, paired with the local name
+            // the file refers to it as. A default import names no export at
+            // all, so it resolves against the slot the extractor files
+            // `export default` under; every other form asks for what it wrote.
+            let (imported, local) = match entry {
+                ImportDeclarationSpecifier::ImportSpecifier(specifier) => {
+                    if specifier.import_kind.is_type() {
+                        continue;
+                    }
+                    (specifier.imported.name().to_string(), &specifier.local.name)
+                }
+                ImportDeclarationSpecifier::ImportDefaultSpecifier(specifier) => {
+                    (DEFAULT_EXPORT_SLOT.to_string(), &specifier.local.name)
+                }
+                ImportDeclarationSpecifier::ImportNamespaceSpecifier(_) => continue,
             };
-            if specifier.import_kind.is_type() {
-                continue;
-            }
-            let imported = specifier.imported.name();
             let Some((_, object)) = entries.iter().find(|(name, _)| name.as_str() == imported)
             else {
                 continue;
             };
-            out.push((specifier.local.name.as_str().to_string(), object.clone()));
+            out.push((local.as_str().to_string(), object.clone()));
         }
     }
     out
+}
+
+/// Collect namespace imports of modules the registry carries.
+///
+/// A namespace binding stands for the module's whole export map, so it is
+/// recorded as ONE object whose properties are the exports. That is what makes
+/// `T.LAYER.modal` fall out of the reads that already work: the first hop
+/// yields the export, and every hop after it is an ordinary map read.
+///
+/// Kept in its own table rather than added to the sz-object one, and the
+/// separation is the safety property. Namespaces are consulted only where a
+/// member expression reads THROUGH them; putting them in the object table
+/// would make `sz={T}` lower a module's export map as a style, turning export
+/// names into utility keys and emitting classes for a shape nobody wrote.
+fn collect_imported_namespaces(
+    program: &Program<'_>,
+    registry: &super::szv_precompile::CrossModuleSzObjects,
+) -> Vec<(String, StaticSzObject)> {
+    let mut out = Vec::new();
+    if registry.is_empty() {
+        return out;
+    }
+    for statement in &program.body {
+        let Statement::ImportDeclaration(declaration) = statement else {
+            continue;
+        };
+        if declaration.import_kind.is_type() {
+            continue;
+        }
+        let source_value = declaration.source.value.as_str();
+        let Some((_, entries)) = registry
+            .iter()
+            .find(|(specifier, _)| specifier == source_value)
+        else {
+            continue;
+        };
+        let Some(specifiers) = &declaration.specifiers else {
+            continue;
+        };
+        for entry in specifiers {
+            let ImportDeclarationSpecifier::ImportNamespaceSpecifier(specifier) = entry else {
+                continue;
+            };
+            let module = StaticSzObject {
+                properties: entries
+                    .iter()
+                    .map(|(name, object)| StaticSzProperty {
+                        key: name.clone(),
+                        value: StaticSzValue::Object(object.clone()),
+                        span: TextSpan { start: 0, end: 0 },
+                    })
+                    .collect(),
+            };
+            out.push((specifier.local.name.as_str().to_string(), module));
+        }
+    }
+    out
+}
+
+/// The module a namespace binding stands for, when an expression is that bare
+/// binding and nothing in this file has shadowed it.
+///
+/// Scope is asked FIRST and a local binding wins outright, even one whose value
+/// is not static. Without that, a local `const T` that resolves to nothing
+/// would fall through and let the imported module answer for a name the code
+/// does not read.
+fn imported_namespace_object(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzValue> {
+    let Expression::Identifier(identifier) = expression else {
+        return None;
+    };
+    if ctx
+        .scope
+        .resolve_initializer_before(&identifier.name, identifier.span.start, ctx.program)
+        .is_some()
+    {
+        return None;
+    }
+    ctx.imported_namespaces
+        .iter()
+        .find(|(local, _)| local == identifier.name.as_str())
+        .map(|(_, module)| StaticSzValue::Object(module.clone()))
 }
 
 /// The imported static sz object a local binding name stands for, if the
@@ -3410,6 +3532,19 @@ fn static_object_from_jsx_expression(
             let object = imported_sz_object(ctx.imported_sz_objects, &identifier.name)?.clone();
             let rewrites_empty_class = object.is_empty();
             Some((object, text_span(identifier.span), rewrites_empty_class))
+        }
+        // `sz={S.cardSz}` — one style read off a map, whether that map is a
+        // namespace import or a local constant. The value resolver already
+        // knows how to perform the read; all this arm adds is accepting an
+        // object as the whole attribute. A read that lands on anything other
+        // than an object is refused, so a number or a string cannot be
+        // stringified into a class list.
+        JSXExpression::StaticMemberExpression(member) => {
+            let StaticSzValue::Object(object) = static_value_from_member(member, ctx)? else {
+                return None;
+            };
+            let rewrites_empty_class = object.is_empty();
+            Some((object, text_span(member.span), rewrites_empty_class))
         }
         _ => None,
     }
@@ -3492,17 +3627,21 @@ struct PartialSzObject {
     /// Property-level conditionals in source order — each lowers to one
     /// appended `${cond ? "…" : "…"}` template segment.
     ternaries: Vec<StaticTernaryIr>,
+    removed_dynamic_keys: Vec<RemovedSzKeyIr>,
 }
 
-fn partial_object_from_jsx_expression(
-    expression: &JSXExpression<'_>,
-    ctx: ResolveContext<'_>,
-) -> Option<(
+type PartialObjectResult = (
     StaticSzObject,
     TextSpan,
     Vec<DynamicCssVarIr>,
     Vec<StaticTernaryIr>,
-)> {
+    Vec<RemovedSzKeyIr>,
+);
+
+fn partial_object_from_jsx_expression(
+    expression: &JSXExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<PartialObjectResult> {
     match expression {
         JSXExpression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
@@ -3511,6 +3650,7 @@ fn partial_object_from_jsx_expression(
                 text_span(object.span),
                 partial.dynamic_css_vars,
                 partial.ternaries,
+                partial.removed_dynamic_keys,
             ))
         }
         JSXExpression::TSAsExpression(value) => {
@@ -3532,12 +3672,7 @@ fn partial_object_from_jsx_expression(
 fn partial_object_from_expression(
     expression: &Expression<'_>,
     ctx: ResolveContext<'_>,
-) -> Option<(
-    StaticSzObject,
-    TextSpan,
-    Vec<DynamicCssVarIr>,
-    Vec<StaticTernaryIr>,
-)> {
+) -> Option<PartialObjectResult> {
     match expression {
         Expression::ObjectExpression(object) => {
             let partial = partial_object_from_object_expression(object, ctx, None, &[])?;
@@ -3546,6 +3681,7 @@ fn partial_object_from_expression(
                 text_span(object.span),
                 partial.dynamic_css_vars,
                 partial.ternaries,
+                partial.removed_dynamic_keys,
             ))
         }
         Expression::ParenthesizedExpression(value) => {
@@ -3574,6 +3710,7 @@ fn partial_object_from_object_expression(
                 object: StaticSzObject::empty(),
                 dynamic_css_vars: Vec::new(),
                 ternaries: vec![ternary],
+                removed_dynamic_keys: Vec::new(),
             });
         }
     }
@@ -3584,6 +3721,7 @@ fn partial_object_from_object_expression(
         },
         dynamic_css_vars: Vec::new(),
         ternaries: Vec::new(),
+        removed_dynamic_keys: Vec::new(),
     };
 
     for property in &object.properties {
@@ -3598,6 +3736,16 @@ fn partial_object_from_object_expression(
                 }
 
                 let key = static_property_key(&property.key)?;
+                if is_removed_sz_key(&key) {
+                    // Retain only diagnostic identity: no class or CSS variable
+                    // may be emitted, while a literal false was skipped above
+                    // and remains silent like the runtime path.
+                    partial.removed_dynamic_keys.push(RemovedSzKeyIr {
+                        key,
+                        span: text_span(property.span),
+                    });
+                    continue;
+                }
                 if let Expression::ObjectExpression(nested) = &property.value {
                     collect_nested_partial_property(
                         &mut partial,
@@ -3716,6 +3864,9 @@ fn collect_nested_partial_property(
         });
     }
     partial.dynamic_css_vars.extend(nested.dynamic_css_vars);
+    partial
+        .removed_dynamic_keys
+        .extend(nested.removed_dynamic_keys);
     for ternary in nested.ternaries {
         set_partial_ternary(partial, ternary);
     }
@@ -4440,34 +4591,64 @@ fn static_value_from_expression(
         // Nested identifier inside a property value, e.g. `{ p: SIZE }`
         // where SIZE is a local const. Resolve via scope and recurse so
         // R4.2 also handles partial-static cases.
+        //
+        // A local declaration is asked first and its answer is FINAL, even when
+        // that answer is "not static". Falling through to the registry after a
+        // local binding was found would let an import of the same name answer
+        // for a value the code does not read — the local-wins rule the
+        // attribute path already keeps, applied on the route that reaches these
+        // names through a property value instead.
         Expression::Identifier(identifier) => {
-            let initializer = ctx.scope.resolve_initializer_before(
+            if let Some(initializer) = ctx.scope.resolve_initializer_before(
                 &identifier.name,
                 identifier.span.start,
                 ctx.program,
-            )?;
-            static_value_from_expression(initializer, ctx)
+            ) {
+                return static_value_from_expression(initializer, ctx);
+            }
+            // The bundler already narrowed the registry to this file's local
+            // binding names, so an import resolves with one lookup and the
+            // member arm below reads through it exactly as it reads a local map.
+            imported_sz_object(ctx.imported_sz_objects, &identifier.name)
+                .map(|object| StaticSzValue::Object(object.clone()))
         }
         // A value read off a constant map, e.g. `{ z: LAYER.appChrome }`.
-        // Resolving the object half reuses the arm above, so a map reaches
-        // this point exactly when the bare identifier would have; all that is
-        // added is the read. Only a named property: `LAYER[key]` picks its key
-        // at run time, and no build-time read of the map can be right.
-        Expression::StaticMemberExpression(member) => {
-            match static_value_from_expression(&member.object, ctx)? {
-                // Last match, not first: duplicate keys are kept in source
-                // order on purpose, and the later one is what JavaScript reads.
-                // A property the map does not carry resolves to nothing rather
-                // than to a guess, which leaves the caller on the runtime path.
-                StaticSzValue::Object(object) => object
-                    .properties
-                    .into_iter()
-                    .rev()
-                    .find(|property| property.key == member.property.name.as_str())
-                    .map(|property| property.value),
-                _ => None,
-            }
-        }
+        Expression::StaticMemberExpression(member) => static_value_from_member(member, ctx),
+        _ => None,
+    }
+}
+
+/// Read one named property off a map that resolves at build time.
+///
+/// Its own function because two callers need the same read: a property VALUE
+/// like `{ z: LAYER.modal }`, and a whole attribute like `sz={S.cardSz}`. One
+/// implementation is what keeps the two from disagreeing about which reads are
+/// answerable.
+///
+/// Only a named property. `LAYER[key]` picks its key at run time, and no
+/// build-time read of the map can be right.
+fn static_value_from_member(
+    member: &oxc_ast::ast::StaticMemberExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzValue> {
+    // Resolving the object half reuses the identifier arm, so a map reaches
+    // this point exactly when the bare identifier would have; all that is
+    // added is the read. The namespace table is asked only after that ordinary
+    // resolution has declined, so a local or named-imported map is always what
+    // answers when one exists.
+    let object = static_value_from_expression(&member.object, ctx)
+        .or_else(|| imported_namespace_object(&member.object, ctx))?;
+    match object {
+        // Last match, not first: duplicate keys are kept in source order on
+        // purpose, and the later one is what JavaScript reads. A property the
+        // map does not carry resolves to nothing rather than to a guess, which
+        // leaves the caller on the runtime path.
+        StaticSzValue::Object(object) => object
+            .properties
+            .into_iter()
+            .rev()
+            .find(|property| property.key == member.property.name.as_str())
+            .map(|property| property.value),
         _ => None,
     }
 }
@@ -4815,8 +4996,280 @@ export const cls = szr(localCard({ pad: 'sm' }));";
         assert_eq!(attribute.object.properties[0].key, "m");
     }
 
+    /// A token map as a provider exports it, in the registry's decoded form.
+    fn cross_module_layer() -> super::StaticSzObject {
+        super::StaticSzObject {
+            properties: vec![super::StaticSzProperty {
+                key: "modal".into(),
+                value: super::StaticSzValue::Number(60.0),
+                span: super::TextSpan { start: 0, end: 0 },
+            }],
+        }
+    }
+
+    /// A colour-with-opacity sub-object, the shape an `sz` VALUE can be.
+    fn cross_module_brand() -> super::StaticSzObject {
+        super::StaticSzObject {
+            properties: vec![
+                super::StaticSzProperty {
+                    key: "color".into(),
+                    value: super::StaticSzValue::String("blue-500".into()),
+                    span: super::TextSpan { start: 0, end: 0 },
+                },
+                super::StaticSzProperty {
+                    key: "op".into(),
+                    value: super::StaticSzValue::Number(20.0),
+                    span: super::TextSpan { start: 0, end: 0 },
+                },
+            ],
+        }
+    }
+
+    /// The registry a bundler hands a file importing both token modules.
+    fn token_registry() -> super::super::szv_precompile::CrossModuleSzObjects {
+        vec![(
+            "./tokens".into(),
+            vec![
+                ("LAYER".into(), cross_module_layer()),
+                ("BRAND".into(), cross_module_brand()),
+            ],
+        )]
+    }
+
+    /// The one static property an attribute lowered, with no CSS variable left.
+    ///
+    /// An unresolved value does NOT reach the runtime-fallback path: it becomes
+    /// a dynamic CSS variable, which is a valid compile that ships a custom
+    /// property instead of a class. Asserting only `!runtime_fallback` would
+    /// therefore pass on today's behaviour and prove nothing.
+    fn single_static_property(attribute: &super::SzAttributeIr) -> (String, super::StaticSzValue) {
+        assert!(
+            attribute.dynamic_css_vars.is_empty(),
+            "value stayed dynamic: {:?}",
+            attribute.dynamic_css_vars,
+        );
+        assert_eq!(attribute.object.properties.len(), 1);
+        let property = &attribute.object.properties[0];
+        (property.key.clone(), property.value.clone())
+    }
+
     #[test]
-    fn parser_refuses_imports_outside_the_named_value_form() {
+    fn parser_reads_a_property_off_an_imported_map() {
+        let source = "import { LAYER } from './tokens';\nexport const A = () => <div sz={{ z: LAYER.modal }} />;";
+
+        let parsed = parse_with_sz_objects(source, &token_registry());
+        assert_eq!(
+            single_static_property(&parsed.ir.sz_attributes[0]),
+            ("z".to_string(), super::StaticSzValue::Number(60.0)),
+        );
+    }
+
+    #[test]
+    fn parser_lowers_an_imported_object_used_as_a_property_value() {
+        let source =
+            "import { BRAND } from './tokens';\nexport const A = () => <div sz={{ bg: BRAND }} />;";
+
+        let parsed = parse_with_sz_objects(source, &token_registry());
+        assert_eq!(
+            single_static_property(&parsed.ir.sz_attributes[0]),
+            (
+                "bg".to_string(),
+                super::StaticSzValue::Object(cross_module_brand()),
+            ),
+        );
+    }
+
+    #[test]
+    fn parser_prefers_a_local_map_over_an_imported_one() {
+        // The attribute path already pins local-wins for `sz={NAME}`. The value
+        // path reaches the same names by a different route, so it needs its own
+        // pin: an import that started answering ahead of a local declaration
+        // would compile the wrong number with nothing to show for it.
+        let source = "import { LAYER } from './tokens';\nexport const A = () => { const LAYER = { modal: 10 }; return <div sz={{ z: LAYER.modal }} />; };";
+
+        let parsed = parse_with_sz_objects(source, &token_registry());
+        assert_eq!(
+            single_static_property(&parsed.ir.sz_attributes[0]),
+            ("z".to_string(), super::StaticSzValue::Number(10.0)),
+        );
+    }
+
+    #[test]
+    fn parser_refuses_map_reads_it_cannot_answer() {
+        let cases = [
+            // A key the map does not carry. Answering with anything here would
+            // be a guess; the runtime read yields undefined and the author gets
+            // today's fallback diagnostic instead of a wrong class.
+            "export const A = () => <div sz={{ z: LAYER.missing }} />;",
+            // A computed key picks its property at run time, so no build-time
+            // read of the map can be right.
+            "export const A = ({ k }) => <div sz={{ z: LAYER[k] }} />;",
+            // The map is imported from a module the registry does not carry.
+            "export const A = () => <div sz={{ z: OTHER.modal }} />;",
+        ];
+
+        for body in cases {
+            let source =
+                format!("import {{ LAYER }} from './tokens';\nimport {{ OTHER }} from './elsewhere';\n{body}");
+            let parsed = parse_with_sz_objects(&source, &token_registry());
+            let attribute = &parsed.ir.sz_attributes[0];
+            // Refusing means the value keeps the custom property it compiles to
+            // today. The static object must stay empty: a key appearing there
+            // would be a build-time guess at a value only the runtime knows.
+            assert_eq!(attribute.dynamic_css_vars.len(), 1, "{body}");
+            assert!(attribute.object.properties.is_empty(), "{body}");
+        }
+    }
+
+    #[test]
+    fn parser_reads_a_property_off_an_imported_namespace() {
+        let source = "import * as T from './tokens';\nexport const A = () => <div sz={{ z: T.LAYER.modal }} />;";
+
+        let parsed = parse_with_sz_objects(source, &token_registry());
+        assert_eq!(
+            single_static_property(&parsed.ir.sz_attributes[0]),
+            ("z".to_string(), super::StaticSzValue::Number(60.0)),
+        );
+    }
+
+    #[test]
+    fn parser_lowers_a_namespace_member_as_the_whole_attribute() {
+        let registry = vec![(
+            "./styles".into(),
+            vec![("cardSz".into(), cross_module_card())],
+        )];
+        let source =
+            "import * as S from './styles';\nexport const A = () => <div sz={S.cardSz} />;";
+
+        let parsed = parse_with_sz_objects(source, &registry);
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(attribute.object.properties[0].key, "p");
+    }
+
+    #[test]
+    fn parser_refuses_the_namespace_object_itself() {
+        // `sz={T}` asks for the module's export map as a style. Lowering it
+        // would turn export NAMES into utility keys and emit classes for a
+        // shape the author never wrote; the runtime path is the honest answer.
+        let source = "import * as T from './tokens';\nexport const A = () => <div sz={T} />;";
+
+        let parsed = parse_with_sz_objects(source, &token_registry());
+        assert!(parsed.ir.sz_attributes[0].runtime_fallback);
+    }
+
+    #[test]
+    fn parser_prefers_a_local_binding_over_a_namespace() {
+        let source = "import * as T from './tokens';\nexport const A = () => { const T = { LAYER: { modal: 10 } }; return <div sz={{ z: T.LAYER.modal }} />; };";
+
+        let parsed = parse_with_sz_objects(source, &token_registry());
+        assert_eq!(
+            single_static_property(&parsed.ir.sz_attributes[0]),
+            ("z".to_string(), super::StaticSzValue::Number(10.0)),
+        );
+    }
+
+    #[test]
+    fn parser_refuses_a_namespace_name_a_local_binding_shadows() {
+        // The local `T` resolves to nothing static, so the ordinary resolution
+        // declines — and the namespace must NOT answer behind it. What the code
+        // reads is the local binding, whatever it happens to hold, and the
+        // module of the same name is not it.
+        let source = "import * as T from './tokens';\nexport const A = ({ runtime }) => { const T = runtime; return <div sz={{ z: T.LAYER.modal }} />; };";
+
+        let parsed = parse_with_sz_objects(source, &token_registry());
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert_eq!(attribute.dynamic_css_vars.len(), 1);
+        assert!(attribute.object.properties.is_empty());
+    }
+
+    #[test]
+    fn parser_refuses_a_scalar_read_as_a_whole_attribute() {
+        // `sz={T.LAYER.modal}` resolves, but to the number 60. An attribute has
+        // to be an object; accepting anything else would put whatever the value
+        // stringifies to into a class list.
+        let source =
+            "import * as T from './tokens';\nexport const A = () => <div sz={T.LAYER.modal} />;";
+
+        let parsed = parse_with_sz_objects(source, &token_registry());
+        assert!(parsed.ir.sz_attributes[0].runtime_fallback);
+    }
+
+    #[test]
+    fn parser_refuses_namespace_reads_it_cannot_answer() {
+        let cases = [
+            // An export the module does not have.
+            "export const A = () => <div sz={{ z: T.MISSING.modal }} />;",
+            // A key the map does not carry.
+            "export const A = () => <div sz={{ z: T.LAYER.missing }} />;",
+            // A computed read, at either level.
+            "export const A = ({ k }) => <div sz={{ z: T[k].modal }} />;",
+            "export const A = ({ k }) => <div sz={{ z: T.LAYER[k] }} />;",
+        ];
+
+        for body in cases {
+            let source = format!("import * as T from './tokens';\n{body}");
+            let parsed = parse_with_sz_objects(&source, &token_registry());
+            let attribute = &parsed.ir.sz_attributes[0];
+            assert_eq!(attribute.dynamic_css_vars.len(), 1, "{body}");
+            assert!(attribute.object.properties.is_empty(), "{body}");
+        }
+    }
+
+    #[test]
+    fn parser_refuses_a_type_only_namespace_import() {
+        let source =
+            "import type * as T from './tokens';\nexport const A = () => <div sz={{ z: T.LAYER.modal }} />;";
+
+        let parsed = parse_with_sz_objects(source, &token_registry());
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert_eq!(attribute.dynamic_css_vars.len(), 1);
+        assert!(attribute.object.properties.is_empty());
+    }
+
+    #[test]
+    fn parser_lowers_a_default_imported_sz_object() {
+        // The provider wrote `export default { p: 4 }`, which the registry
+        // files under the `default` slot. The local name is the importer's to
+        // choose, so resolution has to go by the slot, never by that name.
+        let registry = vec![(
+            "./styles".into(),
+            vec![("default".into(), cross_module_card())],
+        )];
+
+        for source in [
+            "import cardSz from './styles';\nexport const A = () => <div sz={cardSz} />;",
+            "import anythingAtAll from './styles';\nexport const A = () => <div sz={anythingAtAll} />;",
+        ] {
+            let parsed = parse_with_sz_objects(source, &registry);
+            let attribute = &parsed.ir.sz_attributes[0];
+            assert!(!attribute.runtime_fallback, "{source}");
+            assert_eq!(attribute.object.properties[0].key, "p", "{source}");
+        }
+    }
+
+    #[test]
+    fn parser_keeps_the_default_and_named_slots_apart() {
+        // One module exporting both must answer each importer with its own
+        // half. Collapsing the two would let `import x from` pick up a named
+        // export whenever the module happened to have one.
+        let registry = vec![(
+            "./styles".into(),
+            vec![
+                ("default".into(), cross_module_card()),
+                ("hoverSz".into(), cross_module_layer()),
+            ],
+        )];
+        let source = "import base, { hoverSz } from './styles';\nexport const A = () => <div sz={base} className={String(hoverSz)} />;";
+
+        let parsed = parse_with_sz_objects(source, &registry);
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert!(!attribute.runtime_fallback);
+        assert_eq!(attribute.object.properties[0].key, "p");
+    }
+
+    #[test]
+    fn parser_refuses_imports_it_cannot_resolve() {
         let registry = vec![(
             "./styles".into(),
             vec![("cardSz".into(), cross_module_card())],
@@ -4824,7 +5277,11 @@ export const cls = szr(localCard({ pad: 'sm' }));";
         let cases = [
             "import type { cardSz } from './styles';",
             "import { type cardSz } from './styles';",
+            // A default import of a module whose registry entry is a NAMED
+            // export. The default slot is a separate entry, and answering from
+            // a named one would resolve a value the importer never asked for.
             "import cardSz from './styles';",
+            "import type cardSz from './styles';",
             // A side-effect import binds no name at all. It still names a
             // module the registry carries, so the collector has to walk past
             // it rather than read specifiers that are not there.
@@ -4841,13 +5298,6 @@ export const cls = szr(localCard({ pad: 'sm' }));";
             let parsed = parse_with_sz_objects(&source, &registry);
             assert!(parsed.ir.sz_attributes[0].runtime_fallback, "{import}");
         }
-
-        // A namespace import is referenced through a member expression, which
-        // never reached the identifier path in the first place.
-        let namespace =
-            "import * as S from './styles';\nexport const A = () => <div sz={S.cardSz} />;";
-        let parsed = parse_with_sz_objects(namespace, &registry);
-        assert!(parsed.ir.sz_attributes[0].runtime_fallback);
 
         // An absent registry must mean exactly what an empty one means.
         let direct =
@@ -5929,6 +6379,24 @@ export const cls = szr(localCard({ pad: 'sm' }));";
             });
             assert!(parsed.ir.sz_attributes[0].runtime_fallback, "{source}");
         }
+    }
+
+    #[test]
+    fn parser_shell_keeps_removed_dynamic_keys_out_of_css_variables() {
+        let source = "const App=({pad,size})=> <div sz={{ hover: { padding: pad }, fontSize: size, bg: 'red-500' }}/>;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(!attribute.runtime_fallback);
+        assert!(attribute.dynamic_css_vars.is_empty());
+        assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["bg-red-500"]);
+        assert!(attribute
+            .removed_dynamic_keys
+            .iter()
+            .any(|property| property.key == "fontSize"));
     }
 
     #[test]

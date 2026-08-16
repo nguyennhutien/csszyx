@@ -670,11 +670,19 @@ fn unknown_property_diagnostics(
     // sz props first, then the catalog objects (szv leaves + static szr
     // arguments) through the SAME unknown/numeric emission — a typo inside a
     // catalog must be as findable by `csszyx check` as one on an element.
-    let attribute_objects = ir.sz_attributes.iter().map(|attr| &attr.object);
-    let catalog_objects = ir.catalog_sz_objects.iter();
-    for object in attribute_objects.chain(catalog_objects) {
+    let attribute_objects = ir
+        .sz_attributes
+        .iter()
+        .map(|attr| (&attr.object, attr.removed_dynamic_keys.as_slice()));
+    let catalog_objects = ir.catalog_sz_objects.iter().map(|object| (object, &[][..]));
+    for (object, removed_dynamic_keys) in attribute_objects.chain(catalog_objects) {
         unknown.clear();
         collect_unknown_sz_keys(object, &mut unknown);
+        unknown.extend(
+            removed_dynamic_keys
+                .iter()
+                .map(|removed| (removed.key.clone(), removed.span.start)),
+        );
         for (key, offset) in &unknown {
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
@@ -1233,7 +1241,12 @@ mod tests {
                 "{diagnostics}"
             );
         }
-        assert!(diagnostics.contains("import it by name"), "{diagnostics}");
+        // A phrase only the import template carries, so the assertion proves
+        // the import SUGGESTION was rendered and not merely its reason line.
+        assert!(
+            diagnostics.contains("build.importedStaticSz: false"),
+            "{diagnostics}"
+        );
         // The forwarded prop keeps the plain wording, and must not be reported
         // as an import just because it is also an unresolved identifier.
         assert!(diagnostics.contains("identifier `sz`"), "{diagnostics}");

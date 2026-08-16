@@ -63,7 +63,10 @@ export function activate(context: vscode.ExtensionContext): void {
             companionRegistration?.dispose();
         }),
         vscode.workspace.onDidChangeConfiguration(event => {
-            if (event.affectsConfiguration('csszyx.completions')) {
+            if (
+                event.affectsConfiguration('csszyx.completions') ||
+                event.affectsConfiguration('csszyx.themeValues')
+            ) {
                 void syncCompletions();
             }
         }),
@@ -80,7 +83,8 @@ export function activate(context: vscode.ExtensionContext): void {
             vscode.workspace.getConfiguration('csszyx').get('completions'),
         );
         const plan = planCompletions(mode);
-        await configureTsPlugin(plan.pluginEnabled);
+        const themeValues = vscode.workspace.getConfiguration('csszyx').get('themeValues') === true;
+        await configureTsPlugin({ enabled: plan.pluginEnabled, themeValues });
 
         completionRegistration?.dispose();
         completionRegistration = undefined;
@@ -175,15 +179,21 @@ interface TypeScriptServerApi {
     configurePlugin(pluginId: string, configuration: unknown): void;
 }
 
+/** Configuration forwarded to the bundled TypeScript plugin. */
+interface TypeScriptPluginConfiguration {
+    readonly enabled: boolean;
+    readonly themeValues: boolean;
+}
+
 /**
  * Enable or disable the bundled tsserver plugin through the built-in
  * TypeScript extension's API, so `csszyx.completions` controls it at runtime.
  *
  * The plugin defaults to enabled, so an unavailable API (or a host that is not
  * VS Code) simply leaves it on — never a hard failure.
- * @param enabled - Whether the plugin should serve completions.
+ * @param configuration - Completion ownership and theme-preview flags.
  */
-async function configureTsPlugin(enabled: boolean): Promise<void> {
+async function configureTsPlugin(configuration: TypeScriptPluginConfiguration): Promise<void> {
     try {
         const tsExtension = vscode.extensions.getExtension('vscode.typescript-language-features');
         if (!tsExtension) {
@@ -193,7 +203,7 @@ async function configureTsPlugin(enabled: boolean): Promise<void> {
             await tsExtension.activate();
         }
         const api = tsExtension.exports?.getAPI?.(0) as TypeScriptServerApi | undefined;
-        api?.configurePlugin?.(TS_PLUGIN_ID, { enabled });
+        api?.configurePlugin?.(TS_PLUGIN_ID, configuration);
     } catch {
         // Reaching the API is best-effort; the plugin's own default stands.
     }

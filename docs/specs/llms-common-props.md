@@ -260,8 +260,14 @@ merely named `szv` or `szr`.
 
 Value suggestions are curated, not a validity allowlist. Tailwind 4 numeric
 values remain open-ended (`{ p: 13, w: 137 }` is valid even when not listed).
-Current plugin scope excludes theme-token loading, hover, diagnostics, syntax
-highlighting, network access, telemetry, and Tailwind config/plugin execution.
+Theme-token completion is an opt-in preview: add `.csszyx/theme.d.ts` to the
+leaf TypeScript project and set plugin option `themeValues: true` (or VS Code
+setting `csszyx.themeValues: true`). It consumes only that bounded declaration
+from the current TypeScript Program—no CSS scan, direct file I/O, watcher,
+network, or Tailwind/config execution. Missing or malformed declarations leave
+the built-in suggestions unchanged. Current plugin scope excludes hover,
+diagnostics, syntax highlighting, network access, telemetry, and Tailwind
+config/plugin execution.
 The plugin is self-contained: its metadata is bundled at build time, so it
 installs with no runtime dependencies and there is no separate metadata package
 to install.

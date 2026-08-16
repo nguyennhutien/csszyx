@@ -78,32 +78,85 @@ export function repoRelativeSource(source, report) {
  * @returns Repo-relative source path mapped to its recorded lines.
  */
 function readLcov(file) {
+    return parseLcov(readFileSync(file, 'utf8'), file);
+}
+
+/**
+ * Read one lcov report's text into covered and uncovered line numbers per file.
+ *
+ * A line counts as covered only when it was executed AND every branch on it was
+ * taken. Codecov calls the executed-but-not-fully-branched case a "partial" and
+ * scores it as uncovered in its line metric — `codecov.yml` says so in its own
+ * comment — so a gate that read only `DA:` records would call such a line
+ * covered and disagree with the service it exists to predict. That disagreement
+ * is exactly what let a pull request pass here and then report 97% patch
+ * coverage upstream.
+ *
+ * Split from {@link readLcov} so the record arithmetic is testable without
+ * writing a report to disk.
+ *
+ * @param text - lcov report contents.
+ * @param report - Path the report came from, for source-path resolution.
+ * @returns Repo-relative source path mapped to its recorded lines.
+ */
+export function parseLcov(text, report) {
     const records = new Map();
-    let current = null;
-    for (const line of readFileSync(file, 'utf8').split('\n')) {
+    /** Per file: line number to hit count, and the lines with an untaken branch. */
+    let hits = null;
+    let partial = null;
+    const perFile = new Map();
+    let source = null;
+
+    const startFile = next => {
+        source = next;
+        const existing = perFile.get(source);
+        if (existing === undefined) {
+            hits = new Map();
+            partial = new Set();
+            perFile.set(source, { hits, partial });
+            return;
+        }
+        hits = existing.hits;
+        partial = existing.partial;
+    };
+
+    for (const line of text.split('\n')) {
         if (line.startsWith('SF:')) {
-            const source = repoRelativeSource(line.slice(3).trim(), file);
-            current = records.get(source);
-            if (current === undefined) {
-                current = { covered: new Set(), uncovered: new Set() };
-                records.set(source, current);
-            }
+            startFile(repoRelativeSource(line.slice(3).trim(), report));
             continue;
         }
-        if (current === null || !line.startsWith('DA:')) continue;
-        const [rawLine, rawHits] = line.slice(3).split(',');
-        const lineNumber = Number(rawLine);
-        if (!Number.isInteger(lineNumber)) continue;
-        // A line recorded as covered by ANY report stays covered: the rust and
-        // TypeScript runs describe different files, and ts-plugin measures its
-        // own package that the root run deliberately skips. Reading them as one
-        // set is what makes "covered somewhere" the answer.
-        if (Number(rawHits) > 0) {
-            current.covered.add(lineNumber);
-            current.uncovered.delete(lineNumber);
-        } else if (!current.covered.has(lineNumber)) {
-            current.uncovered.add(lineNumber);
+        if (source === null) continue;
+        if (line.startsWith('DA:')) {
+            const [rawLine, rawHits] = line.slice(3).split(',');
+            const lineNumber = Number(rawLine);
+            if (!Number.isInteger(lineNumber)) continue;
+            hits.set(lineNumber, Math.max(hits.get(lineNumber) ?? 0, Number(rawHits) || 0));
+            continue;
         }
+        if (!line.startsWith('BRDA:')) continue;
+        const parts = line.slice(5).split(',');
+        const lineNumber = Number(parts[0]);
+        // lcov writes `-` when the branch was never reached at all, which is
+        // strictly worse than reached-and-not-taken; both mean not covered.
+        const taken = parts[3];
+        if (Number.isInteger(lineNumber) && (taken === '-' || Number(taken) === 0)) {
+            partial.add(lineNumber);
+        }
+    }
+
+    for (const [file, { hits: fileHits, partial: filePartial }] of perFile) {
+        const covered = new Set();
+        const uncovered = new Set();
+        for (const [lineNumber, count] of fileHits) {
+            // A line recorded as covered by ANY report stays covered: the rust
+            // and TypeScript runs describe different files, and ts-plugin
+            // measures its own package that the root run deliberately skips.
+            // Reading them as one set is what makes "covered somewhere" the
+            // answer.
+            if (count > 0 && !filePartial.has(lineNumber)) covered.add(lineNumber);
+            else uncovered.add(lineNumber);
+        }
+        records.set(file, { covered, uncovered });
     }
     return records;
 }

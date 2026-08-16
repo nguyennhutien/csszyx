@@ -238,12 +238,135 @@ function readCrossModuleDeclarator(
 }
 
 /**
- * Extract every `export const X = szv(<literal config>)` from one module, for
+ * The variable declaration a top-level statement carries, exported or not.
+ *
+ * An export list names bindings this module declared, and it may sit either
+ * side of them, so the whole top level has to be indexed before the lists are
+ * read. Block-scoped declarations are deliberately not walked: only a
+ * module-scope binding can be what `export { X }` refers to.
+ *
+ * @param statement - One statement from the program body.
+ * @returns The declaration, or undefined when the statement declares nothing.
+ */
+function moduleScopeVariableDeclaration(statement: OxcNode): OxcNode | undefined {
+    if (statement.type === 'VariableDeclaration') return statement;
+    if (statement.type !== 'ExportNamedDeclaration') return undefined;
+    const declaration = (statement as unknown as { declaration?: OxcNode }).declaration;
+    return declaration?.type === 'VariableDeclaration' ? declaration : undefined;
+}
+
+/** A module-scope declarator kept with the `const` flag its declaration had. */
+interface ScopedDeclarator {
+    declarator: VariableDeclaratorNode;
+    isConst: boolean;
+}
+
+/**
+ * Index every module-scope declarator by the name it binds.
+ *
+ * @param body - Program body.
+ * @returns Binding name to its declarator.
+ */
+function moduleScopeDeclarators(body: OxcNode[]): Map<string, ScopedDeclarator> {
+    const scope = new Map<string, ScopedDeclarator>();
+    for (const statement of body) {
+        const declaration = moduleScopeVariableDeclaration(statement);
+        if (declaration === undefined) continue;
+        const isConst = (declaration as unknown as { kind?: string }).kind === 'const';
+        for (const declarator of (declaration as unknown as VariableDeclarationNode).declarations) {
+            if (declarator.id?.type !== 'Identifier' || declarator.id.name === undefined) continue;
+            scope.set(declarator.id.name, { declarator, isConst });
+        }
+    }
+    return scope;
+}
+
+/**
+ * Read one `export { local as exported }` clause into a registry entry.
+ *
+ * The entry is filed under the EXPORTED name, because that is the name an
+ * importer writes and therefore the one the registry is looked up by. Filing
+ * the local name would put the entry where no consumer can find it.
+ *
+ * @param specifier - One specifier of a source-less export list.
+ * @param scope - Module-scope declarators, by binding name.
+ * @returns The entry to record, or null when the clause does not qualify.
+ */
+function readExportSpecifier(
+    specifier: OxcNode,
+    scope: ReadonlyMap<string, ScopedDeclarator>,
+): CrossModuleRegistryEntry | null {
+    const shaped = specifier as unknown as {
+        exportKind?: string;
+        local?: { type: string; name?: string };
+        exported?: { type: string; name?: string };
+    };
+    if (shaped.exportKind === 'type') return null;
+    // A string export name is legal but is not a name any importer of a token
+    // module writes, and recording one would key the registry by a value the
+    // consumer never asks for.
+    if (shaped.local?.type !== 'Identifier' || shaped.exported?.type !== 'Identifier') return null;
+    const local = shaped.local.name;
+    const exported = shaped.exported.name;
+    /* v8 ignore next -- narrowing only: an oxc Identifier always carries a
+       name, and the check above already established both nodes are one. */
+    if (local === undefined || exported === undefined) return null;
+    // Absent from module scope means the name is imported, declared in a block,
+    // or not declared here at all. Each of those has its value somewhere this
+    // extractor has not read, so there is nothing to answer with.
+    const scoped = scope.get(local);
+    if (scoped === undefined) return null;
+    const entry = readCrossModuleDeclarator(scoped.declarator, scoped.isConst);
+    return entry === null ? null : { ...entry, exportName: exported };
+}
+
+/** The registry key a default export is filed under. */
+const DEFAULT_EXPORT_NAME = 'default';
+
+/**
+ * Read `export default <expression>` into a registry entry.
+ *
+ * The expression is adapted into the declarator shape the one reader takes,
+ * rather than given a reader of its own: a second predicate here is how the
+ * default slot would end up qualifying values the named forms refuse, or the
+ * reverse.
+ *
+ * `isConst` is passed as true, and that is not a shortcut. `export default`
+ * introduces no name to assign to, so the module cannot rebind it after an
+ * importer has been compiled against the value — the live-binding hazard that
+ * keeps `export let` out does not exist here.
+ *
+ * @param statement - The `ExportDefaultDeclaration` node.
+ * @returns The entry to record, or null when the export does not qualify.
+ */
+function readDefaultExport(statement: OxcNode): CrossModuleRegistryEntry | null {
+    const declaration = (statement as unknown as { declaration?: OxcNode }).declaration;
+    /* v8 ignore next -- narrowing only: the caller reaches here solely for an
+       ExportDefaultDeclaration, which always carries a declaration. */
+    if (declaration === undefined) return null;
+    const entry = readCrossModuleDeclarator(
+        {
+            id: { type: 'Identifier', name: DEFAULT_EXPORT_NAME },
+            init: declaration,
+        },
+        true,
+    );
+    return entry === null ? null : { ...entry, exportName: DEFAULT_EXPORT_NAME };
+}
+
+/**
+ * Extract every exported szv factory and static sz object from one module, for
  * the bundler's cross-module registry.
+ *
+ * Both spellings of an export are read: the declaration form
+ * `export const X = …` and the list form `const X = …; export { X }`. They are
+ * one declaration and one value with different punctuation, and reading only
+ * the first made a style qualify by the author's house style with nothing in
+ * the output to say which rule had applied.
  *
  * @param source - Module source text.
  * @param filename - Module filename, for parser dialect detection.
- * @returns The exported factories, declaration order preserved.
+ * @returns The exported values, declaration order preserved.
  */
 export function extractCrossModuleRegistryEntries(
     source: string,
@@ -261,17 +384,73 @@ export function extractCrossModuleRegistryEntries(
         /* v8 ignore next -- oxc reports syntax errors in-band; only native/parser failures throw. */
         return [];
     }
-    const out: CrossModuleRegistryEntry[] = [];
-    for (const statement of program.body) {
-        if (statement.type !== 'ExportNamedDeclaration') continue;
-        const declaration = (statement as unknown as { declaration?: OxcNode }).declaration;
-        if (declaration?.type !== 'VariableDeclaration') continue;
-        const declarators = (declaration as unknown as VariableDeclarationNode).declarations;
-        const isConst = (declaration as unknown as { kind?: string }).kind === 'const';
-        for (const declarator of declarators) {
-            const entry = readCrossModuleDeclarator(declarator, isConst);
-            if (entry !== null) out.push(entry);
-        }
+    const scope = moduleScopeDeclarators(program.body);
+    return program.body.flatMap(statement => readExportStatement(statement, scope));
+}
+
+/**
+ * Read every registry entry one top-level statement contributes.
+ *
+ * Split from the walk above so each export SHAPE is read in one place rather
+ * than as another arm of a loop that already carries the parse, the scope and
+ * the accumulator.
+ *
+ * @param statement - One statement from the program body.
+ * @param scope - Module-scope declarators, by binding name.
+ * @returns The entries this statement contributes, possibly none.
+ */
+function readExportStatement(
+    statement: OxcNode,
+    scope: ReadonlyMap<string, ScopedDeclarator>,
+): CrossModuleRegistryEntry[] {
+    if (statement.type === 'ExportDefaultDeclaration') {
+        return asEntries(readDefaultExport(statement));
     }
-    return out;
+    if (statement.type !== 'ExportNamedDeclaration') {
+        return [];
+    }
+    const shaped = statement as unknown as {
+        exportKind?: string;
+        source?: OxcNode | null;
+        declaration?: OxcNode;
+        specifiers?: OxcNode[];
+    };
+    // A type-only export carries no runtime value, and `export { X } from
+    // './y'` names a binding in the PROVIDER module this extractor has not
+    // read — matching that specifier against the local scope would record
+    // whatever happened to share the name.
+    if (shaped.exportKind === 'type' || shaped.source != null) {
+        return [];
+    }
+    if (shaped.declaration?.type === 'VariableDeclaration') {
+        return readExportedDeclaration(shaped.declaration);
+    }
+    /* v8 ignore next -- narrowing only: oxc always supplies the array, empty
+       for `export {}`; the fallback exists so a shape change cannot throw. */
+    return (shaped.specifiers ?? []).flatMap(specifier =>
+        asEntries(readExportSpecifier(specifier, scope)),
+    );
+}
+
+/**
+ * Read every declarator of an exported variable declaration.
+ *
+ * @param declaration - The `VariableDeclaration` an export carried.
+ * @returns The entries its declarators contribute.
+ */
+function readExportedDeclaration(declaration: OxcNode): CrossModuleRegistryEntry[] {
+    const isConst = (declaration as unknown as { kind?: string }).kind === 'const';
+    return (declaration as unknown as VariableDeclarationNode).declarations.flatMap(declarator =>
+        asEntries(readCrossModuleDeclarator(declarator, isConst)),
+    );
+}
+
+/**
+ * Lift one optional entry into the list shape the readers compose in.
+ *
+ * @param entry - A read result, or null when the export did not qualify.
+ * @returns A one-element list, or an empty one.
+ */
+function asEntries(entry: CrossModuleRegistryEntry | null): CrossModuleRegistryEntry[] {
+    return entry === null ? [] : [entry];
 }

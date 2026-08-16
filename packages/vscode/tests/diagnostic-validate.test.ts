@@ -55,6 +55,7 @@ vi.mock('vscode', () => ({
 }));
 
 const { validateDocument } = await import('../src/diagnostic-provider.js');
+const { KNOWN_SPECIAL_PROPERTIES } = await import('../src/data.js');
 
 interface Diag {
     range: { start: { line: number; character: number }; end: { line: number; character: number } };
@@ -120,6 +121,11 @@ describe('validateDocument — unknown keys', () => {
         ]) {
             expect(diagnosticsFor(source), source).toEqual([]);
         }
+    });
+
+    it('accepts canonical properties lowered by dedicated compiler branches', () => {
+        const entries = KNOWN_SPECIAL_PROPERTIES.map(key => `${key}: 'test'`).join(', ');
+        expect(diagnosticsFor(`const A = () => <div sz={{ ${entries} }} />;`)).toEqual([]);
     });
 
     it('warns on an unknown key with the docs link and an exact range', () => {

@@ -145,6 +145,9 @@ const throwingLoggerProxy = init({ typescript: ts }).create({
         },
     },
     project: {
+        getCurrentDirectory: () => {
+            throw new Error('host project root failure');
+        },
         projectService: {
             logger: { info: () => { throw new Error('host logger failure'); } },
         },
@@ -230,4 +233,34 @@ try {
 } finally {
     performance.now = realNow;
 }
+});
+
+test('activation reports every switch it was given', () => {
+    // Every other case here leaves the defaults in place — completions on,
+    // values on, theme values off. Without the opposite settings the off-states
+    // of the first two and the on-state of the third are never rendered, so a
+    // typo in the message would ship unseen.
+    const activationLogs = [];
+    init({ typescript: ts }).create({
+        config: { enabled: false, values: false, themeValues: true },
+        languageService: {
+            getCompletionsAtPosition: () => base,
+            getProgram: () => undefined,
+        },
+        project: {
+            projectService: {
+                cancellationToken: { isCancellationRequested: () => false },
+                logger: { info: message => activationLogs.push(message) },
+            },
+        },
+    });
+
+    assert.ok(
+        activationLogs.some(
+            message =>
+                message.includes('completions off') &&
+                message.includes('values off') &&
+                message.includes('theme values on'),
+        ),
+    );
 });

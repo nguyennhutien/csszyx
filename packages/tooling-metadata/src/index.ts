@@ -23,6 +23,7 @@ export {
 } from './relations';
 export {
     BOOLEAN_SHORTHANDS,
+    KNOWN_SPECIAL_PROPERTIES,
     KNOWN_VARIANTS,
     METADATA_SCHEMA_VERSION,
     MIGRATION_NOTES,
@@ -30,6 +31,8 @@ export {
     PROPERTY_MAP,
     SPECIAL_VARIANTS,
     SUGGESTION_MAP,
+    THEME_VALUE_PROPERTIES,
+    type ThemeValueCategory,
     VALUE_SUGGESTIONS,
 } from './tooling.generated';
 export { negativeValueSuggestions } from './value-suggestions';

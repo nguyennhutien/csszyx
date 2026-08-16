@@ -5,6 +5,7 @@ import {
     isMeasurable,
     parseArgs,
     parseDiffHunks,
+    parseLcov,
     repoRelativeSource,
 } from './check-patch-coverage.mjs';
 
@@ -90,6 +91,41 @@ describe('patch coverage', () => {
         assert.equal(parsed.base, 'origin/main');
         assert.ok(parsed.reports.includes('coverage/lcov.info'));
         assert.ok(parsed.reports.includes('coverage/rust-lcov.info'));
+    });
+
+    it('counts a line whose branches are not all taken as uncovered', () => {
+        // Codecov calls this a "partial" and its line metric scores it as
+        // uncovered — codecov.yml says so in its own comment. A gate that read
+        // only DA records would call this covered and disagree with the service
+        // it exists to predict, which is the whole failure mode here.
+        const records = parseLcov(
+            'SF:packages/x/src/a.ts\nDA:10,5\nBRDA:10,0,0,5\nBRDA:10,0,1,0\nend_of_record\n',
+            'coverage/lcov.info',
+        );
+
+        assert.ok(records.get('packages/x/src/a.ts').uncovered.has(10));
+        assert.ok(!records.get('packages/x/src/a.ts').covered.has(10));
+    });
+
+    it('leaves a line whose branches are all taken covered', () => {
+        const records = parseLcov(
+            'SF:packages/x/src/a.ts\nDA:10,5\nBRDA:10,0,0,5\nBRDA:10,0,1,2\nend_of_record\n',
+            'coverage/lcov.info',
+        );
+
+        assert.ok(records.get('packages/x/src/a.ts').covered.has(10));
+        assert.ok(!records.get('packages/x/src/a.ts').uncovered.has(10));
+    });
+
+    it('reads a dash branch count as not taken', () => {
+        // lcov writes `-` when a branch was never reached at all, which is
+        // strictly worse than reached-and-not-taken.
+        const records = parseLcov(
+            'SF:packages/x/src/a.ts\nDA:10,5\nBRDA:10,0,0,-\nend_of_record\n',
+            'coverage/lcov.info',
+        );
+
+        assert.ok(records.get('packages/x/src/a.ts').uncovered.has(10));
     });
 
     it('takes an explicit base and replaces the report list rather than adding to it', () => {

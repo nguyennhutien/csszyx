@@ -1,8 +1,8 @@
 /**
  * csszyx_validate — Validate a sz object for correctness before using it.
  *
- * Checks each key against PROPERTY_MAP, KNOWN_VARIANTS, and BOOLEAN_SHORTHANDS
- * from the real compiler, then runs transform() to confirm the output is valid.
+ * Checks each key against the real compiler's generated canonical-key sets,
+ * then runs transform() to confirm the output is valid.
  * Reports unknown props, CSS property name mistakes (padding → p), and type errors.
  *
  * Example: { padding: 4 } → error "Unknown prop 'padding'. Use 'p' instead."
@@ -10,6 +10,7 @@
 
 import {
     BOOLEAN_SHORTHANDS,
+    KNOWN_SPECIAL_PROPERTIES,
     KNOWN_VARIANTS,
     PROPERTY_MAP,
     REMOVED_BOOLEAN_SUGAR,
@@ -61,9 +62,13 @@ function validateEntry(key: string, value: unknown): ValidationError | undefined
     }
 
     const isSpecial =
-        ['css', '@container', '*'].includes(key) || key.startsWith('@') || key.startsWith('[');
+        ['@container', '*'].includes(key) || key.startsWith('@') || key.startsWith('[');
     const isKnown =
-        key in PROPERTY_MAP || BOOLEAN_SHORTHANDS.has(key) || KNOWN_VARIANTS.has(key) || isSpecial;
+        key in PROPERTY_MAP ||
+        BOOLEAN_SHORTHANDS.has(key) ||
+        KNOWN_SPECIAL_PROPERTIES.has(key) ||
+        KNOWN_VARIANTS.has(key) ||
+        isSpecial;
     return isKnown
         ? undefined
         : {

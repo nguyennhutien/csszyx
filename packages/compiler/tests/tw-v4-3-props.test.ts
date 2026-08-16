@@ -153,27 +153,7 @@ describe('tabSize (v4.3)', () => {
     });
 });
 
-// ============================================================================
-// Mask Gradient Color Stops (v4.1)
-// ============================================================================
-
-describe('mask gradient color stops (v4.1)', () => {
-    it('{ maskFrom: "black" } → mask-from-black', () => {
-        expect(transform({ maskFrom: 'black' }).className).toBe('mask-from-black');
-    });
-
-    it('{ maskVia: "transparent" } → mask-via-transparent', () => {
-        expect(transform({ maskVia: 'transparent' }).className).toBe('mask-via-transparent');
-    });
-
-    it('{ maskTo: "white" } → mask-to-white', () => {
-        expect(transform({ maskTo: 'white' }).className).toBe('mask-to-white');
-    });
-
-    it('handles CSS variable', () => {
-        expect(transform({ maskFrom: '--c' }).className).toBe('mask-from-(--c)');
-    });
-
+describe('removed mask gradient color stops (v4.1)', () => {
     it('removed mask stop keys carry no category', () => {
         // maskFrom/maskVia/maskTo were removed with the mask-layer redesign;
         // a leftover COLOR categorization routed them into color validation,
