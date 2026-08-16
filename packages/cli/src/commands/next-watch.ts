@@ -132,6 +132,7 @@ export async function startNextWatch(
         debounceMs,
         onError: reportFailure,
     });
+    const isIgnored = createIgnoredMatcher(root, prebuild.context.safelist.shardsDir, ignore);
     const watchFactory = dependencies.watch ?? watch;
     const fsWatcher = watchFactory(root, {
         ignoreInitial: true,
@@ -141,7 +142,7 @@ export async function startNextWatch(
             stabilityThreshold: 25,
             pollInterval: 10,
         },
-        ignored: createIgnoredMatcher(root, prebuild.context.safelist.shardsDir, ignore),
+        ignored: isIgnored,
     });
 
     const probePath = path.join(
@@ -152,6 +153,17 @@ export async function startNextWatch(
     fsWatcher.on('all', (event, filePath) => {
         const absolutePath = path.resolve(filePath);
         if (absolutePath === probePath) {
+            return;
+        }
+        // A directory that appears after the watch is running may already hold
+        // files, and the recursive watch on it is established AFTER it exists.
+        // Anything written into that window is never reported — and never
+        // reported means the watcher does not know the file at all, so its
+        // eventual removal produces no `unlink` either and the shard it wrote
+        // outlives its source. Naming the files explicitly closes the window;
+        // a path chokidar already tracks is a no-op.
+        if (event === 'addDir') {
+            watchSourcesAlreadyInside(fsWatcher, absolutePath, isIgnored);
             return;
         }
         if (event === 'add' || event === 'change' || event === 'unlink') {
@@ -345,6 +357,48 @@ function waitForShutdown(failure: Promise<Error>): Promise<Error | undefined> {
             resolve(error);
         });
     });
+}
+
+/**
+ * Explicitly watch the source files a newly-seen directory already contains.
+ *
+ * Only the directory's own entries, not its subtree: a nested directory
+ * arrives as its own `addDir`, so recursing here would walk the same tree
+ * twice and would also descend into places the ignore list prunes.
+ *
+ * Best effort by design. The directory can vanish between the event and the
+ * read — a build tool writing a temporary tree, or a `mkdir` immediately
+ * undone — and that is not a watcher failure. Reporting it would turn an
+ * ordinary race into a fatal error, which is the opposite of the point.
+ *
+ * @param watcher Active chokidar watcher.
+ * @param directory Absolute path chokidar reported as added.
+ * @param isIgnored Predicate for paths the watch prunes.
+ */
+function watchSourcesAlreadyInside(
+    watcher: FSWatcher,
+    directory: string,
+    isIgnored: (candidate: string) => boolean,
+): void {
+    if (isIgnored(directory)) {
+        return;
+    }
+    let entries: fs.Dirent[];
+    try {
+        entries = fs.readdirSync(directory, { withFileTypes: true });
+    } catch {
+        return;
+    }
+    for (const entry of entries) {
+        if (!entry.isFile() || !SOURCE_EXTENSION.test(entry.name)) {
+            continue;
+        }
+        const candidate = path.join(directory, entry.name);
+        if (isIgnored(candidate)) {
+            continue;
+        }
+        watcher.add(candidate);
+    }
 }
 
 /**
