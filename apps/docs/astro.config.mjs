@@ -8,6 +8,106 @@ import csszyxLightTheme from './src/themes/csszyx-light.json' with { type: 'json
 import ecTwoslash from 'expressive-code-twoslash';
 import remarkGfm from 'remark-gfm';
 
+/**
+ * The three families this site sets, served from `src/assets/fonts`.
+ *
+ * They used to come from `fontProviders.google()`, which made every build
+ * anywhere depend on fonts.gstatic.com answering. It stopped answering five
+ * times in three days — always HTTP 404, across all three families and both CI
+ * systems. The cause is not a flaky network: Astro caches the resolved gstatic
+ * URL for about two days and does not re-resolve inside that window, so when
+ * Google rotates a file the cached URL is simply gone. A build that fetches in
+ * that gap cannot succeed, and no amount of caching on our side fixes it —
+ * caching the resolved URL is what extends the exposure.
+ *
+ * The files are the exact bytes that build already shipped, so this removes the
+ * network dependency without changing a glyph.
+ */
+const LOCAL_FAMILIES = [
+    {
+        name: 'IBM Plex Sans',
+        cssVariable: '--font-ibm-plex-sans',
+        weights: [300, 400, 500, 600, 700],
+        styles: ['normal', 'italic'],
+    },
+    {
+        name: 'JetBrains Mono',
+        cssVariable: '--font-jetbrains-mono',
+        weights: [400, 500, 600, 700],
+        styles: ['normal', 'italic'],
+    },
+    {
+        name: 'Geist Mono',
+        cssVariable: '--font-geist-mono',
+        weights: [400, 500, 600, 700],
+        styles: ['normal'],
+    },
+];
+
+/**
+ * The `unicode-range` Google served for the latin subset.
+ *
+ * Carried verbatim rather than omitted: without it the browser downloads the
+ * face for any text at all, including scripts these files do not cover.
+ */
+const LATIN_SUBSET = [
+    'U+0000-00FF',
+    'U+0131',
+    'U+0152-0153',
+    'U+02BB-02BC',
+    'U+02C6',
+    'U+02DA',
+    'U+02DC',
+    'U+0304',
+    'U+0308',
+    'U+0329',
+    'U+2000-206F',
+    'U+20AC',
+    'U+2122',
+    'U+2191',
+    'U+2193',
+    'U+2212',
+    'U+2215',
+    'U+FEFF',
+    'U+FFFD',
+];
+
+/**
+ * Vendored file for one family and style.
+ *
+ * Each style is ONE variable font covering the whole weight range, which is
+ * why five files serve twenty-two faces.
+ *
+ * @param {string} name - Family name as declared above.
+ * @param {string} style - `normal` or `italic`.
+ * @returns {string} Filename under `src/assets/fonts`.
+ */
+function fontFile(name, style) {
+    return `${name.toLowerCase().replaceAll(' ', '-')}-latin-${style}.woff2`;
+}
+
+/**
+ * Styles ordered so the fallback metrics come out unchanged.
+ *
+ * Astro derives the `size-adjust` and `*-override` values of the Arial
+ * fallback from whichever variant it measures FIRST for a family — the metrics
+ * cache is keyed by family name — and Google's response happened to list
+ * italic first. Emitting in that same order keeps those numbers identical to
+ * the fetched build, which is what makes this change provably invisible.
+ *
+ * Measured: with `normal` first, IBM Plex Sans shifts from `size-adjust`
+ * 99.5961% to 101.1663%. That is a real difference in how the page is laid out
+ * before the webfont paints, and picking the better face for it is a CLS
+ * decision on its own merits — not something to change as a side effect of
+ * removing a network dependency.
+ *
+ * @param {Array<string>} styles - Styles declared for the family.
+ * @returns {Array<string>} The same styles, italic first.
+ */
+function inMeasurementOrder(styles) {
+    return [...styles].sort((left, right) => Number(right === 'italic') - Number(left === 'italic'));
+}
+
 const docsLandingGlobalVarTokens = [
     '--lp-border',
     '--lp-surface',
@@ -29,29 +129,30 @@ export default defineConfig({
     markdown: {
         remarkPlugins: [remarkGfm],
     },
-    fonts: [
-        {
-            provider: fontProviders.google(),
-            name: 'IBM Plex Sans',
-            cssVariable: '--font-ibm-plex-sans',
-            weights: [300, 400, 500, 600, 700],
-            styles: ['normal', 'italic'],
+    fonts: LOCAL_FAMILIES.map(family => ({
+        provider: fontProviders.local(),
+        name: family.name,
+        cssVariable: family.cssVariable,
+        // Provider-specific config goes under `options`; `variants` is the
+        // local provider's own shape, not a family-level key.
+        options: {
+            variants: inMeasurementOrder(family.styles).flatMap(style =>
+                // One variant per weight rather than a `"300 700"` range:
+                // Google served one variable file per style and Astro emitted a
+                // separate @font-face for each declared weight. Keeping that
+                // shape is what lets the generated CSS be diffed against the
+                // fetched build and shown to be unchanged. A range would render
+                // correctly too, but it would change the output and forfeit
+                // that proof.
+                family.weights.map(weight => ({
+                    src: [`./src/assets/fonts/${fontFile(family.name, style)}`],
+                    weight,
+                    style,
+                    unicodeRange: LATIN_SUBSET,
+                })),
+            ),
         },
-        {
-            provider: fontProviders.google(),
-            name: 'JetBrains Mono',
-            cssVariable: '--font-jetbrains-mono',
-            weights: [400, 500, 600, 700],
-            styles: ['normal', 'italic'],
-        },
-        {
-            provider: fontProviders.google(),
-            name: 'Geist Mono',
-            cssVariable: '--font-geist-mono',
-            weights: [400, 500, 600, 700],
-            styles: ['normal'],
-        },
-    ],
+    })),
     integrations: [
         react(),
         starlight({
