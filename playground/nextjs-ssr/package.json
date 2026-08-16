@@ -15,7 +15,7 @@
         "@csszyx/unplugin": "workspace:*",
         "@tailwindcss/postcss": "^4.3.3",
         "csszyx": "workspace:*",
-        "next": "^15.5.22",
+        "next": "^15.5.23",
         "react": "^19.2.4",
         "react-dom": "^19.2.4",
         "tailwindcss": "^4.3.3"
