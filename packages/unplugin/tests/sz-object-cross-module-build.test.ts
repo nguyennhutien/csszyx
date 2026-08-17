@@ -77,17 +77,19 @@ afterAll(() => {
  * @param parser - Engine under test.
  * @param importedStaticSz - Whether the feature is opted in.
  * @param aliased - Whether the importer names the provider through `@`.
+ * @param overrides - Fixture files to replace, for the export-shape matrix.
  * @returns Emitted bundle text and the safelist file contents.
  */
 async function buildFixture(
     parser: 'rust' | 'oxc' | 'babel',
     importedStaticSz: boolean,
     aliased = false,
+    overrides: Record<string, string> = {},
 ): Promise<{ js: string; safelist: string }> {
     const root = mkdtempSync(join(realpathSync(tmpdir()), `csszyx-szobj-${parser}-`));
     tempDirs.push(root);
     mkdirSync(join(root, 'src'), { recursive: true });
-    for (const [file, source] of Object.entries(FIXTURE_FILES)) {
+    for (const [file, source] of Object.entries({ ...FIXTURE_FILES, ...overrides })) {
         writeFileSync(join(root, file), source, 'utf8');
     }
     if (aliased) writeFileSync(join(root, 'src/App.tsx'), ALIASED_APP, 'utf8');
@@ -163,6 +165,91 @@ describe('a plain exported style object, through a real build', () => {
             expect(safelist).toContain('p-7');
         }
     }, 240_000);
+
+    // The docs state which export shapes fold and which do not, and the shape
+    // that is wrong there is the expensive one: a reader trusts a table saying
+    // "runtime fallback" and rewrites working code, or trusts "build time" and
+    // ships an element naming a rule nothing generated. The table drifted once
+    // already — it still called a named import a runtime fallback three
+    // releases after the feature landed — because nothing here disagreed with
+    // it. These builds are that disagreement.
+    const EXPORT_SHAPES: ReadonlyArray<readonly [string, Record<string, string>, boolean]> = [
+        [
+            'a named export of a literal',
+            { 'src/styles.ts': "export const cardSz = { p: 7, rounded: 'lg' };" },
+            true,
+        ],
+        [
+            'a const exported in a separate clause',
+            { 'src/styles.ts': "const cardSz = { p: 7, rounded: 'lg' };\nexport { cardSz };" },
+            true,
+        ],
+        [
+            'a namespace member',
+            {
+                'src/styles.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
+                'src/App.tsx':
+                    "import * as S from './styles.ts';\nexport const App = () => <div sz={S.cardSz} />;",
+            },
+            true,
+        ],
+        [
+            'a literal in the default slot',
+            {
+                'src/styles.ts': "export default { p: 7, rounded: 'lg' };",
+                'src/App.tsx':
+                    "import cardSz from './styles.ts';\nexport const App = () => <div sz={cardSz} />;",
+            },
+            true,
+        ],
+        [
+            'an identifier in the default slot',
+            {
+                'src/styles.ts': "const cardSz = { p: 7, rounded: 'lg' };\nexport default cardSz;",
+                'src/App.tsx':
+                    "import cardSz from './styles.ts';\nexport const App = () => <div sz={cardSz} />;",
+            },
+            false,
+        ],
+        [
+            'a barrel forwarding a name it does not declare',
+            {
+                'src/base.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
+                'src/styles.ts': "export { cardSz } from './base.ts';",
+            },
+            false,
+        ],
+        [
+            'an import re-exported in a second statement',
+            {
+                'src/base.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
+                'src/styles.ts': "import { cardSz } from './base.ts';\nexport { cardSz };",
+            },
+            false,
+        ],
+        [
+            'a computed value',
+            {
+                'src/styles.ts':
+                    "export const cardSz = makeIt();\nfunction makeIt() { return { p: 7, rounded: 'lg' }; }",
+            },
+            false,
+        ],
+    ];
+
+    it.each(EXPORT_SHAPES)(
+        'folds %s: %o',
+        async (_name, overrides, folds) => {
+            const { js, safelist } = await buildFixture('rust', true, false, overrides);
+            // Both halves matter and they fail apart: the emitted class without
+            // the safelist entry is an element naming a rule Tailwind was never
+            // asked to generate.
+            expect(js.includes('p-7')).toBe(folds);
+            expect(safelist.includes('p-7')).toBe(folds);
+            expect(js.includes('_sz(')).toBe(!folds);
+        },
+        120_000,
+    );
 
     it('reads a provider only because something imports it', async () => {
         // `unusedSz` lives in a module the prescan DID read, so it is recorded;

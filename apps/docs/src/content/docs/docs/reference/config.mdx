@@ -377,9 +377,17 @@ already uncompensated — see the
 [shared-style-object contract](/docs/reusing-styles/). Treat a shared sz object
 as declared once and never written to, whichever way this setting is set.
 
-**What v1 covers:** a direct `sz={binding}` from a named import, including a
-renamed one (`import { cardSz as card }`). The provider must be a `const` whose
-value is a fully static object literal.
+**What it covers:** a direct `sz={binding}` from a named import, including a
+renamed one (`import { cardSz as card }`), a namespace member (`import * as S`,
+then `sz={S.cardSz}`), and a default import when the module writes the literal
+in the default slot (`export default { … }`). The value must be a fully static
+object literal **in the module the importer names**.
+
+That last clause is what the remaining gaps have in common. A barrel
+(`export { cardSz } from './base'`) forwards to a module the compiler has not
+read, and `export default cardSz` puts an identifier where the literal would be;
+both keep the runtime path. [Reusing Styles](/docs/reusing-styles/#across-files)
+has the measured table.
 
 The specifier may be relative (`./styles`, `../shared/styles`, any depth) or an
 alias (`@/styles`). Aliases are read from the bundler's own `resolve.alias` and

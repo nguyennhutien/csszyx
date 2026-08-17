@@ -32,9 +32,12 @@ compiles exactly like the local declaration, because
 [`build.importedStaticSz`](/docs/reference/config/#imported-static-sz-objects-importedstaticsz)
 is on by default.
 
-An import it cannot read is reported rather than passed over: a barrel, a
-namespace or default import, or a value that is not a plain object literal
-falls back to the runtime and contributes no classes, so the CSS goes missing.
+A namespace import (`import * as S`) and a default export written as a literal
+compile the same way. What does not is a **barrel** — a module re-exporting a
+name it does not declare — or a value that is not a plain object literal. Those
+fall back to the runtime and contribute no classes, so the CSS goes missing, and
+the build reports each one by name. [Across files](#across-files) has the
+measured table.
 :::
 
 :::caution[A shared style object is a build-time value]
@@ -207,7 +210,7 @@ no `[object Object]`:
 | `sz={{ ...(cond ? a : b), key: val }}` | Build time ✅ (conditional spread hoist) |
 | `const x = cond ? a : b` | Build time ✅ (both branches, wherever it is written) |
 | `const x = cond && a` | Build time ✅ (the else arm is the empty style) |
-| `import { x } from './styles'` | Runtime fallback |
+| `import { x } from './styles'` | Build time ✅ (see [Across files](#across-files)) |
 | `const x = getStyles()` | Runtime fallback |
 | `const x = cond \|\| a` | Runtime fallback (`\|\|` keeps its left operand, which may itself be a style) |
 
@@ -215,6 +218,33 @@ In development, the compiler emits a build-time warning for any pattern it
 falls back to `_sz()` — explaining why the fallback occurred and pointing to
 the right alternative (`szv()` for static variants, `dynamic()` for runtime
 data). The warning appears in the Vite/webpack dev-server output, not at runtime.
+
+### Across files
+
+An import is resolved when the compiler can follow the name to a **literal
+object in the module that declares it**. What decides is that last hop, not the
+import syntax — so the shape of the *export* is what to look at when a style
+does not fold.
+
+| Provider module | Importer | Resolution |
+|---|---|---|
+| `export const x = { ... }` | `import { x } from './styles'` | Build time ✅ |
+| `const x = { ... }` + `export { x }` | `import { x } from './styles'` | Build time ✅ |
+| `export const x = { ... }` | `import * as S from './styles'`, `sz={S.x}` | Build time ✅ |
+| `export default { ... }` | `import x from './styles'` | Build time ✅ |
+| `const x = { ... }` + `export default x` | `import x from './styles'` | Runtime fallback |
+| `export { x } from './base'` (barrel) | `import { x } from './styles'` | Runtime fallback |
+| `import { x } from './base'` + `export { x }` | `import { x } from './styles'` | Runtime fallback |
+| `export const x = getStyles()` | `import { x } from './styles'` | Runtime fallback |
+
+The three that fall back share one cause: the module the importer names does not
+itself declare the value. A barrel forwards to a module the compiler has not
+read, and `export default x` puts an identifier in the default slot rather than a
+literal. A runtime fallback here is **missing output** — the classes were never
+collected anywhere, so the CSS does not exist. The build reports it by name.
+
+Reading imported objects is [`build.importedStaticSz`](/docs/reference/config/#imported-static-sz-objects-importedstaticsz),
+which is on by default; turning it off makes every row above a runtime fallback.
 
 ## Component Variant Libraries
 
