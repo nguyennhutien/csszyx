@@ -17,6 +17,12 @@
 // should take it OFF the list, not leave csszyx warning about a shape that now
 // works — which is the drift this gate exists to catch.
 //
+// The docs list the same keys per reference page, from one map in
+// `apps/docs/src/components/RuntimeValueNote.tsx`. That map is checked against
+// the engine here too: a key the build drops but no page mentions is the shape
+// that costs trust — a developer hits a report the documentation never
+// anticipated.
+//
 // Usage: node scripts/check-var-hostile-keys.mjs
 
 import { readFileSync } from 'node:fs';
@@ -104,6 +110,22 @@ async function propertiesByClass(candidates) {
 }
 
 /**
+ * Read the docs-site map of per-page keys.
+ *
+ * Parsed rather than imported because the module is TSX inside the docs app,
+ * and this gate must run without building it.
+ *
+ * @param source - `RuntimeValueNote.tsx` text.
+ * @returns Every key the docs claim needs a build-time value.
+ */
+export function documentedKeys(source) {
+    const open = source.indexOf('KEYS_WITHOUT_A_RUNTIME_FORM = {');
+    if (open === -1) throw new Error('KEYS_WITHOUT_A_RUNTIME_FORM not found');
+    const body = source.slice(open, source.indexOf('\n} as const', open));
+    return new Set([...body.matchAll(/'([A-Za-z0-9]+)'/g)].map(match => match[1]));
+}
+
+/**
  * Report the keys Tailwind says are hostile, and the ones it says are not.
  *
  * @returns Process exit code.
@@ -153,11 +175,38 @@ async function main() {
         }
     }
 
+    const documented = documentedKeys(
+        readFileSync(`${ROOT}apps/docs/src/components/RuntimeValueNote.tsx`, 'utf8'),
+    );
     const missing = [...derived].filter(key => !declared.has(key)).sort();
     const stale = [...declared].filter(key => !derived.has(key)).sort();
-    if (missing.length === 0 && stale.length === 0) {
-        console.log(`[var-hostile] ${declared.size} keys, all confirmed against Tailwind.`);
+    const undocumented = [...declared].filter(key => !documented.has(key)).sort();
+    const overdocumented = [...documented].filter(key => !declared.has(key)).sort();
+    if (
+        missing.length === 0 &&
+        stale.length === 0 &&
+        undocumented.length === 0 &&
+        overdocumented.length === 0
+    ) {
+        console.log(
+            `[var-hostile] ${declared.size} keys, all confirmed against Tailwind and documented.`,
+        );
         return 0;
+    }
+    if (undocumented.length > 0) {
+        console.error(
+            '\n[var-hostile] the build drops these, but no reference page lists them — add ' +
+                'them to KEYS_WITHOUT_A_RUNTIME_FORM in ' +
+                'apps/docs/src/components/RuntimeValueNote.tsx:\n  ' +
+                undocumented.join('\n  '),
+        );
+    }
+    if (overdocumented.length > 0) {
+        console.error(
+            '\n[var-hostile] the docs claim these need a build-time value, but the build ' +
+                'accepts a runtime one — remove them from RuntimeValueNote.tsx:\n  ' +
+                overdocumented.join('\n  '),
+        );
     }
 
     if (missing.length > 0) {

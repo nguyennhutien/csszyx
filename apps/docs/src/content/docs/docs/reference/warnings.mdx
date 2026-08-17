@@ -238,44 +238,110 @@ silently preserving obsolete API spellings or leaving dead classes in the DOM.
 | `[csszyx] "{className}"{ at LOC}: the /{opacity} opacity modifier will not apply — the "{color}" theme token resolves to the bare comma triplet "{value}", which color-mix() cannot dim. Wrap the variable, e.g. --color-{color}: rgb(var(--your-triplet)).` | **browser only** — it needs computed style to resolve the token. `csszyx check` answers the same question from the compiled stylesheet. |
 | `[csszyx] fontSmoothing: '{value}' is not supported — use 'grayscale' or 'subpixel'.` | |
 | `[csszyx] fontStyle: '{value}' is not supported — Tailwind only models 'italic' and 'normal'. For oblique, use css: { fontStyle: '{value}' }.` | |
-| `[csszyx] "{key}" cannot take a runtime value{ at LOC}: Tailwind has no utility for this key that reads a CSS variable, so the class and the variable were dropped instead of styling a different property. Name the values with szv(), or use dynamic() for open-ended data.` | Build only — a *literal* on the same key is unaffected. See below. |
+| `[csszyx] "{key}" cannot take a runtime value at {LOC}: Tailwind has no utility for this key that reads a CSS variable, so the class and the variable were dropped instead of styling a different property. Name the values with szv(), or use dynamic() for open-ended data.` | Build only — a *literal* on the same key is unaffected. See below. |
 
-#### Keys that cannot take a runtime value
+#### Keys that need a build-time value
 
 A runtime value normally compiles to `<prefix>-(--_sz-<key>)` plus a `style`
 custom property. That works whenever the var form is the same utility as the
 literal form with the value deferred — which is most of the sz vocabulary, but
-not all of it:
+not all of it.
 
 ```tsx
-<div sz={{ color: tone }} />       // → text-(--_sz-color)   ✅ a colour utility
-<div sz={{ textAlign: align }} />  // → dropped + reported    ❌ text-(--v) is a COLOUR
-<div sz={{ display: how }} />      // → dropped + reported    ❌ display-(--v) is not a utility
+<div sz={{ color: tone }} />       // ✅ text-(--_sz-color) — a colour utility
+<div sz={{ textAlign: align }} />  // ❌ dropped: text-(--v) is a COLOUR, not an alignment
+<div sz={{ display: how }} />      // ❌ dropped: display-(--v) is not a utility at all
 ```
 
 `color` and `textAlign` share the `text-` prefix and only one of them has a var
-form, so the distinction is per **key**, never per prefix. Both failure shapes
-used to be silent: the first wrote `color: var(…)` holding something like
-`"center"`, an invalid value that unsets the inherited colour; the second put a
-class in the safelist that Tailwind generated no rule for.
+form, so this is per **key**, never per prefix. Both failures used to be silent:
+the first wrote `color: var(…)` holding something like `"center"`, an invalid
+value that also unsets the inherited colour; the second put a class in the
+safelist that Tailwind generated no rule for.
 
-The keys are the keyword-valued ones — layout and display modes, alignment,
-overflow, text alignment and transform, background sizing and repeat, border
-and outline *style*, and their neighbours. There is no need to memorise the
-list: the build names the key when you hit it.
-
-The fix is to give the compiler the vocabulary:
+##### What you get now
 
 ```tsx
-const align = szv({
-    variants: { align: { left: { textAlign: 'left' }, center: { textAlign: 'center' } } },
-});
-<div sz={align({ align: side })} />
+<div sz={{ p: 4, textAlign }} />
+// → <div className="p-4" />
 ```
 
-Static values on these keys were never affected, and neither is the runtime —
-`_sz({ textAlign: side })` receives a real value and has always produced the
-keyword utility.
+```text
+[csszyx] "{key}" cannot take a runtime value at {LOC}: Tailwind has no utility for this key that reads a CSS variable, so the class and the variable were dropped instead of styling a different property. Name the values with szv(), or use dynamic() for open-ended data.
+```
+
+The sibling keys survive — only the one property is dropped, and the `style`
+attribute is not emitted at all.
+
+##### Write it one of these three ways
+
+**One or two options — a ternary between literals.** Nothing else needed; this
+is fully build-time.
+
+```tsx
+<div sz={{ p: 4, textAlign: centered ? 'center' : 'left' }} />
+// → className={`p-4 ${centered ? "text-center" : "text-left"}`}
+```
+
+**A real set of options — name them with [`szv`](/docs/szv/).** Read the factory
+through [`szr`](/docs/reusing-styles/) on `className`: that is the position the
+compiler resolves at build time.
+
+```tsx
+const alignSz = szv({
+    base: { p: 4 },
+    variants: {
+        align: {
+            left: { textAlign: 'left' },
+            center: { textAlign: 'center' },
+            right: { textAlign: 'right' },
+        },
+    },
+});
+
+<div className={szr(alignSz({ align: side }))} />
+// → className="p-4 text-left" | "p-4 text-center" | "p-4 text-right"
+// all three safelisted, no runtime helper
+```
+
+<Aside type="caution" title="`sz={alignSz({…})}` also works, but not at build time">
+Passing the factory result straight to `sz=` produces the right CSS — the
+classes are still safelisted — but the class *selection* runs through `_sz()` on
+every render, and the build reports a fallback whose advice ("convert to
+`szv()`") is already taken. Use `className={szr(…)}` until that is fixed.
+</Aside>
+
+**An open-ended value from data — [`dynamic()`](/docs/dynamic/).** Only when the
+value genuinely is not one of a known set; it injects CSS in the browser.
+
+##### The full list
+
+Every key below takes a literal, a ternary between literals, or an `szv` variant
+— but not a bare runtime value. You do not have to memorise it: the build names
+the key and the line when you hit one.
+
+| Reference page | Keys |
+| --- | --- |
+| [Backgrounds](/docs/reference/backgrounds/) | `bgAttach` `bgClip` `bgImg` `bgOrigin` `bgRepeat` `bgSize` |
+| [Borders](/docs/reference/borders/) | `borderStyle` `outlineStyle` |
+| [Effects](/docs/reference/effects/) | `maskClip` `maskComposite` `maskConic` `maskLinear` `maskMode` `maskOrigin` `maskRepeat` `maskType` `mixBlend` |
+| [Flex & Grid](/docs/reference/flex-grid/) | `alignContent` `flexDir` `flexWrap` `gridFlow` `items` `justify` `justifyItems` `justifySelf` `placeContent` `placeItems` `placeSelf` `self` |
+| [Interactivity](/docs/reference/interactivity/) | `appearance` `fieldSizing` `pointerEvents` `resize` `scheme` `scroll` `scrollbar` `scrollbarGutter` `select` `snapAlign` `snapStop` `snapType` `touch` |
+| [Layout](/docs/reference/layout/) | `box` `boxDecoration` `breakAfter` `breakBefore` `breakInside` `clear` `display` `float` `isolation` `notSrOnly` `objectFit` `overflow` `overflowX` `overflowY` `overscroll` `overscrollX` `overscrollY` `position` `srOnly` `visibility` |
+| [Misc](/docs/reference/misc/) | `borderCollapse` `caption` `forcedColorAdjust` `tableLayout` |
+| [Sizing](/docs/reference/sizing/) | `container` |
+| [Transforms](/docs/reference/transforms/) | `backface` `transformStyle` |
+| [Transitions](/docs/reference/transitions/) | `transitionBehavior` |
+| [Typography](/docs/reference/typography/) | `decoration` `decorationStyle` `fontFamily` `fontSmoothing` `fontStyle` `fontVariant` `listPos` `ordinal` `slashedZero` `text` `textAlign` `textClip` `textEllipsis` `textTransform` `textWrap` `whitespace` |
+
+Membership is derived, not decided: `pnpm check:var-hostile-keys` compiles both
+forms of every documented key through the pinned Tailwind and compares which CSS
+properties each one sets. A Tailwind version that adds an arbitrary-value form
+for one of these keys fails that gate until the key is taken off the list.
+
+Two things this never touched: a **static** value on these keys, which has
+always lowered to the keyword utility, and the **runtime** — `_sz({ textAlign:
+side })` receives a real value and has always been correct.
 
 ### Colors
 

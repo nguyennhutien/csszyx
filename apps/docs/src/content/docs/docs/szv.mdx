@@ -176,6 +176,20 @@ plain-JS caller. Production is a no-op.
 
 ## Dynamic & specificity
 
-`szv` returns a plain sz object — it does **not** run through `dynamic()`. Used as
-`sz={szv(…)}` it is fully build-time. Only wrap it in `dynamic()` for genuinely
-runtime values; see [Build-Time vs Runtime](/docs/build-time-vs-runtime/).
+`szv` returns a plain sz object — it does **not** run through `dynamic()`. Its CSS
+is built either way: every variant class is read out of the config and
+safelisted wherever the factory is declared. Only wrap it in `dynamic()` for
+genuinely runtime values; see
+[Build-Time vs Runtime](/docs/build-time-vs-runtime/).
+
+Where the two call positions differ is the class **selection**, not the CSS:
+
+| Call position | Selection | Notes |
+| --- | --- | --- |
+| `className={szr(btnSz({…}))}` | build time | the factory call is replaced with the picked string |
+| `sz={btnSz({…})}` | runtime `_sz()` | same classes, same CSS; one helper call per render |
+
+Both are correct and both are supported. Reach for `szr` on `className` when a
+component renders often enough for the difference to matter. The `sz=` position
+also reports a fallback whose advice ("convert to `szv()`") is already taken —
+a known message bug, not a sign that anything is missing from your CSS.
