@@ -1,5 +1,25 @@
 # csszyx
 
+## [0.14.1](https://github.com/nguyennhutien/csszyx/compare/v0.14.0...v0.14.1) (2026-08-16)
+
+### Features
+
+* read a style a module shares, however it exports it ([#234](https://github.com/nguyennhutien/csszyx/issues/234))
+* **tooling:** benchmark external app build artifacts ([#234](https://github.com/nguyennhutien/csszyx/issues/234))
+* **ts-plugin:** complete generated theme value suggestions ([#234](https://github.com/nguyennhutien/csszyx/issues/234))
+* **core:** read a token map an sz value imports from another module ([#234](https://github.com/nguyennhutien/csszyx/issues/234))
+* **compiler:** record a value the module exports through a list ([#234](https://github.com/nguyennhutien/csszyx/issues/234))
+* resolve a style a module exports as its default ([#234](https://github.com/nguyennhutien/csszyx/issues/234))
+* read a style through a namespace import ([#234](https://github.com/nguyennhutien/csszyx/issues/234))
+
+### Bug Fixes
+
+* **compiler:** drop removed sz aliases instead of dead classes ([#234](https://github.com/nguyennhutien/csszyx/issues/234))
+* **cli:** watch source files inside a directory that appears mid-session ([#234](https://github.com/nguyennhutien/csszyx/issues/234))
+* keep changed lines within the limits the services enforce ([#234](https://github.com/nguyennhutien/csszyx/issues/234))
+* **ts-plugin:** align the type surface with the engine floor it declares ([#234](https://github.com/nguyennhutien/csszyx/issues/234))
+* **cli:** wait for the signal handler instead of guessing when it exists ([#236](https://github.com/nguyennhutien/csszyx/issues/236))
+
 ## [0.14.0](https://github.com/nguyennhutien/csszyx/compare/v0.13.0...v0.14.0) (2026-08-14)
 
 ### ⚠ BREAKING CHANGES
