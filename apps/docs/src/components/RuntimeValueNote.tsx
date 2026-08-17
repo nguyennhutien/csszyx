@@ -11,7 +11,7 @@
  * drift the moment a Tailwind upgrade changed one of them. It is verified
  * against the engine by `pnpm check:var-hostile-keys`, which derives the same
  * set by compiling both forms of every documented key through the pinned
- * Tailwind. Do not hand-edit: fix `packages/core/src/transform/var_hostile.rs`
+ * Tailwind. Do not hand-edit: fix `packages/compiler/src/var-hostile-keys.ts`
  * and let the gate tell you what to change here.
  */
 export const KEYS_WITHOUT_A_RUNTIME_FORM = {

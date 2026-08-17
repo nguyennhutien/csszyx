@@ -36,7 +36,7 @@
     "gen:parity-corpus:check": "node --import tsx/esm scripts/gen-rust-parity-corpus.mjs --check",
     "gen:parse-parity-corpus": "node --import tsx/esm scripts/gen-rust-parse-parity-corpus.mjs",
     "gen:rust-tables": "node scripts/generate-rust-transform-tables.mjs",
-    "gen:rust-tables:check": "node scripts/generate-rust-transform-tables.mjs --check",
+    "gen:rust-tables:check": "node --test scripts/extract-ts-tables.test.mjs && node scripts/generate-rust-transform-tables.mjs --check",
     "gen:key-tests": "node --import tsx/esm scripts/gen-key-tests.mjs",
     "gen:key-tests:check": "node --import tsx/esm scripts/gen-key-tests.mjs --check",
     "gen:box-role": "node --import tsx/esm scripts/gen-box-role-map.mjs",

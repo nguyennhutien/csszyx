@@ -771,3 +771,107 @@ pub(crate) fn is_special_variant(key: &str) -> bool {
         "group" | "peer" | "has" | "not" | "data" | "aria" | "supports"
     )
 }
+
+/// Returns true when a key's `-(--var)` form resolves to a DIFFERENT CSS
+/// property than the literal form — Tailwind styles the element, just not the
+/// way the author asked. See transform::var_hostile.
+pub(crate) fn is_var_hostile_wrong_property(key: &str) -> bool {
+    matches!(
+        key,
+        "bgAttach"
+            | "bgImg"
+            | "bgRepeat"
+            | "bgSize"
+            | "borderCollapse"
+            | "borderStyle"
+            | "decoration"
+            | "decorationStyle"
+            | "flexDir"
+            | "flexWrap"
+            | "fontFamily"
+            | "listPos"
+            | "objectFit"
+            | "outlineStyle"
+            | "text"
+            | "textAlign"
+            | "textTransform"
+            | "textWrap"
+            | "transformStyle"
+            | "transitionBehavior"
+    )
+}
+
+/// Returns true when a key's `-(--var)` form matches no Tailwind utility at
+/// all — no rule is generated and the element is silently unstyled. See
+/// transform::var_hostile.
+pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
+    matches!(
+        key,
+        "alignContent"
+            | "appearance"
+            | "backface"
+            | "bgClip"
+            | "bgOrigin"
+            | "box"
+            | "boxDecoration"
+            | "breakAfter"
+            | "breakBefore"
+            | "breakInside"
+            | "caption"
+            | "clear"
+            | "container"
+            | "display"
+            | "fieldSizing"
+            | "float"
+            | "fontSmoothing"
+            | "fontStyle"
+            | "fontVariant"
+            | "forcedColorAdjust"
+            | "gridFlow"
+            | "isolation"
+            | "items"
+            | "justify"
+            | "justifyItems"
+            | "justifySelf"
+            | "maskClip"
+            | "maskComposite"
+            | "maskConic"
+            | "maskLinear"
+            | "maskMode"
+            | "maskOrigin"
+            | "maskRepeat"
+            | "maskType"
+            | "mixBlend"
+            | "notSrOnly"
+            | "ordinal"
+            | "overflow"
+            | "overflowX"
+            | "overflowY"
+            | "overscroll"
+            | "overscrollX"
+            | "overscrollY"
+            | "placeContent"
+            | "placeItems"
+            | "placeSelf"
+            | "pointerEvents"
+            | "position"
+            | "resize"
+            | "scheme"
+            | "scroll"
+            | "scrollbar"
+            | "scrollbarGutter"
+            | "select"
+            | "self"
+            | "slashedZero"
+            | "snapAlign"
+            | "snapStop"
+            | "snapType"
+            | "srOnly"
+            | "tableLayout"
+            | "textClip"
+            | "textEllipsis"
+            | "touch"
+            | "visibility"
+            | "whitespace"
+    )
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Derive the var-hostile key list from Tailwind, and fail when it drifts.
 //
-// `packages/core/src/transform/var_hostile.rs` names the sz keys whose runtime
+// `packages/compiler/src/var-hostile-keys.ts` names the sz keys whose runtime
 // value cannot be lowered to `<prefix>-(--var)`, because Tailwind either emits
 // no rule for that class or emits one for a DIFFERENT CSS property. Membership
 // is not a judgement call, so it should not be maintained as one: this script
@@ -23,42 +23,21 @@
 // that costs trust — a developer hits a report the documentation never
 // anticipated.
 //
+// Every list this script reads is a named declaration in a TypeScript file, so
+// it reads them through the shared TypeScript-parser extractor rather than by
+// regex — see `scripts/extract-ts-tables.mjs` for why that distinction is not
+// cosmetic here.
+//
 // Usage: node scripts/check-var-hostile-keys.mjs
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
+import { readTableSource } from './extract-ts-tables.mjs';
+
 const require = createRequire(import.meta.url);
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-
-/**
- * Read a Rust `matches!(key, "a" | "b" | …)` arm list out of a source file.
- *
- * @param source - The Rust source text.
- * @param functionName - Name of the function whose arms to read.
- * @returns The string literals that function matches.
- */
-export function rustMatchArms(source, functionName) {
-    const start = source.indexOf(`fn ${functionName}(`);
-    if (start === -1) throw new Error(`${functionName} not found`);
-    const body = source.slice(start, source.indexOf('\n}', start));
-    return [...body.matchAll(/"([A-Za-z0-9]+)"/g)].map(match => match[1]);
-}
-
-/**
- * Read the csszyx key to Tailwind prefix map out of the generated table.
- *
- * @param source - `generated/tables.rs` text.
- * @returns Key mapped to its Tailwind utility prefix.
- */
-export function propertyPrefixes(source) {
-    const start = source.indexOf('fn property_prefix(');
-    const body = source.slice(start, source.indexOf('\n}', start));
-    return Object.fromEntries(
-        [...body.matchAll(/"([A-Za-z0-9]+)" => Some\("([^"]+)"\)/g)].map(m => [m[1], m[2]]),
-    );
-}
 
 /** camelCase to kebab-case, matching the engine's `kebab_case`. */
 function kebab(key) {
@@ -110,38 +89,26 @@ async function propertiesByClass(candidates) {
 }
 
 /**
- * Read the docs-site map of per-page keys.
- *
- * Parsed rather than imported because the module is TSX inside the docs app,
- * and this gate must run without building it.
- *
- * @param source - `RuntimeValueNote.tsx` text.
- * @returns Every key the docs claim needs a build-time value.
- */
-export function documentedKeys(source) {
-    const open = source.indexOf('KEYS_WITHOUT_A_RUNTIME_FORM = {');
-    if (open === -1) throw new Error('KEYS_WITHOUT_A_RUNTIME_FORM not found');
-    const body = source.slice(open, source.indexOf('\n} as const', open));
-    return new Set([...body.matchAll(/'([A-Za-z0-9]+)'/g)].map(match => match[1]));
-}
-
-/**
  * Report the keys Tailwind says are hostile, and the ones it says are not.
  *
  * @returns Process exit code.
  */
 async function main() {
-    const hostileSource = readFileSync(`${ROOT}packages/core/src/transform/var_hostile.rs`, 'utf8');
+    const hostile = readTableSource(`${ROOT}packages/compiler/src/var-hostile-keys.ts`);
     const declared = new Set([
-        ...rustMatchArms(hostileSource, 'is_wrong_property'),
-        ...rustMatchArms(hostileSource, 'has_no_var_form'),
+        ...hostile.stringSet('VAR_HOSTILE_WRONG_PROPERTY'),
+        ...hostile.stringSet('VAR_HOSTILE_NO_VAR_FORM'),
     ]);
-    const tables = readFileSync(`${ROOT}packages/core/src/transform/generated/tables.rs`, 'utf8');
-    const prefixes = propertyPrefixes(tables);
+    // The same declarations the Rust engine reads: `pnpm gen:rust-tables` renders
+    // them into its generated tables, and `gen:rust-tables:check` fails when that
+    // copy is stale, so comparing against the TypeScript source compares against
+    // what the engine runs.
+    const core = readTableSource(`${ROOT}packages/compiler/src/transform-core.ts`);
+    const prefixes = Object.fromEntries(core.stringObject('PROPERTY_MAP'));
     // A boolean-only key never reaches the css-var lane — its runtime value
     // goes through `__szBoolClass` — so it is hostile in the same sense and
     // already handled. Listing it again would drop a class that works.
-    const alreadyRouted = new Set(rustMatchArms(tables, 'is_boolean_only_dynamic'));
+    const alreadyRouted = new Set(core.objectKeys('BOOLEAN_ONLY_DYNAMIC_VOCABULARY'));
     const cases = JSON.parse(
         readFileSync(`${ROOT}packages/cli/tests/generated/sz-key-cases.json`, 'utf8'),
     );
@@ -175,8 +142,12 @@ async function main() {
         }
     }
 
-    const documented = documentedKeys(
-        readFileSync(`${ROOT}apps/docs/src/components/RuntimeValueNote.tsx`, 'utf8'),
+    const documented = new Set(
+        Object.values(
+            readTableSource(
+                `${ROOT}apps/docs/src/components/RuntimeValueNote.tsx`,
+            ).stringArrayRecord('KEYS_WITHOUT_A_RUNTIME_FORM'),
+        ).flat(),
     );
     const missing = [...derived].filter(key => !declared.has(key)).sort();
     const stale = [...declared].filter(key => !derived.has(key)).sort();
@@ -212,13 +183,13 @@ async function main() {
     if (missing.length > 0) {
         console.error(
             '\n[var-hostile] Tailwind cannot lower a runtime value for these keys, and ' +
-                'var_hostile.rs does not list them:\n  ' +
+                'var-hostile-keys.ts does not list them:\n  ' +
                 missing.join('\n  '),
         );
     }
     if (stale.length > 0) {
         console.error(
-            '\n[var-hostile] var_hostile.rs lists these, but Tailwind now lowers them ' +
+            '\n[var-hostile] var-hostile-keys.ts lists these, but Tailwind now lowers them ' +
                 'correctly — take them off the list rather than keep warning:\n  ' +
                 stale.join('\n  '),
         );

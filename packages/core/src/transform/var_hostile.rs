@@ -1,17 +1,13 @@
-//! Keys whose Tailwind utility cannot read a CSS custom property.
+//! What the build lane does about a key Tailwind cannot read a variable for.
 //!
-//! The css-var strategy for a runtime value assumes one thing: that
-//! `<prefix>-(--var)` is the same utility as `<prefix>-<literal>`, only with
-//! the value deferred. For most of the sz vocabulary that holds. For the keys
-//! below it does not, in one of two ways:
-//!
-//! - **The var form is a different property.** `textAlign` and `color` both
-//!   lower to `text-*`, and Tailwind v4 reads `text-(--v)` as a COLOR — so a
-//!   runtime `textAlign` produced `color: var(…)` holding `"center"`, an
-//!   invalid value that unsets the inherited colour and aligns nothing.
-//! - **The var form is not a utility at all.** `display-(--v)` matches
-//!   nothing, so the class reached the safelist, Tailwind generated no rule,
-//!   and the element was silently unstyled.
+//! The css-var strategy for a runtime value assumes `<prefix>-(--var)` is the
+//! same utility as `<prefix>-<literal>` with the value deferred. For 86 keys it
+//! is not, in two ways the generated tables separate: the var form resolves to a
+//! DIFFERENT property (`text-(--v)` is a COLOUR, so a runtime `textAlign`
+//! produced `color: var(…)` holding `"center"` — invalid, unsetting the
+//! inherited colour and aligning nothing), or it matches no utility at all
+//! (`display-(--v)`, so the class reached the safelist, Tailwind generated no
+//! rule, and the element was silently unstyled).
 //!
 //! Both are the csszyx→Tailwind→CSS contract failing with no signal, so a key
 //! listed here drops its class AND its style variable and reports. Emitting a
@@ -19,126 +15,25 @@
 //! -alias path, for the reason it applies here too: broken usage that still
 //! renders a class looks like it works.
 //!
-//! Membership is not a judgement call — `scripts/check-var-hostile-keys.mjs`
-//! derives it by compiling both forms of every documented key through the
-//! pinned Tailwind and comparing the CSS properties each one sets. Run it
-//! after a Tailwind upgrade: a version that adds an arbitrary-value form for
-//! one of these keys should take it off this list, not keep warning about it.
-//!
 //! Only the BUILD lane needs this. The runtime lowering receives an actual
 //! value and produces the keyword utility, so `_sz({ textAlign: align })` was
 //! always correct and is untouched.
+//!
+//! Membership lives in `packages/compiler/src/var-hostile-keys.ts` with the rest
+//! of the transform vocabulary and reaches this module through
+//! `pnpm gen:rust-tables`, so the two languages cannot disagree about which keys
+//! they are. It is not a judgement call either: `pnpm check:var-hostile-keys`
+//! derives the same set by compiling both forms of every documented key through
+//! the pinned Tailwind. Run it after a Tailwind upgrade — a version that adds an
+//! arbitrary-value form for one of these keys should take it off the list rather
+//! than keep warning about a shape that now works.
+
+use super::generated::tables;
 
 /// Whether a runtime value on this key must be dropped rather than lowered to
 /// a CSS custom property.
 pub fn is_var_hostile_dynamic(key: &str) -> bool {
-    matches!(key, k if is_wrong_property(k) || has_no_var_form(k))
-}
-
-/// Keys whose `-(--var)` form resolves to a DIFFERENT CSS property.
-///
-/// The damaging half: Tailwind emits a rule, so the element is styled — just
-/// not the way the author asked, and often over something that was working.
-fn is_wrong_property(key: &str) -> bool {
-    matches!(
-        key,
-        "bgAttach"
-            | "bgImg"
-            | "bgRepeat"
-            | "bgSize"
-            | "borderCollapse"
-            | "borderStyle"
-            | "decoration"
-            | "decorationStyle"
-            | "flexDir"
-            | "flexWrap"
-            | "fontFamily"
-            | "listPos"
-            | "objectFit"
-            | "outlineStyle"
-            | "text"
-            | "textAlign"
-            | "textTransform"
-            | "textWrap"
-            | "transformStyle"
-            | "transitionBehavior"
-    )
-}
-
-/// Keys whose `-(--var)` form matches no Tailwind utility.
-///
-/// The silent half: no rule is generated, so the element is simply unstyled
-/// and the class is safelist noise.
-fn has_no_var_form(key: &str) -> bool {
-    matches!(
-        key,
-        "alignContent"
-            | "appearance"
-            | "backface"
-            | "bgClip"
-            | "bgOrigin"
-            | "box"
-            | "boxDecoration"
-            | "breakAfter"
-            | "breakBefore"
-            | "breakInside"
-            | "caption"
-            | "clear"
-            | "container"
-            | "display"
-            | "fieldSizing"
-            | "float"
-            | "fontSmoothing"
-            | "fontStyle"
-            | "fontVariant"
-            | "forcedColorAdjust"
-            | "gridFlow"
-            | "isolation"
-            | "items"
-            | "justify"
-            | "justifyItems"
-            | "justifySelf"
-            | "maskClip"
-            | "maskComposite"
-            | "maskConic"
-            | "maskLinear"
-            | "maskMode"
-            | "maskOrigin"
-            | "maskRepeat"
-            | "maskType"
-            | "mixBlend"
-            | "notSrOnly"
-            | "ordinal"
-            | "overflow"
-            | "overflowX"
-            | "overflowY"
-            | "overscroll"
-            | "overscrollX"
-            | "overscrollY"
-            | "placeContent"
-            | "placeItems"
-            | "placeSelf"
-            | "pointerEvents"
-            | "position"
-            | "resize"
-            | "scheme"
-            | "scroll"
-            | "scrollbar"
-            | "scrollbarGutter"
-            | "select"
-            | "self"
-            | "slashedZero"
-            | "snapAlign"
-            | "snapStop"
-            | "snapType"
-            | "srOnly"
-            | "tableLayout"
-            | "textClip"
-            | "textEllipsis"
-            | "touch"
-            | "visibility"
-            | "whitespace"
-    )
+    tables::is_var_hostile_wrong_property(key) || tables::is_var_hostile_no_var_form(key)
 }
 
 #[cfg(test)]
