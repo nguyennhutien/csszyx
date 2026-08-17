@@ -327,10 +327,10 @@ pub enum RuntimeFallbackKindIr {
     /// Anything else; `detail` carries the Babel-compatible node type name.
     Other,
     /// A call whose callee names an szv factory THIS parse saw and refused to
-    /// precompile; `detail` carries the factory name and the site fallback's
-    /// `path` names the disqualifying position inside its config. Only the
-    /// szr site produces it — an sz attribute never carries factory-level
-    /// knowledge.
+    /// precompile; `detail` carries the factory name and the accompanying
+    /// `path` names the disqualifying position inside its config. Produced at
+    /// both the szr site and the sz attribute: one cause reads as one message
+    /// wherever the author put the call.
     SzvFactory,
 }
 
@@ -341,6 +341,11 @@ pub struct RuntimeFallbackDiagnosticIr {
     pub kind: RuntimeFallbackKindIr,
     /// Kind-specific detail (callee name, identifier name, or node type).
     pub detail: String,
+    /// Disqualifying position inside an szv config, dot-joined, for the
+    /// `SzvFactory` kind. Empty (and absent from the serialized IR) for every
+    /// other kind, so existing IR snapshots keep their bytes.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub path: String,
 }
 
 /// Why a dynamic property was dropped before CSS-variable lowering.

@@ -600,13 +600,10 @@ fn runtime_fallback_diagnostics(
             RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
             RuntimeFallbackKindIr::Import => SzFallbackKind::Import,
             RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
-            // An sz attribute never carries factory-level knowledge; the
-            // variant exists for the szr site alone.
-            RuntimeFallbackKindIr::Other | RuntimeFallbackKindIr::SzvFactory => {
-                SzFallbackKind::Other
-            }
+            RuntimeFallbackKindIr::SzvFactory => SzFallbackKind::SzvFactory,
+            RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
         };
-        let reason = sz_fallback_reason(kind, &diagnostic.detail, "");
+        let reason = sz_fallback_reason(kind, &diagnostic.detail, &diagnostic.path);
         let suggestion = sz_fallback_suggestion(kind);
         out.push(format!(
             "sz fallback at {line}:{column}: {reason}.
@@ -1228,6 +1225,61 @@ mod tests {
         );
         // The old advice was circular — the author is already writing szv().
         assert!(!diagnostics.contains("convert to szv()"), "{diagnostics}");
+    }
+
+    #[test]
+    fn static_engine_names_the_szv_factory_from_an_sz_attribute_too() {
+        // Same factory, same refusal, read from the attribute position instead
+        // of szr. That position used to classify the call as a generic unknown
+        // function, so one cause produced two explanations and the attribute's
+        // named no position at all. The attribute is written BEFORE the
+        // declaration here on purpose: the substitution runs after the walk, so
+        // it must not depend on which one the parser reached first.
+        let file = TransformFile {
+            filename: "/repo/src/Tag.tsx".to_string(),
+            source: [
+                "import { szv } from 'csszyx';",
+                "export const A = () => <div sz={t({ c: 'blue' })} />;",
+                "const t = szv({ variants: { c: { blue: { 'desktop-sm': { p: 4 } } } } });",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("sz fallback at 2:33: szv factory `t()` did not precompile"),
+            "{diagnostics}"
+        );
+        assert!(
+            diagnostics.contains("config disqualified at `variants.c.blue.desktop-sm`"),
+            "{diagnostics}"
+        );
+        assert!(!diagnostics.contains("convert to szv()"), "{diagnostics}");
+    }
+
+    #[test]
+    fn static_engine_keeps_the_generic_call_advice_for_an_unknown_callee() {
+        // The boundary of the substitution: a function this parse never saw
+        // declared as szv has no config to point at, so inventing a path would
+        // be worse than the generic advice.
+        let file = TransformFile {
+            filename: "/repo/src/Tag.tsx".to_string(),
+            source: [
+                "import { szv } from 'csszyx';",
+                "const t = szv({ variants: { c: { blue: { 'desktop-sm': { p: 4 } } } } });",
+                "export const A = () => <div sz={mk()} />;",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("function call `mk()` result is unknown at build time"),
+            "{diagnostics}"
+        );
+        assert!(!diagnostics.contains("szv factory `mk()`"), "{diagnostics}");
     }
 
     #[test]

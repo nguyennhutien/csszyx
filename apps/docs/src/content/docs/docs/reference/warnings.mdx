@@ -104,6 +104,7 @@ both engine artifacts emit identical wording.
 | `identifier` | `sz={styles}` where `styles` is not a readable const | Yes, when a caller supplies it | No (nudge) |
 | `import` | `sz={imported}` from another module | **No** | **Yes** |
 | `member` | `sz={theme.card}` | Yes, when a caller supplies it | No (nudge) |
+| `szv-factory` | `sz={myVariants({ … })}` where the compiler saw `myVariants = szv(…)` and refused its config | Yes — the runtime szv path renders | No (nudge) |
 | `other` | anything else — a template literal, a conditional | Yes | No (nudge) |
 
 <Aside type="note" title="Why forwarding a prop is only a nudge">
@@ -124,9 +125,24 @@ type:
 | `identifier` | ``identifier `{detail}` could not be resolved to a static value`` | `Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().` |
 | `import` | ``imported binding `{detail}` could not be read at build time`` | `Export it as a const with a static object literal — a re-export, a barrel file, or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().` |
 | `member` | `member expression is not statically resolvable` | `Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().` |
+| `szv-factory` | ``szv factory `{detail}()` did not precompile — its config disqualified at `{path}` `` | `Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().` |
 | `other` | ``expression of type `{detail}` is not statically analyzable`` | `Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().` |
 
 When the callee has no readable name — `sz={obj[key]()}` — `{detail}` is `?`.
+
+<Aside type="tip" title="A call to your own szv reads as one, not as a mystery">
+`szv-factory` is the `call` kind after the compiler recognises the callee.
+Without it, `sz={myVariants({ … })}` reported ``function call `myVariants()`
+result is unknown`` and suggested converting to `szv()` — circular advice for
+someone already writing one, naming no position. The kind fires only when this
+file declared the factory *and* the compiler refused its **config**, so
+`{path}` is a real position such as `variants.size.lg.tablet`: go read that
+value. A factory whose config qualified, or a call to something the file never
+declared, still reports as `call`.
+
+The same substitution happens at `szr(myVariants({ … }))`. One cause, one
+message, wherever the call sits.
+</Aside>
 
 The `szv catalog` site replaces the suggestion with one of its own:
 

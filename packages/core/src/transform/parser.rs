@@ -155,6 +155,7 @@ pub fn parse_source_shell_with_registries(
         visitor.visit_program(&parsed.program);
         let replaced_spans = visitor.finalize_szv_precompile();
         visitor.emit_pending_szr_fallbacks(&replaced_spans);
+        visitor.name_disqualified_szv_factories_in_attributes();
         visitor.finalize_szr_import_rewrite(&replaced_spans);
         timings.ir_ns = elapsed_ns(ir_start);
         visitor.ast_budget_exceeded
@@ -1322,6 +1323,39 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         }
     }
 
+    /// Re-classify sz-attribute fallbacks that call a refused szv factory.
+    ///
+    /// Same substitution `emit_pending_szr_fallbacks` makes for the szr
+    /// position, for the same reason: telling an author to "convert to szv()" a
+    /// factory that IS an szv reads as the compiler not understanding the code,
+    /// and the generic message names no position, so the reader bisects the call
+    /// site while the fault is in the config.
+    ///
+    /// Runs after the walk because an attribute can precede the declaration it
+    /// calls — deciding during the walk would answer correctly only when the
+    /// factory happened to be declared first.
+    fn name_disqualified_szv_factories_in_attributes(&mut self) {
+        if self.szv_disqualified.is_empty() {
+            return;
+        }
+        for attribute in &mut self.ir.sz_attributes {
+            let Some(diagnostic) = &mut attribute.runtime_fallback_diagnostic else {
+                continue;
+            };
+            if diagnostic.kind != super::RuntimeFallbackKindIr::Call {
+                continue;
+            }
+            if let Some((_, path)) = self
+                .szv_disqualified
+                .iter()
+                .find(|(name, _)| *name == diagnostic.detail)
+            {
+                diagnostic.kind = super::RuntimeFallbackKindIr::SzvFactory;
+                diagnostic.path.clone_from(path);
+            }
+        }
+    }
+
     /// Remember one refused szv factory, first declaration wins.
     fn record_szv_disqualified(&mut self, name: &str, path: String) {
         if !self.szv_disqualified.iter().any(|(seen, _)| seen == name) {
@@ -2355,7 +2389,14 @@ fn classify_runtime_fallback(
     use super::RuntimeFallbackDiagnosticIr;
 
     let (kind, detail) = classify_expression_fallback(expression.as_expression()?, imported);
-    Some(RuntimeFallbackDiagnosticIr { kind, detail })
+    // `path` stays empty until the post-walk pass finds the callee among the
+    // refused szv factories — see
+    // `name_disqualified_szv_factories_in_attributes`.
+    Some(RuntimeFallbackDiagnosticIr {
+        kind,
+        detail,
+        path: String::new(),
+    })
 }
 
 /// Names that can never be szv factory bindings for the precompile.
