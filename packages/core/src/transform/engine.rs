@@ -11,8 +11,9 @@ use super::{
     parser::{parse_source_shell_with_registries, CrossModuleRegistries, AST_BUDGET},
     recovery::{generate_inline_recovery_token, offset_to_line_column, LineIndex},
     rewrite::rewrite_static_sz_attributes,
-    DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile, TransformMetadata,
-    TransformOptions, TransformProducer, TransformResult, TransformTimings, UnsupportedRecoveryIr,
+    DroppedKeyReason, DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile,
+    TransformMetadata, TransformOptions, TransformProducer, TransformResult, TransformTimings,
+    UnsupportedRecoveryIr,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
@@ -179,6 +180,11 @@ fn transform_fast_static_ir_with_options(
         diagnostics: {
             let mut diagnostics =
                 unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref());
+            diagnostics.extend(var_hostile_diagnostics(
+                file,
+                lower_ir,
+                options.root_dir.as_deref(),
+            ));
             diagnostics.extend(lower_ir.szs_diagnostics.iter().cloned());
             diagnostics
         },
@@ -283,6 +289,11 @@ fn transform_static_classes_with_options(
     diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
     diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
     diagnostics.extend(unknown_property_diagnostics(
+        file,
+        &parsed.ir,
+        options.root_dir.as_deref(),
+    ));
+    diagnostics.extend(var_hostile_diagnostics(
         file,
         &parsed.ir,
         options.root_dir.as_deref(),
@@ -652,6 +663,41 @@ fn is_numeric_key(key: &str) -> bool {
         && frac.is_none_or(|f| !f.is_empty() && f.bytes().all(|b| b.is_ascii_digit()))
 }
 
+/// Report every property whose runtime value had no Tailwind var form.
+///
+/// Kept apart from the unknown/removed pass because the advice is different:
+/// the key is right, the value shape is not, and the way out is to name the
+/// values rather than to fix a typo. Production, not dev-only — a dropped
+/// class is the csszyx→Tailwind→CSS contract failing, which is the bar this
+/// project warns at in every build.
+fn var_hostile_diagnostics(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    root_dir: Option<&str>,
+) -> Vec<String> {
+    let location = relativize_diagnostic_path(&file.filename, root_dir);
+    let mut lines: Option<LineIndex> = None;
+    let mut out = Vec::new();
+    for attribute in &ir.sz_attributes {
+        for dropped in &attribute.dropped_dynamic_keys {
+            if dropped.reason != DroppedKeyReason::NoVarForm {
+                continue;
+            }
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, dropped.span.start);
+            out.push(format!(
+                "[csszyx] \"{}\" cannot take a runtime value at {location}:{line}: Tailwind has \
+                 no utility for this key that reads a CSS variable, so the class and the variable \
+                 were dropped instead of styling a different property. Name the values with \
+                 szv(), or use dynamic() for open-ended data.",
+                dropped.key
+            ));
+        }
+    }
+    out
+}
+
 fn unknown_property_diagnostics(
     file: &TransformFile,
     ir: &super::SourceIr,
@@ -673,15 +719,19 @@ fn unknown_property_diagnostics(
     let attribute_objects = ir
         .sz_attributes
         .iter()
-        .map(|attr| (&attr.object, attr.removed_dynamic_keys.as_slice()));
+        .map(|attr| (&attr.object, attr.dropped_dynamic_keys.as_slice()));
     let catalog_objects = ir.catalog_sz_objects.iter().map(|object| (object, &[][..]));
-    for (object, removed_dynamic_keys) in attribute_objects.chain(catalog_objects) {
+    for (object, dropped_dynamic_keys) in attribute_objects.chain(catalog_objects) {
         unknown.clear();
         collect_unknown_sz_keys(object, &mut unknown);
+        // Only the removed-key drops belong in this pass. A key dropped for
+        // having no var form is still a supported key, and reporting it as
+        // unknown would send the author looking for a typo.
         unknown.extend(
-            removed_dynamic_keys
+            dropped_dynamic_keys
                 .iter()
-                .map(|removed| (removed.key.clone(), removed.span.start)),
+                .filter(|dropped| dropped.reason == DroppedKeyReason::RemovedKey)
+                .map(|dropped| (dropped.key.clone(), dropped.span.start)),
         );
         for (key, offset) in &unknown {
             let (line, _) = lines
@@ -1039,6 +1089,45 @@ mod tests {
             diagnostic.contains("object literal contains a runtime value")
                 && diagnostic.contains("deferred to _szPart")
         }));
+    }
+
+    #[test]
+    fn diagnostics_report_a_runtime_value_tailwind_cannot_lower() {
+        let file = TransformFile {
+            filename: "/repo/src/Align.tsx".to_string(),
+            // The removed alias shares the drop list with the var-hostile key,
+            // and the two must not borrow each other's message: one says the
+            // key is gone, the other says only this value shape is.
+            source: "const App = ({ v }) => <div sz={{ padding: v, textAlign: v }} />;".to_string(),
+        };
+
+        let result = transform_static_classes_with_options(
+            &file,
+            0,
+            std::time::Instant::now(),
+            TransformOptions {
+                root_dir: Some("/repo/".to_string()),
+                ..TransformOptions::default()
+            },
+        );
+
+        // `text-(--v)` is a COLOUR in Tailwind v4, so emitting the class would
+        // style the wrong property with an invalid value rather than align.
+        assert!(!result.code.contains("--_sz-text-align"), "{}", result.code);
+        assert!(result.classes.is_empty(), "{:?}", result.classes);
+        assert_eq!(result.diagnostics.len(), 2, "{:?}", result.diagnostics);
+        let diagnostic = result
+            .diagnostics
+            .iter()
+            .find(|entry| entry.contains("textAlign"))
+            .expect("a report naming the key");
+        assert!(diagnostic.contains("\"textAlign\""), "{diagnostic}");
+        assert!(diagnostic.contains("src/Align.tsx:1"), "{diagnostic}");
+        assert!(diagnostic.contains("szv()"), "{diagnostic}");
+        // A supported key with one unsupported value shape must not read as a
+        // typo, or the author goes looking for a misspelling that is not there.
+        assert!(!diagnostic.contains("was removed"), "{diagnostic}");
+        assert!(!diagnostic.contains("Unknown"), "{diagnostic}");
     }
 
     #[test]

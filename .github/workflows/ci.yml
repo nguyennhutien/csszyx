@@ -338,6 +338,13 @@ jobs:
       - name: Check parity corpus covers the per-key matrix
         run: pnpm check:key-corpus
 
+      # The keys whose runtime value cannot be lowered to a CSS variable are
+      # derived from Tailwind, not judged. Recheck against the pinned version so
+      # an upgrade that fixes one of them takes it off the list instead of
+      # leaving csszyx dropping a class that now works.
+      - name: Check var-hostile key list matches Tailwind
+        run: pnpm check:var-hostile-keys
+
       # The corpus round-trip checks every documented Tailwind class maps back to
       # an sz form AND that the mapping compiles to the SAME class. The plain
       # check is advisory; --require-no-broken fails only when a class maps but

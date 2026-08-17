@@ -343,14 +343,32 @@ pub struct RuntimeFallbackDiagnosticIr {
     pub detail: String,
 }
 
-/// Removed key whose value stayed dynamic and has no static value node to
-/// carry its diagnostic location.
+/// Why a dynamic property was dropped before CSS-variable lowering.
+///
+/// Both shapes end the same way — no class, no variable — but they are not the
+/// same message: one says the key is gone, the other says the key is fine and
+/// only this value shape cannot be expressed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DroppedKeyReason {
+    /// The key itself was removed from the sz API.
+    #[default]
+    RemovedKey,
+    /// The key is supported, but Tailwind has no utility that reads a CSS
+    /// custom property for it, so a runtime value cannot be lowered at all.
+    NoVarForm,
+}
+
+/// Dynamic property dropped before CSS-variable lowering, with no static value
+/// node to carry its diagnostic location.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RemovedSzKeyIr {
-    /// Removed authoring key.
+pub struct DroppedSzKeyIr {
+    /// Authoring key, as written.
     pub key: String,
     /// Full source property span.
     pub span: TextSpan,
+    /// Which of the two drops this was.
+    #[serde(default)]
+    pub reason: DroppedKeyReason,
 }
 
 /// JSX `sz` attribute and its parser-normalized static object.
@@ -403,9 +421,10 @@ pub struct SzAttributeIr {
     pub runtime_fallback_diagnostic: Option<RuntimeFallbackDiagnosticIr>,
     /// Dynamic object properties emitted through CSS custom properties.
     pub dynamic_css_vars: Vec<DynamicCssVarIr>,
-    /// Dynamic removed keys dropped before CSS-variable lowering.
+    /// Dynamic properties dropped before CSS-variable lowering, each carrying
+    /// the reason its report needs.
     #[serde(default)]
-    pub removed_dynamic_keys: Vec<RemovedSzKeyIr>,
+    pub dropped_dynamic_keys: Vec<DroppedSzKeyIr>,
 }
 
 /// Pre-lowered class lists for a static ternary `sz={cond ? A : B}` attribute.
@@ -695,7 +714,7 @@ mod tests {
                 candidate_classes: Vec::new(),
                 runtime_fallback_diagnostic: None,
                 dynamic_css_vars: Vec::new(),
-                removed_dynamic_keys: Vec::new(),
+                dropped_dynamic_keys: Vec::new(),
             }],
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {

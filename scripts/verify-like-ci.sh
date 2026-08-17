@@ -96,6 +96,11 @@ pnpm gen:sz-allowlist:check
 pnpm gen:box-role:check
 pnpm gen:llms:check
 pnpm check:key-corpus
+# Derives the var-hostile key list from the pinned Tailwind rather than trusting
+# the hand-written one. A Tailwind upgrade that adds an arbitrary-value form for
+# one of these keys must take it off the list, or csszyx keeps dropping a class
+# that would now work.
+pnpm check:var-hostile-keys
 
 # Builds the addon, loads it the way a consumer does, and removes it again —
 # it owns a whole CI job, so it cleans up after itself. That last part is why

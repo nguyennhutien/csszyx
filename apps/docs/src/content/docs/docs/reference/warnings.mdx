@@ -238,6 +238,44 @@ silently preserving obsolete API spellings or leaving dead classes in the DOM.
 | `[csszyx] "{className}"{ at LOC}: the /{opacity} opacity modifier will not apply — the "{color}" theme token resolves to the bare comma triplet "{value}", which color-mix() cannot dim. Wrap the variable, e.g. --color-{color}: rgb(var(--your-triplet)).` | **browser only** — it needs computed style to resolve the token. `csszyx check` answers the same question from the compiled stylesheet. |
 | `[csszyx] fontSmoothing: '{value}' is not supported — use 'grayscale' or 'subpixel'.` | |
 | `[csszyx] fontStyle: '{value}' is not supported — Tailwind only models 'italic' and 'normal'. For oblique, use css: { fontStyle: '{value}' }.` | |
+| `[csszyx] "{key}" cannot take a runtime value{ at LOC}: Tailwind has no utility for this key that reads a CSS variable, so the class and the variable were dropped instead of styling a different property. Name the values with szv(), or use dynamic() for open-ended data.` | Build only — a *literal* on the same key is unaffected. See below. |
+
+#### Keys that cannot take a runtime value
+
+A runtime value normally compiles to `<prefix>-(--_sz-<key>)` plus a `style`
+custom property. That works whenever the var form is the same utility as the
+literal form with the value deferred — which is most of the sz vocabulary, but
+not all of it:
+
+```tsx
+<div sz={{ color: tone }} />       // → text-(--_sz-color)   ✅ a colour utility
+<div sz={{ textAlign: align }} />  // → dropped + reported    ❌ text-(--v) is a COLOUR
+<div sz={{ display: how }} />      // → dropped + reported    ❌ display-(--v) is not a utility
+```
+
+`color` and `textAlign` share the `text-` prefix and only one of them has a var
+form, so the distinction is per **key**, never per prefix. Both failure shapes
+used to be silent: the first wrote `color: var(…)` holding something like
+`"center"`, an invalid value that unsets the inherited colour; the second put a
+class in the safelist that Tailwind generated no rule for.
+
+The keys are the keyword-valued ones — layout and display modes, alignment,
+overflow, text alignment and transform, background sizing and repeat, border
+and outline *style*, and their neighbours. There is no need to memorise the
+list: the build names the key when you hit it.
+
+The fix is to give the compiler the vocabulary:
+
+```tsx
+const align = szv({
+    variants: { align: { left: { textAlign: 'left' }, center: { textAlign: 'center' } } },
+});
+<div sz={align({ align: side })} />
+```
+
+Static values on these keys were never affected, and neither is the runtime —
+`_sz({ textAlign: side })` receives a real value and has always produced the
+keyword utility.
 
 ### Colors
 

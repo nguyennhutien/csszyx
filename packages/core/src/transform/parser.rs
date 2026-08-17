@@ -22,8 +22,8 @@ use std::time::Instant;
 
 use super::{
     lower::{dynamic_css_var_class, is_removed_sz_key, lower_static_sz_object},
-    ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr,
-    RecoveryAttributeIr, RecoveryMode, RemovedSzKeyIr, SafeStyleSpreadExpressionIr,
+    ClassAttributeIr, DroppedKeyReason, DroppedSzKeyIr, DynamicCssVarCategory, DynamicCssVarIr,
+    JsxOpeningElementIr, RecoveryAttributeIr, RecoveryMode, SafeStyleSpreadExpressionIr,
     SafeStyleSpreadIr, SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr,
     StaticArrayPartIr, StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr,
     StyleAttributeIr, SzAttributeIr, SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile,
@@ -716,7 +716,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             runtime_fallback_spread,
             candidate_classes,
             dynamic_css_vars,
-            removed_dynamic_keys,
+            dropped_dynamic_keys,
         ) = match &attr.value {
             Some(JSXAttributeValue::StringLiteral(value)) => (
                 StaticSzObject::empty(),
@@ -782,7 +782,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     value_span,
                     dynamic_css_vars,
                     ternaries,
-                    removed_dynamic_keys,
+                    dropped_dynamic_keys,
                 )) = partial_object_from_jsx_expression(&container.expression, ctx)
                 {
                     (
@@ -796,7 +796,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         Vec::new(),
                         dynamic_css_vars,
-                        removed_dynamic_keys,
+                        dropped_dynamic_keys,
                     )
                 } else if let Some((array_parts, value_span)) =
                     static_array_parts_from_jsx_expression(&container.expression, ctx)
@@ -853,7 +853,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             candidate_classes,
             runtime_fallback_diagnostic,
             dynamic_css_vars,
-            removed_dynamic_keys,
+            dropped_dynamic_keys,
         });
         Some(index)
     }
@@ -3668,7 +3668,7 @@ struct PartialSzObject {
     /// Property-level conditionals in source order — each lowers to one
     /// appended `${cond ? "…" : "…"}` template segment.
     ternaries: Vec<StaticTernaryIr>,
-    removed_dynamic_keys: Vec<RemovedSzKeyIr>,
+    dropped_dynamic_keys: Vec<DroppedSzKeyIr>,
 }
 
 type PartialObjectResult = (
@@ -3676,7 +3676,7 @@ type PartialObjectResult = (
     TextSpan,
     Vec<DynamicCssVarIr>,
     Vec<StaticTernaryIr>,
-    Vec<RemovedSzKeyIr>,
+    Vec<DroppedSzKeyIr>,
 );
 
 fn partial_object_from_jsx_expression(
@@ -3691,7 +3691,7 @@ fn partial_object_from_jsx_expression(
                 text_span(object.span),
                 partial.dynamic_css_vars,
                 partial.ternaries,
-                partial.removed_dynamic_keys,
+                partial.dropped_dynamic_keys,
             ))
         }
         JSXExpression::TSAsExpression(value) => {
@@ -3722,7 +3722,7 @@ fn partial_object_from_expression(
                 text_span(object.span),
                 partial.dynamic_css_vars,
                 partial.ternaries,
-                partial.removed_dynamic_keys,
+                partial.dropped_dynamic_keys,
             ))
         }
         Expression::ParenthesizedExpression(value) => {
@@ -3739,6 +3739,26 @@ fn partial_object_from_expression(
     }
 }
 
+/// Record a dynamic property that must emit neither a class nor a variable.
+///
+/// The two callers drop for unrelated reasons and at deliberately different
+/// points in the walk — a removed key is refused before any value shape is
+/// examined, while a var-hostile key is refused only after the static and
+/// conditional lanes have declined, so a fully static conditional on such a key
+/// still compiles. Only the recording is shared.
+fn drop_dynamic_key(
+    partial: &mut PartialSzObject,
+    key: String,
+    property: &ObjectProperty<'_>,
+    reason: DroppedKeyReason,
+) {
+    partial.dropped_dynamic_keys.push(DroppedSzKeyIr {
+        key,
+        span: text_span(property.span),
+        reason,
+    });
+}
+
 fn partial_object_from_object_expression(
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
@@ -3751,7 +3771,7 @@ fn partial_object_from_object_expression(
                 object: StaticSzObject::empty(),
                 dynamic_css_vars: Vec::new(),
                 ternaries: vec![ternary],
-                removed_dynamic_keys: Vec::new(),
+                dropped_dynamic_keys: Vec::new(),
             });
         }
     }
@@ -3762,7 +3782,7 @@ fn partial_object_from_object_expression(
         },
         dynamic_css_vars: Vec::new(),
         ternaries: Vec::new(),
-        removed_dynamic_keys: Vec::new(),
+        dropped_dynamic_keys: Vec::new(),
     };
 
     for property in &object.properties {
@@ -3781,10 +3801,7 @@ fn partial_object_from_object_expression(
                     // Retain only diagnostic identity: no class or CSS variable
                     // may be emitted, while a literal false was skipped above
                     // and remains silent like the runtime path.
-                    partial.removed_dynamic_keys.push(RemovedSzKeyIr {
-                        key,
-                        span: text_span(property.span),
-                    });
+                    drop_dynamic_key(&mut partial, key, property, DroppedKeyReason::RemovedKey);
                     continue;
                 }
                 if let Expression::ObjectExpression(nested) = &property.value {
@@ -3839,6 +3856,17 @@ fn partial_object_from_object_expression(
                     variant_keys,
                 ) {
                     set_partial_ternary(&mut partial, ternary);
+                    continue;
+                }
+
+                // A key Tailwind has no `-(--var)` utility for cannot take the
+                // css-var lane at all: the class it would carry either matches
+                // nothing or resolves to a different CSS property. Drop both
+                // the class and the variable and let the engine report it —
+                // emitting a dead class beside a warning is the shape that
+                // made removed aliases look like they still worked.
+                if super::var_hostile::is_var_hostile_dynamic(&key) {
+                    drop_dynamic_key(&mut partial, key, property, DroppedKeyReason::NoVarForm);
                     continue;
                 }
 
@@ -3906,8 +3934,8 @@ fn collect_nested_partial_property(
     }
     partial.dynamic_css_vars.extend(nested.dynamic_css_vars);
     partial
-        .removed_dynamic_keys
-        .extend(nested.removed_dynamic_keys);
+        .dropped_dynamic_keys
+        .extend(nested.dropped_dynamic_keys);
     for ternary in nested.ternaries {
         set_partial_ternary(partial, ternary);
     }
@@ -4755,7 +4783,8 @@ mod tests {
     use super::{
         escape_json_string, parse_source_shell, parse_source_shell_with_budget,
         parse_source_shell_with_budget_and_statics, parse_source_shell_with_registries,
-        source_type_for_path, string_value_span, MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
+        source_type_for_path, string_value_span, DroppedKeyReason, MAX_CATALOG_BRANCH_EXTRAS,
+        MAX_CATALOG_DEPTH,
     };
     use crate::transform::{lower::lower_source_ir_classes, TransformFile, UnsupportedRecoveryIr};
     use oxc_span::Span;
@@ -5706,6 +5735,30 @@ export const cls = szr(localCard({ pad: 'sm' }));";
     }
 
     #[test]
+    fn parser_shell_drops_a_runtime_value_with_no_tailwind_var_form() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ v }) => <div sz={{ p: 4, textAlign: v }} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(
+            attribute.dynamic_css_vars.is_empty(),
+            "a key with no var form must never reach the css-var lane"
+        );
+        assert_eq!(attribute.dropped_dynamic_keys.len(), 1);
+        assert_eq!(attribute.dropped_dynamic_keys[0].key, "textAlign");
+        assert_eq!(
+            attribute.dropped_dynamic_keys[0].reason,
+            DroppedKeyReason::NoVarForm
+        );
+        // The static sibling was never in question and must survive the drop.
+        assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["p-4"]);
+    }
+
+    #[test]
     fn parser_shell_keeps_value_typed_keys_on_the_css_var_lane() {
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -6512,7 +6565,7 @@ export const cls = szr(localCard({ pad: 'sm' }));";
     }
 
     #[test]
-    fn parser_shell_keeps_removed_dynamic_keys_out_of_css_variables() {
+    fn parser_shell_keeps_dropped_dynamic_keys_out_of_css_variables() {
         let source = "const App=({pad,size})=> <div sz={{ hover: { padding: pad }, fontSize: size, bg: 'red-500' }}/>;";
         let parsed = parse_source_shell(&TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -6524,7 +6577,7 @@ export const cls = szr(localCard({ pad: 'sm' }));";
         assert!(attribute.dynamic_css_vars.is_empty());
         assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["bg-red-500"]);
         assert!(attribute
-            .removed_dynamic_keys
+            .dropped_dynamic_keys
             .iter()
             .any(|property| property.key == "fontSize"));
     }

@@ -266,7 +266,7 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
             runtime_fallback_spread: false,
             candidate_classes: Vec::new(),
             dynamic_css_vars: Vec::new(),
-            removed_dynamic_keys: Vec::new(),
+            dropped_dynamic_keys: Vec::new(),
         });
         ir.jsx_opening_elements.push(JsxOpeningElementIr {
             opening_span,

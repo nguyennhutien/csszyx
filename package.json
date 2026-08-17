@@ -76,6 +76,7 @@
     "security:sast": "semgrep scan --config rules/ --severity ERROR --error --metrics=off",
     "security:lockfile": "node --test scripts/validate-pnpm-lock-security.test.mjs && node scripts/validate-pnpm-lock-security.mjs",
     "security:sca": "pnpm audit --audit-level high && pnpm security:lockfile",
+    "check:var-hostile-keys": "node scripts/check-var-hostile-keys.mjs",
     "check:patch-coverage": "node --test scripts/check-patch-coverage.test.mjs && node scripts/check-patch-coverage.mjs",
     "codeql:local": "bash scripts/codeql-local.sh",
     "verify:ci": "bash scripts/verify-like-ci.sh",
