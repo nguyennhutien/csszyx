@@ -255,6 +255,24 @@ silently preserving obsolete API spellings or leaving dead classes in the DOM.
 | `[csszyx] fontSmoothing: '{value}' is not supported — use 'grayscale' or 'subpixel'.` | |
 | `[csszyx] fontStyle: '{value}' is not supported — Tailwind only models 'italic' and 'normal'. For oblique, use css: { fontStyle: '{value}' }.` | |
 | `[csszyx] "{key}" cannot take a runtime value at {LOC}: Tailwind has no utility for this key that reads a CSS variable, so the class and the variable were dropped instead of styling a different property. Name the values with szv(), or use dynamic() for open-ended data.` | Build only — a *literal* on the same key is unaffected. See below. |
+| `[csszyx] "{key}: '{value}'"{ at LOC}: Tailwind has no per-side border style, so this generated no CSS and the class is dropped. Use borderStyle: '{value}' for every side, or a number on "{key}" for the width.` | A style keyword on a side key. See below. |
+
+#### Border styles are set for every side, not per side
+
+CSS gives each side its own `border-style`; Tailwind spells the style at the
+root only. `borderStyle` is the key for it, and the side keys take a width:
+
+```tsx
+<div sz={{ borderStyle: 'none' }} />  // ✅ border-none — every side
+<div sz={{ borderB: 2 }} />           // ✅ border-b-2 — this side's width
+<div sz={{ borderB: 0 }} />           // ✅ border-b-0 — this side, no border
+<div sz={{ borderB: 'none' }} />      // ❌ dropped: border-b-none has no rule
+```
+
+`border-b-none` reached the safelist, Tailwind generated nothing for it, and the
+border stayed. All six style keywords behave this way on all ten side keys — the
+four physical sides, the two axes, and the four logical ones. Widths, colours and
+theme tokens are unaffected on every one of them.
 
 #### Keys that need a build-time value
 

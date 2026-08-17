@@ -1083,6 +1083,22 @@ Controlling the style of an element's borders.
 | **Hidden** | `border-style: hidden` | `border-hidden`   | `{ borderStyle: 'hidden' }` |      |
 | **None**   | `border-style: none`   | `border-none`     | `{ borderStyle: 'none' }`   |      |
 
+The style applies to **every side**. Tailwind has no per-side border-style
+utility, so a style keyword on a side key (`{ borderB: 'none' }`) generates no
+CSS — csszyx drops the class and reports it. Use `borderStyle` for the style, and
+a number on the side key for its width:
+
+```jsx
+// ❌ border-b-none — Tailwind serves no rule, so the border stays
+<div sz={{ borderB: 'none' }} />
+
+// ✅ remove the style on every side
+<div sz={{ borderStyle: 'none' }} />
+
+// ✅ or take the bottom border to zero width
+<div sz={{ borderB: 0 }} />
+```
+
 ## Divide Width
 
 Utilities for controlling the border width between elements.

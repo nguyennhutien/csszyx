@@ -704,6 +704,7 @@ fn unknown_property_diagnostics(
     let mut out = Vec::new();
     let mut unknown = Vec::new();
     let mut dead_steps = Vec::new();
+    let mut border_side_styles = Vec::new();
     let mut property_objects = Vec::new();
     let mut mask_members = Vec::new();
     // Built on the first position lookup, not up front: a file whose `sz` props
@@ -771,6 +772,16 @@ fn unknown_property_diagnostics(
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
+            ));
+        }
+        border_side_styles.clear();
+        super::lower::collect_border_side_styles(object, &mut border_side_styles);
+        for (key, value, offset) in &border_side_styles {
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, *offset);
+            out.push(format!(
+                "[csszyx] \"{key}: '{value}'\" at {location}:{line}: Tailwind has no per-side border style, so this generated no CSS and the class is dropped. Use borderStyle: '{value}' for every side, or a number on \"{key}\" for the width."
             ));
         }
         property_objects.clear();

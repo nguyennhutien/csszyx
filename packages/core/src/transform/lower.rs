@@ -420,6 +420,77 @@ pub(crate) fn collect_property_object_values(
     }
 }
 
+/// Per-side border keys — the ones whose Tailwind prefix extends `border-`.
+///
+/// CSS gives every one of these a border-style of its own; Tailwind gives none
+/// of them one, and spells the style at the root only.
+const BORDER_SIDE_KEYS: [&str; 10] = [
+    "borderT", "borderR", "borderB", "borderL", "borderX", "borderY", "borderS", "borderE",
+    "borderBs", "borderBe",
+];
+
+/// The border-style keywords Tailwind spells, at the root only.
+const BORDER_STYLE_VALUES: [&str; 6] = ["solid", "dashed", "dotted", "double", "hidden", "none"];
+
+/// Whether a value on a per-side border key names a style Tailwind cannot
+/// spell per side.
+///
+/// `border: 'none'` works and `borderB: 'none'` did not, which is what made it
+/// a trap rather than a gap — the author generalises from the spelling that
+/// does. Measured against the pinned Tailwind, all six style keywords are dead
+/// on all ten side keys, while widths, colours and theme tokens resolve on
+/// every one of them, so the refusal is exactly this pairing and no wider.
+///
+/// There is nothing to lower it to — Tailwind has no per-side border-style
+/// utility at all — so the class is dropped rather than translated, like every
+/// other class this build cannot back with CSS.
+pub(crate) fn is_border_side_style_value(key: &str, value: &str) -> bool {
+    BORDER_SIDE_KEYS.contains(&key) && BORDER_STYLE_VALUES.contains(&value)
+}
+
+/// Collect per-side border keys carrying a style keyword, for the diagnostic.
+///
+/// Same descent rules as `collect_dead_spacing_steps`: variant nesting is
+/// walked, parameter namespaces are not.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_border_side_styles(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, u32)>,
+) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::String(value) => {
+                if is_border_side_style_value(&property.key, value) {
+                    out.push((property.key.clone(), value.clone(), property.span.start));
+                }
+            }
+            StaticSzValue::Object(nested) => {
+                if matches!(
+                    property.key.as_str(),
+                    "css"
+                        | "bgImg"
+                        | "supports"
+                        | "data"
+                        | "not"
+                        | "aria"
+                        | "has"
+                        | "group"
+                        | "peer"
+                ) {
+                    continue;
+                }
+                if property_prefix(&property.key).is_some()
+                    && object_string_property(nested, "color").is_some()
+                {
+                    continue;
+                }
+                collect_border_side_styles(nested, out);
+            }
+            StaticSzValue::Number(_) | StaticSzValue::Boolean(_) => {}
+        }
+    }
+}
+
 /// Whether a bare numeric value on a spacing-scale key has no Tailwind class.
 #[cfg(feature = "native-engine")]
 fn is_dead_spacing_step(key: &str, value: f64) -> bool {
@@ -499,6 +570,14 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
     for property in &object.properties {
         if is_removed_sz_key(&property.key) {
             continue;
+        }
+        // A style keyword on a per-side border key has no Tailwind utility
+        // behind it, so emitting the class would leave the element naming a
+        // rule nothing generates. `collect_border_side_styles` reports it.
+        if let StaticSzValue::String(value) = &property.value {
+            if is_border_side_style_value(&property.key, value) {
+                continue;
+            }
         }
         match &property.value {
             StaticSzValue::Object(nested) => {
