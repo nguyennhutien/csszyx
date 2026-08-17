@@ -190,6 +190,40 @@ Where the two call positions differ is the class **selection**, not the CSS:
 | `sz={btnSz({…})}` | runtime `_sz()` | same classes, same CSS; one helper call per render |
 
 Both are correct and both are supported. Reach for `szr` on `className` when a
-component renders often enough for the difference to matter. The `sz=` position
-also reports a fallback whose advice ("convert to `szv()`") is already taken —
-a known message bug, not a sign that anything is missing from your CSS.
+component renders often enough for the difference to matter. When a factory does
+not precompile, both positions now report it the same way — naming the factory
+and the config position that disqualified it, not "convert to `szv()`".
+
+## When a factory does not precompile
+
+Precompiling stores **one class string per branch**, and a selection joins the
+strings it picked. That is only the object you wrote when no two branches that
+can appear together set the same property. If `base` sets `color` and a variant
+sets `color`, joining them yields `text-main text-sub`, and which one wins is
+decided by the order of those rules in the stylesheet — not by the order in the
+attribute. The runtime deep-merges the objects first, so it yields `text-sub`,
+full stop. Rather than emit a class string that renders differently from the
+object, csszyx declines to precompile the config and the factory keeps its
+(correct) runtime path.
+
+Nothing is missing from your CSS when this happens: every branch's classes are
+still safelisted. What you lose is the build-time collapse.
+
+The report names the position to change:
+
+```text
+szv factory `card()` did not precompile — its config disqualified at `base.color`
+```
+
+Read the position by which half it names:
+
+| Position | Meaning | Fix |
+| --- | --- | --- |
+| `base.<key>` | a variant sets the same property as `base` | drop the key from `base` and give each variant value its own, or accept the runtime path |
+| `variants.<dim>.<value>.<key>` | two **different** dimensions set the same property | keep the property in one dimension |
+| `variants.<dim>.<value>.<key>` on a key csszyx cannot canonicalize | the key is not a property or a known variant | use a canonical key |
+
+A base conflict always names the **base** key, even when several variants shadow
+it: `base` applies to every selection, so it is the one edit that resolves all of
+them. Values of the *same* dimension never conflict with each other — they are
+mutually exclusive, so only one is ever picked.

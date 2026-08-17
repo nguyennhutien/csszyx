@@ -174,8 +174,25 @@ fn canonical_sz_key(key: &str) -> &str {
     }
 }
 
-/// Collect every canonical LEAF path of one branch, `' '`-joined.
-fn collect_canonical_leaf_paths(branch: &StaticSzObject, prefix: &str, out: &mut Vec<String>) {
+/// One collected leaf: the canonical path the conflict test compares, and the
+/// author's own dot-joined key path for the diagnostic.
+///
+/// Two names because they answer different questions. Canonical folds a fusion
+/// family to a shared token so `leading` and `text` are seen to collide; the raw
+/// path is what the reader has to find in their file, and reporting the canonical
+/// form would name a key they never wrote.
+struct CanonicalLeaf {
+    canonical: String,
+    raw: String,
+}
+
+/// Collect every canonical LEAF path of one branch, NUL-joined.
+fn collect_canonical_leaf_paths(
+    branch: &StaticSzObject,
+    prefix: &str,
+    raw_prefix: &str,
+    out: &mut Vec<CanonicalLeaf>,
+) {
     for property in &branch.properties {
         let canon = canonical_sz_key(&property.key);
         let path = if prefix.is_empty() {
@@ -183,18 +200,29 @@ fn collect_canonical_leaf_paths(branch: &StaticSzObject, prefix: &str, out: &mut
         } else {
             format!("{prefix}\u{0}{canon}")
         };
+        let raw = if raw_prefix.is_empty() {
+            property.key.clone()
+        } else {
+            joined_config_path(raw_prefix, &property.key)
+        };
         match &property.value {
             // A nested object under a PROPERTY key is a fusion unit (the
             // color-opacity form lowers to ONE composite class): fold the
             // subtree to the parent path. Variant keys keep composing.
             StaticSzValue::Object(nested) => {
                 if property_prefix(&property.key).is_some() {
-                    out.push(path);
+                    out.push(CanonicalLeaf {
+                        canonical: path,
+                        raw,
+                    });
                 } else {
-                    collect_canonical_leaf_paths(nested, &path, out);
+                    collect_canonical_leaf_paths(nested, &path, &raw, out);
                 }
             }
-            _ => out.push(path),
+            _ => out.push(CanonicalLeaf {
+                canonical: path,
+                raw,
+            }),
         }
     }
 }
@@ -207,20 +235,25 @@ fn extends_leaf_path(long: &str, short: &str) -> bool {
     long.len() > short.len() && long.as_bytes()[short.len()] == 0 && long.starts_with(short)
 }
 
-/// Whether two branches conflict under deep merge (equal paths, or one leaf
-/// path prefixing the other). Mirrors `leafPathsConflict`.
-fn leaf_paths_conflict(a: &[String], b: &[String]) -> bool {
-    for path_a in a {
-        for path_b in b {
-            if path_a == path_b
-                || extends_leaf_path(path_a, path_b)
-                || extends_leaf_path(path_b, path_a)
+/// The first pair of leaves that conflict under deep merge — equal canonical
+/// paths, or one prefixing the other. Mirrors `leafPathsConflict`, and returns
+/// the pair rather than a bool so the diagnostic can name the property instead
+/// of only the branch that holds it.
+fn conflicting_leaves<'a>(
+    a: &'a [CanonicalLeaf],
+    b: &'a [CanonicalLeaf],
+) -> Option<(&'a CanonicalLeaf, &'a CanonicalLeaf)> {
+    for leaf_a in a {
+        for leaf_b in b {
+            if leaf_a.canonical == leaf_b.canonical
+                || extends_leaf_path(&leaf_a.canonical, &leaf_b.canonical)
+                || extends_leaf_path(&leaf_b.canonical, &leaf_a.canonical)
             {
-                return true;
+                return Some((leaf_a, leaf_b));
             }
         }
     }
-    false
+    None
 }
 
 /// Whether every key in a branch is canonicalizable — a property-map entry or
@@ -303,11 +336,22 @@ pub(crate) fn szv_config_free_of_overlap(config: &StaticSzvConfig) -> bool {
 
 /// The same overlap decision, naming the position that broke it.
 ///
-/// One walk serves the verdict and the szr diagnostic. The path names the
-/// BRANCH whose arrival made the config unrepresentable (or, for a key that
-/// cannot canonicalize, the key itself) — for a pairwise conflict the second
-/// branch in declaration order is reported, since the author reading top to
-/// bottom meets the conflict there.
+/// One walk serves the verdict and the fallback diagnostic. Which position gets
+/// named is a DX decision, and the two conflict shapes answer it differently:
+///
+/// - **A variant shadowing `base`.** `base` is applied first to every selection,
+///   so every variant that sets the same property collides with it. Naming the
+///   first such variant made fixing it reveal the next, one refusal per
+///   dimension, while the shared cause sat in `base` and was never named. The
+///   base property is named instead: one position, one fix, however many
+///   variants shadow it.
+/// - **Two dimensions.** Neither is applied first, so there is no shared cause.
+///   The second branch in declaration order is named, where a reader going top
+///   to bottom meets the conflict.
+///
+/// Both name the PROPERTY, not just the branch that holds it: a branch that
+/// reads as correct on its own tells the author nothing about why it was
+/// refused. A key that cannot canonicalize was already reported at the key.
 pub(crate) fn overlap_disqualify_path(config: &StaticSzvConfig) -> Option<String> {
     if let Some(base) = &config.base {
         if let Some(path) = branch_disqualify_path(base, "base") {
@@ -323,38 +367,43 @@ pub(crate) fn overlap_disqualify_path(config: &StaticSzvConfig) -> Option<String
             }
         }
     }
-    let mut base_paths: Vec<String> = Vec::new();
+    let mut base_leaves: Vec<CanonicalLeaf> = Vec::new();
     if let Some(base) = &config.base {
-        collect_canonical_leaf_paths(base, "", &mut base_paths);
+        collect_canonical_leaf_paths(base, "", "base", &mut base_leaves);
     }
-    let per_dimension: Vec<Vec<(String, Vec<String>)>> = config
+    let per_dimension: Vec<Vec<Vec<CanonicalLeaf>>> = config
         .variants
         .iter()
         .map(|(dimension, leaves)| {
             leaves
                 .iter()
                 .map(|(value, leaf)| {
-                    let mut paths = Vec::new();
-                    collect_canonical_leaf_paths(leaf, "", &mut paths);
-                    (format!("variants.{dimension}.{value}"), paths)
+                    let mut collected = Vec::new();
+                    collect_canonical_leaf_paths(
+                        leaf,
+                        "",
+                        &format!("variants.{dimension}.{value}"),
+                        &mut collected,
+                    );
+                    collected
                 })
                 .collect()
         })
         .collect();
 
     for dimension in &per_dimension {
-        for (position, leaf) in dimension {
-            if leaf_paths_conflict(&base_paths, leaf) {
-                return Some(position.clone());
+        for leaf in dimension {
+            if let Some((base_leaf, _)) = conflicting_leaves(&base_leaves, leaf) {
+                return Some(base_leaf.raw.clone());
             }
         }
     }
     for i in 0..per_dimension.len() {
         for j in (i + 1)..per_dimension.len() {
-            for (_, leaf_a) in &per_dimension[i] {
-                for (position_b, leaf_b) in &per_dimension[j] {
-                    if leaf_paths_conflict(leaf_a, leaf_b) {
-                        return Some(position_b.clone());
+            for leaf_a in &per_dimension[i] {
+                for leaf_b in &per_dimension[j] {
+                    if let Some((_, second)) = conflicting_leaves(leaf_a, leaf_b) {
+                        return Some(second.raw.clone());
                     }
                 }
             }
@@ -655,8 +704,15 @@ mod tests {
 
     fn paths_of(branch: &StaticSzObject) -> Vec<String> {
         let mut out = Vec::new();
-        collect_canonical_leaf_paths(branch, "", &mut out);
-        out
+        collect_canonical_leaf_paths(branch, "", "", &mut out);
+        out.into_iter().map(|leaf| leaf.canonical).collect()
+    }
+
+    /// The author-facing paths the same walk collects, for the diagnostic side.
+    fn raw_paths_of(branch: &StaticSzObject, root: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        collect_canonical_leaf_paths(branch, "", root, &mut out);
+        out.into_iter().map(|leaf| leaf.raw).collect()
     }
 
     #[test]
@@ -682,12 +738,52 @@ mod tests {
 
     #[test]
     fn flags_equal_prefix_and_suffix_conflicts_only() {
-        let path = |value: &str| vec![value.to_string()];
-        assert!(leaf_paths_conflict(&path("p"), &path("p")));
-        assert!(leaf_paths_conflict(&path("md"), &path("md\u{0}p")));
-        assert!(leaf_paths_conflict(&path("md\u{0}p"), &path("md")));
-        assert!(!leaf_paths_conflict(&path("md\u{0}p"), &path("md\u{0}m")));
-        assert!(!leaf_paths_conflict(&path("p"), &path("md\u{0}p")));
+        let path = |value: &str| {
+            vec![CanonicalLeaf {
+                canonical: value.to_string(),
+                raw: value.replace('\u{0}', "."),
+            }]
+        };
+        assert!(conflicting_leaves(&path("p"), &path("p")).is_some());
+        assert!(conflicting_leaves(&path("md"), &path("md\u{0}p")).is_some());
+        assert!(conflicting_leaves(&path("md\u{0}p"), &path("md")).is_some());
+        assert!(conflicting_leaves(&path("md\u{0}p"), &path("md\u{0}m")).is_none());
+        assert!(conflicting_leaves(&path("p"), &path("md\u{0}p")).is_none());
+    }
+
+    #[test]
+    fn reports_the_pair_so_a_diagnostic_can_name_either_side() {
+        // The reason this returns a pair rather than a bool: a base conflict
+        // names the base side and a cross-dimension conflict names the second,
+        // and both need the RAW key, not the canonical token a fusion family
+        // collapses to.
+        let left = vec![CanonicalLeaf {
+            canonical: "text\u{0}leading".to_string(),
+            raw: "base.leading".to_string(),
+        }];
+        let right = vec![CanonicalLeaf {
+            canonical: "text\u{0}leading".to_string(),
+            raw: "variants.s.lg.text".to_string(),
+        }];
+
+        let (first, second) = conflicting_leaves(&left, &right).expect("fusion family collides");
+        assert_eq!(first.raw, "base.leading");
+        assert_eq!(second.raw, "variants.s.lg.text");
+    }
+
+    #[test]
+    fn raw_paths_keep_the_authors_own_keys_under_their_root() {
+        // `leading` canonicalizes to a shared fusion token; the diagnostic has
+        // to say `leading`, which is the word in the author's file.
+        let branch = object(vec![
+            entry("leading", text("tight")),
+            entry("hover", nested(vec![entry("color", text("sub"))])),
+        ]);
+
+        assert_eq!(
+            raw_paths_of(&branch, "base"),
+            ["base.leading", "base.hover.color"]
+        );
     }
 
     #[test]
@@ -1086,7 +1182,9 @@ mod tests {
 
     #[test]
     fn overlap_disqualify_paths_name_the_conflicting_branch() {
-        // Base × leaf: the leaf whose arrival made the config unrepresentable.
+        // Base × leaf: the BASE property, because base is applied to every
+        // selection — naming the first shadowing leaf made fixing it reveal the
+        // next while the shared cause went unnamed.
         let base_conflict = config_from(vec![
             entry("base", nested(vec![entry("p", number(2.0))])),
             entry(
@@ -1100,10 +1198,11 @@ mod tests {
         .expect("shape qualifies");
         assert_eq!(
             overlap_disqualify_path(&base_conflict),
-            Some(String::from("variants.pad.sm"))
+            Some(String::from("base.p"))
         );
         // Leaf × leaf across dimensions: the second branch in declaration
-        // order, where a top-to-bottom reader meets the conflict.
+        // order, where a top-to-bottom reader meets the conflict, down to the
+        // property — the branch alone reads as correct in isolation.
         let cross_conflict = config_from(vec![entry(
             "variants",
             nested(vec![
@@ -1120,7 +1219,7 @@ mod tests {
         .expect("shape qualifies");
         assert_eq!(
             overlap_disqualify_path(&cross_conflict),
-            Some(String::from("variants.b.y"))
+            Some(String::from("variants.b.y.p"))
         );
         // A clean config has nothing to name.
         let clean = config_from(vec![entry(
