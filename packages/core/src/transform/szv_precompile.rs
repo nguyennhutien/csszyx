@@ -308,7 +308,32 @@ fn branch_disqualify_path(branch: &StaticSzObject, prefix: &str) -> Option<Strin
             && !is_known_variant(&property.key)
             && !SPECIAL_ALLOWED_SZ_KEYS.contains(&property.key.as_str())
         {
-            return Some(path);
+            // An OBJECT value means variant nesting, and variant names are
+            // open-ended: a `--breakpoint-*` token from the project's `@theme`
+            // (`{ tablet: { px: 4 } }`) or an inline attribute variant
+            // (`{ 'data-[active]': { p: 4 } }`) cannot appear in a table this
+            // compiler ships. The ordinary lowering already treats such a key as
+            // a variant and emits `tablet:px-4`; refusing it here made the
+            // precompile the one place that read "not in a table" as "not
+            // understood", and it fell on responsive variants, which is most of
+            // what a variant system holds.
+            //
+            // Safe because a variant COMPOSES into the canonical path rather
+            // than aliasing one — `px` and `tablet\0px` stay distinct, exactly
+            // as `md` already did — so the overlap detector keeps working
+            // through it. A SCALAR on an unknown key is the opposite: it lowers
+            // to `key-value`, which could be another key's target under a name
+            // this walk cannot recognise, so that still disqualifies. Mirrors
+            // the descent `collect_unknown_sz_keys` already makes.
+            match &property.value {
+                StaticSzValue::Object(nested) => {
+                    if let Some(inner) = branch_disqualify_path(nested, &path) {
+                        return Some(inner);
+                    }
+                    continue;
+                }
+                _ => return Some(path),
+            }
         }
         if let StaticSzValue::Object(nested) = &property.value {
             if let Some(inner) = branch_disqualify_path(nested, &path) {
@@ -1152,7 +1177,8 @@ mod tests {
             overlap_disqualify_path(&leaf_config(vec![entry("op", number(35.0))])),
             Some(String::from("variants.c.blue.op"))
         );
-        // An unknown key nested under a known variant is named in full.
+        // A custom variant nested under a known one composes rather than
+        // disqualifying — the project's `@theme` names it, so no table can.
         assert_eq!(
             overlap_disqualify_path(&leaf_config(vec![entry(
                 "hover",
@@ -1161,7 +1187,20 @@ mod tests {
                     nested(vec![entry("p", number(4.0))])
                 )]),
             )])),
-            Some(String::from("variants.c.blue.hover.desktop-sm"))
+            None
+        );
+        // A SCALAR under one is the case the refusal is for: it lowers to
+        // `key-value`, which the overlap detector cannot place, and it is named
+        // in full.
+        assert_eq!(
+            overlap_disqualify_path(&leaf_config(vec![entry(
+                "hover",
+                nested(vec![entry(
+                    "desktop-sm",
+                    nested(vec![entry("nonsenseKey", text("x"))])
+                )]),
+            )])),
+            Some(String::from("variants.c.blue.hover.desktop-sm.nonsenseKey"))
         );
         // The css namespace is one level deep; a nested declaration is named.
         assert_eq!(

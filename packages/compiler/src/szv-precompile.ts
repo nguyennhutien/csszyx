@@ -179,7 +179,15 @@ function branchKeyCanonicalizable(key: string, value: unknown): boolean {
     // A bare `op` fuses into whichever color-bearing key it meets at lowering,
     // and per-key compilation cannot represent that.
     if (key === 'op') return false;
-    if (!isCanonicalSzKey(key)) return false;
+    // An OBJECT value means variant nesting, and variant names are open-ended: a
+    // `--breakpoint-*` token from the project's `@theme` (`{ tablet: {…} }`) or
+    // an inline attribute variant (`{ 'data-[active]': {…} }`) cannot appear in
+    // a table this compiler ships. A variant COMPOSES into the canonical path
+    // rather than aliasing one, so the overlap detector keeps working through
+    // it. A SCALAR on an unknown key is the opposite — it lowers to `key-value`,
+    // which could be another key's target under a name this walk cannot
+    // recognise — so that still disqualifies.
+    if (!isCanonicalSzKey(key) && !isPlainRecord(value)) return false;
     return !isPlainRecord(value) || branchKeysCanonicalizable(value);
 }
 

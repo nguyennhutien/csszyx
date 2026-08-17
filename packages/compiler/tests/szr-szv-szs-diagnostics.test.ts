@@ -39,8 +39,8 @@ const WARNING_CASES: ReadonlyArray<readonly [string, string, string]> = [
     // instead of the circular "convert to szv()" call advice.
     [
         'szr call to a disqualified szv factory',
-        "const t = szv({ variants: { c: { blue: { 'desktop-sm': { p: 4 } } } } });\nexport const a = szr(t({ c: 'blue' }));",
-        'szr fallback at 3:22: szv factory `t()` did not precompile — its config disqualified at `variants.c.blue.desktop-sm`',
+        "const t = szv({ base: { color: 'red-500' }, variants: { c: { blue: { color: 'blue-500' } } } });\nexport const a = szr(t({ c: 'blue' }));",
+        'szr fallback at 3:22: szv factory `t()` did not precompile — its config disqualified at `base.color`',
     ],
     ['szv identifier', 'export const v = szv(cfg);', 'szv catalog at 2:22'],
     ['szv call', 'export const v = szv(mk());', 'szv catalog at 2:22'],

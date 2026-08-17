@@ -41,7 +41,8 @@ function diagnosticsFor(
 
 /** A factory whose config disqualifies at a position worth naming. */
 const DISQUALIFIED_FACTORY =
-    "const t = szv({ variants: { c: { blue: { 'desktop-sm': { p: 4 } } } } });\n";
+    "const t = szv({ base: { color: 'red-500' }, " +
+    "variants: { c: { blue: { color: 'blue-500' } } } });\n";
 
 describe.each(ENGINES)('a refused szv factory in an sz attribute (%s)', (_name, engine) => {
     it('names the factory and the config path, not a generic call', () => {
@@ -52,7 +53,7 @@ describe.each(ENGINES)('a refused szv factory in an sz attribute (%s)', (_name, 
 
         expect(diagnostics).toHaveLength(1);
         expect(diagnostics[0]).toContain('szv factory `t()` did not precompile');
-        expect(diagnostics[0]).toContain('variants.c.blue.desktop-sm');
+        expect(diagnostics[0]).toContain('base.color');
     });
 
     it('stops telling an szv author to convert to szv', () => {

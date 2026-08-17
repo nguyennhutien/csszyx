@@ -1218,7 +1218,7 @@ mod tests {
             filename: "/repo/src/Tag.tsx".to_string(),
             source: [
                 "import { szr, szv } from 'csszyx';",
-                "const t = szv({ variants: { c: { blue: { color: 'blue-500', 'desktop-sm': { p: 4 } } } } });",
+                "const t = szv({ base: { color: 'red-500' }, variants: { c: { blue: { color: 'blue-500' } } } });",
                 "export const A = () => <div className={szr(t({ c: 'blue' }))} />;",
             ]
             .join("\n"),
@@ -1231,7 +1231,7 @@ mod tests {
             "{diagnostics}"
         );
         assert!(
-            diagnostics.contains("config disqualified at `variants.c.blue.desktop-sm`"),
+            diagnostics.contains("config disqualified at `base.color`"),
             "{diagnostics}"
         );
         // The old advice was circular — the author is already writing szv().
@@ -1251,7 +1251,7 @@ mod tests {
             source: [
                 "import { szv } from 'csszyx';",
                 "export const A = () => <div sz={t({ c: 'blue' })} />;",
-                "const t = szv({ variants: { c: { blue: { 'desktop-sm': { p: 4 } } } } });",
+                "const t = szv({ base: { color: 'red-500' }, variants: { c: { blue: { color: 'blue-500' } } } });",
             ]
             .join("\n"),
         };
@@ -1263,7 +1263,7 @@ mod tests {
             "{diagnostics}"
         );
         assert!(
-            diagnostics.contains("config disqualified at `variants.c.blue.desktop-sm`"),
+            diagnostics.contains("config disqualified at `base.color`"),
             "{diagnostics}"
         );
         assert!(!diagnostics.contains("convert to szv()"), "{diagnostics}");
@@ -1278,7 +1278,7 @@ mod tests {
             filename: "/repo/src/Tag.tsx".to_string(),
             source: [
                 "import { szv } from 'csszyx';",
-                "const t = szv({ variants: { c: { blue: { 'desktop-sm': { p: 4 } } } } });",
+                "const t = szv({ base: { color: 'red-500' }, variants: { c: { blue: { color: 'blue-500' } } } });",
                 "export const A = () => <div sz={mk()} />;",
             ]
             .join("\n"),

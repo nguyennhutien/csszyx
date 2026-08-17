@@ -221,9 +221,32 @@ Read the position by which half it names:
 | --- | --- | --- |
 | `base.<key>` | a variant sets the same property as `base` | drop the key from `base` and give each variant value its own, or accept the runtime path |
 | `variants.<dim>.<value>.<key>` | two **different** dimensions set the same property | keep the property in one dimension |
-| `variants.<dim>.<value>.<key>` on a key csszyx cannot canonicalize | the key is not a property or a known variant | use a canonical key |
+| `variants.<dim>.<value>.<key>` on a key csszyx cannot canonicalize | the key is neither a property nor a variant, and its value is not an object | use a canonical key |
 
 A base conflict always names the **base** key, even when several variants shadow
 it: `base` applies to every selection, so it is the one edit that resolves all of
 them. Values of the *same* dimension never conflict with each other — they are
 mutually exclusive, so only one is ever picked.
+
+### Variants your project defines are fine here
+
+A branch may nest any variant, including ones no compiler table can know:
+
+```tsx
+const card = szv({
+    base: { px: 2, tablet: { px: 4 } },              // ✅ your @theme breakpoint
+    variants: {
+        dir: { left: { p: 2, 'data-[active]': { p: 4 } } },  // ✅ attribute variant
+    },
+});
+```
+
+Both precompile and both emit the prefixed class (`tablet:px-4`,
+`data-[active]:p-4`). A custom breakpoint comes from your `@theme` and an
+attribute variant is written inline, so neither can appear in a table csszyx
+ships — but a variant *composes* onto the property path rather than replacing it,
+so overlap analysis still works through it and `px` and `tablet.px` stay separate.
+
+What still disqualifies is an unrecognised key holding a plain **value**
+(`{ nonsenseKey: 'x' }`): that lowers to `nonsenseKey-x`, a name csszyx cannot
+place against any other branch's.

@@ -95,13 +95,17 @@ describe.each(ENGINES)('what the position must keep reporting (%s)', (_name, eng
         expect(at).toBe('variants.c.blue.nonsenseKey');
     });
 
-    it('still names a nested breakpoint object at the breakpoint', () => {
+    it('names the property inside a custom variant, not the variant', () => {
+        // A custom breakpoint is a variant, so it composes rather than
+        // disqualifying; the conflict underneath it still has to be named, and
+        // named all the way down.
         const at = disqualifiedAt(
             engine,
-            "{ variants: { c: { blue: { 'desktop-sm': { p: 4 } } } } }",
+            "{ variants: { a: { x: { 'desktop-sm': { p: 2 } } }, " +
+                "b: { y: { 'desktop-sm': { p: 4 } } } } }",
         );
 
-        expect(at).toBe('variants.c.blue.desktop-sm');
+        expect(at).toBe('variants.b.y.desktop-sm.p');
     });
 
     it('stays silent when nothing overlaps', () => {
