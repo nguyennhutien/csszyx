@@ -483,6 +483,32 @@ Works inside variant blocks too:
 // hover branch: hover:scale-110 or hover:scale-100 — zero runtime
 ```
 
+### Conditioning the whole `sz`, not one value
+
+The same applies one level up. `sz={cond ? A : B}` compiles both branches to
+class strings, and a branch that styles nothing — `undefined`, `null`, `false`,
+or `{}` — is the **empty style**, not an unknown one, so it compiles too:
+
+```tsx
+<div sz={disabled ? { color: "muted" } : undefined} />
+// → className={disabled ? "text-muted" : undefined}
+```
+
+A guard is the same expression with the else arm left off, so it compiles the
+same way:
+
+```tsx
+<div sz={compact && { p: 2 }} />
+// → className={compact ? "p-2" : undefined}
+```
+
+`||` is deliberately left on the runtime path. It yields its **left** operand
+when the test passes, and that value can itself be a style — folding
+`sz={base || { p: 4 }}` would drop `base` — so it keeps `_sz()`.
+
+Two shapes still resolve at runtime: a chain of tests (`a ? x : b ? y : z`), and
+a branch holding a value only the runtime knows (`cond ? { p: pad } : undefined`).
+
 ## Array Syntax
 
 Pass an array to `sz` to compose styles with **later-wins** semantics: when two

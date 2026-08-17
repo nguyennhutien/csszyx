@@ -18,6 +18,12 @@ import { isRustTransformAvailable, transformRust, transformWasm } from '../src/i
 export interface TriEngineResult {
     code?: string;
     diagnostics?: string[];
+    /**
+     * Safelist candidates, in discovery order. A parity suite that only reads
+     * `code` cannot see a class going missing from the safelist while the emit
+     * stays identical — the exact shape a runtime fallback produces.
+     */
+    classes?: Iterable<string>;
 }
 
 /** One engine entry, narrowed to the shared result surface. */

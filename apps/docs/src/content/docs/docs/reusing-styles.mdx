@@ -205,9 +205,11 @@ no `[object Object]`:
 | `const x = { ... } as const` | Build time ✅ |
 | `const x = { ...other, key: val }` | Build time ✅ (recursive) |
 | `sz={{ ...(cond ? a : b), key: val }}` | Build time ✅ (conditional spread hoist) |
+| `const x = cond ? a : b` | Build time ✅ (both branches, wherever it is written) |
+| `const x = cond && a` | Build time ✅ (the else arm is the empty style) |
 | `import { x } from './styles'` | Runtime fallback |
 | `const x = getStyles()` | Runtime fallback |
-| `const x = condition ? a : b` | Runtime fallback (variable init — use `sz={cond ? a : b}` instead) |
+| `const x = cond \|\| a` | Runtime fallback (`\|\|` keeps its left operand, which may itself be a style) |
 
 In development, the compiler emits a build-time warning for any pattern it
 falls back to `_sz()` — explaining why the fallback occurred and pointing to

@@ -7,9 +7,9 @@ use oxc_ast::{
         Expression, ImportDeclaration, ImportDeclarationSpecifier, JSXAttribute, JSXAttributeItem,
         JSXAttributeName, JSXAttributeValue, JSXElement, JSXElementName, JSXExpression,
         JSXFragment, JSXMemberExpression, JSXMemberExpressionObject, JSXOpeningElement,
-        JSXSpreadAttribute, ObjectExpression, ObjectProperty, ObjectPropertyKind, Program,
-        PropertyKey, Statement, TSTypeQuery, TSTypeQueryExprName, UnaryOperator,
-        VariableDeclaration,
+        JSXSpreadAttribute, LogicalExpression, ObjectExpression, ObjectProperty,
+        ObjectPropertyKind, Program, PropertyKey, Statement, TSTypeQuery, TSTypeQueryExprName,
+        UnaryOperator, VariableDeclaration,
     },
     AstKind,
 };
@@ -1993,6 +1993,7 @@ fn static_ternary_from_jsx_expression(
         JSXExpression::ConditionalExpression(conditional) => {
             static_ternary_from_conditional(conditional, ctx)
         }
+        JSXExpression::LogicalExpression(logical) => static_ternary_from_logical(logical, ctx),
         JSXExpression::Identifier(identifier) => {
             let initializer = ctx.scope.resolve_initializer_before(
                 &identifier.name,
@@ -2026,6 +2027,7 @@ fn static_ternary_from_expression(
         Expression::ConditionalExpression(conditional) => {
             static_ternary_from_conditional(conditional, ctx)
         }
+        Expression::LogicalExpression(logical) => static_ternary_from_logical(logical, ctx),
         Expression::ParenthesizedExpression(value) => {
             static_ternary_from_expression(&value.expression, ctx)
         }
@@ -2040,22 +2042,61 @@ fn static_ternary_from_expression(
     }
 }
 
+/// Lower one branch of a conditional sz value to the classes it contributes.
+///
+/// A falsy branch is the EMPTY style rather than an unknown one, so it folds
+/// to no classes instead of dropping the whole attribute onto the runtime.
+/// Reading only the object shape made `: undefined` and `: {}` — two spellings
+/// of the same intent, and `undefined` is the one a typed style pushes authors
+/// toward — compile to different code for no reason a caller could see.
+fn conditional_branch_classes(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<Vec<String>> {
+    if is_falsy_style_literal(unwrap_expression(expression)) {
+        return Some(Vec::new());
+    }
+    let (object, _, _) = static_object_from_expression(expression, ctx)?;
+    Some(lower_static_sz_object(&object))
+}
+
 fn static_ternary_from_conditional(
     conditional: &ConditionalExpression<'_>,
     ctx: ResolveContext<'_>,
 ) -> Option<(StaticTernaryIr, TextSpan)> {
-    let (consequent_object, _, _) = static_object_from_expression(&conditional.consequent, ctx)?;
-    let (alternate_object, _, _) = static_object_from_expression(&conditional.alternate, ctx)?;
-    let consequent_classes = lower_static_sz_object(&consequent_object);
-    let alternate_classes = lower_static_sz_object(&alternate_object);
     Some((
         StaticTernaryIr {
             test_span: text_span(conditional.test.span()),
-            consequent_classes,
-            alternate_classes,
+            consequent_classes: conditional_branch_classes(&conditional.consequent, ctx)?,
+            alternate_classes: conditional_branch_classes(&conditional.alternate, ctx)?,
             bool_class_key: None,
         },
         text_span(conditional.span),
+    ))
+}
+
+/// Lower `cond && { … }` to the ternary it already is.
+///
+/// `&&` yields its RIGHT operand when the test passes and its LEFT operand
+/// otherwise — and a left operand that reached the else arm is falsy by
+/// definition, so that arm is the empty style. `||` is refused for the mirror
+/// reason: its left operand is what survives a TRUTHY test, and that value can
+/// be a style object, so folding `base || { p: 4 }` would silently drop `base`.
+fn static_ternary_from_logical(
+    logical: &LogicalExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<(StaticTernaryIr, TextSpan)> {
+    if !logical.operator.is_and() {
+        return None;
+    }
+    Some((
+        StaticTernaryIr {
+            test_span: text_span(logical.left.span()),
+            consequent_classes: conditional_branch_classes(&logical.right, ctx)?,
+            alternate_classes: Vec::new(),
+            bool_class_key: None,
+        },
+        text_span(logical.span),
     ))
 }
 
@@ -2141,7 +2182,7 @@ fn static_array_part_from_expression(
     ctx: ResolveContext<'_>,
 ) -> Option<StaticArrayPartIr> {
     let unwrapped = unwrap_expression(expression);
-    if is_falsy_array_element(unwrapped) {
+    if is_falsy_style_literal(unwrapped) {
         return None;
     }
     if let Expression::StringLiteral(value) = unwrapped {
@@ -4505,7 +4546,12 @@ fn array_element_static_object(
 }
 
 /// Whether an unwrapped array element is a skippable falsy guard.
-fn is_falsy_array_element(expression: &Expression<'_>) -> bool {
+/// Whether an expression is a falsy literal, and therefore the EMPTY style.
+///
+/// Every falsy JS value reaches `_sz` as no classes at all, so an sz position
+/// holding one carries the same information as `{}`. Callers must unwrap
+/// parentheses and TS assertions first.
+fn is_falsy_style_literal(expression: &Expression<'_>) -> bool {
     match expression {
         Expression::BooleanLiteral(value) => !value.value,
         Expression::NullLiteral(_) => true,
@@ -4527,7 +4573,7 @@ fn static_object_from_array_expression(
         // A spread element keeps the whole array a runtime value.
         let expression = element.as_expression()?;
         let unwrapped = unwrap_expression(expression);
-        if is_falsy_array_element(unwrapped) {
+        if is_falsy_style_literal(unwrapped) {
             continue;
         }
         // Deep merge (later leaf wins per key path, sibling keys survive):
@@ -5573,6 +5619,90 @@ export const cls = szr(localCard({ pad: 'sm' }));";
         // The bare class must reach the safelist, or Tailwind emits no rule for
         // it and the toggle styles nothing.
         assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["border-b"]);
+    }
+
+    /// Parse one component and hand back its single sz attribute's ternaries.
+    fn ternaries_for(sz_value: &str) -> Vec<super::super::StaticTernaryIr> {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: format!("export const A = ({{ on, a, b }}) => <div sz={{{sz_value}}} />;"),
+        };
+        parse_source_shell(&file).ir.sz_attributes[0]
+            .ternaries
+            .clone()
+    }
+
+    #[test]
+    fn parser_shell_folds_a_falsy_ternary_branch_to_no_classes() {
+        for branch in ["undefined", "null", "false"] {
+            let ternaries = ternaries_for(&format!("on ? {{ color: 'muted' }} : {branch}"));
+
+            assert_eq!(ternaries.len(), 1, "{branch}");
+            assert_eq!(ternaries[0].consequent_classes, ["text-muted"], "{branch}");
+            assert!(ternaries[0].alternate_classes.is_empty(), "{branch}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_folds_a_falsy_ternary_branch_on_either_side() {
+        let ternaries = ternaries_for("on ? undefined : { color: 'muted' }");
+
+        assert_eq!(ternaries.len(), 1);
+        assert!(ternaries[0].consequent_classes.is_empty());
+        assert_eq!(ternaries[0].alternate_classes, ["text-muted"]);
+    }
+
+    #[test]
+    fn parser_shell_folds_a_guarded_style_into_a_ternary() {
+        let ternaries = ternaries_for("on && { color: 'muted' }");
+
+        assert_eq!(ternaries.len(), 1);
+        assert_eq!(ternaries[0].consequent_classes, ["text-muted"]);
+        assert!(ternaries[0].alternate_classes.is_empty());
+    }
+
+    #[test]
+    fn parser_shell_folds_a_guard_reached_through_a_wrapper() {
+        // A guard rarely arrives bare at the attribute: a formatter parenthesizes
+        // it across a line break, and a shared style is held by a const. Both
+        // reach the expression reader rather than the JSX one, so folding only
+        // the bare form would make the parentheses decide whether it compiles.
+        for sz_value in [
+            "(on && { color: 'muted' })",
+            "(on && { color: 'muted' }) as const",
+        ] {
+            let ternaries = ternaries_for(sz_value);
+
+            assert_eq!(ternaries.len(), 1, "{sz_value}");
+            assert_eq!(
+                ternaries[0].consequent_classes,
+                ["text-muted"],
+                "{sz_value}"
+            );
+        }
+    }
+
+    #[test]
+    fn parser_shell_carries_a_whole_guard_chain_into_the_test_span() {
+        let source =
+            "export const A = ({ on, a, b }) => <div sz={a && b && { color: 'muted' }} />;";
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        };
+        let parsed = parse_source_shell(&file);
+        let span = parsed.ir.sz_attributes[0].ternaries[0].test_span;
+
+        // Taking only the rightmost operand would drop `a` and style the
+        // element on the wrong condition.
+        assert_eq!(&source[span.start as usize..span.end as usize], "a && b");
+    }
+
+    #[test]
+    fn parser_shell_refuses_to_fold_an_or_guard() {
+        // `||` yields its LEFT operand when the test passes, and that value can
+        // itself be a style — folding would silently drop it.
+        assert!(ternaries_for("on || { color: 'muted' }").is_empty());
     }
 
     #[test]
