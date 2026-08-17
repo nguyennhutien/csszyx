@@ -98,6 +98,15 @@ fn rewrite_ternary_classes(
     for class_name in &mut ternary.consequent_classes {
         rewrite_class_name(class_name, aliases, variable_map);
     }
+    // A chain arm carries classes the emitter can pick, so it has to be
+    // renamed with the rest: a class left un-aliased here would reach the DOM
+    // under a name the mangled stylesheet no longer defines, and only for the
+    // input that reaches that arm.
+    for arm in &mut ternary.chain_arms {
+        for class_name in &mut arm.classes {
+            rewrite_class_name(class_name, aliases, variable_map);
+        }
+    }
     for class_name in &mut ternary.alternate_classes {
         rewrite_class_name(class_name, aliases, variable_map);
     }
@@ -232,6 +241,7 @@ mod tests {
                         ternary
                             .consequent_classes
                             .iter()
+                            .chain(ternary.chain_arms.iter().flat_map(|arm| arm.classes.iter()))
                             .chain(ternary.alternate_classes.iter())
                     }))
             })
@@ -281,6 +291,7 @@ mod tests {
             ternary
                 .consequent_classes
                 .iter()
+                .chain(ternary.chain_arms.iter().flat_map(|arm| &arm.classes))
                 .chain(&ternary.alternate_classes)
                 .all(|class_name| !class_name.contains("--brand-"))
         }));

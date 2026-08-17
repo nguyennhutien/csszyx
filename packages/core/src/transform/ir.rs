@@ -445,6 +445,18 @@ pub struct StaticTernaryIr {
     pub consequent_classes: Vec<String>,
     /// Classes produced by lowering the alternate branch, in source order.
     pub alternate_classes: Vec<String>,
+    /// Extra `test ? classes` arms sitting between the head and the alternate,
+    /// for a chained conditional (`a ? X : b ? Y : Z`). Empty for the ordinary
+    /// two-branch form, which is why it serializes away — older IR reads back
+    /// unchanged.
+    ///
+    /// A chain is a CHOICE and the surrounding `Vec<StaticTernaryIr>` is a JOIN:
+    /// two conditionals in one object both contribute classes, while a chain
+    /// contributes exactly one branch. Modelling the arms here keeps that
+    /// difference in the type rather than in a convention a later reader has to
+    /// rediscover.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chain_arms: Vec<StaticTernaryArmIr>,
     /// The sz key when this conditional is a boolean-only key carrying a
     /// runtime value, in which case `test_span` covers that value and the
     /// rewrite emits `__szBoolClass` instead of a `test ? … : …` expression:
@@ -452,6 +464,19 @@ pub struct StaticTernaryIr {
     /// anything else rather than styling the wrong property.
     #[serde(default)]
     pub bool_class_key: Option<String>,
+}
+
+/// One `test ? classes` arm of a chained conditional.
+///
+/// The test is only reached when every test before it was falsy, which the
+/// emitted nesting preserves by keeping JavaScript's own short-circuit rather
+/// than rebuilding the guard out of the earlier tests.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StaticTernaryArmIr {
+    /// Source span of this arm's `test` expression.
+    pub test_span: TextSpan,
+    /// Classes produced by lowering this arm's branch, in source order.
+    pub classes: Vec<String>,
 }
 
 /// One item from an `sz={[...]}` later-wins composition.

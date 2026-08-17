@@ -393,10 +393,14 @@ fn rewrite_ternary_sz_attribute(
             return conditional_expression_source(source, ternary);
         }
         let test = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
+        let mut tail = format!("\"{}\"", ternary.alternate_classes.join(" "));
+        for arm in ternary.chain_arms.iter().rev() {
+            let arm_test = &source[arm.test_span.start as usize..arm.test_span.end as usize];
+            tail = format!("{arm_test} ? \"{}\" : {tail}", arm.classes.join(" "));
+        }
         format!(
-            "{test} ? \"{}\" : \"{}\"",
-            ternary.consequent_classes.join(" "),
-            ternary.alternate_classes.join(" ")
+            "{test} ? \"{}\" : {tail}",
+            ternary.consequent_classes.join(" ")
         )
     };
 
@@ -466,10 +470,19 @@ fn rewrite_ternary_sz_attribute(
                     };
                     let test = &source[only_ternary.test_span.start as usize
                         ..only_ternary.test_span.end as usize];
+                    // Fold the chain from the tail back, so the emitted nesting
+                    // matches the authored one and JavaScript's own
+                    // short-circuit keeps each arm's test unevaluated until
+                    // every test before it has failed.
+                    let mut tail = branch(&only_ternary.alternate_classes);
+                    for arm in only_ternary.chain_arms.iter().rev() {
+                        let arm_test =
+                            &source[arm.test_span.start as usize..arm.test_span.end as usize];
+                        tail = format!("{arm_test} ? {} : {tail}", branch(&arm.classes));
+                    }
                     format!(
-                        "className={{{test} ? {} : {}}}",
-                        branch(&only_ternary.consequent_classes),
-                        branch(&only_ternary.alternate_classes)
+                        "className={{{test} ? {} : {tail}}}",
+                        branch(&only_ternary.consequent_classes)
                     )
                 }
             } else {
@@ -822,8 +835,15 @@ fn conditional_expression_source(source: &str, ternary: &super::StaticTernaryIr)
             js_string_literal(key)
         );
     }
-    let alternate = js_string_literal(&ternary.alternate_classes.join(" "));
-    format!("{expression} ? {consequent} : {alternate}")
+    let mut tail = js_string_literal(&ternary.alternate_classes.join(" "));
+    for arm in ternary.chain_arms.iter().rev() {
+        let arm_test = &source[arm.test_span.start as usize..arm.test_span.end as usize];
+        tail = format!(
+            "{arm_test} ? {} : {tail}",
+            js_string_literal(&arm.classes.join(" "))
+        );
+    }
+    format!("{expression} ? {consequent} : {tail}")
 }
 
 fn style_prop_source(source: &str, prop: &DynamicCssVarIr) -> String {

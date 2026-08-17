@@ -82,12 +82,7 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
         // its safelist candidates — mangle IDs follow discovery order.
         part.classes
             .iter()
-            .chain(part.ternary.iter().flat_map(|ternary| {
-                ternary
-                    .consequent_classes
-                    .iter()
-                    .chain(ternary.alternate_classes.iter())
-            }))
+            .chain(part.ternary.iter().flat_map(ternary_classes))
             .chain(part.candidates.iter())
             .cloned()
     }));
@@ -99,10 +94,22 @@ pub fn lower_sz_attribute_classes(attribute: &super::SzAttributeIr) -> Vec<Strin
             .map(dynamic_css_var_class),
     );
     for ternary in &attribute.ternaries {
-        classes.extend(ternary.consequent_classes.iter().cloned());
-        classes.extend(ternary.alternate_classes.iter().cloned());
+        classes.extend(ternary_classes(ternary).cloned());
     }
     classes
+}
+
+/// Every class a conditional can produce, head and chain arms alike.
+///
+/// One walk so the safelist cannot learn about a branch the emitter can pick:
+/// a chain arm missing here would name a class Tailwind was never asked to
+/// generate, and only for the input that reaches that arm.
+fn ternary_classes(ternary: &super::StaticTernaryIr) -> impl Iterator<Item = &String> {
+    ternary
+        .consequent_classes
+        .iter()
+        .chain(ternary.chain_arms.iter().flat_map(|arm| arm.classes.iter()))
+        .chain(ternary.alternate_classes.iter())
 }
 
 /// Build the Tailwind CSS-variable utility for one dynamic property.

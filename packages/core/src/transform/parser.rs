@@ -2094,15 +2094,40 @@ fn conditional_branch_classes(
     Some(lower_static_sz_object(&object))
 }
 
+/// The depth a chained conditional is followed to.
+///
+/// A bound rather than a judgement about style: each arm adds a class list to
+/// the IR and a nesting level to the emitted expression, and a chain long enough
+/// to matter is better served by `szv()`. Past this the whole attribute keeps
+/// the runtime path it had before, which is correct, just not folded.
+const MAX_CONDITIONAL_CHAIN_ARMS: usize = 8;
+
 fn static_ternary_from_conditional(
     conditional: &ConditionalExpression<'_>,
     ctx: ResolveContext<'_>,
 ) -> Option<(StaticTernaryIr, TextSpan)> {
+    // Follow `a ? X : b ? Y : Z` down its else side. Every arm has to lower for
+    // the fold to happen: a chain is a choice, so a branch left unread would
+    // mean emitting a conditional that can pick a class list the compiler never
+    // saw.
+    let mut arms = Vec::new();
+    let mut alternate = &conditional.alternate;
+    while let Expression::ConditionalExpression(next) = unwrap_expression(alternate) {
+        if arms.len() == MAX_CONDITIONAL_CHAIN_ARMS {
+            return None;
+        }
+        arms.push(super::StaticTernaryArmIr {
+            test_span: text_span(next.test.span()),
+            classes: conditional_branch_classes(&next.consequent, ctx)?,
+        });
+        alternate = &next.alternate;
+    }
     Some((
         StaticTernaryIr {
             test_span: text_span(conditional.test.span()),
             consequent_classes: conditional_branch_classes(&conditional.consequent, ctx)?,
-            alternate_classes: conditional_branch_classes(&conditional.alternate, ctx)?,
+            alternate_classes: conditional_branch_classes(alternate, ctx)?,
+            chain_arms: arms,
             bool_class_key: None,
         },
         text_span(conditional.span),
@@ -2128,6 +2153,7 @@ fn static_ternary_from_logical(
             test_span: text_span(logical.left.span()),
             consequent_classes: conditional_branch_classes(&logical.right, ctx)?,
             alternate_classes: Vec::new(),
+            chain_arms: Vec::new(),
             bool_class_key: None,
         },
         text_span(logical.span),
@@ -2346,6 +2372,7 @@ fn static_array_ternary_from_conditional(
         test_span: text_span(conditional.test.span()),
         consequent_classes: branch_classes(&conditional.consequent)?,
         alternate_classes: branch_classes(&conditional.alternate)?,
+        chain_arms: Vec::new(),
         bool_class_key: None,
     })
 }
@@ -3195,6 +3222,9 @@ fn candidate_classes_from_object_expression(
                                 color_opacity_ternary_from_object(&key, nested, ctx, variant_keys)
                             {
                                 classes.extend(ternary.consequent_classes);
+                                classes.extend(
+                                    ternary.chain_arms.into_iter().flat_map(|arm| arm.classes),
+                                );
                                 classes.extend(ternary.alternate_classes);
                             } else {
                                 classes.extend(candidate_classes_from_keyed_object(
@@ -4025,6 +4055,7 @@ fn conditional_spread_ternary_from_object_expression(
         test_span: text_span(conditional.test.span()),
         consequent_classes: consequent,
         alternate_classes: alternate,
+        chain_arms: Vec::new(),
         bool_class_key: None,
     })
 }
@@ -4061,6 +4092,7 @@ fn conditional_class_from_property(
         test_span: text_span(conditional.test.span()),
         consequent_classes: conditional_property_classes(key, consequent, variant_keys),
         alternate_classes: conditional_property_classes(key, alternate, variant_keys),
+        chain_arms: Vec::new(),
         bool_class_key: None,
     })
 }
@@ -4083,6 +4115,7 @@ fn nullable_conditional_class_from_property(
                 test_span: text_span(conditional.test.span()),
                 consequent_classes: Vec::new(),
                 alternate_classes: Vec::new(),
+                chain_arms: Vec::new(),
                 bool_class_key: None,
             },
             None,
@@ -4126,6 +4159,7 @@ fn nullable_conditional_class_from_property(
             } else {
                 present_classes
             },
+            chain_arms: Vec::new(),
             bool_class_key: None,
         },
         dynamic_prop,
@@ -4253,6 +4287,7 @@ fn color_opacity_ternary_from_object(
                     Some(alternate),
                     variant_keys,
                 ),
+                chain_arms: Vec::new(),
                 bool_class_key: None,
             })
         }
@@ -4281,6 +4316,7 @@ fn color_opacity_ternary_from_object(
                     static_op,
                     variant_keys,
                 ),
+                chain_arms: Vec::new(),
                 bool_class_key: None,
             })
         }
@@ -4343,6 +4379,7 @@ fn bool_class_ternary_from_property(
             variant_keys,
         ),
         alternate_classes: Vec::new(),
+        chain_arms: Vec::new(),
         bool_class_key: Some(key.to_string()),
     })
 }

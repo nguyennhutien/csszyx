@@ -121,6 +121,18 @@ const inactive = { bg: 'gray-100', color: 'gray-600' } as const;
 
 Both branches are compiled to static strings — no runtime object merging.
 
+More than two options chain the same way, and compile the same way:
+
+```tsx
+<div sz={isDanger ? danger : isWarning ? warning : normal} />
+// → className={isDanger ? "…" : isWarning ? "…" : "…"}
+```
+
+The emitted expression keeps the nesting you wrote, so `isWarning` is only
+evaluated when `isDanger` is falsy. Up to eight tests compile; past that the
+attribute keeps its runtime path, and a set that long is what
+[`szv()`](/docs/szv) is for.
+
 ## Chained Variables
 
 A variable can reference another variable in its initializer. The compiler resolves the

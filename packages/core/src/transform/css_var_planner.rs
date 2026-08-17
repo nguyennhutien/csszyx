@@ -339,6 +339,12 @@ fn rename_dynamic_prop(attribute: &mut super::SzAttributeIr, prop_index: usize, 
         ternary
             .consequent_classes
             .iter_mut()
+            .chain(
+                ternary
+                    .chain_arms
+                    .iter_mut()
+                    .flat_map(|arm| arm.classes.iter_mut()),
+            )
             .chain(ternary.alternate_classes.iter_mut())
     }) {
         if *class_name == old_class {
