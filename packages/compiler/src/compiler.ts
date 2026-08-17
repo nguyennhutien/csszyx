@@ -1,5 +1,3 @@
-import { generate_token, version as getWasmVersion, init, transform_sz } from '@csszyx/core';
-
 import { stripInvalidColorStrings } from './color-validation.js';
 import type { SzObject } from './transform-core.js';
 import { transform as jsTransform } from './transform-core.js';
@@ -32,6 +30,21 @@ function foldRecoveryCodePoint(hash: number, codePoint: number): number {
     return foldRecoveryHash(foldRecoveryHash(hash, highSurrogate), lowSurrogate);
 }
 
+/** The four exports this module consumes from the wasm core. */
+interface WasmCoreModule {
+    init(): void;
+    version(): string;
+    transform_sz(sz: Record<string, unknown>): string;
+    generate_token(
+        component: string,
+        filePath: string,
+        line: number,
+        column: number,
+        mode: string,
+        buildId: string,
+    ): string;
+}
+
 /**
  * Core Compiler class for csszyx.
  *
@@ -40,7 +53,19 @@ function foldRecoveryCodePoint(hash: number, codePoint: number): number {
  */
 export class CsszyxCompiler {
     private static instance: CsszyxCompiler;
-    private wasmLoaded = false;
+    /**
+     * The core, once `init()` has loaded it — and the only record that it is
+     * loaded, so the module and the flag saying it is present cannot disagree.
+     *
+     * Held as state rather than reached through a module-level import because
+     * `@csszyx/core` resolves to a wasm module: a static import put it in the
+     * graph of anything that touched this package, so importing
+     * `@csszyx/compiler` failed outright under runners that cannot read wasm,
+     * and the eight platforms with a native binary instantiated a fallback
+     * nothing was ever going to call. Nothing needed it before `init()`, which
+     * is the one place it is set.
+     */
+    private core: WasmCoreModule | undefined;
 
     /**
      * Private constructor to enforce singleton pattern.
@@ -65,21 +90,22 @@ export class CsszyxCompiler {
      * @returns {Promise<void>} Resolves when WASM is ready.
      */
     public async init(): Promise<void> {
-        if (this.wasmLoaded) {
+        if (this.core) {
             return;
         }
 
         try {
-            // Named init call for @csszyx/core
-            init();
-            this.wasmLoaded = true;
-            console.info(`[csszyx] WASM Core initialized (v${getWasmVersion()})`);
+            // Deferred to here on purpose — see the `core` field.
+            const core = (await import('@csszyx/core')) as unknown as WasmCoreModule;
+            core.init();
+            this.core = core;
+            console.info(`[csszyx] WASM Core initialized (v${core.version()})`);
         } catch (error) {
             console.warn(
                 '[csszyx] Failed to initialize WASM core, falling back to JavaScript transformer',
                 error,
             );
-            this.wasmLoaded = false;
+            this.core = undefined;
         }
     }
 
@@ -90,13 +116,13 @@ export class CsszyxCompiler {
      * @returns {string} The transformed class string.
      */
     public transform(sz: SzObject): string {
-        if (this.wasmLoaded) {
+        if (this.core) {
             // Pre-validate: Rust WASM cannot emit warnings, so we must warn here
             // before handing off to transform_sz. stripInvalidColorStrings returns
             // a clean object with invalid/slash-opacity color strings removed.
             const cleaned = stripInvalidColorStrings(sz as Record<string, unknown>);
             try {
-                return transform_sz(cleaned);
+                return this.core.transform_sz(cleaned);
             } catch (error) {
                 console.warn('[csszyx] WASM transformation failed, using JS fallback', error);
                 // JS path handles its own warnings internally
@@ -113,7 +139,7 @@ export class CsszyxCompiler {
      * @returns {boolean} True if WASM is loaded.
      */
     public isWasmActive(): boolean {
-        return this.wasmLoaded;
+        return this.core !== undefined;
     }
 
     /**
@@ -136,9 +162,9 @@ export class CsszyxCompiler {
         mode: 'csr' | 'dev-only';
         buildId: string;
     }): string {
-        if (this.wasmLoaded) {
+        if (this.core) {
             try {
-                return generate_token(
+                return this.core.generate_token(
                     metadata.component,
                     metadata.filePath,
                     metadata.line,
