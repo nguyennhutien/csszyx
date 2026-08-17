@@ -8,8 +8,10 @@
  * grouped by file so a reader can see where the suite is blind.
  *
  * Deliberately does NOT exit non-zero on survivors. The weekly run reports;
- * it does not gate. Turning it into a gate is a separate decision that needs
- * a known baseline first — see .agent/rules/categories/tdd.md (TDD-5).
+ * it does not gate. Turning it into a gate is a separate decision, and it needs
+ * a known survivor baseline first: without one the first gated run fails on
+ * every pre-existing survivor at once, which reads as the gate being broken
+ * rather than as work to do.
  *
  * Usage: node scripts/mutants-report.mjs <dir-of-shard-artifacts>
  */

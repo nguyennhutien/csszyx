@@ -1,6 +1,8 @@
 /**
- * Phase D foundation POC — verify the oxc-parser + magic-string contract
- * that section #27 of `.agent/workflows/future-roadmap.md` calls for.
+ * Foundation POC — verify the oxc-parser + magic-string contract a port off
+ * Babel depends on: that the parser hands back spans a magic-string splice can
+ * use, so the emit stays byte-identical to the authored source outside the
+ * edits.
  *
  * Not part of the public surface, not part of unbuild entries, not part
  * of `tsc -b` (lives outside `src/`). Lives here only so the test
