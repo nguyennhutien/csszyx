@@ -2544,6 +2544,31 @@ mod tests {
         );
     }
 
+    /// The walk into a variant block does not stop at a colour.
+    ///
+    /// Descent is refused only for a parameter namespace — an object that
+    /// belongs to a property key and carries a colour, where the inner names
+    /// are that property's parameters rather than sz keys. A variant block is
+    /// neither, so setting a colour beside a per-side border style must not
+    /// buy the style a way past the diagnostic.
+    #[test]
+    fn a_colour_beside_a_per_side_border_style_does_not_hide_it() {
+        let file = TransformFile {
+            filename: "/repo/src/Hover.tsx".to_string(),
+            source: "export const App = () => <div sz={{ hover: { color: 'red-500', borderB: 'dashed' } }} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("no per-side border style"),
+            "{diagnostics}"
+        );
+        assert!(diagnostics.contains("borderB"), "{diagnostics}");
+    }
+
     /// A `/` that divides must not read as the start of a comment.
     ///
     /// The guard skips comments so a bracket inside one never counts toward
@@ -2659,5 +2684,171 @@ mod tests {
     #[test]
     fn multibyte_text_carries_no_depth() {
         assert_eq!(super::max_source_nesting_depth("const nhãn = '{{'; ({"), 2);
+    }
+
+    /// A typo inside a static `szr()` argument joins the typo-check surface;
+    /// `dynamic()` stays exempt.
+    ///
+    /// Both calls have their literal classes safelisted, but only szr's object
+    /// is checked like an sz prop: dynamic() owns a runtime dev-warning for
+    /// the same mistake, and its static argument is often a partial base that
+    /// runtime values complete. Flip that gate and both diagnostics move to
+    /// the wrong side at once.
+    #[test]
+    fn a_typo_inside_szr_is_reported_and_dynamic_is_exempt() {
+        let file = TransformFile {
+            filename: "/repo/src/Calls.tsx".to_string(),
+            source: [
+                "import { szr } from 'csszyx';",
+                "import { dynamic } from 'csszyx/dynamic';",
+                "export const a = szr({ pading: 4 });",
+                "export const b = dynamic({ margn: 2 });",
+            ]
+            .join("\n"),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("Unknown property \"pading\""),
+            "{diagnostics}"
+        );
+        assert!(!diagnostics.contains("margn"), "{diagnostics}");
+    }
+
+    /// Every refused szv factory is named, not just the first one recorded.
+    ///
+    /// The disqualified list is deduplicated by name. Invert that membership
+    /// test and the list caps at one entry: the second factory's call sites
+    /// fall back to the generic unknown-function advice, sending the author
+    /// hunting for a different cause than the first factory's identical one.
+    #[test]
+    fn every_refused_factory_is_named_not_just_the_first() {
+        let file = TransformFile {
+            filename: "/repo/src/Two.tsx".to_string(),
+            source: [
+                "import { szv } from 'csszyx';",
+                "export const A = () => <div sz={t({ c: 'blue' })} />;",
+                "export const B = () => <div sz={u({ c: 'blue' })} />;",
+                "const t = szv({ base: { color: 'red-500' }, variants: { c: { blue: { color: 'blue-500' } } } });",
+                "const u = szv({ base: { color: 'red-500' }, variants: { c: { blue: { color: 'blue-500' } } } });",
+            ]
+            .join("\n"),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("szv factory `t()` did not precompile"),
+            "{diagnostics}"
+        );
+        assert!(
+            diagnostics.contains("szv factory `u()` did not precompile"),
+            "{diagnostics}"
+        );
+    }
+
+    /// A typo inside an szv base is as findable as one on an element.
+    ///
+    /// The catalogue's base object rides the same unknown-key pass as sz
+    /// props. The push is guarded on the base being non-empty; invert that
+    /// and every real base skips the check while empty ones enter it — the
+    /// diagnostic disappears exactly where it had something to say.
+    #[test]
+    fn a_typo_inside_an_szv_base_is_reported_like_an_sz_prop() {
+        let file = TransformFile {
+            filename: "/repo/src/Base.tsx".to_string(),
+            source: [
+                "import { szv } from 'csszyx';",
+                "const t = szv({ base: { pading: 4 }, variants: { pad: { sm: { p: 2 } } } });",
+                "export const A = () => <div sz={t({ pad: 'sm' })} />;",
+            ]
+            .join("\n"),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("Unknown property \"pading\""),
+            "{diagnostics}"
+        );
+    }
+
+    /// A boolean in an szv config disqualifies it, and the path says where.
+    ///
+    /// The v1 contract wants string and number leaves, so `underline: true`
+    /// is refused — but by the config checker one layer past the literal
+    /// reader, which accepts booleans. Both layers name the same path, which
+    /// is why deleting the reader's boolean arm changes nothing observable:
+    /// this test pins the surface those two layers agree on.
+    #[test]
+    fn a_boolean_in_an_szv_config_disqualifies_at_its_path() {
+        let file = TransformFile {
+            filename: "/repo/src/Bool.tsx".to_string(),
+            source: [
+                "import { szv } from 'csszyx';",
+                "const t = szv({ base: { underline: true, rounded: 'lg' }, variants: { pad: { sm: { p: 2 }, lg: { p: 8 } } } });",
+                "export const A = () => <div sz={t({ pad: 'sm' })} />;",
+            ]
+            .join("\n"),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("config disqualified at `base.underline`"),
+            "{diagnostics}"
+        );
+    }
+
+    /// `S.card` on an imported binding is reported as the import, by name.
+    ///
+    /// The classifier walks a member chain to its root object. Drop the
+    /// static-member hop and the same expression reads as an anonymous member
+    /// access: the advice loses the one name the author can act on, and stops
+    /// pointing at the export that needs to become a static literal.
+    #[test]
+    fn a_member_read_on_an_import_is_reported_as_the_import() {
+        let file = TransformFile {
+            filename: "/repo/src/Member.tsx".to_string(),
+            source: [
+                "import { styles } from './styles';",
+                "export const A = () => <div sz={styles.card} />;",
+            ]
+            .join("\n"),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("imported binding `styles` could not be read at build time"),
+            "{diagnostics}"
+        );
+    }
+
+    /// Same root, spelled with brackets: `S['card']` walks to the import too.
+    #[test]
+    fn a_computed_member_read_on_an_import_is_reported_as_the_import() {
+        let file = TransformFile {
+            filename: "/repo/src/Computed.tsx".to_string(),
+            source: [
+                "import { styles } from './styles';",
+                "export const A = () => <div sz={styles['card']} />;",
+            ]
+            .join("\n"),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("imported binding `styles` could not be read at build time"),
+            "{diagnostics}"
+        );
     }
 }

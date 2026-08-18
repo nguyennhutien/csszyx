@@ -202,7 +202,8 @@
         },
         "packages/core/src/transform/lower.rs replace < with <= in contains_css_function_call": {
             "count": 1,
-            "verdict": "todo"
+            "verdict": "todo",
+            "why": "distinguishing inputs are degenerate values like 1+(2px) where a paren follows a non-identifier; a test for that shape would be mutant-chasing, revisit if a real value hits it."
         },
         "packages/core/src/transform/lower.rs replace < with <= in format_bg_img_object": {
             "count": 2,
@@ -226,7 +227,8 @@
         },
         "packages/core/src/transform/lower.rs replace || with && in collect_unknown_mask_slot_members": {
             "count": 1,
-            "verdict": "todo"
+            "verdict": "todo",
+            "why": "real but needs a mask fixture: a non-side slot carrying a member named like a side would descend into edge validation and emit spurious diagnostics."
         },
         "packages/core/src/transform/lower.rs replace || with && in format_color_opacity_object": {
             "count": 1,
@@ -245,10 +247,6 @@
             "verdict": "todo"
         },
         "packages/core/src/transform/lower.rs replace || with && in merge_text_size_and_leading": {
-            "count": 1,
-            "verdict": "todo"
-        },
-        "packages/core/src/transform/parser.rs delete ! in collect_szv_catalog_classes": {
             "count": 1,
             "verdict": "todo"
         },
@@ -282,17 +280,14 @@
         },
         "packages/core/src/transform/parser.rs delete match arm Expression::BooleanLiteral(literal) in strict_literal_value_diagnosed": {
             "count": 1,
-            "verdict": "todo"
+            "verdict": "equivalent",
+            "why": "with the arm deleted the literal reader returns Err at the same path the szv config checker rejects a boolean at anyway — base.underline both ways, byte-identical diagnostic; pinned by a_boolean_in_an_szv_config_disqualifies_at_its_path."
         },
         "packages/core/src/transform/parser.rs delete match arm Expression::BooleanLiteral(literal) in strict_static_selection": {
             "count": 1,
             "verdict": "todo"
         },
         "packages/core/src/transform/parser.rs delete match arm Expression::BooleanLiteral(value) in is_absent_sz_expression": {
-            "count": 1,
-            "verdict": "todo"
-        },
-        "packages/core/src/transform/parser.rs delete match arm Expression::ComputedMemberExpression(member) in imported_root_name": {
             "count": 1,
             "verdict": "todo"
         },
@@ -337,10 +332,6 @@
             "verdict": "todo"
         },
         "packages/core/src/transform/parser.rs delete match arm Expression::ParenthesizedExpression(value) in static_object_candidate_from_expression": {
-            "count": 1,
-            "verdict": "todo"
-        },
-        "packages/core/src/transform/parser.rs delete match arm Expression::StaticMemberExpression(member) in imported_root_name": {
             "count": 1,
             "verdict": "todo"
         },
@@ -524,19 +515,11 @@
             "count": 1,
             "verdict": "todo"
         },
-        "packages/core/src/transform/parser.rs replace == with != in CsszyxIrVisitor<'_, '_, 'p>::collect_catalog_call_classes": {
-            "count": 1,
-            "verdict": "todo"
-        },
         "packages/core/src/transform/parser.rs replace == with != in CsszyxIrVisitor<'_, '_, 'p>::emit_pending_szr_fallbacks": {
             "count": 1,
             "verdict": "todo"
         },
         "packages/core/src/transform/parser.rs replace == with != in CsszyxIrVisitor<'_, '_, 'p>::finalize_szr_import_rewrite": {
-            "count": 1,
-            "verdict": "todo"
-        },
-        "packages/core/src/transform/parser.rs replace == with != in CsszyxIrVisitor<'_, '_, 'p>::record_szv_disqualified": {
             "count": 1,
             "verdict": "todo"
         },
@@ -634,7 +617,8 @@
         },
         "packages/core/src/transform/rewrite.rs delete field overwrite from struct UpdateOptions expression in apply_dynamic_style_props": {
             "count": 3,
-            "verdict": "todo"
+            "verdict": "todo",
+            "why": "same string_wizard overwrite question as replace_range."
         },
         "packages/core/src/transform/rewrite.rs delete field overwrite from struct UpdateOptions expression in apply_szr_import_rewrite": {
             "count": 1,
@@ -650,7 +634,8 @@
         },
         "packages/core/src/transform/rewrite.rs delete field overwrite from struct UpdateOptions expression in replace_range": {
             "count": 1,
-            "verdict": "todo"
+            "verdict": "todo",
+            "why": "string_wizard overwrite only differs when edits overlap; needs an input with nested rewrites on one span, may prove equivalent."
         },
         "packages/core/src/transform/rewrite.rs delete field overwrite from struct UpdateOptions expression in rewrite_runtime_fallback_sz_attribute": {
             "count": 1,
