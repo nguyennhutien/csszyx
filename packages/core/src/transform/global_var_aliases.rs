@@ -256,6 +256,62 @@ mod tests {
         assert_eq!(result.variable_map.len(), 2);
     }
 
+    /// Every arm of a chained conditional is renamed, not just the ends.
+    ///
+    /// A class left un-aliased in a middle arm reaches the DOM under a name the
+    /// mangled stylesheet no longer defines — and only for the input that picks
+    /// that arm, so it survives any check that exercises the common path.
+    #[test]
+    fn rewrites_every_arm_of_a_chained_conditional() {
+        let source = "const A=({a,b})=><div sz={a?{bg:'--brand-primary'}:b?{bg:'--brand-middle'}:{bg:'--brand-secondary'}}/>;";
+        let ir = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        })
+        .ir;
+
+        let result = apply_global_var_aliases(
+            &ir,
+            &[
+                GlobalVarAliasEntry {
+                    original: "--brand-primary".to_string(),
+                    alias: "--g0".to_string(),
+                },
+                GlobalVarAliasEntry {
+                    original: "--brand-middle".to_string(),
+                    alias: "--g1".to_string(),
+                },
+                GlobalVarAliasEntry {
+                    original: "--brand-secondary".to_string(),
+                    alias: "--g2".to_string(),
+                },
+            ],
+        );
+
+        let ternary = &result.ir.sz_attributes[0].ternaries[0];
+        assert!(!ternary.chain_arms.is_empty(), "the chain must be parsed");
+        let every_class = ternary
+            .consequent_classes
+            .iter()
+            .chain(ternary.chain_arms.iter().flat_map(|arm| arm.classes.iter()))
+            .chain(ternary.alternate_classes.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert!(
+            every_class
+                .iter()
+                .all(|class_name| !class_name.contains("--brand-")),
+            "{every_class:?}"
+        );
+        assert!(
+            every_class
+                .iter()
+                .any(|class_name| class_name.contains("--g1")),
+            "the middle arm must be renamed too: {every_class:?}"
+        );
+    }
+
     #[test]
     fn rewrites_nested_objects_and_property_ternary_classes() {
         let source = "const A=({on})=><div sz={{hover:{bg:'--brand-primary'},color:on?'--brand-primary':'--brand-secondary'}}/>;";

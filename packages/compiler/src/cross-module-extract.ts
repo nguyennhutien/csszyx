@@ -504,7 +504,13 @@ function importedBindings(body: OxcNode[]): Map<string, ImportedBinding> {
         };
         if (shaped.importKind === 'type') continue;
         const specifier = shaped.source?.value;
+        /* v8 ignore next -- narrowing only: an import declaration always
+           carries a string source; the guard exists so a shape change cannot
+           put a non-string into the specifier field of a forward. */
         if (typeof specifier !== 'string') continue;
+        /* v8 ignore next -- narrowing only: oxc always supplies the array,
+           empty for a side-effect import; the fallback exists so a shape change
+           cannot throw mid-walk. */
         for (const raw of shaped.specifiers ?? []) {
             readImportSpecifier(raw, specifier, bindings);
         }
@@ -530,6 +536,8 @@ function readImportSpecifier(
         local?: { type: string; name?: string };
     };
     const local = shaped.local?.name;
+    /* v8 ignore next -- narrowing only: every import specifier binds a local
+       Identifier, including the string-named and default forms. */
     if (shaped.local?.type !== 'Identifier' || local === undefined) return;
     if (raw.type === 'ImportNamespaceSpecifier') {
         bindings.set(local, { specifier: undefined, importedName: local });

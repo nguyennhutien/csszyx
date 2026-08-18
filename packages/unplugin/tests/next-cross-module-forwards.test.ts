@@ -118,6 +118,104 @@ describe('a barrel on the Turbopack lane', () => {
         expect(objects?.['../index']).toEqual({ cardSz: { p: 7 }, rowSz: { m: 2 } });
     });
 
+    it('stops when the chain outruns the hop limit', () => {
+        // Depth is capped on this lane too, and it must be the SAME cap: a
+        // chain that folds under the prescan and falls back under Turbopack
+        // would ship different CSS for the same source.
+        const files: Record<string, string> = {
+            'src/h0.ts': 'export const LAYER = { z: 10 };\n',
+        };
+        for (let hop = 1; hop <= 12; hop += 1) {
+            files[`src/h${hop}.ts`] = `export { LAYER } from './h${hop - 1}';\n`;
+        }
+        const root = projectWith(files);
+
+        expect(
+            resolve(root, "import { LAYER } from '../h3';\n").statics.szObjects?.['../h3']?.LAYER,
+        ).toEqual({ z: 10 });
+        expect(
+            resolve(root, "import { LAYER } from '../h12';\n").statics.szObjects,
+        ).toBeUndefined();
+    });
+
+    it('resolves nothing when the provider does not export that name', () => {
+        const root = projectWith({
+            'src/styles.ts': 'export const other = { p: 7 };\n',
+            'src/index.ts': "export { cardSz } from './styles';\n",
+        });
+
+        expect(
+            resolve(root, "import { cardSz } from '../index';\n").statics.szObjects,
+        ).toBeUndefined();
+    });
+
+    it('resolves each name of a multi-link barrel through its own link', () => {
+        const root = projectWith({
+            'src/pad.ts': 'export const padSz = { p: 4 };\n',
+            'src/gap.ts': 'export const gapSz = { gap: 2 };\n',
+            'src/index.ts': "export { padSz } from './pad';\nexport { gapSz } from './gap';\n",
+        });
+
+        expect(
+            resolve(root, "import { padSz, gapSz } from '../index';\n").statics.szObjects?.[
+                '../index'
+            ],
+        ).toEqual({ padSz: { p: 4 }, gapSz: { gap: 2 } });
+    });
+
+    it('lets a name the barrel declares win over a link of the same name', () => {
+        const root = projectWith({
+            'src/styles.ts': 'export const cardSz = { p: 7 };\n',
+            'src/index.ts': "export { cardSz } from './styles';\nexport const cardSz = { m: 9 };\n",
+        });
+
+        expect(
+            resolve(root, "import { cardSz } from '../index';\n").statics.szObjects?.['../index'],
+        ).toEqual({ cardSz: { m: 9 } });
+    });
+
+    it('reads a provider once when two specifiers reach it', () => {
+        // Two barrels forwarding to one module: the second walk must answer
+        // from the cache rather than parse the file again.
+        const root = projectWith({
+            'src/styles.ts': 'export const cardSz = { p: 7 };\n',
+            'src/one.ts': "export { cardSz } from './styles';\n",
+            'src/two.ts': "export { cardSz as card } from './styles';\n",
+        });
+
+        const resolved = resolve(
+            root,
+            "import { cardSz } from '../one';\nimport { card } from '../two';\n",
+        );
+
+        expect(resolved.statics.szObjects?.['../one']?.cardSz).toEqual({ p: 7 });
+        expect(resolved.statics.szObjects?.['../two']?.card).toEqual({ p: 7 });
+    });
+
+    it('follows a link written through a tsconfig alias', () => {
+        // A `paths` entry may offer several candidate roots, so the walk has to
+        // keep probing past the ones that hold nothing rather than stop at the
+        // first miss — otherwise the alias resolves only when its first
+        // candidate happens to be the right one.
+        const root = projectWith({
+            'app/tokens.ts': 'export const cardSz = { p: 7 };\n',
+            'app/index.ts': "export { cardSz } from '@/app/tokens';\n",
+            'tsconfig.json': JSON.stringify({
+                compilerOptions: { paths: { '@/*': ['./missing/*', './*'] } },
+            }),
+        });
+
+        const resolved = resolveNextCrossModule({
+            root,
+            filename: join(root, 'app/ui/page.tsx'),
+            source: "import { cardSz } from '../index';\n",
+            importedStaticSz: true,
+        });
+
+        expect(resolved.statics.szObjects?.['../index']?.cardSz).toEqual({ p: 7 });
+        expect(resolved.providers).toContain(join(root, 'app/tokens.ts'));
+    });
+
     it('resolves nothing when the forward leaves the project', () => {
         const root = projectWith({ 'src/index.ts': "export { LAYER } from 'some-package';\n" });
 

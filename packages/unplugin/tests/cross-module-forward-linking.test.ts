@@ -153,7 +153,12 @@ describe('chains and their limits', () => {
     it('terminates on a cycle instead of resolving forever', () => {
         // Two barrels forwarding to each other is a real thing to write, and it
         // is the shape that turns a naive follow into a hang.
+        //
+        // The unrelated value matters: with nothing declared anywhere the
+        // resolver short-circuits on an empty registry and the walk never runs,
+        // so the test would pass without ever reaching the cycle guard.
         const built = project({
+            '/app/src/other.ts': 'export const other = { p: 1 };',
             '/app/src/a.ts': "export { LAYER } from './b';",
             '/app/src/b.ts': "export { LAYER } from './a';",
         });
@@ -185,7 +190,10 @@ describe('chains and their limits', () => {
 
 describe('a forward that answers nothing', () => {
     it('resolves nothing when the provider is outside the registry', () => {
+        // The unrelated value keeps the registry non-empty, so the specifier is
+        // really walked and found wanting rather than skipped wholesale.
         const built = project({
+            '/app/src/other.ts': 'export const other = { p: 1 };',
             '/app/src/index.ts': "export { LAYER } from 'some-package';",
         });
 
@@ -227,6 +235,73 @@ describe('a forward that answers nothing', () => {
         expect(
             szObjectsFor(built, '/app/src/ui/Card.tsx', "import { cardSz } from '../index';"),
         ).toBeUndefined();
+    });
+});
+
+describe('a barrel with more than one link', () => {
+    it('resolves each name through its own link', () => {
+        const built = project({
+            '/app/src/pad.ts': 'export const padSz = { p: 4 };',
+            '/app/src/gap.ts': 'export const gapSz = { gap: 2 };',
+            '/app/src/index.ts': "export { padSz } from './pad';\nexport { gapSz } from './gap';",
+        });
+
+        expect(
+            szObjectsFor(built, '/app/src/ui/Card.tsx', "import { padSz, gapSz } from '../index';"),
+        ).toEqual({ '../index': { padSz: { p: 4 }, gapSz: { gap: 2 } } });
+    });
+
+    it('lets a name the barrel declares win over a link of the same name', () => {
+        // Malformed input, but the resolver has to pick one answer rather than
+        // depend on which pass ran last. The declaration is the value the
+        // module actually holds.
+        const built = project({
+            '/app/src/styles.ts': 'export const cardSz = { p: 4 };',
+            '/app/src/index.ts':
+                "export { cardSz } from './styles';\nexport const cardSz = { m: 9 };",
+        });
+
+        expect(
+            szObjectsFor(built, '/app/src/ui/Card.tsx', "import { cardSz } from '../index';"),
+        ).toEqual({ '../index': { cardSz: { m: 9 } } });
+    });
+
+    it('picks the right link when the module it points at has several', () => {
+        // Reached through ANOTHER barrel, so the lookup has to search the inner
+        // module's links by name rather than take the first one.
+        const built = project({
+            '/app/src/pad.ts': 'export const padSz = { p: 4 };',
+            '/app/src/gap.ts': 'export const gapSz = { gap: 2 };',
+            '/app/src/inner.ts': "export { padSz } from './pad';\nexport { gapSz } from './gap';",
+            '/app/src/index.ts': "export { gapSz } from './inner';",
+        });
+
+        expect(
+            szObjectsFor(built, '/app/src/ui/Card.tsx', "import { gapSz } from '../index';"),
+        ).toEqual({ '../index': { gapSz: { gap: 2 } } });
+    });
+
+    it('resolves a link written through a project alias', () => {
+        // An alias offers several candidate bases, so the walk has to keep
+        // probing past the ones that match nothing.
+        const built = project({
+            '/app/src/tokens.ts': 'export const cardSz = { p: 4 };',
+            '/app/src/index.ts': "export { cardSz } from '@/tokens';",
+        });
+        const aliases = [
+            { find: '@/', replacement: '/app/nowhere/', exact: false },
+            { find: '@/', replacement: '/app/src/', exact: false },
+        ];
+
+        expect(
+            resolveCrossModuleStaticsFor(
+                built.registry,
+                '/app/src/ui/Card.tsx',
+                "import { cardSz } from '../index';",
+                aliases,
+                built.forwards,
+            ).szObjects,
+        ).toEqual({ '../index': { cardSz: { p: 4 } } });
     });
 });
 

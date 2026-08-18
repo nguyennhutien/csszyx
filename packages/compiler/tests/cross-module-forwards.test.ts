@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { extractCrossModuleForwards } from '../src/cross-module-extract.js';
+import { VAR_HOSTILE_NO_VAR_FORM, VAR_HOSTILE_WRONG_PROPERTY } from '../src/var-hostile-keys.js';
 
 /**
  * Extract forwards from one module.
@@ -116,7 +117,46 @@ describe('what is not a forward', () => {
         expect(forwards("export * as S from './styles';")).toEqual([]);
     });
 
+    it('ignores a type-only import re-exported by name', () => {
+        // The binding exists in the type world only, so forwarding it would
+        // record a link to a value that is not there at runtime.
+        expect(forwards("import type { C } from './styles';\nexport { C };")).toEqual([]);
+        expect(forwards("import { type C } from './styles';\nexport { C };")).toEqual([]);
+    });
+
+    it('ignores a string-named import and a string-named export', () => {
+        // Legal syntax, but not a name a token module is written with — and a
+        // re-export cannot spell it either, so a link keyed by one resolves for
+        // nobody.
+        expect(forwards('import { "a-b" as c } from \'./styles\';\nexport { c };')).toEqual([]);
+        expect(forwards('export { cardSz as "a-b" } from \'./styles\';')).toEqual([]);
+    });
+
+    it('is unbothered by an import that binds nothing', () => {
+        // A side-effect import has no specifiers at all; walking it must not
+        // throw and must not invent a binding.
+        expect(forwards("import './styles';\nexport { cardSz } from './base';")).toEqual([
+            { exportName: 'cardSz', importedName: 'cardSz', specifier: './base' },
+        ]);
+    });
+
     it('reads nothing from a module with no export at all', () => {
         expect(forwards("import { cardSz } from './styles';\nconsole.log(cardSz);")).toEqual([]);
+    });
+});
+
+describe('the var-hostile key sets', () => {
+    it('keeps the two reasons apart', () => {
+        // A key belongs to exactly one of them: one set is "the var form emits
+        // a class for a DIFFERENT property", the other is "there is no var form
+        // at all". A key in both would make the diagnostic depend on which set
+        // a reader consulted first.
+        const both = [...VAR_HOSTILE_WRONG_PROPERTY].filter(key =>
+            VAR_HOSTILE_NO_VAR_FORM.has(key),
+        );
+
+        expect(both).toEqual([]);
+        expect(VAR_HOSTILE_WRONG_PROPERTY.size).toBeGreaterThan(0);
+        expect(VAR_HOSTILE_NO_VAR_FORM.size).toBeGreaterThan(0);
     });
 });

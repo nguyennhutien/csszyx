@@ -2453,4 +2453,94 @@ mod tests {
         );
         assert!(!diagnostics.contains("numeric key"), "{diagnostics}");
     }
+
+    /// A style keyword on a per-side border key is reported, not silently kept.
+    ///
+    /// `borderB: 'none'` lowers to `border-b-none`, which Tailwind does not
+    /// serve — the element would name a rule nothing generates. Dropping the
+    /// class without saying so would leave the author looking at an unstyled
+    /// border with nothing to search for, so the drop and the message ship
+    /// together and are pinned together.
+    #[test]
+    fn a_border_style_keyword_on_one_side_is_reported_where_it_is_written() {
+        let file = TransformFile {
+            filename: "/repo/src/Side.tsx".to_string(),
+            source: "export const App = () => <div sz={{ borderB: 'none' }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("no per-side border style"),
+            "{diagnostics}"
+        );
+        assert!(diagnostics.contains("borderB"), "{diagnostics}");
+        assert!(
+            !result
+                .classes
+                .iter()
+                .any(|class| class.contains("border-b-none")),
+            "the dead class must not reach the safelist: {:?}",
+            result.classes
+        );
+    }
+
+    /// The same keyword nested under a variant is reported too.
+    ///
+    /// The collector walks nested objects, and a per-side border style inside
+    /// `hover` is exactly as dead as one at the top level — reporting only the
+    /// top level would make the diagnostic depend on where the author put it.
+    #[test]
+    fn a_per_side_border_style_is_found_inside_a_variant() {
+        let file = TransformFile {
+            filename: "/repo/src/Nested.tsx".to_string(),
+            source: "export const App = () => <div sz={{ hover: { borderT: 'dashed' } }} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("no per-side border style"),
+            "{diagnostics}"
+        );
+        assert!(
+            !result
+                .classes
+                .iter()
+                .any(|class| class.contains("border-t-dashed")),
+            "{:?}",
+            result.classes
+        );
+    }
+
+    /// A per-side border WIDTH still compiles, which is the whole point.
+    ///
+    /// The drop keys on the value, not the key: refusing `borderB` outright
+    /// would take a working utility with it.
+    #[test]
+    fn a_per_side_border_width_is_untouched() {
+        let file = TransformFile {
+            filename: "/repo/src/Width.tsx".to_string(),
+            source: "export const App = () => <div sz={{ borderB: 2 }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|diagnostic| !diagnostic.contains("no per-side border style")),
+            "{:?}",
+            result.diagnostics
+        );
+        assert!(
+            result.classes.iter().any(|class| class == "border-b-2"),
+            "{:?}",
+            result.classes
+        );
+    }
 }

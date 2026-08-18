@@ -5805,6 +5805,85 @@ export const cls = szr(localCard({ pad: 'sm' }));";
         assert_eq!(&source[span.start as usize..span.end as usize], "a && b");
     }
 
+    /// A chain longer than the cap keeps the runtime path whole.
+    ///
+    /// The cap exists so an emitted expression stays something a person can
+    /// read in a stack trace, and so the fold cannot be made arbitrarily
+    /// expensive by input. Refusing the WHOLE chain rather than the tail is the
+    /// part worth pinning: a partial fold would emit a conditional that can
+    /// pick a class list the compiler never lowered.
+    /// Naming a refused factory must not disturb the attributes around it.
+    ///
+    /// The pass rewrites a fallback diagnostic in place, so it walks every sz
+    /// attribute in the file — including ones that compiled cleanly and ones
+    /// that fell back for an unrelated reason. Rewriting either would blame a
+    /// factory for a position that never called it.
+    #[test]
+    fn naming_a_refused_factory_leaves_other_attributes_alone() {
+        let source = "\
+import { szv } from 'csszyx';
+const card = szv({ base: { color: 'main' }, variants: { s: { lg: { color: 'sub' } } } });
+export const A = ({ v }) => <div sz={card({ s: v })} />;
+export const B = () => <div sz={{ p: 4 }} />;
+export const C = ({ styles }) => <div sz={styles} />;
+";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        let kinds = parsed
+            .ir
+            .sz_attributes
+            .iter()
+            .map(|attribute| {
+                attribute
+                    .runtime_fallback_diagnostic
+                    .as_ref()
+                    .map(|diagnostic| diagnostic.kind)
+            })
+            .collect::<Vec<_>>();
+
+        assert!(
+            kinds.contains(&Some(super::super::RuntimeFallbackKindIr::SzvFactory)),
+            "the factory call must be renamed: {kinds:?}"
+        );
+        assert!(
+            kinds.contains(&None),
+            "a clean attribute must keep no diagnostic: {kinds:?}"
+        );
+        assert!(
+            kinds
+                .iter()
+                .any(|kind| matches!(kind, Some(other) if *other != super::super::RuntimeFallbackKindIr::SzvFactory)),
+            "an unrelated fallback must keep its own kind: {kinds:?}"
+        );
+    }
+
+    #[test]
+    fn parser_shell_refuses_a_chain_past_the_arm_cap() {
+        use std::fmt::Write as _;
+
+        // `t0 ? {…}` followed by `arms` nested alternates and a final `{…}`.
+        let chain_of = |arms: usize| {
+            let mut chain = String::from("t0 ? { p: 0 }");
+            for arm in 1..=arms {
+                let _ = write!(chain, " : t{arm} ? {{ p: {arm} }}");
+            }
+            chain.push_str(" : { p: 99 }");
+            chain
+        };
+
+        assert!(
+            ternaries_for(&chain_of(super::MAX_CONDITIONAL_CHAIN_ARMS + 1)).is_empty(),
+            "a chain past the cap must not fold at all"
+        );
+
+        // One arm shorter is inside the cap and still folds, so the refusal is
+        // the cap doing its job rather than the chain never working.
+        assert!(!ternaries_for(&chain_of(super::MAX_CONDITIONAL_CHAIN_ARMS)).is_empty());
+    }
+
     #[test]
     fn parser_shell_refuses_to_fold_an_or_guard() {
         // `||` yields its LEFT operand when the test passes, and that value can

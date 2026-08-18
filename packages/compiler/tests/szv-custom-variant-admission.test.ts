@@ -24,6 +24,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { qualifyStaticSzvConfig } from '../src/szv-precompile.js';
 import { ENGINES } from './tri-engine-harness.js';
 
 const IMPORT = "import { szv, szr } from '@csszyx/runtime';\n";
@@ -141,5 +142,27 @@ describe.each(ENGINES)('what must still disqualify (%s)', (_name, engine) => {
                 "{ s: 'lg' }",
             ),
         ).toEqual([]);
+    });
+});
+
+describe('the value decides, not the key', () => {
+    it('admits an unknown key holding an object and refuses one holding a scalar', () => {
+        // The registry extractor qualifies a config before recording it, so
+        // this predicate is what decides whether an imported factory can be
+        // precompiled at all. An unknown key with an OBJECT value is a variant
+        // prefix and composes into the path; the same key with a SCALAR lowers
+        // to `key-value`, which may be another key's class under a name this
+        // walk cannot recognise, so it still refuses.
+        const nested = qualifyStaticSzvConfig({
+            base: { px: 2, 'data-[active]': { px: 4 } },
+            variants: { s: { lg: { m: 2 } } },
+        });
+        expect(nested).not.toBeNull();
+
+        const scalar = qualifyStaticSzvConfig({
+            base: { px: 2 },
+            variants: { s: { lg: { nonsenseKey: 'x' } } },
+        });
+        expect(scalar).toBeNull();
     });
 });

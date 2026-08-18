@@ -234,6 +234,15 @@ describe('a plain exported style object, through a real build', () => {
             true,
         ],
         [
+            'a barrel forwarding two names out of one module',
+            {
+                'src/base.ts':
+                    "export const cardSz = { p: 7, rounded: 'lg' };\nexport const rowSz = { m: 3 };",
+                'src/styles.ts': "export { cardSz, rowSz } from './base.ts';",
+            },
+            true,
+        ],
+        [
             'a barrel two modules deep',
             {
                 'src/base.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
