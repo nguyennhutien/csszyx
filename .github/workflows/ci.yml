@@ -287,7 +287,7 @@ jobs:
       - name: Check runtime box-role map is current
         run: pnpm gen:box-role:check
 
-      # The three engines must print identical sz runtime-fallback wording — a
+      # Both engine builds must print identical sz runtime-fallback wording — a
       # build can switch between them with `build.parser`, and text that changes
       # on a parser flip reads as a behaviour change. TypeScript imports the
       # matrix; Rust gets a generated copy. Fail if the copy is stale.

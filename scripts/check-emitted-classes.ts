@@ -14,7 +14,7 @@
  * point Tailwind's own prettier plugin, IntelliSense server, upgrade tool and
  * CLI use, so it cannot be dropped without breaking those first.
  *
- * Input is the tri-engine parity corpus, which already pins one emitted class
+ * Input is the cross-artifact parity corpus, which already pins one emitted class
  * string per sz input, so the whole mapping surface is covered for free.
  *
  * Usage:

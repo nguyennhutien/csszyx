@@ -343,7 +343,7 @@ function dimensionsConflict(dimensions: string[][][]): boolean {
  *
  * `String(2)` is `"2"` in JavaScript; a non-integral or unsafe number has
  * float-formatting edge cases the Rust mirror must not re-implement, so those
- * disqualify (defaults) or stay dynamic (selections) on all three engines.
+ * disqualify (defaults) or stay dynamic (selections) on both engine builds.
  *
  * @param value - Numeric literal value.
  * @returns True for a safe-integer value.
@@ -568,7 +568,7 @@ export interface MaybeSpan {
 /**
  * Whether a factory call sits inside a source range the sz rewrite replaces.
  *
- * All three engines splice the precompiled pick over the call's own bytes.
+ * Both engine builds splice the precompiled pick over the call's own bytes.
  * When those bytes are inside an `sz` attribute — `sz={[{ p: 4 }, szr(f())]}`
  * — the sz rewrite has already replaced that whole range with a generated
  * expression, and neither span-based engine can edit text it has replaced:
@@ -973,7 +973,7 @@ export function singleDimensionPickAllowed(
  * Coerce one selection value under the tri-lane static contract: string,
  * boolean, or safe-integer values only. Everything else — null and undefined
  * included — returns null and takes the dynamic path, where the runtime picker
- * applies the exact JS semantics without three engines re-implementing them.
+ * applies the exact JS semantics without each build re-implementing them.
  *
  * @param value - One statically evaluated selection value.
  * @returns The value when parity-safe, null otherwise.

@@ -242,6 +242,34 @@ pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(St
 /// `p-1.4` generates no CSS, and a unitless bracket is no escape (`padding:
 /// 1.4` is invalid CSS). Same descent rules as `collect_unknown_sz_keys`;
 /// `leading` is excluded because it falls back to the unitless-ratio bracket.
+/// Collect removed boolean-sugar aliases carrying `true`, for the diagnostic.
+///
+/// The `true` form is the one that lost its meaning: the same keys still take
+/// values in their own right (`flex: 1` is the flex shorthand), so keying on
+/// the key alone would report a line that compiles correctly.
+///
+/// Same descent rules as `collect_dead_spacing_steps`: variant nesting is
+/// walked, parameter namespaces are not.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_removed_boolean_sugar(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::Boolean(true) => {
+                if is_removed_boolean_sugar(&property.key) {
+                    out.push((property.key.clone(), property.span.start));
+                }
+            }
+            StaticSzValue::Object(nested) => {
+                if property_prefix(&property.key).is_some() {
+                    continue;
+                }
+                collect_removed_boolean_sugar(nested, out);
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_dead_spacing_steps(
     object: &StaticSzObject,

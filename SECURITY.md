@@ -113,7 +113,7 @@ that backs each claim:
   `native-resolution-security` tests, and a parser fuzz target
   (`parser_panic_fuzz`) guards against panics on malformed input.
 - **(b) Output safety.** Class-name and CSS generation is deterministic and
-  escaped; the three engines are parity-gated so a change cannot silently
+  escaped; the engine's two builds are parity-gated so a change cannot silently
   diverge into unsafe output. Runtime helpers do not build HTML.
 - **(c) Supply chain.** Dependencies are reviewed by Dependabot with
   SHA-pinned GitHub Actions and a cooldown; `npm audit` and `cargo audit`

@@ -704,6 +704,7 @@ fn unknown_property_diagnostics(
     let mut out = Vec::new();
     let mut unknown = Vec::new();
     let mut dead_steps = Vec::new();
+    let mut removed_sugar = Vec::new();
     let mut border_side_styles = Vec::new();
     let mut property_objects = Vec::new();
     let mut mask_members = Vec::new();
@@ -772,6 +773,25 @@ fn unknown_property_diagnostics(
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
+            ));
+        }
+        removed_sugar.clear();
+        super::lower::collect_removed_boolean_sugar(object, &mut removed_sugar);
+        for (key, offset) in &removed_sugar {
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, *offset);
+            // The build lane is the ONLY one that sees a statically extracted
+            // prop: the runtime warning for these keys never fires for source
+            // this pass compiled, so silence here meant a style vanished with
+            // nothing to search for. Names the canonical spelling and the
+            // codemod, mirroring the runtime channel's wording.
+            let replacement = super::generated::tables::removed_boolean_sugar_replacement(key);
+            let Some((canonical, value)) = replacement else {
+                continue;
+            };
+            out.push(format!(
+                "[csszyx] \"{key}\" boolean sugar was removed at {location}:{line}. Use {{ {canonical}: '{value}' }} instead, or run `csszyx migrate`."
             ));
         }
         border_side_styles.clear();
@@ -1879,7 +1899,7 @@ mod tests {
         assert!(result.metadata.uses_runtime);
         assert!(result.classes.is_empty());
         // Byte-identical to the Babel lane's diagnostic for this source — the
-        // fallback matrix is a three-engine parity surface (ADR 0011).
+        // fallback matrix is a cross-artifact parity surface (ADR 0011).
         assert_eq!(
             result.diagnostics,
             vec![String::from(

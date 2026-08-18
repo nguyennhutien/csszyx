@@ -6,7 +6,7 @@
  * resolves each transformed file's import specifiers against it: relative ones
  * against the importing file, aliased ones through the project's alias table
  * (see `specifier-aliases`). The result feeds `options.crossModuleStatics`
- * identically into all three engines, which then run their local precompile
+ * identically into both engine builds, which then run their local precompile
  * machinery on the imported factories.
  *
  * Pure functions over an explicit registry map, split out of the plugin

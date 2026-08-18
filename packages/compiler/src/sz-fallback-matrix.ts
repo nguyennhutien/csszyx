@@ -61,7 +61,7 @@ export const SZ_FALLBACK_PATH_PLACEHOLDER = '{path}';
 /**
  * Reason and guidance per expression kind.
  *
- * The wording is a compatibility surface: three engines emit it and tests
+ * The wording is a compatibility surface: both engine builds emit it and tests
  * assert it byte for byte, so treat edits here as user-visible changes.
  */
 export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTemplate>> = {
@@ -138,7 +138,7 @@ export function describeSzFallback(
  * Fallback name used when a callee has no statically readable name.
  *
  * `sz={obj[key]()}` and `sz={(cond ? a : b)()}` reach the call arm with nothing
- * to print; all three engines emit this same stand-in rather than each choosing
+ * to print; both engine builds emit this same stand-in rather than each choosing
  * their own.
  */
 export const SZ_FALLBACK_UNKNOWN_CALLEE = '?';
@@ -258,7 +258,7 @@ function szFallbackKindOf(message: string): SzFallbackKind | undefined {
  * Owned by the module that RENDERS the labels, so routing built on this
  * cannot drift from the wording the way an inlined substring match would —
  * change a label above and this classifier changes with it. (Structured
- * diagnostic fields across the three engines are the fuller answer; until
+ * diagnostic fields across both engine builds are the fuller answer; until
  * that contract exists, the classifier is the single point of coupling.)
  *
  * @param message - One raw diagnostic line as an engine emitted it.

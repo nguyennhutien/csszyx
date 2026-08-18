@@ -1912,7 +1912,7 @@ fn jsx_attribute_name<'a>(name: &'a JSXAttributeName<'a>) -> Option<&'a str> {
 /// Convert a value allowed inside an `szs` slot object: string / number /
 /// boolean literals, a negated number, or a nested object of the same.
 /// Deliberately STRICTER than the sz path (no identifiers, spreads,
-/// conditionals, parens, or `as` casts) so all three engines can enforce the
+/// conditionals, parens, or `as` casts) so both engine builds can enforce the
 /// exact same contract without a scope resolver.
 fn static_szs_value(expression: &Expression<'_>) -> Option<StaticSzValue> {
     match expression {

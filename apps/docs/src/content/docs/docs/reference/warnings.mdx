@@ -221,7 +221,7 @@ half of that gate and do reach the console.
 | `[csszyx] "{key}" was removed{ at LOC}: {note}.` | The removed key emits no class. Apply the replacement shape from the note. |
 | `[csszyx] Use the canonical key "{suggestion}" instead of "{key}"{ at LOC}.` | The alias emits no class; rename it to the canonical key. |
 | `[csszyx] sz received a numeric key "{key}"{ at LOC}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored.` | You probably passed an array to `sz={{ … }}`. |
-| `[csszyx] "{rawKey}" boolean sugar was removed. Use { {key}: '{value}' } instead, or run ``csszyx migrate``.` | **browser too** |
+| `[csszyx] "{rawKey}" boolean sugar was removed{ at LOC}. Use { {key}: '{value}' } instead, or run ``csszyx migrate``.` | **browser too.** The build lane reports it as well, with the position — a statically extracted prop never reaches the runtime, so that is the only channel that can tell you. |
 
 When a warning has no source location, csszyx appends a traceability tail so
 you can find it:

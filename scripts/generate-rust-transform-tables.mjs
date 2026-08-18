@@ -55,6 +55,7 @@ function readTables() {
             booleanOnlyDynamicKeys: core.objectKeys('BOOLEAN_ONLY_DYNAMIC_VOCABULARY'),
             knownSpecialProperties: core.stringSet('KNOWN_SPECIAL_PROPERTIES'),
             removedBooleanSugar: core.objectKeys('REMOVED_BOOLEAN_SUGAR'),
+            removedBooleanSugarReplacement: core.objectOfStringObjects('REMOVED_BOOLEAN_SUGAR'),
             knownVariants: core.stringSet('KNOWN_VARIANTS'),
             ariaStates: core.stringSet('ARIA_STATES'),
             specialVariants: core.stringSet('SPECIAL_VARIANTS'),
@@ -76,6 +77,7 @@ function renderRust({
     booleanOnlyDynamicKeys,
     knownSpecialProperties,
     removedBooleanSugar,
+    removedBooleanSugarReplacement,
     knownVariants,
     ariaStates,
     specialVariants,
@@ -166,6 +168,18 @@ ${renderMatchPatterns(removedBooleanSugar)}
     )
 }
 
+/// The canonical key and value that replace a removed boolean-sugar alias.
+///
+/// The pair, not a sentence: the build lane and the runtime lane word the
+/// report differently, and baking one of their sentences into the table would
+/// make the other read as a quotation of it.
+pub(crate) fn removed_boolean_sugar_replacement(key: &str) -> Option<(&'static str, &'static str)> {
+    match key {
+${renderPairArms(removedBooleanSugarReplacement)}
+        _ => None,
+    }
+}
+
 /// Returns true when a key is a known csszyx variant name.
 pub(crate) fn is_known_variant(key: &str) -> bool {
     matches!(
@@ -216,6 +230,15 @@ ${renderMatchPatterns(varHostileNoVarForm)}
 function renderMatchArms(entries) {
     return entries
         .map(([key, value]) => `        ${rustString(key)} => Some(${rustString(value)}),`)
+        .join('\n');
+}
+
+function renderPairArms(entries) {
+    return entries
+        .map(([key, fields]) => {
+            const shape = Object.fromEntries(fields);
+            return `        ${rustString(key)} => Some((${rustString(shape.key)}, ${rustString(shape.value)})),`;
+        })
         .join('\n');
 }
 

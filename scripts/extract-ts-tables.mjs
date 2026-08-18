@@ -149,6 +149,35 @@ export function readTableSource(filePath) {
         },
 
         /**
+         * `{ outer: { inner: 'value' } }` as entries, in source order.
+         *
+         * One table holds a removed key's replacement as a SHAPE — the
+         * canonical key and the value to put on it — so a single string cannot
+         * carry it and `stringObject` cannot read it.
+         *
+         * @param name - The declared name.
+         * @returns Outer key paired with its inner key/value pairs.
+         */
+        objectOfStringObjects(name) {
+            return objectProperties(name).map(property => {
+                const outer = keyText(name, property.name);
+                if (!ts.isObjectLiteralExpression(property.initializer)) {
+                    throw new Error(`${name}.${outer} in ${label} must be an object literal`);
+                }
+                const inner = property.initializer.properties.map(member => {
+                    if (!ts.isPropertyAssignment(member)) {
+                        throw new Error(`${name}.${outer} in ${label} must be plain properties`);
+                    }
+                    return [
+                        keyText(`${name}.${outer}`, member.name),
+                        stringText(`${name}.${outer}`, member.initializer),
+                    ];
+                });
+                return [outer, inner];
+            });
+        },
+
+        /**
          * The keys of an object-shaped table, in source order.
          *
          * @param name - The declared name.

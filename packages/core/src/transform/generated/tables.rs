@@ -630,6 +630,52 @@ pub(crate) fn is_removed_boolean_sugar(key: &str) -> bool {
     )
 }
 
+/// The canonical key and value that replace a removed boolean-sugar alias.
+///
+/// The pair, not a sentence: the build lane and the runtime lane word the
+/// report differently, and baking one of their sentences into the table would
+/// make the other read as a quotation of it.
+pub(crate) fn removed_boolean_sugar_replacement(key: &str) -> Option<(&'static str, &'static str)> {
+    match key {
+        "block" => Some(("display", "block")),
+        "inline" => Some(("display", "inline")),
+        "inlineBlock" => Some(("display", "inline-block")),
+        "flex" => Some(("display", "flex")),
+        "inlineFlex" => Some(("display", "inline-flex")),
+        "grid" => Some(("display", "grid")),
+        "inlineGrid" => Some(("display", "inline-grid")),
+        "hidden" => Some(("display", "none")),
+        "contents" => Some(("display", "contents")),
+        "table" => Some(("display", "table")),
+        "tableRow" => Some(("display", "table-row")),
+        "tableCell" => Some(("display", "table-cell")),
+        "flowRoot" => Some(("display", "flow-root")),
+        "listItem" => Some(("display", "list-item")),
+        "static" => Some(("position", "static")),
+        "fixed" => Some(("position", "fixed")),
+        "absolute" => Some(("position", "absolute")),
+        "relative" => Some(("position", "relative")),
+        "sticky" => Some(("position", "sticky")),
+        "visible" => Some(("visibility", "visible")),
+        "invisible" => Some(("visibility", "hidden")),
+        "collapse" => Some(("visibility", "collapse")),
+        "isolate" => Some(("isolation", "isolate")),
+        "uppercase" => Some(("textTransform", "uppercase")),
+        "lowercase" => Some(("textTransform", "lowercase")),
+        "capitalize" => Some(("textTransform", "capitalize")),
+        "normalCase" => Some(("textTransform", "none")),
+        "italic" => Some(("fontStyle", "italic")),
+        "notItalic" => Some(("fontStyle", "normal")),
+        "underline" => Some(("decoration", "underline")),
+        "overline" => Some(("decoration", "overline")),
+        "lineThrough" => Some(("decoration", "line-through")),
+        "noUnderline" => Some(("decoration", "none")),
+        "antialiased" => Some(("fontSmoothing", "grayscale")),
+        "subpixelAntialiased" => Some(("fontSmoothing", "subpixel")),
+        _ => None,
+    }
+}
+
 /// Returns true when a key is a known csszyx variant name.
 pub(crate) fn is_known_variant(key: &str) -> bool {
     matches!(
