@@ -17,7 +17,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BOOLEAN_ONLY_DYNAMIC_KEYS, PROPERTY_MAP } from '../src/transform-core.js';
-import { expectParity } from './tri-engine-harness';
+import { expectParity } from './engine-parity-harness';
 
 /** Bare class each member must emit for `true` — criterion (b) expectations. */
 const MEMBER_BARE_CLASS: Record<string, string> = {

@@ -21,7 +21,7 @@
  */
 import { describe, it } from 'vitest';
 
-import { expectParity } from './tri-engine-harness.js';
+import { expectParity } from './engine-parity-harness.js';
 
 describe('an important modifier keeps its brackets outside the bang', () => {
     it.each([

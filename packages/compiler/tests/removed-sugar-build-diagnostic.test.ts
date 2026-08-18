@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ENGINES } from './tri-engine-harness.js';
+import { ENGINES } from './engine-parity-harness.js';
 
 /**
  * Compile one sz prop and return its diagnostics.

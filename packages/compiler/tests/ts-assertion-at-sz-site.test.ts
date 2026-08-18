@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { captureWarnings, ENGINES } from './tri-engine-harness.js';
+import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 /** The assertions that wrap an sz literal without changing it. */
 const WRAPPERS: ReadonlyArray<readonly [string, string]> = [

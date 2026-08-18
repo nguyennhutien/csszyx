@@ -14,7 +14,7 @@
  */
 import { describe, it } from 'vitest';
 
-import { ENGINES, expectParity } from './tri-engine-harness.js';
+import { ENGINES, expectParity } from './engine-parity-harness.js';
 
 describe('mask layers — three-engine parity', () => {
     it('linear angles, including the negative and variable forms', () => {

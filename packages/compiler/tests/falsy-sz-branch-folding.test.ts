@@ -19,7 +19,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { captureWarnings, ENGINES } from './tri-engine-harness.js';
+import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 /**
  * Wrap an sz attribute value in the smallest component that carries it.

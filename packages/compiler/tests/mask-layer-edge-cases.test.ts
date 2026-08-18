@@ -14,7 +14,7 @@
  */
 import { describe, it } from 'vitest';
 
-import { expectParity } from './tri-engine-harness.js';
+import { expectParity } from './engine-parity-harness.js';
 
 describe('mask layers — a variant prefixes EVERY emitted class', () => {
     // A layer key emits several classes from one property, unlike every other

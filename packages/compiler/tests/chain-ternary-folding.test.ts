@@ -15,7 +15,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { captureWarnings, ENGINES } from './tri-engine-harness.js';
+import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 /**
  * Compile one sz expression on one engine.

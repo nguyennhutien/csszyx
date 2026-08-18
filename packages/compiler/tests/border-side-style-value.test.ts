@@ -35,7 +35,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { captureWarnings, ENGINES } from './tri-engine-harness.js';
+import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 /** Every per-side border key, including the logical ones. */
 const SIDE_KEYS = [

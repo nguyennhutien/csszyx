@@ -17,7 +17,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ENGINES, normalizeEmit } from './tri-engine-harness.js';
+import { ENGINES, normalizeEmit } from './engine-parity-harness.js';
 
 const IMPORTS = "import { szr, szv } from '@csszyx/runtime';\n";
 const FACTORY =

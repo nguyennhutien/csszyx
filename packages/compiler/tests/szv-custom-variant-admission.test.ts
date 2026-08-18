@@ -25,7 +25,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { qualifyStaticSzvConfig } from '../src/szv-precompile.js';
-import { ENGINES } from './tri-engine-harness.js';
+import { ENGINES } from './engine-parity-harness.js';
 
 const IMPORT = "import { szv, szr } from '@csszyx/runtime';\n";
 

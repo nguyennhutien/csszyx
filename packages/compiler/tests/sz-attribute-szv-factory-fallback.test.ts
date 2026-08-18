@@ -19,7 +19,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ENGINES } from './tri-engine-harness.js';
+import { ENGINES } from './engine-parity-harness.js';
 
 const RUNTIME_IMPORT = "import { szv } from '@csszyx/runtime';\n";
 

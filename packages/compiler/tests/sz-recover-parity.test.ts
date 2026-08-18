@@ -17,7 +17,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { transformSource, transformWasm } from '../src/index.js';
-import { captureWarnings, ENGINES } from './tri-engine-harness.js';
+import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 const NON_LITERAL =
     '[csszyx] szRecover at /p/t.tsx: only string-literal values ("csr" | "dev-only") are ' +

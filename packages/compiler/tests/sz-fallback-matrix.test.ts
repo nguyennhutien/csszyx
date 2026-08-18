@@ -23,7 +23,7 @@ import {
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
 import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
-import { captureWarnings, ENGINES } from './tri-engine-harness.js';
+import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 /** Sources that drive each classification arm through a real transform. */
 const FALLBACK_SOURCES: ReadonlyArray<readonly [string, string]> = [

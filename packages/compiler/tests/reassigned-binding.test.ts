@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { captureWarnings, ENGINES, normalizeEmit } from './tri-engine-harness.js';
+import { captureWarnings, ENGINES, normalizeEmit } from './engine-parity-harness.js';
 
 /**
  * Emitted className for one module, or undefined when none was emitted.

@@ -1,10 +1,11 @@
 /**
  * Shared engine harness for parity suites.
  *
- * Historically three hand-written engines; today one engine, two artifacts —
- * the native addon and the wasm build. The harness keeps its shape (an engine
- * table, the transform-and-compare loop, the warning capture) because the
- * parity QUESTION survives the consolidation: the two artifacts of the engine
+ * Historically three hand-written engines, which is where the old `tri-engine`
+ * name came from; today one engine, two artifacts — the native addon and the
+ * wasm build. The harness keeps its shape (an engine table, the
+ * transform-and-compare loop, the warning capture) because the parity QUESTION
+ * survives the consolidation: the two artifacts of the engine
  * must answer identically, and every suite that asserted cross-engine
  * agreement now asserts cross-artifact agreement through the same calls.
  *
@@ -15,7 +16,7 @@ import { expect } from 'vitest';
 import { isRustTransformAvailable, transformRust, transformWasm } from '../src/index.js';
 
 /** The result surface parity assertions read, common to both artifacts. */
-export interface TriEngineResult {
+export interface EngineParityResult {
     code?: string;
     diagnostics?: string[];
     /**
@@ -27,7 +28,7 @@ export interface TriEngineResult {
 }
 
 /** One engine entry, narrowed to the shared result surface. */
-export type TriEngine = (source: string, filename?: string) => TriEngineResult;
+export type ParityEngine = (source: string, filename?: string) => EngineParityResult;
 
 // In CI the native engine is built before the unit suites run; if that step
 // ever no-ops, every parity suite would silently degrade to two lanes and
@@ -35,16 +36,16 @@ export type TriEngine = (source: string, filename?: string) => TriEngineResult;
 // per file, and the message names the real problem.
 if (process.env.CI && !isRustTransformAvailable()) {
     throw new Error(
-        'tri-engine harness: the rust lane is unavailable under CI — the native ' +
+        'engine parity harness: the rust lane is unavailable under CI — the native ' +
             'engine build step failed or was skipped, and every parity suite ' +
             'would silently degrade to two lanes.',
     );
 }
 
 /** Both artifacts of the engine, native included whenever the binding is present. */
-export const ENGINES: ReadonlyArray<readonly [string, TriEngine]> = [
-    ['wasm', transformWasm as TriEngine],
-    ...(isRustTransformAvailable() ? ([['rust', transformRust as TriEngine]] as const) : []),
+export const ENGINES: ReadonlyArray<readonly [string, ParityEngine]> = [
+    ['wasm', transformWasm as ParityEngine],
+    ...(isRustTransformAvailable() ? ([['rust', transformRust as ParityEngine]] as const) : []),
 ];
 
 /**
@@ -70,7 +71,7 @@ export function normalizeEmit(code: string): string {
 export function expectParity(sz: string, expected: string): void {
     const tsx = `export const A = () => <div sz={${sz}} />;`;
     for (const [name, transform] of ENGINES) {
-        const code = transform(tsx, 'tri-engine.tsx').code ?? '';
+        const code = transform(tsx, 'engine-parity.tsx').code ?? '';
         const emitted = /className="([^"]*)"/.exec(code)?.[1] ?? '';
         expect(emitted, `${name} — ${sz}`).toBe(expected);
     }
@@ -79,7 +80,7 @@ export function expectParity(sz: string, expected: string): void {
 /** One captured engine run: the raw result plus its merged warning channel. */
 export interface CapturedRun {
     /** The engine's transform result. */
-    result: TriEngineResult;
+    result: EngineParityResult;
     /** Diagnostics and console warnings, noise filtered, in emission order. */
     warnings: string[];
     /** The first emitted className attribute value, when any. */
@@ -100,7 +101,7 @@ export interface CapturedRun {
  * @returns The result, merged warnings, and extracted className.
  */
 export function captureWarnings(
-    engine: TriEngine,
+    engine: ParityEngine,
     source: string,
     filename = '/p/t.tsx',
 ): CapturedRun {
@@ -109,7 +110,7 @@ export function captureWarnings(
     console.warn = (...args: unknown[]) => {
         logged.push(args.map(String).join(' '));
     };
-    let result: TriEngineResult;
+    let result: EngineParityResult;
     try {
         result = engine(source, filename);
     } finally {

@@ -11,7 +11,7 @@
  * bundlers resolve `node_modules` through these paths, and a temp dir behind a
  * symlink has broken that resolution before.
  *
- * NOT a `.test.ts` file, like `tri-engine-harness.ts`: vitest must not collect
+ * NOT a `.test.ts` file, like `engine-parity-harness.ts`: vitest must not collect
  * it as a suite.
  */
 import { rmSync } from 'node:fs';
