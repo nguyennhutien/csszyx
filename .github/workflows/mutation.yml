@@ -1,6 +1,6 @@
 name: Mutation Testing
 
-# Weekly full sweep of the Rust transform engine.
+# Monthly full sweep of the Rust transform engine.
 #
 # Codecov's patch gate proves a changed line RAN under test; it cannot prove
 # the suite would go RED if that line were wrong. Mutation testing breaks each
@@ -8,15 +8,17 @@ name: Mutation Testing
 # survivor in encoder.rs — a tier-5 boundary the suite never encoded, which
 # would have collapsed two distinct style indices onto one class name.
 #
-# REPORTS, DOES NOT GATE. Nobody knows the engine-wide survivor count yet, and
-# a gate switched on before that baseline exists would paint every PR red and
-# get turned off. Establish the number here first; promoting a diff-scoped
-# check to a required gate is a separate, later change.
+# REPORTS, DOES NOT GATE. The survivor list is a standing debt register, not a
+# per-change signal: it only moves when somebody writes a test, so re-running
+# it weekly reprinted the same list for ~5.5 hours of runner time. The
+# per-change signal now comes from the diff-scoped job in rust-check, which
+# answers in minutes on the lines a pull request actually touched. This sweep
+# stays for what a diff cannot see — a change that breaks code it never edits.
 on:
   schedule:
-    # Weekly Monday 04:00 UTC — after the daily fuzz batch (03:00), so the two
-    # long Rust jobs do not contend for runners.
-    - cron: "0 4 * * 1"
+    # Monthly, 04:00 UTC on the first — after the daily fuzz batch at 03:00, so
+    # the two long Rust jobs do not contend for runners.
+    - cron: "0 4 1 * *"
   workflow_dispatch:
 
 permissions:
