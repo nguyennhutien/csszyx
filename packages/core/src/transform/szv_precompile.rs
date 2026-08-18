@@ -258,12 +258,26 @@ fn conflicting_leaves<'a>(
 
 /// Whether every key in a branch is canonicalizable — a property-map entry or
 /// a known variant. Mirrors `branchKeysCanonicalizable`: anything else (a
-/// special-cased property like `lineHeight`, a flag utility, a custom theme
-/// variant) could alias another key's target invisibly, so its config bails.
+/// special-cased property like `lineHeight`, a custom theme variant) could alias
+/// another key's target invisibly, so its config bails. A flag utility is
+/// decided by its value in `branch_disqualify_path` instead: the boolean is
+/// canonical, a scalar on the same key is not.
 /// Special-cased property keys outside the property map, verified
 /// fusion-free. Mirrors `SPECIAL_ALLOWED_SZ_KEYS`.
 const SPECIAL_ALLOWED_SZ_KEYS: [&str; 4] =
     ["alignContent", "snapType", "snapAlign", "snapStrictness"];
+
+/// Whether a key's canonical spelling is a boolean flag.
+///
+/// Two tables carry them: the ones whose class name differs from the key
+/// (`srOnly` → `sr-only`) and the ones whose class IS the kebab-cased key
+/// (`truncate`). A key that also takes values (`ring`, `blur`) sits in the
+/// property map and is admitted there instead, so this only decides the
+/// boolean-only ones. Mirrors `isBooleanFlagKey`.
+fn is_boolean_flag_key(key: &str) -> bool {
+    super::generated::tables::boolean_class(key).is_some()
+        || super::generated::tables::is_boolean_shorthand(key)
+}
 
 /// The key walk behind the overlap check, naming the first position that
 /// stops the branch canonicalizing — a property-map entry or a known variant
@@ -325,7 +339,15 @@ fn branch_disqualify_path(branch: &StaticSzObject, prefix: &str) -> Option<Strin
             // to `key-value`, which could be another key's target under a name
             // this walk cannot recognise, so that still disqualifies. Mirrors
             // the descent `collect_unknown_sz_keys` already makes.
+            //
+            // A BOOLEAN is the exception, and for the same reason the special
+            // keys are admitted: on a flag utility the boolean IS the canonical
+            // spelling — Tailwind has no value form for `sr-only` — and measured
+            // merged vs separate, no flag composites with any property key or
+            // any other flag the way `text` + `leading` does. So the flag's own
+            // name identifies its target. Mirrors the TypeScript walk.
             match &property.value {
+                StaticSzValue::Boolean(_) if is_boolean_flag_key(&property.key) => continue,
                 StaticSzValue::Object(nested) => {
                     if let Some(inner) = branch_disqualify_path(nested, &path) {
                         return Some(inner);
@@ -1160,6 +1182,72 @@ mod tests {
                 nested(vec![entry("c", number(1.5))]),
             )]),
             "defaultVariants.c"
+        );
+    }
+
+    #[test]
+    fn a_boolean_flag_is_admitted_and_a_scalar_on_it_is_not() {
+        let base_config = |base: Vec<StaticSzProperty>| {
+            config_from(vec![
+                entry("base", nested(base)),
+                entry(
+                    "variants",
+                    nested(vec![entry(
+                        "pad",
+                        nested(vec![entry("sm", nested(vec![entry("p", number(2.0))]))]),
+                    )]),
+                ),
+            ])
+            .expect("shape qualifies")
+        };
+        // `sr-only` has no value form in Tailwind, so the boolean is how the
+        // style is written — refusing it disqualified a config spelled exactly
+        // as the reference documents it.
+        assert_eq!(
+            overlap_disqualify_path(&base_config(vec![entry(
+                "srOnly",
+                StaticSzValue::Boolean(true)
+            )])),
+            None
+        );
+        // Same for a flag whose class name differs from its key.
+        assert_eq!(
+            overlap_disqualify_path(&base_config(vec![entry(
+                "tabularNums",
+                StaticSzValue::Boolean(true)
+            )])),
+            None
+        );
+        // The admission is on the VALUE: a scalar on the same key lowers to
+        // `sr-only-weird`, the aliasing shape the refusal exists for.
+        assert_eq!(
+            overlap_disqualify_path(&base_config(vec![entry("srOnly", text("weird"))])),
+            Some(String::from("base.srOnly"))
+        );
+        // Admitting the key must not cost the same-name catch: deep merge
+        // replaces, so one branch turning the flag off cannot be represented by
+        // concatenating both branches' classes.
+        assert_eq!(
+            overlap_disqualify_path(
+                &config_from(vec![
+                    entry(
+                        "base",
+                        nested(vec![entry("srOnly", StaticSzValue::Boolean(true))])
+                    ),
+                    entry(
+                        "variants",
+                        nested(vec![entry(
+                            "reader",
+                            nested(vec![entry(
+                                "off",
+                                nested(vec![entry("srOnly", StaticSzValue::Boolean(false))])
+                            )]),
+                        )]),
+                    ),
+                ])
+                .expect("shape qualifies")
+            ),
+            Some(String::from("base.srOnly"))
         );
     }
 

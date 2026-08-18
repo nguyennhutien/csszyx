@@ -1123,7 +1123,7 @@ function warnAlignmentValue(rawKey: string, value: unknown): void {
 // ============================================================================
 // BOOLEAN_TO_CLASS: Maps camelCase boolean props to their class names
 // ============================================================================
-const BOOLEAN_TO_CLASS: Record<string, string> = {
+export const BOOLEAN_TO_CLASS: Record<string, string> = {
     textEllipsis: 'text-ellipsis',
     textClip: 'text-clip',
     backdropBlur: 'backdrop-blur',

@@ -247,6 +247,24 @@ attribute variant is written inline, so neither can appear in a table csszyx
 ships — but a variant *composes* onto the property path rather than replacing it,
 so overlap analysis still works through it and `px` and `tablet.px` stay separate.
 
+### Boolean flags are fine here too
+
+A flag utility carries its meaning in the boolean, because Tailwind has no value
+form for it:
+
+```tsx
+const label = szv({
+    base: { srOnly: true, tabularNums: true },        // ✅ canonical spelling
+    variants: { pad: { sm: { p: 2 }, lg: { p: 8 } } },
+});
+```
+
+Each flag lowers to one fixed class, and no flag combines with another key into a
+composite the way `text` and `leading` do, so its own name places it against
+every other branch.
+
 What still disqualifies is an unrecognised key holding a plain **value**
 (`{ nonsenseKey: 'x' }`): that lowers to `nonsenseKey-x`, a name csszyx cannot
-place against any other branch's.
+place against any other branch's. That includes a **value on a flag key** —
+`{ srOnly: 'weird' }` lowers to `sr-only-weird`, so the admission above is for
+the boolean, not for the key.
