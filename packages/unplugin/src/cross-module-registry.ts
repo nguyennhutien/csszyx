@@ -18,7 +18,9 @@
 import * as path from 'node:path';
 import {
     type CrossModuleExportKind,
+    type CrossModuleForward,
     type CrossModuleRegistryEntry,
+    extractCrossModuleForwards,
     extractCrossModuleRegistryEntries,
 } from '@csszyx/compiler';
 import { normalizePathSeparators } from './path-normalization.js';
@@ -32,6 +34,16 @@ export interface CrossModuleRegistryValue {
 
 /** Separator-normalized absolute path → exported values by name. */
 export type SzvCrossModuleRegistry = Map<string, Record<string, CrossModuleRegistryValue>>;
+
+/**
+ * Separator-normalized absolute path → the names it re-exports from elsewhere.
+ *
+ * Kept beside the registry rather than inside it because the two answer
+ * different questions. The registry says what a module HAS; this says where a
+ * module SENDS you. A reader that found a link where it expected a value would
+ * compile against nothing, so the type keeps them from ever being confused.
+ */
+export type CrossModuleForwardIndex = Map<string, readonly CrossModuleForward[]>;
 
 /** One file's specifier-keyed view of the registry, one entry per export name. */
 type ResolvedBySpecifier = Record<string, Record<string, Record<string, unknown>>>;
@@ -185,6 +197,178 @@ const EMITTED_EXTENSION_SOURCES: ReadonlyArray<readonly [string, readonly string
 ];
 
 /**
+ * Record which names one module re-exports from other modules.
+ *
+ * Separate from the two value passes because a forward is not a value and does
+ * not belong to either kind: it is recorded once per module and evicted whole,
+ * so a barrel that stops re-exporting a name cannot keep answering for it.
+ *
+ * @param index - The forward index to update.
+ * @param filePath - Absolute source path (any separator style).
+ * @param content - Source text.
+ */
+export function recordCrossModuleForwards(
+    index: CrossModuleForwardIndex,
+    filePath: string,
+    content: string,
+): void {
+    const key = normalizePathSeparators(filePath);
+    const forwards = extractCrossModuleForwards(content, filePath);
+    if (forwards.length === 0) index.delete(key);
+    else index.set(key, forwards);
+}
+
+/**
+ * How many modules a single name may be followed through.
+ *
+ * Capped rather than trusted. A generated barrel tree is finite but need not be
+ * short, and the walk is paid per importing file — so the cost of a deep tree
+ * lands on every build, not once. A chain longer than this keeps the runtime
+ * path, which is the same answer every other unreadable shape gets.
+ */
+export const MAX_FORWARD_HOPS = 8;
+
+/**
+ * Join a module path and an export name into one visited-set key.
+ *
+ * Keyed by BOTH on purpose: two barrels forwarding different names through each
+ * other is not a cycle, and refusing it would cost a resolution that terminates
+ * perfectly well. Exported so the Turbopack lane, which walks the same links
+ * from disk instead of from a registry, cannot key its walk differently.
+ *
+ * @param modulePath - Module the name is looked up in.
+ * @param name - Export name as that module spells it.
+ * @returns The visited-set key.
+ */
+export function forwardVisitKey(modulePath: string, name: string): string {
+    // A NUL cannot appear in a path or an export name, so no pair of them
+    // can produce the same key as a different pair.
+    return `${modulePath}\u0000${name}`;
+}
+
+/**
+ * Everything one module exports, its own values and the ones it forwards.
+ *
+ * A name the module DECLARES wins over a forward of the same name: the
+ * declaration is the value this module actually has, and a module that both
+ * declares and re-exports one name is malformed anyway.
+ *
+ * @param registry - The prescan-built registry.
+ * @param forwards - The prescan-built forward index.
+ * @param modulePath - Separator-normalized module path.
+ * @param aliases - Project alias table.
+ * @returns The module's exports, or undefined when it contributes none.
+ */
+function moduleExports(
+    registry: SzvCrossModuleRegistry,
+    forwards: CrossModuleForwardIndex,
+    modulePath: string,
+    aliases: readonly SpecifierAlias[],
+): Record<string, CrossModuleRegistryValue> | undefined {
+    const own = registry.get(modulePath);
+    const links = forwards.get(modulePath);
+    if (links === undefined) return own;
+    const merged = emptyNameIndex<CrossModuleRegistryValue>();
+    for (const [name, value] of Object.entries(own ?? {})) merged[name] = value;
+    for (const link of links) {
+        if (merged[link.exportName] !== undefined) continue;
+        const value = followForward(registry, forwards, modulePath, link, aliases, {
+            hops: MAX_FORWARD_HOPS,
+            visited: new Set([forwardVisitKey(modulePath, link.exportName)]),
+        });
+        if (value !== undefined) merged[link.exportName] = value;
+    }
+    return Object.keys(merged).length === 0 ? undefined : merged;
+}
+
+/** How much budget a forward walk has left, and where it has already been. */
+interface ForwardWalk {
+    hops: number;
+    visited: Set<string>;
+}
+
+/**
+ * Follow one re-export to the value it names.
+ *
+ * The specifier resolves against the FORWARDING module's directory, through the
+ * same probe list a direct import uses — a forward landing on a different file
+ * than a direct import of the same specifier would make a module's value depend
+ * on which route reached it.
+ *
+ * @param registry - The prescan-built registry.
+ * @param forwards - The prescan-built forward index.
+ * @param fromPath - The module that wrote this re-export.
+ * @param forward - The re-export to follow.
+ * @param aliases - Project alias table.
+ * @param walk - Remaining hop budget and the names already visited.
+ * @returns The value, or undefined when the chain answers nothing.
+ */
+function followForward(
+    registry: SzvCrossModuleRegistry,
+    forwards: CrossModuleForwardIndex,
+    fromPath: string,
+    forward: CrossModuleForward,
+    aliases: readonly SpecifierAlias[],
+    walk: ForwardWalk,
+): CrossModuleRegistryValue | undefined {
+    if (walk.hops <= 0) return undefined;
+    const directory = path.dirname(fromPath);
+    for (const base of specifierBases(forward.specifier, directory, aliases)) {
+        const providerPath = probeSpecifier(base, candidate =>
+            registry.has(candidate) || forwards.has(candidate) ? candidate : undefined,
+        );
+        if (providerPath === undefined) continue;
+        return lookupForwardedExport(
+            registry,
+            forwards,
+            providerPath,
+            forward.importedName,
+            aliases,
+            walk,
+        );
+    }
+    return undefined;
+}
+
+/**
+ * Find one export in a module, following it further when it is itself a link.
+ *
+ * The visited set is keyed by module AND name, not module alone: two barrels
+ * forwarding different names through each other is not a cycle, and refusing it
+ * would cost a resolution that terminates perfectly well.
+ *
+ * @param registry - The prescan-built registry.
+ * @param forwards - The prescan-built forward index.
+ * @param modulePath - Module to look in.
+ * @param name - Export name as that module spells it.
+ * @param aliases - Project alias table.
+ * @param walk - Remaining hop budget and the names already visited.
+ * @returns The value, or undefined when nothing answers.
+ */
+function lookupForwardedExport(
+    registry: SzvCrossModuleRegistry,
+    forwards: CrossModuleForwardIndex,
+    modulePath: string,
+    name: string,
+    aliases: readonly SpecifierAlias[],
+    walk: ForwardWalk,
+): CrossModuleRegistryValue | undefined {
+    const key = forwardVisitKey(modulePath, name);
+    if (walk.visited.has(key)) return undefined;
+    walk.visited.add(key);
+    const own = registry.get(modulePath)?.[name];
+    if (own !== undefined) return own;
+    for (const link of forwards.get(modulePath) ?? []) {
+        if (link.exportName !== name) continue;
+        return followForward(registry, forwards, modulePath, link, aliases, {
+            hops: walk.hops - 1,
+            visited: walk.visited,
+        });
+    }
+    return undefined;
+}
+
+/**
  * Resolve the registry entries visible to one file's imports.
  *
  * Each specifier is turned into the path(s) it may denote — its own directory
@@ -198,6 +382,7 @@ const EMITTED_EXTENSION_SOURCES: ReadonlyArray<readonly [string, readonly string
  * @param filename - Importing file path.
  * @param source - Importing file text.
  * @param aliases - Project alias table; empty leaves relative imports only.
+ * @param forwards - Re-export links, so a barrel resolves to what it forwards.
  * @returns Specifier-keyed entries, or undefined when nothing resolves.
  */
 export function resolveCrossModuleStaticsFor(
@@ -205,7 +390,10 @@ export function resolveCrossModuleStaticsFor(
     filename: string,
     source: string,
     aliases: readonly SpecifierAlias[] = [],
+    forwards: CrossModuleForwardIndex = new Map(),
 ): ResolvedCrossModuleEntries {
+    // An empty registry ends it whatever the forwards say: a chain of links
+    // with no declared value at the end of it resolves to nothing anyway.
     if (registry.size === 0 || !source.includes('from')) return {};
     const directory = path.dirname(filename);
     const resolved: ResolvedCrossModuleEntries = {};
@@ -213,7 +401,7 @@ export function resolveCrossModuleStaticsFor(
     for (const specifier of importedSpecifiersIn(source)) {
         if (seen.has(specifier)) continue;
         seen.add(specifier);
-        const entries = firstRegistryHit(registry, specifier, directory, aliases);
+        const entries = firstRegistryHit(registry, specifier, directory, aliases, forwards);
         if (entries !== undefined) fileUnderSpecifier(resolved, specifier, entries);
     }
     return resolved;
@@ -229,6 +417,7 @@ export function resolveCrossModuleStaticsFor(
  * @param specifier - Specifier as written in the import.
  * @param directory - Importing file's directory.
  * @param aliases - Project alias table.
+ * @param forwards - Re-export links, so a barrel counts as a match.
  * @returns The module's exports, or undefined when nothing matches.
  */
 function firstRegistryHit(
@@ -236,10 +425,17 @@ function firstRegistryHit(
     specifier: string,
     directory: string,
     aliases: readonly SpecifierAlias[],
+    forwards: CrossModuleForwardIndex,
 ): Record<string, CrossModuleRegistryValue> | undefined {
     for (const base of specifierBases(specifier, directory, aliases)) {
-        const entries = lookupRegistryKey(registry, base);
-        if (entries !== undefined) return entries;
+        // A barrel holds no value of its own, so it has to be recognised by its
+        // links as well — probing the registry alone would walk past it and
+        // resolve the specifier against a file the importer never named.
+        const modulePath = probeSpecifier(base, candidate =>
+            registry.has(candidate) || forwards.has(candidate) ? candidate : undefined,
+        );
+        if (modulePath === undefined) continue;
+        return moduleExports(registry, forwards, modulePath, aliases);
     }
     return undefined;
 }
@@ -411,18 +607,4 @@ function probeSpecifier<T>(
         break;
     }
     return undefined;
-}
-
-/**
- * Find the registry entry for one resolved specifier path.
- *
- * @param registry - The prescan-built registry.
- * @param base - Specifier resolved against the importing file's directory.
- * @returns The module's factories, or undefined when nothing matches.
- */
-function lookupRegistryKey(
-    registry: SzvCrossModuleRegistry,
-    base: string,
-): Record<string, CrossModuleRegistryValue> | undefined {
-    return probeSpecifier(base, candidate => registry.get(candidate));
 }

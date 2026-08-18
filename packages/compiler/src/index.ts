@@ -13,7 +13,9 @@ export { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 export { CsszyxCompiler } from './compiler.js';
 export {
     type CrossModuleExportKind,
+    type CrossModuleForward,
     type CrossModuleRegistryEntry,
+    extractCrossModuleForwards,
     extractCrossModuleRegistryEntries,
 } from './cross-module-extract.js';
 export {

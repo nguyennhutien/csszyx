@@ -20,14 +20,18 @@ import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 import {
+    type CrossModuleForward,
     type CrossModuleRegistryEntry,
+    extractCrossModuleForwards,
     extractCrossModuleRegistryEntries,
     type TransformSourceCodeOptions,
 } from '@csszyx/compiler';
 import { DEFAULT_IMPORTED_STATIC_SZ } from '@csszyx/types';
 
 import {
+    forwardVisitKey,
     importedSpecifiersIn,
+    MAX_FORWARD_HOPS,
     type ResolvedCrossModuleEntries,
     recordResolvedEntry,
     resolveProviderPathWith,
@@ -113,6 +117,10 @@ export function resolveNextCrossModule(input: NextCrossModuleInput): NextCrossMo
     const providers: string[] = [];
     const seen = new Set<string>();
 
+    // One cache per resolution: a barrel and the file that imports it often name
+    // the same provider, and re-reading it per specifier would parse the same
+    // module several times for one file.
+    const modules = new Map<string, ProviderModule>();
     for (const specifier of importedSpecifiersIn(input.source)) {
         if (seen.has(specifier)) continue;
         seen.add(specifier);
@@ -124,29 +132,128 @@ export function resolveNextCrossModule(input: NextCrossModuleInput): NextCrossMo
             // says so, and an edit that ADDS an export has to invalidate this
             // importer too.
             providers.push(provider);
-            recordEntries(statics, specifier, readProviderEntries(provider), input);
+            const walk: ForwardContext = { aliases, modules, providers };
+            recordEntries(statics, specifier, providerExports(provider, walk), input);
             break;
         }
     }
     return { statics, providers };
 }
 
+/** One provider module as this lane reads it: what it has, and where it points. */
+interface ProviderModule {
+    entries: readonly CrossModuleRegistryEntry[];
+    forwards: readonly CrossModuleForward[];
+}
+
+/** What a forward walk shares across every hop of one file's resolution. */
+interface ForwardContext {
+    aliases: readonly SpecifierAlias[];
+    modules: Map<string, ProviderModule>;
+    /** Appended in place: every module followed THROUGH must be watched too. */
+    providers: string[];
+}
+
 /**
- * Read one provider's exported entries, treating any failure as "none".
+ * Everything one provider exports, its own values and the ones it forwards.
  *
- * A provider that cannot be read or parsed costs the optimization for its
- * importers. Letting it throw would instead fail the build of a file whose own
- * source is fine, which is a worse trade for a build-time nicety.
+ * A barrel declares nothing, so without following its links it looks exactly
+ * like a module with nothing to offer — and a barrel is the module a consumer
+ * of a design system actually imports from.
  *
  * @param provider - Absolute provider path.
- * @returns The entries it exports, empty when it exports none.
+ * @param context - Alias table, module cache, and the watch list to extend.
+ * @returns The entries, each under the name THIS module exports it as.
  */
-function readProviderEntries(provider: string): readonly CrossModuleRegistryEntry[] {
-    try {
-        return extractCrossModuleRegistryEntries(readFileSync(provider, 'utf8'), provider);
-    } catch {
-        return [];
+function providerExports(
+    provider: string,
+    context: ForwardContext,
+): readonly CrossModuleRegistryEntry[] {
+    const module = readProviderModule(provider, context.modules);
+    if (module.forwards.length === 0) return module.entries;
+    const declared = new Set(module.entries.map(entry => entry.exportName));
+    const resolved = [...module.entries];
+    for (const forward of module.forwards) {
+        // A name the module declares itself wins; the link is then a duplicate.
+        if (declared.has(forward.exportName)) continue;
+        const found = followForward(provider, forward, context, {
+            hops: MAX_FORWARD_HOPS,
+            visited: new Set([forwardVisitKey(provider, forward.exportName)]),
+        });
+        if (found !== undefined) resolved.push({ ...found, exportName: forward.exportName });
     }
+    return resolved;
+}
+
+/** How much budget a forward walk has left, and where it has already been. */
+interface ForwardWalk {
+    hops: number;
+    visited: Set<string>;
+}
+
+/**
+ * Follow one re-export to the value it names, reading modules as it goes.
+ *
+ * Every module reached is pushed onto the watch list, including ones the
+ * importing file never mentions. Editing the module at the far end of a barrel
+ * chain changes what the importer compiles to, and an unwatched dependency is a
+ * stale-output bug that only appears on the second build — strictly worse than
+ * the fallback this feature replaces.
+ *
+ * @param fromPath - The module that wrote this re-export.
+ * @param forward - The re-export to follow.
+ * @param context - Alias table, module cache, and the watch list to extend.
+ * @param walk - Remaining hop budget and the names already visited.
+ * @returns The entry found, or undefined when the chain answers nothing.
+ */
+function followForward(
+    fromPath: string,
+    forward: CrossModuleForward,
+    context: ForwardContext,
+    walk: ForwardWalk,
+): CrossModuleRegistryEntry | undefined {
+    if (walk.hops <= 0) return undefined;
+    for (const base of specifierBases(forward.specifier, path.dirname(fromPath), context.aliases)) {
+        const next = resolveProviderPathWith(base, isReadableProviderFile);
+        if (next === undefined) continue;
+        const key = forwardVisitKey(next, forward.importedName);
+        if (walk.visited.has(key)) return undefined;
+        walk.visited.add(key);
+        context.providers.push(next);
+        const module = readProviderModule(next, context.modules);
+        const own = module.entries.find(entry => entry.exportName === forward.importedName);
+        if (own !== undefined) return own;
+        const link = module.forwards.find(item => item.exportName === forward.importedName);
+        if (link === undefined) return undefined;
+        return followForward(next, link, context, { hops: walk.hops - 1, visited: walk.visited });
+    }
+    return undefined;
+}
+
+/**
+ * Read one provider's exports and links, once per resolution.
+ *
+ * @param provider - Absolute provider path.
+ * @param cache - Modules already read during this resolution.
+ * @returns What the module has and where it points.
+ */
+function readProviderModule(provider: string, cache: Map<string, ProviderModule>): ProviderModule {
+    const hit = cache.get(provider);
+    if (hit !== undefined) return hit;
+    let module: ProviderModule = { entries: [], forwards: [] };
+    try {
+        const text = readFileSync(provider, 'utf8');
+        module = {
+            entries: extractCrossModuleRegistryEntries(text, provider),
+            forwards: extractCrossModuleForwards(text, provider),
+        };
+    } catch {
+        // A provider that cannot be read costs the optimization for its
+        // importers. Letting it throw would fail the build of a file whose own
+        // source is fine, which is a worse trade for a build-time nicety.
+    }
+    cache.set(provider, module);
+    return module;
 }
 
 /**

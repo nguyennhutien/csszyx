@@ -68,6 +68,23 @@ export interface OxcSzvFactoryDeclaration {
  */
 export type CrossModuleExportKind = 'szv-config' | 'sz-object';
 
+/**
+ * One export that names a value another module declares.
+ *
+ * Not a kind of {@link CrossModuleRegistryEntry}: it carries no value, because
+ * the value is in a module this parse has not read. A consumer handed one as if
+ * it were an entry would compile against nothing. Following it is a separate
+ * pass over a registry that has read the provider too.
+ */
+export interface CrossModuleForward {
+    /** The name this module exports, and therefore the one an importer writes. */
+    exportName: string;
+    /** The name the provider module exports it as; `default` for the default slot. */
+    importedName: string;
+    /** The provider specifier, exactly as this module spelled it. */
+    specifier: string;
+}
+
 /** One exported value found by the cross-module registry extractor. */
 export interface CrossModuleRegistryEntry {
     /** What the value is, and therefore how a consumer must treat it. */
@@ -453,4 +470,192 @@ function readExportedDeclaration(declaration: OxcNode): CrossModuleRegistryEntry
  */
 function asEntries(entry: CrossModuleRegistryEntry | null): CrossModuleRegistryEntry[] {
     return entry === null ? [] : [entry];
+}
+
+/** The provider name standing for a module's default slot. */
+const DEFAULT_IMPORT_NAME = 'default';
+
+/** Where one imported local binding came from. */
+interface ImportedBinding {
+    /** Provider specifier as written, or undefined for a namespace binding. */
+    specifier: string | undefined;
+    /** Name in the provider; `default` for a default import. */
+    importedName: string;
+}
+
+/**
+ * Index every module-scope binding introduced by an import.
+ *
+ * A namespace binding is indexed with no specifier rather than left out: the
+ * name IS bound, so omitting it would let a later reader mistake it for a name
+ * this module declares. Recorded as unforwardable, it refuses instead.
+ *
+ * @param body - Program body.
+ * @returns Local binding name to where it came from.
+ */
+function importedBindings(body: OxcNode[]): Map<string, ImportedBinding> {
+    const bindings = new Map<string, ImportedBinding>();
+    for (const statement of body) {
+        if (statement.type !== 'ImportDeclaration') continue;
+        const shaped = statement as unknown as {
+            importKind?: string;
+            source?: { value?: unknown };
+            specifiers?: OxcNode[];
+        };
+        if (shaped.importKind === 'type') continue;
+        const specifier = shaped.source?.value;
+        if (typeof specifier !== 'string') continue;
+        for (const raw of shaped.specifiers ?? []) {
+            readImportSpecifier(raw, specifier, bindings);
+        }
+    }
+    return bindings;
+}
+
+/**
+ * Record one import specifier as a local binding.
+ *
+ * @param raw - One specifier of an import declaration.
+ * @param specifier - Provider specifier as written.
+ * @param bindings - Index being built.
+ */
+function readImportSpecifier(
+    raw: OxcNode,
+    specifier: string,
+    bindings: Map<string, ImportedBinding>,
+): void {
+    const shaped = raw as unknown as {
+        importKind?: string;
+        imported?: { type: string; name?: string };
+        local?: { type: string; name?: string };
+    };
+    const local = shaped.local?.name;
+    if (shaped.local?.type !== 'Identifier' || local === undefined) return;
+    if (raw.type === 'ImportNamespaceSpecifier') {
+        bindings.set(local, { specifier: undefined, importedName: local });
+        return;
+    }
+    if (raw.type === 'ImportDefaultSpecifier') {
+        bindings.set(local, { specifier, importedName: DEFAULT_IMPORT_NAME });
+        return;
+    }
+    if (raw.type !== 'ImportSpecifier' || shaped.importKind === 'type') return;
+    // A string import name is legal syntax but is not a name a token module is
+    // written with, and it cannot be spelled by the export list that would
+    // forward it either.
+    if (shaped.imported?.type !== 'Identifier' || shaped.imported.name === undefined) return;
+    bindings.set(local, { specifier, importedName: shaped.imported.name });
+}
+
+/**
+ * Read the two identifier names one export clause carries.
+ *
+ * @param specifier - One specifier of an export list.
+ * @returns Local and exported names, or null when either is not an identifier.
+ */
+function exportClauseNames(specifier: OxcNode): { local: string; exported: string } | null {
+    const shaped = specifier as unknown as {
+        exportKind?: string;
+        local?: { type: string; name?: string };
+        exported?: { type: string; name?: string };
+    };
+    if (shaped.exportKind === 'type') return null;
+    if (shaped.local?.type !== 'Identifier' || shaped.exported?.type !== 'Identifier') return null;
+    const local = shaped.local.name;
+    const exported = shaped.exported.name;
+    /* v8 ignore next -- narrowing only: an oxc Identifier always carries a name. */
+    if (local === undefined || exported === undefined) return null;
+    return { local, exported };
+}
+
+/**
+ * Read the forwards one top-level statement contributes.
+ *
+ * Two shapes, one meaning. `export { X } from './y'` names the provider on the
+ * statement itself. `import { X } from './y'; export { X }` splits the same
+ * promise across two statements, and the second one alone says nothing — which
+ * is why the import index is built first.
+ *
+ * @param statement - One statement from the program body.
+ * @param declared - Names this module declares at module scope.
+ * @param imports - Local bindings introduced by imports.
+ * @returns The forwards this statement contributes, possibly none.
+ */
+function readStatementForwards(
+    statement: OxcNode,
+    declared: ReadonlySet<string>,
+    imports: ReadonlyMap<string, ImportedBinding>,
+): CrossModuleForward[] {
+    if (statement.type !== 'ExportNamedDeclaration') return [];
+    const shaped = statement as unknown as {
+        exportKind?: string;
+        source?: { value?: unknown } | null;
+        declaration?: OxcNode;
+        specifiers?: OxcNode[];
+    };
+    // A declaration form declares the value here, so the value extractor owns
+    // it; a type-only export carries nothing at runtime.
+    if (shaped.exportKind === 'type' || shaped.declaration != null) return [];
+    const from = shaped.source?.value;
+    const fromSpecifier = typeof from === 'string' ? from : undefined;
+    const forwards: CrossModuleForward[] = [];
+    /* v8 ignore next -- narrowing only: oxc always supplies the array. */
+    for (const raw of shaped.specifiers ?? []) {
+        const names = exportClauseNames(raw);
+        if (names === null) continue;
+        if (fromSpecifier !== undefined) {
+            // On a `from` clause the LOCAL name is the provider's, not this
+            // module's — there is no local binding to shadow it.
+            forwards.push({
+                exportName: names.exported,
+                importedName: names.local,
+                specifier: fromSpecifier,
+            });
+            continue;
+        }
+        // A name this module declares has a readable value, and recording a
+        // link as well would give the resolver two answers for one name.
+        if (declared.has(names.local)) continue;
+        const binding = imports.get(names.local);
+        if (binding?.specifier === undefined) continue;
+        forwards.push({
+            exportName: names.exported,
+            importedName: binding.importedName,
+            specifier: binding.specifier,
+        });
+    }
+    return forwards;
+}
+
+/**
+ * Extract every re-exported name in one module, with the module it points at.
+ *
+ * Separate from {@link extractCrossModuleRegistryEntries} because the answers
+ * are different in kind: that one returns values a consumer can compile, this
+ * one returns links a later pass must still follow. Merging them would put an
+ * entry with no value into the registry, which every consumer would have to
+ * learn to refuse.
+ *
+ * `export *` is deliberately absent. It carries no export name, so it cannot be
+ * filed under one — answering it needs the provider's whole export list, which
+ * is a different question from following one link.
+ *
+ * @param source - Module source text.
+ * @param filename - Module filename, for parser dialect detection.
+ * @returns The forwards, declaration order preserved.
+ */
+export function extractCrossModuleForwards(source: string, filename: string): CrossModuleForward[] {
+    if (!source.includes('export') || !source.includes('from')) return [];
+    let program: { body: OxcNode[] };
+    try {
+        program = parseSync(filename, source, { lang: 'tsx' }).program as unknown as {
+            body: OxcNode[];
+        };
+    } catch {
+        /* v8 ignore next -- oxc reports syntax errors in-band; only native/parser failures throw. */
+        return [];
+    }
+    const declared = new Set(moduleScopeDeclarators(program.body).keys());
+    const imports = importedBindings(program.body);
+    return program.body.flatMap(statement => readStatementForwards(statement, declared, imports));
 }

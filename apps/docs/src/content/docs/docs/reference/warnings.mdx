@@ -123,7 +123,7 @@ type:
 | --- | --- | --- |
 | `call` | ``function call `{detail}()` result is unknown at build time`` | `If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().` |
 | `identifier` | ``identifier `{detail}` could not be resolved to a static value`` | `Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().` |
-| `import` | ``imported binding `{detail}` could not be read at build time`` | `Export it as a const with a static object literal — a re-export, a barrel file, or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().` |
+| `import` | ``imported binding `{detail}` could not be read at build time`` | `Export it as a const with a static object literal — a star re-export or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().` |
 | `member` | `member expression is not statically resolvable` | `Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().` |
 | `szv-factory` | ``szv factory `{detail}()` did not precompile — its config disqualified at `{path}` `` | `Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().` |
 | `other` | ``expression of type `{detail}` is not statically analyzable`` | `Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().` |
@@ -152,9 +152,10 @@ Pass the config inline, or as a module-level const object literal. A computed or
 
 <Aside type="tip" title="What the import case usually means">
 Reading a static object out of another module is on by default, so this
-diagnostic normally says the import did not qualify — a barrel, a namespace or
-default import, or a binding whose value is not a plain object literal. The
-other cause is `build.importedStaticSz` being turned off. See
+diagnostic normally says the import did not qualify — a star re-export, or a
+binding whose value is not a plain object literal. A named re-export through a
+barrel is followed and does not report. The other cause is
+`build.importedStaticSz` being turned off. See
 [Reusing Styles](/docs/reusing-styles/) and
 [Plugin Config](/docs/reference/config/).
 </Aside>

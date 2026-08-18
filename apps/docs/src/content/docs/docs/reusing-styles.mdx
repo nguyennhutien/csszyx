@@ -32,12 +32,12 @@ compiles exactly like the local declaration, because
 [`build.importedStaticSz`](/docs/reference/config/#imported-static-sz-objects-importedstaticsz)
 is on by default.
 
-A namespace import (`import * as S`) and a default export written as a literal
-compile the same way. What does not is a **barrel** — a module re-exporting a
-name it does not declare — or a value that is not a plain object literal. Those
-fall back to the runtime and contribute no classes, so the CSS goes missing, and
-the build reports each one by name. [Across files](#across-files) has the
-measured table.
+A namespace import (`import * as S`), a default export written as a literal, and
+a **barrel** re-exporting a name it does not declare all compile the same way.
+What does not is `export *`, an identifier placed in the default slot, or a value
+that is not a plain object literal. Those fall back to the runtime and contribute
+no classes, so the CSS goes missing, and the build reports each one by name.
+[Across files](#across-files) has the measured table.
 :::
 
 :::caution[A shared style object is a build-time value]
@@ -244,16 +244,23 @@ does not fold.
 | `const x = { ... }` + `export { x }` | `import { x } from './styles'` | Build time ✅ |
 | `export const x = { ... }` | `import * as S from './styles'`, `sz={S.x}` | Build time ✅ |
 | `export default { ... }` | `import x from './styles'` | Build time ✅ |
+| `export { x } from './base'` (barrel) | `import { x } from './styles'` | Build time ✅ |
+| `export { x as y } from './base'` | `import { y } from './styles'` | Build time ✅ |
+| `import { x } from './base'` + `export { x }` | `import { x } from './styles'` | Build time ✅ |
 | `const x = { ... }` + `export default x` | `import x from './styles'` | Runtime fallback |
-| `export { x } from './base'` (barrel) | `import { x } from './styles'` | Runtime fallback |
-| `import { x } from './base'` + `export { x }` | `import { x } from './styles'` | Runtime fallback |
+| `export * from './base'` | `import { x } from './styles'` | Runtime fallback |
 | `export const x = getStyles()` | `import { x } from './styles'` | Runtime fallback |
 
-The three that fall back share one cause: the module the importer names does not
-itself declare the value. A barrel forwards to a module the compiler has not
-read, and `export default x` puts an identifier in the default slot rather than a
-literal. A runtime fallback here is **missing output** — the classes were never
-collected anywhere, so the CSS does not exist. The build reports it by name.
+A re-export is read as a **link** rather than a value and followed to the module
+that declares it, so importing through a barrel compiles exactly like importing
+the provider directly — including a chain of barrels, up to eight modules deep.
+
+The three that fall back do so for three different reasons. `export *` names no
+export, so there is nothing to file a value under without reading the provider's
+whole export list. `export default x` puts an identifier in the default slot
+rather than a literal. And a call is not a value the compiler can read at all. A
+runtime fallback here is **missing output** — the classes were never collected
+anywhere, so the CSS does not exist. The build reports it by name.
 
 Reading imported objects is [`build.importedStaticSz`](/docs/reference/config/#imported-static-sz-objects-importedstaticsz),
 which is on by default; turning it off makes every row above a runtime fallback.

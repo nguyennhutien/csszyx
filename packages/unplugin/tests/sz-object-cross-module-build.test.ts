@@ -173,6 +173,12 @@ describe('a plain exported style object, through a real build', () => {
     // already — it still called a named import a runtime fallback three
     // releases after the feature landed — because nothing here disagreed with
     // it. These builds are that disagreement.
+    //
+    // A re-export is read as a LINK and followed against the modules the build
+    // has already read, so a barrel now folds and so does the two-statement
+    // form that means the same thing. `export *` does not: it carries no export
+    // name, so there is nothing to file a value under without reading the
+    // provider's whole export list, which is a different question.
     const EXPORT_SHAPES: ReadonlyArray<readonly [string, Record<string, string>, boolean]> = [
         [
             'a named export of a literal',
@@ -217,13 +223,30 @@ describe('a plain exported style object, through a real build', () => {
                 'src/base.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
                 'src/styles.ts': "export { cardSz } from './base.ts';",
             },
-            false,
+            true,
         ],
         [
             'an import re-exported in a second statement',
             {
                 'src/base.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
                 'src/styles.ts': "import { cardSz } from './base.ts';\nexport { cardSz };",
+            },
+            true,
+        ],
+        [
+            'a barrel two modules deep',
+            {
+                'src/base.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
+                'src/inner.ts': "export { cardSz } from './base.ts';",
+                'src/styles.ts': "export { cardSz } from './inner.ts';",
+            },
+            true,
+        ],
+        [
+            'a star re-export, which names nothing to file the value under',
+            {
+                'src/base.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
+                'src/styles.ts': "export * from './base.ts';",
             },
             false,
         ],
