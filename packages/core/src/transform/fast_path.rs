@@ -412,8 +412,8 @@ fn span(start: usize, end: usize) -> Option<TextSpan> {
 #[cfg(test)]
 mod tests {
     use super::{
-        element_name, is_identifier_key, parse_simple_string, triage_source, FastPathBailoutReason,
-        FastPathTriage,
+        element_name, is_identifier_key, non_code_ranges, parse_simple_string, triage_source,
+        FastPathBailoutReason, FastPathTriage,
     };
     use crate::transform::TransformFile;
 
@@ -860,5 +860,74 @@ mod tests {
         assert_eq!(parse_simple_string("'"), None);
         assert_eq!(parse_simple_string("\""), None);
         assert_eq!(parse_simple_string(""), None);
+    }
+
+    /// A block comment is one non-code range, ending at its own `*/`.
+    ///
+    /// These ranges exist to keep a commented-out `sz` prop from reaching the
+    /// AST-free lane as if it were live code. Mis-measure the end and the lane
+    /// either takes a file it cannot read — minting classes for markup nobody
+    /// ships — or walks off the end of the source.
+    #[test]
+    fn a_block_comment_is_one_non_code_range() {
+        let source = "const alpha = 1; const beta = 2; /* <div sz={{ p: 4 }} /> */ c();";
+        let ranges = non_code_ranges(source).expect("source is scannable");
+
+        assert_eq!(ranges.len(), 1, "{ranges:?}");
+        let (start, end) = ranges[0];
+        assert_eq!(&source[start..end], "/* <div sz={{ p: 4 }} /> */");
+    }
+
+    /// A block comment with no terminator is unscannable, not empty.
+    ///
+    /// Reporting it as scannable hands the lane a range that stops short of
+    /// the end, and every `sz` past it reads as code.
+    #[test]
+    fn an_unterminated_block_comment_refuses_the_lane() {
+        assert_eq!(non_code_ranges("const a = 1; /* sz={{ p: 4 }}"), None);
+    }
+
+    /// An escaped quote does not close the literal it sits in.
+    ///
+    /// Skipping the wrong number of bytes past the escape lands mid-literal,
+    /// where the next quote looks like the end — so the range stops early and
+    /// the rest of the string is handed to the lane as code.
+    #[test]
+    fn an_escaped_quote_does_not_close_a_string_range() {
+        let source = r"const a = 1; const b = 2; const c = 'it\'s sz={{ p: 4 }}'; d();";
+        let ranges = non_code_ranges(source).expect("source is scannable");
+
+        assert_eq!(ranges.len(), 1, "{ranges:?}");
+        let (start, end) = ranges[0];
+        assert_eq!(&source[start..end], r"'it\'s sz={{ p: 4 }}'");
+    }
+
+    /// Same for a template literal, which has its own scanning loop.
+    #[test]
+    fn an_escaped_backtick_does_not_close_a_template_range() {
+        let source = r"const alpha = 1; const beta = 2; let t = `a\` sz={{ p: 4 }}`;";
+        let ranges = non_code_ranges(source).expect("source is scannable");
+
+        assert_eq!(ranges.len(), 1, "{ranges:?}");
+        let (start, end) = ranges[0];
+        assert_eq!(&source[start..end], r"`a\` sz={{ p: 4 }}`");
+    }
+
+    /// A commented-out `sz` prop must not reach the AST-free lane.
+    ///
+    /// The lane rewrites what it finds without a parser, so it has to see the
+    /// marker inside the comment and hand the file to the parser instead.
+    #[test]
+    fn a_commented_out_sz_prop_leaves_the_fast_lane() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "/* <div sz={{ p: 4 }} /> */\nexport const App = () => <div sz={{ m: 2 }} />;"
+                .to_string(),
+        };
+
+        assert!(
+            matches!(triage_source(&file), FastPathTriage::NeedsParser(_)),
+            "a marker inside a comment must not be rewritten without a parser"
+        );
     }
 }

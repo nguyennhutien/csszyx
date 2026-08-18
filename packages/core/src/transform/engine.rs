@@ -2543,4 +2543,121 @@ mod tests {
             result.classes
         );
     }
+
+    /// A `/` that divides must not read as the start of a comment.
+    ///
+    /// The guard skips comments so a bracket inside one never counts toward
+    /// depth. Loosen how a comment is recognised — match a lone `/`, or the
+    /// byte after it instead of the byte itself — and an ordinary division
+    /// swallows the rest of its line. Every bracket past it stops counting, so
+    /// source that really is over-nested sails through the guard and reaches
+    /// the parser it exists to protect.
+    #[test]
+    fn a_division_does_not_open_a_comment() {
+        assert_eq!(
+            super::max_source_nesting_depth("const r = a / b; ({[]})"),
+            3
+        );
+    }
+
+    /// Brackets inside a line comment are text, not structure.
+    ///
+    /// Counting them turns a commented-out block into nesting the author never
+    /// wrote, and a large enough one refuses to transform a file that is fine.
+    #[test]
+    fn brackets_in_a_line_comment_do_not_count() {
+        assert_eq!(super::max_source_nesting_depth("// {{{{{{{{"), 0);
+        // The comment ends at the newline; what follows is code again.
+        assert_eq!(super::max_source_nesting_depth("// {{{{\nconst a = ({;"), 2);
+        // Starting mid-line, so the step past `//` has to land right after it
+        // rather than somewhere scaled off the offset it started from.
+        assert_eq!(
+            super::max_source_nesting_depth("const a = 1; // {{\n({[]})"),
+            3
+        );
+    }
+
+    /// Same for a block comment — including one holding a lone `*` or `/`.
+    ///
+    /// The terminator is the PAIR `*/`. Stopping at either byte alone ends the
+    /// comment early and reads the rest of it as code.
+    #[test]
+    fn brackets_in_a_block_comment_do_not_count() {
+        assert_eq!(super::max_source_nesting_depth("/* {{{ * / {{{ */"), 0);
+        // Code after the terminator counts again, which is what the step past
+        // `*/` is for.
+        assert_eq!(super::max_source_nesting_depth("/* {{{ */ ({["), 3);
+        // Same again from mid-line, where a step that scales with the offset
+        // lands past the terminator instead of just after `/*`.
+        assert_eq!(
+            super::max_source_nesting_depth("const a = 1; /* {{ */ ({[]})"),
+            3
+        );
+    }
+
+    /// A bracket inside a string or template literal is data.
+    ///
+    /// This is the case the guard was written for: a file embedding a minified
+    /// blob or a JSON fixture is not deeply nested source, and refusing to
+    /// transform it would silently drop every sz prop in the file.
+    #[test]
+    fn brackets_in_a_quoted_literal_do_not_count() {
+        assert_eq!(super::max_source_nesting_depth("const a = '{{{{';"), 0);
+        assert_eq!(super::max_source_nesting_depth("const a = \"{{{{\";"), 0);
+        assert_eq!(super::max_source_nesting_depth("const a = `{{{{`;"), 0);
+        // The scanner has to find the real closing quote, not run to the end.
+        assert_eq!(super::max_source_nesting_depth("const a = '{{{{'; ({["), 3);
+    }
+
+    /// An escaped quote does not close the literal it sits in.
+    ///
+    /// Treating it as the end hands the literal's remaining brackets to the
+    /// depth count; skipping the wrong number of bytes past it loses the real
+    /// closing quote and swallows the code that follows.
+    #[test]
+    fn an_escaped_quote_does_not_close_a_literal() {
+        assert_eq!(
+            super::max_source_nesting_depth(r"const a = 'it\'s {{{';"),
+            0
+        );
+        assert_eq!(
+            super::max_source_nesting_depth(r"const a = 'it\'s'; ({["),
+            3
+        );
+    }
+
+    /// Depth is the deepest point reached, not the balance at the end.
+    #[test]
+    fn depth_is_the_deepest_point_not_the_closing_balance() {
+        assert_eq!(super::max_source_nesting_depth("{}{}{}{}"), 1);
+        assert_eq!(super::max_source_nesting_depth("{{{}}}{}"), 3);
+        // More closers than openers must not wrap a usize around.
+        assert_eq!(super::max_source_nesting_depth("}}}}{"), 1);
+    }
+
+    /// Source that never terminates a comment or literal still terminates the
+    /// scan. This runs before the parser on every file, so a hang here is a
+    /// hung build.
+    #[test]
+    fn an_unterminated_comment_or_literal_still_terminates() {
+        assert_eq!(super::max_source_nesting_depth("/* {{{ and no end"), 0);
+        assert_eq!(
+            super::max_source_nesting_depth("const a = '{{{ and no end"),
+            0
+        );
+        assert_eq!(
+            super::max_source_nesting_depth("const a = `{{{ and no end"),
+            0
+        );
+        // A trailing backslash must not step past the end of the source.
+        assert_eq!(super::max_source_nesting_depth(r"const a = 'x\"), 0);
+        // A trailing `*` is the byte before the one a `*/` check would read.
+        assert_eq!(super::max_source_nesting_depth("/* {{{ no end *"), 0);
+    }
+
+    /// Multi-byte text is stepped over, not misread as a bracket or a quote.
+    #[test]
+    fn multibyte_text_carries_no_depth() {
+        assert_eq!(super::max_source_nesting_depth("const nhãn = '{{'; ({"), 2);
+    }
 }
