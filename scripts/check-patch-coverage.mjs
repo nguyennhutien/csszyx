@@ -41,6 +41,13 @@ const UNMEASURED = [
     /^packages\/e2e\//,
     /^packages\/types\//,
     /^packages\/vscode\/src\/extension\.ts$/,
+    // Nothing instruments the docs site, so calling its changed lines
+    // uncovered reports a missing test that could not be written: the
+    // TypeScript coverage run includes `packages/*/src/**` only, and CI never
+    // runs the site's own vitest project either. Keep this list matching what
+    // the coverage runs actually measure — an entry here that later becomes
+    // instrumented is a gate silently not doing its job.
+    /^apps\//,
 ];
 
 /** Extensions the coverage runs instrument. Anything else is not measurable. */
