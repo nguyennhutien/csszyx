@@ -829,6 +829,9 @@ fn unknown_property_diagnostics(
             ));
         }
     }
+    out.extend(class_name_precedence_advisories(
+        file, ir, &location, &mut lines,
+    ));
     out
 }
 
@@ -847,6 +850,59 @@ fn relativize_diagnostic_path(filename: &str, root_dir: Option<&str>) -> String 
         }
     }
     filename.to_string()
+}
+
+/// Advisory for an element carrying both `sz` and a non-literal `className`.
+///
+/// The fusion is always `_szMerge(className, sz)` — sz last, so sz wins per
+/// conflicting utility, and JSX attribute order does not change that. For a
+/// wrapper forwarding a consumer's `className` the effect inverts what the
+/// author expects: a consumer's `sz` demotes to `className` at the call site,
+/// and the wrapper's own defaults then delete it. Nothing else reports it —
+/// the class is safelisted, the CSS ships, the types are fine.
+///
+/// Reports the SHAPE, not a proven conflict: `props.className` is a runtime
+/// value, so whether the two collide is unknowable here. That is why it is
+/// advisory. What makes reporting a shape fair is that the rewrite is strictly
+/// better — the array states the precedence, safelists identically, and lowers
+/// through one memoised `szcn` rather than an un-memoised `_szMerge` wrapping
+/// a memoised one.
+///
+/// Both intents are spellable, and either rewrite drops the `className`
+/// attribute, so the trigger disappears once the author has said which one
+/// they mean. There is no suppression flag because none is needed.
+fn class_name_precedence_advisories(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    location: &str,
+    lines: &mut Option<LineIndex>,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for element in &ir.jsx_opening_elements {
+        let Some(class_index) = element.class_attribute_index else {
+            continue;
+        };
+        // A literal className is written right there beside the sz, so the
+        // author can see both orders at once and nothing is forwarded in.
+        let Some(span) = ir.class_attributes[class_index].expression_span else {
+            continue;
+        };
+        // An sz that is already an array has stated its precedence by position.
+        if !element
+            .sz_attribute_indices
+            .iter()
+            .any(|index| ir.sz_attributes[*index].array_parts.is_empty())
+        {
+            continue;
+        }
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, span.start);
+        out.push(format!(
+            "[csszyx] \"sz\" takes precedence over the runtime \"className\" on this element at {location}:{line}, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={{[{{ … }}, className]}} for the caller to win, sz={{[className, {{ … }}]}} for these styles to win."
+        ));
+    }
+    out
 }
 
 /// Dev diagnostic for an sz ARRAY element that is an object literal carrying a
@@ -1954,11 +2010,19 @@ mod tests {
         assert!(result.metadata.uses_merge);
         assert!(result.classes.is_empty());
         assert!(result.raw_class_names.is_empty());
+        // The className is a call result, so this is exactly the shape the
+        // precedence advisory reports: `sz` is emitted last and wins, and
+        // whatever `getClass()` returns is the losing side.
         assert_eq!(
             result.diagnostics,
-            vec![String::from(
-                "sz fallback at 1:59: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
-            )]
+            vec![
+                String::from(
+                    "sz fallback at 1:59: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+                ),
+                String::from(
+                    "[csszyx] \"sz\" takes precedence over the runtime \"className\" on this element at /repo/src/App.tsx:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win."
+                ),
+            ]
         );
     }
 
@@ -1980,7 +2044,15 @@ mod tests {
         assert!(result.metadata.uses_merge);
         assert_eq!(result.classes, ["p-4"]);
         assert!(result.raw_class_names.is_empty());
-        assert!(result.diagnostics.is_empty());
+        // Same shape, static sz this time: the advisory keys on the className
+        // being an expression, not on how the sz resolved. The static-className
+        // twin above stays diagnostic-free, which is what keeps this precise.
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "[csszyx] \"sz\" takes precedence over the runtime \"className\" on this element at /repo/src/App.tsx:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win."
+            )]
+        );
     }
 
     #[test]

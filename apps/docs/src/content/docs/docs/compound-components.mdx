@@ -101,23 +101,41 @@ function CardHeader({ className, children }: ComponentProps<'header'>) {
 }
 ```
 
-The part's own base styles can be written as a `sz` object too — put them on the
-element and let csszyx compile them:
+The part's own base styles can be written as a `sz` object too. Put them in an
+`sz` **array** together with the forwarded `className`, and the position says who
+wins:
 
 ```tsx
 function CardHeader({ className, children }: ComponentProps<'header'>) {
-  // `sz` here is the part's OWN default; `className` is the consumer override.
+  // Defaults first, the consumer's className last — the consumer wins.
   return (
-    <header sz={{ display: 'flex', items: 'center', gap: 2 }} className={className}>
+    <header sz={[{ display: 'flex', items: 'center', gap: 2 }, className]}>
       {children}
     </header>
   );
 }
 ```
 
-:::note
-When an element has **both** `sz` and `className`, csszyx compiles `sz` and merges
-it with the existing `className` for you — the consumer override still applies.
+Swap the two to keep a style the caller must not override:
+
+```tsx
+// The consumer's className first, these styles last — these win.
+<header sz={[className, { display: 'flex', items: 'center', gap: 2 }]}>
+```
+
+:::caution[Do not put `sz` and a forwarded `className` on the same element]
+When one element carries both, csszyx always emits
+`_szMerge(className, sz)` — `sz` goes last, so **`sz` wins** on any conflicting
+utility, and JSX attribute order does not change that. A consumer who writes
+`sz={{ gap: 8 }}` on your component has it demoted to `className`, so their
+override is the losing side and is deleted from the class string before render.
+
+Nothing else catches it: the class is safelisted, the CSS ships, the types are
+fine. Only the render is wrong. csszyx reports the shape as a nudge — see
+[the warnings reference](/docs/reference/warnings/).
+
+The `sz` array above is also the faster spelling: it lowers through one
+memoised `szcn` instead of an un-memoised `_szMerge` wrapping a memoised one.
 :::
 
 :::tip[szcn understands property groups]

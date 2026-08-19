@@ -169,6 +169,7 @@ barrel is followed and does not report. The other cause is
 | `[csszyx] possible style override at {filename}: this element spreads props that may contain style, while sz emits an explicit style attribute. Move the spread style to an explicit style prop so csszyx can merge both values.` | nudge | Pass `style` explicitly so both values merge. |
 | `[csszyx] szRecover at {filename}: only string-literal values ("csr" \| "dev-only") are supported. Dynamic values disable token emission for this element.` | nudge | Use a literal. |
 | `[csszyx] szRecover at {filename}: unknown mode "{value}" — expected "csr" or "dev-only". Token emission skipped.` | nudge | Use `"csr"` or `"dev-only"`. |
+| `[csszyx] "sz" takes precedence over the runtime "className" on this element at {filename}:{line}, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.` — suggestion: `state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win.` | nudge | State the order in one `sz` array. Either rewrite silences it. |
 
 `{filename}` is `<anonymous>` when the compiler was called without one.
 

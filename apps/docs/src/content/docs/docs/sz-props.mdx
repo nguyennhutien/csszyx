@@ -752,20 +752,38 @@ for runtime data).
 
 ## Combining with className
 
-The `sz` prop and `className` prop can coexist. The compiler merges them:
+The `sz` prop and `className` prop can coexist. The compiler puts `sz` **last**:
 
 ```tsx
 <div sz={{ p: 4, bg: "blue-500" }} className="custom-class" />
-// → className="p-4 bg-blue-500 custom-class"
+// → className="custom-class p-4 bg-blue-500"
 ```
 
-When `className` is a dynamic expression (not a static string), the compiler
-uses `_szMerge` at runtime to join them safely:
+That order is the contract, and it holds whichever order you write the two
+attributes in — JSX attribute order carries no meaning here. Since the merge is
+last-wins per conflicting utility, **`sz` beats `className` on the same
+element**: a `className` of `p-8` beside `sz={{ p: 4 }}` leaves `p-4`, and the
+`p-8` is removed from the string rather than losing in the cascade.
+
+When `className` is a dynamic expression, the same order applies at runtime:
 
 ```tsx
-// className is dynamic → _szMerge at runtime
+// className is dynamic → _szMerge(className, sz) at runtime
 <div sz={{ p: 4 }} className={baseClass} />
 ```
+
+This is worth knowing before you write a wrapper component. A caller's `sz` is
+demoted to `className` at the call site, so it arrives on the losing side of
+your own `sz` and is silently dropped. To state the precedence explicitly —
+either direction — put both in one `sz` array, where position decides:
+
+```tsx
+<div sz={[{ p: 4 }, className]} />   // the caller wins
+<div sz={[className, { p: 4 }]} />   // these styles win
+```
+
+csszyx reports the ambiguous shape as a nudge; either rewrite silences it. See
+[compound components](/docs/compound-components/) for the wrapper case in full.
 
 ## Runtime Helpers for Dynamic Classes
 
