@@ -694,6 +694,8 @@ about files I happen to open".
 | `Dead-class check skipped: no stylesheet in this project imports Tailwind, so there is no design system to ask which classes are real.` | The check needs a Tailwind entry to ask. |
 | `Dead-class check skipped: {reason}.` | |
 | `✖ The dead-class check did not run. Its stylesheet is part of this project, so this is reported as a failure rather than a skip — otherwise a check that never runs is indistinguishable from one that found nothing.` | Exits non-zero. See below. |
+| `Values that belong to a different sz key:` + one line per offender reading ``{key}: '{value}' emits {class}, which sets {properties} — not what {key} sets.`` | A value written on a key that owns neither it nor its CSS property. |
+| `✖ {n} value(s) written on a key that does not own them. Each one compiles, ships CSS and renders, so nothing else reports it; the style asked for is simply absent. Move the value to the key that owns it, or declare a theme token by that name if the spelling was deliberate.` | Exits non-zero. |
 
 A skip is not always harmless. Two things can stop the dead-class pass, and
 only one of them is your project's:
@@ -706,6 +708,17 @@ only one of them is your project's:
   and **fails**, because a check that never runs is indistinguishable in CI
   from one that found nothing, and a project can otherwise stay green for
   months after its entry stopped compiling.
+
+Several sz keys lower under one Tailwind prefix, so a keyword belonging to one
+of them compiles cleanly on another: `color: 'balance'` emits `text-balance`,
+which sets `text-wrap` and no colour at all. The type cannot reject it — a
+colour may be any theme token — and the class is real, so the dead-class pass
+is quiet too. The command reads the CSS property the class actually sets and
+compares it with the one the key sets, which is what separates the mistake from
+`fill: 'none'`, where the keyword sets exactly the property `fill` sets.
+
+Your own stylesheet decides. A project that declares `--color-balance` has
+given the spelling a meaning, and the report disappears for it.
 
 `npx @csszyx/cli scan-collisions` finds class names that would collide with a
 mangled token:

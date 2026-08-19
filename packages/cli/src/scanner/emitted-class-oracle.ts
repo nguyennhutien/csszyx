@@ -31,10 +31,10 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-
 import fg from 'fast-glob';
-
+import { keywordOracleFrom } from './keyword-oracle.js';
 import { brokenOpacityValue, collectCustomProperties } from './opacity-verdict.js';
+import type { KeywordOracle } from './sibling-keyword.js';
 
 /** A stylesheet handed back to Tailwind's loader. */
 interface LoadedStylesheet {
@@ -46,6 +46,8 @@ interface LoadedStylesheet {
 /** The slice of Tailwind's design system this module uses. */
 interface DesignSystem {
     candidatesToCss(candidates: readonly string[]): Array<string | null>;
+    theme: { entries(): Iterable<readonly [string, unknown]> };
+    parseCandidate(candidate: string): Iterable<{ kind: string; root: string }>;
 }
 
 /** A plugin or config module handed back to Tailwind's loader. */
@@ -111,6 +113,12 @@ export type EmittedClassOracle =
            * @returns Broken classes with the value that broke them.
            */
           findBrokenOpacity(classes: readonly string[]): Array<{ token: string; value: string }>;
+          /**
+           * The same design system, answering the questions the sibling-keyword
+           * rule asks. Carried here so a project's stylesheet is compiled once
+           * and every pass that needs it reads the same one.
+           */
+          keywords: KeywordOracle;
       }
     | { ok: false; kind: OracleSkipKind; reason: string };
 
@@ -440,6 +448,7 @@ export async function createEmittedClassOracle(
 
     return {
         ok: true,
+        keywords: keywordOracleFrom(design),
         findDead(classes) {
             // Markers are excluded before the question is asked, not filtered
             // out of the answer: Tailwind's verdict on them is "no CSS", which

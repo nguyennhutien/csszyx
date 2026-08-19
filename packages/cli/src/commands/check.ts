@@ -21,6 +21,12 @@ import {
     type EmittedClassOracle,
     findTailwindCssEntries,
 } from '../scanner/emitted-class-oracle.js';
+import {
+    findSiblingKeywordValues,
+    type SiblingKeywordFinding,
+    type SzValuePair,
+    szValuePairs,
+} from '../scanner/sibling-keyword.js';
 import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
 
 /** Options for the `check` command. */
@@ -88,39 +94,29 @@ function groupIssuesByFile(issues: SzIssue[]): Map<string, string[]> {
     return byFile;
 }
 
+/** Every design system this project compiles, with why any were skipped. */
+interface OpenedOracles {
+    oracles: Array<Extract<EmittedClassOracle, { ok: true }>>;
+    /** One reason per stylesheet that produced no oracle. */
+    skipped: string[];
+    /** True when a stylesheet belonging to the project would not compile. */
+    stylesheetFailed: boolean;
+    /** False when nothing in the project imports Tailwind at all. */
+    hadEntries: boolean;
+}
+
 /**
- * Ask Tailwind which of the emitted classes produce no CSS, and report them.
+ * Compile every Tailwind entry the project has, once.
  *
- * A class that styles nothing is the failure csszyx exists to prevent, and it
- * is invisible in the source: the class is right there in the DOM. Only the
- * project's own Tailwind can answer, because the answer depends on its theme,
- * its custom breakpoints and its `@utility` definitions.
- *
- * Anything that stops the question being asked is reported as a skip, never as
- * a finding — a project without Tailwind v4 is not a project full of dead
- * classes.
+ * Several passes need the project's own design system, and compiling it per
+ * pass would both cost the work twice and let two passes disagree about a
+ * project whose stylesheet is mid-edit.
  *
  * @param cwd - Project root.
- * @param origins - Emitted class mapped to the file that first emitted it.
- * @param allow - Classes the project vouched for.
- * @returns Whether anything dead was found.
+ * @returns The compiled design systems and the reasons any were skipped.
  */
-async function reportDeadClasses(
-    cwd: string,
-    origins: Map<string, string>,
-    allow: readonly string[],
-): Promise<boolean> {
-    if (origins.size === 0) return false;
-
+async function openOracles(cwd: string): Promise<OpenedOracles> {
     const entries = await findTailwindCssEntries(cwd);
-    if (entries.length === 0) {
-        printInfo(
-            'Dead-class check skipped: no stylesheet in this project imports Tailwind, so ' +
-                'there is no design system to ask which classes are real.',
-        );
-        return false;
-    }
-
     const oracles: Array<Extract<EmittedClassOracle, { ok: true }>> = [];
     const skipped: string[] = [];
     let stylesheetFailed = false;
@@ -136,6 +132,41 @@ async function reportDeadClasses(
             skipped.push(oracle.reason);
             stylesheetFailed ||= oracle.kind === 'stylesheet';
         }
+    }
+    return { oracles, skipped, stylesheetFailed, hadEntries: entries.length > 0 };
+}
+
+/**
+ * Ask Tailwind which of the emitted classes produce no CSS, and report them.
+ *
+ * A class that styles nothing is the failure csszyx exists to prevent, and it
+ * is invisible in the source: the class is right there in the DOM. Only the
+ * project's own Tailwind can answer, because the answer depends on its theme,
+ * its custom breakpoints and its `@utility` definitions.
+ *
+ * Anything that stops the question being asked is reported as a skip, never as
+ * a finding — a project without Tailwind v4 is not a project full of dead
+ * classes.
+ *
+ * @param opened - The project's compiled design systems.
+ * @param origins - Emitted class mapped to the file that first emitted it.
+ * @param allow - Classes the project vouched for.
+ * @returns Whether anything dead was found.
+ */
+async function reportDeadClasses(
+    opened: OpenedOracles,
+    origins: Map<string, string>,
+    allow: readonly string[],
+): Promise<boolean> {
+    if (origins.size === 0) return false;
+
+    const { oracles, skipped, stylesheetFailed, hadEntries } = opened;
+    if (!hadEntries) {
+        printInfo(
+            'Dead-class check skipped: no stylesheet in this project imports Tailwind, so ' +
+                'there is no design system to ask which classes are real.',
+        );
+        return false;
     }
     if (oracles.length === 0) {
         // Every reason, not the first: there was at least one entry and none of
@@ -287,6 +318,8 @@ interface SzDiagnostics {
     issues: SzIssue[];
     /** Class name to the first file that produced it. */
     classOrigins: Map<string, string>;
+    /** Literal sz pairs, keyed by project-relative file. */
+    pairsByFile: Map<string, SzValuePair[]>;
 }
 
 /**
@@ -308,11 +341,16 @@ async function collectSzDiagnostics(files: string[], cwd: string): Promise<SzDia
     // One origin per class is enough to point at: the report answers "where did
     // this come from", not "everywhere it appears".
     const classOrigins = new Map<string, string>();
+    // Read from the same source text the lowering pass sees, so a file skipped
+    // there is skipped here too rather than reported by only one of them.
+    const pairsByFile = new Map<string, SzValuePair[]>();
 
     for (const file of files) {
         const source = await readSzSource(file);
         if (source === null) continue;
         const currentFile = path.relative(cwd, file);
+        const pairs = szValuePairs(source);
+        if (pairs.length > 0) pairsByFile.set(currentFile, pairs);
         for (const message of recordFileClasses(source, file, cwd, currentFile, classOrigins)) {
             if (message.startsWith('[csszyx]')) {
                 issues.push({
@@ -322,7 +360,7 @@ async function collectSzDiagnostics(files: string[], cwd: string): Promise<SzDia
             }
         }
     }
-    return { issues, classOrigins };
+    return { issues, classOrigins, pairsByFile };
 }
 
 /**
@@ -359,6 +397,61 @@ function recordFileClasses(
 }
 
 /**
+ * Report values written on a key that owns neither the value nor its property.
+ *
+ * Runs against the project's own design system because that is what decides:
+ * a project declaring `--color-balance` has given `color: 'balance'` a meaning,
+ * and this must disappear for it.
+ *
+ * Silent when there is no design system to ask. The dead-class pass already
+ * reports that, and a second copy of the same skip would read as two problems.
+ *
+ * @param opened - The project's compiled design systems.
+ * @param pairsByFile - Literal sz pairs, keyed by project-relative file.
+ * @returns Whether anything was found.
+ */
+function reportSiblingKeywords(
+    opened: OpenedOracles,
+    pairsByFile: Map<string, SzValuePair[]>,
+): boolean {
+    if (opened.oracles.length === 0 || pairsByFile.size === 0) return false;
+
+    const found: Array<{ file: string; finding: SiblingKeywordFinding }> = [];
+    for (const [file, pairs] of pairsByFile) {
+        // Reported only when EVERY design system agrees the value is foreign.
+        // One stylesheet that resolves it as a token is enough to make the
+        // spelling meaningful, and this command cannot map a file to the
+        // stylesheet it renders under.
+        const perOracle = opened.oracles.map(oracle =>
+            findSiblingKeywordValues(pairs, oracle.keywords),
+        );
+        for (const finding of perOracle[0]) {
+            const everywhere = perOracle.every(findings =>
+                findings.some(other => other.key === finding.key && other.value === finding.value),
+            );
+            if (everywhere) found.push({ file, finding });
+        }
+    }
+    if (found.length === 0) return false;
+
+    printWarn('\nValues that belong to a different sz key:');
+    for (const { file, finding } of found) {
+        printInfo(`  ${file}`);
+        printInfo(
+            `    ${finding.key}: '${finding.value}' emits ${finding.className}, which sets ` +
+                `${finding.sets.join(', ')} — not what ${finding.key} sets.`,
+        );
+    }
+    printWarn(
+        `\n✖ ${found.length} value(s) written on a key that does not own them. Each one ` +
+            'compiles, ships CSS and renders, so nothing else reports it; the style asked for ' +
+            'is simply absent. Move the value to the key that owns it, or declare a theme ' +
+            'token by that name if the spelling was deliberate.',
+    );
+    return true;
+}
+
+/**
  * Scan the project for unknown/aliased `sz` keys and report them in one pass.
  *
  * Sets `process.exitCode` to 1 when any issue is found so the command can gate
@@ -390,7 +483,13 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     }
     s.succeed(`Found ${files.length} files`);
 
-    const { issues, classOrigins } = await collectSzDiagnostics(files, cwd);
+    const { issues, classOrigins, pairsByFile } = await collectSzDiagnostics(files, cwd);
+    // Compiling a stylesheet is the expensive part of this command, so it is
+    // skipped when neither pass that reads it has anything to ask.
+    const opened =
+        classOrigins.size > 0 || pairsByFile.size > 0
+            ? await openOracles(cwd)
+            : { oracles: [], skipped: [], stylesheetFailed: false, hadEntries: false };
 
     if (issues.length === 0) {
         printSuccess(`No sz issues found across ${files.length} files.`);
@@ -405,7 +504,13 @@ export async function check(options: CheckOptions = {}): Promise<void> {
 
     // Runs whichever way the key pass went: a canonical key can still lower to
     // a class this project's Tailwind does not serve.
-    if (await reportDeadClasses(cwd, classOrigins, options.allow ?? [])) {
+    if (await reportDeadClasses(opened, classOrigins, options.allow ?? [])) {
+        process.exitCode = 1;
+    }
+
+    // Runs last and independently: a value on the wrong key survives both
+    // passes above, which is the whole reason it needs its own.
+    if (reportSiblingKeywords(opened, pairsByFile)) {
         process.exitCode = 1;
     }
 }
