@@ -7984,6 +7984,72 @@ export const C = ({ styles }) => <div sz={styles} />;
     /// object but inverts the condition, so the styles land on exactly the
     /// renders that were supposed to go without them — a bug that looks like
     /// application logic rather than compilation.
+    /// The vocabulary the array-part safety proof accepts, and what it refuses.
+    ///
+    /// `dynamic_provable` decides whether the runtime helper may skip its
+    /// object-lowering path for one array element. Read it too generously and
+    /// an object reaching that element at runtime meets a helper that no longer
+    /// knows how to lower it; read it too strictly and every file carries a
+    /// path it never uses. Neither shows up as a wrong class in a fixture, so
+    /// the vocabulary is pinned shape by shape.
+    ///
+    /// Every fixture below has to REACH the dynamic lane first — most provably
+    /// non-object shapes are pre-lowered statically and never become a runtime
+    /// part at all, so the assert on `dynamic_span` is load-bearing, not
+    /// decoration.
+    #[test]
+    fn the_array_part_safety_proof_accepts_exactly_the_non_object_shapes() {
+        let provable = |element: &str| {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: format!("const A = ({{ x, y }}) => <div sz={{[{element}]}} />;"),
+            });
+            let parts = &parsed.ir.sz_attributes[0].array_parts;
+            assert_eq!(parts.len(), 1, "{element}");
+            assert!(
+                parts[0].dynamic_span.is_some(),
+                "{element} must reach the runtime lane for the flag to mean anything"
+            );
+            parts[0].dynamic_provable
+        };
+
+        // `&&` yields its LEFT only when that left is falsy, and no falsy value
+        // is an object — so the right operand alone decides. Demanding the left
+        // too would refuse the ordinary guarded spellings.
+        assert!(provable("x && undefined"), "&& is decided by its right");
+        assert!(provable("x && null"), "&& with a null right");
+        assert!(provable("x && (y ? 'a' : 'b')"), "&& over string branches");
+        assert!(!provable("x && y"), "&& whose right could be an object");
+
+        // A ternary needs BOTH branches proven, since either can be yielded.
+        assert!(!provable("x ? y : 'b'"), "one branch is an open binding");
+        assert!(!provable("x ? y : z"), "neither branch is proven");
+
+        // A bare binding or a call result is exactly what the proof cannot see
+        // through, and the whole reason the runtime path still exists.
+        assert!(!provable("y"), "an ordinary binding");
+        assert!(!provable("y()"), "a call result");
+
+        // A boolean is judged by its VALUE. `false` is falsy and never reaches
+        // the helper as an object; `true` is neither a class nor an object, and
+        // treating it as proven would let the helper skip a lowering it may
+        // still be handed.
+        assert!(provable("x && false"), "false is proven");
+        assert!(!provable("x && true"), "true is not");
+
+        // An array element is the same question asked of every member, so one
+        // unproven member decides the whole.
+        assert!(provable("x && ['a', null]"), "array of proven members");
+        assert!(!provable("x && ['a', y]"), "array holding an open binding");
+
+        // `||` can yield EITHER side, so unlike `&&` both have to be proven.
+        assert!(provable("'a' || 'b'"), "|| with both sides proven");
+        assert!(!provable("y || 'b'"), "|| with an unproven left");
+
+        // The shape the proof exists to refuse, spelled out.
+        assert!(!provable("x ? { p: y } : 'b'"), "an object branch");
+    }
+
     #[test]
     fn only_an_and_guard_becomes_a_conditional_array_part() {
         for source in [

@@ -250,10 +250,6 @@
             "count": 1,
             "verdict": "todo"
         },
-        "packages/core/src/transform/parser.rs delete ! in is_provably_non_object_argument": {
-            "count": 1,
-            "verdict": "todo"
-        },
         "packages/core/src/transform/parser.rs delete match arm \"csszyx\" in szr_rewrite_target": {
             "count": 1,
             "verdict": "todo"
@@ -266,15 +262,7 @@
             "count": 1,
             "verdict": "todo"
         },
-        "packages/core/src/transform/parser.rs delete match arm Expression::ArrayExpression(array) in is_provably_non_object_argument": {
-            "count": 1,
-            "verdict": "todo"
-        },
         "packages/core/src/transform/parser.rs delete match arm Expression::ArrayExpression(array) in static_object_from_expression": {
-            "count": 1,
-            "verdict": "todo"
-        },
-        "packages/core/src/transform/parser.rs delete match arm Expression::BooleanLiteral(literal) in is_provably_non_object_argument": {
             "count": 1,
             "verdict": "todo"
         },
@@ -295,23 +283,11 @@
             "count": 1,
             "verdict": "todo"
         },
-        "packages/core/src/transform/parser.rs delete match arm Expression::ConditionalExpression(conditional) in is_provably_non_object_argument": {
-            "count": 1,
-            "verdict": "todo"
-        },
         "packages/core/src/transform/parser.rs delete match arm Expression::Identifier(identifier) in candidate_classes_from_expression": {
             "count": 1,
             "verdict": "todo"
         },
-        "packages/core/src/transform/parser.rs delete match arm Expression::Identifier(identifier) in is_provably_non_object_argument": {
-            "count": 1,
-            "verdict": "todo"
-        },
         "packages/core/src/transform/parser.rs delete match arm Expression::Identifier(identifier) in static_object_candidate_from_expression": {
-            "count": 1,
-            "verdict": "todo"
-        },
-        "packages/core/src/transform/parser.rs delete match arm Expression::LogicalExpression(logical) in is_provably_non_object_argument": {
             "count": 1,
             "verdict": "todo"
         },
@@ -447,10 +423,6 @@
             "count": 1,
             "verdict": "todo"
         },
-        "packages/core/src/transform/parser.rs delete match arm oxc_ast::ast::LogicalOperator::And in is_provably_non_object_argument": {
-            "count": 1,
-            "verdict": "todo"
-        },
         "packages/core/src/transform/parser.rs replace != with == in strict_static_selection": {
             "count": 1,
             "verdict": "todo"
@@ -464,10 +436,6 @@
             "verdict": "todo"
         },
         "packages/core/src/transform/parser.rs replace && with || in count_szr_word_occurrences": {
-            "count": 1,
-            "verdict": "todo"
-        },
-        "packages/core/src/transform/parser.rs replace && with || in is_provably_non_object_argument": {
             "count": 1,
             "verdict": "todo"
         },
