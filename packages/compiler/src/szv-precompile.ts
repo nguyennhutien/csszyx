@@ -573,7 +573,7 @@ export interface MaybeSpan {
  * — the sz rewrite has already replaced that whole range with a generated
  * expression, and neither span-based engine can edit text it has replaced:
  * magic-string throws, string_wizard aborts the process without naming the
- * file, and one oxc path emitted malformed JSX with no error at all. So the
+ * file, and one the JavaScript path it replaced emitted malformed JSX with no error at all. So the
  * call keeps its runtime path, in every engine, and the existing szr fallback
  * diagnostic reports it.
  *

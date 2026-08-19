@@ -307,7 +307,7 @@ describe('resolveParserMode — wasm degrade target', () => {
     });
 });
 
-describe('resolveParserMode — rust-only world (oxc/babel removed)', () => {
+describe('resolveParserMode — rust-only world (the JavaScript engines it replaced removed)', () => {
     it.each(['oxc', 'babel'] as const)('rejects the removed mode %s', mode => {
         expect(isParserMode(mode)).toBe(false);
     });

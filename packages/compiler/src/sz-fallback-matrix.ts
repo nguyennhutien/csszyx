@@ -20,7 +20,7 @@
  * Shape of the unresolved expression, as far as the guidance is concerned.
  *
  * Deliberately coarser than any engine's AST: each lane classifies its own
- * node type into one of these, so the matrix stays free of Babel/oxc/oxc-rust
+ * node type into one of these, so the matrix stays free of the JavaScript engines it replaced/oxc-rust
  * node vocabulary.
  */
 export type SzFallbackKind = 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory';

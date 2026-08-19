@@ -7,7 +7,7 @@
  * forward case from the per-key matrix fixture
  * (`packages/cli/tests/generated/sz-key-cases.json`), so the rust default engine
  * is proven equivalent to the TS engine for every key the snippets document —
- * not just the curated edges. For each object it records the canonical Babel/oxc
+ * not just the curated edges. For each object it records the canonical the JavaScript engines it replaced
  * `transform()` className and serializes the object into the Rust
  * `StaticSzObject` IR shape. `packages/core/tests/parity_corpus.rs` replays the
  * same objects through the native `lower_static_sz_object` and asserts identical

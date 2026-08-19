@@ -180,7 +180,7 @@ describe('prescan AST budget', () => {
 
     it('wasm prescan extracts a real page file the transform-hook budget would reject', () => {
         const root = tempRoot();
-        // >50k AST nodes for the JS engines (the compiler-level default throws
+        // >50k AST nodes for the JavaScript engines it replaced (the compiler-level default throws
         // ASTBudgetExceededError on this shape), yet well under the prescan cap.
         const bigSource = `import { szv } from 'csszyx';
 const controlSz = szv({ variants: { layout: { a: { mx: 0, my: 4 } } } });

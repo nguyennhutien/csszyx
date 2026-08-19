@@ -43,7 +43,7 @@ pub fn lower_source_ir_classes(ir: &SourceIr) -> LoweredSourceClasses {
         }))
         .collect();
     // Split each static class attribute into individual class tokens, matching
-    // the oxc path: consumers (safelist, mangle) iterate raw_class_names as
+    // the JavaScript path it replaced: consumers (safelist, mangle) iterate raw_class_names as
     // single classes, so a whole `"flex gap-2"` string would be treated as one
     // bogus class on the default rust parser.
     let raw_class_names = ir
@@ -62,7 +62,7 @@ pub fn lower_source_ir_classes(ir: &SourceIr) -> LoweredSourceClasses {
 /// Lower one static `sz` attribute into classes.
 ///
 /// For a ternary `sz={cond ? A : B}` attribute both branches contribute to the
-/// reported class list so `result.classes` matches what oxc-JS reports today
+/// reported class list so `result.classes` matches what the JavaScript pipeline reported
 /// (both possible runtime outcomes flow back as static knowledge for the
 /// className manifest). The rewrite layer keeps the two branches separate
 /// when it emits source.
@@ -137,7 +137,7 @@ pub(crate) fn is_removed_sz_key(key: &str) -> bool {
 
 /// Whether a key is a recognized sz property or variant, mirroring the JS
 /// `isKnown` check in transform-core so the native engine warns on the same set
-/// of typo'd keys as the oxc/Babel engines. Generous by construction — a key is
+/// of typo'd keys as the JavaScript engines it replaced. Generous by construction — a key is
 /// "known" if ANY table or special form claims it (`property_prefix` already
 /// covers the many special-cased keys like `content`/`display`/`snapAlign`), so
 /// a valid key is never flagged as unknown.
@@ -151,7 +151,7 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
         // the key). The `Boolean(true)` emit path falls back to the key itself
         // for them, so they DO produce a class — the known-key check must agree,
         // or rust warns "Unknown property … will be ignored" for a class it
-        // actually emits, diverging from the JS engines (whose BOOLEAN_SHORTHANDS
+        // actually emits, diverging from the JavaScript engines it replaced (whose BOOLEAN_SHORTHANDS
         // set includes them and never warns).
         // Fully-qualified rather than imported: this is the ONLY caller, and it
         // is gated behind `#[cfg(any(feature = "native-engine", test))]`. A plain
@@ -192,7 +192,7 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
 /// the lowering does, but does NOT descend into parametric variants
 /// (`data`/`aria`/`group`/`peer`/`has`/`not`/`supports`), `css`, `bgImg`, or
 /// color-with-opacity objects — their members are parameters/values, not sz
-/// properties, so checking them would falsely warn (matches the oxc/Babel walk).
+/// properties, so checking them would falsely warn (matches the JavaScript walk it replaced).
 #[cfg(any(feature = "native-engine", test))]
 pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
     for property in &object.properties {
@@ -251,12 +251,20 @@ pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(St
 /// Same descent rules as `collect_dead_spacing_steps`: variant nesting is
 /// walked, parameter namespaces are not.
 #[cfg(feature = "native-engine")]
-pub(crate) fn collect_removed_boolean_sugar(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
+pub(crate) fn collect_removed_boolean_sugar(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, &'static str, &'static str, u32)>,
+) {
     for property in &object.properties {
         match &property.value {
             StaticSzValue::Boolean(true) => {
-                if is_removed_boolean_sugar(&property.key) {
-                    out.push((property.key.clone(), property.span.start));
+                // Membership IS the replacement lookup: both tables are
+                // generated from the same source object, so asking one and then
+                // the other would leave a branch that cannot run.
+                if let Some((canonical, value)) =
+                    super::generated::tables::removed_boolean_sugar_replacement(&property.key)
+                {
+                    out.push((property.key.clone(), canonical, value, property.span.start));
                 }
             }
             StaticSzValue::Object(nested) => {
@@ -641,7 +649,7 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
                 // Color-with-opacity object — { bg: { color: 'blue-500', op: 20 } }
                 // → bg-blue-500/20. Distinguished from variant nesting by a
                 // `color` member on a key that maps to a color utility, matching
-                // the Babel/oxc transform; without this it lowered as a nested
+                // the JavaScript transform it replaced; without this it lowered as a nested
                 // variant into broken classes like `bg:text-white` / `bg:op-20`.
                 if property_prefix(&property.key).is_some()
                     && object_string_property(nested, "color").is_some()
@@ -656,7 +664,7 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
 
                 // Parametric / scope variants combine with `-` and bracket their
                 // parameter rather than chaining a plain `:` like simple variants
-                // do, matching the Babel/oxc transform.
+                // do, matching the JavaScript transform it replaced.
                 match property.key.as_str() {
                     "supports" => {
                         lower_bracket_param_variant(nested, prefix, "supports", classes);
@@ -1003,7 +1011,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
     }
 
     // Unknown keys fall back to a kebab-cased utility name (breakWord →
-    // break-word) the way the oxc path does, instead of the raw camelCase key.
+    // break-word) the way the JavaScript path it replaced does, instead of the raw camelCase key.
     let class_key: Cow<str> =
         property_prefix(key).map_or_else(|| Cow::Owned(kebab_case(key)), Cow::Borrowed);
 
@@ -1025,7 +1033,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // leading numbers ride the spacing scale like Tailwind's bare
             // syntax; non-quarter-step values (1.4) have no bare spelling —
             // Tailwind drops leading-1.4 — so they bracket as the unitless
-            // ratio instead of emitting a dead class. Mirrors the oxc lane.
+            // ratio instead of emitting a dead class. Mirrors the JavaScript lane it replaced.
             if (key == "leading" || key == "lineHeight") && (value * 4.0).fract() != 0.0 {
                 return Some(format!("{prefix}leading-[{}]", format_abs_number(*value)));
             }
@@ -1055,7 +1063,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             }
             // leading numeric STRINGS are the unitless line-height ratio and
             // auto-bracket (leading: '1.5' → leading-[1.5]); bare numbers ride
-            // the spacing scale. Mirrors the oxc lane.
+            // the spacing scale. Mirrors the JavaScript lane it replaced.
             if (key == "leading" || key == "lineHeight") && is_unsigned_decimal(value) {
                 return Some(format!("{prefix}leading-[{value}]"));
             }
@@ -1073,7 +1081,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             }
             // display / position / visibility carry their value as the bare
             // Tailwind utility (`flex`, `grid`, `absolute`, `visible`), not a
-            // `display-flex` style prefix-value pair. This mirrors the Babel/oxc
+            // `display-flex` style prefix-value pair. This mirrors the JavaScript engines it replaced
             // transform so both parser paths emit classes Tailwind actually
             // generates.
             if key == "display" {
@@ -1102,7 +1110,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             }
             // Single-property typography utilities carry their value as a bare
             // Tailwind class (`uppercase`, `italic`, `underline`, `antialiased`),
-            // mirroring the Babel/oxc transform. The boolean-sugar aliases were
+            // mirroring the JavaScript transform it replaced. The boolean-sugar aliases were
             // removed, so these canonical string forms are the only spelling.
             if key == "textTransform" {
                 return Some(match value.as_str() {
@@ -1354,7 +1362,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // Bare numeric fractions (1/2, 3/4) are sizing values, not the
             // `color/op` slash strings the guard below suppresses. Fraction-
             // friendly properties keep them native (w-1/2, basis-1/3); the rest
-            // wrap them as arbitrary (p-[1/2]). Mirrors the Babel/oxc transform.
+            // wrap them as arbitrary (p-[1/2]). Mirrors the JavaScript transform it replaced.
             if is_bare_fraction(value) {
                 return Some(if is_fraction_supported_prop(key) {
                     format!("{prefix}{class_key}-{value}")
@@ -1397,7 +1405,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             } else if needs_brackets(value) {
                 // Tailwind arbitrary values cannot contain raw spaces (the class
                 // attribute would split into separate tokens), so collapse
-                // whitespace to underscores, matching the Babel/oxc transform.
+                // whitespace to underscores, matching the JavaScript transform it replaced.
                 format!("[{}]", normalize_arbitrary_value(value))
             } else {
                 value.clone()
@@ -1773,7 +1781,7 @@ fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str)
     } else if raw_color.starts_with("--") {
         // Shadow-family prefixes parse a bare `(--var)` suffix as the shadow
         // VALUE, so a var used as a color needs the `color:` hint. Mirrors
-        // `buildColorObjectClass` in the Babel/oxc transform.
+        // `buildColorObjectClass` in the JavaScript transform it replaced.
         if matches!(
             tw_prefix,
             "shadow" | "inset-shadow" | "text-shadow" | "drop-shadow"
@@ -1807,7 +1815,7 @@ fn format_opacity_value(value: &StaticSzValue) -> Option<String> {
     match value {
         // Integers and half steps (0, 0.5, 50, 75.5 …) stay plain; other
         // decimals (0.05, 0.02 …) become arbitrary `/[0.05]`. Mirrors the
-        // Babel/oxc `formatOpacity`.
+        // the JavaScript engines it replaced `formatOpacity`.
         StaticSzValue::Number(op) => {
             if (op * 2.0).fract() == 0.0 {
                 Some(format_abs_number(*op))
@@ -2004,7 +2012,7 @@ fn is_bare_fraction(value: &str) -> bool {
 }
 
 /// Properties that accept native Tailwind fractions (w-1/2, basis-1/3) instead
-/// of arbitrary brackets. Mirrors `FRACTION_SUPPORTED_PROPS` in the oxc path.
+/// of arbitrary brackets. Mirrors `FRACTION_SUPPORTED_PROPS` in the JavaScript path it replaced.
 fn is_fraction_supported_prop(key: &str) -> bool {
     matches!(
         key,

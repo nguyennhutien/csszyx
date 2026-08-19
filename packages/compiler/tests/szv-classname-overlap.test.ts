@@ -5,7 +5,7 @@
  * target overlapping source ranges. The span-based engines cannot edit text they
  * have already replaced, so this shape used to end a build three different ways:
  * the rust lane aborted the process at `string_wizard` with no file name, the
- * oxc lane threw from magic-string, and one oxc path emitted malformed JSX with
+ * the JavaScript lane it replaced threw from magic-string, and one the JavaScript path it replaced emitted malformed JSX with
  * no error at all. The babel lane survived only by silently dropping the
  * precompile — it re-descends into the attribute value it just rewrote and
  * counted the same factory call twice.

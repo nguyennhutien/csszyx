@@ -5,7 +5,7 @@
  * dirty fixture tree with each parser — rust, oxc, babel — and asserts the
  * safelist token set is IDENTICAL across engines. This is the in-repo version
  * of the harness a field user had to build themselves to discover that the
- * native engine silently dropped whole files (JSX-in-.js) the JS engines kept:
+ * native engine silently dropped whole files (JSX-in-.js) the JavaScript engines it replaced kept:
  * per-snippet transform tests can never see pipeline bugs (file discovery,
  * prescan gates, per-file error handling, fallback asymmetry). Engine scan
  * divergence is a bug by definition — this suite enforces it.
@@ -42,7 +42,7 @@ export const App = ({ isMobile, children }) => (
 );
 `,
     // vui 0.10.10 item 2: JSX in plain .js — parse-fail here silently emptied
-    // the native engine's scan while the JS engines recovered via Babel.
+    // the native engine's scan while the JavaScript engines it replaced recovered via Babel.
     'src/toolbar.js': `
 export const Toolbar = ({ active }) => (
     <div className="toolbar datetime" sz={{ mx: 0, my: 4 }}>

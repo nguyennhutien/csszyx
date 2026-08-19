@@ -10,7 +10,7 @@
  * source printed different advice depending on a setting that is supposed to be
  * an implementation detail.
  *
- * The oxc lane also named the wrong file: it reports through the filename it
+ * The the JavaScript lane it replaced also named the wrong file: it reports through the filename it
  * hands the parser, which substitutes `file.tsx` so JSX is detected at all, so
  * a caller that passed no filename was told about a file that does not exist.
  */

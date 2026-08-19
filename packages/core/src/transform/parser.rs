@@ -171,7 +171,7 @@ pub fn parse_source_shell_with_registries(
     let error_count = diagnostics.len();
     if error_count > 0 || parsed.panicked {
         // A file the parser rejects contributes nothing (or only fragments) to
-        // the safelist, and unlike the JS engines there is no Babel fallback on
+        // the safelist, and unlike the JavaScript engines there is no Babel fallback on
         // the native path — so make the skip observable. The bundler plugin
         // promotes this marker to a build warning when the file yielded no
         // classes, instead of letting the classes die silently under
@@ -742,7 +742,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 //    conditional-expression spread) — emits
                 //    `className={_sz(<original>)}` so the runtime
                 //    handles branches the parser cannot evaluate
-                //    statically. This matches the existing oxc-JS
+                //    statically. This matches the existing the JavaScript pipeline
                 //    production output and prevents the engine from
                 //    leaving source unchanged for shapes the runtime
                 //    can still execute correctly.
@@ -1469,12 +1469,12 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     }
 }
 
-/// Nesting cap for the lenient catalog walk (matches the oxc/Babel walkers).
+/// Nesting cap for the lenient catalog walk (matches the JavaScript walkers it replaced).
 const MAX_CATALOG_DEPTH: usize = 16;
 
 /// Cap on alternate-branch objects one szv call may add to the catalog, so a
 /// pathological conditional pile-up cannot balloon the safelist walk.
-/// (Matches the oxc/Babel walkers.)
+/// (Matches the JavaScript walkers it replaced.)
 const MAX_CATALOG_BRANCH_EXTRAS: usize = 32;
 
 /// Mutable extras budget threaded through one szv call's lenient walk.
@@ -1519,7 +1519,7 @@ fn collect_szv_catalog_classes(
     // TypeScript wrappers (`satisfies` / `as` / parens) around the config are
     // type-level only — unwrap so `szv({…} satisfies SzvConfig)` still extracts.
     // Only a `const` binding is followed (never a reassigned `let`), to match
-    // the const-guarded resolution on the Babel/oxc paths.
+    // the const-guarded resolution the JavaScript engines used.
     let config = match argument.as_expression().map(unwrap_expression) {
         Some(Expression::ObjectExpression(object)) => object,
         Some(Expression::Identifier(identifier)) => {
@@ -1600,7 +1600,7 @@ fn collect_szv_catalog_classes(
     }
 
     // Dedupe (first-seen order): `base` is emitted alone then merged with each
-    // variant, so its classes repeat. The oxc-JS catalog collects into a Set, so
+    // variant, so its classes repeat. The the JavaScript pipeline catalog collects into a Set, so
     // dedupe here too — otherwise the Rust-vs-oxc parity comparison sees Rust's
     // duplicate entries as a class divergence.
     let mut seen = std::collections::HashSet::new();
@@ -2216,7 +2216,7 @@ fn static_array_parts_from_expression(
 /// source span (the rewrite wraps them in `_szPart`), with statically visible
 /// classes inside them collected as safelist candidates. Returns None only
 /// when the whole array must stay a runtime value (a spread element) —
-/// matching the JS engines' classification exactly.
+/// matching the JavaScript engines it replaced' classification exactly.
 fn static_array_parts_from_array_expression(
     array: &ArrayExpression<'_>,
     ctx: ResolveContext<'_>,
@@ -2390,7 +2390,7 @@ fn split_class_tokens(value: &str) -> Vec<String> {
 ///
 /// Dynamic expressions qualify when static lowering has already failed and the
 /// expression can be handed to `_sz(...)` exactly as written. This covers the
-/// same no-className runtime fallback shape as oxc-JS: unresolved identifiers,
+/// same no-className runtime fallback shape as the JavaScript pipeline: unresolved identifiers,
 /// function calls, object/array expressions with dynamic parts, conditionals,
 /// and TS/parens wrappers. Empty JSX expressions still fail closed.
 ///
@@ -3942,7 +3942,7 @@ fn partial_object_from_object_expression(
                 }
 
                 // Slice the UNWRAPPED expression span: `sz={{ p: (pad) }}` must
-                // emit `calc(${pad} …)` like the JS engines, not `calc(${(pad)} …)`
+                // emit `calc(${pad} …)` like the JavaScript engines it replaced, not `calc(${(pad)} …)`
                 // — redundant parens broke rust==oxc byte parity.
                 partial.dynamic_css_vars.push(dynamic_css_var_from_property(
                     &key,
@@ -4627,7 +4627,7 @@ fn static_object_from_spread_argument(
 /// Resolve an sz array ELEMENT to a static object for the deep-merge lane:
 /// an object literal, or an identifier whose initializer unwraps to one.
 /// Object-only on purpose — anything else (strings, conditions, dynamics)
-/// belongs to the szcn parts lane, matching the JS engines' classification.
+/// belongs to the szcn parts lane, matching the JavaScript engines it replaced' classification.
 fn array_element_static_object(
     expression: &Expression<'_>,
     ctx: ResolveContext<'_>,
@@ -6083,7 +6083,7 @@ export const C = ({ styles }) => <div sz={styles} />;
     fn szv_catalog_is_per_key_lenient_and_expands_conditional_branches() {
         // One unreadable leaf (a call) skips ONLY its key; a finite conditional
         // contributes BOTH branches; sibling variants always survive. Matches
-        // the oxc/Babel lenient catalog walk (locked by the TS parity suite
+        // the JavaScript engines it replaced lenient catalog walk (locked by the TS parity suite
         // `szv-catalog-leniency.test.ts`).
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -6366,8 +6366,8 @@ export const C = ({ styles }) => <div sz={styles} />;
     #[test]
     fn parser_shell_extracts_szv_dis_value_cases() {
         // szv lowers "dị" variant/important/negative/arbitrary/css-var values in
-        // the catalog directly — these must match the same shapes the JS engines
-        // emit (the Babel/oxc szv-extraction parity suite locks the JS side).
+        // the catalog directly — these must match the same shapes the JavaScript engines it replaced
+        // emit (the JavaScript engines it replaced szv-extraction parity suite locks the JS side).
         let cases: &[(&str, &str)] = &[
             (
                 "{ variants: { s: { x: { hover: { bg: 'red-500' } } } } }",
@@ -6892,7 +6892,7 @@ export const C = ({ styles }) => <div sz={styles} />;
         });
         assert!(invalid.ir.recovery_attributes.is_empty());
         // The mode NAME is carried through so the diagnostic can quote the typo
-        // back, the way the Babel and oxc lanes do.
+        // back, the way the Babel and the JavaScript lane it replaceds do.
         assert_eq!(
             invalid.ir.unsupported_recovery_attributes,
             vec![UnsupportedRecoveryIr::UnknownMode("sometimes".to_string())]

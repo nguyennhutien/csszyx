@@ -458,7 +458,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                     transformWasm(file.source, file.filename);
                 }
             },
-            'HMR-shaped baseline: one edited file per transform call through oxc-JS.',
+            'HMR-shaped baseline: one edited file per transform call through the JavaScript pipeline.',
         ),
     );
     if (NATIVE_RUST_AVAILABLE) {
@@ -528,7 +528,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
                 () => {
                     transformWasm(fixture.source, `/bench/${fixture.name}.tsx`);
                 },
-                'Single-fixture oxc path timing.',
+                'Single-fixture the JavaScript path it replaced timing.',
             ),
         );
         if (NATIVE_RUST_AVAILABLE) {
@@ -562,7 +562,7 @@ function runParserBenchmarks(opts: CliOptions): BenchStats[] {
  *
  * This reads the native result metadata directly instead of the compiler
  * wrapper because SourceTransformResult intentionally stays API-compatible
- * with the existing Babel/oxc shape.
+ * with the existing the JavaScript engines it replaced shape.
  *
  * @param opts CLI options.
  * @returns median Rust timing breakdown.
@@ -982,11 +982,11 @@ function renderParserReport(
             const oxcRatio = `oxc is ${formatRatio(babel.medianMs / oxc.medianMs)}x faster than Babel`;
             const rustClause =
                 rust.status === 'measured'
-                    ? `rust is ${formatRatio(babel.medianMs / rust.medianMs)}x faster than Babel and ${formatRatio(oxc.medianMs / rust.medianMs)}x faster than oxc-JS`
+                    ? `rust is ${formatRatio(babel.medianMs / rust.medianMs)}x faster than Babel and ${formatRatio(oxc.medianMs / rust.medianMs)}x faster than the JavaScript pipeline`
                     : `${rust.name} is ${rust.status}`;
             const rustBatchClause =
                 rustBatch.status === 'measured'
-                    ? `rust batch is ${formatRatio(rust.medianMs / rustBatch.medianMs)}x vs per-file Rust and ${formatRatio(oxc.medianMs / rustBatch.medianMs)}x vs oxc-JS`
+                    ? `rust batch is ${formatRatio(rust.medianMs / rustBatch.medianMs)}x vs per-file Rust and ${formatRatio(oxc.medianMs / rustBatch.medianMs)}x vs the JavaScript pipeline`
                     : `${rustBatch.name} is ${rustBatch.status}`;
             return `- ${size} mixed fixtures: ${oxcRatio} by median batch time; ${rustClause}; ${rustBatchClause}.`;
         })
@@ -1103,10 +1103,10 @@ function renderHmrSummary(stats: BenchStats[]): string {
     return [
         `- HMR-shaped ${options.hmrEdits} edits: rust is ${formatRatio(
             oxc.medianMs / rust.medianMs,
-        )}x faster than oxc-JS.`,
+        )}x faster than the JavaScript pipeline.`,
         `- HMR-shaped ${options.hmrEdits} edits: rust batch-of-one is ${formatRatio(
             oxc.medianMs / rustBatch.medianMs,
-        )}x faster than oxc-JS and ${formatRatio(
+        )}x faster than the JavaScript pipeline and ${formatRatio(
             rust.medianMs / rustBatch.medianMs,
         )}x vs per-file Rust.`,
     ].join('\n');

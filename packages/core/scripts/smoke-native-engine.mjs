@@ -283,11 +283,14 @@ function assertNativeEngineTransform(binding) {
       `Unexpected merge dynamic class rawClassNames: ${JSON.stringify(mergeDynamicClass.rawClassNames)}`,
     );
   }
-  assertIdentifierFallbackDiagnostic(
-    mergeDynamicClass,
-    75,
-    "merge dynamic class",
-  );
+  // This fixture's className is a call result, so it also draws the precedence
+  // advisory: sz is emitted last and wins, and whatever getClass() returns is
+  // the losing side. The runtime-sz fixture beside it keeps a literal
+  // className and stays at one diagnostic, which is what makes the advisory
+  // precise rather than blanket.
+  assertIdentifierFallbackDiagnostic(mergeDynamicClass, 75, "merge dynamic class", [
+    `[csszyx] "sz" takes precedence over the runtime "className" on this element at ${path.join(repoRoot, "fixtures", "merge-dynamic-class.tsx")}:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win.`,
+  ]);
 
   if (!recover.code.includes('szRecover="csr" data-sz-recovery-token="')) {
     fail(`Unexpected recovery code: ${recover.code}`);
@@ -313,9 +316,10 @@ function assertNativeEngineTransform(binding) {
   }
 }
 
-function assertIdentifierFallbackDiagnostic(result, column, label) {
+function assertIdentifierFallbackDiagnostic(result, column, label, alsoExpect = []) {
   const expected = [
     `sz fallback at 1:${column}: identifier \`styles\` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().`,
+    ...alsoExpect,
   ];
   if (JSON.stringify(result.diagnostics) !== JSON.stringify(expected)) {
     fail(`Unexpected ${label} diagnostics: ${result.diagnostics}`);

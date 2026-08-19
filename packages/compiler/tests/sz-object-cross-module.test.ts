@@ -484,7 +484,7 @@ describe('import shapes the oxc reader has to tell apart', () => {
         expect(out.code).toContain('p-4');
     });
 
-    it('is read the same way by the oxc lane', () => {
+    it('is read the same way by the JavaScript lane it replaced', () => {
         // The two lanes read the specifier through different AST shapes, and a
         // lane that fell back to the LOCAL name here would resolve a different
         // entry than its sibling for the same source.

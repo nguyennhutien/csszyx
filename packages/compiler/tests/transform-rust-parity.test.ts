@@ -335,7 +335,7 @@ const fixtures: readonly RustParityFixture[] = [
     },
 ];
 
-describe('Rust native engine — parity vs oxc-JS', () => {
+describe('Rust native engine — parity vs the JavaScript pipeline', () => {
     beforeAll(() => {
         // Preload the Rust addon from the workspace platform package so
         // `transformRust()` does not hit the unavailable-binding path on
@@ -364,7 +364,7 @@ describe('Rust native engine — parity vs oxc-JS', () => {
         const summary = summariseRust(fixtures);
         console.log(`\n  ${summary}\n`);
         expect(summary).toMatch(
-            /Rust vs oxc-JS coverage: \d+% — \d+ full, \d+ surgical, \d+ classes-only, \d+ rust-ahead, \d+ pending \(\d+ total\)/,
+            /Rust vs the JavaScript pipeline coverage: \d+% — \d+ full, \d+ surgical, \d+ classes-only, \d+ rust-ahead, \d+ pending \(\d+ total\)/,
         );
     });
 });

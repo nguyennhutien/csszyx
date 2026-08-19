@@ -66,18 +66,18 @@ const sources = [
     'const A = () => <div sz={{ starting: { opacity: 0 }, inert: { opacity: 50 } }} />;',
     // A bare runtime identifier and a nullable ternary in ONE object: the rust
     // parser used to punt the whole object and silently drop every dynamic
-    // utility (only statics survived), while oxc/babel emit all of them.
+    // utility (only statics survived), while the JavaScript engines it replaced emit all of them.
     'const A = ({ width, flex }) => <div sz={{ w: width, flex: typeof flex === "number" ? flex : undefined }} />;',
     'const A = ({ width, flex, cond }) => <div sz={{ w: width, h: "max", flex: cond ? flex : undefined }} />;',
     'const A = ({ flex, cond }) => <div sz={{ flex: cond ? flex : undefined }} />;',
     'const A = ({ width, flex }) => <div sz={{ w: width, flex }} />;',
     // sz inside // line and /** doc comments must not contribute classes: the
-    // rust scanner used to extract them while oxc/babel ignore comments.
+    // rust scanner used to extract them while the JavaScript engines it replaced ignore comments.
     'const A = () => {\n  // <Box sz={{ mb: 10 }}>x</Box>\n  return <div sz={{ p: 2 }} />;\n};',
     '/** example: <svg sz={{ fill: "red-500" }} /> */\nconst A = () => <div sz={{ p: 2 }} />;',
     'const A = () => <div /* sz={{ mt: 8 }} */ sz={{ p: 2 }} />;',
     // An `as`-cast literal in a conditional branch resolves statically in every
-    // lane (rust always unwrapped casts; babel/oxc used to collapse the whole
+    // lane (rust always unwrapped casts; the JavaScript engines it replaced used to collapse the whole
     // conditional to a runtime CSS variable).
     'const A = ({ isImage }) => <div sz={{ whitespace: isImage ? "nowrap" : ("wrap" as any) }} />;',
     // Family sweep around the ternary-beside-runtime-var fix: finite ternary +

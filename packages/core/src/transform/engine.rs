@@ -275,7 +275,7 @@ fn transform_static_classes_with_options(
     let mut diagnostics = parsed.diagnostics;
     // Per-element warnings about unsupported sz/szRecover shapes are soft —
     // the rewrite pass already skips those elements individually, so they
-    // must not block the rest of the file from transforming. The oxc-JS
+    // must not block the rest of the file from transforming. The the JavaScript pipeline
     // path has the same contract: a warning on one element keeps the
     // valid ones flowing through className/recovery-token emission.
     let has_parser_errors = !diagnostics.is_empty();
@@ -325,7 +325,7 @@ fn transform_static_classes_with_options(
     }
 
     // Runtime helper flags for downstream import-injection, mirroring the
-    // oxc-JS pipeline so caches built against one producer stay valid for the
+    // the JavaScript pipeline pipeline so caches built against one producer stay valid for the
     // other. sz arrays compose through `szcn` (later-wins per property group),
     // with dynamic elements resolving through `_szPart`; `_szMerge` remains
     // the className+sz merge helper and `_sz` the whole-value runtime
@@ -411,7 +411,7 @@ fn transform_static_classes_with_options(
     // A budget-tripped walk produced a PARTIAL IR: whichever classes happen to
     // sit before the cut would flow into the safelist and the rest silently
     // vanish — under Tailwind `source(none)` that is wrong CSS with no signal
-    // (and a rust-vs-oxc parity break, since the JS engines throw instead).
+    // (and a rust-vs-oxc parity break, since the JavaScript engines it replaced throw instead).
     // Contribute nothing and let the diagnostic above carry the loud skip.
     let (classes, raw_class_names) = if parsed.ast_budget_exceeded {
         (Vec::new(), Vec::new())
@@ -575,7 +575,7 @@ fn site_fallback_diagnostics(
 /// Emits the shared fallback matrix entry (why, and what to do instead) and —
 /// for an object literal with a top-level spread — the unresolvable-spread
 /// notice, in the same per-attribute order and with the same wording and
-/// `line:column` positions as the Babel and oxc lanes, so a `build.parser`
+/// `line:column` positions as the Babel and the JavaScript lane it replaceds, so a `build.parser`
 /// flip cannot change the build log. The `unresolvable sz spread` phrase is
 /// the marker the bundler plugin matches to promote those to a build-log
 /// warning in every mode.
@@ -646,10 +646,10 @@ fn style_spread_collision_diagnostics(file: &TransformFile, ir: &super::SourceIr
 
 /// Dev-mode build-log diagnostics for unrecognized sz property keys (likely
 /// typos), located by file and line so they are findable in a large codebase —
-/// parity with the oxc/Babel engines, which previously were the only ones to
+/// parity with the JavaScript engines it replaced, which previously were the only ones to
 /// warn. The bundler plugin gates these to dev (and suppresses source paths in
 /// production), the same as the other soft diagnostics here.
-/// Matches the JS engines' `/^\d+(?:\.\d+)?$/` — a bare integer or decimal, the
+/// Matches the JavaScript engines it replaced' `/^\d+(?:\.\d+)?$/` — a bare integer or decimal, the
 /// shape of an array index or a spread's numeric key that reached `sz`.
 fn is_numeric_key(key: &str) -> bool {
     let (int, frac) = key
@@ -737,7 +737,7 @@ fn unknown_property_diagnostics(
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, *offset);
             // A numeric key is almost never a typo — it means an array or a spread
-            // reached `sz`. Match the JS engines' wording so a `build.parser` flip
+            // reached `sz`. Match the JavaScript engines it replaced' wording so a `build.parser` flip
             // does not change the diagnostic text.
             if let Some(note) = super::generated::tables::key_migration_note(key) {
                 // Wording mirrors the runtime channel's unknownSzPropertyMessage
@@ -769,7 +769,7 @@ fn unknown_property_diagnostics(
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, *offset);
-            // Wording matches the JS engines' warnDeadSpacingStep so a
+            // Wording matches the JavaScript engines it replaced' warnDeadSpacingStep so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
@@ -794,7 +794,7 @@ fn unknown_property_diagnostics(
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, *offset);
-            // Wording matches the JS engines' warnPropertyObjectValue so a
+            // Wording matches the JavaScript engines it replaced' warnPropertyObjectValue so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] \"{key}\" is a property, not a variant, but received an object {{ {nested} }} at {location}:{line}. This compiles to \"{key}:*\" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use {{ color: '...', op: ... }}."
@@ -806,14 +806,16 @@ fn unknown_property_diagnostics(
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, *offset);
-            // Wording matches the JS engines' warnMaskSlotMember so a
+            // Wording matches the JavaScript engines it replaced' warnMaskSlotMember so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] {owner}: unknown field \"{member}\" at {location}:{line} — nothing is emitted for it. {owner} takes {{ {allowed} }}."
             ));
         }
     }
-    out.extend(class_name_precedence_advisories(file, ir, &location));
+    out.extend(class_name_precedence_advisories(
+        file, ir, &location, &mut lines,
+    ));
     out
 }
 
@@ -842,17 +844,14 @@ fn relativize_diagnostic_path(filename: &str, root_dir: Option<&str>) -> String 
 /// canonical spelling and the codemod, mirroring the runtime channel's wording.
 fn push_removed_sugar_diagnostics(
     file: &TransformFile,
-    found: &[(String, u32)],
+    found: &[(String, &'static str, &'static str, u32)],
     location: &str,
     lines: &mut Option<LineIndex>,
     out: &mut Vec<String>,
 ) {
-    for (key, offset) in found {
-        let Some((canonical, value)) =
-            super::generated::tables::removed_boolean_sugar_replacement(key)
-        else {
-            continue;
-        };
+    // The collector proved the replacement exists by finding it, so there is
+    // no lookup here that could fail and no branch that cannot run.
+    for (key, canonical, value, offset) in found {
         let (line, _) = lines
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
@@ -885,11 +884,8 @@ fn class_name_precedence_advisories(
     file: &TransformFile,
     ir: &super::SourceIr,
     location: &str,
+    lines: &mut Option<LineIndex>,
 ) -> Vec<String> {
-    // Its own lazy index rather than the caller's: the advisory is the last
-    // pass, so sharing bought nothing but an argument, and a file that never
-    // trips it still never builds one.
-    let mut lines: Option<LineIndex> = None;
     let mut out = Vec::new();
     for element in &ir.jsx_opening_elements {
         let Some(class_index) = element.class_attribute_index else {
@@ -922,7 +918,7 @@ fn class_name_precedence_advisories(
 /// runtime value: the whole element degrades to `_szPart` at runtime instead
 /// of compiling statically. Only object literals warn — identifiers, calls,
 /// and member expressions are legitimate forwarded slots. The wording and the
-/// 1-based line:column position match the oxc/Babel engines byte-for-byte.
+/// 1-based line:column position match the JavaScript engines it replaced byte-for-byte.
 fn deferred_array_object_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
     ir.sz_attributes
         .iter()
@@ -2955,5 +2951,46 @@ mod tests {
             diagnostics.contains("imported binding `styles` could not be read at build time"),
             "{diagnostics}"
         );
+    }
+
+    /// Every removed-sugar family reports its own canonical replacement.
+    ///
+    /// The table is generated, but the report reads it one key at a time, so a
+    /// family nobody exercised would ship a message pointing at the wrong
+    /// replacement and nothing would notice. One key per family, plus the
+    /// branch for a key the table does not answer for.
+    #[test]
+    fn each_removed_sugar_family_names_its_own_replacement() {
+        let report = |prop: &str| {
+            let file = TransformFile {
+                filename: "/repo/src/Sugar.tsx".to_string(),
+                source: format!("export const A = () => <div sz={{{{ {prop} }}}} />;"),
+            };
+            transform_static_classes(&file, 0, std::time::Instant::now())
+                .diagnostics
+                .join("\n")
+        };
+
+        for (prop, canonical) in [
+            ("notItalic: true", "{ fontStyle: 'normal' }"),
+            ("underline: true", "{ decoration: 'underline' }"),
+            ("overline: true", "{ decoration: 'overline' }"),
+            ("lineThrough: true", "{ decoration: 'line-through' }"),
+            ("noUnderline: true", "{ decoration: 'none' }"),
+            ("antialiased: true", "{ fontSmoothing: 'grayscale' }"),
+            ("subpixelAntialiased: true", "{ fontSmoothing: 'subpixel' }"),
+        ] {
+            let diagnostics = report(prop);
+            assert!(
+                diagnostics.contains(canonical),
+                "{prop} must name {canonical}, got: {diagnostics}"
+            );
+        }
+
+        // A key the replacement table has no entry for reports nothing here —
+        // the collector keys on the removed-sugar list, and the two are
+        // generated from the same source, so a gap between them would be a
+        // message with no replacement to offer rather than a wrong one.
+        assert!(!report("p: 4").contains("boolean sugar was removed"));
     }
 }

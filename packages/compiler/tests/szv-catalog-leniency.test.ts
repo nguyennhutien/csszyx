@@ -5,11 +5,11 @@
  * a computed key…) used to drop the ENTIRE szv catalog — every static sibling
  * key and every other variant included — which under Tailwind `source(none)`
  * is silently missing CSS. Worse, the engines disagreed on which leaves they
- * could resolve (rust followed const refs, oxc/babel did not), so flipping
+ * could resolve (rust followed const refs, the JavaScript engines it replaced did not), so flipping
  * `build.parser` changed the safelist (field-reported by a design-system
  * consumer as "rust drops tokens from a multi-key szv variant object").
  *
- * Contract locked here, identical in babel/oxc/rust:
+ * Contract locked here, identical in the JavaScript engines it replaced/rust:
  *   - unreadable KEYS are skipped individually; siblings and other variants
  *     always survive;
  *   - finite conditionals contribute BOTH branches (the runtime picks one at

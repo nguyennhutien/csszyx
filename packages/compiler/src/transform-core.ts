@@ -2197,7 +2197,7 @@ function runtimeSzWarnContext(szProp: SzObject): string {
 
 /**
  * Set (or clear, with `undefined`) the source location appended to the dev-mode
- * unknown-property warning. Called by the build engines (oxc/babel) around each
+ * unknown-property warning. Called by the build engines (the JavaScript engines it replaced) around each
  * sz attribute; a balanced clear MUST follow so the location never leaks to an
  * unrelated later transform.
  *

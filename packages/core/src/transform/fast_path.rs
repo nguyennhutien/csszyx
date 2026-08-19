@@ -58,7 +58,7 @@ pub fn triage_source(file: &TransformFile) -> FastPathTriage {
     // attribute force the full parser: the AST-free `try_static_sz_ir` only walks
     // `sz={{ … }}` attributes, so a file that ALSO defines an `szv` catalog, an
     // `szr(static-object)`, or a `dynamic(...)` call would keep its static `sz`
-    // classes but silently drop those extras — the exact classes the JS engines
+    // classes but silently drop those extras — the exact classes the JavaScript engines it replaced
     // collect via `collect_catalog_call_classes`. A file with both a plain
     // `sz={{ p: 4 }}` and a `szv({...})` used to fast-path here and lose the whole
     // szv catalog under `rust` while `oxc`/`babel` kept it (a parser-flip safelist
@@ -93,7 +93,7 @@ pub fn triage_source(file: &TransformFile) -> FastPathTriage {
     // An `sz=` occurrence inside a comment or string literal must never build
     // static IR: the textual scan below cannot tell it from a real attribute,
     // so `// <Box sz={{ mb: 10 }} />` used to ship the commented-out classes
-    // into the build (field-reported — babel/oxc parse and ignore comments).
+    // into the build (field-reported — the JavaScript engines it replaced parse and ignore comments).
     // A `None` from the lexer means it hit something it cannot classify
     // (e.g. a JSX-text apostrophe opening a bogus string); both cases take the
     // parser path, which owns the real distinction.
@@ -519,7 +519,7 @@ mod tests {
         // The regression: a file with a plain static `sz={{ p: 4 }}` AND a
         // top-level `szv`/`szr` catalog must NOT fast-path — the AST-free path
         // only sees the `sz=` attribute and would silently drop the catalog,
-        // diverging from the JS engines that DO collect it (field-reported as a
+        // diverging from the JavaScript engines it replaced that DO collect it (field-reported as a
         // `build.parser` flip changing the safelist). Every catalog marker in
         // `collect_catalog_call_classes` is covered here.
         for source in [
@@ -624,7 +624,7 @@ mod tests {
         // The field-reported shape: a commented-out sz block AND a real static
         // one. Both look identical to the textual scan, so the file must take
         // the parser lane — fast-pathing it shipped the commented-out classes
-        // (mb-10) into the build while babel/oxc correctly ignored them.
+        // (mb-10) into the build while the JavaScript engines it replaced correctly ignored them.
         for source in [
             "const A = () => {\n  // <Box sz={{ mb: 10 }}>x</Box>\n  return <div sz={{ p: 2 }} />;\n};",
             "/** example: <svg sz={{ fill: 'red-500' }} /> */\nconst A = () => <div sz={{ p: 2 }} />;",

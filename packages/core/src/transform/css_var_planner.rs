@@ -1,6 +1,6 @@
 //! CSS custom-property name planning for the native transform.
 //!
-//! This mirrors the TypeScript planner used by the oxc path. Keeping the
+//! This mirrors the TypeScript planner used by the JavaScript path it replaced. Keeping the
 //! planner pure gives the Rust rewrite path a deterministic contract before it
 //! mutates source code.
 

@@ -3,7 +3,7 @@ import { transformSource, transformWasm } from '../src/index.js';
 
 // szv catalog extraction lives in three engines (Babel `transformSource`,
 // the wasm build via `transformWasm`, Rust — covered by its own cargo tests). These lock the
-// build-time safelist behaviour for the two JS engines AND assert they agree, so
+// build-time safelist behaviour for the two JavaScript engines it replaced AND assert they agree, so
 // a regression in one surfaces here instead of as silent dead classes in a
 // consumer. The matrix is deliberately wide: it was a wide pass that found the
 // `compoundVariants`/non-static-sibling gap and a Babel↔oxc divergence.
@@ -96,7 +96,7 @@ describe('szv extraction — oxc engine', () => {
     });
 });
 
-describe('szv extraction — Babel/oxc parity', () => {
+describe('szv extraction — the JavaScript engines it replaced parity', () => {
     const CASES: Array<[string, string]> = [
         [
             'base + variants + defaultVariants',
@@ -260,7 +260,7 @@ describe('szv extraction — TypeScript wrappers are looked through', () => {
     ];
 
     for (const [name, source] of wrapped) {
-        it(`extracts through ${name} (both JS engines agree)`, () => {
+        it(`extracts through ${name} (both JavaScript engines it replaced agree)`, () => {
             const babel = [...transformSource(source, 'F.tsx').classes].sort();
             const oxc = [...transformWasm(source, 'F.tsx').classes].sort();
             expect(babel, 'babel extracts the catalog').toContain('bg-tag-blue');
@@ -293,7 +293,7 @@ describe('szr literal-arg extraction', () => {
     ];
 
     for (const [name, source, expected] of shapes) {
-        it(`extracts a ${name} (both JS engines agree)`, () => {
+        it(`extracts a ${name} (both JavaScript engines it replaced agree)`, () => {
             const babel = [...transformSource(source, 'F.tsx').classes].sort();
             const oxc = [...transformWasm(source, 'F.tsx').classes].sort();
             expect(babel).toEqual(expected);
