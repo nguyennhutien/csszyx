@@ -106,7 +106,7 @@ async function derive() {
             if (reading.kind !== 'functional') continue;
             if (!byPrefix.has(reading.root)) continue;
             const value = reading.value;
-            if (!value || value.kind !== 'named') continue;
+            if (value?.kind !== 'named') continue;
             byPrefix.get(reading.root).add(value.value);
         }
     }
