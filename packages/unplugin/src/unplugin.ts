@@ -38,6 +38,7 @@ import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } fro
 import type { PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
+import { findClassNameAuthorConflicts } from './class-name-authors.js';
 import { findUnknownConfigKeys, unknownConfigKeysMessage } from './config-keys.js';
 import {
     type CrossModuleForwardIndex,
@@ -101,7 +102,12 @@ import {
     THEME_GROUPS_FILE_MARKER,
     themeGroupsSpecifier,
 } from './theme-groups-file.js';
-import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
+import {
+    mergeThemes,
+    type ParsedTheme,
+    parseThemeBlocks,
+    parseUtilityBlocks,
+} from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
     createTransformCacheKey,
@@ -387,6 +393,7 @@ function findOpeningTag(source: string, tag: string): OpeningTagSpan | null {
     }
 }
 
+const _warnedClassNameAuthors = new Set<string>();
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
 let _hasWarnedNativeFallback = false;
@@ -2046,6 +2053,52 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
     if (!scanCss) {
         return null;
     }
+    /**
+     * Report class names this project gives more than one author.
+     *
+     * At the DECLARATION, not the uses. A declaration is one place a person can
+     * fix; the uses are many and mostly innocent — including the `sz` props csszyx
+     * itself lowers onto the contaminated class. Warning at every use would blame
+     * the wrong author and bury the one line that can be changed.
+     *
+     * @param rootDir - Project root, for readable paths.
+     * @param sourceFiles - The stylesheets that were scanned.
+     * @param theme - The merged theme those stylesheets declare.
+     */
+    function reportClassNameAuthorConflicts(
+        rootDir: string,
+        sourceFiles: string[],
+        theme: ParsedTheme,
+    ): void {
+        const utilityStatics: string[] = [];
+        for (const file of sourceFiles) {
+            try {
+                utilityStatics.push(
+                    ...parseUtilityBlocks(readStableTextFileSnapshotSync(file).source).statics,
+                );
+            } catch {
+                // A stylesheet that cannot be read contributes no declarations; the
+                // theme scan above already tolerates the same failure.
+            }
+        }
+        const conflicts = findClassNameAuthorConflicts({
+            themeColors: theme.colors,
+            utilityStatics,
+        });
+        for (const conflict of conflicts) {
+            const key = `${rootDir}\u0000${conflict.name}`;
+            if (_warnedClassNameAuthors.has(key)) continue;
+            _warnedClassNameAuthors.add(key);
+            console.warn(
+                `[csszyx] "@utility ${conflict.name}" collides — ${conflict.reason}. Tailwind ` +
+                    'merges both declarations into one rule and reports nothing, so the class ' +
+                    'carries styles no single place in your CSS shows. Every use is affected, ' +
+                    'including sz props that spell it correctly. Rename it; if a multi-property ' +
+                    'class is the point, declare it under a name nothing else claims.',
+            );
+        }
+    }
+
     const sourceFiles = expandFilePatterns(rootDir, scanCss).filter(file => file.endsWith('.css'));
     if (sourceFiles.length === 0) {
         return null;
@@ -2060,6 +2113,7 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
         })
         .filter((t): t is NonNullable<typeof t> => t !== null);
     const merged = mergeThemes(themes);
+    reportClassNameAuthorConflicts(rootDir, sourceFiles, merged);
     const outputPath = path.join(rootDir, '.csszyx', 'theme.d.ts');
     writeThemeDts({ outputPath, theme: merged, sourceFiles });
 
