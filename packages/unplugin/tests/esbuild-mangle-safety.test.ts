@@ -35,7 +35,7 @@ describe('esbuild class-mangle safety', () => {
             logLevel: 'silent',
             plugins: [
                 esbuildPlugin({
-                    build: { cache: false, parser: 'oxc' },
+                    build: { cache: false },
                     production: { mangle: true },
                 }),
             ],

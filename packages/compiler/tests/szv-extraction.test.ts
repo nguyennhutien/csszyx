@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { transformSource, transformWasm } from '../src/index.js';
 
 // szv catalog extraction lives in three engines (Babel `transformSource`,
-// oxc `transformWasm`, Rust — covered by its own cargo tests). These lock the
+// the wasm build via `transformWasm`, Rust — covered by its own cargo tests). These lock the
 // build-time safelist behaviour for the two JS engines AND assert they agree, so
 // a regression in one surfaces here instead of as silent dead classes in a
 // consumer. The matrix is deliberately wide: it was a wide pass that found the

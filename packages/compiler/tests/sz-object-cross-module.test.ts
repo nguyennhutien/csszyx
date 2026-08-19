@@ -33,8 +33,8 @@ type Engine = (
 ) => { code?: string; classes?: Set<string>; diagnostics?: string[] };
 
 const ENGINES: ReadonlyArray<readonly [string, Engine]> = [
-    ['babel', transformSource as Engine],
-    ['oxc', transformWasm as Engine],
+    ['auto', transformSource as Engine],
+    ['wasm', transformWasm as Engine],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
 ];
 

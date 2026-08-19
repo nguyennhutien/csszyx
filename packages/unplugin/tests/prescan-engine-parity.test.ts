@@ -169,7 +169,7 @@ afterEach(() => {
  * @param parser - engine under test.
  * @returns sorted safelist tokens + everything console.warn'd during the run.
  */
-function runPrescan(parser: 'rust' | 'oxc' | 'babel'): {
+function runPrescan(parser: 'rust' | 'wasm'): {
     tokens: string[];
     warnings: string[];
 } {
@@ -220,20 +220,15 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
         loadNativeBinding();
     });
 
-    // Computed once; every assertion below reuses the same three runs.
-    const runs = {} as Record<'rust' | 'oxc' | 'babel', ReturnType<typeof runPrescan>>;
+    // Computed once; every assertion below reuses the same two runs.
+    const runs = {} as Record<'rust' | 'wasm', ReturnType<typeof runPrescan>>;
     beforeAll(() => {
         runs.rust = runPrescan('rust');
-        runs.oxc = runPrescan('oxc');
-        runs.babel = runPrescan('babel');
+        runs.wasm = runPrescan('wasm');
     });
 
-    it('rust and oxc scans produce the identical token set', () => {
-        expect(runs.rust.tokens).toEqual(runs.oxc.tokens);
-    });
-
-    it('babel and oxc scans produce the identical token set', () => {
-        expect(runs.babel.tokens).toEqual(runs.oxc.tokens);
+    it('the native and wasm scans produce the identical token set', () => {
+        expect(runs.rust.tokens).toEqual(runs.wasm.tokens);
     });
 
     // Known, ENGINE-CONSISTENT gap (not a divergence): string candidates inside
@@ -288,7 +283,7 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
     });
 
     it('numeric lookup tables never mint garbage tokens', () => {
-        for (const engine of ['rust', 'oxc', 'babel'] as const) {
+        for (const engine of ['rust', 'wasm'] as const) {
             expect(runs[engine].tokens, engine).not.toContain('50-100');
             expect(runs[engine].tokens, engine).not.toContain('undefined');
         }
@@ -299,7 +294,7 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
         // lanes surface Babel's own parse-failure warning) — the CONTRACT is
         // that some warning names the file, so a developer can find the dead
         // classes before a field user does.
-        for (const engine of ['rust', 'oxc', 'babel'] as const) {
+        for (const engine of ['rust', 'wasm'] as const) {
             expect(
                 runs[engine].warnings.some(w => w.includes('broken.tsx')),
                 `${engine}: broken.tsx must be named in a warning`,
@@ -308,7 +303,7 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
     });
 
     it('the unimported compileSources file is scanned (directory walk, not import graph)', () => {
-        for (const engine of ['rust', 'oxc', 'babel'] as const) {
+        for (const engine of ['rust', 'wasm'] as const) {
             expect(runs[engine].tokens, engine).toContain('ds-button');
             expect(runs[engine].tokens, engine).toContain('rounded-lg');
         }
@@ -320,7 +315,7 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
         // dropped the szv catalog (`mx-0`/`grow-1`/`my-4`) while the semantic
         // string classes survived — so `rust` safelisted fewer tokens than `oxc`.
         // Every token this file contributes must appear on all three engines.
-        for (const engine of ['rust', 'oxc', 'babel'] as const) {
+        for (const engine of ['rust', 'wasm'] as const) {
             for (const token of [
                 'grow-1',
                 'mx-0',
@@ -342,7 +337,7 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
         // fast-path bug and the suspected `px`→`pl` mis-split must be guarded for
         // padding. Every token the padding leaf contributes survives on all
         // engines, and the `-l`/`-r` mis-split never appears.
-        for (const engine of ['rust', 'oxc', 'babel'] as const) {
+        for (const engine of ['rust', 'wasm'] as const) {
             for (const token of [
                 'px-0',
                 'py-1',

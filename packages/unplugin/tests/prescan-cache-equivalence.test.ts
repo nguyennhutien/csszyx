@@ -57,7 +57,7 @@ afterAll(() => {
  * @param cache - transform-cache toggle for this run.
  * @returns sorted safelist tokens.
  */
-function runPrescan(root: string, parser: 'rust' | 'oxc', cache: boolean): string[] {
+function runPrescan(root: string, parser: 'rust' | 'wasm', cache: boolean): string[] {
     // Each run must observe only its own scan: the safelist writer merges with
     // an existing file, which would mask a run that discovered fewer classes.
     rmSync(join(root, 'csszyx-classes.html'), { force: true });
@@ -73,7 +73,7 @@ describe('prescan cache equivalence (off == cold == warm)', () => {
         loadNativeBinding();
     });
 
-    for (const parser of ['rust', 'oxc'] as const) {
+    for (const parser of ['rust', 'wasm'] as const) {
         it(`${parser}: cache-off, cache-cold and cache-warm scans agree`, () => {
             const root = mkdtempSync(join(tmpdir(), `csszyx-cache-eq-${parser}-`));
             tempDirs.push(root);
@@ -128,7 +128,7 @@ describe('prescan → transform-hook result handoff (1× cold transform)', () =>
             writeFileSync(join(root, file), source, 'utf8');
         }
 
-        const [prePlugin] = vitePlugin({ build: { parser: 'oxc', cache: true } }) as Array<
+        const [prePlugin] = vitePlugin({ build: { cache: true } }) as Array<
             ViteConfigHook & {
                 transform?:
                     | { handler?: (code: string, id: string) => unknown }

@@ -22,8 +22,8 @@ import { captureWarnings, type ParityEngine } from './engine-parity-harness.js';
 /** [lane, engine, property key]. Keys stay distinct so the dedup case
  * below can still observe a genuine second-lane silence. */
 const LANES: ReadonlyArray<readonly [string, ParityEngine, string]> = [
-    ['babel', transformSource, 'p'],
-    ['oxc', transformWasm as ParityEngine, 'm'],
+    ['auto', transformSource, 'p'],
+    ['wasm', transformWasm as ParityEngine, 'm'],
     ...(isRustTransformAvailable()
         ? ([['rust', transformRust as ParityEngine, 'w']] as const)
         : []),

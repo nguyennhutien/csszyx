@@ -170,7 +170,7 @@ describe('RSC boundary guard', () => {
 
     it('keeps generated runtime imports after leading-comment server directives', () => {
         const [prePlugin] = vitePlugin({
-            build: { parser: 'babel', cache: false },
+            build: { cache: false },
         }) as TransformHook[];
         const source = `
             // comments before directives are legal directive prologue trivia

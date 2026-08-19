@@ -65,8 +65,8 @@ describe('szRecover diagnostics are identical on every engine', () => {
         // Called with the filename argument OMITTED — a default parameter would
         // swallow an explicit `undefined`, so the harness cannot express this.
         for (const [name, engine] of [
-            ['babel', transformSource],
-            ['oxc', transformWasm],
+            ['auto', transformSource],
+            ['wasm', transformWasm],
         ] as const) {
             const recovery = engine(tsx).diagnostics.filter(message =>
                 message.includes('szRecover'),

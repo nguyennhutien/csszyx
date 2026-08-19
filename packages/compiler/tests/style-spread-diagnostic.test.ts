@@ -17,8 +17,8 @@ function oxcDiagnostics(source: string): string[] {
 
 describe('style supplied by a prop spread beside runtime sz values', () => {
     it.each([
-        ['babel', babelDiagnostics],
-        ['oxc', oxcDiagnostics],
+        ['auto', babelDiagnostics],
+        ['wasm', oxcDiagnostics],
     ] as const)('%s normalizes safe conditional object branches', (_, transform) => {
         expect(transform(collisionSource).join('\n')).not.toContain(diagnosticMarker);
     });

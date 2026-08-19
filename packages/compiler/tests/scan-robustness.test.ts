@@ -25,8 +25,8 @@ import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
 
 const ENGINES = [
-    ['babel', transformSource],
-    ['oxc', transformWasm],
+    ['auto', transformSource],
+    ['wasm', transformWasm],
 ] as const;
 
 describe('safelist scan robustness', () => {

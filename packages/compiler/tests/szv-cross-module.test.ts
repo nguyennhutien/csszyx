@@ -25,8 +25,8 @@ type Engine = (
 ) => { code?: string; usesSzvPick?: boolean };
 
 const LANES: ReadonlyArray<readonly [string, Engine]> = [
-    ['babel', transformSource as Engine],
-    ['oxc', transformWasm as Engine],
+    ['auto', transformSource as Engine],
+    ['wasm', transformWasm as Engine],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
 ];
 

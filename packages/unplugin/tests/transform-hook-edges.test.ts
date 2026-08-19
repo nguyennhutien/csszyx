@@ -108,7 +108,7 @@ describe('transform hook branch edges', () => {
     // resolves to whatever engine binary is installed, which may predate the
     // __szSpacingVar/__szUnitVar emission these cases exercise.
     it('injects the spacing-var runtime helper when a dynamic spacing value is used', async () => {
-        const { root, transform } = await boot({ build: { parser: 'oxc' } });
+        const { root, transform } = await boot({ build: {} });
         const result = (await transform(
             'export const A = ({w}) => <div sz={{ w }} />;',
             path.join(root, 'src/DynSpacing.tsx'),
@@ -122,7 +122,7 @@ describe('transform hook branch edges', () => {
     });
 
     it('injects the unit-var runtime helper when a dynamic angle value is used', async () => {
-        const { root, transform } = await boot({ build: { parser: 'oxc' } });
+        const { root, transform } = await boot({ build: {} });
         const result = (await transform(
             'export const B = ({angle}) => <div sz={{ rotate: angle }} />;',
             path.join(root, 'src/DynUnit.tsx'),
@@ -134,7 +134,7 @@ describe('transform hook branch edges', () => {
     });
 
     it('appends the spacing-var helper to an existing @csszyx/runtime import', async () => {
-        const { root, transform } = await boot({ build: { parser: 'oxc' } });
+        const { root, transform } = await boot({ build: {} });
         const result = (await transform(
             "import { _sz } from '@csszyx/runtime';\nconst A = ({w}) => <div sz={{ w }} />;",
             path.join(root, 'src/DynSpacing2.tsx'),
@@ -147,7 +147,7 @@ describe('transform hook branch edges', () => {
     });
 
     it('does not re-import an already-imported unit-var helper', async () => {
-        const { root, transform } = await boot({ build: { parser: 'oxc' } });
+        const { root, transform } = await boot({ build: {} });
         const result = (await transform(
             "import { __szUnitVar } from '@csszyx/runtime';\nconst B = ({ms}) => <div sz={{ duration: ms }} />;",
             path.join(root, 'src/DynUnit2.tsx'),

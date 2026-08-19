@@ -5,8 +5,8 @@ import { transformRust, transformSource, transformWasm } from '../src/index.js';
 type Transform = typeof transformSource;
 
 const engines: ReadonlyArray<[string, Transform]> = [
-    ['babel', transformSource],
-    ['oxc', transformWasm],
+    ['auto', transformSource],
+    ['wasm', transformWasm],
     ['rust', transformRust],
 ];
 

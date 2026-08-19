@@ -81,7 +81,7 @@ afterAll(() => {
  * @returns Emitted bundle text and the safelist file contents.
  */
 async function buildFixture(
-    parser: 'rust' | 'oxc' | 'babel',
+    parser: 'rust' | 'wasm' | 'auto',
     importedStaticSz: boolean,
     aliased = false,
     overrides: Record<string, string> = {},
@@ -127,7 +127,7 @@ async function buildFixture(
     return { js, safelist };
 }
 
-const PARSERS = ['rust', 'oxc', 'babel'] as const;
+const PARSERS = ['rust', 'wasm', 'auto'] as const;
 
 describe('a plain exported style object, through a real build', () => {
     for (const parser of PARSERS) {

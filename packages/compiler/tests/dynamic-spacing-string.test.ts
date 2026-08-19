@@ -12,8 +12,8 @@ import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
 
 const ENGINES = [
-    ['babel', (jsx: string) => transformSource(jsx, 'probe.tsx', {})],
-    ['oxc', (jsx: string) => transformWasm(jsx, 'probe.tsx', {})],
+    ['auto', (jsx: string) => transformSource(jsx, 'probe.tsx', {})],
+    ['wasm', (jsx: string) => transformWasm(jsx, 'probe.tsx', {})],
 ] as const;
 
 describe.each(ENGINES)('dynamic spacing/unit lowering (%s)', (_name, run) => {

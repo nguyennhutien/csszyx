@@ -36,9 +36,9 @@ interface EngineOutput {
  * @param tsx - source to transform.
  * @returns code, ordered classes, and diagnostic count.
  */
-function run(engine: 'babel' | 'oxc' | 'rust', tsx: string): EngineOutput {
+function run(engine: 'auto' | 'wasm' | 'rust', tsx: string): EngineOutput {
     let result = transformSource(tsx, 'F.tsx');
-    if (engine === 'oxc') result = transformWasm(tsx, 'F.tsx');
+    if (engine === 'wasm') result = transformWasm(tsx, 'F.tsx');
     else if (engine === 'rust') result = transformRust(tsx, 'F.tsx');
     return {
         code: typeof result === 'string' ? result : result.code,
@@ -178,8 +178,8 @@ describe('szs slot-map parity', () => {
 
     for (const fixture of COMPILED) {
         it(`compiles — ${fixture.name}`, () => {
-            const oxc = run('oxc', fixture.tsx);
-            const babel = run('babel', fixture.tsx);
+            const oxc = run('wasm', fixture.tsx);
+            const babel = run('auto', fixture.tsx);
             expect(oxc.code, 'oxc emits the shared format').toContain(fixture.expectAttr);
             // babel keeps a kept string slot's ORIGINAL quotes (verbatim), so the
             // expected attribute text matches without quote rewriting.
@@ -193,7 +193,7 @@ describe('szs slot-map parity', () => {
         });
 
         it.skipIf(!isRustTransformAvailable())(`rust is byte-identical — ${fixture.name}`, () => {
-            const oxc = run('oxc', fixture.tsx);
+            const oxc = run('wasm', fixture.tsx);
             const rust = run('rust', fixture.tsx);
             expect(rust.code, 'rust code equals oxc byte-for-byte').toBe(oxc.code);
             expect(rust.classes, 'rust class order equals oxc').toEqual(oxc.classes);
@@ -203,8 +203,8 @@ describe('szs slot-map parity', () => {
 
     for (const fixture of REJECTED) {
         it(`leaves the attribute untouched with a diagnostic — ${fixture.name}`, () => {
-            const oxc = run('oxc', fixture.tsx);
-            const babel = run('babel', fixture.tsx);
+            const oxc = run('wasm', fixture.tsx);
+            const babel = run('auto', fixture.tsx);
             expect(oxc.code, 'oxc leaves the source unchanged').toBe(fixture.tsx);
             expect(oxc.classes).toEqual([]);
             expect(oxc.diagnostics, 'oxc records one diagnostic').toBe(1);
@@ -227,8 +227,8 @@ describe('szs slot-map parity', () => {
         const tsx =
             'export const A = () => (<Card sz={{ m: 1 }} szs={{ a: { p: 1 } }}><Card.Sub szs={{ b: { p: 2 } }} sz={{ m: 2 }} /></Card>);';
         const expected = ['m-1', 'm-2', 'p-1', 'p-2'];
-        expect(run('oxc', tsx).classes).toEqual(expected);
-        expect(run('babel', tsx).classes).toEqual(expected);
+        expect(run('wasm', tsx).classes).toEqual(expected);
+        expect(run('auto', tsx).classes).toEqual(expected);
         if (isRustTransformAvailable()) {
             expect(run('rust', tsx).classes).toEqual(expected);
         }
@@ -237,7 +237,7 @@ describe('szs slot-map parity', () => {
     it('is idempotent: re-transforming pass-1 output changes nothing and warns nothing', () => {
         const tsx =
             'export const A = () => <Card sz={{ p: 4 }} szs={{ header: { bg: "gray-100" } }} />;';
-        for (const engine of ['oxc', 'babel'] as const) {
+        for (const engine of ['wasm', 'auto'] as const) {
             const first = run(engine, tsx);
             const second = run(engine, first.code);
             expect(norm(second.code), `${engine} pass-2 output stable`).toBe(norm(first.code));
@@ -253,7 +253,7 @@ describe('szs slot-map parity', () => {
 
     it('empty szs map renames to szsc without classes or diagnostics', () => {
         const tsx = 'export const A = () => <Card szs={{}} />;';
-        for (const engine of ['oxc', 'babel'] as const) {
+        for (const engine of ['wasm', 'auto'] as const) {
             const out = run(engine, tsx);
             expect(norm(out.code)).toContain(norm('szsc={{}}'));
             expect(out.classes).toEqual([]);

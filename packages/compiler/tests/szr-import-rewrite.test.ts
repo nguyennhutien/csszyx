@@ -30,8 +30,8 @@ import { transformWasm } from '../src/transform-wasm.js';
 type Engine = (source: string, filename?: string) => { code?: string };
 
 const LANES: ReadonlyArray<readonly [string, Engine]> = [
-    ['babel', transformSource],
-    ['oxc', transformWasm as Engine],
+    ['auto', transformSource],
+    ['wasm', transformWasm as Engine],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
 ];
 

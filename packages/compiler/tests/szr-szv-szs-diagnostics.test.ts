@@ -67,8 +67,8 @@ const SZS_WARNING_SOURCES: ReadonlyArray<readonly [string, string]> = [
 type Engine = (source: string, filename?: string) => { diagnostics?: string[] };
 
 const LANES: ReadonlyArray<readonly [string, Engine]> = [
-    ['babel', transformSource],
-    ['oxc', transformWasm as Engine],
+    ['auto', transformSource],
+    ['wasm', transformWasm as Engine],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
 ];
 

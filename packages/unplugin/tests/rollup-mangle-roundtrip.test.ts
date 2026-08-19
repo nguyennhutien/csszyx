@@ -74,7 +74,7 @@ describe('pure Rollup production mangle round-trip', () => {
         );
 
         const [prePlugin, postPlugin] = rollupPlugin({
-            build: { emitManifest: true, cache: false, parser: 'oxc' },
+            build: { emitManifest: true, cache: false },
             production: { mangle: true },
         });
         const build = await rollup({

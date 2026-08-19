@@ -42,7 +42,7 @@ describe('Next Turbopack prebuild core', () => {
             files,
             explicitRoot: root,
             cwd: root,
-            parserMode: 'babel',
+            parserMode: 'auto',
             config: { mangleVars: false },
             nextVersion: '16.2.7',
             csszyxVersion: '0.9.0',

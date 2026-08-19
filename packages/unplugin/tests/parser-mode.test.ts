@@ -236,8 +236,8 @@ describe('resolveParserMode — robustness / no hidden side effects', () => {
     });
 
     it('matrix smoke — every (env, config, available) combo returns a valid ParserMode', () => {
-        const envs = [undefined, '', 'foo', 'rust', 'wasm', 'oxc', 'babel'];
-        const configs: Array<ParserMode | undefined> = [undefined, 'rust', 'oxc', 'babel'];
+        const envs = [undefined, '', 'foo', 'rust', 'wasm', 'wasm', 'auto'];
+        const configs: Array<ParserMode | undefined> = [undefined, 'rust', 'wasm', 'auto'];
         for (const envParser of envs) {
             for (const configParser of configs) {
                 for (const rustAvailable of [true, false]) {
@@ -246,7 +246,7 @@ describe('resolveParserMode — robustness / no hidden side effects', () => {
                     expect(isParserMode(out.parser)).toBe(true);
                     // degraded implies the resolved parser is oxc and it was not explicit
                     if (out.degraded) {
-                        expect(out.parser).toBe('oxc');
+                        expect(out.parser).toBe('wasm');
                         expect(out.explicit).toBe(false);
                     }
                 }

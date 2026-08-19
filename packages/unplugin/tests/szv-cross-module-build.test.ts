@@ -64,7 +64,7 @@ afterAll(() => {
  * @param parser - Engine under test.
  * @returns Emitted JS bundle text.
  */
-async function buildFixture(parser: 'rust' | 'oxc' | 'babel'): Promise<string> {
+async function buildFixture(parser: 'rust' | 'wasm' | 'auto'): Promise<string> {
     const root = mkdtempSync(join(realpathSync(tmpdir()), `csszyx-szv-xm-${parser}-`));
     tempDirs.push(root);
     mkdirSync(join(root, 'src'), { recursive: true });
@@ -119,7 +119,7 @@ export const App = ({ n }) => <div sz={[{ p: 4 }, \`col-\${n}\`]} />;
  * @param parser - Engine under test.
  * @returns Emitted JS bundle text.
  */
-async function buildSlimFixture(parser: 'rust' | 'oxc' | 'babel'): Promise<string> {
+async function buildSlimFixture(parser: 'rust' | 'wasm' | 'auto'): Promise<string> {
     const root = mkdtempSync(join(realpathSync(tmpdir()), `csszyx-szpart-slim-${parser}-`));
     tempDirs.push(root);
     mkdirSync(join(root, 'src'), { recursive: true });
@@ -152,7 +152,7 @@ async function buildSlimFixture(parser: 'rust' | 'oxc' | 'babel'): Promise<strin
     return js;
 }
 
-describe.each(['rust', 'oxc', 'babel'] as const)('%s slim injection build', parser => {
+describe.each(['rust', 'wasm', 'auto'] as const)('%s slim injection build', parser => {
     it('routes provable merge helpers through the compiler-free entry', async () => {
         const js = await buildSlimFixture(parser);
         // The merge helpers import the /merge entry, not the self-registering
@@ -166,7 +166,7 @@ describe.each(['rust', 'oxc', 'babel'] as const)('%s slim injection build', pars
     }, 120_000);
 });
 
-describe.each(['rust', 'oxc', 'babel'] as const)('%s build', parser => {
+describe.each(['rust', 'wasm', 'auto'] as const)('%s build', parser => {
     it('rewrites the imported factory end to end', { timeout: 120_000 }, async () => {
         const js = await buildFixture(parser);
         // The static selection collapsed at build time.

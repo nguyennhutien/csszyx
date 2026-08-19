@@ -111,8 +111,8 @@ describe('manifest emission', () => {
             plugins: [
                 vitePlugin(
                     emitManifest === undefined
-                        ? { build: { parser: 'oxc', cache: false } }
-                        : { build: { emitManifest, parser: 'oxc', cache: false } },
+                        ? { build: { cache: false } }
+                        : { build: { emitManifest, cache: false } },
                 ),
             ],
             build: { minify: false },
