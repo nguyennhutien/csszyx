@@ -777,23 +777,7 @@ fn unknown_property_diagnostics(
         }
         removed_sugar.clear();
         super::lower::collect_removed_boolean_sugar(object, &mut removed_sugar);
-        for (key, offset) in &removed_sugar {
-            let (line, _) = lines
-                .get_or_insert_with(|| LineIndex::new(&file.source))
-                .line_column(&file.source, *offset);
-            // The build lane is the ONLY one that sees a statically extracted
-            // prop: the runtime warning for these keys never fires for source
-            // this pass compiled, so silence here meant a style vanished with
-            // nothing to search for. Names the canonical spelling and the
-            // codemod, mirroring the runtime channel's wording.
-            let replacement = super::generated::tables::removed_boolean_sugar_replacement(key);
-            let Some((canonical, value)) = replacement else {
-                continue;
-            };
-            out.push(format!(
-                "[csszyx] \"{key}\" boolean sugar was removed at {location}:{line}. Use {{ {canonical}: '{value}' }} instead, or run `csszyx migrate`."
-            ));
-        }
+        push_removed_sugar_diagnostics(file, &removed_sugar, &location, &mut lines, &mut out);
         border_side_styles.clear();
         super::lower::collect_border_side_styles(object, &mut border_side_styles);
         for (key, value, offset) in &border_side_styles {
@@ -829,9 +813,7 @@ fn unknown_property_diagnostics(
             ));
         }
     }
-    out.extend(class_name_precedence_advisories(
-        file, ir, &location, &mut lines,
-    ));
+    out.extend(class_name_precedence_advisories(file, ir, &location));
     out
 }
 
@@ -850,6 +832,34 @@ fn relativize_diagnostic_path(filename: &str, root_dir: Option<&str>) -> String 
         }
     }
     filename.to_string()
+}
+
+/// Report each removed boolean-sugar alias found in one sz object.
+///
+/// The build lane is the ONLY one that sees a statically extracted prop: the
+/// runtime warning for these keys never fires for source this pass compiled,
+/// so silence here meant a style vanished with nothing to search for. Names the
+/// canonical spelling and the codemod, mirroring the runtime channel's wording.
+fn push_removed_sugar_diagnostics(
+    file: &TransformFile,
+    found: &[(String, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    for (key, offset) in found {
+        let Some((canonical, value)) =
+            super::generated::tables::removed_boolean_sugar_replacement(key)
+        else {
+            continue;
+        };
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        out.push(format!(
+            "[csszyx] \"{key}\" boolean sugar was removed at {location}:{line}. Use {{ {canonical}: '{value}' }} instead, or run `csszyx migrate`."
+        ));
+    }
 }
 
 /// Advisory for an element carrying both `sz` and a non-literal `className`.
@@ -875,8 +885,11 @@ fn class_name_precedence_advisories(
     file: &TransformFile,
     ir: &super::SourceIr,
     location: &str,
-    lines: &mut Option<LineIndex>,
 ) -> Vec<String> {
+    // Its own lazy index rather than the caller's: the advisory is the last
+    // pass, so sharing bought nothing but an argument, and a file that never
+    // trips it still never builds one.
+    let mut lines: Option<LineIndex> = None;
     let mut out = Vec::new();
     for element in &ir.jsx_opening_elements {
         let Some(class_index) = element.class_attribute_index else {
