@@ -45,6 +45,57 @@ const EMPTY_THEME: ParsedTheme = {
     breakpoints: [],
 };
 
+/** The class names and namespaces a stylesheet claims with `@utility`. */
+export interface ParsedUtilities {
+    /** Static declarations, each claiming one class name: `panel-flat`. */
+    statics: string[];
+    /** Functional declarations, each claiming a namespace: `pad` for `pad-*`. */
+    functionals: string[];
+}
+
+/**
+ * Read the `@utility` declarations out of one stylesheet.
+ *
+ * A project claims class names two ways, and only one of them was ever read.
+ * A `@theme` token claims them indirectly — `--color-brand` makes `text-brand`
+ * and fourteen others — while `@utility` claims one outright. Tailwind MERGES
+ * when the name is already taken rather than refusing it, and says nothing, so
+ * `@utility text-balance { letter-spacing: … }` quietly ships a class that also
+ * sets `text-wrap`. Reporting that needs this list first.
+ *
+ * Static and functional forms are kept apart because they answer different
+ * questions. `panel-flat` is a class name and can be compared to one. `pad-*`
+ * is a namespace whose members depend on the theme, so comparing its literal
+ * text to a class list would ask something meaningless.
+ *
+ * @param cssContent Stylesheet source.
+ * @returns The claimed names, both forms.
+ */
+export function parseUtilityBlocks(cssContent: string): ParsedUtilities {
+    // Comments first: a commented-out declaration claims nothing, and reporting
+    // it would send the reader to a line that is already inert.
+    const source = cssContent.replaceAll(/\/\*[\s\S]*?\*\//g, '');
+    const statics: string[] = [];
+    const functionals: string[] = [];
+    const pattern = /@utility\s+([^\s{]+)\s*\{/g;
+    let match = pattern.exec(source);
+    while (match !== null) {
+        const name = match[1];
+        if (name.endsWith('-*')) {
+            functionals.push(name.slice(0, -2));
+        } else {
+            statics.push(name);
+        }
+        // Skip the whole body: a nested rule inside it holds braces of its own,
+        // and resuming mid-body would read them as declarations.
+        const open = source.indexOf('{', match.index);
+        const close = findMatchingBrace(source, open);
+        pattern.lastIndex = close === -1 ? source.length : close + 1;
+        match = pattern.exec(source);
+    }
+    return { statics, functionals };
+}
+
 /**
  * Find the closing brace paired with one opening brace.
  *

@@ -345,6 +345,15 @@ jobs:
       - name: Check var-hostile key list matches Tailwind
         run: pnpm check:var-hostile-keys
 
+      # The szcn collision blocklist names the theme tokens that shadow a
+      # built-in keyword. Tailwind states the collision itself — a shadowed name
+      # parses BOTH as a static utility and as a functional one — so the list is
+      # derived rather than judged. A Tailwind release that adds a keyword adds a
+      # name a project could already be using, and without this the first symptom
+      # is szcn deleting a property the author set.
+      - name: Check szcn collision blocklist matches Tailwind
+        run: pnpm check:szcn-collision-blocklist
+
       # The corpus round-trip checks every documented Tailwind class maps back to
       # an sz form AND that the mapping compiles to the SAME class. The plain
       # check is advisory; --require-no-broken fails only when a class maps but

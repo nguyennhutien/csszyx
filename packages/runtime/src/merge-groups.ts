@@ -214,6 +214,66 @@ export interface SzcnThemeGroups {
  * color and merge it wrongly — the exact "delete a different property" bug this
  * module exists to prevent. Colliding names are rejected, keeping keep-both.
  */
+/**
+ * Static keywords Tailwind reads under a colour-carrying prefix.
+ *
+ * Derived, not judged: `scripts/check-szcn-collision-blocklist.mjs` asks
+ * Tailwind's own `parseCandidate` which class names come back with BOTH a
+ * static and a functional reading, and a name in that set is one a colour
+ * token would shadow. Measured consequence of missing one — with
+ * `--color-collapse` declared, `szcn('border-collapse', 'border-red-500')`
+ * returned `border-red-500`, deleting a border-collapse the author set.
+ */
+const BLEND_MODES = new Set([
+    'blend-color',
+    'blend-color-burn',
+    'blend-color-dodge',
+    'blend-darken',
+    'blend-difference',
+    'blend-exclusion',
+    'blend-hard-light',
+    'blend-hue',
+    'blend-lighten',
+    'blend-luminosity',
+    'blend-multiply',
+    'blend-normal',
+    'blend-overlay',
+    'blend-saturation',
+    'blend-screen',
+    'blend-soft-light',
+]);
+
+const BG_CLIPS = new Set(['clip-border', 'clip-content', 'clip-padding', 'clip-text']);
+
+const BG_ORIGINS = new Set(['origin-border', 'origin-content', 'origin-padding']);
+
+const BORDER_COLLAPSE = new Set(['collapse', 'separate']);
+
+/** Keywords the ring, shadow and divide prefixes spell without a value. */
+const RING_SHADOW_DIVIDE_KEYWORDS = new Set([
+    'inset',
+    'initial',
+    'shadow-initial',
+    'spacing-px',
+    'spacing-x-px',
+    'spacing-y-px',
+    'x-reverse',
+    'y-reverse',
+]);
+
+/** `font-stretch-*` keywords, which a font-family or font-weight token shadows. */
+const FONT_STRETCHES = new Set([
+    'stretch-condensed',
+    'stretch-expanded',
+    'stretch-extra-condensed',
+    'stretch-extra-expanded',
+    'stretch-normal',
+    'stretch-semi-condensed',
+    'stretch-semi-expanded',
+    'stretch-ultra-condensed',
+    'stretch-ultra-expanded',
+]);
+
 const COLLISION_BLOCKLIST: Record<keyof typeof customTokens, ReadonlySet<string>> = {
     colors: new Set([
         ...NAMED_COLORS,
@@ -229,10 +289,21 @@ const COLLISION_BLOCKLIST: Record<keyof typeof customTokens, ReadonlySet<string>
         ...SHADOW_SIZES,
         ...DECORATION_STYLES,
         ...DECORATION_THICKNESSES,
+        ...BLEND_MODES,
+        ...BG_CLIPS,
+        ...BG_ORIGINS,
+        ...BORDER_COLLAPSE,
+        ...RING_SHADOW_DIVIDE_KEYWORDS,
     ]),
-    textSizes: new Set([...TEXT_ALIGNS, ...TEXT_WRAPS, ...TEXT_OVERFLOWS, ...NAMED_COLORS]),
-    fontFamilies: new Set(FONT_WEIGHTS),
-    fontWeights: new Set(FONT_FAMILIES),
+    textSizes: new Set([
+        ...TEXT_ALIGNS,
+        ...TEXT_WRAPS,
+        ...TEXT_OVERFLOWS,
+        ...NAMED_COLORS,
+        'shadow-initial',
+    ]),
+    fontFamilies: new Set([...FONT_WEIGHTS, ...FONT_STRETCHES]),
+    fontWeights: new Set([...FONT_FAMILIES, ...FONT_STRETCHES]),
 };
 
 /**

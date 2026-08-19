@@ -1,0 +1,102 @@
+/**
+ * Reading `@utility` declarations out of a project's CSS.
+ *
+ * The scanner has only ever read `@theme`. That was enough while a theme token
+ * was the only way a project could claim a class name, but `@utility` claims
+ * one directly, and Tailwind merges rather than refuses when the name is
+ * already taken — measured: `@utility text-balance { letter-spacing: … }`
+ * against stock Tailwind emits `letter-spacing` AND `text-wrap: balance`, with
+ * no warning from anyone.
+ *
+ * Nothing can report that collision without first knowing which names the
+ * project declares, which is what this reads.
+ *
+ * Two forms, and the difference matters. A static `@utility panel-flat` claims
+ * exactly one class name. A functional `@utility pad-*` claims a namespace and
+ * resolves its argument against the theme — comparing its literal text to a
+ * class list would ask the wrong question, so the two are kept apart rather
+ * than flattened into one list.
+ */
+import { describe, expect, it } from 'vitest';
+
+import { parseUtilityBlocks } from '../src/theme-scanner.js';
+
+describe('parseUtilityBlocks', () => {
+    it('reads a static utility as one claimed class name', () => {
+        const css = `@utility panel-flat {\n    box-shadow: none;\n}\n`;
+
+        expect(parseUtilityBlocks(css)).toEqual({ statics: ['panel-flat'], functionals: [] });
+    });
+
+    it('reads a functional utility as a namespace, not a class name', () => {
+        const css = `@utility pad-* {\n    padding: --value(--pad-*);\n}\n`;
+
+        expect(parseUtilityBlocks(css)).toEqual({ statics: [], functionals: ['pad'] });
+    });
+
+    it('reads several declarations from one stylesheet', () => {
+        const css = [
+            '@import "tailwindcss";',
+            '@theme {',
+            '    --color-brand: #f00;',
+            '}',
+            '@utility panel-flat {',
+            '    box-shadow: none;',
+            '}',
+            '@utility pad-* {',
+            '    padding: --value(--pad-*);',
+            '}',
+            '@utility text-balance {',
+            '    letter-spacing: 0.01em;',
+            '}',
+        ].join('\n');
+
+        expect(parseUtilityBlocks(css)).toEqual({
+            statics: ['panel-flat', 'text-balance'],
+            functionals: ['pad'],
+        });
+    });
+
+    it('reads a declaration nested in a layer', () => {
+        // `@theme` already had to handle this, so a stylesheet that wraps one
+        // wraps the other.
+        const css = `@layer utilities {\n@utility panel-flat {\n    box-shadow: none;\n}\n}\n`;
+
+        expect(parseUtilityBlocks(css).statics).toEqual(['panel-flat']);
+    });
+
+    it('survives a declaration body holding braces', () => {
+        // A nested rule inside the body must not end the block early, or every
+        // declaration after it is lost silently.
+        const css = [
+            '@utility card-raised {',
+            '    box-shadow: 0 1px 2px #0001;',
+            '    &:hover {',
+            '        box-shadow: 0 4px 8px #0002;',
+            '    }',
+            '}',
+            '@utility panel-flat {',
+            '    box-shadow: none;',
+            '}',
+        ].join('\n');
+
+        expect(parseUtilityBlocks(css).statics).toEqual(['card-raised', 'panel-flat']);
+    });
+
+    it('reports nothing for a stylesheet that declares none', () => {
+        expect(
+            parseUtilityBlocks('@import "tailwindcss";\n@theme {\n--color-a: #f00;\n}\n'),
+        ).toEqual({ statics: [], functionals: [] });
+    });
+
+    it('ignores the word inside a comment or a string', () => {
+        const css = [
+            '/* @utility commented-out { color: red } */',
+            '@utility real-one {',
+            '    color: red;',
+            '}',
+        ].join('\n');
+
+        expect(parseUtilityBlocks(css).statics).toEqual(['real-one']);
+    });
+});

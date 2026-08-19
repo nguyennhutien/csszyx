@@ -101,6 +101,7 @@ pnpm check:key-corpus
 # one of these keys must take it off the list, or csszyx keeps dropping a class
 # that would now work.
 pnpm check:var-hostile-keys
+pnpm check:szcn-collision-blocklist
 
 # Builds the addon, loads it the way a consumer does, and removes it again —
 # it owns a whole CI job, so it cleans up after itself. That last part is why
