@@ -243,6 +243,27 @@ describe('parseObjectLiteralSafe — surrounding syntax', () => {
         expect(parseObjectLiteralSafe('{ p: -(-4) }')).toBeNull();
     });
 
+    it('reads a template that holds a dollar or a brace but no interpolation', () => {
+        // Only the two characters together open an interpolation. Treating
+        // either one alone as the trigger would refuse text that has nothing
+        // to evaluate in it.
+        expect(parseObjectLiteralSafe('{ p: `a$b`, q: `a{b`, r: `ab$` }')).toEqual({
+            p: 'a$b',
+            q: 'a{b',
+            r: 'ab$',
+        });
+    });
+
+    it('removes exactly the comment and nothing either side of it', () => {
+        // The span dropped has to start at the opener and end past the closer.
+        // One character short leaves `/` where a key is expected, one too far
+        // eats the key itself, and `/*/` is an opener rather than an empty
+        // comment.
+        expect(parseObjectLiteralSafe('{/*a*/p: 1}')).toEqual({ p: 1 });
+        expect(parseObjectLiteralSafe('{ p: 1 } /* t */')).toEqual({ p: 1 });
+        expect(parseObjectLiteralSafe('{ /*/ p: 1 }')).toBeNull();
+    });
+
     it('accepts line and block comments', () => {
         expect(parseObjectLiteralSafe('{ /* a */ p: 1, // b\n q: 2 }')).toEqual({ p: 1, q: 2 });
     });
@@ -339,6 +360,41 @@ describe('parseObjectLiteralSafe — escape decoding in full', () => {
 
     it('rejects a backslash at the end of the input', () => {
         expect(parseObjectLiteralSafe('{ p: "a\\')).toBeNull();
+    });
+
+    it('rejects a null escape followed by either end of the digit range', () => {
+        // `\0` is the null character only while NO digit follows, so both ends
+        // of 0-9 have to close it. A bound that starts at 1 lets `\00` decode
+        // to a null byte plus a stray zero, which is not what a module reads.
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\00' }`)).toBeNull();
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\09' }`)).toBeNull();
+    });
+
+    it('rejects a hex escape whose digits merely start out hex', () => {
+        // parseInt stops at the first character it cannot use, so `1g` comes
+        // back as 1 rather than NaN. Only checking every digit up front keeps
+        // these from decoding to the value of their valid prefix.
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\x1g' }`)).toBeNull();
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\u004g' }`)).toBeNull();
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\u{1g}' }`)).toBeNull();
+    });
+
+    it('decodes the largest code point and the longest braced escape', () => {
+        // The upper bounds are inclusive: six digits is the widest legal form
+        // and 10FFFF the highest legal value, so an off-by-one on either one
+        // rejects a literal the bundler accepts.
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\u{10FFFF}' }`)).toEqual({
+            p: '\u{10FFFF}',
+        });
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\u{0FFFFF}' }`)).toEqual({
+            p: '\u{0FFFFF}',
+        });
+    });
+
+    it('rejects a raw carriage return inside a quoted string', () => {
+        // A line terminator ends a string literal in a module, and CR is one
+        // of them even though it is invisible next to the newline case.
+        expect(parseObjectLiteralSafe(`{ p: 'a${String.fromCharCode(13)}b' }`)).toBeNull();
     });
 });
 
