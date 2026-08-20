@@ -123,6 +123,11 @@ class Reader {
 
     /**
      * Read an identifier name.
+     *
+     * Callers check {@link IDENTIFIER_START} first, and every character that
+     * may start an identifier may also continue one, so the loop always
+     * consumes at least the character it was pointed at.
+     *
      * @returns The name.
      */
     readIdentifier(): string {
@@ -130,7 +135,6 @@ class Reader {
         while (this.offset < this.source.length && IDENTIFIER_PART.test(this.source[this.offset])) {
             this.offset += 1;
         }
-        if (this.offset === start) this.bail();
         return this.source.slice(start, this.offset);
     }
 

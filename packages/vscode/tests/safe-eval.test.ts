@@ -283,3 +283,85 @@ describe('parseObjectLiteralSafe — surrounding syntax', () => {
         expect(parseObjectLiteralSafe('{ p: Infinity }')).toBeNull();
     });
 });
+
+describe('parseObjectLiteralSafe — escape decoding in full', () => {
+    it('decodes the remaining single-character escapes', () => {
+        expect(parseObjectLiteralSafe(String.raw`{ p: "a\rb\bc\fd\ve" }`)).toEqual({
+            p: 'a\rb\bc\fd\ve',
+        });
+    });
+
+    it('decodes a lone null escape', () => {
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\0' }`)).toEqual({ p: '\0' });
+    });
+
+    it('rejects a null escape followed by a digit', () => {
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\01' }`)).toBeNull();
+    });
+
+    it('rejects every legacy octal escape digit', () => {
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\1', q: '\2', r: '\3' }`)).toBeNull();
+    });
+
+    it('drops a carriage-return line continuation', () => {
+        expect(parseObjectLiteralSafe('{ p: "a\\\r\nb" }')).toEqual({ p: 'ab' });
+    });
+
+    it('rejects a hex escape whose digits are not hex', () => {
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\xZZ' }`)).toBeNull();
+    });
+
+    it('rejects a hex escape that runs out of digits', () => {
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\x4' }`)).toBeNull();
+    });
+
+    it('decodes a braced unicode escape', () => {
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\u{41}' }`)).toEqual({ p: 'A' });
+    });
+
+    it('rejects an empty braced unicode escape', () => {
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\u{}' }`)).toBeNull();
+    });
+
+    it('rejects a code point above the unicode range', () => {
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\u{110000}' }`)).toBeNull();
+    });
+
+    it('rejects an unclosed braced unicode escape', () => {
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\u{41' }`)).toBeNull();
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\u{41'`)).toBeNull();
+    });
+
+    it('rejects a four-digit unicode escape that is short or not hex', () => {
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\u041' }`)).toBeNull();
+        expect(parseObjectLiteralSafe(String.raw`{ p: '\uZZZZ' }`)).toBeNull();
+    });
+
+    it('rejects a backslash at the end of the input', () => {
+        expect(parseObjectLiteralSafe('{ p: "a\\')).toBeNull();
+    });
+});
+
+describe('parseObjectLiteralSafe — unterminated constructs', () => {
+    it('rejects an unterminated template literal', () => {
+        expect(parseObjectLiteralSafe('{ p: `abc')).toBeNull();
+    });
+
+    it('rejects an unterminated block comment', () => {
+        expect(parseObjectLiteralSafe('{ /* unterminated p: 1 }')).toBeNull();
+    });
+
+    it('rejects an object that stops after the opening brace', () => {
+        expect(parseObjectLiteralSafe('{')).toBeNull();
+    });
+});
+
+describe('parseObjectLiteralSafe — array edges', () => {
+    it('extracts an empty array', () => {
+        expect(parseObjectLiteralSafe('{ list: [] }')).toEqual({ list: [] });
+    });
+
+    it('ignores a trailing comma in an array', () => {
+        expect(parseObjectLiteralSafe('{ list: [1,] }')).toEqual({ list: [1] });
+    });
+});
