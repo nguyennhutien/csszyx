@@ -331,6 +331,13 @@ jobs:
       - name: Check Rust transform tables are current
         run: pnpm gen:rust-tables:check
 
+      # migrate's reverse map is the same PROPERTY_MAP read backwards. It used
+      # to be written out by hand and drifted: two prefixes went missing, and
+      # round-trip tests could not see it because the wrong sz key still lowers
+      # to the class it came from. Fail if regenerating would change it.
+      - name: Check migrate reverse map is current
+        run: pnpm gen:reverse-map:check
+
       # The per-key matrix fixture and the parity corpus are derived independently
       # from the snippets; the staleness checks only prove each is internally
       # fresh. Assert the corpus actually covers every per-key forward case, so the
