@@ -338,6 +338,16 @@ jobs:
       - name: Check migrate reverse map is current
         run: pnpm gen:reverse-map:check
 
+      # The golden of what migrate WRITES, one probe class per prefix the
+      # compiler can emit. The reverse-map check above only proves the table is
+      # freshly derived; this one makes a change to the sz output a visible diff
+      # rather than a judgement call about whether a table swap was plumbing.
+      # Round-trip tests cannot stand in for it: a wrong sz key still lowers back
+      # to the class it came from, so the only place the wrongness exists is the
+      # intermediate sz object this golden records.
+      - name: Check migrate sz golden is current
+        run: pnpm gen:migrate-golden:check
+
       # The per-key matrix fixture and the parity corpus are derived independently
       # from the snippets; the staleness checks only prove each is internally
       # fresh. Assert the corpus actually covers every per-key forward case, so the

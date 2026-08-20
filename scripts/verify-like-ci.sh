@@ -92,6 +92,7 @@ pnpm gen:key-tests:check
 pnpm gen:parity-corpus:check
 pnpm gen:rust-tables:check
 pnpm gen:reverse-map:check
+pnpm gen:migrate-golden:check
 pnpm gen:sz-fallback-matrix:check
 pnpm gen:sz-allowlist:check
 pnpm gen:box-role:check
