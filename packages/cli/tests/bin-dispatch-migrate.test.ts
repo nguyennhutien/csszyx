@@ -51,8 +51,14 @@ describe('bin migrate dispatch (real command)', () => {
             'https://cdn.example.com/csszyx-runtime.js',
         ];
         await import('../src/bin.js?scenario=migrate-cdn');
-        // The migrate action is async; let it settle.
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Poll for the effect this test is about rather than sleeping a fixed
+        // span: the action is async and now loads its command module on
+        // demand, so any constant is a race that passes alone and fails under
+        // a loaded suite.
+        for (let waited = 0; waited < 10_000; waited += 25) {
+            if (readFileSync(join(cwd, 'src/page.html'), 'utf8').includes('sz="')) break;
+            await new Promise(resolve => setTimeout(resolve, 25));
+        }
 
         const html = readFileSync(join(cwd, 'src/page.html'), 'utf8');
         // className → sz attribute (positional dir was used, so the file was found).

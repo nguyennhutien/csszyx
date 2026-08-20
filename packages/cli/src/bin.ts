@@ -23,17 +23,6 @@ import { readFileSync } from 'node:fs';
 
 import cac from 'cac';
 
-import { audit } from './commands/audit.js';
-import { check } from './commands/check.js';
-import { doctor } from './commands/doctor.js';
-import { explain } from './commands/explain.js';
-import { generateTypes } from './commands/generate-types.js';
-import { init } from './commands/init.js';
-import { migrate } from './commands/migrate.js';
-import { nextPrebuild } from './commands/next-prebuild.js';
-import { nextWatch } from './commands/next-watch.js';
-import { scanCollisions } from './commands/scan-collisions.js';
-
 /**
  * Normalize a repeatable CLI option to its array representation.
  *
@@ -57,6 +46,11 @@ function runtimeInjection(value: unknown): 'local' | 'cdn' | false {
     return false;
 }
 
+// Commands load on demand. Every one of them was imported here, so `csszyx
+// check` in a pre-commit hook paid to load the watcher, the process spawner
+// and the prompt library it never calls — measured at 130ms of a 280ms run.
+// It also meant one command's dependency failing to load took down the whole
+// binary, including commands that do not use it.
 const cli = cac('csszyx');
 normalizeNextCommandAlias(process.argv);
 
@@ -109,7 +103,7 @@ async function runNextPrebuildCommand(
     pattern: string | undefined,
     options: CacNextPrebuildOptions,
 ): Promise<void> {
-    const code = await nextPrebuild({
+    const code = await (await import('./commands/next-prebuild.js')).nextPrebuild({
         cwd: options.cwd,
         root: options.root,
         mode: options.mode,
@@ -130,7 +124,7 @@ async function runNextWatchCommand(
     pattern: string | undefined,
     options: CacNextWatchOptions,
 ): Promise<void> {
-    const code = await nextWatch({
+    const code = await (await import('./commands/next-watch.js')).nextWatch({
         cwd: options.cwd,
         root: options.root,
         parserMode: options.parserMode,
@@ -150,7 +144,7 @@ cli.command('init', 'Setup csszyx in your project')
     .option('--yes', 'Skip prompts (use defaults)')
     .option('--cwd <dir>', 'Current working directory')
     .action(async options => {
-        await init({
+        await (await import('./commands/init.js')).init({
             framework: options.framework,
             yes: options.yes,
             cwd: options.cwd,
@@ -162,7 +156,7 @@ cli.command('doctor', 'Diagnose mangling issues')
     .option('--verbose', 'Show detailed output')
     .option('--cwd <dir>', 'Current working directory')
     .action(async options => {
-        await doctor({
+        await (await import('./commands/doctor.js')).doctor({
             verbose: options.verbose,
             cwd: options.cwd,
         });
@@ -184,7 +178,7 @@ cli.command(
     .option('--files <path>', 'Check exactly these files, for a git hook (repeatable)')
     .option('--json', 'Emit one machine-readable document instead of the prose report')
     .action(async options => {
-        await check({
+        await (await import('./commands/check.js')).check({
             cwd: options.cwd,
             pattern: options.pattern,
             ignore: repeatableOption(options.ignore),
@@ -204,7 +198,7 @@ cli.command(
     .option('--ignore <glob>', 'Extra ignore glob (repeatable)')
     .option('--cwd <dir>', 'Current working directory')
     .action(async options => {
-        await scanCollisions({
+        await (await import('./commands/scan-collisions.js')).scanCollisions({
             cwd: options.cwd,
             pattern: options.pattern,
             ignore: repeatableOption(options.ignore),
@@ -213,8 +207,8 @@ cli.command(
 
 // explain command
 cli.command('explain <sz>', 'Print the Tailwind className an sz object compiles to').action(
-    (sz: string) => {
-        explain(sz);
+    async (sz: string) => {
+        (await import('./commands/explain.js')).explain(sz);
     },
 );
 
@@ -225,7 +219,7 @@ cli.command('audit', 'Analyze mangling performance')
     .option('--compare <dir>', 'Compare with previous build')
     .option('--cwd <dir>', 'Current working directory')
     .action(async options => {
-        await audit({
+        await (await import('./commands/audit.js')).audit({
             json: options.json,
             watch: options.watch,
             compare: options.compare,
@@ -240,7 +234,7 @@ cli.command('generate-types', 'Generate TypeScript declarations from tailwind.co
     .option('--cwd <dir>', 'Current working directory')
     .option('--silent', 'Silent mode (no output)')
     .action(async options => {
-        await generateTypes({
+        await (await import('./commands/generate-types.js')).generateTypes({
             config: options.config,
             output: options.output,
             cwd: options.cwd,
@@ -270,7 +264,7 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
         'Only normalize legacy sz-prop keys to their canonical form; leave className untouched (0.9.10 → 0.10.0 upgrade)',
     )
     .action(async (dir, options) => {
-        await migrate({
+        await (await import('./commands/migrate.js')).migrate({
             dryRun: options.dryRun,
             ignore: options.ignore ? options.ignore.split(',') : undefined,
             pattern: options.pattern,
