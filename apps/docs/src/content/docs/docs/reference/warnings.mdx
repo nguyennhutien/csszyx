@@ -737,6 +737,43 @@ The class prefixes each theme namespace feeds are derived from the project's own
 Tailwind, not listed — so a colour named `cover` is reported against `bg-cover`,
 a prefix its name gives no hint of.
 
+### Running it as a git hook
+
+`--files` takes the paths a hook hands over, instead of a glob, and `--json`
+replaces the prose with one parseable document. The exit code is the same
+either way, so the format can change without changing what failing means.
+
+```yaml
+# lefthook.yml
+pre-commit:
+  commands:
+    csszyx:
+      glob: "*.{jsx,tsx}"
+      run: npx csszyx check --files {staged_files}
+```
+
+Scoping to a subset is sound because the scan lowers each file on its own, with
+no cross-module registry: a file checked alone yields exactly what it yields in
+a whole-project run. Paths that are not `.jsx`/`.tsx` are dropped rather than
+refused, so a README staged alongside a component does not fail the hook.
+
+The JSON document is `{ "version": 1, "findings": [...] }`, one entry per
+finding:
+
+```json
+{
+  "rule": "sibling-keyword",
+  "file": "src/App.tsx",
+  "line": 12,
+  "message": "color: 'balance' emits text-balance, which sets text-wrap — not what color sets."
+}
+```
+
+`rule` is one of `sz-diagnostic`, `dead-class`, `broken-opacity`,
+`sibling-keyword`, `theme-collision`. It is a stable id on purpose: messages get
+rewritten whenever they can be made clearer, so anything filtering on wording
+would break each time one was.
+
 `npx @csszyx/cli scan-collisions` finds class names that would collide with a
 mangled token:
 

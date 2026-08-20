@@ -76,6 +76,9 @@ describe('csszyx check — a value that belongs to a sibling key', () => {
         expect(report).toContain("color: 'balance'");
         expect(report).toContain('text-balance');
         expect(report).toContain('text-wrap');
+        // A linter that names a file but no line leaves an editor and a CI
+        // annotation with nowhere to point.
+        expect(report).toContain('src/App.tsx:1');
         expect(process.exitCode).toBe(1);
     });
 

@@ -15,7 +15,7 @@ import path from 'node:path';
 
 import { transformSource } from '@csszyx/compiler';
 import fg from 'fast-glob';
-
+import { createReporter, type Reporter, renderJsonReport } from '../scanner/check-report.js';
 import {
     createEmittedClassOracle,
     type EmittedClassOracle,
@@ -29,7 +29,7 @@ import {
 } from '../scanner/sibling-keyword.js';
 import { type DeclaredToken, findThemeCollisions } from '../scanner/theme-collision.js';
 import { declaredThemeTokens } from '../scanner/theme-declarations.js';
-import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
+import { spinner } from '../utils/terminal-ui.js';
 
 /** Options for the `check` command. */
 export interface CheckOptions {
@@ -57,6 +57,26 @@ export interface CheckOptions {
      * nobody runs.
      */
     allowToken?: string[];
+    /**
+     * Emit one machine-readable document instead of the prose report.
+     *
+     * The verdict does not change with the format: the exit code is the same
+     * either way, so a pipeline can switch on this without re-reading what it
+     * means to fail.
+     */
+    json?: boolean;
+    /**
+     * An explicit list of files to check, absolute or project-relative.
+     *
+     * What a git hook has to offer: lefthook and husky hand over the staged
+     * paths, not a glob. Given, this replaces the glob scan entirely — a hook
+     * that also walked the project would report files the author did not touch.
+     *
+     * Scoping is sound because the scan lowers each file on its own, with no
+     * cross-module registry, so a file checked alone yields exactly what it
+     * yields in a whole-project run.
+     */
+    files?: string[];
 }
 
 /** One captured sz diagnostic, with the project-relative file it came from. */
@@ -87,6 +107,42 @@ async function readSzSource(file: string): Promise<string | null> {
     } catch {
         return null;
     }
+}
+
+/** Extensions the scan can lower. */
+const SOURCE_EXTENSIONS = new Set(['.jsx', '.tsx']);
+
+/**
+ * Resolve an explicit file list to the paths this scan can read.
+ *
+ * A hook passes everything that was staged, so a README or a lockfile arrives
+ * alongside the components. Those are dropped rather than refused: a run that
+ * failed because a doc was committed in the same change would be switched off
+ * within a day.
+ *
+ * @param listed - Paths as given, absolute or project-relative.
+ * @param cwd - Project root.
+ * @returns Absolute paths of the source files among them.
+ */
+function listedSourceFiles(listed: readonly string[], cwd: string): string[] {
+    return listed
+        .filter(file => SOURCE_EXTENSIONS.has(path.extname(file)))
+        .map(file => (path.isAbsolute(file) ? file : path.join(cwd, file)));
+}
+
+/**
+ * The line a compiler diagnostic names, when it names one.
+ *
+ * The engine already renders `at path/File.tsx:12` into its message, and
+ * re-deriving the position here would mean a second answer free to disagree
+ * with the one the author reads.
+ *
+ * @param message - The diagnostic text.
+ * @returns The 1-based line, or undefined when the message carries none.
+ */
+function lineFromMessage(message: string): number | undefined {
+    const match = /:(\d+)(?::\d+)?\b/.exec(message);
+    return match ? Number(match[1]) : undefined;
 }
 
 /**
@@ -159,12 +215,14 @@ async function openOracles(cwd: string): Promise<OpenedOracles> {
  * a finding — a project without Tailwind v4 is not a project full of dead
  * classes.
  *
+ * @param out - Where this pass sends its prose and its findings.
  * @param opened - The project's compiled design systems.
  * @param origins - Emitted class mapped to the file that first emitted it.
  * @param allow - Classes the project vouched for.
  * @returns Whether anything dead was found.
  */
 async function reportDeadClasses(
+    out: Reporter,
     opened: OpenedOracles,
     origins: Map<string, string>,
     allow: readonly string[],
@@ -173,7 +231,7 @@ async function reportDeadClasses(
 
     const { oracles, skipped, stylesheetFailed, hadEntries } = opened;
     if (!hadEntries) {
-        printInfo(
+        out.info(
             'Dead-class check skipped: no stylesheet in this project imports Tailwind, so ' +
                 'there is no design system to ask which classes are real.',
         );
@@ -184,14 +242,14 @@ async function reportDeadClasses(
         // them produced an oracle, so each has something to say about why, and
         // a project whose stylesheets fail for different reasons is exactly the
         // one where hearing only the first sends the user to the wrong file.
-        printInfo(`Dead-class check skipped: ${skipped.join('; ')}.`);
+        out.info(`Dead-class check skipped: ${skipped.join('; ')}.`);
         // A stylesheet that will not compile is a broken project, not an absent
         // one, and passing it quietly is how a check stays green for months
         // after it stopped running. An environment with nothing to ask — no
         // Tailwind, a version without a design system — still passes: failing
         // there would break every consumer who does not build with one.
         if (stylesheetFailed) {
-            printWarn(
+            out.warn(
                 '\n✖ The dead-class check did not run. Its stylesheet is part of this project, ' +
                     'so this is reported as a failure rather than a skip — otherwise a check ' +
                     'that never runs is indistinguishable from one that found nothing.',
@@ -230,7 +288,7 @@ async function reportDeadClasses(
             origin,
             value: brokenPerOracle[0].get(token) as string,
         }));
-    return printDeadClassReport({
+    return printDeadClassReport(out, {
         dead,
         broken,
         acceptedCount: accepted.length,
@@ -259,28 +317,34 @@ interface DeadClassReport {
  * Split from the scan so each side stays readable on its own: the scan decides
  * what is dead across every stylesheet, and this decides how to say it.
  *
+ * @param out - Where this pass sends its prose and its findings.
  * @param report - What the scan concluded.
  * @returns Whether anything was found that should fail the command.
  */
-function printDeadClassReport(report: DeadClassReport): boolean {
+function printDeadClassReport(out: Reporter, report: DeadClassReport): boolean {
     const { dead, broken, acceptedCount, emittedCount } = report;
     // Say how many were waved through even on a clean run: an allow list that
     // silently covers a growing pile is the failure mode of every such list.
     const acceptedNote = acceptedCount > 0 ? `, ${acceptedCount} accepted` : '';
 
     if (dead.length === 0 && broken.length === 0) {
-        printSuccess(
+        out.success(
             `Every one of the ${emittedCount} emitted class(es) produces CSS under this project's Tailwind${acceptedNote}.`,
         );
         return false;
     }
 
     if (dead.length > 0) {
-        printWarn('\nClasses that produce no CSS:');
+        out.warn('\nClasses that produce no CSS:');
         for (const [token, origin] of dead) {
-            printInfo(`  ${token.padEnd(28)} ${origin}`);
+            out.push({
+                rule: 'dead-class',
+                file: origin,
+                message: `"${token}" is emitted but produces no CSS under this project's Tailwind.`,
+            });
+            out.info(`  ${token.padEnd(28)} ${origin}`);
         }
-        printWarn(
+        out.warn(
             `\n✖ ${dead.length} emitted class(es) style nothing. Each is in the DOM and does ` +
                 "nothing: fix the sz key, or define the class with Tailwind's @utility.",
         );
@@ -291,15 +355,20 @@ function printDeadClassReport(report: DeadClassReport): boolean {
         // v4 wraps the modifier in color-mix(), which dims any valid color, so
         // the only broken shape is a var() chain ending in a bare comma
         // triplet — invalid inside color-mix(), silently dropped by browsers.
-        printWarn('\nOpacity modifiers the compiled stylesheet drops:');
+        out.warn('\nOpacity modifiers the compiled stylesheet drops:');
         for (const entry of broken) {
-            printInfo(`  ${entry.token.padEnd(28)} ${entry.origin}`);
-            printInfo(
+            out.push({
+                rule: 'broken-opacity',
+                file: entry.origin,
+                message: `"${entry.token}" carries an opacity modifier this stylesheet drops.`,
+            });
+            out.info(`  ${entry.token.padEnd(28)} ${entry.origin}`);
+            out.info(
                 `      its theme token resolves to the bare triplet "${entry.value}", which ` +
                     'color-mix() cannot dim — wrap the variable, e.g. rgb(var(--your-triplet)).',
             );
         }
-        printWarn(
+        out.warn(
             `\n✖ ${broken.length} emitted class(es) carry an opacity modifier that does not ` +
                 'survive compilation.',
         );
@@ -310,17 +379,21 @@ function printDeadClassReport(report: DeadClassReport): boolean {
 /**
  * Print captured diagnostics and mark the process as failed.
  *
+ * @param out - Where this pass sends its prose and its findings.
  * @param issues Captured compiler diagnostics.
  */
-function reportIssues(issues: SzIssue[]): void {
+function reportIssues(out: Reporter, issues: SzIssue[]): void {
+    for (const { file, message } of issues) {
+        out.push({ rule: 'sz-diagnostic', file, line: lineFromMessage(message), message });
+    }
     const byFile = groupIssuesByFile(issues);
     for (const [file, messages] of byFile) {
-        printWarn(file);
+        out.warn(file);
         for (const message of messages) {
-            printInfo(`  ${message}`);
+            out.info(`  ${message}`);
         }
     }
-    printWarn(`\n✖ ${issues.length} sz issue(s) in ${byFile.size} file(s).`);
+    out.warn(`\n✖ ${issues.length} sz issue(s) in ${byFile.size} file(s).`);
     process.exitCode = 1;
 }
 
@@ -417,11 +490,13 @@ function recordFileClasses(
  * Silent when there is no design system to ask. The dead-class pass already
  * reports that, and a second copy of the same skip would read as two problems.
  *
+ * @param out - Where this pass sends its prose and its findings.
  * @param opened - The project's compiled design systems.
  * @param pairsByFile - Literal sz pairs, keyed by project-relative file.
  * @returns Whether anything was found.
  */
 function reportSiblingKeywords(
+    out: Reporter,
     opened: OpenedOracles,
     pairsByFile: Map<string, SzValuePair[]>,
 ): boolean {
@@ -445,15 +520,23 @@ function reportSiblingKeywords(
     }
     if (found.length === 0) return false;
 
-    printWarn('\nValues that belong to a different sz key:');
+    out.warn('\nValues that belong to a different sz key:');
     for (const { file, finding } of found) {
-        printInfo(`  ${file}`);
-        printInfo(
+        out.push({
+            rule: 'sibling-keyword',
+            file,
+            line: finding.line,
+            message:
+                `${finding.key}: '${finding.value}' emits ${finding.className}, which sets ` +
+                `${finding.sets.join(', ')} — not what ${finding.key} sets.`,
+        });
+        out.info(`  ${file}:${finding.line}`);
+        out.info(
             `    ${finding.key}: '${finding.value}' emits ${finding.className}, which sets ` +
                 `${finding.sets.join(', ')} — not what ${finding.key} sets.`,
         );
     }
-    printWarn(
+    out.warn(
         `\n✖ ${found.length} value(s) written on a key that does not own them. Each one ` +
             'compiles, ships CSS and renders, so nothing else reports it; the style asked for ' +
             'is simply absent. Move the value to the key that owns it, or declare a theme ' +
@@ -471,12 +554,14 @@ function reportSiblingKeywords(
  * stylesheet decides the winner instead of the order the author passed. That is
  * wrong output, which is why this fails rather than reporting and passing.
  *
+ * @param out - Where this pass sends its prose and its findings.
  * @param opened - The project's compiled design systems.
  * @param cwd - Project root, for relative paths.
  * @param allowToken - Token names the project accepted deliberately.
  * @returns Whether anything was found.
  */
 async function reportThemeCollisions(
+    out: Reporter,
     opened: OpenedOracles,
     cwd: string,
     allowToken: readonly string[],
@@ -503,17 +588,26 @@ async function reportThemeCollisions(
     const found = findThemeCollisions(declared, oracle, allowToken);
     if (found.length === 0) return false;
 
-    printWarn('\nTheme tokens a built-in utility already claims:');
+    out.warn('\nTheme tokens a built-in utility already claims:');
     for (const finding of found) {
-        printInfo(`  ${finding.file}:${finding.line}`);
-        printInfo(
+        out.push({
+            rule: 'theme-collision',
+            file: finding.file,
+            line: finding.line,
+            message:
+                `"${finding.name}" also names ${finding.classes.join(', ')}. Tailwind merges ` +
+                'both meanings into one rule, so szcn keeps the classes apart instead of ' +
+                'merging them and the stylesheet decides which wins — not the order you wrote.',
+        });
+        out.info(`  ${finding.file}:${finding.line}`);
+        out.info(
             `    "${finding.name}" also names ${finding.classes.join(', ')}. Tailwind merges ` +
                 'both meanings into one rule, so szcn keeps the classes apart instead of ' +
                 'merging them and the stylesheet decides which wins — not the order you ' +
                 'wrote.',
         );
     }
-    printWarn(
+    out.warn(
         `\n✖ ${found.length} theme token(s) shadow a built-in utility. Rename them; no ` +
             'spelling of the merge can fix this while the name is shared. To keep one anyway, ' +
             'pass --allow-token <name>.',
@@ -531,6 +625,7 @@ async function reportThemeCollisions(
  * @param options - scan options.
  */
 export async function check(options: CheckOptions = {}): Promise<void> {
+    const out = createReporter(options.json === true);
     const cwd = options.cwd ?? process.cwd();
     const patterns = options.pattern ? [options.pattern] : ['**/*.{jsx,tsx}'];
     const ignore = [...DEFAULT_IGNORE, ...(options.ignore ?? [])];
@@ -539,19 +634,23 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     // "run `csszyx check`" hint while it runs over every file.
     process.env.CSSZYX_NO_PROJECT_SCAN_HINT = '1';
 
-    printHeader('csszyx check — static sz diagnostics');
+    out.header('csszyx check — static sz diagnostics');
 
-    const s = spinner.start('Scanning for files...');
+    // ora writes straight to the tty, so it has to be skipped rather than
+    // routed: a spinner frame in the middle of a JSON document is not parseable.
+    const s = out.quiet ? null : spinner.start('Scanning for files...');
     let files: string[];
     try {
-        files = await fg(patterns, { cwd, ignore, absolute: true });
+        files = options.files
+            ? listedSourceFiles(options.files, cwd)
+            : await fg(patterns, { cwd, ignore, absolute: true });
     } catch (err) {
-        s.fail('File scan failed');
-        printWarn(`Could not scan files: ${err instanceof Error ? err.message : String(err)}`);
+        s?.fail('File scan failed');
+        out.warn(`Could not scan files: ${err instanceof Error ? err.message : String(err)}`);
         process.exitCode = 1;
         return;
     }
-    s.succeed(`Found ${files.length} files`);
+    s?.succeed(`Found ${files.length} files`);
 
     const { issues, classOrigins, pairsByFile } = await collectSzDiagnostics(files, cwd);
     // Compiling a stylesheet is the expensive part of this command, so it is
@@ -562,29 +661,33 @@ export async function check(options: CheckOptions = {}): Promise<void> {
             : { oracles: [], skipped: [], stylesheetFailed: false, hadEntries: false };
 
     if (issues.length === 0) {
-        printSuccess(`No sz issues found across ${files.length} files.`);
-        printInfo(
+        out.success(`No sz issues found across ${files.length} files.`);
+        out.info(
             'Scope: static sz props and szv()/szr() catalog definitions. Keys that ' +
                 'only exist at runtime (an array or spread built from runtime data, a ' +
                 'dynamic() value) cannot be checked statically.',
         );
     } else {
-        reportIssues(issues);
+        reportIssues(out, issues);
     }
 
     // Runs whichever way the key pass went: a canonical key can still lower to
     // a class this project's Tailwind does not serve.
-    if (await reportDeadClasses(opened, classOrigins, options.allow ?? [])) {
+    if (await reportDeadClasses(out, opened, classOrigins, options.allow ?? [])) {
         process.exitCode = 1;
     }
 
     // Runs last and independently: a value on the wrong key survives both
     // passes above, which is the whole reason it needs its own.
-    if (reportSiblingKeywords(opened, pairsByFile)) {
+    if (reportSiblingKeywords(out, opened, pairsByFile)) {
         process.exitCode = 1;
     }
 
-    if (await reportThemeCollisions(opened, cwd, options.allowToken ?? [])) {
+    if (await reportThemeCollisions(out, opened, cwd, options.allowToken ?? [])) {
         process.exitCode = 1;
     }
+
+    // Written last, after every pass has recorded what it found, so the
+    // document is the whole run rather than whatever had arrived by then.
+    if (out.quiet) console.log(renderJsonReport(out));
 }

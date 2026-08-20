@@ -181,6 +181,8 @@ cli.command(
         '--allow-token <name>',
         'Accept a theme token that shadows a built-in utility (repeatable)',
     )
+    .option('--files <path>', 'Check exactly these files, for a git hook (repeatable)')
+    .option('--json', 'Emit one machine-readable document instead of the prose report')
     .action(async options => {
         await check({
             cwd: options.cwd,
@@ -188,6 +190,8 @@ cli.command(
             ignore: repeatableOption(options.ignore),
             allow: repeatableOption(options.allow),
             allowToken: repeatableOption(options.allowToken),
+            files: repeatableOption(options.files),
+            json: options.json,
         });
     });
 

@@ -69,30 +69,52 @@ const TAILWIND = oracle(
 
 describe('findSiblingKeywordValues', () => {
     it("reports a sibling's keyword on a colour key, naming the class it emits", () => {
-        const found = findSiblingKeywordValues([{ key: 'color', value: 'balance' }], TAILWIND);
+        const found = findSiblingKeywordValues(
+            [{ key: 'color', value: 'balance', line: 1 }],
+            TAILWIND,
+        );
 
         expect(found).toEqual([
-            { key: 'color', value: 'balance', className: 'text-balance', sets: ['text-wrap'] },
+            {
+                key: 'color',
+                value: 'balance',
+                line: 1,
+                className: 'text-balance',
+                sets: ['text-wrap'],
+            },
         ]);
+    });
+
+    it('carries the line through, so the report can point at it', () => {
+        // The finding is built from the pair; rebuilding it field by field
+        // silently dropped the position once already.
+        const found = findSiblingKeywordValues(
+            [{ key: 'color', value: 'balance', line: 42 }],
+            TAILWIND,
+        );
+
+        expect(found[0].line).toBe(42);
     });
 
     it('reports it on a second key under the same prefix', () => {
         expect(
-            findSiblingKeywordValues([{ key: 'borderColor', value: 'solid' }], TAILWIND),
+            findSiblingKeywordValues([{ key: 'borderColor', value: 'solid', line: 1 }], TAILWIND),
         ).toHaveLength(1);
     });
 
     it('stays silent for a value the project theme resolves', () => {
         // The whole point of an open domain: any theme token is valid.
-        expect(findSiblingKeywordValues([{ key: 'color', value: 'red-500' }], TAILWIND)).toEqual(
-            [],
-        );
+        expect(
+            findSiblingKeywordValues([{ key: 'color', value: 'red-500', line: 1 }], TAILWIND),
+        ).toEqual([]);
     });
 
     it('stays silent for a keyword that sets the key OWN property', () => {
         // `fill-none` sets `fill`, exactly what a colour on `fill` sets. A rule
         // without this test reports every correct `fill: 'none'` in a codebase.
-        expect(findSiblingKeywordValues([{ key: 'fill', value: 'none' }], TAILWIND)).toEqual([]);
+        expect(
+            findSiblingKeywordValues([{ key: 'fill', value: 'none', line: 1 }], TAILWIND),
+        ).toEqual([]);
     });
 
     it('stays silent once the project declares that token itself', () => {
@@ -101,45 +123,63 @@ describe('findSiblingKeywordValues', () => {
             'text-red-500': ['color'],
         });
 
-        expect(findSiblingKeywordValues([{ key: 'color', value: 'balance' }], themed)).toEqual([]);
+        expect(
+            findSiblingKeywordValues([{ key: 'color', value: 'balance', line: 1 }], themed),
+        ).toEqual([]);
     });
 
     it('stays silent for a shorthand key that owns keywords of its own', () => {
         // `outline: 'none'` is the documented spelling, so the shorthand is out
         // of scope rather than reported.
-        expect(findSiblingKeywordValues([{ key: 'outline', value: 'none' }], TAILWIND)).toEqual([]);
+        expect(
+            findSiblingKeywordValues([{ key: 'outline', value: 'none', line: 1 }], TAILWIND),
+        ).toEqual([]);
     });
 
     it('stays silent for a key it does not cover', () => {
-        expect(findSiblingKeywordValues([{ key: 'p', value: '4' }], TAILWIND)).toEqual([]);
+        expect(findSiblingKeywordValues([{ key: 'p', value: '4', line: 1 }], TAILWIND)).toEqual([]);
     });
 
     it('stays silent when the class is not a static utility', () => {
-        expect(findSiblingKeywordValues([{ key: 'color', value: 'nonesuch' }], TAILWIND)).toEqual(
-            [],
-        );
+        expect(
+            findSiblingKeywordValues([{ key: 'color', value: 'nonesuch', line: 1 }], TAILWIND),
+        ).toEqual([]);
     });
 });
 
 describe('szValuePairs', () => {
-    it('reads literal pairs out of an sz prop', () => {
+    it('reads literal pairs out of an sz prop, with the line to go to', () => {
         const source = `export const A = () => <div sz={{ color: 'balance', p: 4 }} />;`;
 
-        expect(szValuePairs(source)).toEqual([{ key: 'color', value: 'balance' }]);
+        expect(szValuePairs(source)).toEqual([{ key: 'color', value: 'balance', line: 1 }]);
+    });
+
+    it('gives each pair the line it was written on', () => {
+        // Without this the report can name a file but not a place in it, and
+        // an editor or a CI annotation has nowhere to point.
+        const source = [
+            'export const A = () => (',
+            '    <div',
+            "        sz={{ color: 'balance' }}",
+            '    />',
+            ');',
+        ].join('\n');
+
+        expect(szValuePairs(source)).toEqual([{ key: 'color', value: 'balance', line: 3 }]);
     });
 
     it('reads pairs nested inside a variant', () => {
         const source = `const A = () => <div sz={{ hover: { color: 'balance' } }} />;`;
 
-        expect(szValuePairs(source)).toEqual([{ key: 'color', value: 'balance' }]);
+        expect(szValuePairs(source)).toEqual([{ key: 'color', value: 'balance', line: 1 }]);
     });
 
     it('reads every element of an sz array', () => {
         const source = `const A = () => <div sz={[{ color: 'balance' }, { bg: 'white' }]} />;`;
 
         expect(szValuePairs(source)).toEqual([
-            { key: 'color', value: 'balance' },
-            { key: 'bg', value: 'white' },
+            { key: 'color', value: 'balance', line: 1 },
+            { key: 'bg', value: 'white', line: 1 },
         ]);
     });
 
@@ -154,6 +194,6 @@ describe('szValuePairs', () => {
     it('reads the szs slot map too, where the same mistake lands', () => {
         const source = `const A = () => <Card szs={{ header: { color: 'balance' } }} />;`;
 
-        expect(szValuePairs(source)).toEqual([{ key: 'color', value: 'balance' }]);
+        expect(szValuePairs(source)).toEqual([{ key: 'color', value: 'balance', line: 1 }]);
     });
 });

@@ -60,6 +60,8 @@ export interface KeywordOracle {
 export interface SzValuePair {
     key: string;
     value: string;
+    /** 1-based line the pair was written on. */
+    line: number;
 }
 
 /** One value that belongs to a different key than the one it was written on. */
@@ -124,7 +126,8 @@ export function findSiblingKeywordValues(
     oracle: KeywordOracle,
 ): SiblingKeywordFinding[] {
     const findings: SiblingKeywordFinding[] = [];
-    for (const { key, value } of pairs) {
+    for (const pair of pairs) {
+        const { key, value } = pair;
         const open = OPEN_DOMAIN_KEYS[key];
         if (!open) continue;
         // A token the project resolves is the open domain working as intended.
@@ -141,7 +144,7 @@ export function findSiblingKeywordValues(
         // Sharing a property means the keyword belongs to this key after all.
         if ([...sets].some(property => own.has(property))) continue;
 
-        findings.push({ key, value, className, sets: [...sets] });
+        findings.push({ ...pair, className, sets: [...sets] });
     }
     return findings;
 }
@@ -174,16 +177,39 @@ export function szValuePairs(source: string): SzValuePair[] {
         const resumeFrom = attribute.index + attribute[0].length;
         const end = expressionEnd(source, resumeFrom - 1);
         if (end !== -1) {
-            for (const [, key, , value] of source
-                .slice(attribute.index, end)
-                .matchAll(LITERAL_PAIR)) {
-                pairs.push({ key, value });
+            const region = source.slice(attribute.index, end);
+            for (const pair of region.matchAll(LITERAL_PAIR)) {
+                const [, key, , value] = pair;
+                pairs.push({
+                    key,
+                    value,
+                    line: lineAt(source, attribute.index + (pair.index ?? 0)),
+                });
             }
         }
         SZ_ATTRIBUTE.lastIndex = resumeFrom;
         attribute = SZ_ATTRIBUTE.exec(source);
     }
     return pairs;
+}
+
+/**
+ * The 1-based line an offset falls on.
+ *
+ * Counted from the start each time rather than from a prebuilt index: a file
+ * yields a handful of pairs at most, so an index would cost more to build than
+ * the scans it saves.
+ *
+ * @param source - Source module text.
+ * @param offset - Offset into it.
+ * @returns The 1-based line number.
+ */
+function lineAt(source: string, offset: number): number {
+    let line = 1;
+    for (let index = 0; index < offset && index < source.length; index += 1) {
+        if (source[index] === '\n') line += 1;
+    }
+    return line;
 }
 
 /**
