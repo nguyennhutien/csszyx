@@ -79,7 +79,12 @@ describe('csszyx check — a value that belongs to a sibling key', () => {
         expect(process.exitCode).toBe(1);
     });
 
-    it('stays silent once the project declares that token itself', async () => {
+    it('stops blaming the USE once the project declares that token itself', async () => {
+        // The declaration is still reported — by the theme-collision pass,
+        // which owns it — so the command still fails. What must stop is THIS
+        // pass pointing at the sz prop: the author who wrote `color: 'balance'`
+        // spelled it exactly as their own theme defines it, and the one line
+        // worth changing is in the stylesheet.
         const cwd = projectWith({
             'src/app.css': '@import "tailwindcss";\n@theme {\n  --color-balance: #0af;\n}\n',
             'src/App.tsx': `export const A = () => <div sz={{ color: 'balance' }} />;`,
@@ -88,7 +93,7 @@ describe('csszyx check — a value that belongs to a sibling key', () => {
         const report = await reportFor(cwd);
 
         expect(report).not.toContain("color: 'balance'");
-        expect(process.exitCode).toBeUndefined();
+        expect(report).toContain('src/app.css:3');
     });
 
     it('stays silent for a value that sets the key own property', async () => {

@@ -177,12 +177,17 @@ cli.command(
     .option('--ignore <glob>', 'Extra ignore glob (repeatable)')
     .option('--cwd <dir>', 'Current working directory')
     .option('--allow <class>', 'Accept an emitted class that produces no CSS (repeatable)')
+    .option(
+        '--allow-token <name>',
+        'Accept a theme token that shadows a built-in utility (repeatable)',
+    )
     .action(async options => {
         await check({
             cwd: options.cwd,
             pattern: options.pattern,
             ignore: repeatableOption(options.ignore),
             allow: repeatableOption(options.allow),
+            allowToken: repeatableOption(options.allowToken),
         });
     });
 

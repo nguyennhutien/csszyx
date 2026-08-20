@@ -696,6 +696,8 @@ about files I happen to open".
 | `✖ The dead-class check did not run. Its stylesheet is part of this project, so this is reported as a failure rather than a skip — otherwise a check that never runs is indistinguishable from one that found nothing.` | Exits non-zero. See below. |
 | `Values that belong to a different sz key:` + one line per offender reading ``{key}: '{value}' emits {class}, which sets {properties} — not what {key} sets.`` | A value written on a key that owns neither it nor its CSS property. |
 | `✖ {n} value(s) written on a key that does not own them. Each one compiles, ships CSS and renders, so nothing else reports it; the style asked for is simply absent. Move the value to the key that owns it, or declare a theme token by that name if the spelling was deliberate.` | Exits non-zero. |
+| `Theme tokens a built-in utility already claims:` + one line per token reading `"{name}" also names {classes}. Tailwind merges both meanings into one rule, so szcn keeps the classes apart instead of merging them and the stylesheet decides which wins — not the order you wrote.` | Reported at the declaration, with its line. |
+| `✖ {n} theme token(s) shadow a built-in utility. Rename them; no spelling of the merge can fix this while the name is shared. To keep one anyway, pass --allow-token <name>.` | Exits non-zero. |
 
 A skip is not always harmless. Two things can stop the dead-class pass, and
 only one of them is your project's:
@@ -719,6 +721,21 @@ compares it with the one the key sets, which is what separates the mistake from
 
 Your own stylesheet decides. A project that declares `--color-balance` has
 given the spelling a meaning, and the report disappears for it.
+
+Declaring `--color-balance` does not add a colour class. `text-balance` is
+already a static utility, so Tailwind merges the two readings and the class
+ends up carrying `text-wrap: balance` **and** the colour — it then competes on
+`color` with every other colour class. szcn cannot tell them apart, so it keeps
+both classes rather than merging, and the stylesheet's order decides the winner
+instead of the order the arguments were passed.
+
+That is wrong output rather than a missed optimisation, which is why it exits
+non-zero. `--allow-token <name>` keeps a name deliberately, so the exemption is
+a line in a diff somebody reviews.
+
+The class prefixes each theme namespace feeds are derived from the project's own
+Tailwind, not listed — so a colour named `cover` is reported against `bg-cover`,
+a prefix its name gives no hint of.
 
 `npx @csszyx/cli scan-collisions` finds class names that would collide with a
 mangled token:

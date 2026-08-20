@@ -32,9 +32,15 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import fg from 'fast-glob';
+import {
+    type CollisionDesignSystem,
+    collisionOracleFrom,
+    PROBE_THEME,
+} from './collision-oracle.js';
 import { keywordOracleFrom } from './keyword-oracle.js';
 import { brokenOpacityValue, collectCustomProperties } from './opacity-verdict.js';
 import type { KeywordOracle } from './sibling-keyword.js';
+import type { CollisionOracle } from './theme-collision.js';
 
 /** A stylesheet handed back to Tailwind's loader. */
 interface LoadedStylesheet {
@@ -47,7 +53,12 @@ interface LoadedStylesheet {
 interface DesignSystem {
     candidatesToCss(candidates: readonly string[]): Array<string | null>;
     theme: { entries(): Iterable<readonly [string, unknown]> };
-    parseCandidate(candidate: string): Iterable<{ kind: string; root: string }>;
+    // The value shape is what the collision oracle reads; the keyword oracle
+    // only needs kind and root, so one declaration serves both.
+    parseCandidate(
+        candidate: string,
+    ): Iterable<{ kind: string; root: string; value?: { kind: string; value: string } | null }>;
+    getClassList(): Iterable<string | readonly [string, unknown]>;
 }
 
 /** A plugin or config module handed back to Tailwind's loader. */
@@ -119,6 +130,13 @@ export type EmittedClassOracle =
            * and every pass that needs it reads the same one.
            */
           keywords: KeywordOracle;
+          /**
+           * An oracle for theme-name collisions, or null when the probe
+           * compile failed. Built on first call and cached — it costs a second
+           * compile of the stylesheet, which a project with no theme tokens
+           * should not pay.
+           */
+          loadCollisionOracle(): Promise<CollisionOracle | null>;
       }
     | { ok: false; kind: OracleSkipKind; reason: string };
 
@@ -418,14 +436,15 @@ export async function createEmittedClassOracle(
         options: LoadDesignSystemOptions,
     ) => Promise<DesignSystem>;
 
+    const loadOptions: LoadDesignSystemOptions = {
+        base: options.cssBase,
+        loadStylesheet: (id, base) => loadStylesheet(id, base, tailwind.root, options.resolveFrom),
+        loadModule: (id, base) => loadModule(id, base, options.resolveFrom),
+    };
+
     let design: DesignSystem;
     try {
-        design = await load(options.css, {
-            base: options.cssBase,
-            loadStylesheet: (id, base) =>
-                loadStylesheet(id, base, tailwind.root, options.resolveFrom),
-            loadModule: (id, base) => loadModule(id, base, options.resolveFrom),
-        });
+        design = await load(options.css, loadOptions);
     } catch (error) {
         return stylesheetSkip(
             `the stylesheet did not compile: ${error instanceof Error ? error.message : String(error)}`,
@@ -446,9 +465,33 @@ export async function createEmittedClassOracle(
 
     const customProperties = collectCustomProperties(options.css);
 
+    // Built on first use, from a SECOND compile of the same stylesheet with
+    // probe tokens appended. Kept out of the main design system because that
+    // one answers the dead-class question, and injecting tokens into it to save
+    // a compile would put a diagnostic's instrumentation inside another
+    // diagnostic's evidence.
+    let collisions: CollisionOracle | null | undefined;
+
     return {
         ok: true,
         keywords: keywordOracleFrom(design),
+        async loadCollisionOracle() {
+            if (collisions !== undefined) return collisions;
+            try {
+                collisions = collisionOracleFrom(
+                    (await load(
+                        `${options.css}\n${PROBE_THEME}`,
+                        loadOptions,
+                    )) as CollisionDesignSystem,
+                );
+            } catch {
+                // The stylesheet already compiled once, so a failure here is
+                // the probe theme meeting something unusual — report nothing
+                // rather than blaming the project for our own instrumentation.
+                collisions = null;
+            }
+            return collisions;
+        },
         findDead(classes) {
             // Markers are excluded before the question is asked, not filtered
             // out of the answer: Tailwind's verdict on them is "no CSS", which

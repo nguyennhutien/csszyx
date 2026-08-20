@@ -27,6 +27,8 @@ import {
     type SzValuePair,
     szValuePairs,
 } from '../scanner/sibling-keyword.js';
+import { type DeclaredToken, findThemeCollisions } from '../scanner/theme-collision.js';
+import { declaredThemeTokens } from '../scanner/theme-declarations.js';
 import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
 
 /** Options for the `check` command. */
@@ -46,6 +48,15 @@ export interface CheckOptions {
      * running the check, which costs every other finding too.
      */
     allow?: string[];
+    /**
+     * Theme token names to accept even though a built-in utility claims them.
+     *
+     * The collision is wrong output, not a missed optimisation, so it fails by
+     * default. A project that wants the name anyway says so here, and the
+     * exemption becomes a line in a diff someone reviews rather than a check
+     * nobody runs.
+     */
+    allowToken?: string[];
 }
 
 /** One captured sz diagnostic, with the project-relative file it came from. */
@@ -452,6 +463,65 @@ function reportSiblingKeywords(
 }
 
 /**
+ * Report theme tokens whose names a built-in utility already claims.
+ *
+ * Declaring a colour named after a keyword does not add a colour class: the
+ * name is already a static utility, so Tailwind merges the readings and the
+ * class carries both. szcn cannot tell them apart, keeps both classes, and the
+ * stylesheet decides the winner instead of the order the author passed. That is
+ * wrong output, which is why this fails rather than reporting and passing.
+ *
+ * @param opened - The project's compiled design systems.
+ * @param cwd - Project root, for relative paths.
+ * @param allowToken - Token names the project accepted deliberately.
+ * @returns Whether anything was found.
+ */
+async function reportThemeCollisions(
+    opened: OpenedOracles,
+    cwd: string,
+    allowToken: readonly string[],
+): Promise<boolean> {
+    if (opened.oracles.length === 0) return false;
+
+    const declared: DeclaredToken[] = [];
+    for (const entry of await findTailwindCssEntries(cwd)) {
+        try {
+            declared.push(
+                ...declaredThemeTokens(await readFile(entry, 'utf8'), path.relative(cwd, entry)),
+            );
+        } catch {
+            // A stylesheet that cannot be read declares nothing this pass can
+            // see; the dead-class pass already reports an unreadable entry.
+        }
+    }
+    if (declared.length === 0) return false;
+
+    // The probe compile is paid only now, once there is something to ask about.
+    const oracle = await opened.oracles[0].loadCollisionOracle();
+    if (oracle === null) return false;
+
+    const found = findThemeCollisions(declared, oracle, allowToken);
+    if (found.length === 0) return false;
+
+    printWarn('\nTheme tokens a built-in utility already claims:');
+    for (const finding of found) {
+        printInfo(`  ${finding.file}:${finding.line}`);
+        printInfo(
+            `    "${finding.name}" also names ${finding.classes.join(', ')}. Tailwind merges ` +
+                'both meanings into one rule, so szcn keeps the classes apart instead of ' +
+                'merging them and the stylesheet decides which wins — not the order you ' +
+                'wrote.',
+        );
+    }
+    printWarn(
+        `\n✖ ${found.length} theme token(s) shadow a built-in utility. Rename them; no ` +
+            'spelling of the merge can fix this while the name is shared. To keep one anyway, ' +
+            'pass --allow-token <name>.',
+    );
+    return true;
+}
+
+/**
  * Scan the project for unknown/aliased `sz` keys and report them in one pass.
  *
  * Sets `process.exitCode` to 1 when any issue is found so the command can gate
@@ -511,6 +581,10 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     // Runs last and independently: a value on the wrong key survives both
     // passes above, which is the whole reason it needs its own.
     if (reportSiblingKeywords(opened, pairsByFile)) {
+        process.exitCode = 1;
+    }
+
+    if (await reportThemeCollisions(opened, cwd, options.allowToken ?? [])) {
         process.exitCode = 1;
     }
 }
