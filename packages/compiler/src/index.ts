@@ -54,7 +54,11 @@ export {
     validateSzRecover,
 } from './recovery.js';
 export { sortStrings } from './sort.js';
-export { parseStaticObjectLiteral } from './static-object-parser.js';
+export {
+    explainStaticObjectLiteral,
+    parseStaticObjectLiteral,
+    type StaticObjectResult,
+} from './static-object-parser.js';
 // Export the fallback-consequence classifier so the bundler routes
 // diagnostics through the module that renders their labels.
 export {
