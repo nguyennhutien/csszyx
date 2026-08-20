@@ -130,4 +130,34 @@ describe('parseUtilityBlocks', () => {
 
         expect(parseUtilityBlocks(css).statics).toEqual(['kept']);
     });
+
+    it('joins the text either side of a comment with nothing between', () => {
+        // The declaration only survives if the removed span is exactly the
+        // comment: one character too few leaves the `/` glued to `@utility`
+        // and one too many eats the space in front of the name, and either
+        // way the at-rule stops matching and the utility disappears.
+        const css = '@utility/* c */ name { color: red }';
+
+        expect(parseUtilityBlocks(css).statics).toEqual(['name']);
+    });
+
+    it('does not let a comment close on the slash that opened it', () => {
+        // `/*/` is one opener, not an opener and a closer. Searching for the
+        // close from the star instead of past it ends the comment here and
+        // exposes the declaration it was hiding.
+        const css = '/*/ @utility hacked { color: red } */ @utility after { color: red }';
+
+        expect(parseUtilityBlocks(css).statics).toEqual(['after']);
+    });
+
+    it('keeps an earlier comment stripped once a later one is found', () => {
+        // Each kept span has to start where the previous comment ended. Copying
+        // from the start of the source instead re-admits every comment already
+        // dropped, so the first one's contents come back.
+        const css =
+            '/* @utility h1 { color: red } */ @utility keep1 { color: red }' +
+            ' /* @utility h2 { color: red } */ @utility keep2 { color: red }';
+
+        expect(parseUtilityBlocks(css).statics).toEqual(['keep1', 'keep2']);
+    });
 });
