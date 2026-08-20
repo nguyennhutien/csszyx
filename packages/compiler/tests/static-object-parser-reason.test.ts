@@ -89,6 +89,18 @@ describe('explainStaticObjectLiteral', () => {
             reason: 'the unary operator "+" is dynamic',
         });
     });
+
+    it('refuses a negated literal that is not a number', () => {
+        // Both halves of the guard have to hold. Negating any of these in
+        // JavaScript coerces to a number, so accepting them would hand the
+        // compiler a value the source never wrote — `-true` as -1, `-'5'` as
+        // -5, `-null` as 0 — instead of saying it cannot read the literal.
+        for (const source of [`{ p: -true }`, `{ p: -'5' }`, `{ p: -null }`]) {
+            expect(explainStaticObjectLiteral(source)).toEqual({
+                reason: 'a negated non-number is dynamic',
+            });
+        }
+    });
 });
 
 describe('explainStaticObjectLiteral — spreads read the same in both positions', () => {
