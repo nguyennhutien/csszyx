@@ -472,6 +472,23 @@ describe('class-parser', () => {
             expect(parseClass('border-8')).toEqual({ prop: 'border', value: 8 });
         });
 
+        it('bare side utilities carry an implicit width, on every side', () => {
+            // The golden probes each prefix with a value, so the valueless
+            // form of these is only ever read here. The logical and axis
+            // sides are the ones a shortened side list drops silently:
+            // `border-x` would stop being a class migrate understands and
+            // fall through to the unrecognized list instead.
+            expect(parseClass('border')).toEqual({ prop: 'border', value: true });
+            expect(parseClass('border-t')).toEqual({ prop: 'borderT', value: true });
+            expect(parseClass('border-r')).toEqual({ prop: 'borderR', value: true });
+            expect(parseClass('border-b')).toEqual({ prop: 'borderB', value: true });
+            expect(parseClass('border-l')).toEqual({ prop: 'borderL', value: true });
+            expect(parseClass('border-x')).toEqual({ prop: 'borderX', value: true });
+            expect(parseClass('border-y')).toEqual({ prop: 'borderY', value: true });
+            expect(parseClass('border-s')).toEqual({ prop: 'borderS', value: true });
+            expect(parseClass('border-e')).toEqual({ prop: 'borderE', value: true });
+        });
+
         it('border arbitrary width (not color)', () => {
             // Arbitrary dimensions → border width, NOT borderColor
             expect(parseClass('border-[1.5px]')).toEqual({ prop: 'border', value: '1.5px' });
