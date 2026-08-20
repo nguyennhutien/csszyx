@@ -464,8 +464,10 @@ function shadowsBuiltIn(category: ThemeCategory, name: string): boolean {
     const builtInKind = category === 'colors' ? 'utility keyword' : 'value';
     warnOnce(
         `theme token "${name}" shadows a built-in ${builtInKind} — ` +
-            'szcn will not group classes built from it (they keep the safe keep-both behaviour). ' +
-            'Rename the token to enable precise merging.',
+            'szcn cannot tell the two apart, so it keeps both classes instead of merging. ' +
+            'Both then apply, and stylesheet order decides which wins rather than the order ' +
+            'you passed them: a later argument no longer overrides an earlier one. ' +
+            'Rename the token — no spelling of the merge can fix this while the name is shared.',
     );
     return true;
 }

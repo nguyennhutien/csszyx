@@ -469,7 +469,7 @@ ambiguous, it falls back to keeping both, and says so once.
 
 | Message |
 | --- |
-| `[csszyx] theme token "{name}" shadows a built-in {kind} — szcn will not group classes built from it (they keep the safe keep-both behaviour). Rename the token to enable precise merging.` |
+| `[csszyx] theme token "{name}" shadows a built-in {kind} — szcn cannot tell the two apart, so it keeps both classes instead of merging. Both then apply, and stylesheet order decides which wins rather than the order you passed them: a later argument no longer overrides an earlier one. Rename the token — no spelling of the merge can fix this while the name is shared.` |
 | ``[csszyx] theme token "{name}" is defined as BOTH a color and a text size — szcn cannot classify `text-{name}` and will keep-both instead of merging.`` |
 | ``[csszyx] theme token "{name}" is defined as BOTH a font family and a font weight — szcn cannot classify `font-{name}` and will keep-both instead of merging.`` |
 
