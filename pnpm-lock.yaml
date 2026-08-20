@@ -588,12 +588,6 @@ importers:
 
   packages/vscode:
     devDependencies:
-      '@babel/parser':
-        specifier: ^8.0.4
-        version: 8.0.4
-      '@babel/types':
-        specifier: ^8.0.4
-        version: 8.0.4
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
