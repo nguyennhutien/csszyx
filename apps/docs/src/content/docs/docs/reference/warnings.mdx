@@ -722,6 +722,14 @@ compares it with the one the key sets, which is what separates the mistake from
 Your own stylesheet decides. A project that declares `--color-balance` has
 given the spelling a meaning, and the report disappears for it.
 
+The pass covers keys whose documented values are theme tokens and nothing else
+— the colour keys, `bg`, `fontSize`, `fontFamily` and `fontWeight`. `outline`,
+`ring` and `border` are left out: each takes a colour **and** values of its own
+(`outline: 'none'`, `border: '3px'`), so a foreign value there cannot be told
+from an owned one. `bg` looks like one of them and is not — every other
+background domain has its own key, `bgSize` and `bgImg` among them, so
+`bg: 'cover'` is reported.
+
 Declaring `--color-balance` does not add a colour class. `text-balance` is
 already a static utility, so Tailwind merges the two readings and the class
 ends up carrying `text-wrap: balance` **and** the colour — it then competes on

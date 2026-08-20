@@ -16,10 +16,12 @@
  * it, every correct `color: 'white'` and `fill: 'none'` in the tree is
  * reported.
  *
- * Only keys with ONE domain are covered. A shorthand like `outline` or `bg`
- * takes a colour AND keywords of its own — `outline: 'none'` is the documented
- * spelling — so a foreign value cannot be told from an owned one there, and
- * they are left out rather than reported wrongly.
+ * Only keys with ONE domain are covered. `outline`, `ring` and `border` take a
+ * colour AND values of their own — `outline: 'none'` and `border: '3px'` are
+ * documented spellings — so a foreign value cannot be told from an owned one
+ * there, and they are left out rather than reported wrongly. `bg` reads like
+ * one of them and is not: every documented value it takes is a colour, because
+ * each other background domain has a key of its own.
  *
  * The project's own design system answers, never Tailwind's defaults alone: a
  * project that declares `--color-balance` has given `color: 'balance'` a
@@ -98,6 +100,7 @@ interface OpenDomainKey {
  */
 const OPEN_DOMAIN_KEYS: Readonly<Record<string, OpenDomainKey>> = {
     color: { prefix: 'text', namespace: 'colors', probe: 'red-500' },
+    bg: { prefix: 'bg', namespace: 'colors', probe: 'red-500' },
     borderColor: { prefix: 'border', namespace: 'colors', probe: 'red-500' },
     ringColor: { prefix: 'ring', namespace: 'colors', probe: 'red-500' },
     outlineColor: { prefix: 'outline', namespace: 'colors', probe: 'red-500' },

@@ -14,10 +14,12 @@
  * property test is what separates the two; a rule without it reported every
  * correct `fill: 'none'` and `color: 'white'` in the tree.
  *
- * Scope is keys with ONE domain. Shorthands like `outline` and `bg` accept a
- * colour AND their own keywords — `outline: 'none'` is documented — so their
- * foreign values cannot be told from their own by this test, and they are left
- * out rather than reported wrongly.
+ * Scope is keys with ONE domain. `outline`, `ring` and `border` accept a colour
+ * AND their own values — `outline: 'none'` and `border: '3px'` are documented —
+ * so their foreign values cannot be told from their own by this test, and they
+ * are left out rather than reported wrongly. `bg` looks like one of them but is
+ * covered: each other background domain has its own key, so every value `bg`
+ * documents is a colour.
  *
  * The project's own theme decides, not Tailwind's defaults: a project that
  * declares `--color-balance` has made `color: 'balance'` mean something, and
@@ -54,7 +56,7 @@ function oracle(
 
 const TAILWIND = oracle(
     { colors: ['red-500', 'white', 'transparent'], textSizes: ['lg'] },
-    ['text-balance', 'text-center', 'border-solid', 'fill-none'],
+    ['text-balance', 'text-center', 'border-solid', 'fill-none', 'bg-cover'],
     {
         'text-balance': ['text-wrap'],
         'text-center': ['text-align'],
@@ -64,6 +66,8 @@ const TAILWIND = oracle(
         'border-red-500': ['border-color'],
         'fill-red-500': ['fill'],
         'text-lg': ['font-size', 'line-height'],
+        'bg-cover': ['background-size'],
+        'bg-red-500': ['background-color'],
     },
 );
 
@@ -125,6 +129,31 @@ describe('findSiblingKeywordValues', () => {
 
         expect(
             findSiblingKeywordValues([{ key: 'color', value: 'balance', line: 1 }], themed),
+        ).toEqual([]);
+    });
+
+    it("reports another background domain's keyword on bg", () => {
+        // `bg` reads as a shorthand but is not one: every documented value is a
+        // colour, and each other background domain has a key of its own
+        // (`bgSize`, `bgPos`, `bgImg`, …). So `bg: 'cover'` is the same mistake
+        // as `color: 'balance'` — a live class setting a property `bg` never
+        // sets — and it went unreported while `bg` sat with the shorthands.
+        expect(
+            findSiblingKeywordValues([{ key: 'bg', value: 'cover', line: 1 }], TAILWIND),
+        ).toEqual([
+            {
+                key: 'bg',
+                value: 'cover',
+                line: 1,
+                className: 'bg-cover',
+                sets: ['background-size'],
+            },
+        ]);
+    });
+
+    it('stays silent for a colour on bg', () => {
+        expect(
+            findSiblingKeywordValues([{ key: 'bg', value: 'red-500', line: 1 }], TAILWIND),
         ).toEqual([]);
     });
 
