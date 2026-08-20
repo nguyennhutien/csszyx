@@ -99,4 +99,35 @@ describe('parseUtilityBlocks', () => {
 
         expect(parseUtilityBlocks(css).statics).toEqual(['real-one']);
     });
+
+    // Comment stripping is the step in front of every other rule here, so a
+    // change to how it matches can silently move what the rest of the scanner
+    // sees. These pin the shapes a naive pattern gets wrong.
+    it('ends a comment at the first close, not the last', () => {
+        const css = '/* one */ @utility a { color: red } /* two */ @utility b { color: red }';
+
+        expect(parseUtilityBlocks(css).statics).toEqual(['a', 'b']);
+    });
+
+    it('reads stars inside a comment as comment text', () => {
+        const css = '/** doc ** star * /* @utility hidden { color: red } */ @utility shown {}';
+
+        expect(parseUtilityBlocks(css).statics).toEqual(['shown']);
+    });
+
+    it('leaves an unterminated comment in place rather than swallowing the rest', () => {
+        // Not what CSS itself does, where an unclosed comment runs to EOF.
+        // Pinned as it stands: a scanner that starts dropping declarations
+        // after a stray `/*` would be a worse failure than reading one it
+        // should have skipped, and changing it is not a ReDoS question.
+        const css = '@utility before {}\n/* @utility after { color: red }';
+
+        expect(parseUtilityBlocks(css).statics).toEqual(['before', 'after']);
+    });
+
+    it('keeps a bare slash or star that opens nothing', () => {
+        const css = 'a { width: calc(1px * 2 / 3) }\n@utility kept { color: red }';
+
+        expect(parseUtilityBlocks(css).statics).toEqual(['kept']);
+    });
 });

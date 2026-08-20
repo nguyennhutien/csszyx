@@ -54,6 +54,37 @@ export interface ParsedUtilities {
 }
 
 /**
+ * Drop every closed block comment, in one pass.
+ *
+ * Not a regex on purpose. Both spellings of this — the lazy one and the
+ * unrolled form that avoids backtracking — are reported as second-degree
+ * polynomial, because the cost is not backtracking but SEARCH: a global regex
+ * restarts from every position, so a stylesheet full of comment openers that
+ * never close is quadratic however the body is written. A stylesheet is
+ * attacker-controllable input inside a build.
+ *
+ * Two index scans cannot do that. Each character is passed at most once, and
+ * an unterminated comment is left in place, which is what the previous regex
+ * did too — it required a closing delimiter to match at all.
+ *
+ * @param css - Stylesheet source.
+ * @returns The source with closed block comments removed.
+ */
+function stripBlockComments(css: string): string {
+    let out = '';
+    let from = 0;
+    for (;;) {
+        const open = css.indexOf('/*', from);
+        if (open === -1) break;
+        const close = css.indexOf('*/', open + 2);
+        if (close === -1) break;
+        out += css.slice(from, open);
+        from = close + 2;
+    }
+    return from === 0 ? css : out + css.slice(from);
+}
+
+/**
  * Read the `@utility` declarations out of one stylesheet.
  *
  * A project claims class names two ways, and only one of them was ever read.
@@ -74,7 +105,7 @@ export interface ParsedUtilities {
 export function parseUtilityBlocks(cssContent: string): ParsedUtilities {
     // Comments first: a commented-out declaration claims nothing, and reporting
     // it would send the reader to a line that is already inert.
-    const source = cssContent.replaceAll(/\/\*[\s\S]*?\*\//g, '');
+    const source = stripBlockComments(cssContent);
     const statics: string[] = [];
     const functionals: string[] = [];
     const pattern = /@utility\s+([^\s{]+)\s*\{/g;
