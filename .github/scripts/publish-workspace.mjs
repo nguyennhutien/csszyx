@@ -99,6 +99,24 @@ export function isRetryablePublishFailure(output) {
 }
 
 /**
+ * Whether the registry is telling us it already holds this exact version.
+ *
+ * npm answers a re-send of a version it has with a conflict, and the wording
+ * separates two very different situations. "Failed to save packument" is a lost
+ * write race and worth sending again. "Cannot publish over" means the version
+ * is there: sending it again can only conflict a second time, so the thing to
+ * wait for is the registry exposing it, not another upload.
+ *
+ * @param {string} output - Combined publish stdout and stderr.
+ * @returns {boolean}
+ */
+export function registryAcceptedVersion(output) {
+    return /Cannot publish over previously staged version|cannot publish over the previously published versions/i.test(
+        output,
+    );
+}
+
+/**
  * Whether a publish authenticated through OIDC rather than the long-lived token.
  *
  * pnpm attempts trusted publishing first and falls back to `NODE_AUTH_TOKEN`
@@ -157,12 +175,27 @@ export async function publishPackageSet(packages, options) {
                 visibilityDelaysMs,
             );
 
-            if (visible) {
+            // Visible is the happy answer, but not the only one that means the
+            // upload worked. A publish that exited clean, or one the registry
+            // refused because it already holds this version, is on the registry
+            // whether or not it has propagated yet — and sending it again can
+            // only conflict with the copy that is already there, burning the
+            // remaining attempts and abandoning every package queued behind
+            // this one. What is still owed is the version appearing, and the
+            // final audit below is what waits for that.
+            const accepted =
+                visible || result.code === 0 || registryAcceptedVersion(output);
+            if (accepted) {
                 const viaOidc = usedOidcAuth(output);
                 if (!viaOidc) {
                     tokenFallbacks.push(spec);
                 }
-                log(`OK ${spec} is visible on npm (auth: ${viaOidc ? 'oidc' : 'token'})`);
+                const auth = viaOidc ? 'oidc' : 'token';
+                log(
+                    visible
+                        ? `OK ${spec} is visible on npm (auth: ${auth})`
+                        : `OK ${spec} accepted by npm, not visible yet (auth: ${auth})`,
+                );
                 published.push(spec);
                 completed = true;
                 break;
