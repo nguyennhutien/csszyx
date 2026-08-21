@@ -367,6 +367,27 @@ export async function findTailwindCssEntry(cwd: string): Promise<string | null> 
 }
 
 /**
+ * Order two glob results shallowest first, then by name.
+ *
+ * Depth is counted from `/` rather than `path.sep` because that is what the
+ * input is: `fast-glob` returns posix paths on every platform, including
+ * Windows. Asking the platform there found no separator at all, measured every
+ * path as depth 1, and dropped the ordering to alphabetical without saying so.
+ *
+ * On posix the two spellings are the same function, so this cannot be shown
+ * by a test on a posix machine — the platform it is wrong on is the platform
+ * this repo has never run on.
+ *
+ * @param a - First absolute path.
+ * @param b - Second absolute path.
+ * @returns Negative when `a` sorts first, as Array#sort expects.
+ */
+export function comparePathDepth(a: string, b: string): number {
+    const depth = a.split('/').length - b.split('/').length;
+    return depth === 0 ? a.localeCompare(b) : depth;
+}
+
+/**
  * Find every stylesheet that pulls Tailwind into the project.
  *
  * A project may have more than one — a design system plus a page theme is an
@@ -387,10 +408,7 @@ export async function findTailwindCssEntries(cwd: string): Promise<string[]> {
     // this function reads, and reordering the glob result in place would leave
     // that dependency invisible at the call site.
     const byDepth = [...files];
-    byDepth.sort((a, b) => {
-        const depth = a.split(path.sep).length - b.split(path.sep).length;
-        return depth === 0 ? a.localeCompare(b) : depth;
-    });
+    byDepth.sort(comparePathDepth);
     const entries: string[] = [];
     for (const file of byDepth) {
         try {
