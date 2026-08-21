@@ -204,11 +204,12 @@ export function explainStaticObjectLiteral(source: string): StaticObjectResult {
         if (value === undefined) {
             // The fallback is the partner of `extractTemplateValue`'s `?? undefined`,
             // which is the one way this walk can give up without naming a node: a
-            // template whose text the parser could not cook. Every other path goes
-            // through `reject`, so no input reaches the fallback today — but the
-            // alternative to keeping it is returning `reason: undefined` from a
-            // function whose contract says a failure carries one, and a caller
-            // printing nothing is a worse answer than a general one.
+            // template whose text the parser could not cook. An untagged template
+            // that cannot cook is a syntax error, so oxc rejects it in-band and the
+            // catch answers instead; every other path goes through `reject`. Kept
+            // anyway, because the alternative is returning `reason: undefined` from
+            // a function whose contract says a failure carries one.
+            /* v8 ignore next -- unreachable default: every path reaching this line has already recorded a reason. */
             return { reason: out.reason ?? 'contains a value that is not static' };
         }
         return { value };

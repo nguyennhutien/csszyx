@@ -227,6 +227,16 @@ describe('szValuePairs', () => {
         ]);
     });
 
+    it('reports nothing when a quote in the sz expression never closes', () => {
+        // The brace walk swallows a quoted run whole, so an unterminated one
+        // runs to the end of the file and the container never balances. A
+        // half-read region would pair a key with whatever text followed it,
+        // which is worse than saying nothing about a file that cannot parse.
+        const source = `const A = () => <div sz={{ color: 'balance }} />;`;
+
+        expect(szValuePairs(source)).toEqual([]);
+    });
+
     it('ignores an object that is not an sz prop', () => {
         // A chart config or a style object can hold the same key names, and
         // reporting those would make the check unusable in a real app.
