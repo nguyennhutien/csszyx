@@ -98,6 +98,15 @@ fn rewrite_ternary_classes(
     for class_name in &mut ternary.consequent_classes {
         rewrite_class_name(class_name, aliases, variable_map);
     }
+    // A chain arm carries classes the emitter can pick, so it has to be
+    // renamed with the rest: a class left un-aliased here would reach the DOM
+    // under a name the mangled stylesheet no longer defines, and only for the
+    // input that reaches that arm.
+    for arm in &mut ternary.chain_arms {
+        for class_name in &mut arm.classes {
+            rewrite_class_name(class_name, aliases, variable_map);
+        }
+    }
     for class_name in &mut ternary.alternate_classes {
         rewrite_class_name(class_name, aliases, variable_map);
     }
@@ -179,7 +188,7 @@ mod tests {
             candidate_classes: Vec::new(),
             runtime_fallback_diagnostic: None,
             dynamic_css_vars: Vec::new(),
-            removed_dynamic_keys: Vec::new(),
+            dropped_dynamic_keys: Vec::new(),
         });
 
         let result = apply_global_var_aliases(
@@ -232,6 +241,7 @@ mod tests {
                         ternary
                             .consequent_classes
                             .iter()
+                            .chain(ternary.chain_arms.iter().flat_map(|arm| arm.classes.iter()))
                             .chain(ternary.alternate_classes.iter())
                     }))
             })
@@ -244,6 +254,62 @@ mod tests {
         assert!(classes.iter().any(|class_name| class_name.contains("--g0")));
         assert!(classes.iter().any(|class_name| class_name.contains("--g1")));
         assert_eq!(result.variable_map.len(), 2);
+    }
+
+    /// Every arm of a chained conditional is renamed, not just the ends.
+    ///
+    /// A class left un-aliased in a middle arm reaches the DOM under a name the
+    /// mangled stylesheet no longer defines — and only for the input that picks
+    /// that arm, so it survives any check that exercises the common path.
+    #[test]
+    fn rewrites_every_arm_of_a_chained_conditional() {
+        let source = "const A=({a,b})=><div sz={a?{bg:'--brand-primary'}:b?{bg:'--brand-middle'}:{bg:'--brand-secondary'}}/>;";
+        let ir = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        })
+        .ir;
+
+        let result = apply_global_var_aliases(
+            &ir,
+            &[
+                GlobalVarAliasEntry {
+                    original: "--brand-primary".to_string(),
+                    alias: "--g0".to_string(),
+                },
+                GlobalVarAliasEntry {
+                    original: "--brand-middle".to_string(),
+                    alias: "--g1".to_string(),
+                },
+                GlobalVarAliasEntry {
+                    original: "--brand-secondary".to_string(),
+                    alias: "--g2".to_string(),
+                },
+            ],
+        );
+
+        let ternary = &result.ir.sz_attributes[0].ternaries[0];
+        assert!(!ternary.chain_arms.is_empty(), "the chain must be parsed");
+        let every_class = ternary
+            .consequent_classes
+            .iter()
+            .chain(ternary.chain_arms.iter().flat_map(|arm| arm.classes.iter()))
+            .chain(ternary.alternate_classes.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert!(
+            every_class
+                .iter()
+                .all(|class_name| !class_name.contains("--brand-")),
+            "{every_class:?}"
+        );
+        assert!(
+            every_class
+                .iter()
+                .any(|class_name| class_name.contains("--g1")),
+            "the middle arm must be renamed too: {every_class:?}"
+        );
     }
 
     #[test]
@@ -281,6 +347,7 @@ mod tests {
             ternary
                 .consequent_classes
                 .iter()
+                .chain(ternary.chain_arms.iter().flat_map(|arm| &arm.classes))
                 .chain(&ternary.alternate_classes)
                 .all(|class_name| !class_name.contains("--brand-"))
         }));
@@ -316,7 +383,7 @@ mod tests {
             candidate_classes: Vec::new(),
             runtime_fallback_diagnostic: None,
             dynamic_css_vars: Vec::new(),
-            removed_dynamic_keys: Vec::new(),
+            dropped_dynamic_keys: Vec::new(),
         });
 
         let result = apply_global_var_aliases(

@@ -82,7 +82,7 @@ describe('watchChange delete', () => {
 
 describe('transformIndexHtml recovery injection', () => {
     it('injects a recovery manifest once szRecover tokens have been collected', async () => {
-        const h = harness({ build: { parser: 'oxc', cache: false } });
+        const h = harness({ build: { cache: false } });
         await h.invoke('configResolved', { root: h.root, command: 'build' });
         // A szRecover attribute registers a recovery token in plugin state.
         await h.invoke(
@@ -100,7 +100,7 @@ describe('transformIndexHtml recovery injection', () => {
     it('reports stripped dev-only recovery sites in production', async () => {
         vi.stubEnv('NODE_ENV', 'production');
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const h = harness({ build: { parser: 'oxc', cache: false } });
+        const h = harness({ build: { cache: false } });
         await h.invoke('configResolved', { root: h.root, command: 'build' });
         await h.invoke(
             'transform',
@@ -120,7 +120,7 @@ describe('transformIndexHtml recovery injection', () => {
 describe('buildEnd unresolvable-spread warning', () => {
     it('surfaces an unresolvable sz spread collected during transform', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const h = harness({ build: { parser: 'oxc', cache: false } });
+        const h = harness({ build: { cache: false } });
         await h.invoke('configResolved', { root: h.root, command: 'build' });
         await h.invoke(
             'transform',

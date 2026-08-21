@@ -61,3 +61,22 @@ describe('csszyx check', () => {
         expect(process.exitCode).not.toBe(1);
     });
 });
+
+describe('csszyx check — when the file scan itself fails', () => {
+    it('fails the run and says why, rather than reporting a clean empty scan', async () => {
+        // `--cwd` pointing at a file instead of a directory. The scan throws
+        // ENOTDIR, and the alternative to this branch is a run that found zero
+        // files, printed "no issues found" and exited 0 — a gate reporting
+        // success for a project it never opened.
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = projectWith({ 'src/App.tsx': 'export const A = () => <div sz={{ p: 4 }} />;' });
+
+        await check({ cwd: join(cwd, 'src/App.tsx') });
+
+        expect(log.mock.calls.map(call => call.join(' ')).join('\n')).toContain(
+            'Could not scan files',
+        );
+        expect(process.exitCode).toBe(1);
+    });
+});

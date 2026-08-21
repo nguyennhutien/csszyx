@@ -93,7 +93,7 @@ mod parse_parity {
     /// above compares SORTED class sets, which is blind to ordering — but
     /// production mangle IDs are assigned in discovery order, so rust must
     /// list statics, then var classes, then each conditional's branches in
-    /// source property order, exactly like the JS engines. The vitest ordered
+    /// source property order, exactly like the removed JavaScript lanes. The vitest ordered
     /// fixtures cover this through the napi binding only once a binary with
     /// multi-ternary support ships; this test covers the source tree now.
     #[test]

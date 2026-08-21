@@ -14,7 +14,7 @@
  * false positive for a false negative.
  */
 import { describe, expect, it } from 'vitest';
-import { captureWarnings, ENGINES } from './tri-engine-harness.js';
+import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 /** Breakpoint names taken from a real `@theme inline` block, verbatim. */
 const CUSTOM_VARIANT_SOURCES: ReadonlyArray<readonly [string, string]> = [

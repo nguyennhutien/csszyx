@@ -68,7 +68,7 @@ const tempDirs: string[] = [];
  * @param parser - engine under test.
  * @returns concatenated JS output + sorted safelist tokens.
  */
-async function buildWith(parser: 'rust' | 'oxc'): Promise<BuildArtifacts> {
+async function buildWith(parser: 'rust' | 'wasm'): Promise<BuildArtifacts> {
     const root = mkdtempSync(join(tmpdir(), `csszyx-build-diff-${parser}-`));
     tempDirs.push(root);
     mkdirSync(join(root, 'src'), { recursive: true });
@@ -119,14 +119,14 @@ async function buildWith(parser: 'rust' | 'oxc'): Promise<BuildArtifacts> {
     return { bundle: normalizedBundle, safelistTokens };
 }
 
-describe('vite production build — engine diff (rust vs oxc)', () => {
+describe('vite production build — engine diff (native vs wasm)', () => {
     let rust: BuildArtifacts;
-    let oxc: BuildArtifacts;
+    let wasm: BuildArtifacts;
 
     beforeAll(async () => {
         loadNativeBinding();
         rust = await buildWith('rust');
-        oxc = await buildWith('oxc');
+        wasm = await buildWith('wasm');
     }, 60_000);
 
     afterAll(() => {
@@ -136,11 +136,11 @@ describe('vite production build — engine diff (rust vs oxc)', () => {
     });
 
     it('emits an identical bundle from both engines', () => {
-        expect(rust.bundle).toBe(oxc.bundle);
+        expect(rust.bundle).toBe(wasm.bundle);
     });
 
     it('emits an identical safelist from both engines', () => {
-        expect(rust.safelistTokens).toEqual(oxc.safelistTokens);
+        expect(rust.safelistTokens).toEqual(wasm.safelistTokens);
     });
 
     it('the className expression survives into the bundle as a merge', () => {

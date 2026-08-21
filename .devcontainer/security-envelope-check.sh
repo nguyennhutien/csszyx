@@ -50,7 +50,9 @@ if [ ${#DEGRADED[@]} -gt 0 ]; then
     echo "[security] The network sandbox this repo's risk model assumes is not"
     echo "[security] active under this runtime. Treat AI tool sessions in this"
     echo "[security] container as having unrestricted outbound network access."
-    echo "[security] Details + mitigations: .agent/workflows/security-roadmap.md (2.0)."
+    echo "[security] Mitigate by running the container with NET_ADMIN and the"
+    echo "[security] firewall init script, or by treating this session as"
+    echo "[security] untrusted: no credentials, no writes to shared remotes."
     echo ""
 else
     echo "[security] OK — firewall tooling, NET_ADMIN, and egress filtering all verified."

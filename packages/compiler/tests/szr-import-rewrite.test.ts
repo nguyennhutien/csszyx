@@ -11,7 +11,7 @@
  *
  * 1. **Decision parity.** A `build.parser` flip must not change the emitted
  *    import — one engine rewriting while another keeps the barrel would mean
- *    different bundles per parser. Every case here runs on all three engines
+ *    different bundles per parser. Every case here runs on both engine artifacts
  *    and asserts the same verdict.
  * 2. **Conservative failure.** A wrong "keep" costs bytes; a wrong "rewrite"
  *    crashes at runtime when an object reaches the string-only szr. Every
@@ -30,8 +30,8 @@ import { transformWasm } from '../src/transform-wasm.js';
 type Engine = (source: string, filename?: string) => { code?: string };
 
 const LANES: ReadonlyArray<readonly [string, Engine]> = [
-    ['babel', transformSource],
-    ['oxc', transformWasm as Engine],
+    ['auto', transformSource],
+    ['wasm', transformWasm as Engine],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
 ];
 

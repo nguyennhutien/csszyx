@@ -1,15 +1,15 @@
 /**
- * szv catalog — per-key lenient extraction parity across the three engines.
+ * szv catalog — per-key lenient extraction parity across both engine artifacts.
  *
  * One unresolvable leaf (a runtime conditional, a call, a template, an array,
  * a computed key…) used to drop the ENTIRE szv catalog — every static sibling
  * key and every other variant included — which under Tailwind `source(none)`
  * is silently missing CSS. Worse, the engines disagreed on which leaves they
- * could resolve (rust followed const refs, oxc/babel did not), so flipping
+ * could resolve (rust followed const refs, the removed JavaScript lanes did not), so flipping
  * `build.parser` changed the safelist (field-reported by a design-system
  * consumer as "rust drops tokens from a multi-key szv variant object").
  *
- * Contract locked here, identical in babel/oxc/rust:
+ * Contract locked here, identical in the JavaScript lanes and rust:
  *   - unreadable KEYS are skipped individually; siblings and other variants
  *     always survive;
  *   - finite conditionals contribute BOTH branches (the runtime picks one at
@@ -32,7 +32,7 @@ import {
 const IMPORT = "import { szv } from 'csszyx';";
 
 /**
- * Run all three engines and assert their class sets are identical AND equal
+ * Run both engine artifacts and assert their class sets are identical AND equal
  * to the expected list.
  * @param source TSX source containing an szv config.
  * @param expected Classes every engine must extract (order-insensitive).
@@ -273,7 +273,7 @@ describe('szv catalog + a coexisting static sz attribute (fast-path parity)', ()
     // safelisted fewer classes than `oxc`/`babel` for identical source (a
     // `build.parser` flip changed the produced CSS). Every case here pairs an
     // szv catalog with a static `sz={{ p: 4 }}` so the static-sz path is live,
-    // and asserts all three engines agree.
+    // and asserts both engine artifacts agree.
     const STATIC = 'export const App = () => <div sz={{ p: 4 }} />;';
 
     it('the reported mx-0 multi-key variant survives on every engine', () => {

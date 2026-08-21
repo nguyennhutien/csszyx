@@ -174,8 +174,25 @@ fn canonical_sz_key(key: &str) -> &str {
     }
 }
 
-/// Collect every canonical LEAF path of one branch, `' '`-joined.
-fn collect_canonical_leaf_paths(branch: &StaticSzObject, prefix: &str, out: &mut Vec<String>) {
+/// One collected leaf: the canonical path the conflict test compares, and the
+/// author's own dot-joined key path for the diagnostic.
+///
+/// Two names because they answer different questions. Canonical folds a fusion
+/// family to a shared token so `leading` and `text` are seen to collide; the raw
+/// path is what the reader has to find in their file, and reporting the canonical
+/// form would name a key they never wrote.
+struct CanonicalLeaf {
+    canonical: String,
+    raw: String,
+}
+
+/// Collect every canonical LEAF path of one branch, NUL-joined.
+fn collect_canonical_leaf_paths(
+    branch: &StaticSzObject,
+    prefix: &str,
+    raw_prefix: &str,
+    out: &mut Vec<CanonicalLeaf>,
+) {
     for property in &branch.properties {
         let canon = canonical_sz_key(&property.key);
         let path = if prefix.is_empty() {
@@ -183,18 +200,29 @@ fn collect_canonical_leaf_paths(branch: &StaticSzObject, prefix: &str, out: &mut
         } else {
             format!("{prefix}\u{0}{canon}")
         };
+        let raw = if raw_prefix.is_empty() {
+            property.key.clone()
+        } else {
+            joined_config_path(raw_prefix, &property.key)
+        };
         match &property.value {
             // A nested object under a PROPERTY key is a fusion unit (the
             // color-opacity form lowers to ONE composite class): fold the
             // subtree to the parent path. Variant keys keep composing.
             StaticSzValue::Object(nested) => {
                 if property_prefix(&property.key).is_some() {
-                    out.push(path);
+                    out.push(CanonicalLeaf {
+                        canonical: path,
+                        raw,
+                    });
                 } else {
-                    collect_canonical_leaf_paths(nested, &path, out);
+                    collect_canonical_leaf_paths(nested, &path, &raw, out);
                 }
             }
-            _ => out.push(path),
+            _ => out.push(CanonicalLeaf {
+                canonical: path,
+                raw,
+            }),
         }
     }
 }
@@ -207,30 +235,49 @@ fn extends_leaf_path(long: &str, short: &str) -> bool {
     long.len() > short.len() && long.as_bytes()[short.len()] == 0 && long.starts_with(short)
 }
 
-/// Whether two branches conflict under deep merge (equal paths, or one leaf
-/// path prefixing the other). Mirrors `leafPathsConflict`.
-fn leaf_paths_conflict(a: &[String], b: &[String]) -> bool {
-    for path_a in a {
-        for path_b in b {
-            if path_a == path_b
-                || extends_leaf_path(path_a, path_b)
-                || extends_leaf_path(path_b, path_a)
+/// The first pair of leaves that conflict under deep merge — equal canonical
+/// paths, or one prefixing the other. Mirrors `leafPathsConflict`, and returns
+/// the pair rather than a bool so the diagnostic can name the property instead
+/// of only the branch that holds it.
+fn conflicting_leaves<'a>(
+    a: &'a [CanonicalLeaf],
+    b: &'a [CanonicalLeaf],
+) -> Option<(&'a CanonicalLeaf, &'a CanonicalLeaf)> {
+    for leaf_a in a {
+        for leaf_b in b {
+            if leaf_a.canonical == leaf_b.canonical
+                || extends_leaf_path(&leaf_a.canonical, &leaf_b.canonical)
+                || extends_leaf_path(&leaf_b.canonical, &leaf_a.canonical)
             {
-                return true;
+                return Some((leaf_a, leaf_b));
             }
         }
     }
-    false
+    None
 }
 
 /// Whether every key in a branch is canonicalizable — a property-map entry or
 /// a known variant. Mirrors `branchKeysCanonicalizable`: anything else (a
-/// special-cased property like `lineHeight`, a flag utility, a custom theme
-/// variant) could alias another key's target invisibly, so its config bails.
+/// special-cased property like `lineHeight`, a custom theme variant) could alias
+/// another key's target invisibly, so its config bails. A flag utility is
+/// decided by its value in `branch_disqualify_path` instead: the boolean is
+/// canonical, a scalar on the same key is not.
 /// Special-cased property keys outside the property map, verified
 /// fusion-free. Mirrors `SPECIAL_ALLOWED_SZ_KEYS`.
 const SPECIAL_ALLOWED_SZ_KEYS: [&str; 4] =
     ["alignContent", "snapType", "snapAlign", "snapStrictness"];
+
+/// Whether a key's canonical spelling is a boolean flag.
+///
+/// Two tables carry them: the ones whose class name differs from the key
+/// (`srOnly` → `sr-only`) and the ones whose class IS the kebab-cased key
+/// (`truncate`). A key that also takes values (`ring`, `blur`) sits in the
+/// property map and is admitted there instead, so this only decides the
+/// boolean-only ones. Mirrors `isBooleanFlagKey`.
+fn is_boolean_flag_key(key: &str) -> bool {
+    super::generated::tables::boolean_class(key).is_some()
+        || super::generated::tables::is_boolean_shorthand(key)
+}
 
 /// The key walk behind the overlap check, naming the first position that
 /// stops the branch canonicalizing — a property-map entry or a known variant
@@ -275,7 +322,40 @@ fn branch_disqualify_path(branch: &StaticSzObject, prefix: &str) -> Option<Strin
             && !is_known_variant(&property.key)
             && !SPECIAL_ALLOWED_SZ_KEYS.contains(&property.key.as_str())
         {
-            return Some(path);
+            // An OBJECT value means variant nesting, and variant names are
+            // open-ended: a `--breakpoint-*` token from the project's `@theme`
+            // (`{ tablet: { px: 4 } }`) or an inline attribute variant
+            // (`{ 'data-[active]': { p: 4 } }`) cannot appear in a table this
+            // compiler ships. The ordinary lowering already treats such a key as
+            // a variant and emits `tablet:px-4`; refusing it here made the
+            // precompile the one place that read "not in a table" as "not
+            // understood", and it fell on responsive variants, which is most of
+            // what a variant system holds.
+            //
+            // Safe because a variant COMPOSES into the canonical path rather
+            // than aliasing one — `px` and `tablet\0px` stay distinct, exactly
+            // as `md` already did — so the overlap detector keeps working
+            // through it. A SCALAR on an unknown key is the opposite: it lowers
+            // to `key-value`, which could be another key's target under a name
+            // this walk cannot recognise, so that still disqualifies. Mirrors
+            // the descent `collect_unknown_sz_keys` already makes.
+            //
+            // A BOOLEAN is the exception, and for the same reason the special
+            // keys are admitted: on a flag utility the boolean IS the canonical
+            // spelling — Tailwind has no value form for `sr-only` — and measured
+            // merged vs separate, no flag composites with any property key or
+            // any other flag the way `text` + `leading` does. So the flag's own
+            // name identifies its target. Mirrors the TypeScript walk.
+            match &property.value {
+                StaticSzValue::Boolean(_) if is_boolean_flag_key(&property.key) => continue,
+                StaticSzValue::Object(nested) => {
+                    if let Some(inner) = branch_disqualify_path(nested, &path) {
+                        return Some(inner);
+                    }
+                    continue;
+                }
+                _ => return Some(path),
+            }
         }
         if let StaticSzValue::Object(nested) = &property.value {
             if let Some(inner) = branch_disqualify_path(nested, &path) {
@@ -303,11 +383,22 @@ pub(crate) fn szv_config_free_of_overlap(config: &StaticSzvConfig) -> bool {
 
 /// The same overlap decision, naming the position that broke it.
 ///
-/// One walk serves the verdict and the szr diagnostic. The path names the
-/// BRANCH whose arrival made the config unrepresentable (or, for a key that
-/// cannot canonicalize, the key itself) — for a pairwise conflict the second
-/// branch in declaration order is reported, since the author reading top to
-/// bottom meets the conflict there.
+/// One walk serves the verdict and the fallback diagnostic. Which position gets
+/// named is a DX decision, and the two conflict shapes answer it differently:
+///
+/// - **A variant shadowing `base`.** `base` is applied first to every selection,
+///   so every variant that sets the same property collides with it. Naming the
+///   first such variant made fixing it reveal the next, one refusal per
+///   dimension, while the shared cause sat in `base` and was never named. The
+///   base property is named instead: one position, one fix, however many
+///   variants shadow it.
+/// - **Two dimensions.** Neither is applied first, so there is no shared cause.
+///   The second branch in declaration order is named, where a reader going top
+///   to bottom meets the conflict.
+///
+/// Both name the PROPERTY, not just the branch that holds it: a branch that
+/// reads as correct on its own tells the author nothing about why it was
+/// refused. A key that cannot canonicalize was already reported at the key.
 pub(crate) fn overlap_disqualify_path(config: &StaticSzvConfig) -> Option<String> {
     if let Some(base) = &config.base {
         if let Some(path) = branch_disqualify_path(base, "base") {
@@ -323,38 +414,43 @@ pub(crate) fn overlap_disqualify_path(config: &StaticSzvConfig) -> Option<String
             }
         }
     }
-    let mut base_paths: Vec<String> = Vec::new();
+    let mut base_leaves: Vec<CanonicalLeaf> = Vec::new();
     if let Some(base) = &config.base {
-        collect_canonical_leaf_paths(base, "", &mut base_paths);
+        collect_canonical_leaf_paths(base, "", "base", &mut base_leaves);
     }
-    let per_dimension: Vec<Vec<(String, Vec<String>)>> = config
+    let per_dimension: Vec<Vec<Vec<CanonicalLeaf>>> = config
         .variants
         .iter()
         .map(|(dimension, leaves)| {
             leaves
                 .iter()
                 .map(|(value, leaf)| {
-                    let mut paths = Vec::new();
-                    collect_canonical_leaf_paths(leaf, "", &mut paths);
-                    (format!("variants.{dimension}.{value}"), paths)
+                    let mut collected = Vec::new();
+                    collect_canonical_leaf_paths(
+                        leaf,
+                        "",
+                        &format!("variants.{dimension}.{value}"),
+                        &mut collected,
+                    );
+                    collected
                 })
                 .collect()
         })
         .collect();
 
     for dimension in &per_dimension {
-        for (position, leaf) in dimension {
-            if leaf_paths_conflict(&base_paths, leaf) {
-                return Some(position.clone());
+        for leaf in dimension {
+            if let Some((base_leaf, _)) = conflicting_leaves(&base_leaves, leaf) {
+                return Some(base_leaf.raw.clone());
             }
         }
     }
     for i in 0..per_dimension.len() {
         for j in (i + 1)..per_dimension.len() {
-            for (_, leaf_a) in &per_dimension[i] {
-                for (position_b, leaf_b) in &per_dimension[j] {
-                    if leaf_paths_conflict(leaf_a, leaf_b) {
-                        return Some(position_b.clone());
+            for leaf_a in &per_dimension[i] {
+                for leaf_b in &per_dimension[j] {
+                    if let Some((_, second)) = conflicting_leaves(leaf_a, leaf_b) {
+                        return Some(second.raw.clone());
                     }
                 }
             }
@@ -655,8 +751,15 @@ mod tests {
 
     fn paths_of(branch: &StaticSzObject) -> Vec<String> {
         let mut out = Vec::new();
-        collect_canonical_leaf_paths(branch, "", &mut out);
-        out
+        collect_canonical_leaf_paths(branch, "", "", &mut out);
+        out.into_iter().map(|leaf| leaf.canonical).collect()
+    }
+
+    /// The author-facing paths the same walk collects, for the diagnostic side.
+    fn raw_paths_of(branch: &StaticSzObject, root: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        collect_canonical_leaf_paths(branch, "", root, &mut out);
+        out.into_iter().map(|leaf| leaf.raw).collect()
     }
 
     #[test]
@@ -682,12 +785,52 @@ mod tests {
 
     #[test]
     fn flags_equal_prefix_and_suffix_conflicts_only() {
-        let path = |value: &str| vec![value.to_string()];
-        assert!(leaf_paths_conflict(&path("p"), &path("p")));
-        assert!(leaf_paths_conflict(&path("md"), &path("md\u{0}p")));
-        assert!(leaf_paths_conflict(&path("md\u{0}p"), &path("md")));
-        assert!(!leaf_paths_conflict(&path("md\u{0}p"), &path("md\u{0}m")));
-        assert!(!leaf_paths_conflict(&path("p"), &path("md\u{0}p")));
+        let path = |value: &str| {
+            vec![CanonicalLeaf {
+                canonical: value.to_string(),
+                raw: value.replace('\u{0}', "."),
+            }]
+        };
+        assert!(conflicting_leaves(&path("p"), &path("p")).is_some());
+        assert!(conflicting_leaves(&path("md"), &path("md\u{0}p")).is_some());
+        assert!(conflicting_leaves(&path("md\u{0}p"), &path("md")).is_some());
+        assert!(conflicting_leaves(&path("md\u{0}p"), &path("md\u{0}m")).is_none());
+        assert!(conflicting_leaves(&path("p"), &path("md\u{0}p")).is_none());
+    }
+
+    #[test]
+    fn reports_the_pair_so_a_diagnostic_can_name_either_side() {
+        // The reason this returns a pair rather than a bool: a base conflict
+        // names the base side and a cross-dimension conflict names the second,
+        // and both need the RAW key, not the canonical token a fusion family
+        // collapses to.
+        let left = vec![CanonicalLeaf {
+            canonical: "text\u{0}leading".to_string(),
+            raw: "base.leading".to_string(),
+        }];
+        let right = vec![CanonicalLeaf {
+            canonical: "text\u{0}leading".to_string(),
+            raw: "variants.s.lg.text".to_string(),
+        }];
+
+        let (first, second) = conflicting_leaves(&left, &right).expect("fusion family collides");
+        assert_eq!(first.raw, "base.leading");
+        assert_eq!(second.raw, "variants.s.lg.text");
+    }
+
+    #[test]
+    fn raw_paths_keep_the_authors_own_keys_under_their_root() {
+        // `leading` canonicalizes to a shared fusion token; the diagnostic has
+        // to say `leading`, which is the word in the author's file.
+        let branch = object(vec![
+            entry("leading", text("tight")),
+            entry("hover", nested(vec![entry("color", text("sub"))])),
+        ]);
+
+        assert_eq!(
+            raw_paths_of(&branch, "base"),
+            ["base.leading", "base.hover.color"]
+        );
     }
 
     #[test]
@@ -1043,6 +1186,91 @@ mod tests {
     }
 
     #[test]
+    fn a_boolean_flag_is_admitted_and_a_scalar_on_it_is_not() {
+        let base_config = |base: Vec<StaticSzProperty>| {
+            config_from(vec![
+                entry("base", nested(base)),
+                entry(
+                    "variants",
+                    nested(vec![entry(
+                        "pad",
+                        nested(vec![entry("sm", nested(vec![entry("p", number(2.0))]))]),
+                    )]),
+                ),
+            ])
+            .expect("shape qualifies")
+        };
+        // `sr-only` has no value form in Tailwind, so the boolean is how the
+        // style is written — refusing it disqualified a config spelled exactly
+        // as the reference documents it.
+        assert_eq!(
+            overlap_disqualify_path(&base_config(vec![entry(
+                "srOnly",
+                StaticSzValue::Boolean(true)
+            )])),
+            None
+        );
+        // Same for a flag whose class name differs from its key.
+        assert_eq!(
+            overlap_disqualify_path(&base_config(vec![entry(
+                "tabularNums",
+                StaticSzValue::Boolean(true)
+            )])),
+            None
+        );
+        // Two tables carry the flags, and the pair above sits in BOTH — so it
+        // cannot tell a union apart from an intersection. These two sit in
+        // exactly one each: `truncate`'s class IS its kebab-cased key, and
+        // `divideXReverse` is only in the differing-class table. Admitting a
+        // flag has to be either table on its own.
+        assert_eq!(
+            overlap_disqualify_path(&base_config(vec![entry(
+                "truncate",
+                StaticSzValue::Boolean(true)
+            )])),
+            None
+        );
+        assert_eq!(
+            overlap_disqualify_path(&base_config(vec![entry(
+                "divideXReverse",
+                StaticSzValue::Boolean(true)
+            )])),
+            None
+        );
+        // The admission is on the VALUE: a scalar on the same key lowers to
+        // `sr-only-weird`, the aliasing shape the refusal exists for.
+        assert_eq!(
+            overlap_disqualify_path(&base_config(vec![entry("srOnly", text("weird"))])),
+            Some(String::from("base.srOnly"))
+        );
+        // Admitting the key must not cost the same-name catch: deep merge
+        // replaces, so one branch turning the flag off cannot be represented by
+        // concatenating both branches' classes.
+        assert_eq!(
+            overlap_disqualify_path(
+                &config_from(vec![
+                    entry(
+                        "base",
+                        nested(vec![entry("srOnly", StaticSzValue::Boolean(true))])
+                    ),
+                    entry(
+                        "variants",
+                        nested(vec![entry(
+                            "reader",
+                            nested(vec![entry(
+                                "off",
+                                nested(vec![entry("srOnly", StaticSzValue::Boolean(false))])
+                            )]),
+                        )]),
+                    ),
+                ])
+                .expect("shape qualifies")
+            ),
+            Some(String::from("base.srOnly"))
+        );
+    }
+
+    #[test]
     fn overlap_disqualify_paths_name_the_key_that_cannot_canonicalize() {
         let leaf_config = |leaf: Vec<StaticSzProperty>| {
             config_from(vec![entry(
@@ -1056,7 +1284,8 @@ mod tests {
             overlap_disqualify_path(&leaf_config(vec![entry("op", number(35.0))])),
             Some(String::from("variants.c.blue.op"))
         );
-        // An unknown key nested under a known variant is named in full.
+        // A custom variant nested under a known one composes rather than
+        // disqualifying — the project's `@theme` names it, so no table can.
         assert_eq!(
             overlap_disqualify_path(&leaf_config(vec![entry(
                 "hover",
@@ -1065,7 +1294,20 @@ mod tests {
                     nested(vec![entry("p", number(4.0))])
                 )]),
             )])),
-            Some(String::from("variants.c.blue.hover.desktop-sm"))
+            None
+        );
+        // A SCALAR under one is the case the refusal is for: it lowers to
+        // `key-value`, which the overlap detector cannot place, and it is named
+        // in full.
+        assert_eq!(
+            overlap_disqualify_path(&leaf_config(vec![entry(
+                "hover",
+                nested(vec![entry(
+                    "desktop-sm",
+                    nested(vec![entry("nonsenseKey", text("x"))])
+                )]),
+            )])),
+            Some(String::from("variants.c.blue.hover.desktop-sm.nonsenseKey"))
         );
         // The css namespace is one level deep; a nested declaration is named.
         assert_eq!(
@@ -1086,7 +1328,9 @@ mod tests {
 
     #[test]
     fn overlap_disqualify_paths_name_the_conflicting_branch() {
-        // Base × leaf: the leaf whose arrival made the config unrepresentable.
+        // Base × leaf: the BASE property, because base is applied to every
+        // selection — naming the first shadowing leaf made fixing it reveal the
+        // next while the shared cause went unnamed.
         let base_conflict = config_from(vec![
             entry("base", nested(vec![entry("p", number(2.0))])),
             entry(
@@ -1100,10 +1344,11 @@ mod tests {
         .expect("shape qualifies");
         assert_eq!(
             overlap_disqualify_path(&base_conflict),
-            Some(String::from("variants.pad.sm"))
+            Some(String::from("base.p"))
         );
         // Leaf × leaf across dimensions: the second branch in declaration
-        // order, where a top-to-bottom reader meets the conflict.
+        // order, where a top-to-bottom reader meets the conflict, down to the
+        // property — the branch alone reads as correct in isolation.
         let cross_conflict = config_from(vec![entry(
             "variants",
             nested(vec![
@@ -1120,7 +1365,7 @@ mod tests {
         .expect("shape qualifies");
         assert_eq!(
             overlap_disqualify_path(&cross_conflict),
-            Some(String::from("variants.b.y"))
+            Some(String::from("variants.b.y.p"))
         );
         // A clean config has nothing to name.
         let clean = config_from(vec![entry(

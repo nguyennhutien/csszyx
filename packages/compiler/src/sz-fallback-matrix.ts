@@ -2,16 +2,16 @@
  * The single source of truth for "why did this sz expression fall back to
  * runtime, and what should the author do instead".
  *
- * Three engines answer that question — Babel (`transform.ts`), oxc
- * (`transform-oxc.ts`) and Rust (`packages/core`) — and a build may switch
- * between them via `build.parser`. The wording therefore has to be identical
- * across all three: a diagnostic that changes text when the parser changes
- * looks like a behaviour change to whoever is reading the build log.
+ * One engine answers that question, shipped as two artifacts — the native
+ * addon and the wasm build, both from `packages/core` — and a build serves
+ * whichever the platform can load. The wording therefore has to be identical
+ * across both: a diagnostic that changes text when the lane changes looks
+ * like a behaviour change to whoever is reading the build log.
  *
- * Keeping three hand-written copies in sync is the failure this module exists
- * to prevent. The TypeScript lanes import these templates directly; the Rust
- * lane gets them through `scripts/gen-sz-fallback-matrix.mjs`, whose `--check`
- * mode fails CI when the generated file drifts from this one.
+ * Keeping hand-written copies in sync is the failure this module exists to
+ * prevent. TypeScript imports these templates directly; Rust gets them
+ * through `scripts/gen-sz-fallback-matrix.mjs`, whose `--check` mode fails
+ * CI when the generated file drifts from this one.
  *
  * @module sz-fallback-matrix
  */
@@ -19,8 +19,8 @@
 /**
  * Shape of the unresolved expression, as far as the guidance is concerned.
  *
- * Deliberately coarser than any engine's AST: each lane classifies its own
- * node type into one of these, so the matrix stays free of Babel/oxc/oxc-rust
+ * Deliberately coarser than any lane's AST: each lane classifies its own
+ * node type into one of these, so the matrix stays free of engine-specific
  * node vocabulary.
  */
 export type SzFallbackKind = 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory';
@@ -61,7 +61,7 @@ export const SZ_FALLBACK_PATH_PLACEHOLDER = '{path}';
 /**
  * Reason and guidance per expression kind.
  *
- * The wording is a compatibility surface: three engines emit it and tests
+ * The wording is a compatibility surface: both engine builds emit it and tests
  * assert it byte for byte, so treat edits here as user-visible changes.
  */
 export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTemplate>> = {
@@ -78,7 +78,7 @@ export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTempl
     import: {
         reason: 'imported binding `{detail}` could not be read at build time',
         suggestion:
-            'Export it as a const with a static object literal — a re-export, a barrel file, or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().',
+            'Export it as a const with a static object literal — a star re-export or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().',
     },
     member: {
         reason: 'member expression is not statically resolvable',
@@ -138,7 +138,7 @@ export function describeSzFallback(
  * Fallback name used when a callee has no statically readable name.
  *
  * `sz={obj[key]()}` and `sz={(cond ? a : b)()}` reach the call arm with nothing
- * to print; all three engines emit this same stand-in rather than each choosing
+ * to print; both engine builds emit this same stand-in rather than each choosing
  * their own.
  */
 export const SZ_FALLBACK_UNKNOWN_CALLEE = '?';
@@ -258,7 +258,7 @@ function szFallbackKindOf(message: string): SzFallbackKind | undefined {
  * Owned by the module that RENDERS the labels, so routing built on this
  * cannot drift from the wording the way an inlined substring match would —
  * change a label above and this classifier changes with it. (Structured
- * diagnostic fields across the three engines are the fuller answer; until
+ * diagnostic fields across both engine builds are the fuller answer; until
  * that contract exists, the classifier is the single point of coupling.)
  *
  * @param message - One raw diagnostic line as an engine emitted it.

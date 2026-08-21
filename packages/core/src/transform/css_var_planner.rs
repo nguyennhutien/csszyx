@@ -1,6 +1,6 @@
 //! CSS custom-property name planning for the native transform.
 //!
-//! This mirrors the TypeScript planner used by the oxc path. Keeping the
+//! This mirrors the TypeScript planner used by the JavaScript path it replaced. Keeping the
 //! planner pure gives the Rust rewrite path a deterministic contract before it
 //! mutates source code.
 
@@ -339,6 +339,12 @@ fn rename_dynamic_prop(attribute: &mut super::SzAttributeIr, prop_index: usize, 
         ternary
             .consequent_classes
             .iter_mut()
+            .chain(
+                ternary
+                    .chain_arms
+                    .iter_mut()
+                    .flat_map(|arm| arm.classes.iter_mut()),
+            )
             .chain(ternary.alternate_classes.iter_mut())
     }) {
         if *class_name == old_class {
@@ -798,7 +804,7 @@ mod tests {
             candidate_classes: Vec::new(),
             runtime_fallback_diagnostic: None,
             dynamic_css_vars,
-            removed_dynamic_keys: Vec::new(),
+            dropped_dynamic_keys: Vec::new(),
         }
     }
 

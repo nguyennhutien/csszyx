@@ -37,6 +37,52 @@ Tailwind class names map to camelCase sz prop keys:
 | `flex`         | `{ display: 'flex' }` |
 | `hidden`       | `{ display: 'none' }` |
 
+## Keys that need a build-time value
+
+Most keys take a runtime value. `sz={{ p: pad }}` compiles to
+`p-(--_sz-p)` plus a `style` custom property, and Tailwind serves that class.
+
+A minority cannot, because Tailwind has no utility for them that reads a CSS
+variable. Passing one a variable used to produce a class that either styled the
+**wrong property** or matched nothing at all — silently. csszyx now drops it and
+says so:
+
+```tsx
+// ❌ textAlign has no variable form — `text-(--v)` is a COLOUR in Tailwind v4
+<div sz={{ p: 4, textAlign }} />
+// → <div className="p-4" />   + a build report naming textAlign and the line
+```
+
+The sibling `p: 4` is unaffected — only that one property is dropped.
+
+Three ways to write it, all fully build-time:
+
+```tsx
+// 1. Two or three options — a ternary between literals
+<div sz={{ p: 4, textAlign: centered ? 'center' : 'left' }} />
+
+// 2. A real set of options — name them with szv, read through szr
+const alignSz = szv({ variants: { align: {
+    left: { textAlign: 'left' }, center: { textAlign: 'center' },
+} } });
+<div className={szr(alignSz({ align: side }))} />
+
+// 3. Genuinely open-ended data — dynamic(), which injects CSS at runtime
+```
+
+The affected keys are the keyword-valued ones: display and layout modes,
+alignment, overflow, text alignment and transform, background sizing and repeat,
+border and outline *style*, and their neighbours. Each reference page lists its
+own, and
+[Warnings → Keys that need a build-time value](/docs/reference/warnings/#keys-that-need-a-build-time-value)
+carries the complete table plus the exact message.
+
+:::tip[You do not have to look this up first]
+The build names the key and the line the moment you hit one, in dev **and** in
+production — a dropped class is missing CSS, not a style nitpick. Write what
+reads best; fix it when the build tells you.
+:::
+
 ## One key per property
 
 Props that set a single CSS property are written with their **canonical key and
@@ -418,7 +464,9 @@ time and emits a conditional class expression — no CSS variables, no inline st
 
 :::note[When does the CSS variable fallback apply?]
 Only when at least one branch is a **runtime expression** (variable, function call, etc.).
-In that case the compiler falls back to `prop-[var(--_sz-prop)]` with an inline `style`.
+In that case the compiler falls back to `prop-[var(--_sz-prop)]` with an inline `style`
+— for the keys whose Tailwind utility can read one. Some keys cannot; see
+[Keys that need a build-time value](#keys-that-need-a-build-time-value) below.
 
 If the opposite branch is `undefined`, `null`, `false`, or an empty string, that
 branch emits neither the utility class nor the CSS custom-property value. This
@@ -482,6 +530,32 @@ Works inside variant blocks too:
 />
 // hover branch: hover:scale-110 or hover:scale-100 — zero runtime
 ```
+
+### Conditioning the whole `sz`, not one value
+
+The same applies one level up. `sz={cond ? A : B}` compiles both branches to
+class strings, and a branch that styles nothing — `undefined`, `null`, `false`,
+or `{}` — is the **empty style**, not an unknown one, so it compiles too:
+
+```tsx
+<div sz={disabled ? { color: "muted" } : undefined} />
+// → className={disabled ? "text-muted" : undefined}
+```
+
+A guard is the same expression with the else arm left off, so it compiles the
+same way:
+
+```tsx
+<div sz={compact && { p: 2 }} />
+// → className={compact ? "p-2" : undefined}
+```
+
+`||` is deliberately left on the runtime path. It yields its **left** operand
+when the test passes, and that value can itself be a style — folding
+`sz={base || { p: 4 }}` would drop `base` — so it keeps `_sz()`.
+
+Two shapes still resolve at runtime: a chain of tests (`a ? x : b ? y : z`), and
+a branch holding a value only the runtime knows (`cond ? { p: pad } : undefined`).
 
 ## Array Syntax
 
@@ -678,20 +752,38 @@ for runtime data).
 
 ## Combining with className
 
-The `sz` prop and `className` prop can coexist. The compiler merges them:
+The `sz` prop and `className` prop can coexist. The compiler puts `sz` **last**:
 
 ```tsx
 <div sz={{ p: 4, bg: "blue-500" }} className="custom-class" />
-// → className="p-4 bg-blue-500 custom-class"
+// → className="custom-class p-4 bg-blue-500"
 ```
 
-When `className` is a dynamic expression (not a static string), the compiler
-uses `_szMerge` at runtime to join them safely:
+That order is the contract, and it holds whichever order you write the two
+attributes in — JSX attribute order carries no meaning here. Since the merge is
+last-wins per conflicting utility, **`sz` beats `className` on the same
+element**: a `className` of `p-8` beside `sz={{ p: 4 }}` leaves `p-4`, and the
+`p-8` is removed from the string rather than losing in the cascade.
+
+When `className` is a dynamic expression, the same order applies at runtime:
 
 ```tsx
-// className is dynamic → _szMerge at runtime
+// className is dynamic → _szMerge(className, sz) at runtime
 <div sz={{ p: 4 }} className={baseClass} />
 ```
+
+This is worth knowing before you write a wrapper component. A caller's `sz` is
+demoted to `className` at the call site, so it arrives on the losing side of
+your own `sz` and is silently dropped. To state the precedence explicitly —
+either direction — put both in one `sz` array, where position decides:
+
+```tsx
+<div sz={[{ p: 4 }, className]} />   // the caller wins
+<div sz={[className, { p: 4 }]} />   // these styles win
+```
+
+csszyx reports the ambiguous shape as a nudge; either rewrite silences it. See
+[compound components](/docs/compound-components/) for the wrapper case in full.
 
 ## Runtime Helpers for Dynamic Classes
 

@@ -110,7 +110,7 @@ async function buildFixture(
     await build({
         root,
         logLevel: 'silent',
-        plugins: [vitePlugin({ build: { parser: 'oxc', cache: false }, ...options })],
+        plugins: [vitePlugin({ build: { cache: false }, ...options })],
         esbuild: {
             jsx: 'transform',
             jsxFactory: 'h',

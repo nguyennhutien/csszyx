@@ -377,9 +377,19 @@ already uncompensated — see the
 [shared-style-object contract](/docs/reusing-styles/). Treat a shared sz object
 as declared once and never written to, whichever way this setting is set.
 
-**What v1 covers:** a direct `sz={binding}` from a named import, including a
-renamed one (`import { cardSz as card }`). The provider must be a `const` whose
-value is a fully static object literal.
+**What it covers:** a direct `sz={binding}` from a named import, including a
+renamed one (`import { cardSz as card }`), a namespace member (`import * as S`,
+then `sz={S.cardSz}`), and a default import when the module writes the literal
+in the default slot (`export default { … }`). The value must be a fully static
+object literal **in the module the importer names**.
+
+A re-export is followed rather than refused: a barrel
+(`export { cardSz } from './base'`) is read as a link to the module that
+declares the value, so importing through one compiles like importing the
+provider directly. What still keeps the runtime path is `export *`, which names
+no export to file a value under, and `export default cardSz`, which puts an
+identifier where the literal would be.
+[Reusing Styles](/docs/reusing-styles/#across-files) has the measured table.
 
 The specifier may be relative (`./styles`, `../shared/styles`, any depth) or an
 alias (`@/styles`). Aliases are read from the bundler's own `resolve.alias` and
@@ -413,9 +423,8 @@ classes with no CSS. In a dev session it is quieter, and a watcher left without
 the flag maintains a second identity beside the loader's. Set it on **every**
 csszyx loader rule too, if you declare more than one.
 
-**What still falls back** — and keeps reporting that it did: barrels and
-re-exports, package specifiers, absolute specifiers, namespace
-(`import * as S`) and default imports, and any nested position such as
+**What still falls back** — and keeps reporting that it did: `export *`,
+package specifiers, absolute specifiers, and any nested position such as
 `sz={[cardSz, …]}` or `sz={{ ...cardSz }}`.
 
 ### File Filters

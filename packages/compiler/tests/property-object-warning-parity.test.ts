@@ -17,14 +17,16 @@ import { __resetSzWarnDedupForTests } from '../src/transform-core.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
 import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
-import { captureWarnings, type TriEngine } from './tri-engine-harness.js';
+import { captureWarnings, type ParityEngine } from './engine-parity-harness.js';
 
 /** [lane, engine, property key]. Keys stay distinct so the dedup case
  * below can still observe a genuine second-lane silence. */
-const LANES: ReadonlyArray<readonly [string, TriEngine, string]> = [
-    ['babel', transformSource, 'p'],
-    ['oxc', transformWasm as TriEngine, 'm'],
-    ...(isRustTransformAvailable() ? ([['rust', transformRust as TriEngine, 'w']] as const) : []),
+const LANES: ReadonlyArray<readonly [string, ParityEngine, string]> = [
+    ['auto', transformSource, 'p'],
+    ['wasm', transformWasm as ParityEngine, 'm'],
+    ...(isRustTransformAvailable()
+        ? ([['rust', transformRust as ParityEngine, 'w']] as const)
+        : []),
 ];
 
 beforeEach(() => {

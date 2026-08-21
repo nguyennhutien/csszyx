@@ -327,10 +327,10 @@ pub enum RuntimeFallbackKindIr {
     /// Anything else; `detail` carries the Babel-compatible node type name.
     Other,
     /// A call whose callee names an szv factory THIS parse saw and refused to
-    /// precompile; `detail` carries the factory name and the site fallback's
-    /// `path` names the disqualifying position inside its config. Only the
-    /// szr site produces it — an sz attribute never carries factory-level
-    /// knowledge.
+    /// precompile; `detail` carries the factory name and the accompanying
+    /// `path` names the disqualifying position inside its config. Produced at
+    /// both the szr site and the sz attribute: one cause reads as one message
+    /// wherever the author put the call.
     SzvFactory,
 }
 
@@ -341,16 +341,39 @@ pub struct RuntimeFallbackDiagnosticIr {
     pub kind: RuntimeFallbackKindIr,
     /// Kind-specific detail (callee name, identifier name, or node type).
     pub detail: String,
+    /// Disqualifying position inside an szv config, dot-joined, for the
+    /// `SzvFactory` kind. Empty (and absent from the serialized IR) for every
+    /// other kind, so existing IR snapshots keep their bytes.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub path: String,
 }
 
-/// Removed key whose value stayed dynamic and has no static value node to
-/// carry its diagnostic location.
+/// Why a dynamic property was dropped before CSS-variable lowering.
+///
+/// Both shapes end the same way — no class, no variable — but they are not the
+/// same message: one says the key is gone, the other says the key is fine and
+/// only this value shape cannot be expressed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DroppedKeyReason {
+    /// The key itself was removed from the sz API.
+    #[default]
+    RemovedKey,
+    /// The key is supported, but Tailwind has no utility that reads a CSS
+    /// custom property for it, so a runtime value cannot be lowered at all.
+    NoVarForm,
+}
+
+/// Dynamic property dropped before CSS-variable lowering, with no static value
+/// node to carry its diagnostic location.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RemovedSzKeyIr {
-    /// Removed authoring key.
+pub struct DroppedSzKeyIr {
+    /// Authoring key, as written.
     pub key: String,
     /// Full source property span.
     pub span: TextSpan,
+    /// Which of the two drops this was.
+    #[serde(default)]
+    pub reason: DroppedKeyReason,
 }
 
 /// JSX `sz` attribute and its parser-normalized static object.
@@ -403,9 +426,10 @@ pub struct SzAttributeIr {
     pub runtime_fallback_diagnostic: Option<RuntimeFallbackDiagnosticIr>,
     /// Dynamic object properties emitted through CSS custom properties.
     pub dynamic_css_vars: Vec<DynamicCssVarIr>,
-    /// Dynamic removed keys dropped before CSS-variable lowering.
+    /// Dynamic properties dropped before CSS-variable lowering, each carrying
+    /// the reason its report needs.
     #[serde(default)]
-    pub removed_dynamic_keys: Vec<RemovedSzKeyIr>,
+    pub dropped_dynamic_keys: Vec<DroppedSzKeyIr>,
 }
 
 /// Pre-lowered class lists for a static ternary `sz={cond ? A : B}` attribute.
@@ -421,6 +445,18 @@ pub struct StaticTernaryIr {
     pub consequent_classes: Vec<String>,
     /// Classes produced by lowering the alternate branch, in source order.
     pub alternate_classes: Vec<String>,
+    /// Extra `test ? classes` arms sitting between the head and the alternate,
+    /// for a chained conditional (`a ? X : b ? Y : Z`). Empty for the ordinary
+    /// two-branch form, which is why it serializes away — older IR reads back
+    /// unchanged.
+    ///
+    /// A chain is a CHOICE and the surrounding `Vec<StaticTernaryIr>` is a JOIN:
+    /// two conditionals in one object both contribute classes, while a chain
+    /// contributes exactly one branch. Modelling the arms here keeps that
+    /// difference in the type rather than in a convention a later reader has to
+    /// rediscover.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chain_arms: Vec<StaticTernaryArmIr>,
     /// The sz key when this conditional is a boolean-only key carrying a
     /// runtime value, in which case `test_span` covers that value and the
     /// rewrite emits `__szBoolClass` instead of a `test ? … : …` expression:
@@ -428,6 +464,19 @@ pub struct StaticTernaryIr {
     /// anything else rather than styling the wrong property.
     #[serde(default)]
     pub bool_class_key: Option<String>,
+}
+
+/// One `test ? classes` arm of a chained conditional.
+///
+/// The test is only reached when every test before it was falsy, which the
+/// emitted nesting preserves by keeping JavaScript's own short-circuit rather
+/// than rebuilding the guard out of the earlier tests.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StaticTernaryArmIr {
+    /// Source span of this arm's `test` expression.
+    pub test_span: TextSpan,
+    /// Classes produced by lowering this arm's branch, in source order.
+    pub classes: Vec<String>,
 }
 
 /// One item from an `sz={[...]}` later-wins composition.
@@ -695,7 +744,7 @@ mod tests {
                 candidate_classes: Vec::new(),
                 runtime_fallback_diagnostic: None,
                 dynamic_css_vars: Vec::new(),
-                removed_dynamic_keys: Vec::new(),
+                dropped_dynamic_keys: Vec::new(),
             }],
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {

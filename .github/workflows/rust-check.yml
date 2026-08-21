@@ -107,3 +107,71 @@ jobs:
 
       - name: Build WASM
         run: wasm-pack build --mode no-install --target bundler
+
+  # Mutation testing on the lines this pull request changed.
+  #
+  # Codecov's patch gate proves a changed line RAN under test. It cannot prove
+  # the test would go RED if the line were wrong, and a loose assertion scores
+  # 100% patch coverage while catching nothing. This closes that gap where it
+  # is cheap: only the added lines are mutated, so a run costs minutes instead
+  # of the hours the full sweep needs, and the answer arrives while the change
+  # is still open.
+  #
+  # The monthly sweep in mutation.yml stays for what a diff cannot see: a
+  # change that breaks code it never edits.
+  #
+  # Known cost: a mutant that breaks a loop counter never terminates, and in a
+  # loop that allocates it can demand tens of GB before the timeout fires. That
+  # only happens when a pull request touches one of the hand-written byte
+  # scanners. --timeout-multiplier bounds the window relative to the measured
+  # baseline rather than pinning an absolute that would drift with runner speed.
+  mutate-diff:
+    name: Mutation (changed lines)
+    if: >-
+      ${{ github.event_name == 'pull_request'
+      && !startsWith(github.head_ref, 'release-please--branches--main') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: mutate-diff-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      # Full history: the wrapper scopes the run with `git merge-base HEAD main`
+      # and a shallow clone has no merge base to find.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      # checkout leaves main as a remote ref only, and the wrapper names it
+      # locally. Non-fatal: without it the wrapper exits saying so.
+      - name: Make main resolvable
+        run: git fetch --no-tags origin main:main || true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b # 1.97.1
+
+      - name: Cache cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-mutants-${{ hashFiles('**/Cargo.toml') }}
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2.85.2
+        with:
+          tool: cargo-mutants
+
+      # --features is spelled out rather than left to .cargo/mutants.toml: the
+      # engine only exists behind native-engine, and without it every mutant
+      # lands in a crate whose transform module is compiled out and reports back
+      # as unviable — a green run that measured nothing.
+      - name: Mutate the diff
+        run: >-
+          bash scripts/mutants.sh diff
+          --features native-engine
+          --timeout-multiplier 3
+          --minimum-test-timeout 30

@@ -33,7 +33,7 @@ function writeSource(root: string, source: string): string {
 }
 
 const baseOptions = {
-    parserMode: 'babel' as const,
+    parserMode: 'auto' as const,
     config: { mangleVars: false },
     nextVersion: '16.2.7',
     csszyxVersion: '0.9.0',

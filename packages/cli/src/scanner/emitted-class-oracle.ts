@@ -31,10 +31,16 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-
 import fg from 'fast-glob';
-
+import {
+    type CollisionDesignSystem,
+    collisionOracleFrom,
+    PROBE_THEME,
+} from './collision-oracle.js';
+import { keywordOracleFrom } from './keyword-oracle.js';
 import { brokenOpacityValue, collectCustomProperties } from './opacity-verdict.js';
+import type { KeywordOracle } from './sibling-keyword.js';
+import type { CollisionOracle } from './theme-collision.js';
 
 /** A stylesheet handed back to Tailwind's loader. */
 interface LoadedStylesheet {
@@ -46,6 +52,13 @@ interface LoadedStylesheet {
 /** The slice of Tailwind's design system this module uses. */
 interface DesignSystem {
     candidatesToCss(candidates: readonly string[]): Array<string | null>;
+    theme: { entries(): Iterable<readonly [string, unknown]> };
+    // The value shape is what the collision oracle reads; the keyword oracle
+    // only needs kind and root, so one declaration serves both.
+    parseCandidate(
+        candidate: string,
+    ): Iterable<{ kind: string; root: string; value?: { kind: string; value: string } | null }>;
+    getClassList(): Iterable<string | readonly [string, unknown]>;
 }
 
 /** A plugin or config module handed back to Tailwind's loader. */
@@ -111,6 +124,19 @@ export type EmittedClassOracle =
            * @returns Broken classes with the value that broke them.
            */
           findBrokenOpacity(classes: readonly string[]): Array<{ token: string; value: string }>;
+          /**
+           * The same design system, answering the questions the sibling-keyword
+           * rule asks. Carried here so a project's stylesheet is compiled once
+           * and every pass that needs it reads the same one.
+           */
+          keywords: KeywordOracle;
+          /**
+           * An oracle for theme-name collisions, or null when the probe
+           * compile failed. Built on first call and cached — it costs a second
+           * compile of the stylesheet, which a project with no theme tokens
+           * should not pay.
+           */
+          loadCollisionOracle(): Promise<CollisionOracle | null>;
       }
     | { ok: false; kind: OracleSkipKind; reason: string };
 
@@ -341,6 +367,27 @@ export async function findTailwindCssEntry(cwd: string): Promise<string | null> 
 }
 
 /**
+ * Order two glob results shallowest first, then by name.
+ *
+ * Depth is counted from `/` rather than `path.sep` because that is what the
+ * input is: `fast-glob` returns posix paths on every platform, including
+ * Windows. Asking the platform there found no separator at all, measured every
+ * path as depth 1, and dropped the ordering to alphabetical without saying so.
+ *
+ * On posix the two spellings are the same function, so this cannot be shown
+ * by a test on a posix machine — the platform it is wrong on is the platform
+ * this repo has never run on.
+ *
+ * @param a - First absolute path.
+ * @param b - Second absolute path.
+ * @returns Negative when `a` sorts first, as Array#sort expects.
+ */
+export function comparePathDepth(a: string, b: string): number {
+    const depth = a.split('/').length - b.split('/').length;
+    return depth === 0 ? a.localeCompare(b) : depth;
+}
+
+/**
  * Find every stylesheet that pulls Tailwind into the project.
  *
  * A project may have more than one — a design system plus a page theme is an
@@ -361,10 +408,7 @@ export async function findTailwindCssEntries(cwd: string): Promise<string[]> {
     // this function reads, and reordering the glob result in place would leave
     // that dependency invisible at the call site.
     const byDepth = [...files];
-    byDepth.sort((a, b) => {
-        const depth = a.split(path.sep).length - b.split(path.sep).length;
-        return depth === 0 ? a.localeCompare(b) : depth;
-    });
+    byDepth.sort(comparePathDepth);
     const entries: string[] = [];
     for (const file of byDepth) {
         try {
@@ -410,14 +454,15 @@ export async function createEmittedClassOracle(
         options: LoadDesignSystemOptions,
     ) => Promise<DesignSystem>;
 
+    const loadOptions: LoadDesignSystemOptions = {
+        base: options.cssBase,
+        loadStylesheet: (id, base) => loadStylesheet(id, base, tailwind.root, options.resolveFrom),
+        loadModule: (id, base) => loadModule(id, base, options.resolveFrom),
+    };
+
     let design: DesignSystem;
     try {
-        design = await load(options.css, {
-            base: options.cssBase,
-            loadStylesheet: (id, base) =>
-                loadStylesheet(id, base, tailwind.root, options.resolveFrom),
-            loadModule: (id, base) => loadModule(id, base, options.resolveFrom),
-        });
+        design = await load(options.css, loadOptions);
     } catch (error) {
         return stylesheetSkip(
             `the stylesheet did not compile: ${error instanceof Error ? error.message : String(error)}`,
@@ -438,8 +483,33 @@ export async function createEmittedClassOracle(
 
     const customProperties = collectCustomProperties(options.css);
 
+    // Built on first use, from a SECOND compile of the same stylesheet with
+    // probe tokens appended. Kept out of the main design system because that
+    // one answers the dead-class question, and injecting tokens into it to save
+    // a compile would put a diagnostic's instrumentation inside another
+    // diagnostic's evidence.
+    let collisions: CollisionOracle | null | undefined;
+
     return {
         ok: true,
+        keywords: keywordOracleFrom(design),
+        async loadCollisionOracle() {
+            if (collisions !== undefined) return collisions;
+            try {
+                collisions = collisionOracleFrom(
+                    (await load(
+                        `${options.css}\n${PROBE_THEME}`,
+                        loadOptions,
+                    )) as CollisionDesignSystem,
+                );
+            } catch {
+                // The stylesheet already compiled once, so a failure here is
+                // the probe theme meeting something unusual — report nothing
+                // rather than blaming the project for our own instrumentation.
+                collisions = null;
+            }
+            return collisions;
+        },
         findDead(classes) {
             // Markers are excluded before the question is asked, not filtered
             // out of the answer: Tailwind's verdict on them is "no CSS", which

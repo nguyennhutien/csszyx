@@ -393,10 +393,17 @@ fn rewrite_ternary_sz_attribute(
             return conditional_expression_source(source, ternary);
         }
         let test = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
+        // Fold the chain from the tail back, so the emitted nesting matches the
+        // authored one and JavaScript's own short-circuit keeps each arm's test
+        // unevaluated until every test before it has failed.
+        let mut tail = format!("\"{}\"", ternary.alternate_classes.join(" "));
+        for arm in ternary.chain_arms.iter().rev() {
+            let arm_test = &source[arm.test_span.start as usize..arm.test_span.end as usize];
+            tail = format!("{arm_test} ? \"{}\" : {tail}", arm.classes.join(" "));
+        }
         format!(
-            "{test} ? \"{}\" : \"{}\"",
-            ternary.consequent_classes.join(" "),
-            ternary.alternate_classes.join(" ")
+            "{test} ? \"{}\" : {tail}",
+            ternary.consequent_classes.join(" ")
         )
     };
 
@@ -466,10 +473,19 @@ fn rewrite_ternary_sz_attribute(
                     };
                     let test = &source[only_ternary.test_span.start as usize
                         ..only_ternary.test_span.end as usize];
+                    // Fold the chain from the tail back, so the emitted nesting
+                    // matches the authored one and JavaScript's own
+                    // short-circuit keeps each arm's test unevaluated until
+                    // every test before it has failed.
+                    let mut tail = branch(&only_ternary.alternate_classes);
+                    for arm in only_ternary.chain_arms.iter().rev() {
+                        let arm_test =
+                            &source[arm.test_span.start as usize..arm.test_span.end as usize];
+                        tail = format!("{arm_test} ? {} : {tail}", branch(&arm.classes));
+                    }
                     format!(
-                        "className={{{test} ? {} : {}}}",
-                        branch(&only_ternary.consequent_classes),
-                        branch(&only_ternary.alternate_classes)
+                        "className={{{test} ? {} : {tail}}}",
+                        branch(&only_ternary.consequent_classes)
                     )
                 }
             } else {
@@ -822,8 +838,17 @@ fn conditional_expression_source(source: &str, ternary: &super::StaticTernaryIr)
             js_string_literal(key)
         );
     }
-    let alternate = js_string_literal(&ternary.alternate_classes.join(" "));
-    format!("{expression} ? {consequent} : {alternate}")
+    // No chain arms reach here. This builder serves an array ELEMENT, and an
+    // array element holding a chain is refused upstream — the whole element
+    // keeps its runtime part, so a chain never arrives already lowered.
+    debug_assert!(
+        ternary.chain_arms.is_empty(),
+        "an array element chain is refused before it is emitted"
+    );
+    format!(
+        "{expression} ? {consequent} : {}",
+        js_string_literal(&ternary.alternate_classes.join(" "))
+    )
 }
 
 fn style_prop_source(source: &str, prop: &DynamicCssVarIr) -> String {
@@ -937,6 +962,88 @@ mod tests {
         assert_eq!(opening_attribute_insert_offset("<div   />", 9), 7);
         assert_eq!(opening_attribute_insert_offset("<div", 4), 4);
         assert_eq!(opening_attribute_insert_offset("<div   ", 7), 4);
+    }
+
+    /// A chained conditional emits the nesting the author wrote.
+    ///
+    /// Two positions can receive a chain and they build the expression
+    /// separately — a bare attribute value, and a value merged with an authored
+    /// `className` — so a chain folded in one and dropped in the other would
+    /// silently lose every arm but the first two. Each is pinned here because
+    /// each builds the tail with its own quoting rule.
+    #[test]
+    // The fixtures are JSX sources whose `{p:2}` object literals read as
+    // formatting placeholders to the lint; they are never format strings.
+    #[allow(clippy::literal_string_with_formatting_args)]
+    fn folds_a_chained_conditional_in_the_bare_value_position() {
+        let source =
+            "export const App = ({ a, b }) => <div sz={a ? { p: 1 } : b ? { p: 2 } : { p: 3 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert!(
+            rewritten.contains(r#"a ? "p-1" : b ? "p-2" : "p-3""#),
+            "{rewritten}"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::literal_string_with_formatting_args)]
+    fn folds_a_chained_conditional_merged_with_an_authored_class() {
+        // An authored `className` merges through a runtime helper, so the
+        // conditional is built as a helper ARGUMENT rather than as the
+        // attribute value — a separate builder with its own quoting.
+        let source = "export const App = ({ a, b }) => <div className=\"x\" sz={a ? { p: 1 } : b ? { p: 2 } : { p: 3 }} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert!(
+            rewritten.contains(r#"a ? "p-1" : b ? "p-2" : "p-3""#),
+            "{rewritten}"
+        );
+    }
+
+    /// A chain inside an ARRAY element is not folded, and must not pretend.
+    ///
+    /// The two-branch form of the same shape folds into the composed call, so
+    /// the asymmetry reads as a bug in the fold rather than a limit of the
+    /// array part. Pinned so the limit is a decision on record: the element
+    /// keeps its runtime part and every class still reaches the safelist.
+    #[test]
+    #[allow(clippy::literal_string_with_formatting_args)]
+    fn a_chain_inside_an_array_element_keeps_the_runtime_part() {
+        let two = "export const App = ({ a }) => <div sz={[{ m: 4 }, a ? { p: 1 } : { p: 2 }]} />;";
+        assert!(rewrite(two)
+            .expect("rewritten")
+            .contains(r#"a ? "p-1" : "p-2""#));
+
+        let chained = "export const App = ({ a, b }) => <div sz={[{ m: 4 }, a ? { p: 1 } : b ? { p: 2 } : { p: 3 }]} />;";
+        assert!(rewrite(chained).expect("rewritten").contains("_szPart("));
+    }
+
+    /// A boolean-only key keeps its helper call, chain or not.
+    #[test]
+    #[allow(clippy::literal_string_with_formatting_args)]
+    fn a_boolean_only_key_still_routes_through_its_helper() {
+        let source = "export const App = ({ a }) => <div sz={[{ m: 4 }, { truncate: a }]} />;";
+        let rewritten = rewrite(source).expect("rewritten");
+
+        assert!(rewritten.contains("__szBoolClass("), "{rewritten}");
+    }
+
+    /// A chain inside a conditional SPREAD is not folded, and must not pretend.
+    ///
+    /// The two-branch form of the same shape hoists into both branches, so the
+    /// asymmetry is easy to mistake for a bug in the fold rather than a limit
+    /// of the hoist. Pinned so the limit is a decision on record: the attribute
+    /// keeps its runtime path and every class still reaches the safelist.
+    #[test]
+    #[allow(clippy::literal_string_with_formatting_args)]
+    fn a_chain_inside_a_conditional_spread_keeps_the_runtime_path() {
+        let two =
+            "export const App = ({ a }) => <div sz={{ ...(a ? { p: 1 } : { p: 2 }), m: 4 }} />;";
+        assert!(rewrite(two).expect("rewritten").contains("p-1 m-4"));
+
+        let chained = "export const App = ({ a, b }) => <div sz={{ ...(a ? { p: 1 } : b ? { p: 2 } : { p: 3 }), m: 4 }} />;";
+        assert!(rewrite(chained).expect("rewritten").contains("_sz("));
     }
 
     #[test]

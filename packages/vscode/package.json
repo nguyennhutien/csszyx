@@ -104,8 +104,6 @@
     "vsix:publish": "pnpm --filter @csszyx/tooling-metadata --filter @csszyx/ts-plugin build && pnpm build && node scripts/package.mjs --publish"
   },
   "devDependencies": {
-    "@babel/parser": "^8.0.4",
-    "@babel/types": "^8.0.4",
     "@csszyx/compiler": "workspace:*",
     "@csszyx/tooling-metadata": "workspace:*",
     "@csszyx/ts-plugin": "workspace:*",

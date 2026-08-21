@@ -37,8 +37,10 @@ maintainer team is an explicit goal — see "Becoming a Maintainer" below.
   maintainer through normal review and merge.
 - **Significant changes** (public API, new packages, breaking changes,
   architecture) are proposed as a GitHub issue or discussion first, recorded as
-  an Architecture Decision Record under [`.agent/decisions/`](.agent/decisions/),
-  and merged once a maintainer approves and no maintainer objects.
+  an Architecture Decision Record in the maintainers' notes, and merged once a
+  maintainer approves and no maintainer objects. The reasoning that a decision
+  record holds is summarised in the issue or discussion it came from, so it stays
+  readable without the notes.
 - **Disagreements** are resolved by discussion aiming for consensus. While the
   project has a single lead maintainer, the lead maintainer is the final
   decision-maker; as the maintainer team grows, ties are broken by a majority of

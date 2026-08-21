@@ -32,9 +32,12 @@ compiles exactly like the local declaration, because
 [`build.importedStaticSz`](/docs/reference/config/#imported-static-sz-objects-importedstaticsz)
 is on by default.
 
-An import it cannot read is reported rather than passed over: a barrel, a
-namespace or default import, or a value that is not a plain object literal
-falls back to the runtime and contributes no classes, so the CSS goes missing.
+A namespace import (`import * as S`), a default export written as a literal, and
+a **barrel** re-exporting a name it does not declare all compile the same way.
+What does not is `export *`, an identifier placed in the default slot, or a value
+that is not a plain object literal. Those fall back to the runtime and contribute
+no classes, so the CSS goes missing, and the build reports each one by name.
+[Across files](#across-files) has the measured table.
 :::
 
 :::caution[A shared style object is a build-time value]
@@ -117,6 +120,18 @@ const inactive = { bg: 'gray-100', color: 'gray-600' } as const;
 ```
 
 Both branches are compiled to static strings — no runtime object merging.
+
+More than two options chain the same way, and compile the same way:
+
+```tsx
+<div sz={isDanger ? danger : isWarning ? warning : normal} />
+// → className={isDanger ? "…" : isWarning ? "…" : "…"}
+```
+
+The emitted expression keeps the nesting you wrote, so `isWarning` is only
+evaluated when `isDanger` is falsy. Up to eight tests compile; past that the
+attribute keeps its runtime path, and a set that long is what
+[`szv()`](/docs/szv) is for.
 
 ## Chained Variables
 
@@ -205,14 +220,50 @@ no `[object Object]`:
 | `const x = { ... } as const` | Build time ✅ |
 | `const x = { ...other, key: val }` | Build time ✅ (recursive) |
 | `sz={{ ...(cond ? a : b), key: val }}` | Build time ✅ (conditional spread hoist) |
-| `import { x } from './styles'` | Runtime fallback |
+| `const x = cond ? a : b` | Build time ✅ (both branches, wherever it is written) |
+| `const x = cond && a` | Build time ✅ (the else arm is the empty style) |
+| `import { x } from './styles'` | Build time ✅ (see [Across files](#across-files)) |
 | `const x = getStyles()` | Runtime fallback |
-| `const x = condition ? a : b` | Runtime fallback (variable init — use `sz={cond ? a : b}` instead) |
+| `const x = cond \|\| a` | Runtime fallback (`\|\|` keeps its left operand, which may itself be a style) |
 
 In development, the compiler emits a build-time warning for any pattern it
 falls back to `_sz()` — explaining why the fallback occurred and pointing to
 the right alternative (`szv()` for static variants, `dynamic()` for runtime
 data). The warning appears in the Vite/webpack dev-server output, not at runtime.
+
+### Across files
+
+An import is resolved when the compiler can follow the name to a **literal
+object in the module that declares it**. What decides is that last hop, not the
+import syntax — so the shape of the *export* is what to look at when a style
+does not fold.
+
+| Provider module | Importer | Resolution |
+|---|---|---|
+| `export const x = { ... }` | `import { x } from './styles'` | Build time ✅ |
+| `const x = { ... }` + `export { x }` | `import { x } from './styles'` | Build time ✅ |
+| `export const x = { ... }` | `import * as S from './styles'`, `sz={S.x}` | Build time ✅ |
+| `export default { ... }` | `import x from './styles'` | Build time ✅ |
+| `export { x } from './base'` (barrel) | `import { x } from './styles'` | Build time ✅ |
+| `export { x as y } from './base'` | `import { y } from './styles'` | Build time ✅ |
+| `import { x } from './base'` + `export { x }` | `import { x } from './styles'` | Build time ✅ |
+| `const x = { ... }` + `export default x` | `import x from './styles'` | Runtime fallback |
+| `export * from './base'` | `import { x } from './styles'` | Runtime fallback |
+| `export const x = getStyles()` | `import { x } from './styles'` | Runtime fallback |
+
+A re-export is read as a **link** rather than a value and followed to the module
+that declares it, so importing through a barrel compiles exactly like importing
+the provider directly — including a chain of barrels, up to eight modules deep.
+
+The three that fall back do so for three different reasons. `export *` names no
+export, so there is nothing to file a value under without reading the provider's
+whole export list. `export default x` puts an identifier in the default slot
+rather than a literal. And a call is not a value the compiler can read at all. A
+runtime fallback here is **missing output** — the classes were never collected
+anywhere, so the CSS does not exist. The build reports it by name.
+
+Reading imported objects is [`build.importedStaticSz`](/docs/reference/config/#imported-static-sz-objects-importedstaticsz),
+which is on by default; turning it off makes every row above a runtime fallback.
 
 ## Component Variant Libraries
 

@@ -30,6 +30,8 @@ pub(crate) mod rewrite;
 pub(crate) mod scope;
 #[cfg(feature = "native-engine")]
 pub(crate) mod szv_precompile;
+#[cfg(feature = "native-engine")]
+pub(crate) mod var_hostile;
 
 #[cfg(not(feature = "native-engine"))]
 use fast_path::{triage_source, FastPathTriage};
@@ -42,13 +44,13 @@ pub use contract::{
     TransformTimings,
 };
 pub use ir::{
-    ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, IrError, JsxOpeningElementIr,
-    RecoveryAttributeIr, RemovedSzKeyIr, RuntimeFallbackDiagnosticIr, RuntimeFallbackKindIr,
-    SafeStyleSpreadExpressionIr, SafeStyleSpreadIr, SafeStyleSpreadObjectIr,
+    ClassAttributeIr, DroppedKeyReason, DroppedSzKeyIr, DynamicCssVarCategory, DynamicCssVarIr,
+    IrError, JsxOpeningElementIr, RecoveryAttributeIr, RuntimeFallbackDiagnosticIr,
+    RuntimeFallbackKindIr, SafeStyleSpreadExpressionIr, SafeStyleSpreadIr, SafeStyleSpreadObjectIr,
     SafeStyleSpreadValueIr, SiteFallbackIr, SourceIr, StaticArrayPartIr, StaticSzObject,
-    StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr,
-    SzFallbackSiteIr, SzrImportRewriteIr, SzsAttributeIr, SzsSlotEntryIr, SzvReplacementIr,
-    SzvTableInsertionIr, TextSpan, UnsupportedRecoveryIr,
+    StaticSzProperty, StaticSzValue, StaticTernaryArmIr, StaticTernaryIr, StyleAttributeIr,
+    SzAttributeIr, SzFallbackSiteIr, SzrImportRewriteIr, SzsAttributeIr, SzsSlotEntryIr,
+    SzvReplacementIr, SzvTableInsertionIr, TextSpan, UnsupportedRecoveryIr,
 };
 
 /// Error returned when the Rust transform engine cannot run in this build.

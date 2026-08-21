@@ -58,7 +58,7 @@ pub fn triage_source(file: &TransformFile) -> FastPathTriage {
     // attribute force the full parser: the AST-free `try_static_sz_ir` only walks
     // `sz={{ … }}` attributes, so a file that ALSO defines an `szv` catalog, an
     // `szr(static-object)`, or a `dynamic(...)` call would keep its static `sz`
-    // classes but silently drop those extras — the exact classes the JS engines
+    // classes but silently drop those extras — the exact classes the removed JavaScript lanes
     // collect via `collect_catalog_call_classes`. A file with both a plain
     // `sz={{ p: 4 }}` and a `szv({...})` used to fast-path here and lose the whole
     // szv catalog under `rust` while `oxc`/`babel` kept it (a parser-flip safelist
@@ -93,7 +93,7 @@ pub fn triage_source(file: &TransformFile) -> FastPathTriage {
     // An `sz=` occurrence inside a comment or string literal must never build
     // static IR: the textual scan below cannot tell it from a real attribute,
     // so `// <Box sz={{ mb: 10 }} />` used to ship the commented-out classes
-    // into the build (field-reported — babel/oxc parse and ignore comments).
+    // into the build (field-reported — the removed JavaScript lanes parse and ignore comments).
     // A `None` from the lexer means it hit something it cannot classify
     // (e.g. a JSX-text apostrophe opening a bogus string); both cases take the
     // parser path, which owns the real distinction.
@@ -266,7 +266,7 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
             runtime_fallback_spread: false,
             candidate_classes: Vec::new(),
             dynamic_css_vars: Vec::new(),
-            removed_dynamic_keys: Vec::new(),
+            dropped_dynamic_keys: Vec::new(),
         });
         ir.jsx_opening_elements.push(JsxOpeningElementIr {
             opening_span,
@@ -412,8 +412,8 @@ fn span(start: usize, end: usize) -> Option<TextSpan> {
 #[cfg(test)]
 mod tests {
     use super::{
-        element_name, is_identifier_key, parse_simple_string, triage_source, FastPathBailoutReason,
-        FastPathTriage,
+        element_name, is_identifier_key, non_code_ranges, parse_simple_string, triage_source,
+        FastPathBailoutReason, FastPathTriage,
     };
     use crate::transform::TransformFile;
 
@@ -519,7 +519,7 @@ mod tests {
         // The regression: a file with a plain static `sz={{ p: 4 }}` AND a
         // top-level `szv`/`szr` catalog must NOT fast-path — the AST-free path
         // only sees the `sz=` attribute and would silently drop the catalog,
-        // diverging from the JS engines that DO collect it (field-reported as a
+        // diverging from the removed JavaScript lanes that DO collect it (field-reported as a
         // `build.parser` flip changing the safelist). Every catalog marker in
         // `collect_catalog_call_classes` is covered here.
         for source in [
@@ -624,7 +624,7 @@ mod tests {
         // The field-reported shape: a commented-out sz block AND a real static
         // one. Both look identical to the textual scan, so the file must take
         // the parser lane — fast-pathing it shipped the commented-out classes
-        // (mb-10) into the build while babel/oxc correctly ignored them.
+        // (mb-10) into the build while the removed JavaScript lanes correctly ignored them.
         for source in [
             "const A = () => {\n  // <Box sz={{ mb: 10 }}>x</Box>\n  return <div sz={{ p: 2 }} />;\n};",
             "/** example: <svg sz={{ fill: 'red-500' }} /> */\nconst A = () => <div sz={{ p: 2 }} />;",
@@ -860,5 +860,74 @@ mod tests {
         assert_eq!(parse_simple_string("'"), None);
         assert_eq!(parse_simple_string("\""), None);
         assert_eq!(parse_simple_string(""), None);
+    }
+
+    /// A block comment is one non-code range, ending at its own `*/`.
+    ///
+    /// These ranges exist to keep a commented-out `sz` prop from reaching the
+    /// AST-free lane as if it were live code. Mis-measure the end and the lane
+    /// either takes a file it cannot read — minting classes for markup nobody
+    /// ships — or walks off the end of the source.
+    #[test]
+    fn a_block_comment_is_one_non_code_range() {
+        let source = "const alpha = 1; const beta = 2; /* <div sz={{ p: 4 }} /> */ c();";
+        let ranges = non_code_ranges(source).expect("source is scannable");
+
+        assert_eq!(ranges.len(), 1, "{ranges:?}");
+        let (start, end) = ranges[0];
+        assert_eq!(&source[start..end], "/* <div sz={{ p: 4 }} /> */");
+    }
+
+    /// A block comment with no terminator is unscannable, not empty.
+    ///
+    /// Reporting it as scannable hands the lane a range that stops short of
+    /// the end, and every `sz` past it reads as code.
+    #[test]
+    fn an_unterminated_block_comment_refuses_the_lane() {
+        assert_eq!(non_code_ranges("const a = 1; /* sz={{ p: 4 }}"), None);
+    }
+
+    /// An escaped quote does not close the literal it sits in.
+    ///
+    /// Skipping the wrong number of bytes past the escape lands mid-literal,
+    /// where the next quote looks like the end — so the range stops early and
+    /// the rest of the string is handed to the lane as code.
+    #[test]
+    fn an_escaped_quote_does_not_close_a_string_range() {
+        let source = r"const a = 1; const b = 2; const c = 'it\'s sz={{ p: 4 }}'; d();";
+        let ranges = non_code_ranges(source).expect("source is scannable");
+
+        assert_eq!(ranges.len(), 1, "{ranges:?}");
+        let (start, end) = ranges[0];
+        assert_eq!(&source[start..end], r"'it\'s sz={{ p: 4 }}'");
+    }
+
+    /// Same for a template literal, which has its own scanning loop.
+    #[test]
+    fn an_escaped_backtick_does_not_close_a_template_range() {
+        let source = r"const alpha = 1; const beta = 2; let t = `a\` sz={{ p: 4 }}`;";
+        let ranges = non_code_ranges(source).expect("source is scannable");
+
+        assert_eq!(ranges.len(), 1, "{ranges:?}");
+        let (start, end) = ranges[0];
+        assert_eq!(&source[start..end], r"`a\` sz={{ p: 4 }}`");
+    }
+
+    /// A commented-out `sz` prop must not reach the AST-free lane.
+    ///
+    /// The lane rewrites what it finds without a parser, so it has to see the
+    /// marker inside the comment and hand the file to the parser instead.
+    #[test]
+    fn a_commented_out_sz_prop_leaves_the_fast_lane() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "/* <div sz={{ p: 4 }} /> */\nexport const App = () => <div sz={{ m: 2 }} />;"
+                .to_string(),
+        };
+
+        assert!(
+            matches!(triage_source(&file), FastPathTriage::NeedsParser(_)),
+            "a marker inside a comment must not be rewritten without a parser"
+        );
     }
 }

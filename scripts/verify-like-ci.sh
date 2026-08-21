@@ -91,11 +91,19 @@ echo "[verify-like-ci] Generated-artefact staleness gates (sz-key fixture, parit
 pnpm gen:key-tests:check
 pnpm gen:parity-corpus:check
 pnpm gen:rust-tables:check
+pnpm gen:reverse-map:check
+pnpm gen:migrate-golden:check
 pnpm gen:sz-fallback-matrix:check
 pnpm gen:sz-allowlist:check
 pnpm gen:box-role:check
 pnpm gen:llms:check
 pnpm check:key-corpus
+# Derives the var-hostile key list from the pinned Tailwind rather than trusting
+# the hand-written one. A Tailwind upgrade that adds an arbitrary-value form for
+# one of these keys must take it off the list, or csszyx keeps dropping a class
+# that would now work.
+pnpm check:var-hostile-keys
+pnpm check:szcn-collision-blocklist
 
 # Builds the addon, loads it the way a consumer does, and removes it again —
 # it owns a whole CI job, so it cleans up after itself. That last part is why

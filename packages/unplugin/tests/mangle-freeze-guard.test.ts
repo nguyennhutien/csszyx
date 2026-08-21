@@ -57,7 +57,7 @@ function boot(options = {}): Harness {
     mkdirSync(join(root, 'src'), { recursive: true });
     writeFileSync(join(root, 'src/App.tsx'), PRESCANNED_SOURCE, 'utf8');
     const plugins = vitePlugin({
-        build: { parser: 'oxc', cache: false },
+        build: { cache: false },
         ...options,
     }) as Array<Record<string, unknown>>;
     const hookOf = (pluginName: string, hookName: string): Hook => {

@@ -37,3 +37,26 @@ features = ["native-engine"]
 gitignore = true
 copy_target = false
 copy_vcs = false
+
+# ---------------------------------------------------------------------------
+# EXCLUDED — mutants here report as missed while measuring nothing.
+#
+# The weekly sweep is only useful if its survivor list is a to-do list. These
+# two paths produced 301 of the first full run's 549 survivors and not one of
+# them was a test worth writing, which buries the ones that are.
+#
+# transform/generated/ — the lookup tables are emitted from the TypeScript
+# compiler's PROPERTY_MAP/VARIANT_MAP by a generator, and a hand-edit is
+# already caught by the regeneration check CI runs, which cargo-mutants does
+# not. Most arms return exactly what the caller's kebab-case fallback rebuilds
+# when the lookup misses, so deleting one changes no class name; the only test
+# that could kill it would assert the table against itself.
+#
+# native.rs — the napi bridge is behind the `native` feature, which this file
+# does not enable. The module compiles out, so its mutants leave the suite
+# untouched and every one of them comes back missed.
+# ---------------------------------------------------------------------------
+exclude_globs = [
+    "packages/core/src/transform/generated/**",
+    "packages/core/src/native.rs",
+]

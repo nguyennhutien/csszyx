@@ -7,9 +7,9 @@ use oxc_ast::{
         Expression, ImportDeclaration, ImportDeclarationSpecifier, JSXAttribute, JSXAttributeItem,
         JSXAttributeName, JSXAttributeValue, JSXElement, JSXElementName, JSXExpression,
         JSXFragment, JSXMemberExpression, JSXMemberExpressionObject, JSXOpeningElement,
-        JSXSpreadAttribute, ObjectExpression, ObjectProperty, ObjectPropertyKind, Program,
-        PropertyKey, Statement, TSTypeQuery, TSTypeQueryExprName, UnaryOperator,
-        VariableDeclaration,
+        JSXSpreadAttribute, LogicalExpression, ObjectExpression, ObjectProperty,
+        ObjectPropertyKind, Program, PropertyKey, Statement, TSTypeQuery, TSTypeQueryExprName,
+        UnaryOperator, VariableDeclaration,
     },
     AstKind,
 };
@@ -22,8 +22,8 @@ use std::time::Instant;
 
 use super::{
     lower::{dynamic_css_var_class, is_removed_sz_key, lower_static_sz_object},
-    ClassAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr,
-    RecoveryAttributeIr, RecoveryMode, RemovedSzKeyIr, SafeStyleSpreadExpressionIr,
+    ClassAttributeIr, DroppedKeyReason, DroppedSzKeyIr, DynamicCssVarCategory, DynamicCssVarIr,
+    JsxOpeningElementIr, RecoveryAttributeIr, RecoveryMode, SafeStyleSpreadExpressionIr,
     SafeStyleSpreadIr, SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr,
     StaticArrayPartIr, StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr,
     StyleAttributeIr, SzAttributeIr, SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile,
@@ -155,6 +155,7 @@ pub fn parse_source_shell_with_registries(
         visitor.visit_program(&parsed.program);
         let replaced_spans = visitor.finalize_szv_precompile();
         visitor.emit_pending_szr_fallbacks(&replaced_spans);
+        visitor.name_disqualified_szv_factories_in_attributes();
         visitor.finalize_szr_import_rewrite(&replaced_spans);
         timings.ir_ns = elapsed_ns(ir_start);
         visitor.ast_budget_exceeded
@@ -170,7 +171,7 @@ pub fn parse_source_shell_with_registries(
     let error_count = diagnostics.len();
     if error_count > 0 || parsed.panicked {
         // A file the parser rejects contributes nothing (or only fragments) to
-        // the safelist, and unlike the JS engines there is no Babel fallback on
+        // the safelist, and unlike the JavaScript engines there is no Babel fallback on
         // the native path — so make the skip observable. The bundler plugin
         // promotes this marker to a build warning when the file yielded no
         // classes, instead of letting the classes die silently under
@@ -716,7 +717,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             runtime_fallback_spread,
             candidate_classes,
             dynamic_css_vars,
-            removed_dynamic_keys,
+            dropped_dynamic_keys,
         ) = match &attr.value {
             Some(JSXAttributeValue::StringLiteral(value)) => (
                 StaticSzObject::empty(),
@@ -741,7 +742,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 //    conditional-expression spread) — emits
                 //    `className={_sz(<original>)}` so the runtime
                 //    handles branches the parser cannot evaluate
-                //    statically. This matches the existing oxc-JS
+                //    statically. This matches the existing the JavaScript pipeline
                 //    production output and prevents the engine from
                 //    leaving source unchanged for shapes the runtime
                 //    can still execute correctly.
@@ -782,7 +783,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     value_span,
                     dynamic_css_vars,
                     ternaries,
-                    removed_dynamic_keys,
+                    dropped_dynamic_keys,
                 )) = partial_object_from_jsx_expression(&container.expression, ctx)
                 {
                     (
@@ -796,7 +797,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         false,
                         Vec::new(),
                         dynamic_css_vars,
-                        removed_dynamic_keys,
+                        dropped_dynamic_keys,
                     )
                 } else if let Some((array_parts, value_span)) =
                     static_array_parts_from_jsx_expression(&container.expression, ctx)
@@ -853,7 +854,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             candidate_classes,
             runtime_fallback_diagnostic,
             dynamic_css_vars,
-            removed_dynamic_keys,
+            dropped_dynamic_keys,
         });
         Some(index)
     }
@@ -1322,6 +1323,39 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         }
     }
 
+    /// Re-classify sz-attribute fallbacks that call a refused szv factory.
+    ///
+    /// Same substitution `emit_pending_szr_fallbacks` makes for the szr
+    /// position, for the same reason: telling an author to "convert to szv()" a
+    /// factory that IS an szv reads as the compiler not understanding the code,
+    /// and the generic message names no position, so the reader bisects the call
+    /// site while the fault is in the config.
+    ///
+    /// Runs after the walk because an attribute can precede the declaration it
+    /// calls — deciding during the walk would answer correctly only when the
+    /// factory happened to be declared first.
+    fn name_disqualified_szv_factories_in_attributes(&mut self) {
+        if self.szv_disqualified.is_empty() {
+            return;
+        }
+        for attribute in &mut self.ir.sz_attributes {
+            let Some(diagnostic) = &mut attribute.runtime_fallback_diagnostic else {
+                continue;
+            };
+            if diagnostic.kind != super::RuntimeFallbackKindIr::Call {
+                continue;
+            }
+            if let Some((_, path)) = self
+                .szv_disqualified
+                .iter()
+                .find(|(name, _)| *name == diagnostic.detail)
+            {
+                diagnostic.kind = super::RuntimeFallbackKindIr::SzvFactory;
+                diagnostic.path.clone_from(path);
+            }
+        }
+    }
+
     /// Remember one refused szv factory, first declaration wins.
     fn record_szv_disqualified(&mut self, name: &str, path: String) {
         if !self.szv_disqualified.iter().any(|(seen, _)| seen == name) {
@@ -1435,12 +1469,12 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
     }
 }
 
-/// Nesting cap for the lenient catalog walk (matches the oxc/Babel walkers).
+/// Nesting cap for the lenient catalog walk (matches the JavaScript walkers it replaced).
 const MAX_CATALOG_DEPTH: usize = 16;
 
 /// Cap on alternate-branch objects one szv call may add to the catalog, so a
 /// pathological conditional pile-up cannot balloon the safelist walk.
-/// (Matches the oxc/Babel walkers.)
+/// (Matches the JavaScript walkers it replaced.)
 const MAX_CATALOG_BRANCH_EXTRAS: usize = 32;
 
 /// Mutable extras budget threaded through one szv call's lenient walk.
@@ -1485,7 +1519,7 @@ fn collect_szv_catalog_classes(
     // TypeScript wrappers (`satisfies` / `as` / parens) around the config are
     // type-level only — unwrap so `szv({…} satisfies SzvConfig)` still extracts.
     // Only a `const` binding is followed (never a reassigned `let`), to match
-    // the const-guarded resolution on the Babel/oxc paths.
+    // the const-guarded resolution the JavaScript engines used.
     let config = match argument.as_expression().map(unwrap_expression) {
         Some(Expression::ObjectExpression(object)) => object,
         Some(Expression::Identifier(identifier)) => {
@@ -1566,7 +1600,7 @@ fn collect_szv_catalog_classes(
     }
 
     // Dedupe (first-seen order): `base` is emitted alone then merged with each
-    // variant, so its classes repeat. The oxc-JS catalog collects into a Set, so
+    // variant, so its classes repeat. The the JavaScript pipeline catalog collects into a Set, so
     // dedupe here too — otherwise the Rust-vs-oxc parity comparison sees Rust's
     // duplicate entries as a class divergence.
     let mut seen = std::collections::HashSet::new();
@@ -1878,7 +1912,7 @@ fn jsx_attribute_name<'a>(name: &'a JSXAttributeName<'a>) -> Option<&'a str> {
 /// Convert a value allowed inside an `szs` slot object: string / number /
 /// boolean literals, a negated number, or a nested object of the same.
 /// Deliberately STRICTER than the sz path (no identifiers, spreads,
-/// conditionals, parens, or `as` casts) so all three engines can enforce the
+/// conditionals, parens, or `as` casts) so both engine builds can enforce the
 /// exact same contract without a scope resolver.
 fn static_szs_value(expression: &Expression<'_>) -> Option<StaticSzValue> {
     match expression {
@@ -1993,6 +2027,7 @@ fn static_ternary_from_jsx_expression(
         JSXExpression::ConditionalExpression(conditional) => {
             static_ternary_from_conditional(conditional, ctx)
         }
+        JSXExpression::LogicalExpression(logical) => static_ternary_from_logical(logical, ctx),
         JSXExpression::Identifier(identifier) => {
             let initializer = ctx.scope.resolve_initializer_before(
                 &identifier.name,
@@ -2026,6 +2061,7 @@ fn static_ternary_from_expression(
         Expression::ConditionalExpression(conditional) => {
             static_ternary_from_conditional(conditional, ctx)
         }
+        Expression::LogicalExpression(logical) => static_ternary_from_logical(logical, ctx),
         Expression::ParenthesizedExpression(value) => {
             static_ternary_from_expression(&value.expression, ctx)
         }
@@ -2040,22 +2076,87 @@ fn static_ternary_from_expression(
     }
 }
 
+/// Lower one branch of a conditional sz value to the classes it contributes.
+///
+/// A falsy branch is the EMPTY style rather than an unknown one, so it folds
+/// to no classes instead of dropping the whole attribute onto the runtime.
+/// Reading only the object shape made `: undefined` and `: {}` — two spellings
+/// of the same intent, and `undefined` is the one a typed style pushes authors
+/// toward — compile to different code for no reason a caller could see.
+fn conditional_branch_classes(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<Vec<String>> {
+    if is_falsy_style_literal(unwrap_expression(expression)) {
+        return Some(Vec::new());
+    }
+    let (object, _, _) = static_object_from_expression(expression, ctx)?;
+    Some(lower_static_sz_object(&object))
+}
+
+/// The depth a chained conditional is followed to.
+///
+/// A bound rather than a judgement about style: each arm adds a class list to
+/// the IR and a nesting level to the emitted expression, and a chain long enough
+/// to matter is better served by `szv()`. Past this the whole attribute keeps
+/// the runtime path it had before, which is correct, just not folded.
+const MAX_CONDITIONAL_CHAIN_ARMS: usize = 8;
+
 fn static_ternary_from_conditional(
     conditional: &ConditionalExpression<'_>,
     ctx: ResolveContext<'_>,
 ) -> Option<(StaticTernaryIr, TextSpan)> {
-    let (consequent_object, _, _) = static_object_from_expression(&conditional.consequent, ctx)?;
-    let (alternate_object, _, _) = static_object_from_expression(&conditional.alternate, ctx)?;
-    let consequent_classes = lower_static_sz_object(&consequent_object);
-    let alternate_classes = lower_static_sz_object(&alternate_object);
+    // Follow `a ? X : b ? Y : Z` down its else side. Every arm has to lower for
+    // the fold to happen: a chain is a choice, so a branch left unread would
+    // mean emitting a conditional that can pick a class list the compiler never
+    // saw.
+    let mut arms = Vec::new();
+    let mut alternate = &conditional.alternate;
+    while let Expression::ConditionalExpression(next) = unwrap_expression(alternate) {
+        if arms.len() == MAX_CONDITIONAL_CHAIN_ARMS {
+            return None;
+        }
+        arms.push(super::StaticTernaryArmIr {
+            test_span: text_span(next.test.span()),
+            classes: conditional_branch_classes(&next.consequent, ctx)?,
+        });
+        alternate = &next.alternate;
+    }
     Some((
         StaticTernaryIr {
             test_span: text_span(conditional.test.span()),
-            consequent_classes,
-            alternate_classes,
+            consequent_classes: conditional_branch_classes(&conditional.consequent, ctx)?,
+            alternate_classes: conditional_branch_classes(alternate, ctx)?,
+            chain_arms: arms,
             bool_class_key: None,
         },
         text_span(conditional.span),
+    ))
+}
+
+/// Lower `cond && { … }` to the ternary it already is.
+///
+/// `&&` yields its RIGHT operand when the test passes and its LEFT operand
+/// otherwise — and a left operand that reached the else arm is falsy by
+/// definition, so that arm is the empty style. `||` is refused for the mirror
+/// reason: its left operand is what survives a TRUTHY test, and that value can
+/// be a style object, so folding `base || { p: 4 }` would silently drop `base`.
+fn static_ternary_from_logical(
+    logical: &LogicalExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<(StaticTernaryIr, TextSpan)> {
+    if !logical.operator.is_and() {
+        return None;
+    }
+    Some((
+        StaticTernaryIr {
+            test_span: text_span(logical.left.span()),
+            consequent_classes: conditional_branch_classes(&logical.right, ctx)?,
+            alternate_classes: Vec::new(),
+            chain_arms: Vec::new(),
+            bool_class_key: None,
+        },
+        text_span(logical.span),
     ))
 }
 
@@ -2115,7 +2216,7 @@ fn static_array_parts_from_expression(
 /// source span (the rewrite wraps them in `_szPart`), with statically visible
 /// classes inside them collected as safelist candidates. Returns None only
 /// when the whole array must stay a runtime value (a spread element) —
-/// matching the JS engines' classification exactly.
+/// matching the removed JavaScript lanes' classification exactly.
 fn static_array_parts_from_array_expression(
     array: &ArrayExpression<'_>,
     ctx: ResolveContext<'_>,
@@ -2141,7 +2242,7 @@ fn static_array_part_from_expression(
     ctx: ResolveContext<'_>,
 ) -> Option<StaticArrayPartIr> {
     let unwrapped = unwrap_expression(expression);
-    if is_falsy_array_element(unwrapped) {
+    if is_falsy_style_literal(unwrapped) {
         return None;
     }
     if let Expression::StringLiteral(value) = unwrapped {
@@ -2271,6 +2372,7 @@ fn static_array_ternary_from_conditional(
         test_span: text_span(conditional.test.span()),
         consequent_classes: branch_classes(&conditional.consequent)?,
         alternate_classes: branch_classes(&conditional.alternate)?,
+        chain_arms: Vec::new(),
         bool_class_key: None,
     })
 }
@@ -2288,7 +2390,7 @@ fn split_class_tokens(value: &str) -> Vec<String> {
 ///
 /// Dynamic expressions qualify when static lowering has already failed and the
 /// expression can be handed to `_sz(...)` exactly as written. This covers the
-/// same no-className runtime fallback shape as oxc-JS: unresolved identifiers,
+/// same no-className runtime fallback shape as the JavaScript pipeline: unresolved identifiers,
 /// function calls, object/array expressions with dynamic parts, conditionals,
 /// and TS/parens wrappers. Empty JSX expressions still fail closed.
 ///
@@ -2314,7 +2416,14 @@ fn classify_runtime_fallback(
     use super::RuntimeFallbackDiagnosticIr;
 
     let (kind, detail) = classify_expression_fallback(expression.as_expression()?, imported);
-    Some(RuntimeFallbackDiagnosticIr { kind, detail })
+    // `path` stays empty until the post-walk pass finds the callee among the
+    // refused szv factories — see
+    // `name_disqualified_szv_factories_in_attributes`.
+    Some(RuntimeFallbackDiagnosticIr {
+        kind,
+        detail,
+        path: String::new(),
+    })
 }
 
 /// Names that can never be szv factory bindings for the precompile.
@@ -3113,6 +3222,9 @@ fn candidate_classes_from_object_expression(
                                 color_opacity_ternary_from_object(&key, nested, ctx, variant_keys)
                             {
                                 classes.extend(ternary.consequent_classes);
+                                classes.extend(
+                                    ternary.chain_arms.into_iter().flat_map(|arm| arm.classes),
+                                );
                                 classes.extend(ternary.alternate_classes);
                             } else {
                                 classes.extend(candidate_classes_from_keyed_object(
@@ -3627,7 +3739,7 @@ struct PartialSzObject {
     /// Property-level conditionals in source order — each lowers to one
     /// appended `${cond ? "…" : "…"}` template segment.
     ternaries: Vec<StaticTernaryIr>,
-    removed_dynamic_keys: Vec<RemovedSzKeyIr>,
+    dropped_dynamic_keys: Vec<DroppedSzKeyIr>,
 }
 
 type PartialObjectResult = (
@@ -3635,7 +3747,7 @@ type PartialObjectResult = (
     TextSpan,
     Vec<DynamicCssVarIr>,
     Vec<StaticTernaryIr>,
-    Vec<RemovedSzKeyIr>,
+    Vec<DroppedSzKeyIr>,
 );
 
 fn partial_object_from_jsx_expression(
@@ -3650,7 +3762,7 @@ fn partial_object_from_jsx_expression(
                 text_span(object.span),
                 partial.dynamic_css_vars,
                 partial.ternaries,
-                partial.removed_dynamic_keys,
+                partial.dropped_dynamic_keys,
             ))
         }
         JSXExpression::TSAsExpression(value) => {
@@ -3681,7 +3793,7 @@ fn partial_object_from_expression(
                 text_span(object.span),
                 partial.dynamic_css_vars,
                 partial.ternaries,
-                partial.removed_dynamic_keys,
+                partial.dropped_dynamic_keys,
             ))
         }
         Expression::ParenthesizedExpression(value) => {
@@ -3698,6 +3810,26 @@ fn partial_object_from_expression(
     }
 }
 
+/// Record a dynamic property that must emit neither a class nor a variable.
+///
+/// The two callers drop for unrelated reasons and at deliberately different
+/// points in the walk — a removed key is refused before any value shape is
+/// examined, while a var-hostile key is refused only after the static and
+/// conditional lanes have declined, so a fully static conditional on such a key
+/// still compiles. Only the recording is shared.
+fn drop_dynamic_key(
+    partial: &mut PartialSzObject,
+    key: String,
+    property: &ObjectProperty<'_>,
+    reason: DroppedKeyReason,
+) {
+    partial.dropped_dynamic_keys.push(DroppedSzKeyIr {
+        key,
+        span: text_span(property.span),
+        reason,
+    });
+}
+
 fn partial_object_from_object_expression(
     object: &ObjectExpression<'_>,
     ctx: ResolveContext<'_>,
@@ -3710,7 +3842,7 @@ fn partial_object_from_object_expression(
                 object: StaticSzObject::empty(),
                 dynamic_css_vars: Vec::new(),
                 ternaries: vec![ternary],
-                removed_dynamic_keys: Vec::new(),
+                dropped_dynamic_keys: Vec::new(),
             });
         }
     }
@@ -3721,7 +3853,7 @@ fn partial_object_from_object_expression(
         },
         dynamic_css_vars: Vec::new(),
         ternaries: Vec::new(),
-        removed_dynamic_keys: Vec::new(),
+        dropped_dynamic_keys: Vec::new(),
     };
 
     for property in &object.properties {
@@ -3740,10 +3872,7 @@ fn partial_object_from_object_expression(
                     // Retain only diagnostic identity: no class or CSS variable
                     // may be emitted, while a literal false was skipped above
                     // and remains silent like the runtime path.
-                    partial.removed_dynamic_keys.push(RemovedSzKeyIr {
-                        key,
-                        span: text_span(property.span),
-                    });
+                    drop_dynamic_key(&mut partial, key, property, DroppedKeyReason::RemovedKey);
                     continue;
                 }
                 if let Expression::ObjectExpression(nested) = &property.value {
@@ -3801,8 +3930,19 @@ fn partial_object_from_object_expression(
                     continue;
                 }
 
+                // A key Tailwind has no `-(--var)` utility for cannot take the
+                // css-var lane at all: the class it would carry either matches
+                // nothing or resolves to a different CSS property. Drop both
+                // the class and the variable and let the engine report it —
+                // emitting a dead class beside a warning is the shape that
+                // made removed aliases look like they still worked.
+                if super::var_hostile::is_var_hostile_dynamic(&key) {
+                    drop_dynamic_key(&mut partial, key, property, DroppedKeyReason::NoVarForm);
+                    continue;
+                }
+
                 // Slice the UNWRAPPED expression span: `sz={{ p: (pad) }}` must
-                // emit `calc(${pad} …)` like the JS engines, not `calc(${(pad)} …)`
+                // emit `calc(${pad} …)` like the removed JavaScript lanes, not `calc(${(pad)} …)`
                 // — redundant parens broke rust==oxc byte parity.
                 partial.dynamic_css_vars.push(dynamic_css_var_from_property(
                     &key,
@@ -3865,8 +4005,8 @@ fn collect_nested_partial_property(
     }
     partial.dynamic_css_vars.extend(nested.dynamic_css_vars);
     partial
-        .removed_dynamic_keys
-        .extend(nested.removed_dynamic_keys);
+        .dropped_dynamic_keys
+        .extend(nested.dropped_dynamic_keys);
     for ternary in nested.ternaries {
         set_partial_ternary(partial, ternary);
     }
@@ -3915,6 +4055,7 @@ fn conditional_spread_ternary_from_object_expression(
         test_span: text_span(conditional.test.span()),
         consequent_classes: consequent,
         alternate_classes: alternate,
+        chain_arms: Vec::new(),
         bool_class_key: None,
     })
 }
@@ -3951,6 +4092,7 @@ fn conditional_class_from_property(
         test_span: text_span(conditional.test.span()),
         consequent_classes: conditional_property_classes(key, consequent, variant_keys),
         alternate_classes: conditional_property_classes(key, alternate, variant_keys),
+        chain_arms: Vec::new(),
         bool_class_key: None,
     })
 }
@@ -3973,6 +4115,7 @@ fn nullable_conditional_class_from_property(
                 test_span: text_span(conditional.test.span()),
                 consequent_classes: Vec::new(),
                 alternate_classes: Vec::new(),
+                chain_arms: Vec::new(),
                 bool_class_key: None,
             },
             None,
@@ -4016,6 +4159,7 @@ fn nullable_conditional_class_from_property(
             } else {
                 present_classes
             },
+            chain_arms: Vec::new(),
             bool_class_key: None,
         },
         dynamic_prop,
@@ -4143,6 +4287,7 @@ fn color_opacity_ternary_from_object(
                     Some(alternate),
                     variant_keys,
                 ),
+                chain_arms: Vec::new(),
                 bool_class_key: None,
             })
         }
@@ -4171,6 +4316,7 @@ fn color_opacity_ternary_from_object(
                     static_op,
                     variant_keys,
                 ),
+                chain_arms: Vec::new(),
                 bool_class_key: None,
             })
         }
@@ -4233,6 +4379,7 @@ fn bool_class_ternary_from_property(
             variant_keys,
         ),
         alternate_classes: Vec::new(),
+        chain_arms: Vec::new(),
         bool_class_key: Some(key.to_string()),
     })
 }
@@ -4480,7 +4627,7 @@ fn static_object_from_spread_argument(
 /// Resolve an sz array ELEMENT to a static object for the deep-merge lane:
 /// an object literal, or an identifier whose initializer unwraps to one.
 /// Object-only on purpose — anything else (strings, conditions, dynamics)
-/// belongs to the szcn parts lane, matching the JS engines' classification.
+/// belongs to the szcn parts lane, matching the removed JavaScript lanes' classification.
 fn array_element_static_object(
     expression: &Expression<'_>,
     ctx: ResolveContext<'_>,
@@ -4505,7 +4652,12 @@ fn array_element_static_object(
 }
 
 /// Whether an unwrapped array element is a skippable falsy guard.
-fn is_falsy_array_element(expression: &Expression<'_>) -> bool {
+/// Whether an expression is a falsy literal, and therefore the EMPTY style.
+///
+/// Every falsy JS value reaches `_sz` as no classes at all, so an sz position
+/// holding one carries the same information as `{}`. Callers must unwrap
+/// parentheses and TS assertions first.
+fn is_falsy_style_literal(expression: &Expression<'_>) -> bool {
     match expression {
         Expression::BooleanLiteral(value) => !value.value,
         Expression::NullLiteral(_) => true,
@@ -4527,7 +4679,7 @@ fn static_object_from_array_expression(
         // A spread element keeps the whole array a runtime value.
         let expression = element.as_expression()?;
         let unwrapped = unwrap_expression(expression);
-        if is_falsy_array_element(unwrapped) {
+        if is_falsy_style_literal(unwrapped) {
             continue;
         }
         // Deep merge (later leaf wins per key path, sibling keys survive):
@@ -4709,7 +4861,8 @@ mod tests {
     use super::{
         escape_json_string, parse_source_shell, parse_source_shell_with_budget,
         parse_source_shell_with_budget_and_statics, parse_source_shell_with_registries,
-        source_type_for_path, string_value_span, MAX_CATALOG_BRANCH_EXTRAS, MAX_CATALOG_DEPTH,
+        source_type_for_path, string_value_span, DroppedKeyReason, MAX_CATALOG_BRANCH_EXTRAS,
+        MAX_CATALOG_DEPTH,
     };
     use crate::transform::{lower::lower_source_ir_classes, TransformFile, UnsupportedRecoveryIr};
     use oxc_span::Span;
@@ -5575,6 +5728,193 @@ export const cls = szr(localCard({ pad: 'sm' }));";
         assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["border-b"]);
     }
 
+    /// Parse one component and hand back its single sz attribute's ternaries.
+    fn ternaries_for(sz_value: &str) -> Vec<super::super::StaticTernaryIr> {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: format!("export const A = ({{ on, a, b }}) => <div sz={{{sz_value}}} />;"),
+        };
+        parse_source_shell(&file).ir.sz_attributes[0]
+            .ternaries
+            .clone()
+    }
+
+    #[test]
+    fn parser_shell_folds_a_falsy_ternary_branch_to_no_classes() {
+        for branch in ["undefined", "null", "false"] {
+            let ternaries = ternaries_for(&format!("on ? {{ color: 'muted' }} : {branch}"));
+
+            assert_eq!(ternaries.len(), 1, "{branch}");
+            assert_eq!(ternaries[0].consequent_classes, ["text-muted"], "{branch}");
+            assert!(ternaries[0].alternate_classes.is_empty(), "{branch}");
+        }
+    }
+
+    #[test]
+    fn parser_shell_folds_a_falsy_ternary_branch_on_either_side() {
+        let ternaries = ternaries_for("on ? undefined : { color: 'muted' }");
+
+        assert_eq!(ternaries.len(), 1);
+        assert!(ternaries[0].consequent_classes.is_empty());
+        assert_eq!(ternaries[0].alternate_classes, ["text-muted"]);
+    }
+
+    #[test]
+    fn parser_shell_folds_a_guarded_style_into_a_ternary() {
+        let ternaries = ternaries_for("on && { color: 'muted' }");
+
+        assert_eq!(ternaries.len(), 1);
+        assert_eq!(ternaries[0].consequent_classes, ["text-muted"]);
+        assert!(ternaries[0].alternate_classes.is_empty());
+    }
+
+    #[test]
+    fn parser_shell_folds_a_guard_reached_through_a_wrapper() {
+        // A guard rarely arrives bare at the attribute: a formatter parenthesizes
+        // it across a line break, and a shared style is held by a const. Both
+        // reach the expression reader rather than the JSX one, so folding only
+        // the bare form would make the parentheses decide whether it compiles.
+        for sz_value in [
+            "(on && { color: 'muted' })",
+            "(on && { color: 'muted' }) as const",
+        ] {
+            let ternaries = ternaries_for(sz_value);
+
+            assert_eq!(ternaries.len(), 1, "{sz_value}");
+            assert_eq!(
+                ternaries[0].consequent_classes,
+                ["text-muted"],
+                "{sz_value}"
+            );
+        }
+    }
+
+    #[test]
+    fn parser_shell_carries_a_whole_guard_chain_into_the_test_span() {
+        let source =
+            "export const A = ({ on, a, b }) => <div sz={a && b && { color: 'muted' }} />;";
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        };
+        let parsed = parse_source_shell(&file);
+        let span = parsed.ir.sz_attributes[0].ternaries[0].test_span;
+
+        // Taking only the rightmost operand would drop `a` and style the
+        // element on the wrong condition.
+        assert_eq!(&source[span.start as usize..span.end as usize], "a && b");
+    }
+
+    /// A chain longer than the cap keeps the runtime path whole.
+    ///
+    /// The cap exists so an emitted expression stays something a person can
+    /// read in a stack trace, and so the fold cannot be made arbitrarily
+    /// expensive by input. Refusing the WHOLE chain rather than the tail is the
+    /// part worth pinning: a partial fold would emit a conditional that can
+    /// pick a class list the compiler never lowered.
+    /// Naming a refused factory must not disturb the attributes around it.
+    ///
+    /// The pass rewrites a fallback diagnostic in place, so it walks every sz
+    /// attribute in the file — including ones that compiled cleanly and ones
+    /// that fell back for an unrelated reason. Rewriting either would blame a
+    /// factory for a position that never called it.
+    #[test]
+    fn naming_a_refused_factory_leaves_other_attributes_alone() {
+        let source = "\
+import { szv } from 'csszyx';
+const card = szv({ base: { color: 'main' }, variants: { s: { lg: { color: 'sub' } } } });
+export const A = ({ v }) => <div sz={card({ s: v })} />;
+export const B = () => <div sz={{ p: 4 }} />;
+export const C = ({ styles }) => <div sz={styles} />;
+";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        let kinds = parsed
+            .ir
+            .sz_attributes
+            .iter()
+            .map(|attribute| {
+                attribute
+                    .runtime_fallback_diagnostic
+                    .as_ref()
+                    .map(|diagnostic| diagnostic.kind)
+            })
+            .collect::<Vec<_>>();
+
+        assert!(
+            kinds.contains(&Some(super::super::RuntimeFallbackKindIr::SzvFactory)),
+            "the factory call must be renamed: {kinds:?}"
+        );
+        assert!(
+            kinds.contains(&None),
+            "a clean attribute must keep no diagnostic: {kinds:?}"
+        );
+        assert!(
+            kinds
+                .iter()
+                .any(|kind| matches!(kind, Some(other) if *other != super::super::RuntimeFallbackKindIr::SzvFactory)),
+            "an unrelated fallback must keep its own kind: {kinds:?}"
+        );
+    }
+
+    #[test]
+    fn parser_shell_refuses_a_chain_past_the_arm_cap() {
+        use std::fmt::Write as _;
+
+        // `t0 ? {…}` followed by `arms` nested alternates and a final `{…}`.
+        let chain_of = |arms: usize| {
+            let mut chain = String::from("t0 ? { p: 0 }");
+            for arm in 1..=arms {
+                let _ = write!(chain, " : t{arm} ? {{ p: {arm} }}");
+            }
+            chain.push_str(" : { p: 99 }");
+            chain
+        };
+
+        assert!(
+            ternaries_for(&chain_of(super::MAX_CONDITIONAL_CHAIN_ARMS + 1)).is_empty(),
+            "a chain past the cap must not fold at all"
+        );
+
+        // One arm shorter is inside the cap and still folds, so the refusal is
+        // the cap doing its job rather than the chain never working.
+        assert!(!ternaries_for(&chain_of(super::MAX_CONDITIONAL_CHAIN_ARMS)).is_empty());
+    }
+
+    #[test]
+    fn parser_shell_refuses_to_fold_an_or_guard() {
+        // `||` yields its LEFT operand when the test passes, and that value can
+        // itself be a style — folding would silently drop it.
+        assert!(ternaries_for("on || { color: 'muted' }").is_empty());
+    }
+
+    #[test]
+    fn parser_shell_drops_a_runtime_value_with_no_tailwind_var_form() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = ({ v }) => <div sz={{ p: 4, textAlign: v }} />;".to_string(),
+        };
+
+        let parsed = parse_source_shell(&file);
+        let attribute = &parsed.ir.sz_attributes[0];
+
+        assert!(
+            attribute.dynamic_css_vars.is_empty(),
+            "a key with no var form must never reach the css-var lane"
+        );
+        assert_eq!(attribute.dropped_dynamic_keys.len(), 1);
+        assert_eq!(attribute.dropped_dynamic_keys[0].key, "textAlign");
+        assert_eq!(
+            attribute.dropped_dynamic_keys[0].reason,
+            DroppedKeyReason::NoVarForm
+        );
+        // The static sibling was never in question and must survive the drop.
+        assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["p-4"]);
+    }
+
     #[test]
     fn parser_shell_keeps_value_typed_keys_on_the_css_var_lane() {
         let file = TransformFile {
@@ -5743,7 +6083,7 @@ export const cls = szr(localCard({ pad: 'sm' }));";
     fn szv_catalog_is_per_key_lenient_and_expands_conditional_branches() {
         // One unreadable leaf (a call) skips ONLY its key; a finite conditional
         // contributes BOTH branches; sibling variants always survive. Matches
-        // the oxc/Babel lenient catalog walk (locked by the TS parity suite
+        // the removed JavaScript lanes lenient catalog walk (locked by the TS parity suite
         // `szv-catalog-leniency.test.ts`).
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -6026,8 +6366,8 @@ export const cls = szr(localCard({ pad: 'sm' }));";
     #[test]
     fn parser_shell_extracts_szv_dis_value_cases() {
         // szv lowers "dị" variant/important/negative/arbitrary/css-var values in
-        // the catalog directly — these must match the same shapes the JS engines
-        // emit (the Babel/oxc szv-extraction parity suite locks the JS side).
+        // the catalog directly — these must match the same shapes the removed JavaScript lanes
+        // emit (the removed JavaScript lanes szv-extraction parity suite locks the JS side).
         let cases: &[(&str, &str)] = &[
             (
                 "{ variants: { s: { x: { hover: { bg: 'red-500' } } } } }",
@@ -6382,7 +6722,7 @@ export const cls = szr(localCard({ pad: 'sm' }));";
     }
 
     #[test]
-    fn parser_shell_keeps_removed_dynamic_keys_out_of_css_variables() {
+    fn parser_shell_keeps_dropped_dynamic_keys_out_of_css_variables() {
         let source = "const App=({pad,size})=> <div sz={{ hover: { padding: pad }, fontSize: size, bg: 'red-500' }}/>;";
         let parsed = parse_source_shell(&TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -6394,7 +6734,7 @@ export const cls = szr(localCard({ pad: 'sm' }));";
         assert!(attribute.dynamic_css_vars.is_empty());
         assert_eq!(lower_source_ir_classes(&parsed.ir).classes, ["bg-red-500"]);
         assert!(attribute
-            .removed_dynamic_keys
+            .dropped_dynamic_keys
             .iter()
             .any(|property| property.key == "fontSize"));
     }
@@ -6552,7 +6892,7 @@ export const cls = szr(localCard({ pad: 'sm' }));";
         });
         assert!(invalid.ir.recovery_attributes.is_empty());
         // The mode NAME is carried through so the diagnostic can quote the typo
-        // back, the way the Babel and oxc lanes do.
+        // back, the way the Babel and the JavaScript lane it replaceds do.
         assert_eq!(
             invalid.ir.unsupported_recovery_attributes,
             vec![UnsupportedRecoveryIr::UnknownMode("sometimes".to_string())]
@@ -7644,6 +7984,72 @@ export const cls = szr(localCard({ pad: 'sm' }));";
     /// object but inverts the condition, so the styles land on exactly the
     /// renders that were supposed to go without them — a bug that looks like
     /// application logic rather than compilation.
+    /// The vocabulary the array-part safety proof accepts, and what it refuses.
+    ///
+    /// `dynamic_provable` decides whether the runtime helper may skip its
+    /// object-lowering path for one array element. Read it too generously and
+    /// an object reaching that element at runtime meets a helper that no longer
+    /// knows how to lower it; read it too strictly and every file carries a
+    /// path it never uses. Neither shows up as a wrong class in a fixture, so
+    /// the vocabulary is pinned shape by shape.
+    ///
+    /// Every fixture below has to REACH the dynamic lane first — most provably
+    /// non-object shapes are pre-lowered statically and never become a runtime
+    /// part at all, so the assert on `dynamic_span` is load-bearing, not
+    /// decoration.
+    #[test]
+    fn the_array_part_safety_proof_accepts_exactly_the_non_object_shapes() {
+        let provable = |element: &str| {
+            let parsed = parse_source_shell(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: format!("const A = ({{ x, y }}) => <div sz={{[{element}]}} />;"),
+            });
+            let parts = &parsed.ir.sz_attributes[0].array_parts;
+            assert_eq!(parts.len(), 1, "{element}");
+            assert!(
+                parts[0].dynamic_span.is_some(),
+                "{element} must reach the runtime lane for the flag to mean anything"
+            );
+            parts[0].dynamic_provable
+        };
+
+        // `&&` yields its LEFT only when that left is falsy, and no falsy value
+        // is an object — so the right operand alone decides. Demanding the left
+        // too would refuse the ordinary guarded spellings.
+        assert!(provable("x && undefined"), "&& is decided by its right");
+        assert!(provable("x && null"), "&& with a null right");
+        assert!(provable("x && (y ? 'a' : 'b')"), "&& over string branches");
+        assert!(!provable("x && y"), "&& whose right could be an object");
+
+        // A ternary needs BOTH branches proven, since either can be yielded.
+        assert!(!provable("x ? y : 'b'"), "one branch is an open binding");
+        assert!(!provable("x ? y : z"), "neither branch is proven");
+
+        // A bare binding or a call result is exactly what the proof cannot see
+        // through, and the whole reason the runtime path still exists.
+        assert!(!provable("y"), "an ordinary binding");
+        assert!(!provable("y()"), "a call result");
+
+        // A boolean is judged by its VALUE. `false` is falsy and never reaches
+        // the helper as an object; `true` is neither a class nor an object, and
+        // treating it as proven would let the helper skip a lowering it may
+        // still be handed.
+        assert!(provable("x && false"), "false is proven");
+        assert!(!provable("x && true"), "true is not");
+
+        // An array element is the same question asked of every member, so one
+        // unproven member decides the whole.
+        assert!(provable("x && ['a', null]"), "array of proven members");
+        assert!(!provable("x && ['a', y]"), "array holding an open binding");
+
+        // `||` can yield EITHER side, so unlike `&&` both have to be proven.
+        assert!(provable("'a' || 'b'"), "|| with both sides proven");
+        assert!(!provable("y || 'b'"), "|| with an unproven left");
+
+        // The shape the proof exists to refuse, spelled out.
+        assert!(!provable("x ? { p: y } : 'b'"), "an object branch");
+    }
+
     #[test]
     fn only_an_and_guard_becomes_a_conditional_array_part() {
         for source in [

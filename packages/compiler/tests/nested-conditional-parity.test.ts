@@ -1,12 +1,12 @@
 /**
- * Nested finite-conditional parity across the three engines.
+ * Nested finite-conditional parity across both engine artifacts.
  *
  * A finite conditional inside a value (`{ borderColor: { color: cond ? a : b, op } }`)
  * is a CHOICE between two static classes. The native (rust) engine expands it into
- * both branches; babel and oxc used to fall through to the runtime helper / a CSS
+ * both branches; the JavaScript engines of the time fell through to the runtime helper / a CSS
  * variable, leaving the classes incompletely safelisted (the trove 0.10.8 report).
  *
- * These fixtures lock the fix: babel and oxc now expand the same branches, and no
+ * These fixtures lock the fix: every lane expands the same branches, and no
  * engine silently switches the whole object to `_sz(...)`. Fixtures are an array
  * (not `const source = ...`) so the extracted-corpus meta-test does not sample them.
  */
@@ -28,20 +28,20 @@ function element(code: string): string {
 }
 
 /**
- * Transform with the babel engine and return the JSX element.
+ * Transform through the auto-selecting entry and return the JSX element.
  * @param code - source to transform.
  * @returns the transformed `<div .../>` element.
  */
-function babel(code: string): string {
+function auto(code: string): string {
     return element(transformSource(code, 'F.tsx').code);
 }
 
 /**
- * Transform with the oxc engine and return the JSX element.
+ * Transform with the engine's wasm build and return the JSX element.
  * @param code - source to transform.
  * @returns the transformed `<div .../>` element.
  */
-function oxc(code: string): string {
+function wasm(code: string): string {
     const r = transformWasm(code, 'F.tsx');
     return element(typeof r === 'string' ? r : r.code);
 }
@@ -71,9 +71,9 @@ function orderedClassesOf(result: { classes?: Iterable<string> } | string): stri
 }
 
 /**
- * Fixtures where all three engines agree byte-for-byte. The variant prefix is a
+ * Fixtures where both engine artifacts agree byte-for-byte. The variant prefix is a
  * single standard variant (or none), which the rust conditional path joins the
- * same way babel/oxc do.
+ * same way the JavaScript-facing lanes do.
  */
 const FULL_PARITY: Array<{ name: string; src: string; contains: string[] }> = [
     {
@@ -133,7 +133,7 @@ const FULL_PARITY: Array<{ name: string; src: string; contains: string[] }> = [
     },
     {
         // An `as`-cast around a literal branch is still a finite choice: every
-        // lane resolves through the cast (rust always did; babel/oxc used to
+        // lane resolves through the cast (rust always did; the JavaScript engines used to
         // collapse the conditional to a runtime CSS variable and drop the
         // resolvable static branches).
         name: 'as-cast literal branch',
@@ -152,33 +152,37 @@ describe('nested finite-conditional parity', () => {
     });
 
     for (const fixture of FULL_PARITY) {
-        it(`babel and oxc expand the same branches — ${fixture.name}`, () => {
-            const b = babel(fixture.src);
-            const o = oxc(fixture.src);
-            expect(b, 'babel must not fall back to the runtime helper').not.toContain('_sz(');
-            expect(o, 'oxc must not fall back to the runtime helper').not.toContain('_sz(');
+        it(`the auto and wasm lanes expand the same branches — ${fixture.name}`, () => {
+            const b = auto(fixture.src);
+            const o = wasm(fixture.src);
+            expect(b, 'the auto lane must not fall back to the runtime helper').not.toContain(
+                '_sz(',
+            );
+            expect(o, 'the wasm lane must not fall back to the runtime helper').not.toContain(
+                '_sz(',
+            );
             expect(o).toBe(b);
             for (const cls of fixture.contains) {
-                expect(b, `babel should contain ${cls}`).toContain(cls);
+                expect(b, `the auto lane should contain ${cls}`).toContain(cls);
             }
         });
 
         it.skipIf(!isRustTransformAvailable())(
-            `rust is byte-identical to oxc/babel — ${fixture.name}`,
+            `the native build is byte-identical to the wasm one — ${fixture.name}`,
             () => {
-                // All three engines factor the static sibling out and emit the same
+                // Both engine artifacts factor the static sibling out and emit the same
                 // template literal in the same order. Byte-identical code AND identical
                 // discovery ORDER are required: production mangle IDs are assigned in
                 // discovery order, so a different order (even with the same class set)
                 // makes the mangled artifacts diverge between engines.
                 expect(rust(fixture.src), 'rust must not fall back').not.toContain('_sz(');
-                expect(rust(fixture.src), 'rust vs oxc code').toBe(oxc(fixture.src));
-                expect(rust(fixture.src), 'rust vs babel code').toBe(babel(fixture.src));
+                expect(rust(fixture.src), 'native vs wasm code').toBe(wasm(fixture.src));
+                expect(rust(fixture.src), 'native vs auto-selected code').toBe(auto(fixture.src));
                 const rustClasses = orderedClassesOf(transformRust(fixture.src, 'F.tsx'));
-                expect(rustClasses, 'rust vs oxc class ORDER').toEqual(
+                expect(rustClasses, 'native vs wasm class ORDER').toEqual(
                     orderedClassesOf(transformWasm(fixture.src, 'F.tsx')),
                 );
-                expect(rustClasses, 'rust vs babel class ORDER').toEqual(
+                expect(rustClasses, 'native vs auto-selected class ORDER').toEqual(
                     orderedClassesOf(transformSource(fixture.src, 'F.tsx')),
                 );
             },
@@ -192,8 +196,8 @@ describe('nested finite-conditional parity', () => {
         // does not sample it.
         const twoConditionals =
             'export const A = ({ c, d }) => <div sz={{ borderColor: { color: c ? "red-700" : "charcoal" }, bg: { color: d ? "white" : "black" } }} />;';
-        // Whatever the engines choose, babel and oxc must agree and stay safe.
-        expect(oxc(twoConditionals)).toBe(babel(twoConditionals));
+        // Whatever the engines choose, every lane must agree and stay safe.
+        expect(wasm(twoConditionals)).toBe(auto(twoConditionals));
     });
 });
 
@@ -232,7 +236,7 @@ const MULTI_TERNARY: Array<{ name: string; src: string; ordered: string[] }> = [
 ];
 
 /**
- * Collapse the babel-reprint vs oxc-surgical whitespace difference inside a
+ * Collapse the reprint vs surgical-splice whitespace difference inside a
  * style object literal (`style={{ "--x": … }}` vs `style={{"--x": …}}`).
  * Established surgical-parity behavior — className bytes stay unnormalized.
  * @param code - a transformed element string.
@@ -261,10 +265,12 @@ const rustHasMultiTernary = (): boolean => {
 
 describe('multi-ternary parity (property conditionals append template segments)', () => {
     for (const fixture of MULTI_TERNARY) {
-        it(`babel and oxc agree byte-for-byte — ${fixture.name}`, () => {
-            const b = babel(fixture.src);
-            expect(b, 'babel must not fall back to the runtime helper').not.toContain('_sz(');
-            expect(normalizeStyleBraces(oxc(fixture.src))).toBe(normalizeStyleBraces(b));
+        it(`the auto and wasm lanes agree byte-for-byte — ${fixture.name}`, () => {
+            const b = auto(fixture.src);
+            expect(b, 'the auto lane must not fall back to the runtime helper').not.toContain(
+                '_sz(',
+            );
+            expect(normalizeStyleBraces(wasm(fixture.src))).toBe(normalizeStyleBraces(b));
             expect(orderedClassesOf(transformWasm(fixture.src, 'F.tsx')), 'class ORDER').toEqual(
                 orderedClassesOf(transformSource(fixture.src, 'F.tsx')),
             );
@@ -273,14 +279,17 @@ describe('multi-ternary parity (property conditionals append template segments)'
             );
         });
 
-        it.skipIf(!rustHasMultiTernary())(`rust matches oxc/babel — ${fixture.name}`, () => {
-            expect(normalizeStyleBraces(rust(fixture.src))).toBe(
-                normalizeStyleBraces(babel(fixture.src)),
-            );
-            expect(orderedClassesOf(transformRust(fixture.src, 'F.tsx'))).toEqual(
-                orderedClassesOf(transformSource(fixture.src, 'F.tsx')),
-            );
-        });
+        it.skipIf(!rustHasMultiTernary())(
+            `the native build matches the other lanes — ${fixture.name}`,
+            () => {
+                expect(normalizeStyleBraces(rust(fixture.src))).toBe(
+                    normalizeStyleBraces(auto(fixture.src)),
+                );
+                expect(orderedClassesOf(transformRust(fixture.src, 'F.tsx'))).toEqual(
+                    orderedClassesOf(transformSource(fixture.src, 'F.tsx')),
+                );
+            },
+        );
     }
 });
 
@@ -292,7 +301,7 @@ describe('punt-path candidate parity (path-aware collectors)', () => {
     const punted =
         'const App = ({ rest, a }) => <div sz={{ ...rest, bg: { color: "black", op: a ? 30 : 100 }, hover: { m: 2 } }} />;';
 
-    it('babel and oxc collect identical, junk-free candidates', () => {
+    it('the auto and wasm lanes collect identical, junk-free candidates', () => {
         const b = orderedClassesOf(transformSource(punted, 'F.tsx'));
         const o = orderedClassesOf(transformWasm(punted, 'F.tsx'));
         expect(b).toEqual(['bg-black/30', 'bg-black/100', 'hover:m-2']);

@@ -3,7 +3,7 @@
  *
  * This scans existing compiler tests for simple source snippets containing
  * `sz` / `szRecover`, then compares the native Rust engine against the current
- * oxc-JS baseline. It is the Rust-side equivalent of the Phase D extracted
+ * the JavaScript pipeline baseline. It is the Rust-side equivalent of the Phase D extracted
  * corpus and gives the default-flip decision a broader regression signal than
  * the curated parity fixtures alone.
  */

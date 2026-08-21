@@ -14,7 +14,7 @@
  * point Tailwind's own prettier plugin, IntelliSense server, upgrade tool and
  * CLI use, so it cannot be dropped without breaking those first.
  *
- * Input is the tri-engine parity corpus, which already pins one emitted class
+ * Input is the cross-artifact parity corpus, which already pins one emitted class
  * string per sz input, so the whole mapping surface is covered for free.
  *
  * Usage:
@@ -241,11 +241,68 @@ async function main(): Promise<void> {
         );
         process.exitCode = 1;
     }
+    reportRefusedVocabulary(oracle.findDead(REFUSED_VOCABULARY));
+
     if (process.exitCode === 1) {
         return;
     }
 
     console.log('\nNo new dead classes.');
+}
+
+/**
+ * Classes csszyx REFUSES to emit because Tailwind serves no rule for them.
+ *
+ * The corpus check above asks whether an emitted class is dead. This asks the
+ * other direction, and it is the direction a refusal rots in: once the mapping
+ * stops emitting a class, nothing here notices when Tailwind starts serving it,
+ * and csszyx quietly drops a value that would now work.
+ *
+ * Per-side border styles are the first entry. CSS gives every side its own
+ * border-style; Tailwind spells the style at the root only, so `borderB: 'none'`
+ * compiled to `border-b-none` and generated nothing. A Tailwind version that
+ * adds the per-side form should take the refusal off `is_border_side_style_value`
+ * in `packages/core/src/transform/lower.rs` rather than keep dropping it.
+ */
+const REFUSED_VOCABULARY: readonly string[] = [
+    't',
+    'r',
+    'b',
+    'l',
+    'x',
+    'y',
+    's',
+    'e',
+    'bs',
+    'be',
+].flatMap(side =>
+    ['solid', 'dashed', 'dotted', 'double', 'hidden', 'none'].map(
+        style => `border-${side}-${style}`,
+    ),
+);
+
+/**
+ * Fail when Tailwind has started serving something csszyx refuses to emit.
+ *
+ * @param dead - The refused classes Tailwind still serves no rule for.
+ */
+function reportRefusedVocabulary(dead: readonly string[]): void {
+    const served = REFUSED_VOCABULARY.filter(token => !dead.includes(token));
+    console.log(
+        `\nchecked ${REFUSED_VOCABULARY.length} refused classes — ${served.length} now served`,
+    );
+    if (served.length === 0) {
+        return;
+    }
+    console.log('\nREFUSED classes Tailwind now serves — the mapping should emit them again:');
+    for (const token of served) {
+        console.log(`  ${token}`);
+    }
+    console.log(
+        '\nTake the pairing off is_border_side_style_value in\n' +
+            'packages/core/src/transform/lower.rs, and drop its entry here.',
+    );
+    process.exitCode = 1;
 }
 
 await main();

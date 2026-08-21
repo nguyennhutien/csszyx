@@ -618,3 +618,55 @@ describe('asking about nothing', () => {
         expect(oracle.findDead(['group', 'peer', 'group/item'])).toEqual([]);
     });
 });
+
+// The collision oracle costs a SECOND compile of the same stylesheet, with the
+// probe theme appended. That compile is deferred until a caller asks and then
+// remembered, so a run that never reaches the theme-collision pass never pays
+// it and a run that does pays once. Both halves are behaviour a caller depends
+// on, not an implementation detail: `check` asks per stylesheet, and a retried
+// compile would multiply the slowest step of the command.
+describe('createEmittedClassOracle — the collision oracle is built once', () => {
+    it('answers a second request from the first compile', async () => {
+        const oracle = await readyOracle();
+        if (!oracle.ok) throw new Error('expected a ready oracle');
+
+        const first = await oracle.loadCollisionOracle();
+        const second = await oracle.loadCollisionOracle();
+
+        // Not null first, or identity would hold trivially for two failures
+        // and the assertion below would pin nothing.
+        expect(first).not.toBeNull();
+        // Identity, not equality: two compiles would produce equal answers and
+        // hide the cost this assertion exists to pin.
+        expect(second).toBe(first);
+    });
+
+    it('reports no collision oracle when the probe compile fails, and does not retry it', async () => {
+        // The stylesheet already compiled once, so a failure with the probe
+        // theme appended is our own instrumentation meeting something unusual.
+        // Blaming the project for it would fail a CI run over a token this
+        // package injected.
+        let compiles = 0;
+        const oracle = await createEmittedClassOracle(
+            { resolveFrom: REPO, css: STOCK, cssBase: REPO },
+            async () => ({
+                version: '4.3.3',
+                root: REPO,
+                loadDesignSystem: async () => {
+                    compiles += 1;
+                    if (compiles > 1) throw new Error('the probe theme did not compile');
+                    return {
+                        candidatesToCss: (candidates: readonly string[]) =>
+                            candidates.map(() => null),
+                    };
+                },
+            }),
+        );
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+
+        expect(await oracle.loadCollisionOracle()).toBeNull();
+        expect(await oracle.loadCollisionOracle()).toBeNull();
+        // The project stylesheet, then the probe attempt. Nothing after.
+        expect(compiles).toBe(2);
+    });
+});

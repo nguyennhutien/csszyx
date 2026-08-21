@@ -104,6 +104,7 @@ both engine artifacts emit identical wording.
 | `identifier` | `sz={styles}` where `styles` is not a readable const | Yes, when a caller supplies it | No (nudge) |
 | `import` | `sz={imported}` from another module | **No** | **Yes** |
 | `member` | `sz={theme.card}` | Yes, when a caller supplies it | No (nudge) |
+| `szv-factory` | `sz={myVariants({ … })}` where the compiler saw `myVariants = szv(…)` and refused its config | Yes — the runtime szv path renders | No (nudge) |
 | `other` | anything else — a template literal, a conditional | Yes | No (nudge) |
 
 <Aside type="note" title="Why forwarding a prop is only a nudge">
@@ -122,11 +123,26 @@ type:
 | --- | --- | --- |
 | `call` | ``function call `{detail}()` result is unknown at build time`` | `If it returns static variants → convert to szv(). If it depends on runtime data → use dynamic().` |
 | `identifier` | ``identifier `{detail}` could not be resolved to a static value`` | `Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic().` |
-| `import` | ``imported binding `{detail}` could not be read at build time`` | `Export it as a const with a static object literal — a re-export, a barrel file, or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().` |
+| `import` | ``imported binding `{detail}` could not be read at build time`` | `Export it as a const with a static object literal — a star re-export or a computed value keeps the runtime path, as does build.importedStaticSz: false. For variant-based styling → szv(). For true runtime values → dynamic().` |
 | `member` | `member expression is not statically resolvable` | `Extract the value to a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().` |
+| `szv-factory` | ``szv factory `{detail}()` did not precompile — its config disqualified at `{path}` `` | `Every variant value must be a static sz object literal with canonical keys and non-overlapping branches. Fix the value at that path. For runtime data → dynamic().` |
 | `other` | ``expression of type `{detail}` is not statically analyzable`` | `Use a literal sz object or a module-level const. For variant-based styling → szv(). For true runtime values → dynamic().` |
 
 When the callee has no readable name — `sz={obj[key]()}` — `{detail}` is `?`.
+
+<Aside type="tip" title="A call to your own szv reads as one, not as a mystery">
+`szv-factory` is the `call` kind after the compiler recognises the callee.
+Without it, `sz={myVariants({ … })}` reported ``function call `myVariants()`
+result is unknown`` and suggested converting to `szv()` — circular advice for
+someone already writing one, naming no position. The kind fires only when this
+file declared the factory *and* the compiler refused its **config**, so
+`{path}` is a real position such as `variants.size.lg.tablet`: go read that
+value. A factory whose config qualified, or a call to something the file never
+declared, still reports as `call`.
+
+The same substitution happens at `szr(myVariants({ … }))`. One cause, one
+message, wherever the call sits.
+</Aside>
 
 The `szv catalog` site replaces the suggestion with one of its own:
 
@@ -136,9 +152,10 @@ Pass the config inline, or as a module-level const object literal. A computed or
 
 <Aside type="tip" title="What the import case usually means">
 Reading a static object out of another module is on by default, so this
-diagnostic normally says the import did not qualify — a barrel, a namespace or
-default import, or a binding whose value is not a plain object literal. The
-other cause is `build.importedStaticSz` being turned off. See
+diagnostic normally says the import did not qualify — a star re-export, or a
+binding whose value is not a plain object literal. A named re-export through a
+barrel is followed and does not report. The other cause is
+`build.importedStaticSz` being turned off. See
 [Reusing Styles](/docs/reusing-styles/) and
 [Plugin Config](/docs/reference/config/).
 </Aside>
@@ -152,6 +169,7 @@ other cause is `build.importedStaticSz` being turned off. See
 | `[csszyx] possible style override at {filename}: this element spreads props that may contain style, while sz emits an explicit style attribute. Move the spread style to an explicit style prop so csszyx can merge both values.` | nudge | Pass `style` explicitly so both values merge. |
 | `[csszyx] szRecover at {filename}: only string-literal values ("csr" \| "dev-only") are supported. Dynamic values disable token emission for this element.` | nudge | Use a literal. |
 | `[csszyx] szRecover at {filename}: unknown mode "{value}" — expected "csr" or "dev-only". Token emission skipped.` | nudge | Use `"csr"` or `"dev-only"`. |
+| `[csszyx] "sz" takes precedence over the runtime "className" on this element at {filename}:{line}, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.` — suggestion: `state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win.` | nudge | State the order in one `sz` array. Either rewrite silences it. |
 
 `{filename}` is `<anonymous>` when the compiler was called without one.
 
@@ -204,7 +222,7 @@ half of that gate and do reach the console.
 | `[csszyx] "{key}" was removed{ at LOC}: {note}.` | The removed key emits no class. Apply the replacement shape from the note. |
 | `[csszyx] Use the canonical key "{suggestion}" instead of "{key}"{ at LOC}.` | The alias emits no class; rename it to the canonical key. |
 | `[csszyx] sz received a numeric key "{key}"{ at LOC}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored.` | You probably passed an array to `sz={{ … }}`. |
-| `[csszyx] "{rawKey}" boolean sugar was removed. Use { {key}: '{value}' } instead, or run ``csszyx migrate``.` | **browser too** |
+| `[csszyx] "{rawKey}" boolean sugar was removed{ at LOC}. Use { {key}: '{value}' } instead, or run ``csszyx migrate``.` | **browser too.** The build lane reports it as well, with the position — a statically extracted prop never reaches the runtime, so that is the only channel that can tell you. |
 
 When a warning has no source location, csszyx appends a traceability tail so
 you can find it:
@@ -238,6 +256,128 @@ silently preserving obsolete API spellings or leaving dead classes in the DOM.
 | `[csszyx] "{className}"{ at LOC}: the /{opacity} opacity modifier will not apply — the "{color}" theme token resolves to the bare comma triplet "{value}", which color-mix() cannot dim. Wrap the variable, e.g. --color-{color}: rgb(var(--your-triplet)).` | **browser only** — it needs computed style to resolve the token. `csszyx check` answers the same question from the compiled stylesheet. |
 | `[csszyx] fontSmoothing: '{value}' is not supported — use 'grayscale' or 'subpixel'.` | |
 | `[csszyx] fontStyle: '{value}' is not supported — Tailwind only models 'italic' and 'normal'. For oblique, use css: { fontStyle: '{value}' }.` | |
+| `[csszyx] "{key}" cannot take a runtime value at {LOC}: Tailwind has no utility for this key that reads a CSS variable, so the class and the variable were dropped instead of styling a different property. Name the values with szv(), or use dynamic() for open-ended data.` | Build only — a *literal* on the same key is unaffected. See below. |
+| `[csszyx] "{key}: '{value}'"{ at LOC}: Tailwind has no per-side border style, so this generated no CSS and the class is dropped. Use borderStyle: '{value}' for every side, or a number on "{key}" for the width.` | A style keyword on a side key. See below. |
+
+#### Border styles are set for every side, not per side
+
+CSS gives each side its own `border-style`; Tailwind spells the style at the
+root only. `borderStyle` is the key for it, and the side keys take a width:
+
+```tsx
+<div sz={{ borderStyle: 'none' }} />  // ✅ border-none — every side
+<div sz={{ borderB: 2 }} />           // ✅ border-b-2 — this side's width
+<div sz={{ borderB: 0 }} />           // ✅ border-b-0 — this side, no border
+<div sz={{ borderB: 'none' }} />      // ❌ dropped: border-b-none has no rule
+```
+
+`border-b-none` reached the safelist, Tailwind generated nothing for it, and the
+border stayed. All six style keywords behave this way on all ten side keys — the
+four physical sides, the two axes, and the four logical ones. Widths, colours and
+theme tokens are unaffected on every one of them.
+
+#### Keys that need a build-time value
+
+A runtime value normally compiles to `<prefix>-(--_sz-<key>)` plus a `style`
+custom property. That works whenever the var form is the same utility as the
+literal form with the value deferred — which is most of the sz vocabulary, but
+not all of it.
+
+```tsx
+<div sz={{ color: tone }} />       // ✅ text-(--_sz-color) — a colour utility
+<div sz={{ textAlign: align }} />  // ❌ dropped: text-(--v) is a COLOUR, not an alignment
+<div sz={{ display: how }} />      // ❌ dropped: display-(--v) is not a utility at all
+```
+
+`color` and `textAlign` share the `text-` prefix and only one of them has a var
+form, so this is per **key**, never per prefix. Both failures used to be silent:
+the first wrote `color: var(…)` holding something like `"center"`, an invalid
+value that also unsets the inherited colour; the second put a class in the
+safelist that Tailwind generated no rule for.
+
+##### What you get now
+
+```tsx
+<div sz={{ p: 4, textAlign }} />
+// → <div className="p-4" />
+```
+
+```text
+[csszyx] "{key}" cannot take a runtime value at {LOC}: Tailwind has no utility for this key that reads a CSS variable, so the class and the variable were dropped instead of styling a different property. Name the values with szv(), or use dynamic() for open-ended data.
+```
+
+The sibling keys survive — only the one property is dropped, and the `style`
+attribute is not emitted at all.
+
+##### Write it one of these three ways
+
+**One or two options — a ternary between literals.** Nothing else needed; this
+is fully build-time.
+
+```tsx
+<div sz={{ p: 4, textAlign: centered ? 'center' : 'left' }} />
+// → className={`p-4 ${centered ? "text-center" : "text-left"}`}
+```
+
+**A real set of options — name them with [`szv`](/docs/szv/).** Read the factory
+through [`szr`](/docs/reusing-styles/) on `className`: that is the position the
+compiler resolves at build time.
+
+```tsx
+const alignSz = szv({
+    base: { p: 4 },
+    variants: {
+        align: {
+            left: { textAlign: 'left' },
+            center: { textAlign: 'center' },
+            right: { textAlign: 'right' },
+        },
+    },
+});
+
+<div className={szr(alignSz({ align: side }))} />
+// → className="p-4 text-left" | "p-4 text-center" | "p-4 text-right"
+// all three safelisted, no runtime helper
+```
+
+<Aside type="caution" title="`sz={alignSz({…})}` also works, but not at build time">
+Passing the factory result straight to `sz=` produces the right CSS — the
+classes are still safelisted — but the class *selection* runs through `_sz()` on
+every render, and the build reports a fallback whose advice ("convert to
+`szv()`") is already taken. Use `className={szr(…)}` until that is fixed.
+</Aside>
+
+**An open-ended value from data — [`dynamic()`](/docs/dynamic/).** Only when the
+value genuinely is not one of a known set; it injects CSS in the browser.
+
+##### The full list
+
+Every key below takes a literal, a ternary between literals, or an `szv` variant
+— but not a bare runtime value. You do not have to memorise it: the build names
+the key and the line when you hit one.
+
+| Reference page | Keys |
+| --- | --- |
+| [Backgrounds](/docs/reference/backgrounds/) | `bgAttach` `bgClip` `bgImg` `bgOrigin` `bgRepeat` `bgSize` |
+| [Borders](/docs/reference/borders/) | `borderStyle` `outlineStyle` |
+| [Effects](/docs/reference/effects/) | `maskClip` `maskComposite` `maskConic` `maskLinear` `maskMode` `maskOrigin` `maskRepeat` `maskType` `mixBlend` |
+| [Flex & Grid](/docs/reference/flex-grid/) | `alignContent` `flexDir` `flexWrap` `gridFlow` `items` `justify` `justifyItems` `justifySelf` `placeContent` `placeItems` `placeSelf` `self` |
+| [Interactivity](/docs/reference/interactivity/) | `appearance` `fieldSizing` `pointerEvents` `resize` `scheme` `scroll` `scrollbar` `scrollbarGutter` `select` `snapAlign` `snapStop` `snapType` `touch` |
+| [Layout](/docs/reference/layout/) | `box` `boxDecoration` `breakAfter` `breakBefore` `breakInside` `clear` `display` `float` `isolation` `notSrOnly` `objectFit` `overflow` `overflowX` `overflowY` `overscroll` `overscrollX` `overscrollY` `position` `srOnly` `visibility` |
+| [Misc](/docs/reference/misc/) | `borderCollapse` `caption` `forcedColorAdjust` `tableLayout` |
+| [Sizing](/docs/reference/sizing/) | `container` |
+| [Transforms](/docs/reference/transforms/) | `backface` `transformStyle` |
+| [Transitions](/docs/reference/transitions/) | `transitionBehavior` |
+| [Typography](/docs/reference/typography/) | `decoration` `decorationStyle` `fontFamily` `fontSmoothing` `fontStyle` `fontVariant` `listPos` `ordinal` `slashedZero` `text` `textAlign` `textClip` `textEllipsis` `textTransform` `textWrap` `whitespace` |
+
+Membership is derived, not decided: `pnpm check:var-hostile-keys` compiles both
+forms of every documented key through the pinned Tailwind and compares which CSS
+properties each one sets. A Tailwind version that adds an arbitrary-value form
+for one of these keys fails that gate until the key is taken off the list.
+
+Two things this never touched: a **static** value on these keys, which has
+always lowered to the keyword utility, and the **runtime** — `_sz({ textAlign:
+side })` receives a real value and has always been correct.
 
 ### Colors
 
@@ -329,7 +469,7 @@ ambiguous, it falls back to keeping both, and says so once.
 
 | Message |
 | --- |
-| `[csszyx] theme token "{name}" shadows a built-in {kind} — szcn will not group classes built from it (they keep the safe keep-both behaviour). Rename the token to enable precise merging.` |
+| `[csszyx] theme token "{name}" shadows a built-in {kind} — szcn cannot tell the two apart, so it keeps both classes instead of merging. Both then apply, and stylesheet order decides which wins rather than the order you passed them: a later argument no longer overrides an earlier one. Rename the token — no spelling of the merge can fix this while the name is shared.` |
 | ``[csszyx] theme token "{name}" is defined as BOTH a color and a text size — szcn cannot classify `text-{name}` and will keep-both instead of merging.`` |
 | ``[csszyx] theme token "{name}" is defined as BOTH a font family and a font weight — szcn cannot classify `font-{name}` and will keep-both instead of merging.`` |
 
@@ -381,6 +521,25 @@ prefix. Nothing is wrong with your CSS: the scan works, but `tsconfig.json`
 does not include the generated `.csszyx` types, so the theme tokens it finds
 never reach editor completion or type-checking. Styling is unaffected either
 way.
+
+### A class name with more than one author
+
+Tailwind v4 treats a class name as a namespace several sources contribute to,
+and when two of them land on the same name it **merges** the declarations and
+says nothing. csszyx reports the declaration site, because that is the one
+place someone can change:
+
+```text
+[csszyx] "@utility {name}" collides — {reason}. Tailwind merges both declarations into one rule and reports nothing, so the class carries styles no single place in your CSS shows. Every use is affected, including sz props that spell it correctly. Rename it; if a multi-property class is the point, declare it under a name nothing else claims.
+```
+
+`{reason}` is either `declared twice` — two `@utility` blocks claiming one name
+— or `a theme token already generates it`, where a `@utility` takes a name a
+`--color-*` token already produces under one of its prefixes.
+
+There is deliberately no ignore comment. A class that is meant to set several
+properties has a spelling that costs nothing: a name nobody else claims. An
+ignore would silence a warning about damage that lands in other files.
 
 ## Build pipeline
 
@@ -535,6 +694,12 @@ about files I happen to open".
 | `Dead-class check skipped: no stylesheet in this project imports Tailwind, so there is no design system to ask which classes are real.` | The check needs a Tailwind entry to ask. |
 | `Dead-class check skipped: {reason}.` | |
 | `✖ The dead-class check did not run. Its stylesheet is part of this project, so this is reported as a failure rather than a skip — otherwise a check that never runs is indistinguishable from one that found nothing.` | Exits non-zero. See below. |
+| `Files that could not be read:` + one line per path | A path given to `--files` that names a source file the scan could not open. |
+| `✖ {n} listed file(s) could not be read, so they were not checked. A pass here would report a subset as if it were the whole list. Check the paths, and note that a separator is normalised rather than trusted, so this is a missing file rather than a Windows path.` | Exits non-zero, before any file is scanned. |
+| `Values that belong to a different sz key:` + one line per offender reading ``{key}: '{value}' emits {class}, which sets {properties} — not what {key} sets.`` | A value written on a key that owns neither it nor its CSS property. |
+| `✖ {n} value(s) written on a key that does not own them. Each one compiles, ships CSS and renders, so nothing else reports it; the style asked for is simply absent. Move the value to the key that owns it, or declare a theme token by that name if the spelling was deliberate.` | Exits non-zero. |
+| `Theme tokens a built-in utility already claims:` + one line per token reading `"{name}" also names {classes}. Tailwind merges both meanings into one rule, so szcn keeps the classes apart instead of merging them and the stylesheet decides which wins — not the order you wrote.` | Reported at the declaration, with its line. |
+| `✖ {n} theme token(s) shadow a built-in utility. Rename them; no spelling of the merge can fix this while the name is shared. To keep one anyway, pass --allow-token <name>.` | Exits non-zero. |
 
 A skip is not always harmless. Two things can stop the dead-class pass, and
 only one of them is your project's:
@@ -547,6 +712,84 @@ only one of them is your project's:
   and **fails**, because a check that never runs is indistinguishable in CI
   from one that found nothing, and a project can otherwise stay green for
   months after its entry stopped compiling.
+
+Several sz keys lower under one Tailwind prefix, so a keyword belonging to one
+of them compiles cleanly on another: `color: 'balance'` emits `text-balance`,
+which sets `text-wrap` and no colour at all. The type cannot reject it — a
+colour may be any theme token — and the class is real, so the dead-class pass
+is quiet too. The command reads the CSS property the class actually sets and
+compares it with the one the key sets, which is what separates the mistake from
+`fill: 'none'`, where the keyword sets exactly the property `fill` sets.
+
+Your own stylesheet decides. A project that declares `--color-balance` has
+given the spelling a meaning, and the report disappears for it.
+
+The pass covers keys whose documented values are theme tokens and nothing else
+— the colour keys, `bg`, `fontSize`, `fontFamily` and `fontWeight`. `outline`,
+`ring` and `border` are left out: each takes a colour **and** values of its own
+(`outline: 'none'`, `border: '3px'`), so a foreign value there cannot be told
+from an owned one. `bg` looks like one of them and is not — every other
+background domain has its own key, `bgSize` and `bgImg` among them, so
+`bg: 'cover'` is reported.
+
+Declaring `--color-balance` does not add a colour class. `text-balance` is
+already a static utility, so Tailwind merges the two readings and the class
+ends up carrying `text-wrap: balance` **and** the colour — it then competes on
+`color` with every other colour class. szcn cannot tell them apart, so it keeps
+both classes rather than merging, and the stylesheet's order decides the winner
+instead of the order the arguments were passed.
+
+That is wrong output rather than a missed optimisation, which is why it exits
+non-zero. `--allow-token <name>` keeps a name deliberately, so the exemption is
+a line in a diff somebody reviews.
+
+The class prefixes each theme namespace feeds are derived from the project's own
+Tailwind, not listed — so a colour named `cover` is reported against `bg-cover`,
+a prefix its name gives no hint of.
+
+### Running it as a git hook
+
+`--files` takes the paths a hook hands over, instead of a glob, and `--json`
+replaces the prose with one parseable document. The exit code is the same
+either way, so the format can change without changing what failing means.
+
+```yaml
+# lefthook.yml
+pre-commit:
+  commands:
+    csszyx:
+      glob: "*.{jsx,tsx}"
+      run: npx csszyx check --files {staged_files}
+```
+
+Scoping to a subset is sound because the scan lowers each file on its own, with
+no cross-module registry: a file checked alone yields exactly what it yields in
+a whole-project run. Paths that are not `.jsx`/`.tsx` are dropped rather than
+refused, so a README staged alongside a component does not fail the hook.
+
+A path that *is* a source file and still cannot be read is the opposite case,
+and fails the run. Counting it as scanned is how the command came to print
+`No sz issues found across 1 files` for a file it never opened — the one answer
+a commit gate must never give. Separators are normalised first, so a hook that
+hands over `src\App.tsx` on Windows checks that file rather than reporting a
+clean result for a name that exists nowhere.
+
+The JSON document is `{ "version": 1, "findings": [...] }`, one entry per
+finding:
+
+```json
+{
+  "rule": "sibling-keyword",
+  "file": "src/App.tsx",
+  "line": 12,
+  "message": "color: 'balance' emits text-balance, which sets text-wrap — not what color sets."
+}
+```
+
+`rule` is one of `sz-diagnostic`, `dead-class`, `broken-opacity`,
+`sibling-keyword`, `theme-collision`. It is a stable id on purpose: messages get
+rewritten whenever they can be made clearer, so anything filtering on wording
+would break each time one was.
 
 `npx @csszyx/cli scan-collisions` finds class names that would collide with a
 mangled token:

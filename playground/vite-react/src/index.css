@@ -7,4 +7,29 @@
        declares. Keep it on its own line so the spec can drop it
        deterministically. */
     --color-vite-live: #16a34a;
+    /* Feeds the functional `pad-*` utility below, so the scanner has a
+       namespace-resolving form to read and not only static ones. */
+    --pad-tight: 0.25rem;
+    --pad-loose: 2rem;
+}
+
+/* Real `@utility` declarations, so the scanner has shapes to read rather than
+   a guess at what authors write. Three forms, chosen for what each one proves:
+
+   - a static utility on a name nothing else claims (the clean case);
+   - a functional utility, which resolves its argument against a theme
+     namespace and so is NOT a single class name;
+   - a static utility whose name Tailwind already serves, which merges rather
+     than overrides and is the collision worth reporting. */
+@utility panel-flat {
+    box-shadow: none;
+    border-radius: 0;
+}
+
+@utility pad-* {
+    padding: --value(--pad-*);
+}
+
+@utility text-balance {
+    letter-spacing: 0.01em;
 }

@@ -41,10 +41,10 @@ function norm(code: string): string {
     return code.replace(/\s+/g, ' ');
 }
 
-function run(engine: 'oxc' | 'babel' | 'rust', attr: string) {
+function run(engine: 'wasm' | 'auto' | 'rust', attr: string) {
     const source = `${PRELUDE}export const A = () => <div ${attr} />;`;
     let fn = transformSource;
-    if (engine === 'oxc') fn = transformWasm;
+    if (engine === 'wasm') fn = transformWasm;
     else if (engine === 'rust') fn = transformRust;
     const result = fn(source, 'array.tsx');
     return {
@@ -173,8 +173,8 @@ const FIXTURES: Fixture[] = [
 describe('sz array composition — later wins (3-engine parity)', () => {
     for (const fixture of FIXTURES) {
         it(fixture.name, () => {
-            const oxc = run('oxc', fixture.attr);
-            const babel = run('babel', fixture.attr);
+            const oxc = run('wasm', fixture.attr);
+            const babel = run('auto', fixture.attr);
             expect(oxc.div, 'oxc emission').toBe(fixture.expectDiv);
             expect(norm(babel.div), 'babel matches (normalized)').toBe(norm(fixture.expectDiv));
             expect(oxc.classes, 'oxc class discovery order').toEqual(fixture.classes);
@@ -186,7 +186,7 @@ describe('sz array composition — later wins (3-engine parity)', () => {
         });
 
         it.skipIf(!isRustTransformAvailable())(`rust is byte-identical — ${fixture.name}`, () => {
-            const oxc = run('oxc', fixture.attr);
+            const oxc = run('wasm', fixture.attr);
             const rust = run('rust', fixture.attr);
             expect(rust.code, 'rust code equals oxc byte-for-byte').toBe(oxc.code);
             expect(rust.classes, 'rust class discovery order equals oxc').toEqual(oxc.classes);
@@ -196,7 +196,7 @@ describe('sz array composition — later wins (3-engine parity)', () => {
     }
 
     it('arrays no longer set usesMerge (szcn replaced _szMerge for composition)', () => {
-        for (const engine of ['oxc', 'babel'] as const) {
+        for (const engine of ['wasm', 'auto'] as const) {
             const out = run(engine, 'sz={[{ p: 4 }, big && { p: 8 }]}');
             expect(out.usesMerge, engine).toBe(false);
         }
@@ -208,7 +208,7 @@ describe('sz array composition — later wins (3-engine parity)', () => {
     it('three-level deep merge keeps unrelated branches intact', () => {
         const attr =
             'sz={[{ md: { hover: { bg: "red-500", p: 2 } } }, { md: { hover: { bg: "blue-500" } } }]}';
-        const oxc = run('oxc', attr);
+        const oxc = run('wasm', attr);
         expect(oxc.div).toBe('<div className="md:hover:bg-blue-500 md:hover:p-2" />');
         if (isRustTransformAvailable()) {
             expect(run('rust', attr).code).toBe(oxc.code);

@@ -1,0 +1,661 @@
+{
+    "entries": {
+        "packages/core/src/collision.rs replace > with >= in CollisionDetector::stats": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/collision.rs replace WasmCollisionDetector::has_collision -> bool with false": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/lib.rs replace init with ()": {
+            "count": 1,
+            "verdict": "equivalent",
+            "why": "the whole body is behind cfg(target_arch = \"wasm32\"), so on this target the function already is ()."
+        },
+        "packages/core/src/lib.rs replace version -> String with \"xyzzy\".into()": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/mangle.rs replace compute_mangle_checksum -> Result<String, JsValue> with Ok(\"xyzzy\".into())": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/mangle.rs replace compute_mangle_checksum -> Result<String, JsValue> with Ok(String::new())": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/mangle.rs replace verify_mangle_checksum -> Result<bool, JsValue> with Ok(false)": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/mangle.rs replace verify_mangle_checksum -> Result<bool, JsValue> with Ok(true)": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/token.rs replace /= with %= in hex_to_base62": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/css_var_planner.rs replace + with * in extract_quoted_custom_property_keys": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/css_var_planner.rs replace + with - in extract_quoted_custom_property_keys": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/css_var_planner.rs replace < with <= in extract_quoted_custom_property_keys": {
+            "count": 3,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/css_var_planner.rs replace dynamic_value_key -> String with \"xyzzy\".into()": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/css_var_planner.rs replace dynamic_value_key -> String with String::new()": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/css_var_planner.rs replace || with && in has_redundant_outer_parens": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/engine.rs delete field total_ns from struct TransformTimings expression in transform_fast_static_ir_with_options": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/engine.rs delete field triage_ns from struct TransformTimings expression in transform_fast_static_ir_with_options": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/engine.rs replace && with || in is_numeric_key": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/engine.rs replace > with >= in max_source_nesting_depth": {
+            "count": 1,
+            "verdict": "equivalent",
+            "why": "depth and max_depth are equal on that branch, so the assignment writes the value already held; no output can separate the two."
+        },
+        "packages/core/src/transform/engine.rs replace > with >= in transform_file_with_options": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/engine.rs replace Instant::elapsed -> core::time::Duration with Default::default()": {
+            "count": 1,
+            "verdict": "unmeasured",
+            "why": "the clock stub is behind cfg(target_arch = \"wasm32\") and is not compiled by this sweep."
+        },
+        "packages/core/src/transform/engine.rs replace Instant::now -> Self with Default::default()": {
+            "count": 1,
+            "verdict": "unmeasured",
+            "why": "the clock stub is behind cfg(target_arch = \"wasm32\") and is not compiled by this sweep."
+        },
+        "packages/core/src/transform/engine.rs replace elapsed_ns -> u64 with 1": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/engine.rs replace || with && in transform_static_classes_with_options": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/fast_path.rs replace && with || in is_identifier_key": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/fast_path.rs replace && with || in parse_static_value": {
+            "count": 3,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/fast_path.rs replace + with * in parse_flat_static_object": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/fast_path.rs replace + with * in try_static_sz_ir": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/fast_path.rs replace + with - in parse_flat_static_object": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/fast_path.rs replace + with - in try_static_sz_ir": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/fast_path.rs replace < with <= in any_sz_marker_in_ranges": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/fast_path.rs replace < with <= in parse_simple_string": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/fast_path.rs replace == with != in is_identifier_key": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/fast_path.rs replace || with && in parse_flat_static_object": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/fast_path.rs replace || with && in try_static_sz_ir": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/global_var_aliases.rs replace && with || in normalize_aliases": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/global_var_aliases.rs replace && with || in push_variable_map": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/ir.rs replace && with || in SourceIr::is_noop": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs delete ! in is_percent": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs delete match arm \"no-repeat\" in format_static_class_value": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs delete match arm \"repeat\" in format_static_class_value": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs delete match arm (Some(int), Some(frac), None) in is_percent": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace && with || in format_static_class_value": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace && with || in is_percent": {
+            "count": 4,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace && with || in is_unsigned_decimal": {
+            "count": 3,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace && with || in needs_brackets": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace && with || in text_size_class_parts": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace && with || in variant_string_prefix": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace < with <= in build_mask_slot_classes": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace < with <= in contains_css_function_call": {
+            "count": 1,
+            "verdict": "todo",
+            "why": "distinguishing inputs are degenerate values like 1+(2px) where a paren follows a non-identifier; a test for that shape would be mutant-chasing, revisit if a real value hits it."
+        },
+        "packages/core/src/transform/lower.rs replace < with <= in format_bg_img_object": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace < with <= in is_tailwind_build_function": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace > with >= in variant_string_prefix": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace match guard text.starts_with(\"--\") with false in build_mask_stop_classes": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace match guard text.starts_with(\"--\") with true in build_mask_stop_classes": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace || with && in collect_unknown_mask_slot_members": {
+            "count": 1,
+            "verdict": "todo",
+            "why": "real but needs a mask fixture: a non-side slot carrying a member named like a side would descend into edge validation and emit spurious diagnostics."
+        },
+        "packages/core/src/transform/lower.rs replace || with && in format_color_opacity_object": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace || with && in format_static_class_value": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace || with && in is_known_sz_key": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace || with && in lower_group_peer_variant": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/lower.rs replace || with && in merge_text_size_and_leading": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm \"csszyx\" in szr_rewrite_target": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm 0 in classify_szv_call_argument": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::ArrayExpression(_) in estree_expression_type_name": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::ArrayExpression(array) in static_object_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::BooleanLiteral(literal) in strict_literal_value_diagnosed": {
+            "count": 1,
+            "verdict": "equivalent",
+            "why": "with the arm deleted the literal reader returns Err at the same path the szv config checker rejects a boolean at anyway — base.underline both ways, byte-identical diagnostic; pinned by a_boolean_in_an_szv_config_disqualifies_at_its_path."
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::BooleanLiteral(literal) in strict_static_selection": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::BooleanLiteral(value) in is_absent_sz_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::ConditionalExpression(_) in estree_expression_type_name": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::Identifier(identifier) in candidate_classes_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::Identifier(identifier) in static_object_candidate_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::NumericLiteral(literal) in strict_static_selection": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::ParenthesizedExpression(value) in is_skippable_static_value": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::ParenthesizedExpression(value) in runtime_fallback_span_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::ParenthesizedExpression(value) in static_array_parts_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::ParenthesizedExpression(value) in static_object_candidate_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::StringLiteral(_) in estree_expression_type_name": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::StringLiteral(value) in is_absent_sz_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSAsExpression(value) in candidate_classes_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSAsExpression(value) in is_skippable_static_value": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSAsExpression(value) in runtime_fallback_span_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSAsExpression(value) in static_object_candidate_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSNonNullExpression(value) in expression_has_top_level_spread": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSNonNullExpression(value) in is_skippable_static_value": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSNonNullExpression(value) in partial_object_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSNonNullExpression(value) in runtime_fallback_span_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSNonNullExpression(value) in static_array_parts_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSNonNullExpression(value) in static_object_candidate_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSNonNullExpression(value) in static_object_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSSatisfiesExpression(value) in is_skippable_static_value": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSSatisfiesExpression(value) in runtime_fallback_span_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSSatisfiesExpression(value) in static_array_parts_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSSatisfiesExpression(value) in static_object_candidate_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::TSSatisfiesExpression(value) in static_ternary_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm Expression::UnaryExpression(unary) in strict_static_selection": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm JSXExpression::ParenthesizedExpression(parenthesized) in static_object_from_jsx_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm JSXExpression::ParenthesizedExpression(value) in static_ternary_from_jsx_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm JSXExpression::TSAsExpression(value) in runtime_fallback_span_from_jsx_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm JSXExpression::TSAsExpression(value) in static_object_from_jsx_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm JSXExpression::TSNonNullExpression(value) in runtime_fallback_span_from_jsx_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm JSXExpression::TSNonNullExpression(value) in static_object_from_jsx_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm JSXExpression::TSSatisfiesExpression(value) in runtime_fallback_span_from_jsx_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm JSXExpression::TSSatisfiesExpression(value) in static_object_from_jsx_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs delete match arm PropertyKey::StringLiteral(string) in single_dimension_selection": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace != with == in strict_static_selection": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace && with || in <impl Visit<'a> for CsszyxIrVisitor<'_, '_, 'a>>::visit_ts_type_query": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace && with || in CsszyxIrVisitor<'_, '_, 'p>::record_szr_import_candidate": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace && with || in count_szr_word_occurrences": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace && with || in static_array_part_from_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace && with || in string_value_span": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace + with * in count_szr_word_occurrences": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace + with * in lenient_catalog_objects": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace + with * in string_value_span": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace -= with += in lenient_catalog_object_candidates": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace -= with += in lenient_catalog_values": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace -= with += in push_catalog_extra": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace -= with /= in lenient_catalog_object_candidates": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace -= with /= in lenient_catalog_values": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace -= with /= in push_catalog_extra": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace == with != in CsszyxIrVisitor<'_, '_, 'p>::emit_pending_szr_fallbacks": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace == with != in CsszyxIrVisitor<'_, '_, 'p>::finalize_szr_import_rewrite": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace == with != in count_szr_word_occurrences": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace > with < in parse_source_shell_with_registries": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace > with == in <impl Visit<'a> for CsszyxIrVisitor<'_, '_, 'a>>::enter_node": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace > with == in lenient_catalog_object_candidates": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace > with == in lenient_catalog_values": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace > with >= in <impl Visit<'a> for CsszyxIrVisitor<'_, '_, 'a>>::enter_node": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace > with >= in kebab_case": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace > with >= in lenient_catalog_object_candidates": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace > with >= in lenient_catalog_values": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace > with >= in string_value_span": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace > with >= in truncate_catalog_candidates": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace elapsed_ns -> u64 with 1": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace is_identifier_byte -> bool with false": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace match guard logical.operator.is_and() with true in candidate_classes_from_array_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace || with && in CsszyxIrVisitor<'_, '_, 'p>::record_cross_module_szv_factories": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace || with && in CsszyxIrVisitor<'_, '_, 'p>::record_szr_call_proof": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace || with && in candidate_classes_from_object_expression": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace || with && in color_opacity_ternary_from_object": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace || with && in is_identifier_byte": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace || with && in lenient_catalog_objects": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace || with && in lenient_catalog_values": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace || with && in parse_source_shell_with_registries": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/parser.rs replace || with && in static_property_from_object_property": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/rewrite.rs delete field overwrite from struct UpdateOptions expression in apply_dynamic_style_props": {
+            "count": 3,
+            "verdict": "todo",
+            "why": "same string_wizard overwrite question as replace_range."
+        },
+        "packages/core/src/transform/rewrite.rs delete field overwrite from struct UpdateOptions expression in apply_szr_import_rewrite": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/rewrite.rs delete field overwrite from struct UpdateOptions expression in apply_szv_precompile": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/rewrite.rs delete field overwrite from struct UpdateOptions expression in overwrite_attribute": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/rewrite.rs delete field overwrite from struct UpdateOptions expression in replace_range": {
+            "count": 1,
+            "verdict": "todo",
+            "why": "string_wizard overwrite only differs when edits overlap; needs an input with nested rewrites on one span, may prove equivalent."
+        },
+        "packages/core/src/transform/rewrite.rs delete field overwrite from struct UpdateOptions expression in rewrite_runtime_fallback_sz_attribute": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/rewrite.rs delete field overwrite from struct UpdateOptions expression in rewrite_static_sz_attributes_with_options": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/rewrite.rs delete field overwrite from struct UpdateOptions expression in rewrite_ternary_sz_attribute": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/rewrite.rs replace > with < in opening_attribute_insert_offset": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/rewrite.rs replace > with == in opening_attribute_insert_offset": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/rewrite.rs replace > with >= in opening_attribute_insert_offset": {
+            "count": 2,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/rewrite.rs replace > with >= in whitespace_start": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/scope.rs replace && with || in <impl Visit<'a> for InitializerFinder<'a>>::visit_variable_declaration": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/scope.rs replace DeclaratorScope::is_empty -> bool with true": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/szv_precompile.rs replace && with || in extends_leaf_path": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transform/szv_precompile.rs replace || with && in is_identifier_byte": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transformer.rs replace transform_sz -> Result<String, JsValue> with Ok(\"xyzzy\".into())": {
+            "count": 1,
+            "verdict": "todo"
+        },
+        "packages/core/src/transformer.rs replace transform_sz -> Result<String, JsValue> with Ok(String::new())": {
+            "count": 1,
+            "verdict": "todo"
+        }
+    }
+}

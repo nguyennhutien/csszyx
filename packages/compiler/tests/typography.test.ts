@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { transform } from '../src/transform-core.js';
-import { expectParity } from './tri-engine-harness.js';
+import { expectParity } from './engine-parity-harness.js';
 
 const t = (sz: Parameters<typeof transform>[0]): string => transform(sz).className;
 

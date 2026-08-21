@@ -353,13 +353,14 @@ describe('the sz-object arm of the registry', () => {
         expect(Object.values(left).every(entry => entry.kind === 'sz-object')).toBe(true);
     });
 
-    it('records nothing for a barrel that only re-exports', () => {
-        // A barrel is the shape most likely to be mistaken for support: the
-        // name IS exported from the module the importer names, just not
-        // declared there. Recording the specifier with no value would be worse
-        // than recording nothing — the importer would resolve an entry that
-        // describes no object. Following the chain is out of v1 scope, so the
-        // safe answer is an absent entry and the runtime path.
+    it('records no VALUE for a barrel, which holds none', () => {
+        // A barrel exports a name it does not declare, so there is no value in
+        // it to record — recording the specifier with an empty one would be
+        // worse than recording nothing, because the importer would resolve an
+        // entry that describes no object. What a barrel contributes is a LINK,
+        // kept in a separate index and followed against modules that DO hold
+        // values; this pins that the value pass never invents one. `export *`
+        // contributes neither, since it names nothing to file under.
         const registry: SzvCrossModuleRegistry = new Map();
         recordSzObjectRegistryFile(
             registry,

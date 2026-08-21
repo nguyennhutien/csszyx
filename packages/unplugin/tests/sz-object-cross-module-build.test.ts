@@ -2,7 +2,7 @@
  * A real build for the imported-static-sz-object path.
  *
  * The unit nets cover the registry's rules and the compiler suites cover the
- * three engines' lowering. What neither can show is the part that only exists
+ * both artifacts' lowering. What neither can show is the part that only exists
  * during a build: the prescan deciding WHICH modules to read. A plain exported
  * object carries no marker of its own — unlike `szv(`, there is nothing cheap
  * to grep for, and `export const` is far too common to gate on — so the pass is
@@ -77,17 +77,19 @@ afterAll(() => {
  * @param parser - Engine under test.
  * @param importedStaticSz - Whether the feature is opted in.
  * @param aliased - Whether the importer names the provider through `@`.
+ * @param overrides - Fixture files to replace, for the export-shape matrix.
  * @returns Emitted bundle text and the safelist file contents.
  */
 async function buildFixture(
-    parser: 'rust' | 'oxc' | 'babel',
+    parser: 'rust' | 'wasm' | 'auto',
     importedStaticSz: boolean,
     aliased = false,
+    overrides: Record<string, string> = {},
 ): Promise<{ js: string; safelist: string }> {
     const root = mkdtempSync(join(realpathSync(tmpdir()), `csszyx-szobj-${parser}-`));
     tempDirs.push(root);
     mkdirSync(join(root, 'src'), { recursive: true });
-    for (const [file, source] of Object.entries(FIXTURE_FILES)) {
+    for (const [file, source] of Object.entries({ ...FIXTURE_FILES, ...overrides })) {
         writeFileSync(join(root, file), source, 'utf8');
     }
     if (aliased) writeFileSync(join(root, 'src/App.tsx'), ALIASED_APP, 'utf8');
@@ -125,7 +127,7 @@ async function buildFixture(
     return { js, safelist };
 }
 
-const PARSERS = ['rust', 'oxc', 'babel'] as const;
+const PARSERS = ['rust', 'wasm', 'auto'] as const;
 
 describe('a plain exported style object, through a real build', () => {
     for (const parser of PARSERS) {
@@ -163,6 +165,123 @@ describe('a plain exported style object, through a real build', () => {
             expect(safelist).toContain('p-7');
         }
     }, 240_000);
+
+    // The docs state which export shapes fold and which do not, and the shape
+    // that is wrong there is the expensive one: a reader trusts a table saying
+    // "runtime fallback" and rewrites working code, or trusts "build time" and
+    // ships an element naming a rule nothing generated. The table drifted once
+    // already — it still called a named import a runtime fallback three
+    // releases after the feature landed — because nothing here disagreed with
+    // it. These builds are that disagreement.
+    //
+    // A re-export is read as a LINK and followed against the modules the build
+    // has already read, so a barrel now folds and so does the two-statement
+    // form that means the same thing. `export *` does not: it carries no export
+    // name, so there is nothing to file a value under without reading the
+    // provider's whole export list, which is a different question.
+    const EXPORT_SHAPES: ReadonlyArray<readonly [string, Record<string, string>, boolean]> = [
+        [
+            'a named export of a literal',
+            { 'src/styles.ts': "export const cardSz = { p: 7, rounded: 'lg' };" },
+            true,
+        ],
+        [
+            'a const exported in a separate clause',
+            { 'src/styles.ts': "const cardSz = { p: 7, rounded: 'lg' };\nexport { cardSz };" },
+            true,
+        ],
+        [
+            'a namespace member',
+            {
+                'src/styles.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
+                'src/App.tsx':
+                    "import * as S from './styles.ts';\nexport const App = () => <div sz={S.cardSz} />;",
+            },
+            true,
+        ],
+        [
+            'a literal in the default slot',
+            {
+                'src/styles.ts': "export default { p: 7, rounded: 'lg' };",
+                'src/App.tsx':
+                    "import cardSz from './styles.ts';\nexport const App = () => <div sz={cardSz} />;",
+            },
+            true,
+        ],
+        [
+            'an identifier in the default slot',
+            {
+                'src/styles.ts': "const cardSz = { p: 7, rounded: 'lg' };\nexport default cardSz;",
+                'src/App.tsx':
+                    "import cardSz from './styles.ts';\nexport const App = () => <div sz={cardSz} />;",
+            },
+            false,
+        ],
+        [
+            'a barrel forwarding a name it does not declare',
+            {
+                'src/base.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
+                'src/styles.ts': "export { cardSz } from './base.ts';",
+            },
+            true,
+        ],
+        [
+            'an import re-exported in a second statement',
+            {
+                'src/base.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
+                'src/styles.ts': "import { cardSz } from './base.ts';\nexport { cardSz };",
+            },
+            true,
+        ],
+        [
+            'a barrel forwarding two names out of one module',
+            {
+                'src/base.ts':
+                    "export const cardSz = { p: 7, rounded: 'lg' };\nexport const rowSz = { m: 3 };",
+                'src/styles.ts': "export { cardSz, rowSz } from './base.ts';",
+            },
+            true,
+        ],
+        [
+            'a barrel two modules deep',
+            {
+                'src/base.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
+                'src/inner.ts': "export { cardSz } from './base.ts';",
+                'src/styles.ts': "export { cardSz } from './inner.ts';",
+            },
+            true,
+        ],
+        [
+            'a star re-export, which names nothing to file the value under',
+            {
+                'src/base.ts': "export const cardSz = { p: 7, rounded: 'lg' };",
+                'src/styles.ts': "export * from './base.ts';",
+            },
+            false,
+        ],
+        [
+            'a computed value',
+            {
+                'src/styles.ts':
+                    "export const cardSz = makeIt();\nfunction makeIt() { return { p: 7, rounded: 'lg' }; }",
+            },
+            false,
+        ],
+    ];
+
+    it.each(EXPORT_SHAPES)(
+        'folds %s: %o',
+        async (_name, overrides, folds) => {
+            const { js, safelist } = await buildFixture('rust', true, false, overrides);
+            // Both halves matter and they fail apart: the emitted class without
+            // the safelist entry is an element naming a rule Tailwind was never
+            // asked to generate.
+            expect(js.includes('p-7')).toBe(folds);
+            expect(safelist.includes('p-7')).toBe(folds);
+            expect(js.includes('_sz(')).toBe(!folds);
+        },
+        120_000,
+    );
 
     it('reads a provider only because something imports it', async () => {
         // `unusedSz` lives in a module the prescan DID read, so it is recorded;

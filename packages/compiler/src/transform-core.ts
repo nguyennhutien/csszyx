@@ -1123,7 +1123,7 @@ function warnAlignmentValue(rawKey: string, value: unknown): void {
 // ============================================================================
 // BOOLEAN_TO_CLASS: Maps camelCase boolean props to their class names
 // ============================================================================
-const BOOLEAN_TO_CLASS: Record<string, string> = {
+export const BOOLEAN_TO_CLASS: Record<string, string> = {
     textEllipsis: 'text-ellipsis',
     textClip: 'text-clip',
     backdropBlur: 'backdrop-blur',
@@ -2197,7 +2197,7 @@ function runtimeSzWarnContext(szProp: SzObject): string {
 
 /**
  * Set (or clear, with `undefined`) the source location appended to the dev-mode
- * unknown-property warning. Called by the build engines (oxc/babel) around each
+ * unknown-property warning. Called by the build engines (the removed JavaScript lanes) around each
  * sz attribute; a balanced clear MUST follow so the location never leaks to an
  * unrelated later transform.
  *

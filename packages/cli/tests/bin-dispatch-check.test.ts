@@ -52,7 +52,13 @@ describe('bin check dispatch (real command)', () => {
             '**/skipme/**',
         ];
         await import('../src/bin.js?scenario=check-single-ignore');
-        await new Promise(resolve => setTimeout(resolve, 200));
+        // Poll rather than sleep a fixed span: the action is async and now
+        // loads its command module on demand, so any constant is a race that
+        // passes alone and fails under a loaded suite.
+        for (let waited = 0; waited < 10_000 && logs.length === 0; waited += 25) {
+            await new Promise(resolve => setTimeout(resolve, 25));
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         const out = logs.join('\n');
         expect(out).toContain('Bad.tsx');

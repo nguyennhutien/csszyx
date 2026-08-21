@@ -644,7 +644,7 @@ describe('csszyx parser selection', () => {
                     'const App=()=> <div sz={{ p: 4 }} />;',
                     '/repo/src/App.tsx',
                 ),
-            ).toThrow('Use build.parser: "oxc" or "babel"');
+            ).toThrow('Use build.parser: "wasm" or "auto"');
             return;
         }
 
@@ -672,7 +672,7 @@ describe('csszyx parser selection', () => {
                     'export const App = () => <div sz={{ p: 4 }} />;',
                     '/repo/src/App.tsx',
                 ),
-            ).toThrow('Use build.parser: "oxc" or "babel"');
+            ).toThrow('Use build.parser: "wasm" or "auto"');
             return;
         }
 

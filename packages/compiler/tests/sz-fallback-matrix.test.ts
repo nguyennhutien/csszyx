@@ -23,7 +23,7 @@ import {
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
 import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
-import { captureWarnings, ENGINES } from './tri-engine-harness.js';
+import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 /** Sources that drive each classification arm through a real transform. */
 const FALLBACK_SOURCES: ReadonlyArray<readonly [string, string]> = [
@@ -33,7 +33,7 @@ const FALLBACK_SOURCES: ReadonlyArray<readonly [string, string]> = [
     ['call without a readable name', 'export const A = ({ c }) => <div sz={(c ? f : g)()} />;'],
     ['identifier', 'export const A = ({ v }) => <div sz={v} />;'],
     ['member', 'export const A = () => <div sz={cfg.card} />;'],
-    // Babel's AST has no parenthesized nodes; the oxc lane unwraps them to
+    // Babel's AST has no parenthesized nodes; the JavaScript lane it replaced unwraps them to
     // match. Diverged before that fix: other/ParenthesizedExpression at 1:33
     // versus member at 1:34.
     ['member behind parentheses', 'export const A = () => <div sz={(cfg.card)} />;'],

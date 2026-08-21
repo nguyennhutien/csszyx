@@ -36,8 +36,8 @@ import { transformWasm } from '../src/transform-wasm.js';
 type Engine = (source: string, filename?: string) => { code?: string; usesSzvPick?: boolean };
 
 const LANES: ReadonlyArray<readonly [string, Engine]> = [
-    ['babel', transformSource],
-    ['oxc', transformWasm as Engine],
+    ['auto', transformSource],
+    ['wasm', transformWasm as Engine],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
 ];
 
@@ -705,7 +705,7 @@ describe('the single-dimension picker', () => {
         });
     });
 
-    it.each(CASES)('three engines agree on: %s', (_name, body) => {
+    it.each(CASES)('both artifacts agree on: %s', (_name, body) => {
         const shapes = LANES.map(([, engine]) => JSON.stringify(pickShape(engine, IMPORTS + body)));
         expect(new Set(shapes).size).toBe(1);
     });

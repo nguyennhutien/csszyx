@@ -11,8 +11,9 @@ use super::{
     parser::{parse_source_shell_with_registries, CrossModuleRegistries, AST_BUDGET},
     recovery::{generate_inline_recovery_token, offset_to_line_column, LineIndex},
     rewrite::rewrite_static_sz_attributes,
-    DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile, TransformMetadata,
-    TransformOptions, TransformProducer, TransformResult, TransformTimings, UnsupportedRecoveryIr,
+    DroppedKeyReason, DynamicCssVarCategory, ParserPath, RecoveryToken, TransformFile,
+    TransformMetadata, TransformOptions, TransformProducer, TransformResult, TransformTimings,
+    UnsupportedRecoveryIr,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
@@ -179,6 +180,11 @@ fn transform_fast_static_ir_with_options(
         diagnostics: {
             let mut diagnostics =
                 unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref());
+            diagnostics.extend(var_hostile_diagnostics(
+                file,
+                lower_ir,
+                options.root_dir.as_deref(),
+            ));
             diagnostics.extend(lower_ir.szs_diagnostics.iter().cloned());
             diagnostics
         },
@@ -269,7 +275,7 @@ fn transform_static_classes_with_options(
     let mut diagnostics = parsed.diagnostics;
     // Per-element warnings about unsupported sz/szRecover shapes are soft —
     // the rewrite pass already skips those elements individually, so they
-    // must not block the rest of the file from transforming. The oxc-JS
+    // must not block the rest of the file from transforming. The the JavaScript pipeline
     // path has the same contract: a warning on one element keeps the
     // valid ones flowing through className/recovery-token emission.
     let has_parser_errors = !diagnostics.is_empty();
@@ -283,6 +289,11 @@ fn transform_static_classes_with_options(
     diagnostics.extend(deferred_array_object_diagnostics(file, &parsed.ir));
     diagnostics.extend(unsupported_recovery_diagnostics(file, &parsed.ir));
     diagnostics.extend(unknown_property_diagnostics(
+        file,
+        &parsed.ir,
+        options.root_dir.as_deref(),
+    ));
+    diagnostics.extend(var_hostile_diagnostics(
         file,
         &parsed.ir,
         options.root_dir.as_deref(),
@@ -314,7 +325,7 @@ fn transform_static_classes_with_options(
     }
 
     // Runtime helper flags for downstream import-injection, mirroring the
-    // oxc-JS pipeline so caches built against one producer stay valid for the
+    // the JavaScript pipeline pipeline so caches built against one producer stay valid for the
     // other. sz arrays compose through `szcn` (later-wins per property group),
     // with dynamic elements resolving through `_szPart`; `_szMerge` remains
     // the className+sz merge helper and `_sz` the whole-value runtime
@@ -400,7 +411,7 @@ fn transform_static_classes_with_options(
     // A budget-tripped walk produced a PARTIAL IR: whichever classes happen to
     // sit before the cut would flow into the safelist and the rest silently
     // vanish — under Tailwind `source(none)` that is wrong CSS with no signal
-    // (and a rust-vs-oxc parity break, since the JS engines throw instead).
+    // (and a rust-vs-oxc parity break, since the removed JavaScript lanes throw instead).
     // Contribute nothing and let the diagnostic above carry the loud skip.
     let (classes, raw_class_names) = if parsed.ast_budget_exceeded {
         (Vec::new(), Vec::new())
@@ -564,7 +575,7 @@ fn site_fallback_diagnostics(
 /// Emits the shared fallback matrix entry (why, and what to do instead) and —
 /// for an object literal with a top-level spread — the unresolvable-spread
 /// notice, in the same per-attribute order and with the same wording and
-/// `line:column` positions as the Babel and oxc lanes, so a `build.parser`
+/// `line:column` positions as the Babel and the JavaScript lane it replaceds, so a `build.parser`
 /// flip cannot change the build log. The `unresolvable sz spread` phrase is
 /// the marker the bundler plugin matches to promote those to a build-log
 /// warning in every mode.
@@ -589,13 +600,10 @@ fn runtime_fallback_diagnostics(
             RuntimeFallbackKindIr::Identifier => SzFallbackKind::Identifier,
             RuntimeFallbackKindIr::Import => SzFallbackKind::Import,
             RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
-            // An sz attribute never carries factory-level knowledge; the
-            // variant exists for the szr site alone.
-            RuntimeFallbackKindIr::Other | RuntimeFallbackKindIr::SzvFactory => {
-                SzFallbackKind::Other
-            }
+            RuntimeFallbackKindIr::SzvFactory => SzFallbackKind::SzvFactory,
+            RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
         };
-        let reason = sz_fallback_reason(kind, &diagnostic.detail, "");
+        let reason = sz_fallback_reason(kind, &diagnostic.detail, &diagnostic.path);
         let suggestion = sz_fallback_suggestion(kind);
         out.push(format!(
             "sz fallback at {line}:{column}: {reason}.
@@ -638,10 +646,10 @@ fn style_spread_collision_diagnostics(file: &TransformFile, ir: &super::SourceIr
 
 /// Dev-mode build-log diagnostics for unrecognized sz property keys (likely
 /// typos), located by file and line so they are findable in a large codebase —
-/// parity with the oxc/Babel engines, which previously were the only ones to
+/// parity with the removed JavaScript lanes, which previously were the only ones to
 /// warn. The bundler plugin gates these to dev (and suppresses source paths in
 /// production), the same as the other soft diagnostics here.
-/// Matches the JS engines' `/^\d+(?:\.\d+)?$/` — a bare integer or decimal, the
+/// Matches the removed JavaScript lanes' `/^\d+(?:\.\d+)?$/` — a bare integer or decimal, the
 /// shape of an array index or a spread's numeric key that reached `sz`.
 fn is_numeric_key(key: &str) -> bool {
     let (int, frac) = key
@@ -650,6 +658,41 @@ fn is_numeric_key(key: &str) -> bool {
     !int.is_empty()
         && int.bytes().all(|b| b.is_ascii_digit())
         && frac.is_none_or(|f| !f.is_empty() && f.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Report every property whose runtime value had no Tailwind var form.
+///
+/// Kept apart from the unknown/removed pass because the advice is different:
+/// the key is right, the value shape is not, and the way out is to name the
+/// values rather than to fix a typo. Production, not dev-only — a dropped
+/// class is the csszyx→Tailwind→CSS contract failing, which is the bar this
+/// project warns at in every build.
+fn var_hostile_diagnostics(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    root_dir: Option<&str>,
+) -> Vec<String> {
+    let location = relativize_diagnostic_path(&file.filename, root_dir);
+    let mut lines: Option<LineIndex> = None;
+    let mut out = Vec::new();
+    for attribute in &ir.sz_attributes {
+        for dropped in &attribute.dropped_dynamic_keys {
+            if dropped.reason != DroppedKeyReason::NoVarForm {
+                continue;
+            }
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, dropped.span.start);
+            out.push(format!(
+                "[csszyx] \"{}\" cannot take a runtime value at {location}:{line}: Tailwind has \
+                 no utility for this key that reads a CSS variable, so the class and the variable \
+                 were dropped instead of styling a different property. Name the values with \
+                 szv(), or use dynamic() for open-ended data.",
+                dropped.key
+            ));
+        }
+    }
+    out
 }
 
 fn unknown_property_diagnostics(
@@ -661,6 +704,8 @@ fn unknown_property_diagnostics(
     let mut out = Vec::new();
     let mut unknown = Vec::new();
     let mut dead_steps = Vec::new();
+    let mut removed_sugar = Vec::new();
+    let mut border_side_styles = Vec::new();
     let mut property_objects = Vec::new();
     let mut mask_members = Vec::new();
     // Built on the first position lookup, not up front: a file whose `sz` props
@@ -673,22 +718,26 @@ fn unknown_property_diagnostics(
     let attribute_objects = ir
         .sz_attributes
         .iter()
-        .map(|attr| (&attr.object, attr.removed_dynamic_keys.as_slice()));
+        .map(|attr| (&attr.object, attr.dropped_dynamic_keys.as_slice()));
     let catalog_objects = ir.catalog_sz_objects.iter().map(|object| (object, &[][..]));
-    for (object, removed_dynamic_keys) in attribute_objects.chain(catalog_objects) {
+    for (object, dropped_dynamic_keys) in attribute_objects.chain(catalog_objects) {
         unknown.clear();
         collect_unknown_sz_keys(object, &mut unknown);
+        // Only the removed-key drops belong in this pass. A key dropped for
+        // having no var form is still a supported key, and reporting it as
+        // unknown would send the author looking for a typo.
         unknown.extend(
-            removed_dynamic_keys
+            dropped_dynamic_keys
                 .iter()
-                .map(|removed| (removed.key.clone(), removed.span.start)),
+                .filter(|dropped| dropped.reason == DroppedKeyReason::RemovedKey)
+                .map(|dropped| (dropped.key.clone(), dropped.span.start)),
         );
         for (key, offset) in &unknown {
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, *offset);
             // A numeric key is almost never a typo — it means an array or a spread
-            // reached `sz`. Match the JS engines' wording so a `build.parser` flip
+            // reached `sz`. Match the removed JavaScript lanes' wording so a `build.parser` flip
             // does not change the diagnostic text.
             if let Some(note) = super::generated::tables::key_migration_note(key) {
                 // Wording mirrors the runtime channel's unknownSzPropertyMessage
@@ -720,10 +769,23 @@ fn unknown_property_diagnostics(
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, *offset);
-            // Wording matches the JS engines' warnDeadSpacingStep so a
+            // Wording matches the removed JavaScript lanes' warnDeadSpacingStep so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
+            ));
+        }
+        removed_sugar.clear();
+        super::lower::collect_removed_boolean_sugar(object, &mut removed_sugar);
+        push_removed_sugar_diagnostics(file, &removed_sugar, &location, &mut lines, &mut out);
+        border_side_styles.clear();
+        super::lower::collect_border_side_styles(object, &mut border_side_styles);
+        for (key, value, offset) in &border_side_styles {
+            let (line, _) = lines
+                .get_or_insert_with(|| LineIndex::new(&file.source))
+                .line_column(&file.source, *offset);
+            out.push(format!(
+                "[csszyx] \"{key}: '{value}'\" at {location}:{line}: Tailwind has no per-side border style, so this generated no CSS and the class is dropped. Use borderStyle: '{value}' for every side, or a number on \"{key}\" for the width."
             ));
         }
         property_objects.clear();
@@ -732,7 +794,7 @@ fn unknown_property_diagnostics(
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, *offset);
-            // Wording matches the JS engines' warnPropertyObjectValue so a
+            // Wording matches the removed JavaScript lanes' warnPropertyObjectValue so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] \"{key}\" is a property, not a variant, but received an object {{ {nested} }} at {location}:{line}. This compiles to \"{key}:*\" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use {{ color: '...', op: ... }}."
@@ -744,13 +806,16 @@ fn unknown_property_diagnostics(
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, *offset);
-            // Wording matches the JS engines' warnMaskSlotMember so a
+            // Wording matches the removed JavaScript lanes' warnMaskSlotMember so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] {owner}: unknown field \"{member}\" at {location}:{line} — nothing is emitted for it. {owner} takes {{ {allowed} }}."
             ));
         }
     }
+    out.extend(class_name_precedence_advisories(
+        file, ir, &location, &mut lines,
+    ));
     out
 }
 
@@ -771,11 +836,89 @@ fn relativize_diagnostic_path(filename: &str, root_dir: Option<&str>) -> String 
     filename.to_string()
 }
 
+/// Report each removed boolean-sugar alias found in one sz object.
+///
+/// The build lane is the ONLY one that sees a statically extracted prop: the
+/// runtime warning for these keys never fires for source this pass compiled,
+/// so silence here meant a style vanished with nothing to search for. Names the
+/// canonical spelling and the codemod, mirroring the runtime channel's wording.
+fn push_removed_sugar_diagnostics(
+    file: &TransformFile,
+    found: &[(String, &'static str, &'static str, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    // The collector proved the replacement exists by finding it, so there is
+    // no lookup here that could fail and no branch that cannot run.
+    for (key, canonical, value, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        out.push(format!(
+            "[csszyx] \"{key}\" boolean sugar was removed at {location}:{line}. Use {{ {canonical}: '{value}' }} instead, or run `csszyx migrate`."
+        ));
+    }
+}
+
+/// Advisory for an element carrying both `sz` and a non-literal `className`.
+///
+/// The fusion is always `_szMerge(className, sz)` — sz last, so sz wins per
+/// conflicting utility, and JSX attribute order does not change that. For a
+/// wrapper forwarding a consumer's `className` the effect inverts what the
+/// author expects: a consumer's `sz` demotes to `className` at the call site,
+/// and the wrapper's own defaults then delete it. Nothing else reports it —
+/// the class is safelisted, the CSS ships, the types are fine.
+///
+/// Reports the SHAPE, not a proven conflict: `props.className` is a runtime
+/// value, so whether the two collide is unknowable here. That is why it is
+/// advisory. What makes reporting a shape fair is that the rewrite is strictly
+/// better — the array states the precedence, safelists identically, and lowers
+/// through one memoised `szcn` rather than an un-memoised `_szMerge` wrapping
+/// a memoised one.
+///
+/// Both intents are spellable, and either rewrite drops the `className`
+/// attribute, so the trigger disappears once the author has said which one
+/// they mean. There is no suppression flag because none is needed.
+fn class_name_precedence_advisories(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    location: &str,
+    lines: &mut Option<LineIndex>,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for element in &ir.jsx_opening_elements {
+        let Some(class_index) = element.class_attribute_index else {
+            continue;
+        };
+        // A literal className is written right there beside the sz, so the
+        // author can see both orders at once and nothing is forwarded in.
+        let Some(span) = ir.class_attributes[class_index].expression_span else {
+            continue;
+        };
+        // An sz that is already an array has stated its precedence by position.
+        if !element
+            .sz_attribute_indices
+            .iter()
+            .any(|index| ir.sz_attributes[*index].array_parts.is_empty())
+        {
+            continue;
+        }
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, span.start);
+        out.push(format!(
+            "[csszyx] \"sz\" takes precedence over the runtime \"className\" on this element at {location}:{line}, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={{[{{ … }}, className]}} for the caller to win, sz={{[className, {{ … }}]}} for these styles to win."
+        ));
+    }
+    out
+}
+
 /// Dev diagnostic for an sz ARRAY element that is an object literal carrying a
 /// runtime value: the whole element degrades to `_szPart` at runtime instead
 /// of compiling statically. Only object literals warn — identifiers, calls,
 /// and member expressions are legitimate forwarded slots. The wording and the
-/// 1-based line:column position match the oxc/Babel engines byte-for-byte.
+/// 1-based line:column position match the removed JavaScript lanes byte-for-byte.
 fn deferred_array_object_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
     ir.sz_attributes
         .iter()
@@ -1042,6 +1185,45 @@ mod tests {
     }
 
     #[test]
+    fn diagnostics_report_a_runtime_value_tailwind_cannot_lower() {
+        let file = TransformFile {
+            filename: "/repo/src/Align.tsx".to_string(),
+            // The removed alias shares the drop list with the var-hostile key,
+            // and the two must not borrow each other's message: one says the
+            // key is gone, the other says only this value shape is.
+            source: "const App = ({ v }) => <div sz={{ padding: v, textAlign: v }} />;".to_string(),
+        };
+
+        let result = transform_static_classes_with_options(
+            &file,
+            0,
+            std::time::Instant::now(),
+            TransformOptions {
+                root_dir: Some("/repo/".to_string()),
+                ..TransformOptions::default()
+            },
+        );
+
+        // `text-(--v)` is a COLOUR in Tailwind v4, so emitting the class would
+        // style the wrong property with an invalid value rather than align.
+        assert!(!result.code.contains("--_sz-text-align"), "{}", result.code);
+        assert!(result.classes.is_empty(), "{:?}", result.classes);
+        assert_eq!(result.diagnostics.len(), 2, "{:?}", result.diagnostics);
+        let diagnostic = result
+            .diagnostics
+            .iter()
+            .find(|entry| entry.contains("textAlign"))
+            .expect("a report naming the key");
+        assert!(diagnostic.contains("\"textAlign\""), "{diagnostic}");
+        assert!(diagnostic.contains("src/Align.tsx:1"), "{diagnostic}");
+        assert!(diagnostic.contains("szv()"), "{diagnostic}");
+        // A supported key with one unsupported value shape must not read as a
+        // typo, or the author goes looking for a misspelling that is not there.
+        assert!(!diagnostic.contains("was removed"), "{diagnostic}");
+        assert!(!diagnostic.contains("Unknown"), "{diagnostic}");
+    }
+
+    #[test]
     fn diagnostics_render_migration_note_and_canonical_suggestion() {
         let file = TransformFile {
             filename: "/repo/src/Diagnostics.tsx".to_string(),
@@ -1121,7 +1303,7 @@ mod tests {
             filename: "/repo/src/Tag.tsx".to_string(),
             source: [
                 "import { szr, szv } from 'csszyx';",
-                "const t = szv({ variants: { c: { blue: { color: 'blue-500', 'desktop-sm': { p: 4 } } } } });",
+                "const t = szv({ base: { color: 'red-500' }, variants: { c: { blue: { color: 'blue-500' } } } });",
                 "export const A = () => <div className={szr(t({ c: 'blue' }))} />;",
             ]
             .join("\n"),
@@ -1134,11 +1316,66 @@ mod tests {
             "{diagnostics}"
         );
         assert!(
-            diagnostics.contains("config disqualified at `variants.c.blue.desktop-sm`"),
+            diagnostics.contains("config disqualified at `base.color`"),
             "{diagnostics}"
         );
         // The old advice was circular — the author is already writing szv().
         assert!(!diagnostics.contains("convert to szv()"), "{diagnostics}");
+    }
+
+    #[test]
+    fn static_engine_names_the_szv_factory_from_an_sz_attribute_too() {
+        // Same factory, same refusal, read from the attribute position instead
+        // of szr. That position used to classify the call as a generic unknown
+        // function, so one cause produced two explanations and the attribute's
+        // named no position at all. The attribute is written BEFORE the
+        // declaration here on purpose: the substitution runs after the walk, so
+        // it must not depend on which one the parser reached first.
+        let file = TransformFile {
+            filename: "/repo/src/Tag.tsx".to_string(),
+            source: [
+                "import { szv } from 'csszyx';",
+                "export const A = () => <div sz={t({ c: 'blue' })} />;",
+                "const t = szv({ base: { color: 'red-500' }, variants: { c: { blue: { color: 'blue-500' } } } });",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("sz fallback at 2:33: szv factory `t()` did not precompile"),
+            "{diagnostics}"
+        );
+        assert!(
+            diagnostics.contains("config disqualified at `base.color`"),
+            "{diagnostics}"
+        );
+        assert!(!diagnostics.contains("convert to szv()"), "{diagnostics}");
+    }
+
+    #[test]
+    fn static_engine_keeps_the_generic_call_advice_for_an_unknown_callee() {
+        // The boundary of the substitution: a function this parse never saw
+        // declared as szv has no config to point at, so inventing a path would
+        // be worse than the generic advice.
+        let file = TransformFile {
+            filename: "/repo/src/Tag.tsx".to_string(),
+            source: [
+                "import { szv } from 'csszyx';",
+                "const t = szv({ base: { color: 'red-500' }, variants: { c: { blue: { color: 'blue-500' } } } });",
+                "export const A = () => <div sz={mk()} />;",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("function call `mk()` result is unknown at build time"),
+            "{diagnostics}"
+        );
+        assert!(!diagnostics.contains("szv factory `mk()`"), "{diagnostics}");
     }
 
     #[test]
@@ -1727,7 +1964,7 @@ mod tests {
         assert!(result.metadata.uses_runtime);
         assert!(result.classes.is_empty());
         // Byte-identical to the Babel lane's diagnostic for this source — the
-        // fallback matrix is a three-engine parity surface (ADR 0011).
+        // fallback matrix is a cross-artifact parity surface (ADR 0011).
         assert_eq!(
             result.diagnostics,
             vec![String::from(
@@ -1782,11 +2019,19 @@ mod tests {
         assert!(result.metadata.uses_merge);
         assert!(result.classes.is_empty());
         assert!(result.raw_class_names.is_empty());
+        // The className is a call result, so this is exactly the shape the
+        // precedence advisory reports: `sz` is emitted last and wins, and
+        // whatever `getClass()` returns is the losing side.
         assert_eq!(
             result.diagnostics,
-            vec![String::from(
-                "sz fallback at 1:59: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
-            )]
+            vec![
+                String::from(
+                    "sz fallback at 1:59: identifier `styles` could not be resolved to a static value.\n  Suggestion: Make sure it's a module-level or function-body const with a literal object value. For variant-based styling → szv(). For true runtime values → dynamic()."
+                ),
+                String::from(
+                    "[csszyx] \"sz\" takes precedence over the runtime \"className\" on this element at /repo/src/App.tsx:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win."
+                ),
+            ]
         );
     }
 
@@ -1808,7 +2053,15 @@ mod tests {
         assert!(result.metadata.uses_merge);
         assert_eq!(result.classes, ["p-4"]);
         assert!(result.raw_class_names.is_empty());
-        assert!(result.diagnostics.is_empty());
+        // Same shape, static sz this time: the advisory keys on the className
+        // being an expression, not on how the sz resolved. The static-className
+        // twin above stays diagnostic-free, which is what keeps this precise.
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "[csszyx] \"sz\" takes precedence over the runtime \"className\" on this element at /repo/src/App.tsx:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win."
+            )]
+        );
     }
 
     #[test]
@@ -2300,5 +2553,444 @@ mod tests {
             "{diagnostics}"
         );
         assert!(!diagnostics.contains("numeric key"), "{diagnostics}");
+    }
+
+    /// A style keyword on a per-side border key is reported, not silently kept.
+    ///
+    /// `borderB: 'none'` lowers to `border-b-none`, which Tailwind does not
+    /// serve — the element would name a rule nothing generates. Dropping the
+    /// class without saying so would leave the author looking at an unstyled
+    /// border with nothing to search for, so the drop and the message ship
+    /// together and are pinned together.
+    #[test]
+    fn a_border_style_keyword_on_one_side_is_reported_where_it_is_written() {
+        let file = TransformFile {
+            filename: "/repo/src/Side.tsx".to_string(),
+            source: "export const App = () => <div sz={{ borderB: 'none' }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("no per-side border style"),
+            "{diagnostics}"
+        );
+        assert!(diagnostics.contains("borderB"), "{diagnostics}");
+        assert!(
+            !result
+                .classes
+                .iter()
+                .any(|class| class.contains("border-b-none")),
+            "the dead class must not reach the safelist: {:?}",
+            result.classes
+        );
+    }
+
+    /// The same keyword nested under a variant is reported too.
+    ///
+    /// The collector walks nested objects, and a per-side border style inside
+    /// `hover` is exactly as dead as one at the top level — reporting only the
+    /// top level would make the diagnostic depend on where the author put it.
+    #[test]
+    fn a_per_side_border_style_is_found_inside_a_variant() {
+        let file = TransformFile {
+            filename: "/repo/src/Nested.tsx".to_string(),
+            source: "export const App = () => <div sz={{ hover: { borderT: 'dashed' } }} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("no per-side border style"),
+            "{diagnostics}"
+        );
+        assert!(
+            !result
+                .classes
+                .iter()
+                .any(|class| class.contains("border-t-dashed")),
+            "{:?}",
+            result.classes
+        );
+    }
+
+    /// A per-side border WIDTH still compiles, which is the whole point.
+    ///
+    /// The drop keys on the value, not the key: refusing `borderB` outright
+    /// would take a working utility with it.
+    #[test]
+    fn a_per_side_border_width_is_untouched() {
+        let file = TransformFile {
+            filename: "/repo/src/Width.tsx".to_string(),
+            source: "export const App = () => <div sz={{ borderB: 2 }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|diagnostic| !diagnostic.contains("no per-side border style")),
+            "{:?}",
+            result.diagnostics
+        );
+        assert!(
+            result.classes.iter().any(|class| class == "border-b-2"),
+            "{:?}",
+            result.classes
+        );
+    }
+
+    /// The walk into a variant block does not stop at a colour.
+    ///
+    /// Descent is refused only for a parameter namespace — an object that
+    /// belongs to a property key and carries a colour, where the inner names
+    /// are that property's parameters rather than sz keys. A variant block is
+    /// neither, so setting a colour beside a per-side border style must not
+    /// buy the style a way past the diagnostic.
+    #[test]
+    fn a_colour_beside_a_per_side_border_style_does_not_hide_it() {
+        let file = TransformFile {
+            filename: "/repo/src/Hover.tsx".to_string(),
+            source: "export const App = () => <div sz={{ hover: { color: 'red-500', borderB: 'dashed' } }} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("no per-side border style"),
+            "{diagnostics}"
+        );
+        assert!(diagnostics.contains("borderB"), "{diagnostics}");
+    }
+
+    /// A `/` that divides must not read as the start of a comment.
+    ///
+    /// The guard skips comments so a bracket inside one never counts toward
+    /// depth. Loosen how a comment is recognised — match a lone `/`, or the
+    /// byte after it instead of the byte itself — and an ordinary division
+    /// swallows the rest of its line. Every bracket past it stops counting, so
+    /// source that really is over-nested sails through the guard and reaches
+    /// the parser it exists to protect.
+    #[test]
+    fn a_division_does_not_open_a_comment() {
+        assert_eq!(
+            super::max_source_nesting_depth("const r = a / b; ({[]})"),
+            3
+        );
+    }
+
+    /// Brackets inside a line comment are text, not structure.
+    ///
+    /// Counting them turns a commented-out block into nesting the author never
+    /// wrote, and a large enough one refuses to transform a file that is fine.
+    #[test]
+    fn brackets_in_a_line_comment_do_not_count() {
+        assert_eq!(super::max_source_nesting_depth("// {{{{{{{{"), 0);
+        // The comment ends at the newline; what follows is code again.
+        assert_eq!(super::max_source_nesting_depth("// {{{{\nconst a = ({;"), 2);
+        // Starting mid-line, so the step past `//` has to land right after it
+        // rather than somewhere scaled off the offset it started from.
+        assert_eq!(
+            super::max_source_nesting_depth("const a = 1; // {{\n({[]})"),
+            3
+        );
+    }
+
+    /// Same for a block comment — including one holding a lone `*` or `/`.
+    ///
+    /// The terminator is the PAIR `*/`. Stopping at either byte alone ends the
+    /// comment early and reads the rest of it as code.
+    #[test]
+    fn brackets_in_a_block_comment_do_not_count() {
+        assert_eq!(super::max_source_nesting_depth("/* {{{ * / {{{ */"), 0);
+        // Code after the terminator counts again, which is what the step past
+        // `*/` is for.
+        assert_eq!(super::max_source_nesting_depth("/* {{{ */ ({["), 3);
+        // Same again from mid-line, where a step that scales with the offset
+        // lands past the terminator instead of just after `/*`.
+        assert_eq!(
+            super::max_source_nesting_depth("const a = 1; /* {{ */ ({[]})"),
+            3
+        );
+    }
+
+    /// A bracket inside a string or template literal is data.
+    ///
+    /// This is the case the guard was written for: a file embedding a minified
+    /// blob or a JSON fixture is not deeply nested source, and refusing to
+    /// transform it would silently drop every sz prop in the file.
+    #[test]
+    fn brackets_in_a_quoted_literal_do_not_count() {
+        assert_eq!(super::max_source_nesting_depth("const a = '{{{{';"), 0);
+        assert_eq!(super::max_source_nesting_depth("const a = \"{{{{\";"), 0);
+        assert_eq!(super::max_source_nesting_depth("const a = `{{{{`;"), 0);
+        // The scanner has to find the real closing quote, not run to the end.
+        assert_eq!(super::max_source_nesting_depth("const a = '{{{{'; ({["), 3);
+    }
+
+    /// An escaped quote does not close the literal it sits in.
+    ///
+    /// Treating it as the end hands the literal's remaining brackets to the
+    /// depth count; skipping the wrong number of bytes past it loses the real
+    /// closing quote and swallows the code that follows.
+    #[test]
+    fn an_escaped_quote_does_not_close_a_literal() {
+        assert_eq!(
+            super::max_source_nesting_depth(r"const a = 'it\'s {{{';"),
+            0
+        );
+        assert_eq!(
+            super::max_source_nesting_depth(r"const a = 'it\'s'; ({["),
+            3
+        );
+    }
+
+    /// Depth is the deepest point reached, not the balance at the end.
+    #[test]
+    fn depth_is_the_deepest_point_not_the_closing_balance() {
+        assert_eq!(super::max_source_nesting_depth("{}{}{}{}"), 1);
+        assert_eq!(super::max_source_nesting_depth("{{{}}}{}"), 3);
+        // More closers than openers must not wrap a usize around.
+        assert_eq!(super::max_source_nesting_depth("}}}}{"), 1);
+    }
+
+    /// Source that never terminates a comment or literal still terminates the
+    /// scan. This runs before the parser on every file, so a hang here is a
+    /// hung build.
+    #[test]
+    fn an_unterminated_comment_or_literal_still_terminates() {
+        assert_eq!(super::max_source_nesting_depth("/* {{{ and no end"), 0);
+        assert_eq!(
+            super::max_source_nesting_depth("const a = '{{{ and no end"),
+            0
+        );
+        assert_eq!(
+            super::max_source_nesting_depth("const a = `{{{ and no end"),
+            0
+        );
+        // A trailing backslash must not step past the end of the source.
+        assert_eq!(super::max_source_nesting_depth(r"const a = 'x\"), 0);
+        // A trailing `*` is the byte before the one a `*/` check would read.
+        assert_eq!(super::max_source_nesting_depth("/* {{{ no end *"), 0);
+    }
+
+    /// Multi-byte text is stepped over, not misread as a bracket or a quote.
+    #[test]
+    fn multibyte_text_carries_no_depth() {
+        assert_eq!(super::max_source_nesting_depth("const nhãn = '{{'; ({"), 2);
+    }
+
+    /// A typo inside a static `szr()` argument joins the typo-check surface;
+    /// `dynamic()` stays exempt.
+    ///
+    /// Both calls have their literal classes safelisted, but only szr's object
+    /// is checked like an sz prop: dynamic() owns a runtime dev-warning for
+    /// the same mistake, and its static argument is often a partial base that
+    /// runtime values complete. Flip that gate and both diagnostics move to
+    /// the wrong side at once.
+    #[test]
+    fn a_typo_inside_szr_is_reported_and_dynamic_is_exempt() {
+        let file = TransformFile {
+            filename: "/repo/src/Calls.tsx".to_string(),
+            source: [
+                "import { szr } from 'csszyx';",
+                "import { dynamic } from 'csszyx/dynamic';",
+                "export const a = szr({ pading: 4 });",
+                "export const b = dynamic({ margn: 2 });",
+            ]
+            .join("\n"),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("Unknown property \"pading\""),
+            "{diagnostics}"
+        );
+        assert!(!diagnostics.contains("margn"), "{diagnostics}");
+    }
+
+    /// Every refused szv factory is named, not just the first one recorded.
+    ///
+    /// The disqualified list is deduplicated by name. Invert that membership
+    /// test and the list caps at one entry: the second factory's call sites
+    /// fall back to the generic unknown-function advice, sending the author
+    /// hunting for a different cause than the first factory's identical one.
+    #[test]
+    fn every_refused_factory_is_named_not_just_the_first() {
+        let file = TransformFile {
+            filename: "/repo/src/Two.tsx".to_string(),
+            source: [
+                "import { szv } from 'csszyx';",
+                "export const A = () => <div sz={t({ c: 'blue' })} />;",
+                "export const B = () => <div sz={u({ c: 'blue' })} />;",
+                "const t = szv({ base: { color: 'red-500' }, variants: { c: { blue: { color: 'blue-500' } } } });",
+                "const u = szv({ base: { color: 'red-500' }, variants: { c: { blue: { color: 'blue-500' } } } });",
+            ]
+            .join("\n"),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("szv factory `t()` did not precompile"),
+            "{diagnostics}"
+        );
+        assert!(
+            diagnostics.contains("szv factory `u()` did not precompile"),
+            "{diagnostics}"
+        );
+    }
+
+    /// A typo inside an szv base is as findable as one on an element.
+    ///
+    /// The catalogue's base object rides the same unknown-key pass as sz
+    /// props. The push is guarded on the base being non-empty; invert that
+    /// and every real base skips the check while empty ones enter it — the
+    /// diagnostic disappears exactly where it had something to say.
+    #[test]
+    fn a_typo_inside_an_szv_base_is_reported_like_an_sz_prop() {
+        let file = TransformFile {
+            filename: "/repo/src/Base.tsx".to_string(),
+            source: [
+                "import { szv } from 'csszyx';",
+                "const t = szv({ base: { pading: 4 }, variants: { pad: { sm: { p: 2 } } } });",
+                "export const A = () => <div sz={t({ pad: 'sm' })} />;",
+            ]
+            .join("\n"),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("Unknown property \"pading\""),
+            "{diagnostics}"
+        );
+    }
+
+    /// A boolean in an szv config disqualifies it, and the path says where.
+    ///
+    /// The v1 contract wants string and number leaves, so `underline: true`
+    /// is refused — but by the config checker one layer past the literal
+    /// reader, which accepts booleans. Both layers name the same path, which
+    /// is why deleting the reader's boolean arm changes nothing observable:
+    /// this test pins the surface those two layers agree on.
+    #[test]
+    fn a_boolean_in_an_szv_config_disqualifies_at_its_path() {
+        let file = TransformFile {
+            filename: "/repo/src/Bool.tsx".to_string(),
+            source: [
+                "import { szv } from 'csszyx';",
+                "const t = szv({ base: { underline: true, rounded: 'lg' }, variants: { pad: { sm: { p: 2 }, lg: { p: 8 } } } });",
+                "export const A = () => <div sz={t({ pad: 'sm' })} />;",
+            ]
+            .join("\n"),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("config disqualified at `base.underline`"),
+            "{diagnostics}"
+        );
+    }
+
+    /// `S.card` on an imported binding is reported as the import, by name.
+    ///
+    /// The classifier walks a member chain to its root object. Drop the
+    /// static-member hop and the same expression reads as an anonymous member
+    /// access: the advice loses the one name the author can act on, and stops
+    /// pointing at the export that needs to become a static literal.
+    #[test]
+    fn a_member_read_on_an_import_is_reported_as_the_import() {
+        let file = TransformFile {
+            filename: "/repo/src/Member.tsx".to_string(),
+            source: [
+                "import { styles } from './styles';",
+                "export const A = () => <div sz={styles.card} />;",
+            ]
+            .join("\n"),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("imported binding `styles` could not be read at build time"),
+            "{diagnostics}"
+        );
+    }
+
+    /// Same root, spelled with brackets: `S['card']` walks to the import too.
+    #[test]
+    fn a_computed_member_read_on_an_import_is_reported_as_the_import() {
+        let file = TransformFile {
+            filename: "/repo/src/Computed.tsx".to_string(),
+            source: [
+                "import { styles } from './styles';",
+                "export const A = () => <div sz={styles['card']} />;",
+            ]
+            .join("\n"),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        let diagnostics = result.diagnostics.join("\n");
+
+        assert!(
+            diagnostics.contains("imported binding `styles` could not be read at build time"),
+            "{diagnostics}"
+        );
+    }
+
+    /// Every removed-sugar family reports its own canonical replacement.
+    ///
+    /// The table is generated, but the report reads it one key at a time, so a
+    /// family nobody exercised would ship a message pointing at the wrong
+    /// replacement and nothing would notice. One key per family, plus the
+    /// branch for a key the table does not answer for.
+    #[test]
+    fn each_removed_sugar_family_names_its_own_replacement() {
+        let report = |prop: &str| {
+            let file = TransformFile {
+                filename: "/repo/src/Sugar.tsx".to_string(),
+                source: format!("export const A = () => <div sz={{{{ {prop} }}}} />;"),
+            };
+            transform_static_classes(&file, 0, std::time::Instant::now())
+                .diagnostics
+                .join("\n")
+        };
+
+        for (prop, canonical) in [
+            ("notItalic: true", "{ fontStyle: 'normal' }"),
+            ("underline: true", "{ decoration: 'underline' }"),
+            ("overline: true", "{ decoration: 'overline' }"),
+            ("lineThrough: true", "{ decoration: 'line-through' }"),
+            ("noUnderline: true", "{ decoration: 'none' }"),
+            ("antialiased: true", "{ fontSmoothing: 'grayscale' }"),
+            ("subpixelAntialiased: true", "{ fontSmoothing: 'subpixel' }"),
+        ] {
+            let diagnostics = report(prop);
+            assert!(
+                diagnostics.contains(canonical),
+                "{prop} must name {canonical}, got: {diagnostics}"
+            );
+        }
+
+        // A key the replacement table has no entry for reports nothing here —
+        // the collector keys on the removed-sugar list, and the two are
+        // generated from the same source, so a gap between them would be a
+        // message with no replacement to offer rather than a wrong one.
+        assert!(!report("p: 4").contains("boolean sugar was removed"));
     }
 }

@@ -100,7 +100,7 @@ describe('vite output mangle passes', () => {
     it('rewrites CSS selectors and JS class strings for discovered classes', async () => {
         const h = await boot({
             production: { mangle: true },
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, cache: false },
         });
 
         const css = await h.transformCss('.m-3{margin:0.75rem}', path.join(h.root, 'style.css'));
@@ -126,7 +126,7 @@ describe('vite output mangle passes', () => {
     it('leaves CSS assets alone in generateBundle once the transform rewrote them', async () => {
         const h = await boot({
             production: { mangle: true },
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, cache: false },
         });
 
         // A stylesheet the transform pass already mangled reaches the bundle
@@ -141,7 +141,7 @@ describe('vite output mangle passes', () => {
     it('swallows a CSS syntax error while mangling a malformed stylesheet', async () => {
         const h = await boot({
             production: { mangle: true },
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, cache: false },
         });
 
         // Unclosed rule → the CSS mangler throws a CssSyntaxError, which the
@@ -153,7 +153,7 @@ describe('vite output mangle passes', () => {
     it('replaces the checksum placeholder in JS chunks even when mangling is disabled', async () => {
         const h = await boot({
             production: { mangle: false },
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, cache: false },
         });
 
         const jsChunk = { code: 'var checksum="___CSSZYX_CHECKSUM___";' };
@@ -166,7 +166,7 @@ describe('vite output mangle passes', () => {
     it('replaces checksum, mangle-map and var-map placeholders in a plain chunk', async () => {
         const h = await boot({
             production: { mangle: false },
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, cache: false },
         });
 
         const jsChunk = {
@@ -184,7 +184,7 @@ describe('vite output mangle passes', () => {
     it('double-escapes the placeholder maps inside an eval-wrapped chunk', async () => {
         const h = await boot({
             production: { mangle: false },
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, cache: false },
         });
 
         // Realistic webpack eval-devtool shape: the wrapper always stamps a
@@ -205,7 +205,7 @@ describe('vite output mangle passes', () => {
     it('keeps the map raw in a production chunk that merely CALLS eval', async () => {
         const h = await boot({
             production: { mangle: false },
-            build: { emitManifest: true, parser: 'oxc', cache: false },
+            build: { emitManifest: true, cache: false },
         });
 
         // A user eval CALL in the same chunk as the bundled mangle-runtime

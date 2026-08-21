@@ -63,7 +63,7 @@ describe('Next Turbopack loader core', () => {
         };
 
         const result = runNextTurboLoader(source, ctx, {
-            parserMode: 'babel',
+            parserMode: 'auto',
             config: { mangleVars: false },
             nextVersion: '16.2.7',
             csszyxVersion: '0.9.0',
@@ -98,7 +98,7 @@ describe('Next Turbopack loader core', () => {
         const ctx = loaderContext(root, filename);
 
         const first = runNextTurboLoader(source, ctx, {
-            parserMode: 'babel',
+            parserMode: 'auto',
             config: { mangleVars: false },
             nextVersion: '16.2.7',
             csszyxVersion: '0.9.0',
@@ -107,7 +107,7 @@ describe('Next Turbopack loader core', () => {
             writeOptions: { retryDelayMs: 0 },
         });
         const second = runNextTurboLoader(source, ctx, {
-            parserMode: 'babel',
+            parserMode: 'auto',
             config: { mangleVars: false },
             nextVersion: '16.2.7',
             csszyxVersion: '0.9.0',
@@ -134,7 +134,7 @@ describe('Next Turbopack loader core', () => {
         const filename = writeSource(root, source);
 
         const result = runNextTurboLoader(source, loaderContext(root, filename), {
-            parserMode: 'babel',
+            parserMode: 'auto',
             materializeSafelist: false,
             config: { mangleVars: false },
             nextVersion: '16.2.7',
@@ -156,7 +156,7 @@ describe('Next Turbopack loader core', () => {
         const filename = writeSource(root, withSz);
         const ctx = loaderContext(root, filename);
         const options = {
-            parserMode: 'babel' as const,
+            parserMode: 'auto' as const,
             config: { mangleVars: false },
             nextVersion: '16.2.7',
             csszyxVersion: '0.9.0',
@@ -187,7 +187,7 @@ describe('Next Turbopack loader core', () => {
 
         expect(() =>
             runNextTurboLoader(source, loaderContext(root, filename), {
-                parserMode: 'babel',
+                parserMode: 'auto',
                 mode: 'production',
                 config: { mangleVars: false },
                 nextVersion: '16.2.7',
@@ -205,7 +205,7 @@ describe('Next Turbopack loader core', () => {
 
         expect(() =>
             runNextTurboLoader(source, loaderContext(root, filename), {
-                parserMode: 'babel',
+                parserMode: 'auto',
                 mode: 'production',
                 compilerOptions: { mangleVars: true },
             }),
@@ -271,7 +271,7 @@ describe('szcn theme groups on the Turbopack lane', () => {
 
     /** Loader options every case in this block shares. */
     const OPTIONS = {
-        parserMode: 'babel',
+        parserMode: 'auto',
         config: { mangleVars: false },
         nextVersion: '16.2.7',
         csszyxVersion: '0.9.0',

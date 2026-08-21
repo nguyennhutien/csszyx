@@ -129,7 +129,7 @@ describe('className expression + static sz merges (never overwritten)', () => {
         // which carries no classes. The engine does not treat it as a
         // mergeable className and emits its own attribute after it — React
         // resolves duplicate props last-wins, so the compiled value applies.
-        // (The deleted oxc lane used to fold it into the merge as `""`.)
+        // (The deleted the JavaScript lane it replaced used to fold it into the merge as `""`.)
         const tsx = 'export const A = ({ r }) => <Row className sz={{ ...r }} />;';
         expect(element(transformWasm(tsx, 'F.tsx').code)).toContain(
             'className className={_sz({ ...r })}',

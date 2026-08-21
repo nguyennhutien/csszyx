@@ -89,8 +89,8 @@ describe('explain', () => {
     });
 
     it('rejects unparseable input and non-object expressions', () => {
-        expect(() => explainSz('{{{{')).toThrow(/could not parse/);
-        expect(() => explainSz('42')).toThrow(/must be an object literal/);
+        expect(() => explainSz('{{{{')).toThrow(/could not be parsed/);
+        expect(() => explainSz('42')).toThrow(/not an object literal/);
     });
 
     it('prints the className, or (no classes) for an empty object', () => {
@@ -211,12 +211,26 @@ describe('explainSz literal space', () => {
     it('names each dynamic construct it refuses', () => {
         expect(() => explainSz('{ p: x }')).toThrow(/dynamic/);
         expect(() => explainSz('{ p: `a${x}` }')).toThrow(/interpolation/);
-        expect(() => explainSz('{ p: [1, , 2] }')).toThrow(/array holes/);
-        expect(() => explainSz('{ p: [...xs] }')).toThrow(/spreads/);
-        expect(() => explainSz('{ ...rest }')).toThrow(/methods\/spreads/);
+        expect(() => explainSz('{ p: [...xs] }')).toThrow(/spread/);
+        expect(() => explainSz('{ ...rest }')).toThrow(/spread/);
         expect(() => explainSz('{ [k]: 1 }')).toThrow(/computed/);
         expect(() => explainSz('{ p: !x }')).toThrow(/unary|dynamic/);
-        expect(() => explainSz('{ 4: 1 }')).toThrow(/unsupported key/);
+    });
+
+    it('accepts what csszyx itself accepts, rather than a stricter reading', () => {
+        // These two were refused while the command carried its own parser,
+        // which made it stricter than the compiler: the Vue and Svelte
+        // adapters resolve both through the shared reader, so csszyx does
+        // compile them and a command whose job is to show what csszyx emits
+        // has nothing to refuse. A numeric key is a string key in JS, and an
+        // array hole reads as a hole rather than stopping the whole literal.
+        //
+        // The numeric key now reaches the compiler, which answers with its
+        // own diagnostic about numeric keys and emits nothing. That is the
+        // gain: the reason a person reads is csszyx's, not a second parser's
+        // guess at what csszyx would have said.
+        expect(explainSz('{ 4: 1 }')).toBe('');
+        expect(() => explainSz('{ p: [1, , 2] }')).not.toThrow();
     });
 });
 

@@ -630,6 +630,52 @@ pub(crate) fn is_removed_boolean_sugar(key: &str) -> bool {
     )
 }
 
+/// The canonical key and value that replace a removed boolean-sugar alias.
+///
+/// The pair, not a sentence: the build lane and the runtime lane word the
+/// report differently, and baking one of their sentences into the table would
+/// make the other read as a quotation of it.
+pub(crate) fn removed_boolean_sugar_replacement(key: &str) -> Option<(&'static str, &'static str)> {
+    match key {
+        "block" => Some(("display", "block")),
+        "inline" => Some(("display", "inline")),
+        "inlineBlock" => Some(("display", "inline-block")),
+        "flex" => Some(("display", "flex")),
+        "inlineFlex" => Some(("display", "inline-flex")),
+        "grid" => Some(("display", "grid")),
+        "inlineGrid" => Some(("display", "inline-grid")),
+        "hidden" => Some(("display", "none")),
+        "contents" => Some(("display", "contents")),
+        "table" => Some(("display", "table")),
+        "tableRow" => Some(("display", "table-row")),
+        "tableCell" => Some(("display", "table-cell")),
+        "flowRoot" => Some(("display", "flow-root")),
+        "listItem" => Some(("display", "list-item")),
+        "static" => Some(("position", "static")),
+        "fixed" => Some(("position", "fixed")),
+        "absolute" => Some(("position", "absolute")),
+        "relative" => Some(("position", "relative")),
+        "sticky" => Some(("position", "sticky")),
+        "visible" => Some(("visibility", "visible")),
+        "invisible" => Some(("visibility", "hidden")),
+        "collapse" => Some(("visibility", "collapse")),
+        "isolate" => Some(("isolation", "isolate")),
+        "uppercase" => Some(("textTransform", "uppercase")),
+        "lowercase" => Some(("textTransform", "lowercase")),
+        "capitalize" => Some(("textTransform", "capitalize")),
+        "normalCase" => Some(("textTransform", "none")),
+        "italic" => Some(("fontStyle", "italic")),
+        "notItalic" => Some(("fontStyle", "normal")),
+        "underline" => Some(("decoration", "underline")),
+        "overline" => Some(("decoration", "overline")),
+        "lineThrough" => Some(("decoration", "line-through")),
+        "noUnderline" => Some(("decoration", "none")),
+        "antialiased" => Some(("fontSmoothing", "grayscale")),
+        "subpixelAntialiased" => Some(("fontSmoothing", "subpixel")),
+        _ => None,
+    }
+}
+
 /// Returns true when a key is a known csszyx variant name.
 pub(crate) fn is_known_variant(key: &str) -> bool {
     matches!(
@@ -769,5 +815,109 @@ pub(crate) fn is_special_variant(key: &str) -> bool {
     matches!(
         key,
         "group" | "peer" | "has" | "not" | "data" | "aria" | "supports"
+    )
+}
+
+/// Returns true when a key's `-(--var)` form resolves to a DIFFERENT CSS
+/// property than the literal form — Tailwind styles the element, just not the
+/// way the author asked. See transform::var_hostile.
+pub(crate) fn is_var_hostile_wrong_property(key: &str) -> bool {
+    matches!(
+        key,
+        "bgAttach"
+            | "bgImg"
+            | "bgRepeat"
+            | "bgSize"
+            | "borderCollapse"
+            | "borderStyle"
+            | "decoration"
+            | "decorationStyle"
+            | "flexDir"
+            | "flexWrap"
+            | "fontFamily"
+            | "listPos"
+            | "objectFit"
+            | "outlineStyle"
+            | "text"
+            | "textAlign"
+            | "textTransform"
+            | "textWrap"
+            | "transformStyle"
+            | "transitionBehavior"
+    )
+}
+
+/// Returns true when a key's `-(--var)` form matches no Tailwind utility at
+/// all — no rule is generated and the element is silently unstyled. See
+/// transform::var_hostile.
+pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
+    matches!(
+        key,
+        "alignContent"
+            | "appearance"
+            | "backface"
+            | "bgClip"
+            | "bgOrigin"
+            | "box"
+            | "boxDecoration"
+            | "breakAfter"
+            | "breakBefore"
+            | "breakInside"
+            | "caption"
+            | "clear"
+            | "container"
+            | "display"
+            | "fieldSizing"
+            | "float"
+            | "fontSmoothing"
+            | "fontStyle"
+            | "fontVariant"
+            | "forcedColorAdjust"
+            | "gridFlow"
+            | "isolation"
+            | "items"
+            | "justify"
+            | "justifyItems"
+            | "justifySelf"
+            | "maskClip"
+            | "maskComposite"
+            | "maskConic"
+            | "maskLinear"
+            | "maskMode"
+            | "maskOrigin"
+            | "maskRepeat"
+            | "maskType"
+            | "mixBlend"
+            | "notSrOnly"
+            | "ordinal"
+            | "overflow"
+            | "overflowX"
+            | "overflowY"
+            | "overscroll"
+            | "overscrollX"
+            | "overscrollY"
+            | "placeContent"
+            | "placeItems"
+            | "placeSelf"
+            | "pointerEvents"
+            | "position"
+            | "resize"
+            | "scheme"
+            | "scroll"
+            | "scrollbar"
+            | "scrollbarGutter"
+            | "select"
+            | "self"
+            | "slashedZero"
+            | "snapAlign"
+            | "snapStop"
+            | "snapType"
+            | "srOnly"
+            | "tableLayout"
+            | "textClip"
+            | "textEllipsis"
+            | "touch"
+            | "visibility"
+            | "whitespace"
     )
 }

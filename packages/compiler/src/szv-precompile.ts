@@ -16,7 +16,13 @@
  * @module szv-precompile
  */
 
-import { KNOWN_VARIANTS, PROPERTY_MAP, transform } from './transform-core.js';
+import {
+    BOOLEAN_SHORTHANDS,
+    BOOLEAN_TO_CLASS,
+    KNOWN_VARIANTS,
+    PROPERTY_MAP,
+    transform,
+} from './transform-core.js';
 
 /** A statically resolved szv config, branches still as sz objects. */
 export interface StaticSzvConfig {
@@ -149,8 +155,10 @@ export function leafPathsConflict(a: readonly string[], b: readonly string[]): b
  * The overlap detector can only trust names it can canonicalize: a key in the
  * property map, or a known variant. Anything else — special-cased properties
  * like `lineHeight` (which lowers to the same target as `leading` WITHOUT a
- * map entry), boolean flag utilities, custom theme variants, junk — could
- * alias another key's target invisibly, so its config bails.
+ * map entry), custom theme variants, junk — could alias another key's target
+ * invisibly, so its config bails. Boolean flags are decided by their value in
+ * `branchKeyCanonicalizable` rather than here, because the key alone does not
+ * settle it: the flag is canonical, a scalar on the same key is not.
  *
  * @param branch - One base or variant-leaf sz object.
  * @returns True when the canonical paths are trustworthy.
@@ -179,7 +187,28 @@ function branchKeyCanonicalizable(key: string, value: unknown): boolean {
     // A bare `op` fuses into whichever color-bearing key it meets at lowering,
     // and per-key compilation cannot represent that.
     if (key === 'op') return false;
-    if (!isCanonicalSzKey(key)) return false;
+    // A BOOLEAN on a flag utility is that key's canonical spelling: Tailwind has
+    // no value form for `sr-only` or `tabular-nums`, so the flag IS how the
+    // style is written, and the snippets document it that way. Admitting it
+    // needs the same evidence the SPECIAL_ALLOWED_SZ_KEYS entries carry —
+    // measured merged vs separate, across every flag paired with every property
+    // key and with every other flag, no pair composites the way `text` +
+    // `leading` does. So a flag's own name identifies its target, which is all
+    // the detector asks of a canonical path.
+    //
+    // The admission is on the VALUE. A scalar on the same key lowers to
+    // `key-value` (`{ srOnly: 'weird' }` → `sr-only-weird`) and falls to the
+    // refusal below with everything else that could alias invisibly.
+    if (typeof value === 'boolean' && isBooleanFlagKey(key)) return true;
+    // An OBJECT value means variant nesting, and variant names are open-ended: a
+    // `--breakpoint-*` token from the project's `@theme` (`{ tablet: {…} }`) or
+    // an inline attribute variant (`{ 'data-[active]': {…} }`) cannot appear in
+    // a table this compiler ships. A variant COMPOSES into the canonical path
+    // rather than aliasing one, so the overlap detector keeps working through
+    // it. A SCALAR on an unknown key is the opposite — it lowers to `key-value`,
+    // which could be another key's target under a name this walk cannot
+    // recognise — so that still disqualifies.
+    if (!isCanonicalSzKey(key) && !isPlainRecord(value)) return false;
     return !isPlainRecord(value) || branchKeysCanonicalizable(value);
 }
 
@@ -193,6 +222,22 @@ function cssDeclarationsCanonicalizable(css: Record<string, unknown>): boolean {
     return Object.values(css).every(
         declaration => declaration === null || typeof declaration !== 'object',
     );
+}
+
+/**
+ * Whether a key's canonical spelling is a boolean flag.
+ *
+ * Two tables carry them: the ones whose class name differs from the key
+ * (`srOnly` → `sr-only`) and the ones whose class IS the kebab-cased key
+ * (`truncate`). A key that also takes values (`ring`, `blur`) appears in the
+ * property map and is admitted there instead, so this only decides the
+ * boolean-only ones.
+ *
+ * @param key - Candidate sz key.
+ * @returns True when a boolean on this key lowers to one fixed class.
+ */
+function isBooleanFlagKey(key: string): boolean {
+    return BOOLEAN_TO_CLASS[key] !== undefined || BOOLEAN_SHORTHANDS.has(key);
 }
 
 /**
@@ -298,7 +343,7 @@ function dimensionsConflict(dimensions: string[][][]): boolean {
  *
  * `String(2)` is `"2"` in JavaScript; a non-integral or unsafe number has
  * float-formatting edge cases the Rust mirror must not re-implement, so those
- * disqualify (defaults) or stay dynamic (selections) on all three engines.
+ * disqualify (defaults) or stay dynamic (selections) on both engine builds.
  *
  * @param value - Numeric literal value.
  * @returns True for a safe-integer value.
@@ -523,12 +568,12 @@ export interface MaybeSpan {
 /**
  * Whether a factory call sits inside a source range the sz rewrite replaces.
  *
- * All three engines splice the precompiled pick over the call's own bytes.
+ * Both engine builds splice the precompiled pick over the call's own bytes.
  * When those bytes are inside an `sz` attribute — `sz={[{ p: 4 }, szr(f())]}`
  * — the sz rewrite has already replaced that whole range with a generated
  * expression, and neither span-based engine can edit text it has replaced:
  * magic-string throws, string_wizard aborts the process without naming the
- * file, and one oxc path emitted malformed JSX with no error at all. So the
+ * file, and one the JavaScript path it replaced emitted malformed JSX with no error at all. So the
  * call keeps its runtime path, in every engine, and the existing szr fallback
  * diagnostic reports it.
  *
@@ -928,7 +973,7 @@ export function singleDimensionPickAllowed(
  * Coerce one selection value under the tri-lane static contract: string,
  * boolean, or safe-integer values only. Everything else — null and undefined
  * included — returns null and takes the dynamic path, where the runtime picker
- * applies the exact JS semantics without three engines re-implementing them.
+ * applies the exact JS semantics without each build re-implementing them.
  *
  * @param value - One statically evaluated selection value.
  * @returns The value when parity-safe, null otherwise.

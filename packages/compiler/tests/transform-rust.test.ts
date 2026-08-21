@@ -61,7 +61,7 @@ describe('transformRust native wrapper', () => {
             expect(result.code).toContain('className="p-4"');
         } catch (err) {
             expect(err).toBeInstanceOf(OxcRustNotImplementedError);
-            expect((err as Error).message).toContain('Use build.parser: "oxc" or "babel"');
+            expect((err as Error).message).toContain('Use build.parser: "wasm" or "auto"');
         }
     });
 

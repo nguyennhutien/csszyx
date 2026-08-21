@@ -10,7 +10,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetSzWarnDedupForTests, setSzWarnLocation, transform } from '../src/transform-core.js';
-import { captureWarnings, ENGINES } from './tri-engine-harness.js';
+import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 /**
  * Collect console warnings emitted synchronously by one runtime call.

@@ -9,7 +9,7 @@
  * hybrid breakage) came from exactly this layer.
  *
  * Round-trip contract asserted here:
- *   1. rust, oxc, and babel produce identical artifacts (JS + CSS + HTML map);
+ *   1. the native and wasm builds produce identical artifacts (JS + CSS + HTML map);
  *   2. the injected mangle map is bijective and covers every owned class;
  *   3. owned classes are actually mangled OUT of the JS bundle and the CSS
  *      selectors, and the map decodes every token back to its original;
@@ -113,7 +113,7 @@ function tailwindSourceNonePlugin(root: string): Plugin {
  * @param parser - engine under test.
  * @returns normalized JS + CSS output and the mangle map from the built HTML.
  */
-async function buildWithMangle(parser: 'rust' | 'oxc' | 'babel'): Promise<MangleArtifacts> {
+async function buildWithMangle(parser: 'rust' | 'wasm'): Promise<MangleArtifacts> {
     // realpath the temp root so the path handed to vite matches the realpath
     // vite's build-html plugin resolves internally. On macOS os.tmpdir() is a
     // /var -> /private/var symlink; without this the emitted index.html name is
@@ -213,8 +213,7 @@ function withoutBundledMap(js: string, map: Record<string, string>): string {
 
 describe('production mangle — real-build round-trip (all parsers)', () => {
     let rust: MangleArtifacts;
-    let oxc: MangleArtifacts;
-    let babel: MangleArtifacts;
+    let wasm: MangleArtifacts;
     const buildWarnings: string[] = [];
 
     beforeAll(async () => {
@@ -226,8 +225,7 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
         });
         try {
             rust = await buildWithMangle('rust');
-            oxc = await buildWithMangle('oxc');
-            babel = await buildWithMangle('babel');
+            wasm = await buildWithMangle('wasm');
         } finally {
             warnSpy.mockRestore();
         }
@@ -239,15 +237,13 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
         }
     });
 
-    it('all parsers produce the identical mangle map', () => {
-        expect(rust.map).toEqual(oxc.map);
-        expect(rust.map).toEqual(babel.map);
+    it('both engine builds produce the identical mangle map', () => {
+        expect(rust.map).toEqual(wasm.map);
     });
 
-    it('all parsers produce identical JS and CSS artifacts', () => {
-        expect(rust.js).toBe(oxc.js);
-        expect(rust.css).toBe(oxc.css);
-        expect(rust.css).toBe(babel.css);
+    it('both engine builds produce identical JS and CSS artifacts', () => {
+        expect(rust.js).toBe(wasm.js);
+        expect(rust.css).toBe(wasm.css);
     });
 
     it('source(none) safelisting emits every owned CSS rule without hybrid hazards', () => {
@@ -306,7 +302,7 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
             collapseWhitespace(escapeJsonForInlineScript(JSON.stringify(rust.map))),
         );
         expect(rust.js, 'placeholders must be substituted').not.toContain('___CSSZYX_');
-        expect(oxc.js, 'installer must be parser-independent').toMatch(/window\.__csszyx\s*=/);
+        expect(wasm.js, 'installer must be parser-independent').toMatch(/window\.__csszyx\s*=/);
     });
 
     it('szcn dedupes mangled tokens through the decode bridge built from the map', () => {

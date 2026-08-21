@@ -176,6 +176,95 @@ plain-JS caller. Production is a no-op.
 
 ## Dynamic & specificity
 
-`szv` returns a plain sz object — it does **not** run through `dynamic()`. Used as
-`sz={szv(…)}` it is fully build-time. Only wrap it in `dynamic()` for genuinely
-runtime values; see [Build-Time vs Runtime](/docs/build-time-vs-runtime/).
+`szv` returns a plain sz object — it does **not** run through `dynamic()`. Its CSS
+is built either way: every variant class is read out of the config and
+safelisted wherever the factory is declared. Only wrap it in `dynamic()` for
+genuinely runtime values; see
+[Build-Time vs Runtime](/docs/build-time-vs-runtime/).
+
+Where the two call positions differ is the class **selection**, not the CSS:
+
+| Call position | Selection | Notes |
+| --- | --- | --- |
+| `className={szr(btnSz({…}))}` | build time | the factory call is replaced with the picked string |
+| `sz={btnSz({…})}` | runtime `_sz()` | same classes, same CSS; one helper call per render |
+
+Both are correct and both are supported. Reach for `szr` on `className` when a
+component renders often enough for the difference to matter. When a factory does
+not precompile, both positions now report it the same way — naming the factory
+and the config position that disqualified it, not "convert to `szv()`".
+
+## When a factory does not precompile
+
+Precompiling stores **one class string per branch**, and a selection joins the
+strings it picked. That is only the object you wrote when no two branches that
+can appear together set the same property. If `base` sets `color` and a variant
+sets `color`, joining them yields `text-main text-sub`, and which one wins is
+decided by the order of those rules in the stylesheet — not by the order in the
+attribute. The runtime deep-merges the objects first, so it yields `text-sub`,
+full stop. Rather than emit a class string that renders differently from the
+object, csszyx declines to precompile the config and the factory keeps its
+(correct) runtime path.
+
+Nothing is missing from your CSS when this happens: every branch's classes are
+still safelisted. What you lose is the build-time collapse.
+
+The report names the position to change:
+
+```text
+szv factory `card()` did not precompile — its config disqualified at `base.color`
+```
+
+Read the position by which half it names:
+
+| Position | Meaning | Fix |
+| --- | --- | --- |
+| `base.<key>` | a variant sets the same property as `base` | drop the key from `base` and give each variant value its own, or accept the runtime path |
+| `variants.<dim>.<value>.<key>` | two **different** dimensions set the same property | keep the property in one dimension |
+| `variants.<dim>.<value>.<key>` on a key csszyx cannot canonicalize | the key is neither a property nor a variant, and its value is not an object | use a canonical key |
+
+A base conflict always names the **base** key, even when several variants shadow
+it: `base` applies to every selection, so it is the one edit that resolves all of
+them. Values of the *same* dimension never conflict with each other — they are
+mutually exclusive, so only one is ever picked.
+
+### Variants your project defines are fine here
+
+A branch may nest any variant, including ones no compiler table can know:
+
+```tsx
+const card = szv({
+    base: { px: 2, tablet: { px: 4 } },              // ✅ your @theme breakpoint
+    variants: {
+        dir: { left: { p: 2, 'data-[active]': { p: 4 } } },  // ✅ attribute variant
+    },
+});
+```
+
+Both precompile and both emit the prefixed class (`tablet:px-4`,
+`data-[active]:p-4`). A custom breakpoint comes from your `@theme` and an
+attribute variant is written inline, so neither can appear in a table csszyx
+ships — but a variant *composes* onto the property path rather than replacing it,
+so overlap analysis still works through it and `px` and `tablet.px` stay separate.
+
+### Boolean flags are fine here too
+
+A flag utility carries its meaning in the boolean, because Tailwind has no value
+form for it:
+
+```tsx
+const label = szv({
+    base: { srOnly: true, tabularNums: true },        // ✅ canonical spelling
+    variants: { pad: { sm: { p: 2 }, lg: { p: 8 } } },
+});
+```
+
+Each flag lowers to one fixed class, and no flag combines with another key into a
+composite the way `text` and `leading` do, so its own name places it against
+every other branch.
+
+What still disqualifies is an unrecognised key holding a plain **value**
+(`{ nonsenseKey: 'x' }`): that lowers to `nonsenseKey-x`, a name csszyx cannot
+place against any other branch's. That includes a **value on a flag key** —
+`{ srOnly: 'weird' }` lowers to `sr-only-weird`, so the admission above is for
+the boolean, not for the key.

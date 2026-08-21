@@ -92,6 +92,30 @@ never-imported component contributes no CSS. For a sibling workspace package, op
 it in with [`compileSources`](/docs/monorepo-content-scope/).
 </Aside>
 
+## When a key refuses a runtime value
+
+Everything above is about *where* CSS is generated. One narrower question sits
+underneath it: can this key hold a runtime value at all?
+
+Usually yes. `sz={{ p: pad }}` compiles to `p-(--_sz-p)` plus a `style` custom
+property, so the CSS is built and only the value arrives at runtime — path one
+above, not path three.
+
+A minority of keys have no Tailwind utility that reads a CSS variable, so that
+trick has nothing to compile to. `text-(--v)` is a **colour** in Tailwind v4, so
+a runtime `textAlign` produced a colour rule holding `"center"`; `display-(--v)`
+matches no utility, so the class was safelist noise. csszyx drops the class and
+the variable and reports it, rather than shipping either.
+
+```tsx
+<div sz={{ p: 4, textAlign }} />   // → className="p-4", textAlign reported
+```
+
+The way back onto the static path is to give the compiler the vocabulary — a
+ternary between literals for two options, `szv` for a real set. See
+[Keys that need a build-time value](/docs/reference/warnings/#keys-that-need-a-build-time-value)
+for the complete list and the three shapes that compile.
+
 ## Tree-shaking
 
 csszyx safelists by **content presence**, exactly like Tailwind itself — a class

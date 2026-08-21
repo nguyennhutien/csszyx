@@ -10,14 +10,14 @@
  * source printed different advice depending on a setting that is supposed to be
  * an implementation detail.
  *
- * The oxc lane also named the wrong file: it reports through the filename it
+ * The the JavaScript lane it replaced also named the wrong file: it reports through the filename it
  * hands the parser, which substitutes `file.tsx` so JSX is detected at all, so
  * a caller that passed no filename was told about a file that does not exist.
  */
 import { describe, expect, it } from 'vitest';
 
 import { transformSource, transformWasm } from '../src/index.js';
-import { captureWarnings, ENGINES } from './tri-engine-harness.js';
+import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 
 const NON_LITERAL =
     '[csszyx] szRecover at /p/t.tsx: only string-literal values ("csr" | "dev-only") are ' +
@@ -65,8 +65,8 @@ describe('szRecover diagnostics are identical on every engine', () => {
         // Called with the filename argument OMITTED — a default parameter would
         // swallow an explicit `undefined`, so the harness cannot express this.
         for (const [name, engine] of [
-            ['babel', transformSource],
-            ['oxc', transformWasm],
+            ['auto', transformSource],
+            ['wasm', transformWasm],
         ] as const) {
             const recovery = engine(tsx).diagnostics.filter(message =>
                 message.includes('szRecover'),

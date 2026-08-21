@@ -287,7 +287,7 @@ jobs:
       - name: Check runtime box-role map is current
         run: pnpm gen:box-role:check
 
-      # The three engines must print identical sz runtime-fallback wording — a
+      # Both engine builds must print identical sz runtime-fallback wording — a
       # build can switch between them with `build.parser`, and text that changes
       # on a parser flip reads as a behaviour change. TypeScript imports the
       # matrix; Rust gets a generated copy. Fail if the copy is stale.
@@ -331,12 +331,45 @@ jobs:
       - name: Check Rust transform tables are current
         run: pnpm gen:rust-tables:check
 
+      # migrate's reverse map is the same PROPERTY_MAP read backwards. It used
+      # to be written out by hand and drifted: two prefixes went missing, and
+      # round-trip tests could not see it because the wrong sz key still lowers
+      # to the class it came from. Fail if regenerating would change it.
+      - name: Check migrate reverse map is current
+        run: pnpm gen:reverse-map:check
+
+      # The golden of what migrate WRITES, one probe class per prefix the
+      # compiler can emit. The reverse-map check above only proves the table is
+      # freshly derived; this one makes a change to the sz output a visible diff
+      # rather than a judgement call about whether a table swap was plumbing.
+      # Round-trip tests cannot stand in for it: a wrong sz key still lowers back
+      # to the class it came from, so the only place the wrongness exists is the
+      # intermediate sz object this golden records.
+      - name: Check migrate sz golden is current
+        run: pnpm gen:migrate-golden:check
+
       # The per-key matrix fixture and the parity corpus are derived independently
       # from the snippets; the staleness checks only prove each is internally
       # fresh. Assert the corpus actually covers every per-key forward case, so the
       # Rust default engine can't silently lose coverage for a key.
       - name: Check parity corpus covers the per-key matrix
         run: pnpm check:key-corpus
+
+      # The keys whose runtime value cannot be lowered to a CSS variable are
+      # derived from Tailwind, not judged. Recheck against the pinned version so
+      # an upgrade that fixes one of them takes it off the list instead of
+      # leaving csszyx dropping a class that now works.
+      - name: Check var-hostile key list matches Tailwind
+        run: pnpm check:var-hostile-keys
+
+      # The szcn collision blocklist names the theme tokens that shadow a
+      # built-in keyword. Tailwind states the collision itself — a shadowed name
+      # parses BOTH as a static utility and as a functional one — so the list is
+      # derived rather than judged. A Tailwind release that adds a keyword adds a
+      # name a project could already be using, and without this the first symptom
+      # is szcn deleting a property the author set.
+      - name: Check szcn collision blocklist matches Tailwind
+        run: pnpm check:szcn-collision-blocklist
 
       # The corpus round-trip checks every documented Tailwind class maps back to
       # an sz form AND that the mapping compiles to the SAME class. The plain

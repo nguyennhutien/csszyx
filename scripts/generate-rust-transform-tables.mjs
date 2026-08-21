@@ -6,36 +6,15 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import ts from 'typescript';
+
+import { readTableSource } from './extract-ts-tables.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
-const sourcePath = path.join(repoRoot, 'packages/compiler/src/transform-core.ts');
 const outPath = path.join(repoRoot, 'packages/core/src/transform/generated/tables.rs');
 
 const check = process.argv.includes('--check');
-const sourceText = readFileSync(sourcePath, 'utf8');
-const sourceFile = ts.createSourceFile(
-    sourcePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-);
 
-const tables = {
-    propertyMap: extractStringObject('PROPERTY_MAP'),
-    variantMap: extractStringObject('VARIANT_MAP'),
-    booleanToClass: extractStringObject('BOOLEAN_TO_CLASS'),
-    booleanShorthands: extractStringSet('BOOLEAN_SHORTHANDS'),
-    booleanOnlyDynamicKeys: extractObjectKeys('BOOLEAN_ONLY_DYNAMIC_VOCABULARY'),
-    knownSpecialProperties: extractStringSet('KNOWN_SPECIAL_PROPERTIES'),
-    removedBooleanSugar: extractObjectKeys('REMOVED_BOOLEAN_SUGAR'),
-    knownVariants: extractStringSet('KNOWN_VARIANTS'),
-    ariaStates: extractStringSet('ARIA_STATES'),
-    specialVariants: extractStringSet('SPECIAL_VARIANTS'),
-    suggestionMap: extractStringObject('SUGGESTION_MAP'),
-    migrationNotes: extractStringObject('MIGRATION_NOTES'),
-};
+const tables = readTables();
 
 const generated = formatRust(renderRust(tables));
 
@@ -54,81 +33,40 @@ mkdirSync(path.dirname(outPath), { recursive: true });
 writeFileSync(outPath, generated);
 console.log(`[generate-rust-transform-tables] Wrote ${path.relative(repoRoot, outPath)}`);
 
-function extractStringObject(name) {
-    const declaration = findVariableDeclaration(name);
-    const initializer = declaration.initializer;
-    if (!initializer || !ts.isObjectLiteralExpression(initializer)) {
-        fail(`${name} must be an object literal`);
+/**
+ * Read every table this generator renders out of the compiler package.
+ *
+ * @returns The extracted tables, keyed by the name `renderRust` expects.
+ */
+function readTables() {
+    try {
+        const core = readTableSource(
+            path.join(repoRoot, 'packages/compiler/src/transform-core.ts'),
+        );
+        const varHostile = readTableSource(
+            path.join(repoRoot, 'packages/compiler/src/var-hostile-keys.ts'),
+        );
+
+        return {
+            propertyMap: core.stringObject('PROPERTY_MAP'),
+            variantMap: core.stringObject('VARIANT_MAP'),
+            booleanToClass: core.stringObject('BOOLEAN_TO_CLASS'),
+            booleanShorthands: core.stringSet('BOOLEAN_SHORTHANDS'),
+            booleanOnlyDynamicKeys: core.objectKeys('BOOLEAN_ONLY_DYNAMIC_VOCABULARY'),
+            knownSpecialProperties: core.stringSet('KNOWN_SPECIAL_PROPERTIES'),
+            removedBooleanSugar: core.objectKeys('REMOVED_BOOLEAN_SUGAR'),
+            removedBooleanSugarReplacement: core.objectOfStringObjects('REMOVED_BOOLEAN_SUGAR'),
+            knownVariants: core.stringSet('KNOWN_VARIANTS'),
+            ariaStates: core.stringSet('ARIA_STATES'),
+            specialVariants: core.stringSet('SPECIAL_VARIANTS'),
+            suggestionMap: core.stringObject('SUGGESTION_MAP'),
+            migrationNotes: core.stringObject('MIGRATION_NOTES'),
+            varHostileWrongProperty: varHostile.stringSet('VAR_HOSTILE_WRONG_PROPERTY'),
+            varHostileNoVarForm: varHostile.stringSet('VAR_HOSTILE_NO_VAR_FORM'),
+        };
+    } catch (error) {
+        fail(error.message);
     }
-
-    const entries = [];
-    for (const property of initializer.properties) {
-        if (!ts.isPropertyAssignment(property)) {
-            fail(`${name} contains a non-property assignment`);
-        }
-
-        const key = propertyNameToString(property.name);
-        const value = stringLiteralToString(property.initializer);
-        entries.push([key, value]);
-    }
-
-    return entries;
-}
-
-function extractStringSet(name) {
-    const declaration = findVariableDeclaration(name);
-    const initializer = declaration.initializer;
-    if (
-        !initializer ||
-        !ts.isNewExpression(initializer) ||
-        initializer.arguments?.length !== 1 ||
-        !ts.isArrayLiteralExpression(initializer.arguments[0])
-    ) {
-        fail(`${name} must be new Set([...])`);
-    }
-
-    return initializer.arguments[0].elements.map(element => stringLiteralToString(element));
-}
-
-function findVariableDeclaration(name) {
-    let found;
-
-    visit(sourceFile);
-
-    if (!found) {
-        fail(`Could not find ${name}`);
-    }
-
-    return found;
-
-    function visit(node) {
-        if (
-            ts.isVariableDeclaration(node) &&
-            ts.isIdentifier(node.name) &&
-            node.name.text === name
-        ) {
-            found = node;
-            return;
-        }
-
-        ts.forEachChild(node, visit);
-    }
-}
-
-function propertyNameToString(name) {
-    if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
-        return name.text;
-    }
-
-    fail(`Unsupported property key: ${name.getText(sourceFile)}`);
-}
-
-function stringLiteralToString(node) {
-    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-        return node.text;
-    }
-
-    fail(`Expected string literal, got: ${node.getText(sourceFile)}`);
 }
 
 function renderRust({
@@ -139,11 +77,14 @@ function renderRust({
     booleanOnlyDynamicKeys,
     knownSpecialProperties,
     removedBooleanSugar,
+    removedBooleanSugarReplacement,
     knownVariants,
     ariaStates,
     specialVariants,
     suggestionMap,
     migrationNotes,
+    varHostileWrongProperty,
+    varHostileNoVarForm,
 }) {
     return `// @generated by scripts/generate-rust-transform-tables.mjs
 // Do not edit by hand.
@@ -227,6 +168,18 @@ ${renderMatchPatterns(removedBooleanSugar)}
     )
 }
 
+/// The canonical key and value that replace a removed boolean-sugar alias.
+///
+/// The pair, not a sentence: the build lane and the runtime lane word the
+/// report differently, and baking one of their sentences into the table would
+/// make the other read as a quotation of it.
+pub(crate) fn removed_boolean_sugar_replacement(key: &str) -> Option<(&'static str, &'static str)> {
+    match key {
+${renderPairArms(removedBooleanSugarReplacement)}
+        _ => None,
+    }
+}
+
 /// Returns true when a key is a known csszyx variant name.
 pub(crate) fn is_known_variant(key: &str) -> bool {
     matches!(
@@ -251,37 +204,41 @@ pub(crate) fn is_special_variant(key: &str) -> bool {
 ${renderMatchPatterns(specialVariants)}
     )
 }
-`;
+
+/// Returns true when a key's \`-(--var)\` form resolves to a DIFFERENT CSS
+/// property than the literal form — Tailwind styles the element, just not the
+/// way the author asked. See transform::var_hostile.
+pub(crate) fn is_var_hostile_wrong_property(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(varHostileWrongProperty)}
+    )
 }
 
-function extractObjectKeys(name) {
-    const declaration = findVariableDeclaration(name);
-    // Unwrap `as const` / `satisfies` so a type-locked literal (e.g.
-    // BOOLEAN_ONLY_DYNAMIC_VOCABULARY `as const satisfies SzProps`) extracts
-    // like a plain one.
-    let initializer = declaration.initializer;
-    while (
-        initializer &&
-        (ts.isAsExpression(initializer) || ts.isSatisfiesExpression(initializer))
-    ) {
-        initializer = initializer.expression;
-    }
-    if (!initializer || !ts.isObjectLiteralExpression(initializer)) {
-        fail(`${name} must be an object literal`);
-    }
-    const keys = [];
-    for (const property of initializer.properties) {
-        if (!ts.isPropertyAssignment(property)) {
-            fail(`${name} contains a non-property assignment`);
-        }
-        keys.push(propertyNameToString(property.name));
-    }
-    return keys;
+/// Returns true when a key's \`-(--var)\` form matches no Tailwind utility at
+/// all — no rule is generated and the element is silently unstyled. See
+/// transform::var_hostile.
+pub(crate) fn is_var_hostile_no_var_form(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(varHostileNoVarForm)}
+    )
+}
+`;
 }
 
 function renderMatchArms(entries) {
     return entries
         .map(([key, value]) => `        ${rustString(key)} => Some(${rustString(value)}),`)
+        .join('\n');
+}
+
+function renderPairArms(entries) {
+    return entries
+        .map(([key, fields]) => {
+            const shape = Object.fromEntries(fields);
+            return `        ${rustString(key)} => Some((${rustString(shape.key)}, ${rustString(shape.value)})),`;
+        })
         .join('\n');
 }
 

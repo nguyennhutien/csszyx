@@ -38,10 +38,13 @@ import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } fro
 import type { PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
+import { findClassNameAuthorConflicts } from './class-name-authors.js';
 import { findUnknownConfigKeys, unknownConfigKeysMessage } from './config-keys.js';
 import {
+    type CrossModuleForwardIndex,
     importedSpecifiersIn,
     mayExportSzvFactories,
+    recordCrossModuleForwards,
     recordSzObjectRegistryFile,
     recordSzvRegistryFile,
     resolveCrossModuleStaticsFor,
@@ -99,7 +102,12 @@ import {
     THEME_GROUPS_FILE_MARKER,
     themeGroupsSpecifier,
 } from './theme-groups-file.js';
-import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
+import {
+    mergeThemes,
+    type ParsedTheme,
+    parseThemeBlocks,
+    parseUtilityBlocks,
+} from './theme-scanner.js';
 import { writeThemeDts } from './theme-type-writer.js';
 import {
     createTransformCacheKey,
@@ -385,6 +393,7 @@ function findOpeningTag(source: string, tag: string): OpeningTagSpan | null {
     }
 }
 
+const _warnedClassNameAuthors = new Set<string>();
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
 let _hasWarnedNativeFallback = false;
@@ -2044,6 +2053,52 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
     if (!scanCss) {
         return null;
     }
+    /**
+     * Report class names this project gives more than one author.
+     *
+     * At the DECLARATION, not the uses. A declaration is one place a person can
+     * fix; the uses are many and mostly innocent — including the `sz` props csszyx
+     * itself lowers onto the contaminated class. Warning at every use would blame
+     * the wrong author and bury the one line that can be changed.
+     *
+     * @param rootDir - Project root, for readable paths.
+     * @param sourceFiles - The stylesheets that were scanned.
+     * @param theme - The merged theme those stylesheets declare.
+     */
+    function reportClassNameAuthorConflicts(
+        rootDir: string,
+        sourceFiles: string[],
+        theme: ParsedTheme,
+    ): void {
+        const utilityStatics: string[] = [];
+        for (const file of sourceFiles) {
+            try {
+                utilityStatics.push(
+                    ...parseUtilityBlocks(readStableTextFileSnapshotSync(file).source).statics,
+                );
+            } catch {
+                // A stylesheet that cannot be read contributes no declarations; the
+                // theme scan above already tolerates the same failure.
+            }
+        }
+        const conflicts = findClassNameAuthorConflicts({
+            themeColors: theme.colors,
+            utilityStatics,
+        });
+        for (const conflict of conflicts) {
+            const key = `${rootDir}\u0000${conflict.name}`;
+            if (_warnedClassNameAuthors.has(key)) continue;
+            _warnedClassNameAuthors.add(key);
+            console.warn(
+                `[csszyx] "@utility ${conflict.name}" collides — ${conflict.reason}. Tailwind ` +
+                    'merges both declarations into one rule and reports nothing, so the class ' +
+                    'carries styles no single place in your CSS shows. Every use is affected, ' +
+                    'including sz props that spell it correctly. Rename it; if a multi-property ' +
+                    'class is the point, declare it under a name nothing else claims.',
+            );
+        }
+    }
+
     const sourceFiles = expandFilePatterns(rootDir, scanCss).filter(file => file.endsWith('.css'));
     if (sourceFiles.length === 0) {
         return null;
@@ -2058,6 +2113,7 @@ function runThemeScan(rootDir: string, scanCss: string | string[] | undefined): 
         })
         .filter((t): t is NonNullable<typeof t> => t !== null);
     const merged = mergeThemes(themes);
+    reportClassNameAuthorConflicts(rootDir, sourceFiles, merged);
     const outputPath = path.join(rootDir, '.csszyx', 'theme.d.ts');
     writeThemeDts({ outputPath, theme: merged, sourceFiles });
 
@@ -2670,6 +2726,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const importedStaticSzEnabled = options.build?.importedStaticSz ?? DEFAULT_IMPORTED_STATIC_SZ;
     /** absPath (separator-normalized) → exported factory configs. */
     const szvCrossModuleRegistry: SzvCrossModuleRegistry = new Map();
+    // absPath → the names that module re-exports from somewhere else. A barrel
+    // declares nothing, so it contributes no registry entry at all; without this
+    // it looked identical to a module with nothing to offer, and every consumer
+    // importing through it lost the precompile.
+    const szvCrossModuleForwards: CrossModuleForwardIndex = new Map();
     // Provider paths already read for sz objects this session. A module that
     // exports nothing usable is absent from the registry, so the registry alone
     // cannot answer "have I looked at this?" — without the set, every edit of a
@@ -3175,6 +3236,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             filename,
             source,
             specifierAliases,
+            szvCrossModuleForwards,
         );
         // The registry is filled in every mode; only the REWRITE is gated, so
         // an edited factory can never serve importers a stale table.
@@ -3415,6 +3477,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             file.filePath,
             file.content,
             specifierAliases,
+            szvCrossModuleForwards,
         );
         return resolved.szvConfigs !== undefined || resolved.szObjects !== undefined;
     }
@@ -3793,9 +3856,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (!shouldProcessSource(filePath)) return;
         if (content === null) {
             szvCrossModuleRegistry.delete(normalizePathSeparators(filePath));
+            szvCrossModuleForwards.delete(normalizePathSeparators(filePath));
             return;
         }
         recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content);
+        // A re-export edited during a watch has to lose its stale link the same
+        // way an edited value does: a barrel that starts pointing at a different
+        // module would otherwise keep answering with the old one's value.
+        recordCrossModuleForwards(szvCrossModuleForwards, filePath, content);
         // A provider edited during a watch has to lose its stale value the same
         // way an edited factory does. Re-reading the changed file for both kinds
         // costs one parse of one file; deciding whether it is still demanded
@@ -3830,20 +3898,37 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Demand comes from files that author sz, matching the prescan's gate:
         // an edited module that styles nothing imports nothing worth reading.
         if (!fileMayContainSafelistableSz(content)) return;
-        const directory = path.dirname(filePath);
+        const queue: string[] = [];
+        const queued = new Set<string>();
         for (const specifier of importedSpecifiersIn(content)) {
-            for (const base of specifierBases(specifier, directory, specifierAliases)) {
-                const providerPath = resolveProviderPathWith(base, isReadableProviderFile);
-                if (providerPath === undefined) continue;
-                const key = normalizePathSeparators(providerPath);
-                // Already-seen providers are kept current by their own refresh,
-                // so re-reading here would buy nothing.
-                if (!szObjectProvidersExamined.has(key)) {
-                    szObjectProvidersExamined.add(key);
-                    readAndRecordSzObjectProvider(providerPath);
+            for (const base of specifierBases(
+                specifier,
+                path.dirname(filePath),
+                specifierAliases,
+            )) {
+                if (!queued.has(base)) {
+                    queued.add(base);
+                    queue.push(base);
                 }
-                break;
             }
+        }
+        // `enqueueForwardedProviders` appends to `queue` inside this body, so
+        // the walk covers a chain of barrels in one pass. An array iterator
+        // re-reads `length` at every step, so a path queued during the walk is
+        // still visited by this same loop rather than needing a second one.
+        for (const specifier of queue) {
+            const providerPath = resolveProviderPathWith(specifier, isReadableProviderFile);
+            if (providerPath === undefined) continue;
+            const key = normalizePathSeparators(providerPath);
+            // Already-seen providers are kept current by their own refresh, so
+            // re-reading here would buy nothing — but a barrel read earlier may
+            // still have links this walk has not queued, so following comes
+            // first and unconditionally.
+            if (!szObjectProvidersExamined.has(key)) {
+                szObjectProvidersExamined.add(key);
+                readAndRecordSzObjectProvider(providerPath);
+            }
+            enqueueForwardedProviders(providerPath, queue, queued);
         }
     }
 
@@ -3861,6 +3946,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return;
         }
         recordSzObjectRegistryFile(szvCrossModuleRegistry, providerPath, content);
+        // A provider reached only through demand may itself be a barrel, and it
+        // is not necessarily inside the walked roots — an opted-in package's
+        // entry point is the common case. Recording its links here means every
+        // module the build reads at all contributes them.
+        recordCrossModuleForwards(szvCrossModuleForwards, providerPath, content);
     }
 
     /**
@@ -3879,8 +3969,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         seenSourcePaths: ReadonlySet<string>,
         demand: ReadonlySet<string>,
     ): void {
-        for (const base of demand) {
-            const providerPath = resolveProviderPath(seenSourcePaths, base);
+        const queue = [...demand];
+        const queued = new Set(queue);
+        // `enqueueForwardedProviders` appends to `queue` inside this body, so
+        // the walk covers a chain of barrels in one pass. An array iterator
+        // re-reads `length` at every step, so a path queued during the walk is
+        // still visited by this same loop rather than needing a second one.
+        for (const specifier of queue) {
+            const providerPath = resolveProviderPath(seenSourcePaths, specifier);
             // A specifier resolving to nothing the walk saw is ordinary — a
             // package, a tsconfig alias, a file outside the compiled roots. It
             // costs the optimization and the importer keeps the runtime path,
@@ -3890,6 +3986,39 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // already answered; the entry stays current through its own refresh.
             szObjectProvidersExamined.add(normalizePathSeparators(providerPath));
             readAndRecordSzObjectProvider(providerPath);
+            enqueueForwardedProviders(providerPath, queue, queued);
+        }
+    }
+
+    /**
+     * Extend the demand to the modules a provider re-exports from.
+     *
+     * Demand is collected from files that AUTHOR sz, and a barrel authors none:
+     * the module it forwards to is imported by nobody the walk counted, so it
+     * would never be read for its values and the barrel would resolve to
+     * nothing. Following the links transitively is what makes an importer's
+     * route through the barrel reach the same value a direct import does.
+     *
+     * The queue grows while it is walked, so a chain of barrels is covered by
+     * the same pass; `queued` keeps a cycle from growing it forever.
+     *
+     * @param providerPath - Provider just read.
+     * @param queue - Specifier bases still to resolve, appended to in place.
+     * @param queued - Bases already queued, to stop repeats and cycles.
+     */
+    function enqueueForwardedProviders(
+        providerPath: string,
+        queue: string[],
+        queued: Set<string>,
+    ): void {
+        const directory = path.dirname(providerPath);
+        for (const forward of szvCrossModuleForwards.get(normalizePathSeparators(providerPath)) ??
+            []) {
+            for (const base of specifierBases(forward.specifier, directory, specifierAliases)) {
+                if (queued.has(base)) continue;
+                queued.add(base);
+                queue.push(base);
+            }
         }
     }
 
@@ -3924,6 +4053,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // exporting a qualifying factory would keep its old table through any
         // later prescan in the same process.
         szvCrossModuleRegistry.clear();
+        szvCrossModuleForwards.clear();
         // Cleared with the registry it describes: a provider "already examined"
         // against entries that no longer exist would never be read again.
         szObjectProvidersExamined.clear();
@@ -3961,6 +4091,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // need the expensive sz parser pass.
             recordAuthoredClasses(content);
             recordSzvRegistryEntries(filePath, content);
+            // Recorded for every walked file, not only sz-authoring ones: a
+            // barrel styles nothing itself, and it is exactly the module an
+            // importer names.
+            recordCrossModuleForwards(szvCrossModuleForwards, filePath, content);
             seenSourcePaths.add(normalizePathSeparators(filePath));
             if (fileMayContainSafelistableSz(content)) {
                 prescanSources.push({ filePath, content });

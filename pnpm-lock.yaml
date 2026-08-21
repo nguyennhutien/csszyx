@@ -232,9 +232,6 @@ importers:
       csstype:
         specifier: ^3.2.3
         version: 3.2.3
-      magic-string:
-        specifier: 1.1.0
-        version: 1.1.0
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -591,12 +588,6 @@ importers:
 
   packages/vscode:
     devDependencies:
-      '@babel/parser':
-        specifier: ^8.0.4
-        version: 8.0.4
-      '@babel/types':
-        specifier: ^8.0.4
-        version: 8.0.4
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler

@@ -21,7 +21,7 @@ import { type NextTurboLoaderContext, runNextTurboLoader } from '../src/next-tur
 const roots: string[] = [];
 
 const OPTIONS = {
-    parserMode: 'babel',
+    parserMode: 'auto',
     config: { mangleVars: false },
     nextVersion: '16.2.7',
     csszyxVersion: '0.9.0',

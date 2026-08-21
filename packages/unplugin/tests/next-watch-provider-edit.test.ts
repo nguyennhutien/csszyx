@@ -35,7 +35,7 @@ const IMPORTER =
     "import { cardSz } from '@/app/styles';\nexport default () => <div sz={cardSz} />;\n";
 
 const SHARED = {
-    parserMode: 'babel',
+    parserMode: 'auto',
     config: { mangleVars: false },
     nextVersion: '16.2.7',
     csszyxVersion: '0.9.0',

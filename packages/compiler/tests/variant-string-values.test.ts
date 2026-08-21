@@ -92,8 +92,8 @@ function classNameFor(
 }
 
 const LANES = [
-    ['babel', transformSource],
-    ['oxc', transformWasm],
+    ['auto', transformSource],
+    ['wasm', transformWasm],
 ] as const;
 
 describe.each(LANES)('%s lane', (_lane, transform) => {

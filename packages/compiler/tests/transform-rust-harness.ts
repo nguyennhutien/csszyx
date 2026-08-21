@@ -3,7 +3,7 @@
  * `transformWasm` (the v0.8.0 default) on the same fixture set. Catches
  * silent drift as the Rust native engine grows coverage. Sister harness
  * to `oxc-parity-harness.ts`; same state model but the baseline is
- * `transformWasm` instead of `transformSource` because oxc-JS is the
+ * `transformWasm` instead of `transformSource` because the JavaScript pipeline is the
  * production parser that Rust must match before it can take over.
  *
  * When the Rust native binding is not available (`@csszyx/core/native`
@@ -24,18 +24,18 @@ import {
 } from '../src/index.js';
 
 /**
- * Side-by-side Rust vs oxc-JS comparison for one fixture.
+ * Side-by-side Rust vs the JavaScript pipeline comparison for one fixture.
  */
 export interface RustParityComparison {
-    /** Did Rust and oxc-JS agree on the class set? */
+    /** Did Rust and the JavaScript pipeline agree on the class set? */
     classesEqual: boolean;
-    /** Did Rust and oxc-JS agree on the rewritten source? */
+    /** Did Rust and the JavaScript pipeline agree on the rewritten source? */
     codeEqual: boolean;
-    /** Did Rust and oxc-JS agree on the `transformed` flag? */
+    /** Did Rust and the JavaScript pipeline agree on the `transformed` flag? */
     transformedEqual: boolean;
-    /** Did Rust and oxc-JS agree on emitted CSS custom-property metadata? */
+    /** Did Rust and the JavaScript pipeline agree on emitted CSS custom-property metadata? */
     cssVariableMapEqual: boolean;
-    /** oxc-JS output — always populated unless oxc itself throws. */
+    /** the JavaScript pipeline output — always populated unless oxc itself throws. */
     oxc: {
         code: string;
         classes: string[];
@@ -53,7 +53,7 @@ export interface RustParityComparison {
 /**
  * Fixture descriptor for the Rust parity suite. Mirrors the oxc-parity
  * `ParityFixture` shape but `expected` describes Rust's relationship to
- * oxc-JS (the v0.8.0 baseline), not Babel.
+ * the JavaScript pipeline (the v0.8.0 baseline), not Babel.
  */
 export interface RustParityFixture {
     /** Human-readable test name. */
@@ -70,13 +70,13 @@ export interface RustParityFixture {
      *   OR fixture exercises a path the Rust engine has not yet ported).
      * - `classes-only-parity`: Rust produces the same class set, code may
      *   differ. Reserved for paths where Rust intentionally leaves source
-     *   unchanged (e.g. dynamic sz fail-closed) while oxc-JS emits a
+     *   unchanged (e.g. dynamic sz fail-closed) while the JavaScript pipeline emits a
      *   runtime helper call.
      * - `surgical-parity`: classes match, code differs by formatting (rare
-     *   for Rust vs oxc-JS since both go through magic-string-equivalent
+     *   for Rust vs the JavaScript pipeline since both go through magic-string-equivalent
      *   surgical edits; included for symmetry).
      * - `rust-ahead`: Rust intentionally produces stricter static output than
-     *   oxc-JS for this fixture. Rust's class set must be a superset of oxc-JS.
+     *   the JavaScript pipeline for this fixture. Rust's class set must be a superset of the JavaScript pipeline.
      * - `parity`: full match — classes + code + transformed flag.
      */
     expected: 'pending' | 'classes-only-parity' | 'surgical-parity' | 'rust-ahead' | 'parity';
@@ -85,7 +85,7 @@ export interface RustParityFixture {
 }
 
 /**
- * Run Rust and oxc-JS on the same source. Never throws — Rust failures
+ * Run Rust and the JavaScript pipeline on the same source. Never throws — Rust failures
  * are captured in the return value, oxc failures propagate.
  *
  * @param source Source TSX/JSX text.
@@ -158,7 +158,7 @@ function assertPendingRustParity(
     if (comparison.rustError) return;
     if (!comparison.classesEqual || !comparison.codeEqual) return;
     throw new Error(
-        `Fixture "${fixture.name}" marked as pending but Rust matched oxc-JS exactly. ` +
+        `Fixture "${fixture.name}" marked as pending but Rust matched the JavaScript pipeline exactly. ` +
             'Flip its `expected` to "parity" and drop `pendingReason`.',
     );
 }
@@ -204,7 +204,7 @@ export function assertExpectedRustParity(
     if (fixture.expected === 'classes-only-parity') {
         if (comparison.codeEqual) {
             throw new Error(
-                `Fixture "${fixture.name}" marked as classes-only-parity but code also matches oxc-JS. ` +
+                `Fixture "${fixture.name}" marked as classes-only-parity but code also matches the JavaScript pipeline. ` +
                     'Flip its `expected` to "parity".',
             );
         }
@@ -213,7 +213,7 @@ export function assertExpectedRustParity(
     if (fixture.expected === 'surgical-parity') {
         if (comparison.codeEqual) {
             throw new Error(
-                `Fixture "${fixture.name}" marked as surgical-parity but code matches oxc-JS byte-for-byte. ` +
+                `Fixture "${fixture.name}" marked as surgical-parity but code matches the JavaScript pipeline byte-for-byte. ` +
                     'Flip its `expected` to "parity".',
             );
         }
@@ -244,7 +244,7 @@ export function summariseRust(fixtures: readonly RustParityFixture[]): string {
     const covered = parity + surgical + classesOnly + rustAhead;
     const pct = total === 0 ? 0 : Math.round((covered / total) * 100);
     return (
-        `Rust vs oxc-JS coverage: ${pct}% — ${parity} full, ${surgical} surgical, ` +
+        `Rust vs the JavaScript pipeline coverage: ${pct}% — ${parity} full, ${surgical} surgical, ` +
         `${classesOnly} classes-only, ${rustAhead} rust-ahead, ${pending} pending (${total} total)`
     );
 }
@@ -257,14 +257,14 @@ function assertRustAhead(fixture: RustParityFixture, comparison: RustParityCompa
     }
     if (comparison.codeEqual) {
         throw new Error(
-            `Fixture "${fixture.name}" marked as rust-ahead but code matches oxc-JS. ` +
+            `Fixture "${fixture.name}" marked as rust-ahead but code matches the JavaScript pipeline. ` +
                 'Flip its `expected` to "parity".',
         );
     }
     const rustClasses = [...comparison.rust.classes].sort();
     if (!isSuperset(rustClasses, comparison.oxc.classes)) {
         throw new Error(
-            `Fixture "${fixture.name}" marked as rust-ahead but Rust lost oxc-JS classes.\n` +
+            `Fixture "${fixture.name}" marked as rust-ahead but Rust lost the JavaScript pipeline classes.\n` +
                 `  oxc:  [${comparison.oxc.classes.join(', ')}]\n` +
                 `  rust: [${rustClasses.join(', ')}]`,
         );
