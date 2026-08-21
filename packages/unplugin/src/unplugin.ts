@@ -3912,11 +3912,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
             }
         }
-        // NOSONAR: not simple iteration — `enqueueForwardedProviders` appends to
-        // `queue` inside this body, so the walk covers a chain of barrels in one
-        // pass. An index read against a live `length` is what makes that visible.
-        for (let index = 0; index < queue.length; index += 1) {
-            const providerPath = resolveProviderPathWith(queue[index], isReadableProviderFile);
+        // `enqueueForwardedProviders` appends to `queue` inside this body, so
+        // the walk covers a chain of barrels in one pass. An array iterator
+        // re-reads `length` at every step, so a path queued during the walk is
+        // still visited by this same loop rather than needing a second one.
+        for (const specifier of queue) {
+            const providerPath = resolveProviderPathWith(specifier, isReadableProviderFile);
             if (providerPath === undefined) continue;
             const key = normalizePathSeparators(providerPath);
             // Already-seen providers are kept current by their own refresh, so
@@ -3970,11 +3971,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     ): void {
         const queue = [...demand];
         const queued = new Set(queue);
-        // NOSONAR: not simple iteration — `enqueueForwardedProviders` appends to
-        // `queue` inside this body, so the walk covers a chain of barrels in one
-        // pass. An index read against a live `length` is what makes that visible.
-        for (let index = 0; index < queue.length; index += 1) {
-            const providerPath = resolveProviderPath(seenSourcePaths, queue[index]);
+        // `enqueueForwardedProviders` appends to `queue` inside this body, so
+        // the walk covers a chain of barrels in one pass. An array iterator
+        // re-reads `length` at every step, so a path queued during the walk is
+        // still visited by this same loop rather than needing a second one.
+        for (const specifier of queue) {
+            const providerPath = resolveProviderPath(seenSourcePaths, specifier);
             // A specifier resolving to nothing the walk saw is ordinary — a
             // package, a tsconfig alias, a file outside the compiled roots. It
             // costs the optimization and the importer keeps the runtime path,
