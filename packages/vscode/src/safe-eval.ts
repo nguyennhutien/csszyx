@@ -19,23 +19,57 @@ const IDENTIFIER_PART = /[\p{ID_Continue}$\u200C\u200D]/u;
 const DIGIT_OR_DOT = /[\d.]/;
 const WHITESPACE = /\s/;
 
+/** Hex, octal and binary literals, each with its own digit set. */
+const RADIX_NUMBERS = [/^0x[\da-f](?:_?[\da-f])*/i, /^0o[0-7](?:_?[0-7])*/i, /^0b[01](?:_?[01])*/i];
+
 /**
- * Numeric literals as module code defines them.
+ * The integer part of a base-ten literal: a lone zero, or a digit string that
+ * does not start with one.
  *
  * A leading zero followed by another digit is deliberately absent: `010` and
  * `09` are legacy octal and octal-like forms, and both are syntax errors in a
  * module. Accepting them would read `010` as ten where the bundler reads
  * eight.
+ *
+ * Tried only after {@link RADIX_NUMBERS}, because `0x10` also begins with
+ * something this pattern would happily read as `0`.
  */
-const RADIX_NUMBER = /^(?:0x[\da-f](?:_?[\da-f])*|0o[0-7](?:_?[0-7])*|0b[01](?:_?[01])*)/i;
+const INTEGER_PART = /^(?:0|[1-9](?:_?\d)*)/;
 
 /**
- * Base-ten literals: integer, fraction, leading-dot fraction, each with an
- * optional exponent. Tried only after {@link RADIX_NUMBER}, because `0x10`
- * also begins with something this pattern would happily read as `0`.
+ * A fraction. The digits are optional here because `5.` is a whole literal;
+ * a bare dot is rejected by the reader instead, where the integer part it
+ * would need is known.
  */
-const DECIMAL_NUMBER =
-    /^(?:(?:0|[1-9](?:_?\d)*)(?:\.(?:\d(?:_?\d)*)?)?|\.\d(?:_?\d)*)(?:e[+-]?\d(?:_?\d)*)?/i;
+const FRACTION_PART = /^\.(?:\d(?:_?\d)*)?/;
+
+/** An exponent suffix, which either part above may carry. */
+const EXPONENT_PART = /^e[+-]?\d(?:_?\d)*/i;
+
+/**
+ * The numeric literal `text` opens with.
+ *
+ * Read in parts rather than by one pattern for the whole grammar: each part
+ * below is a rule of the language a reader can check against the spec on its
+ * own, where one combined alternation is only checkable as a whole.
+ *
+ * @param text - Source from the start of the candidate number.
+ * @returns The literal's text, or null when `text` does not open with one.
+ */
+function numericPrefix(text: string): string | null {
+    for (const radix of RADIX_NUMBERS) {
+        const matched = radix.exec(text);
+        if (matched !== null) return matched[0];
+    }
+    const integer = INTEGER_PART.exec(text)?.[0] ?? '';
+    const fraction = FRACTION_PART.exec(text.slice(integer.length))?.[0] ?? '';
+    // A dot needs digits on one side or the other. Neither makes `.` on its
+    // own, or `._1`, which is a member access on a number that is not there.
+    if (integer === '' && (fraction === '' || fraction === '.')) return null;
+    const mantissa = integer + fraction;
+    const exponent = EXPONENT_PART.exec(text.slice(mantissa.length))?.[0] ?? '';
+    return mantissa + exponent;
+}
 
 /** Thrown to unwind to {@link parseObjectLiteralSafe} from any depth. */
 class NotStatic extends Error {}
@@ -291,14 +325,14 @@ class Reader {
      */
     readNumber(): number {
         const rest = this.source.slice(this.offset);
-        const matched = RADIX_NUMBER.exec(rest) ?? DECIMAL_NUMBER.exec(rest);
-        if (!matched) this.bail();
-        this.offset += matched[0].length;
+        const matched = numericPrefix(rest);
+        if (matched === null) this.bail();
+        this.offset += matched.length;
         // `1n` is a bigint and `1abc` is not a literal at all; neither is a
         // number, and both end where a number would have ended.
         const next = this.source[this.offset];
         if (next !== undefined && (next === 'n' || IDENTIFIER_PART.test(next))) this.bail();
-        return Number(matched[0].split('_').join(''));
+        return Number(matched.split('_').join(''));
     }
 }
 

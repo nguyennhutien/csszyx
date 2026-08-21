@@ -182,6 +182,14 @@ describe('parseObjectLiteralSafe — numeric literal grammar', () => {
             '1.5': 3,
         });
     });
+
+    it('reads a dot as a number only with digits on one side of it', () => {
+        expect(parseObjectLiteralSafe('{ p: .5, q: 5. }')).toEqual({ p: 0.5, q: 5 });
+        expect(parseObjectLiteralSafe('{ p: . }')).toBeNull();
+        // A separator cannot open the fraction, so this is a member access on
+        // a number that is not there rather than a literal.
+        expect(parseObjectLiteralSafe('{ p: ._1 }')).toBeNull();
+    });
 });
 
 describe('parseObjectLiteralSafe — string and template escapes', () => {
