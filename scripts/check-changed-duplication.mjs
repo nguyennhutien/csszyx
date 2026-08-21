@@ -23,16 +23,36 @@ const MIN_LINES = '10';
 /** Below this a shared shape is a coincidence of syntax, not a copy. */
 const MIN_TOKENS = '50';
 
+/** The tree jscpd is pointed at, and what its reported paths are relative to. */
+const SCAN_ROOT = 'packages';
+
+/** `sonar.exclusions`, plus the tests Sonar measures separately. */
+const IGNORE = [
+    '**/dist/**',
+    '**/node_modules/**',
+    '**/generated/**',
+    '**/*.d.ts',
+    '**/*.type-test.ts',
+    'packages/core/fuzz/**',
+    'packages/e2e/**',
+    '**/tests/**',
+    '**/*.test.ts',
+].join(',');
+
 /**
  * Whether a block of a clone covers any line the diff touched.
  *
+ * jscpd names a file relative to the directory it was told to scan, so the
+ * scan root has to be put back before the name can be looked up against a
+ * diff, whose paths are relative to the repository.
+ *
  * @param block - One `firstFile`/`secondFile` entry from jscpd.
  * @param touched - Repo-relative path mapped to the lines the diff changed.
- * @param root - Absolute repository root, to relativise jscpd's paths.
+ * @param scanRoot - Repo-relative directory jscpd was pointed at.
  * @returns True when the diff reaches into this block.
  */
-function blockIsChanged(block, touched, root) {
-    const lines = touched.get(path.relative(root, block.name));
+function blockIsChanged(block, touched, scanRoot) {
+    const lines = touched.get(path.posix.join(scanRoot, block.name));
     if (lines === undefined) return false;
     for (const line of lines) {
         if (line >= block.start && line <= block.end) return true;
@@ -49,24 +69,27 @@ function blockIsChanged(block, touched, root) {
  *
  * @param duplicates - The `duplicates` array of a jscpd JSON report.
  * @param touched - Repo-relative path mapped to the lines the diff changed.
- * @param root - Absolute repository root.
+ * @param scanRoot - Repo-relative directory jscpd was pointed at.
  * @returns The subset landing on changed lines.
  */
-export function clonesOnChangedLines(duplicates, touched, root) {
+export function clonesOnChangedLines(duplicates, touched, scanRoot) {
     return duplicates.filter(
         clone =>
-            blockIsChanged(clone.firstFile, touched, root) ||
-            blockIsChanged(clone.secondFile, touched, root),
+            blockIsChanged(clone.firstFile, touched, scanRoot) ||
+            blockIsChanged(clone.secondFile, touched, scanRoot),
     );
 }
 
 /**
  * Run jscpd over the Sonar-scoped sources and read its report.
  *
- * @param files - Repo-relative paths to scan.
- * @returns The `duplicates` array, empty when jscpd could not be run.
+ * The whole tree is scanned rather than the changed files alone, because jscpd
+ * reduces an explicit file list to bare basenames in its report, which cannot
+ * be matched back to a diff. Filtering to the change happens afterwards.
+ *
+ * @returns The `duplicates` array, or null when jscpd could not be run.
  */
-function detect(files) {
+function detect() {
     const out = mkdtempSync(path.join(tmpdir(), 'csszyx-dup-'));
     try {
         execFileSync(
@@ -83,7 +106,11 @@ function detect(files) {
                 'json',
                 '--output',
                 out,
-                ...files,
+                '--ignore',
+                IGNORE,
+                '--pattern',
+                '**/*.ts',
+                SCAN_ROOT,
             ],
             { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 },
         );
@@ -122,14 +149,13 @@ function main(base) {
     }
 
     console.log(`[duplication] checking ${files.length} changed file(s) for copied blocks...`);
-    const duplicates = detect(files);
+    const duplicates = detect();
     if (duplicates === null) {
         console.error('[duplication] jscpd could not be run — treating that as a failure.');
         return 1;
     }
 
-    const root = process.cwd();
-    const offending = clonesOnChangedLines(duplicates, touched, root);
+    const offending = clonesOnChangedLines(duplicates, touched, SCAN_ROOT);
     if (offending.length === 0) {
         console.log('[duplication] no copied block on a changed line.');
         return 0;
@@ -137,8 +163,8 @@ function main(base) {
 
     console.error('\n[duplication] copied blocks on changed lines:');
     for (const clone of offending) {
-        const first = `${path.relative(root, clone.firstFile.name)}:${clone.firstFile.start}`;
-        const second = `${path.relative(root, clone.secondFile.name)}:${clone.secondFile.start}`;
+        const first = `${path.posix.join(SCAN_ROOT, clone.firstFile.name)}:${clone.firstFile.start}`;
+        const second = `${path.posix.join(SCAN_ROOT, clone.secondFile.name)}:${clone.secondFile.start}`;
         console.error(`  ${clone.lines} lines — ${first} and ${second}`);
     }
     console.error(
