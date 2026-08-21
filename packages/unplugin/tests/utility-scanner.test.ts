@@ -161,3 +161,23 @@ describe('parseUtilityBlocks', () => {
         expect(parseUtilityBlocks(css).statics).toEqual(['keep1', 'keep2']);
     });
 });
+
+describe('parseUtilityBlocks — a declaration whose body never closes', () => {
+    it('still claims the name, and stops rather than scanning the body again', () => {
+        // A stylesheet mid-edit, or one with a brace missing. The name IS
+        // claimed — that is what the collision report needs — and the scan has
+        // to end: resuming inside a block with no close would find the same
+        // declaration over and over.
+        const css = '@utility panel-flat {\n    box-shadow: none;\n';
+
+        expect(parseUtilityBlocks(css)).toEqual({ statics: ['panel-flat'], functionals: [] });
+    });
+
+    it('does not read a declaration buried in an unclosed body as a second one', () => {
+        // Everything after the unclosed brace belongs to that body as far as
+        // CSS is concerned, so nothing later is a declaration of its own.
+        const css = '@utility outer {\n    @utility inner {\n        color: red;\n';
+
+        expect(parseUtilityBlocks(css).statics).toEqual(['outer']);
+    });
+});
