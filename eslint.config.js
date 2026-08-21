@@ -13,6 +13,7 @@ import tsParser from '@typescript-eslint/parser';
 import jsdoc from 'eslint-plugin-jsdoc';
 import regexp from 'eslint-plugin-regexp';
 import security from 'eslint-plugin-security';
+import sonarjs from 'eslint-plugin-sonarjs';
 
 const repoRoot = import.meta.dirname;
 
@@ -170,6 +171,28 @@ export default [
                         'Bare .sort() mis-orders numbers. Use sortStrings() for strings, or pass an explicit comparator.',
                 },
             ],
+        },
+    },
+
+    // Two rules SonarCloud reports on the pull request, run here instead. This
+    // is SonarSource's own plugin, so the finding is the same one rather than a
+    // lookalike: on the code that first triggered them it reproduced Sonar's
+    // exact complexity numbers and its exact wording.
+    //
+    // Scoped to what `sonar.sources` covers, so a report here means a report
+    // there. `scripts/` is outside it, and the argument parsers living there
+    // advance the loop index on purpose to consume the value after a flag.
+    {
+        files: ['packages/**/*.ts', 'packages/**/*.tsx'],
+        ignores: ['packages/e2e/**', '**/generated/**', '**/*.d.ts', '**/*.type-test.ts'],
+        plugins: { sonarjs },
+        rules: {
+            // S5843. A pattern past this size stops being checkable against the
+            // grammar it encodes, one rule at a time.
+            'sonarjs/regex-complexity': 'error',
+            // S2310. A counter the body rewrites is no longer a counter, and
+            // where the next step lands stops being readable from the header.
+            'sonarjs/updated-loop-counter': 'error',
         },
     },
 
