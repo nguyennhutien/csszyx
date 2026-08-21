@@ -222,24 +222,49 @@ function lineAt(source: string, offset: number): number {
  * @param start - Index of the opening brace.
  * @returns The index after the matching brace, or -1 when it is unbalanced.
  */
-function expressionEnd(source: string, start: number): number {
-    let depth = 0;
-    let quote = '';
+/**
+ * Index of the quote that closes a string opened before `start`.
+ *
+ * @param source - Source module text.
+ * @param start - First index inside the string.
+ * @param quote - The delimiter that opened it.
+ * @returns Index of the closing quote, or `source.length` when unterminated.
+ */
+function quotedEnd(source: string, start: number, quote: string): number {
     for (let index = start; index < source.length; index += 1) {
         const character = source[index];
-        if (quote) {
-            if (character === '\\') index += 1;
-            else if (character === quote) quote = '';
+        // A backslash consumes whatever follows, including the delimiter.
+        if (character === '\\') index += 1;
+        else if (character === quote) return index;
+    }
+    return source.length;
+}
+
+/**
+ * How one character moves bracket depth.
+ *
+ * @param character - Character under the cursor.
+ * @returns 1 to open, -1 to close, 0 for everything else.
+ */
+function bracketDelta(character: string | undefined): number {
+    if (character === '{' || character === '[' || character === '(') return 1;
+    if (character === '}' || character === ']' || character === ')') return -1;
+    return 0;
+}
+
+function expressionEnd(source: string, start: number): number {
+    let depth = 0;
+    for (let index = start; index < source.length; index += 1) {
+        const character = source[index];
+        if (character === "'" || character === '"' || character === '`') {
+            index = quotedEnd(source, index + 1, character);
             continue;
         }
-        if (character === "'" || character === '"' || character === '`') {
-            quote = character;
-        } else if (character === '{' || character === '[' || character === '(') {
-            depth += 1;
-        } else if (character === '}' || character === ']' || character === ')') {
-            depth -= 1;
-            if (depth === 0) return index + 1;
-        }
+        const delta = bracketDelta(character);
+        depth += delta;
+        // Only a CLOSING bracket can end the container: depth is also 0 before
+        // the first one opens, and reading that as the end would return `start`.
+        if (delta < 0 && depth === 0) return index + 1;
     }
     return -1;
 }

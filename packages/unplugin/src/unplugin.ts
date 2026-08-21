@@ -3912,6 +3912,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
             }
         }
+        // NOSONAR: not simple iteration — `enqueueForwardedProviders` appends to
+        // `queue` inside this body, so the walk covers a chain of barrels in one
+        // pass. An index read against a live `length` is what makes that visible.
         for (let index = 0; index < queue.length; index += 1) {
             const providerPath = resolveProviderPathWith(queue[index], isReadableProviderFile);
             if (providerPath === undefined) continue;
@@ -3967,6 +3970,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     ): void {
         const queue = [...demand];
         const queued = new Set(queue);
+        // NOSONAR: not simple iteration — `enqueueForwardedProviders` appends to
+        // `queue` inside this body, so the walk covers a chain of barrels in one
+        // pass. An index read against a live `length` is what makes that visible.
         for (let index = 0; index < queue.length; index += 1) {
             const providerPath = resolveProviderPath(seenSourcePaths, queue[index]);
             // A specifier resolving to nothing the walk saw is ordinary — a

@@ -22,12 +22,58 @@
 import type { ThemeNamespace } from './sibling-keyword.js';
 import type { CollisionOracle } from './theme-collision.js';
 
+/** One way Tailwind can read a class name. */
+interface CandidateReading {
+    kind: string;
+    root: string;
+    value?: { kind: string; value: string } | null;
+}
+
 /** The part of Tailwind's design system this reads. */
 export interface CollisionDesignSystem {
     getClassList(): Iterable<string | readonly [string, unknown]>;
-    parseCandidate(
-        candidate: string,
-    ): Iterable<{ kind: string; root: string; value?: { kind: string; value: string } | null }>;
+    parseCandidate(candidate: string): Iterable<CandidateReading>;
+}
+
+/**
+ * Add one member to the set stored under `key`, creating it on first use.
+ *
+ * @param map - Index being built.
+ * @param key - Key whose set receives the member.
+ * @param member - Value to record.
+ */
+function addToSet<K>(map: Map<K, Set<string>>, key: K, member: string): void {
+    const existing = map.get(key);
+    if (existing) {
+        existing.add(member);
+        return;
+    }
+    map.set(key, new Set([member]));
+}
+
+/**
+ * Record what one reading of a class name says about the two indexes.
+ *
+ * @param reading - One reading Tailwind offers for the class.
+ * @param isStatic - Whether the same class also reads as a whole static utility.
+ * @param probeOwner - Probe token name to the namespace that injected it.
+ * @param prefixes - Namespace to the class roots it feeds.
+ * @param ambiguous - Class root to the names read both ways under it.
+ */
+function indexReading(
+    reading: CandidateReading,
+    isStatic: boolean,
+    probeOwner: ReadonlyMap<string, ThemeNamespace>,
+    prefixes: Map<ThemeNamespace, Set<string>>,
+    ambiguous: Map<string, Set<string>>,
+): void {
+    if (reading.kind !== 'functional' || reading.value?.kind !== 'named') return;
+    const value = reading.value.value;
+    const owner = probeOwner.get(value);
+    if (owner) addToSet(prefixes, owner, reading.root);
+    // Only a name read BOTH ways is a collision; a functional-only reading is
+    // an ordinary token slot.
+    if (isStatic) addToSet(ambiguous, reading.root, value);
 }
 
 /**
@@ -75,18 +121,7 @@ export function collisionOracleFrom(design: CollisionDesignSystem): CollisionOra
             reading => reading.kind === 'static' && reading.root === cls,
         );
         for (const reading of readings) {
-            if (reading.kind !== 'functional' || reading.value?.kind !== 'named') continue;
-            const value = reading.value.value;
-            const owner = probeOwner.get(value);
-            if (owner) {
-                if (!prefixes.has(owner)) prefixes.set(owner, new Set());
-                prefixes.get(owner)?.add(reading.root);
-            }
-            // Only a name read BOTH ways is a collision; a functional-only
-            // reading is an ordinary token slot.
-            if (!isStatic) continue;
-            if (!ambiguous.has(reading.root)) ambiguous.set(reading.root, new Set());
-            ambiguous.get(reading.root)?.add(value);
+            indexReading(reading, isStatic, probeOwner, prefixes, ambiguous);
         }
     }
 

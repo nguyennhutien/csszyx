@@ -27,8 +27,15 @@ const WHITESPACE = /\s/;
  * module. Accepting them would read `010` as ten where the bundler reads
  * eight.
  */
-const NUMBER =
-    /^(?:0x[\da-f](?:_?[\da-f])*|0o[0-7](?:_?[0-7])*|0b[01](?:_?[01])*|(?:0|[1-9](?:_?\d)*)(?:\.(?:\d(?:_?\d)*)?)?(?:e[+-]?\d(?:_?\d)*)?|\.\d(?:_?\d)*(?:e[+-]?\d(?:_?\d)*)?)/i;
+const RADIX_NUMBER = /^(?:0x[\da-f](?:_?[\da-f])*|0o[0-7](?:_?[0-7])*|0b[01](?:_?[01])*)/i;
+
+/**
+ * Base-ten literals: integer, fraction, leading-dot fraction, each with an
+ * optional exponent. Tried only after {@link RADIX_NUMBER}, because `0x10`
+ * also begins with something this pattern would happily read as `0`.
+ */
+const DECIMAL_NUMBER =
+    /^(?:(?:0|[1-9](?:_?\d)*)(?:\.(?:\d(?:_?\d)*)?)?|\.\d(?:_?\d)*)(?:e[+-]?\d(?:_?\d)*)?/i;
 
 /** Thrown to unwind to {@link parseObjectLiteralSafe} from any depth. */
 class NotStatic extends Error {}
@@ -283,7 +290,8 @@ class Reader {
      * @returns Its value.
      */
     readNumber(): number {
-        const matched = NUMBER.exec(this.source.slice(this.offset));
+        const rest = this.source.slice(this.offset);
+        const matched = RADIX_NUMBER.exec(rest) ?? DECIMAL_NUMBER.exec(rest);
         if (!matched) this.bail();
         this.offset += matched[0].length;
         // `1n` is a bigint and `1abc` is not a literal at all; neither is a

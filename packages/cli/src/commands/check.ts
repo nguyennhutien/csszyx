@@ -653,6 +653,63 @@ async function reportThemeCollisions(
 }
 
 /**
+ * Resolve the files this run will scan, or fail the run explaining why.
+ *
+ * Two ways to end with nothing to scan, and both are fatal rather than empty:
+ * the glob itself threw, or a listed path could not be read. Every later line
+ * counts only the files that were read, so a run that quietly dropped one
+ * would report a clean subset as if it were the whole list.
+ *
+ * @param options - scan options.
+ * @param out - reporter the failure is written to.
+ * @param cwd - directory the scan is rooted at.
+ * @param patterns - globs used when no explicit file list is given.
+ * @param ignore - globs to skip.
+ * @returns Absolute paths to scan, or null when the run has already failed.
+ */
+async function resolveScanFiles(
+    options: CheckOptions,
+    out: Reporter,
+    cwd: string,
+    patterns: readonly string[],
+    ignore: readonly string[],
+): Promise<string[] | null> {
+    // ora writes straight to the tty, so it has to be skipped rather than
+    // routed: a spinner frame in the middle of a JSON document is not parseable.
+    const s = out.quiet ? null : spinner.start('Scanning for files...');
+    let files: string[];
+    let missing: readonly string[] = [];
+    try {
+        if (options.files) {
+            const listed = listedSourceFiles(options.files, cwd);
+            missing = listed.missing;
+            files = listed.files;
+        } else {
+            files = await fg([...patterns], { cwd, ignore: [...ignore], absolute: true });
+        }
+    } catch (err) {
+        s?.fail('File scan failed');
+        out.warn(`Could not scan files: ${err instanceof Error ? err.message : String(err)}`);
+        process.exitCode = 1;
+        return null;
+    }
+    s?.succeed(`Found ${files.length} files`);
+
+    if (missing.length === 0) return files;
+
+    out.warn('Files that could not be read:');
+    for (const file of missing) out.info(`  ${file}`);
+    out.warn(
+        `\u2716 ${missing.length} listed file(s) could not be read, so they were not ` +
+            'checked. A pass here would report a subset as if it were the whole list. ' +
+            'Check the paths, and note that a separator is normalised rather than ' +
+            'trusted, so this is a missing file rather than a Windows path.',
+    );
+    process.exitCode = 1;
+    return null;
+}
+
+/**
  * Scan the project for unknown/aliased `sz` keys and report them in one pass.
  *
  * Sets `process.exitCode` to 1 when any issue is found so the command can gate
@@ -675,42 +732,8 @@ export async function check(options: CheckOptions = {}): Promise<void> {
 
     out.header('csszyx check — static sz diagnostics');
 
-    // ora writes straight to the tty, so it has to be skipped rather than
-    // routed: a spinner frame in the middle of a JSON document is not parseable.
-    const s = out.quiet ? null : spinner.start('Scanning for files...');
-    let files: string[];
-    let missing: string[] = [];
-    try {
-        if (options.files) {
-            const listed = listedSourceFiles(options.files, cwd);
-            missing = listed.missing;
-            files = listed.files;
-        } else {
-            files = await fg(patterns, { cwd, ignore, absolute: true });
-        }
-    } catch (err) {
-        s?.fail('File scan failed');
-        out.warn(`Could not scan files: ${err instanceof Error ? err.message : String(err)}`);
-        process.exitCode = 1;
-        return;
-    }
-    s?.succeed(`Found ${files.length} files`);
-
-    // Reported before anything is scanned, and fatal: every later line counts
-    // only the files that were read, so a run that quietly dropped one would
-    // report a clean subset as if it were the whole list.
-    if (missing.length > 0) {
-        out.warn('Files that could not be read:');
-        for (const file of missing) out.info(`  ${file}`);
-        out.warn(
-            `\u2716 ${missing.length} listed file(s) could not be read, so they were not ` +
-                'checked. A pass here would report a subset as if it were the whole list. ' +
-                'Check the paths, and note that a separator is normalised rather than ' +
-                'trusted, so this is a missing file rather than a Windows path.',
-        );
-        process.exitCode = 1;
-        return;
-    }
+    const files = await resolveScanFiles(options, out, cwd, patterns, ignore);
+    if (!files) return;
 
     const { issues, classOrigins, pairsByFile } = await collectSzDiagnostics(files, cwd);
     // Compiling a stylesheet is the expensive part of this command, so it is
