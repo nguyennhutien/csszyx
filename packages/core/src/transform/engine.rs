@@ -411,7 +411,7 @@ fn transform_static_classes_with_options(
     // A budget-tripped walk produced a PARTIAL IR: whichever classes happen to
     // sit before the cut would flow into the safelist and the rest silently
     // vanish — under Tailwind `source(none)` that is wrong CSS with no signal
-    // (and a rust-vs-oxc parity break, since the JavaScript engines it replaced throw instead).
+    // (and a rust-vs-oxc parity break, since the removed JavaScript lanes throw instead).
     // Contribute nothing and let the diagnostic above carry the loud skip.
     let (classes, raw_class_names) = if parsed.ast_budget_exceeded {
         (Vec::new(), Vec::new())
@@ -646,10 +646,10 @@ fn style_spread_collision_diagnostics(file: &TransformFile, ir: &super::SourceIr
 
 /// Dev-mode build-log diagnostics for unrecognized sz property keys (likely
 /// typos), located by file and line so they are findable in a large codebase —
-/// parity with the JavaScript engines it replaced, which previously were the only ones to
+/// parity with the removed JavaScript lanes, which previously were the only ones to
 /// warn. The bundler plugin gates these to dev (and suppresses source paths in
 /// production), the same as the other soft diagnostics here.
-/// Matches the JavaScript engines it replaced' `/^\d+(?:\.\d+)?$/` — a bare integer or decimal, the
+/// Matches the removed JavaScript lanes' `/^\d+(?:\.\d+)?$/` — a bare integer or decimal, the
 /// shape of an array index or a spread's numeric key that reached `sz`.
 fn is_numeric_key(key: &str) -> bool {
     let (int, frac) = key
@@ -737,7 +737,7 @@ fn unknown_property_diagnostics(
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, *offset);
             // A numeric key is almost never a typo — it means an array or a spread
-            // reached `sz`. Match the JavaScript engines it replaced' wording so a `build.parser` flip
+            // reached `sz`. Match the removed JavaScript lanes' wording so a `build.parser` flip
             // does not change the diagnostic text.
             if let Some(note) = super::generated::tables::key_migration_note(key) {
                 // Wording mirrors the runtime channel's unknownSzPropertyMessage
@@ -769,7 +769,7 @@ fn unknown_property_diagnostics(
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, *offset);
-            // Wording matches the JavaScript engines it replaced' warnDeadSpacingStep so a
+            // Wording matches the removed JavaScript lanes' warnDeadSpacingStep so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
@@ -794,7 +794,7 @@ fn unknown_property_diagnostics(
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, *offset);
-            // Wording matches the JavaScript engines it replaced' warnPropertyObjectValue so a
+            // Wording matches the removed JavaScript lanes' warnPropertyObjectValue so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] \"{key}\" is a property, not a variant, but received an object {{ {nested} }} at {location}:{line}. This compiles to \"{key}:*\" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use {{ color: '...', op: ... }}."
@@ -806,7 +806,7 @@ fn unknown_property_diagnostics(
             let (line, _) = lines
                 .get_or_insert_with(|| LineIndex::new(&file.source))
                 .line_column(&file.source, *offset);
-            // Wording matches the JavaScript engines it replaced' warnMaskSlotMember so a
+            // Wording matches the removed JavaScript lanes' warnMaskSlotMember so a
             // `build.parser` flip does not change the diagnostic text.
             out.push(format!(
                 "[csszyx] {owner}: unknown field \"{member}\" at {location}:{line} — nothing is emitted for it. {owner} takes {{ {allowed} }}."
@@ -918,7 +918,7 @@ fn class_name_precedence_advisories(
 /// runtime value: the whole element degrades to `_szPart` at runtime instead
 /// of compiling statically. Only object literals warn — identifiers, calls,
 /// and member expressions are legitimate forwarded slots. The wording and the
-/// 1-based line:column position match the JavaScript engines it replaced byte-for-byte.
+/// 1-based line:column position match the removed JavaScript lanes byte-for-byte.
 fn deferred_array_object_diagnostics(file: &TransformFile, ir: &super::SourceIr) -> Vec<String> {
     ir.sz_attributes
         .iter()

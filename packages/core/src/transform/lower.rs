@@ -137,7 +137,7 @@ pub(crate) fn is_removed_sz_key(key: &str) -> bool {
 
 /// Whether a key is a recognized sz property or variant, mirroring the JS
 /// `isKnown` check in transform-core so the native engine warns on the same set
-/// of typo'd keys as the JavaScript engines it replaced. Generous by construction — a key is
+/// of typo'd keys as the removed JavaScript lanes. Generous by construction — a key is
 /// "known" if ANY table or special form claims it (`property_prefix` already
 /// covers the many special-cased keys like `content`/`display`/`snapAlign`), so
 /// a valid key is never flagged as unknown.
@@ -151,7 +151,7 @@ pub(crate) fn is_known_sz_key(key: &str) -> bool {
         // the key). The `Boolean(true)` emit path falls back to the key itself
         // for them, so they DO produce a class — the known-key check must agree,
         // or rust warns "Unknown property … will be ignored" for a class it
-        // actually emits, diverging from the JavaScript engines it replaced (whose BOOLEAN_SHORTHANDS
+        // actually emits, diverging from the removed JavaScript lanes (whose BOOLEAN_SHORTHANDS
         // set includes them and never warns).
         // Fully-qualified rather than imported: this is the ONLY caller, and it
         // is gated behind `#[cfg(any(feature = "native-engine", test))]`. A plain
@@ -1081,7 +1081,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             }
             // display / position / visibility carry their value as the bare
             // Tailwind utility (`flex`, `grid`, `absolute`, `visible`), not a
-            // `display-flex` style prefix-value pair. This mirrors the JavaScript engines it replaced
+            // `display-flex` style prefix-value pair. This mirrors the removed JavaScript lanes
             // transform so both parser paths emit classes Tailwind actually
             // generates.
             if key == "display" {
@@ -1815,7 +1815,7 @@ fn format_opacity_value(value: &StaticSzValue) -> Option<String> {
     match value {
         // Integers and half steps (0, 0.5, 50, 75.5 …) stay plain; other
         // decimals (0.05, 0.02 …) become arbitrary `/[0.05]`. Mirrors the
-        // the JavaScript engines it replaced `formatOpacity`.
+        // the removed JavaScript lanes `formatOpacity`.
         StaticSzValue::Number(op) => {
             if (op * 2.0).fract() == 0.0 {
                 Some(format_abs_number(*op))

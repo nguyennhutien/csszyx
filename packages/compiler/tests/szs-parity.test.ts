@@ -1,5 +1,5 @@
 /**
- * `szs` slot-map parity + contract across the three engines.
+ * `szs` slot-map parity + contract across both engine artifacts.
  *
  * `szs={{ header: { bg: 'gray-100' } }}` compiles each slot VALUE to its class
  * string (keeping the key) so a component forwards `props.szs?.<slot>` into a

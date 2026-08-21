@@ -13,7 +13,7 @@
  * The rule now: the sz merge edits only the text on either side of the authored
  * className expression, so the precompile keeps the inner range. Where that is
  * impossible — a factory call nested INSIDE the `sz` attribute, which is
- * replaced wholesale — all three engines keep the runtime path instead.
+ * replaced wholesale — both engine artifacts keep the runtime path instead.
  */
 import { describe, expect, it } from 'vitest';
 

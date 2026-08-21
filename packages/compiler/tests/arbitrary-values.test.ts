@@ -211,7 +211,7 @@ describe('arbitrary values — CSS function calls', () => {
 
 describe('arbitrary values — CSS function calls agree across engines', () => {
     // The name lists were per-engine, so the same value could bracket on one
-    // lane and emit a dead class on another. One rule, three engines.
+    // lane and emit a dead class on another. One rule, both artifacts.
     it.each([
         ["{ pt: 'env(safe-area-inset-top)' }", 'pt-[env(safe-area-inset-top)]'],
         ["{ bg: 'oklch(0.7,0.1,200)' }", 'bg-[oklch(0.7,0.1,200)]'],

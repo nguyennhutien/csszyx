@@ -1,5 +1,5 @@
 /**
- * The `szPartArgsProvable` metadata flag, across three engines.
+ * The `szPartArgsProvable` metadata flag, across both artifacts.
  *
  * `sz={[{ p: 4 }, extra]}` emits `_szPart(extra)`, and importing that helper
  * from the main entry ships the browser transform whether or not an object

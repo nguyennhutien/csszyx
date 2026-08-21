@@ -1,5 +1,5 @@
 /**
- * Mask layer parity across the three engines.
+ * Mask layer parity across both engine artifacts.
  *
  * `mask-image` composites three custom properties, so the sz surface is one key
  * per layer and the lowering has to reproduce Tailwind's naming exactly: stops

@@ -705,7 +705,7 @@ describe('the single-dimension picker', () => {
         });
     });
 
-    it.each(CASES)('three engines agree on: %s', (_name, body) => {
+    it.each(CASES)('both artifacts agree on: %s', (_name, body) => {
         const shapes = LANES.map(([, engine]) => JSON.stringify(pickShape(engine, IMPORTS + body)));
         expect(new Set(shapes).size).toBe(1);
     });

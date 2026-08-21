@@ -2216,7 +2216,7 @@ fn static_array_parts_from_expression(
 /// source span (the rewrite wraps them in `_szPart`), with statically visible
 /// classes inside them collected as safelist candidates. Returns None only
 /// when the whole array must stay a runtime value (a spread element) —
-/// matching the JavaScript engines it replaced' classification exactly.
+/// matching the removed JavaScript lanes' classification exactly.
 fn static_array_parts_from_array_expression(
     array: &ArrayExpression<'_>,
     ctx: ResolveContext<'_>,
@@ -3942,7 +3942,7 @@ fn partial_object_from_object_expression(
                 }
 
                 // Slice the UNWRAPPED expression span: `sz={{ p: (pad) }}` must
-                // emit `calc(${pad} …)` like the JavaScript engines it replaced, not `calc(${(pad)} …)`
+                // emit `calc(${pad} …)` like the removed JavaScript lanes, not `calc(${(pad)} …)`
                 // — redundant parens broke rust==oxc byte parity.
                 partial.dynamic_css_vars.push(dynamic_css_var_from_property(
                     &key,
@@ -4627,7 +4627,7 @@ fn static_object_from_spread_argument(
 /// Resolve an sz array ELEMENT to a static object for the deep-merge lane:
 /// an object literal, or an identifier whose initializer unwraps to one.
 /// Object-only on purpose — anything else (strings, conditions, dynamics)
-/// belongs to the szcn parts lane, matching the JavaScript engines it replaced' classification.
+/// belongs to the szcn parts lane, matching the removed JavaScript lanes' classification.
 fn array_element_static_object(
     expression: &Expression<'_>,
     ctx: ResolveContext<'_>,
@@ -6083,7 +6083,7 @@ export const C = ({ styles }) => <div sz={styles} />;
     fn szv_catalog_is_per_key_lenient_and_expands_conditional_branches() {
         // One unreadable leaf (a call) skips ONLY its key; a finite conditional
         // contributes BOTH branches; sibling variants always survive. Matches
-        // the JavaScript engines it replaced lenient catalog walk (locked by the TS parity suite
+        // the removed JavaScript lanes lenient catalog walk (locked by the TS parity suite
         // `szv-catalog-leniency.test.ts`).
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
@@ -6366,8 +6366,8 @@ export const C = ({ styles }) => <div sz={styles} />;
     #[test]
     fn parser_shell_extracts_szv_dis_value_cases() {
         // szv lowers "dị" variant/important/negative/arbitrary/css-var values in
-        // the catalog directly — these must match the same shapes the JavaScript engines it replaced
-        // emit (the JavaScript engines it replaced szv-extraction parity suite locks the JS side).
+        // the catalog directly — these must match the same shapes the removed JavaScript lanes
+        // emit (the removed JavaScript lanes szv-extraction parity suite locks the JS side).
         let cases: &[(&str, &str)] = &[
             (
                 "{ variants: { s: { x: { hover: { bg: 'red-500' } } } } }",

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { transformSource, transformWasm } from '../src/index.js';
 
-// szv catalog extraction lives in three engines (Babel `transformSource`,
-// the wasm build via `transformWasm`, Rust — covered by its own cargo tests). These lock the
-// build-time safelist behaviour for the two JavaScript engines it replaced AND assert they agree, so
-// a regression in one surfaces here instead of as silent dead classes in a
+// szv catalog extraction runs through both engine artifacts: `transformSource`
+// serves whichever lane the platform can load, `transformWasm` pins the wasm
+// one. These lock the build-time safelist behaviour AND assert the two agree,
+// so a regression in one surfaces here instead of as silent dead classes in a
 // consumer. The matrix is deliberately wide: it was a wide pass that found the
-// `compoundVariants`/non-static-sibling gap and a Babel↔oxc divergence.
+// `compoundVariants`/non-static-sibling gap and a cross-lane divergence.
 
 const IMPORT = "import { szv } from 'csszyx';";
 const sorted = (classes: Set<string>) => [...classes].sort();
@@ -96,7 +96,7 @@ describe('szv extraction — oxc engine', () => {
     });
 });
 
-describe('szv extraction — the JavaScript engines it replaced parity', () => {
+describe('szv extraction — the removed JavaScript lanes parity', () => {
     const CASES: Array<[string, string]> = [
         [
             'base + variants + defaultVariants',
@@ -260,7 +260,7 @@ describe('szv extraction — TypeScript wrappers are looked through', () => {
     ];
 
     for (const [name, source] of wrapped) {
-        it(`extracts through ${name} (both JavaScript engines it replaced agree)`, () => {
+        it(`extracts through ${name} (both JavaScript lanes agreed)`, () => {
             const babel = [...transformSource(source, 'F.tsx').classes].sort();
             const oxc = [...transformWasm(source, 'F.tsx').classes].sort();
             expect(babel, 'babel extracts the catalog').toContain('bg-tag-blue');
@@ -293,7 +293,7 @@ describe('szr literal-arg extraction', () => {
     ];
 
     for (const [name, source, expected] of shapes) {
-        it(`extracts a ${name} (both JavaScript engines it replaced agree)`, () => {
+        it(`extracts a ${name} (both JavaScript lanes agreed)`, () => {
             const babel = [...transformSource(source, 'F.tsx').classes].sort();
             const oxc = [...transformWasm(source, 'F.tsx').classes].sort();
             expect(babel).toEqual(expected);

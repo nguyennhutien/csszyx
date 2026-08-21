@@ -5,7 +5,7 @@
  * dirty fixture tree with each parser — rust, oxc, babel — and asserts the
  * safelist token set is IDENTICAL across engines. This is the in-repo version
  * of the harness a field user had to build themselves to discover that the
- * native engine silently dropped whole files (JSX-in-.js) the JavaScript engines it replaced kept:
+ * native engine silently dropped whole files (JSX-in-.js) the removed JavaScript lanes kept:
  * per-snippet transform tests can never see pipeline bugs (file discovery,
  * prescan gates, per-file error handling, fallback asymmetry). Engine scan
  * divergence is a bug by definition — this suite enforces it.
@@ -42,7 +42,7 @@ export const App = ({ isMobile, children }) => (
 );
 `,
     // vui 0.10.10 item 2: JSX in plain .js — parse-fail here silently emptied
-    // the native engine's scan while the JavaScript engines it replaced recovered via Babel.
+    // the native engine's scan while the removed JavaScript lanes recovered via Babel.
     'src/toolbar.js': `
 export const Toolbar = ({ active }) => (
     <div className="toolbar datetime" sz={{ mx: 0, my: 4 }}>
@@ -129,7 +129,7 @@ export const Button = () => <button className="ds-button" sz={{ rounded: 'lg', i
 // native fast path used to see the static `sz={{ p: 4 }}`, take the AST-free path,
 // and drop the szv catalog (mx-0/grow-1/my-4) — so `rust`'s safelist was smaller
 // than `oxc`'s for this file while the semantic strings survived, the divergence
-// vui measured. All three engines must now agree.
+// vui measured. Both engine artifacts must now agree.
 const UNIMPORTED_VUI_LEAF_FIXTURE = `
 import { szv } from '@csszyx/runtime';
 const gridSz = szv({ variants: { layout: {
@@ -314,7 +314,7 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
         // `sz={{ p: 4 }}` in an unimported vui leaf, took the AST-free path, and
         // dropped the szv catalog (`mx-0`/`grow-1`/`my-4`) while the semantic
         // string classes survived — so `rust` safelisted fewer tokens than `oxc`.
-        // Every token this file contributes must appear on all three engines.
+        // Every token this file contributes must appear on both engine artifacts.
         for (const engine of ['rust', 'wasm'] as const) {
             for (const token of [
                 'grow-1',

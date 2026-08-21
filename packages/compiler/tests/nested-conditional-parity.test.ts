@@ -1,5 +1,5 @@
 /**
- * Nested finite-conditional parity across the three engines.
+ * Nested finite-conditional parity across both engine artifacts.
  *
  * A finite conditional inside a value (`{ borderColor: { color: cond ? a : b, op } }`)
  * is a CHOICE between two static classes. The native (rust) engine expands it into
@@ -71,7 +71,7 @@ function orderedClassesOf(result: { classes?: Iterable<string> } | string): stri
 }
 
 /**
- * Fixtures where all three engines agree byte-for-byte. The variant prefix is a
+ * Fixtures where both engine artifacts agree byte-for-byte. The variant prefix is a
  * single standard variant (or none), which the rust conditional path joins the
  * same way the JavaScript-facing lanes do.
  */
@@ -170,7 +170,7 @@ describe('nested finite-conditional parity', () => {
         it.skipIf(!isRustTransformAvailable())(
             `the native build is byte-identical to the wasm one — ${fixture.name}`,
             () => {
-                // All three engines factor the static sibling out and emit the same
+                // Both engine artifacts factor the static sibling out and emit the same
                 // template literal in the same order. Byte-identical code AND identical
                 // discovery ORDER are required: production mangle IDs are assigned in
                 // discovery order, so a different order (even with the same class set)

@@ -2,7 +2,7 @@
  * A real build for the imported-static-sz-object path.
  *
  * The unit nets cover the registry's rules and the compiler suites cover the
- * three engines' lowering. What neither can show is the part that only exists
+ * both artifacts' lowering. What neither can show is the part that only exists
  * during a build: the prescan deciding WHICH modules to read. A plain exported
  * object carries no marker of its own — unlike `szv(`, there is nothing cheap
  * to grep for, and `export const` is far too common to gate on — so the pass is
