@@ -205,6 +205,9 @@ pnpm check:patch-coverage
 echo "[verify-like-ci] Cognitive complexity of changed files (mirrors Sonar)..."
 node scripts/check-changed-complexity.mjs
 
+echo "[verify-like-ci] Duplication on changed lines (mirrors Sonar)..."
+node scripts/check-changed-duplication.mjs
+
 # Runs after the build on purpose: the gate measures built dist output, and a
 # missing dist fails it rather than passing it.
 echo "[verify-like-ci] Package size gate (user-shipped gzip budgets)..."

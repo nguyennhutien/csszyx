@@ -51,12 +51,19 @@ describe('bin init dispatch (real command)', () => {
 
         const hasConfig = (): boolean =>
             existsSync(join(cwd, 'csszyx.config.ts')) || existsSync(join(cwd, 'csszyx.config.js'));
+        const gitignoreNamesTheme = (): boolean =>
+            readFileSync(join(cwd, '.gitignore'), 'utf8').includes('.csszyx');
 
         process.argv = ['node', 'csszyx', 'init', '--yes', '--cwd', cwd];
         await import('../src/bin.js?scenario=init-yes');
-        // Poll for the effect this test is about rather than sleeping a fixed
+        // Poll for BOTH effects asserted below rather than sleeping a fixed
         // span: the action is async and loads its command module on demand.
-        for (let waited = 0; waited < 10_000 && !hasConfig(); waited += 25) {
+        // Waiting on the config alone is not enough — the command writes it
+        // several awaits before it touches the gitignore, so on a loaded
+        // machine the wait ends while the second effect is still pending and
+        // the assertion reads a file the command has not reached.
+        const scaffolded = (): boolean => hasConfig() && gitignoreNamesTheme();
+        for (let waited = 0; waited < 10_000 && !scaffolded(); waited += 25) {
             await new Promise(resolve => setTimeout(resolve, 25));
         }
 

@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import {
     isRetryablePublishFailure,
+    registryAcceptedVersion,
     publishPackageSet,
     usedOidcAuth,
     registryHasVersion,
@@ -271,4 +272,54 @@ test('stays silent about auth when every package used OIDC', async () => {
 
     assert.ok(lines.some((line) => line.includes('auth: oidc')), lines.join('\n'));
     assert.ok(lines.some((line) => line.includes('all 1 package(s) published through OIDC')));
+});
+
+
+test('waits for a publish the registry accepted instead of sending it again', async () => {
+    // The registry took the package and exposed it a moment later than the
+    // loop looked. Sending it a second time can only conflict with the copy
+    // already staged, which is how one slow package burned every attempt and
+    // abandoned the packages queued behind it.
+    let publishCalls = 0;
+    let queries = 0;
+    const result = await publishPackageSet([pkg('mcp')], {
+        isPublished: async () => {
+            queries += 1;
+            // Invisible through the initial check and the six visibility
+            // polls; visible by the time the final audit asks.
+            return queries > 7;
+        },
+        runPublish: async () => {
+            publishCalls += 1;
+            return { code: 0, stdout: 'published', stderr: '' };
+        },
+        sleep: async () => {},
+        log: () => {},
+        error: () => {},
+    });
+
+    assert.equal(publishCalls, 1);
+    assert.deepEqual(result.published, ['mcp@1.2.3']);
+});
+
+test('reads a staged-version conflict as the registry already holding it', () => {
+    assert.equal(
+        registryAcceptedVersion(
+            'npm error [E409] 409 Conflict - PUT https://registry.npmjs.org/' +
+                '@csszyx%2fmcp-server - Cannot publish over previously staged version "0.14.2".',
+        ),
+        true,
+    );
+    assert.equal(
+        registryAcceptedVersion(
+            'npm error 403 Forbidden - You cannot publish over the previously published versions: 0.14.2.',
+        ),
+        true,
+    );
+    // A packument write that lost a race is the other 409, and that one IS
+    // worth sending again.
+    assert.equal(
+        registryAcceptedVersion('npm error E409 Conflict - Failed to save packument'),
+        false,
+    );
 });

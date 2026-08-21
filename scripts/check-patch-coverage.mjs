@@ -154,7 +154,12 @@ export function parseLcov(text, report) {
     for (const [file, { hits: fileHits, partial: filePartial }] of perFile) {
         const covered = new Set();
         const uncovered = new Set();
-        for (const [lineNumber, count] of fileHits) {
+        // A partial line need not carry a hit record of its own. v8 writes one
+        // DA per statement, so a branch inside a multi-line expression lands on
+        // a line the hit map never mentions, and reading only the hit map would
+        // drop it from both answers instead of reporting it.
+        for (const lineNumber of new Set([...fileHits.keys(), ...filePartial])) {
+            const count = fileHits.get(lineNumber) ?? 0;
             // A line recorded as covered by ANY report stays covered: the rust
             // and TypeScript runs describe different files, and ts-plugin
             // measures its own package that the root run deliberately skips.
