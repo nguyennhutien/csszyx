@@ -216,13 +216,6 @@ function lineAt(source: string, offset: number): number {
 }
 
 /**
- * Index just past the expression container opened at `start`.
- *
- * @param source - Source module text.
- * @param start - Index of the opening brace.
- * @returns The index after the matching brace, or -1 when it is unbalanced.
- */
-/**
  * Index of the quote that closes a string opened before `start`.
  *
  * @param source - Source module text.
@@ -252,6 +245,13 @@ function bracketDelta(character: string | undefined): number {
     return 0;
 }
 
+/**
+ * Index just past the expression container opened at `start`.
+ *
+ * @param source - Source module text.
+ * @param start - Index of the opening brace.
+ * @returns The index after the matching brace, or -1 when it is unbalanced.
+ */
 function expressionEnd(source: string, start: number): number {
     let depth = 0;
     for (let index = start; index < source.length; index += 1) {
