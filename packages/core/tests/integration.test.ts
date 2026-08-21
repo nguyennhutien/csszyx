@@ -53,35 +53,48 @@ describe('@csszyx/core Integration', () => {
                 }
                 return map;
             };
-            // Fastest of several runs, after a warm-up call. The previous form
-            // timed one cold call against a fixed millisecond budget, which
-            // measured the machine rather than the code: the first call into
-            // WASM pays instantiation and JIT costs that do not depend on the
-            // map at all, and the same work that takes about a millisecond
-            // here was billed 120 ms on a shared CI runner. Taking the minimum
-            // of repeated warm runs leaves the map size as the only variable.
-            const fastestOf = (map: Record<string, string>): number => {
-                compute_mangle_checksum(map);
-                let best = Number.POSITIVE_INFINITY;
-                for (let run = 0; run < 5; run++) {
-                    const start = performance.now();
-                    compute_mangle_checksum(map);
-                    best = Math.min(best, performance.now() - start);
-                }
-                return best;
-            };
-
             const small = build(2_000);
             const large = build(16_000);
             expect(compute_mangle_checksum(small)).toHaveLength(16);
             expect(compute_mangle_checksum(large)).toHaveLength(16);
+
+            // Fastest of several runs, after a warm-up call. Timing one cold
+            // call against a fixed millisecond budget would measure the
+            // machine rather than the code: the first call into WASM pays
+            // instantiation and JIT costs that do not depend on the map at
+            // all, and the same work that takes about a millisecond here was
+            // billed 120 ms on a shared CI runner.
+            //
+            // The two sizes are timed in the same alternating loop rather than
+            // one after the other, because the comparison is only meaningful
+            // if both saw the same machine. Measuring them in separate phases
+            // let a busy stretch land entirely on one of them: a runner once
+            // billed the large map ten times its local cost while the small
+            // map, timed after the load passed, paid under three, and the
+            // ratio failed on the load rather than on the code.
+            const timeBoth = (): { small: number; large: number } => {
+                compute_mangle_checksum(small);
+                compute_mangle_checksum(large);
+                let bestSmall = Number.POSITIVE_INFINITY;
+                let bestLarge = Number.POSITIVE_INFINITY;
+                for (let run = 0; run < 5; run++) {
+                    let start = performance.now();
+                    compute_mangle_checksum(small);
+                    bestSmall = Math.min(bestSmall, performance.now() - start);
+                    start = performance.now();
+                    compute_mangle_checksum(large);
+                    bestLarge = Math.min(bestLarge, performance.now() - start);
+                }
+                return { small: bestSmall, large: bestLarge };
+            };
 
             // Eight times the entries costs about eight times the work while
             // the cost stays linear, and about sixty-four times once it does
             // not. The bound sits between the two, far enough above linear to
             // survive a noisy runner and far enough below quadratic to fail
             // the regression this guards against.
-            expect(fastestOf(large)).toBeLessThan(fastestOf(small) * 20);
+            const { small: smallMs, large: largeMs } = timeBoth();
+            expect(largeMs).toBeLessThan(smallMs * 20);
         });
     });
 
