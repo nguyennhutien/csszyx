@@ -117,6 +117,21 @@ describe('patch coverage', () => {
         assert.ok(!records.get('packages/x/src/a.ts').uncovered.has(10));
     });
 
+    it('counts a partial line the report gives no hit record for as uncovered', () => {
+        // v8 writes one DA record per statement, so a branch inside a
+        // multi-line expression is reported against a line the hit map never
+        // mentions. Building the line set from DA records alone drops such a
+        // line from both answers, and a gate that reports on what it collected
+        // then stays silent about a branch it was handed.
+        const records = parseLcov(
+            'SF:packages/x/src/a.ts\nDA:10,5\nBRDA:12,7,0,5\nBRDA:12,7,1,0\nend_of_record\n',
+            'coverage/lcov.info',
+        );
+
+        assert.ok(records.get('packages/x/src/a.ts').uncovered.has(12));
+        assert.ok(!records.get('packages/x/src/a.ts').covered.has(12));
+    });
+
     it('reads a dash branch count as not taken', () => {
         // lcov writes `-` when a branch was never reached at all, which is
         // strictly worse than reached-and-not-taken.
