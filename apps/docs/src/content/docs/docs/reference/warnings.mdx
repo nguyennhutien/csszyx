@@ -694,6 +694,8 @@ about files I happen to open".
 | `Dead-class check skipped: no stylesheet in this project imports Tailwind, so there is no design system to ask which classes are real.` | The check needs a Tailwind entry to ask. |
 | `Dead-class check skipped: {reason}.` | |
 | `✖ The dead-class check did not run. Its stylesheet is part of this project, so this is reported as a failure rather than a skip — otherwise a check that never runs is indistinguishable from one that found nothing.` | Exits non-zero. See below. |
+| `Files that could not be read:` + one line per path | A path given to `--files` that names a source file the scan could not open. |
+| `✖ {n} listed file(s) could not be read, so they were not checked. A pass here would report a subset as if it were the whole list. Check the paths, and note that a separator is normalised rather than trusted, so this is a missing file rather than a Windows path.` | Exits non-zero, before any file is scanned. |
 | `Values that belong to a different sz key:` + one line per offender reading ``{key}: '{value}' emits {class}, which sets {properties} — not what {key} sets.`` | A value written on a key that owns neither it nor its CSS property. |
 | `✖ {n} value(s) written on a key that does not own them. Each one compiles, ships CSS and renders, so nothing else reports it; the style asked for is simply absent. Move the value to the key that owns it, or declare a theme token by that name if the spelling was deliberate.` | Exits non-zero. |
 | `Theme tokens a built-in utility already claims:` + one line per token reading `"{name}" also names {classes}. Tailwind merges both meanings into one rule, so szcn keeps the classes apart instead of merging them and the stylesheet decides which wins — not the order you wrote.` | Reported at the declaration, with its line. |
@@ -764,6 +766,13 @@ Scoping to a subset is sound because the scan lowers each file on its own, with
 no cross-module registry: a file checked alone yields exactly what it yields in
 a whole-project run. Paths that are not `.jsx`/`.tsx` are dropped rather than
 refused, so a README staged alongside a component does not fail the hook.
+
+A path that *is* a source file and still cannot be read is the opposite case,
+and fails the run. Counting it as scanned is how the command came to print
+`No sz issues found across 1 files` for a file it never opened — the one answer
+a commit gate must never give. Separators are normalised first, so a hook that
+hands over `src\App.tsx` on Windows checks that file rather than reporting a
+clean result for a name that exists nowhere.
 
 The JSON document is `{ "version": 1, "findings": [...] }`, one entry per
 finding:

@@ -152,3 +152,69 @@ describe('csszyx check --files', () => {
         expect(process.exitCode).toBeUndefined();
     });
 });
+
+/**
+ * A path in the list that does not resolve.
+ *
+ * The command counted these and reported them clean: `--files typo.tsx`
+ * printed "Found 1 files" and "No sz issues found across 1 files" and exited
+ * 0. For a check whose whole job is to gate a commit, that is the one failure
+ * shape that must never happen — it claims to have looked.
+ *
+ * A hook reaches it without anyone making a typo. lefthook on Windows hands
+ * over `src\App.tsx`, and joining that onto a posix cwd produces a filename
+ * with a literal backslash in it, which exists nowhere.
+ */
+describe('csszyx check --files with a path that does not resolve', () => {
+    it('fails rather than reporting a file it never read as clean', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Real.tsx': BAD,
+        });
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await check({ cwd, files: ['src/Missing.tsx'] });
+
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('names the path it could not read', async () => {
+        const cwd = projectWith({ 'src/app.css': '@import "tailwindcss";' });
+        // The reporter writes every level through console.log, warnings too.
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await check({ cwd, files: ['src/Missing.tsx'] });
+
+        expect(log.mock.calls.flat().join('\n')).toContain('src/Missing.tsx');
+    });
+
+    it('reads a windows-style path as the file it names', async () => {
+        // The separator a hook passes is not a statement about the filesystem.
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Real.tsx': BAD,
+        });
+
+        const findings = await findingsFor(cwd, ['src\\Real.tsx']);
+
+        expect(findings.some(finding => finding.rule === 'sz-diagnostic')).toBe(true);
+    });
+
+    it('accepts a windows-style glob for the same files as a posix one', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Real.tsx': BAD,
+        });
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await check({ cwd, pattern: 'src\\**\\*.tsx', json: true });
+        const findings = JSON.parse(log.mock.calls.map(call => call.join(' ')).join('\n')).findings;
+
+        expect(findings.some((finding: { rule: string }) => finding.rule === 'sz-diagnostic')).toBe(
+            true,
+        );
+    });
+});

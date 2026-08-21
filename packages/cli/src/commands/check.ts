@@ -10,6 +10,7 @@
  * @module
  */
 
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -113,6 +114,30 @@ async function readSzSource(file: string): Promise<string | null> {
 const SOURCE_EXTENSIONS = new Set(['.jsx', '.tsx']);
 
 /**
+ * Read a path the way the caller's shell wrote it.
+ *
+ * A hook on Windows hands over `src\\App.tsx`. Joined onto a posix cwd that
+ * becomes a filename containing a literal backslash, which exists nowhere —
+ * and the scan then reported it as a file it had checked and found clean.
+ * The separator a hook happens to use is not a statement about the
+ * filesystem, so it is normalised at the door.
+ *
+ * @param file - A path as given.
+ * @returns The same path with forward slashes.
+ */
+function withPosixSeparators(file: string): string {
+    return file.includes('\\') ? file.replaceAll('\\', '/') : file;
+}
+
+/** An explicit file list, split into what can be read and what cannot. */
+interface ListedFiles {
+    /** Absolute paths of the source files that exist. */
+    files: string[];
+    /** Paths that named a source file which could not be read. */
+    missing: string[];
+}
+
+/**
  * Resolve an explicit file list to the paths this scan can read.
  *
  * A hook passes everything that was staged, so a README or a lockfile arrives
@@ -120,14 +145,26 @@ const SOURCE_EXTENSIONS = new Set(['.jsx', '.tsx']);
  * failed because a doc was committed in the same change would be switched off
  * within a day.
  *
+ * A path that DOES name a source file and still cannot be read is the
+ * opposite case, and is kept rather than dropped. Counting it as scanned is
+ * how the command came to print "no issues found across 1 files" for a file
+ * it never opened, which is the one answer a commit gate must never give.
+ *
  * @param listed - Paths as given, absolute or project-relative.
  * @param cwd - Project root.
- * @returns Absolute paths of the source files among them.
+ * @returns The readable source files, and the ones that were not.
  */
-function listedSourceFiles(listed: readonly string[], cwd: string): string[] {
-    return listed
-        .filter(file => SOURCE_EXTENSIONS.has(path.extname(file)))
-        .map(file => (path.isAbsolute(file) ? file : path.join(cwd, file)));
+function listedSourceFiles(listed: readonly string[], cwd: string): ListedFiles {
+    const files: string[] = [];
+    const missing: string[] = [];
+    for (const given of listed) {
+        const file = withPosixSeparators(given);
+        if (!SOURCE_EXTENSIONS.has(path.extname(file))) continue;
+        const absolute = path.isAbsolute(file) ? file : path.join(cwd, file);
+        if (existsSync(absolute)) files.push(absolute);
+        else missing.push(given);
+    }
+    return { files, missing };
 }
 
 /**
@@ -627,7 +664,9 @@ async function reportThemeCollisions(
 export async function check(options: CheckOptions = {}): Promise<void> {
     const out = createReporter(options.json === true);
     const cwd = options.cwd ?? process.cwd();
-    const patterns = options.pattern ? [options.pattern] : ['**/*.{jsx,tsx}'];
+    // fast-glob reads a backslash as an escape, so a Windows-shaped glob
+    // matches nothing and the run passes having scanned no files at all.
+    const patterns = options.pattern ? [withPosixSeparators(options.pattern)] : ['**/*.{jsx,tsx}'];
     const ignore = [...DEFAULT_IGNORE, ...(options.ignore ?? [])];
 
     // This command IS the full project scan, so suppress the compiler's
@@ -640,10 +679,15 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     // routed: a spinner frame in the middle of a JSON document is not parseable.
     const s = out.quiet ? null : spinner.start('Scanning for files...');
     let files: string[];
+    let missing: string[] = [];
     try {
-        files = options.files
-            ? listedSourceFiles(options.files, cwd)
-            : await fg(patterns, { cwd, ignore, absolute: true });
+        if (options.files) {
+            const listed = listedSourceFiles(options.files, cwd);
+            missing = listed.missing;
+            files = listed.files;
+        } else {
+            files = await fg(patterns, { cwd, ignore, absolute: true });
+        }
     } catch (err) {
         s?.fail('File scan failed');
         out.warn(`Could not scan files: ${err instanceof Error ? err.message : String(err)}`);
@@ -651,6 +695,22 @@ export async function check(options: CheckOptions = {}): Promise<void> {
         return;
     }
     s?.succeed(`Found ${files.length} files`);
+
+    // Reported before anything is scanned, and fatal: every later line counts
+    // only the files that were read, so a run that quietly dropped one would
+    // report a clean subset as if it were the whole list.
+    if (missing.length > 0) {
+        out.warn('Files that could not be read:');
+        for (const file of missing) out.info(`  ${file}`);
+        out.warn(
+            `\u2716 ${missing.length} listed file(s) could not be read, so they were not ` +
+                'checked. A pass here would report a subset as if it were the whole list. ' +
+                'Check the paths, and note that a separator is normalised rather than ' +
+                'trusted, so this is a missing file rather than a Windows path.',
+        );
+        process.exitCode = 1;
+        return;
+    }
 
     const { issues, classOrigins, pairsByFile } = await collectSzDiagnostics(files, cwd);
     // Compiling a stylesheet is the expensive part of this command, so it is
