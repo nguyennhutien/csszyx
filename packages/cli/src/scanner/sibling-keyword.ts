@@ -186,7 +186,7 @@ export function szValuePairs(source: string): SzValuePair[] {
                 pairs.push({
                     key,
                     value,
-                    line: lineAt(source, attribute.index + (pair.index ?? 0)),
+                    line: lineAt(source, attribute.index + pair.index),
                 });
             }
         }
@@ -254,10 +254,14 @@ function bracketDelta(character: string | undefined): number {
  */
 function expressionEnd(source: string, start: number): number {
     let depth = 0;
-    for (let index = start; index < source.length; index += 1) {
+    let index = start;
+    while (index < source.length) {
         const character = source[index];
         if (character === "'" || character === '"' || character === '`') {
+            // Land ON the closing quote, so the step below moves past it. An
+            // unterminated string reports `source.length` and ends the walk.
             index = quotedEnd(source, index + 1, character);
+            index += 1;
             continue;
         }
         const delta = bracketDelta(character);
@@ -265,6 +269,7 @@ function expressionEnd(source: string, start: number): number {
         // Only a CLOSING bracket can end the container: depth is also 0 before
         // the first one opens, and reading that as the end would return `start`.
         if (delta < 0 && depth === 0) return index + 1;
+        index += 1;
     }
     return -1;
 }
