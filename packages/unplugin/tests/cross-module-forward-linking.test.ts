@@ -210,7 +210,7 @@ describe('a forward that answers nothing', () => {
 
         expect(
             szObjectsFor(built, '/app/src/ui/Card.tsx', "import { cardSz } from '../index';"),
-        ).toEqual(undefined);
+        ).toBeUndefined();
     });
 
     it('resolves nothing when the provider value is not static', () => {

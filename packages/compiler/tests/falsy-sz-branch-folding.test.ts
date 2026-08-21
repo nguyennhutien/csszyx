@@ -32,22 +32,11 @@ function component(szValue: string): string {
 }
 
 describe.each(ENGINES)('a falsy ternary branch is the empty style (%s)', (_name, engine) => {
-    it('folds an undefined alternate', () => {
-        const run = captureWarnings(engine, component("on ? { color: 'muted' } : undefined"));
-
-        expect(run.result.code).toContain('className={on ? "text-muted" : undefined}');
-    });
-
-    it('folds a null alternate', () => {
-        const run = captureWarnings(engine, component("on ? { color: 'muted' } : null"));
-
-        expect(run.result.code).toContain('className={on ? "text-muted" : undefined}');
-    });
-
-    it('folds a false alternate', () => {
-        // `false` is the spelling a `&&` chain collapses to, and the array lane
-        // has skipped it as an element since before this change.
-        const run = captureWarnings(engine, component("on ? { color: 'muted' } : false"));
+    // `false` is in this table because it is the spelling a `&&` chain collapses
+    // to, and the array lane has skipped it as an element since before this
+    // change; the three must fold identically or a `&&` reads differently.
+    it.each(['undefined', 'null', 'false'])('folds a %s alternate', falsy => {
+        const run = captureWarnings(engine, component(`on ? { color: 'muted' } : ${falsy}`));
 
         expect(run.result.code).toContain('className={on ? "text-muted" : undefined}');
     });
