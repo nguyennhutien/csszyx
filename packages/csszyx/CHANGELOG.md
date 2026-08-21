@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.14.2](https://github.com/nguyennhutien/csszyx/compare/v0.14.1...v0.14.2) (2026-08-21)
+
+
+### Bug Fixes
+
+* check a file list, name a colliding theme token, and stop passing on work not done ([#237](https://github.com/nguyennhutien/csszyx/issues/237)) ([78ccab0](https://github.com/nguyennhutien/csszyx/commit/78ccab04632e6a6a45f208b84b13f8fe81edcdb1))
+
 ## [0.14.1](https://github.com/nguyennhutien/csszyx/compare/v0.14.0...v0.14.1) (2026-08-16)
 
 ### Features
