@@ -111,6 +111,7 @@
                 "useParseIntRadix": "warn"
             },
             "style": {
+                "useForOf": "error",
                 "useNodejsImportProtocol": "warn",
                 "useTemplate": "warn",
                 "useImportType": "warn"
@@ -138,6 +139,16 @@
         }
     },
     "overrides": [
+        {
+            "includes": ["scripts/**"],
+            "linter": {
+                "rules": {
+                    "style": {
+                        "useForOf": "off"
+                    }
+                }
+            }
+        },
         {
             "includes": ["**/package.json"],
             "json": {
