@@ -11,6 +11,7 @@
  * answers cannot drift: there is no second traversal deciding independently
  * what counts as dynamic.
  */
+import { parseSync } from 'oxc-parser';
 import { describe, expect, it } from 'vitest';
 
 import { explainStaticObjectLiteral } from '../src/static-object-parser.js';
@@ -108,5 +109,64 @@ describe('explainStaticObjectLiteral — spreads read the same in both positions
         expect(explainStaticObjectLiteral('{ p: [...xs] }')).toEqual({
             reason: 'a spread is dynamic',
         });
+    });
+});
+
+// The walk narrows on node types rather than defending against every shape the
+// parser could hypothetically produce, so what it may assume is a contract with
+// oxc and not a matter of taste. Pinned here because the alternative is a guard
+// per assumption that no input can reach, which reads as caution while proving
+// nothing and can never be exercised.
+describe('the oxc ESTree shapes the walk narrows on', () => {
+    /** Minimal structural view of a node, matching the parser module's own. */
+    type Node = Record<string, unknown>;
+
+    /**
+     * Parse one object literal the way the walk does.
+     *
+     * @param source - Object literal source.
+     * @returns The members of its `ObjectExpression` node.
+     */
+    function members(source: string): Node[] {
+        const parsed = parseSync('sz.js', `const _=${source}`);
+        expect(parsed.errors).toEqual([]);
+        const body = (parsed.program as unknown as Node).body as Node[];
+        const declaration = (body[0].declarations as Node[])[0];
+        return (declaration.init as Node).properties as Node[];
+    }
+
+    it('spells a non-computed key as Identifier or Literal and nothing else', () => {
+        // Every way JavaScript lets a key be written, short of a computed one,
+        // which the walk rejects before it ever reads the key.
+        const keys = members(
+            `{ plain: 1, 'quoted': 1, 42: 1, 0x2a: 1, 1n: 1, get accessor() {}, set accessor(v) {}, method() {}, shorthand }`,
+        ).map(property => (property.key as Node).type);
+
+        expect(new Set(keys)).toEqual(new Set(['Identifier', 'Literal']));
+    });
+
+    it('gives an object expression a members array, empty object included', () => {
+        // The walk iterates it directly, so an object with nothing in it has to
+        // arrive as an empty array rather than as a missing field.
+        expect(members('{}')).toEqual([]);
+    });
+
+    it('spells every object member as Property or SpreadElement', () => {
+        // Accessors and methods are Property nodes carrying a flag, not member
+        // types of their own, which is why the walk asks `method` rather than
+        // asking what kind of node it is holding.
+        const kinds = members(
+            `{ ...spread, plain: 1, get accessor() {}, set accessor(v) {}, method() {} }`,
+        ).map(property => property.type);
+
+        expect(new Set(kinds)).toEqual(new Set(['Property', 'SpreadElement']));
+    });
+
+    it('gives a template literal an expressions array even with nothing to interpolate', () => {
+        const shapes = members('{ bare: `x`, interpolated: `x${y}` }').map(property =>
+            Array.isArray((property.value as Node).expressions),
+        );
+
+        expect(shapes).toEqual([true, true]);
     });
 });

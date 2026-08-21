@@ -85,7 +85,7 @@ function extractArrayValue(node: OxcNode, out: Rejection): StaticValue[] | undef
  * @returns Static cooked text, or undefined for interpolated templates.
  */
 function extractTemplateValue(node: OxcNode, out: Rejection): string | undefined {
-    if (((node.expressions as unknown[]) ?? []).length > 0) {
+    if ((node.expressions as unknown[]).length > 0) {
         return reject(out, 'a template literal with interpolation is dynamic');
     }
     const quasis = node.quasis as OxcNode[];
@@ -117,13 +117,19 @@ function extractStaticValue(node: OxcNode, out: Rejection): StaticValue | undefi
 
 /**
  * Extract a supported static object property key.
+ *
+ * A key the caller has already found not to be computed is an `Identifier` or a
+ * `Literal` and nothing else, which is a contract with the parser rather than an
+ * assumption — `static-object-parser-reason.test.ts` pins it. So a shape neither
+ * branch below claims falls to the last line and is refused there, which is what
+ * a guard for it would have done anyway.
+ *
  * @param node - Candidate property key node.
  * @param out - Collector the first rejection reason is recorded into.
  * @returns Normalized string key, or undefined when unsupported.
  */
 function extractPropertyKey(node: OxcNode, out: Rejection): string | undefined {
     if (node.type === 'Identifier') return node.name as string;
-    if (node.type !== 'Literal') return reject(out, `a "${String(node.type)}" key is dynamic`);
     if (typeof node.value === 'string') return node.value;
     if (typeof node.value === 'number') return String(node.value);
     return reject(out, 'a key that is neither a string nor a number is dynamic');
@@ -140,12 +146,12 @@ function extractObjectValue(
     out: Rejection,
 ): Record<string, StaticValue> | undefined {
     const result: Record<string, StaticValue> = {};
-    for (const property of (node.properties as OxcNode[]) ?? []) {
+    for (const property of node.properties as OxcNode[]) {
         if (property.type === 'SpreadElement') return reject(out, 'a spread is dynamic');
         if (property.computed === true) return reject(out, 'a computed key is dynamic');
-        if (property.type !== 'Property') {
-            return reject(out, `"${String(property.type)}" is dynamic`);
-        }
+        // Accessors and methods are `Property` nodes carrying a flag rather than
+        // member types of their own, so `method` is the question to ask; the
+        // parser has no third member type to defend against.
         if (property.method === true) return reject(out, 'an object method is dynamic');
         const key = extractPropertyKey(property.key as OxcNode, out);
         if (key === undefined) return undefined;
@@ -155,6 +161,9 @@ function extractObjectValue(
     }
     return result;
 }
+
+/** Reported when the source is not readable JavaScript at all. */
+const UNPARSEABLE = 'could not be parsed as a JavaScript expression';
 
 /** The outcome of reading one object-literal source. */
 export type StaticObjectResult =
@@ -177,29 +186,34 @@ export type StaticObjectResult =
  * @returns The parsed object, or the reason it is not static.
  */
 export function explainStaticObjectLiteral(source: string): StaticObjectResult {
-    let parsed: ReturnType<typeof parseSync>;
-    try {
-        parsed = parseSync('sz.js', `const _=${source.trim()}`);
-    } catch {
-        return { reason: 'could not be parsed as a JavaScript expression' };
-    }
-    if (parsed.errors.length > 0) {
-        return { reason: 'could not be parsed as a JavaScript expression' };
-    }
-
     const out: Rejection = {};
+    // One catch, not one per step: the parser rejecting the source and the walk
+    // tripping over what it returned are the same answer to the caller, and two
+    // handlers producing that answer separately is a second place for it to
+    // drift. It already read as two rules where there is one.
     try {
+        const parsed = parseSync('sz.js', `const _=${source.trim()}`);
+        if (parsed.errors.length > 0) {
+            return { reason: UNPARSEABLE };
+        }
         const body = (parsed.program as unknown as OxcNode).body as OxcNode[];
         const declaration = (body[0].declarations as OxcNode[])[0];
         const initializer = declaration.init as OxcNode | undefined;
         if (initializer?.type !== 'ObjectExpression') return { reason: 'not an object literal' };
         const value = extractObjectValue(initializer, out) as SzObject | undefined;
         if (value === undefined) {
+            // The fallback is the partner of `extractTemplateValue`'s `?? undefined`,
+            // which is the one way this walk can give up without naming a node: a
+            // template whose text the parser could not cook. Every other path goes
+            // through `reject`, so no input reaches the fallback today — but the
+            // alternative to keeping it is returning `reason: undefined` from a
+            // function whose contract says a failure carries one, and a caller
+            // printing nothing is a worse answer than a general one.
             return { reason: out.reason ?? 'contains a value that is not static' };
         }
         return { value };
     } catch {
-        return { reason: 'could not be parsed as a JavaScript expression' };
+        return { reason: UNPARSEABLE };
     }
 }
 
