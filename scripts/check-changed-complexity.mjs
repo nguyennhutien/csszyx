@@ -18,6 +18,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import path from 'node:path';
 
 import { changedLines } from './check-patch-coverage.mjs';
 
@@ -160,5 +161,9 @@ function main(base) {
     return 1;
 }
 
-const flag = process.argv.slice(2).find(argument => argument.startsWith('--base='));
-process.exit(main(flag === undefined ? 'origin/main' : flag.slice('--base='.length)));
+// Guarded so the Sonar scoping above can be imported by a sibling gate without
+// running this one as a side effect of the import.
+if (process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]))) {
+    const flag = process.argv.slice(2).find(argument => argument.startsWith('--base='));
+    process.exit(main(flag === undefined ? 'origin/main' : flag.slice('--base='.length)));
+}
