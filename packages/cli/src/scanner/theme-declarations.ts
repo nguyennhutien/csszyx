@@ -43,7 +43,7 @@ export function declaredThemeTokens(css: string, file: string): DeclaredToken[] 
     const lines = css.split('\n');
     const tokens: DeclaredToken[] = [];
     for (const { namespace, field, prefix } of NAMESPACES) {
-        for (const name of parsed[field] ?? []) {
+        for (const name of parsed[field]) {
             const declaration = `${prefix}${name}`;
             const index = lines.findIndex(line => line.includes(`${declaration}:`));
             // A name the shared parser found always has a declaration to point
