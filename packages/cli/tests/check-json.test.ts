@@ -148,3 +148,24 @@ describe('csszyx check --json', () => {
         expect(process.exitCode).toBe(1);
     });
 });
+
+// `line` is optional in the document, and a consumer has to be able to tell
+// "no position" from "line zero". The engine renders the position into its own
+// message text and this reads it back from there rather than deriving a second
+// answer, so a diagnostic the engine could not place carries none here either.
+describe('csszyx check --json — a diagnostic that names no line', () => {
+    it('omits the line rather than inventing one', async () => {
+        // An `szs` slot map built from a variable: the engine reports the
+        // attribute it left alone, but has no single position to blame.
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': `export const A = () => <Card szs={slots} />;`,
+        });
+
+        const doc = await jsonFor(cwd);
+        const finding = doc.findings.find(entry => entry.rule === 'sz-diagnostic');
+
+        expect(finding?.message).toContain('slot');
+        expect(finding?.line).toBeUndefined();
+    });
+});

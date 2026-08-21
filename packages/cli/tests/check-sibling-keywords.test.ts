@@ -119,3 +119,24 @@ describe('csszyx check — a value that belongs to a sibling key', () => {
         expect(process.exitCode).toBeUndefined();
     });
 });
+
+// A project may compile more than one stylesheet — a design system plus a page
+// theme is an ordinary shape — and this command cannot know which one a given
+// component renders under. So a value is foreign only when EVERY design system
+// says so; one stylesheet resolving it as a token has given the spelling a
+// meaning somewhere in the project.
+describe('csszyx check — a project with more than one stylesheet', () => {
+    it('stays quiet when only one of them reads the value as foreign', async () => {
+        // `a.css` is stock Tailwind, under which `color: 'balance'` is the
+        // mistake this whole rule exists for. `b.css` declares the token, so
+        // somewhere in this project the spelling is deliberate — and a report
+        // would send its author to a line that is correct for their page.
+        const cwd = projectWith({
+            'src/a.css': '@import "tailwindcss";',
+            'src/b.css': '@import "tailwindcss";\n@theme {\n  --color-balance: #0af;\n}\n',
+            'src/App.tsx': `export const A = () => <div sz={{ color: 'balance' }} />;`,
+        });
+
+        expect(await reportFor(cwd)).not.toContain("color: 'balance' emits text-balance");
+    });
+});

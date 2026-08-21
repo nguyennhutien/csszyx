@@ -126,3 +126,34 @@ describe('csszyx check — a theme token that shadows a built-in', () => {
         expect(process.exitCode).toBe(1);
     });
 });
+
+// The collision question needs a SECOND compile of the same stylesheet, with
+// probe tokens appended, and that compile is this package's instrumentation
+// rather than anything the project asked for. When it is the instrumentation
+// that fails, the project must not be the one blamed for it.
+describe('csszyx check — when the probe compile cannot be made', () => {
+    it('says nothing about theme collisions rather than failing the project', async () => {
+        // A plugin that refuses to run twice in one process. The project's own
+        // stylesheet compiles — the whole rest of the command works on it — and
+        // only the probe compile fails, so a report here would fail CI over a
+        // token this package injected.
+        const cwd = projectWith({
+            'src/once.cjs':
+                'let compiles = 0;\n' +
+                'module.exports = function onceOnlyPlugin() {\n' +
+                '    compiles += 1;\n' +
+                "    if (compiles > 1) throw new Error('this plugin refuses a second compile');\n" +
+                '};\n',
+            'src/app.css':
+                '@import "tailwindcss";\n@plugin "./once.cjs";\n@theme {\n  --color-balance: #0af;\n}\n',
+            'src/App.tsx': APP,
+        });
+
+        const report = await reportFor(cwd);
+
+        // `--color-balance` is the collision the first case in this file fails
+        // on, so a quiet run here is the branch and not an empty fixture.
+        expect(report).not.toContain('text-balance');
+        expect(process.exitCode).toBeUndefined();
+    });
+});
