@@ -2,10 +2,40 @@
 
 ## [0.14.2](https://github.com/nguyennhutien/csszyx/compare/v0.14.1...v0.14.2) (2026-08-21)
 
+### Features
+
+* compile a style whose other branch is nothing ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* precompile an szv branch that nests a variant csszyx cannot name ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* compile a conditional whose else-branch is another conditional ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* read a style through a module that re-exports it ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **compiler:** report an element whose className and sz precedence is unstated ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **unplugin:** report a utility block that claims a name twice ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **cli:** report an sz value that belongs to a sibling key ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **cli:** fail the check on a theme token that shadows a built-in ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **cli:** give check a file list, a JSON report and line numbers ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
 
 ### Bug Fixes
 
-* check a file list, name a colliding theme token, and stop passing on work not done ([#237](https://github.com/nguyennhutien/csszyx/issues/237)) ([78ccab0](https://github.com/nguyennhutien/csszyx/commit/78ccab04632e6a6a45f208b84b13f8fe81edcdb1))
+* check a file list, name a colliding theme token, and stop passing on work not done ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* stop lowering a runtime value Tailwind cannot read ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* name the szv factory an sz attribute could not precompile ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* point a refused szv config at the property that refused it ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* drop a border style Tailwind cannot spell per side ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **compiler:** keep the wasm core out of the import graph ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **compiler:** precompile an szv branch that sets a boolean flag ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **compiler:** report removed boolean sugar where it is written ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **runtime:** block the theme names Tailwind reads two ways ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **runtime:** stop calling the shadowed-token fallback safe ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **cli:** check the bg key for values another background key owns ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **cli:** generate migrate's reverse map from the compiler's property map ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **vscode:** read sz object text without a JavaScript parser ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **unplugin:** strip css comments without a quadratic scan ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **cli:** fail the check on a listed file it could not read ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+* **cli:** order css entries by the separator fast-glob actually returns ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
+
+### Performance
+
+* **cli:** load a command only when it is the one being run ([#237](https://github.com/nguyennhutien/csszyx/issues/237))
 
 ## [0.14.1](https://github.com/nguyennhutien/csszyx/compare/v0.14.0...v0.14.1) (2026-08-16)
 
