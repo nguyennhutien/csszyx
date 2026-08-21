@@ -313,28 +313,15 @@ function readExportSpecifier(
     specifier: OxcNode,
     scope: ReadonlyMap<string, ScopedDeclarator>,
 ): CrossModuleRegistryEntry | null {
-    const shaped = specifier as unknown as {
-        exportKind?: string;
-        local?: { type: string; name?: string };
-        exported?: { type: string; name?: string };
-    };
-    if (shaped.exportKind === 'type') return null;
-    // A string export name is legal but is not a name any importer of a token
-    // module writes, and recording one would key the registry by a value the
-    // consumer never asks for.
-    if (shaped.local?.type !== 'Identifier' || shaped.exported?.type !== 'Identifier') return null;
-    const local = shaped.local.name;
-    const exported = shaped.exported.name;
-    /* v8 ignore next -- narrowing only: an oxc Identifier always carries a
-       name, and the check above already established both nodes are one. */
-    if (local === undefined || exported === undefined) return null;
+    const names = exportClauseNames(specifier);
+    if (names === null) return null;
     // Absent from module scope means the name is imported, declared in a block,
     // or not declared here at all. Each of those has its value somewhere this
     // extractor has not read, so there is nothing to answer with.
-    const scoped = scope.get(local);
+    const scoped = scope.get(names.local);
     if (scoped === undefined) return null;
     const entry = readCrossModuleDeclarator(scoped.declarator, scoped.isConst);
-    return entry === null ? null : { ...entry, exportName: exported };
+    return entry === null ? null : { ...entry, exportName: names.exported };
 }
 
 /** The registry key a default export is filed under. */
@@ -568,6 +555,9 @@ function exportClauseNames(specifier: OxcNode): { local: string; exported: strin
         exported?: { type: string; name?: string };
     };
     if (shaped.exportKind === 'type') return null;
+    // A string export name is legal but is not a name any importer of a token
+    // module writes, and recording one would key the registry by a value the
+    // consumer never asks for.
     if (shaped.local?.type !== 'Identifier' || shaped.exported?.type !== 'Identifier') return null;
     const local = shaped.local.name;
     const exported = shaped.exported.name;
