@@ -3806,4 +3806,31 @@ mod tests {
         super::collect_unknown_mask_slot_members(&branch, &mut out);
         assert_eq!(out[0].2, "angle, from, to, t, r, b, l, x, y");
     }
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn removed_sugar_is_collected_under_a_variant_but_not_a_property_namespace() {
+        // Sugar nested in a variant still lowers to a dead class, so the walk
+        // has to descend. A property namespace is the opposite case: inside
+        // `p: { ... }` the members are values of `p`, and a key that happens to
+        // spell a removed sugar name there is not that sugar.
+        let object = StaticSzObject {
+            properties: vec![
+                property(
+                    "hover",
+                    object(vec![property("flex", StaticSzValue::Boolean(true))]),
+                ),
+                property(
+                    "p",
+                    object(vec![property("absolute", StaticSzValue::Boolean(true))]),
+                ),
+            ],
+        };
+        let mut out = Vec::new();
+        super::collect_removed_boolean_sugar(&object, &mut out);
+        let hits: Vec<(&str, &str, &str)> = out
+            .iter()
+            .map(|(key, canonical, value, _)| (key.as_str(), *canonical, *value))
+            .collect();
+        assert_eq!(hits, [("flex", "display", "flex")]);
+    }
 }

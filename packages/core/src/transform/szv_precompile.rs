@@ -1218,6 +1218,25 @@ mod tests {
             )])),
             None
         );
+        // Two tables carry the flags, and the pair above sits in BOTH — so it
+        // cannot tell a union apart from an intersection. These two sit in
+        // exactly one each: `truncate`'s class IS its kebab-cased key, and
+        // `divideXReverse` is only in the differing-class table. Admitting a
+        // flag has to be either table on its own.
+        assert_eq!(
+            overlap_disqualify_path(&base_config(vec![entry(
+                "truncate",
+                StaticSzValue::Boolean(true)
+            )])),
+            None
+        );
+        assert_eq!(
+            overlap_disqualify_path(&base_config(vec![entry(
+                "divideXReverse",
+                StaticSzValue::Boolean(true)
+            )])),
+            None
+        );
         // The admission is on the VALUE: a scalar on the same key lowers to
         // `sr-only-weird`, the aliasing shape the refusal exists for.
         assert_eq!(
