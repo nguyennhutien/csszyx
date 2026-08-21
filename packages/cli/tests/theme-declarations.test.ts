@@ -53,6 +53,19 @@ describe('declaredThemeTokens', () => {
         expect(declaredThemeTokens(css, 'a.css').map(token => token.line)).toEqual([2, 3]);
     });
 
+    it('still reports a token whose declaration it cannot locate a line for', () => {
+        // A formatter that puts a space before the colon, or any spelling the
+        // line search does not recognise. The shared parser found the token, so
+        // the project does declare it — dropping it here would make the check
+        // exempt whichever stylesheets happen to be formatted that way, and say
+        // nothing about why.
+        const css = '@theme {\n  --color-brand : #0af;\n}\n';
+
+        expect(declaredThemeTokens(css, 'a.css')).toEqual([
+            { namespace: 'colors', name: 'brand', file: 'a.css', line: 1 },
+        ]);
+    });
+
     it('reports nothing for a stylesheet that declares no theme', () => {
         expect(declaredThemeTokens('@import "tailwindcss";\n', 'a.css')).toEqual([]);
     });

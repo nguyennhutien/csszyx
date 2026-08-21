@@ -22,6 +22,8 @@ const design = {
             ['--color-brand', '#0af'],
             ['--text-lg', '1.125rem'],
             ['--color-', 'ignored'],
+            ['--font-display', 'Inter'],
+            ['--font-weight-chunky', '850'],
         ],
     },
     parseCandidate: (candidate: string) =>
@@ -68,6 +70,19 @@ describe('keywordOracleFrom', () => {
         // `--tw-x` is a variable the utility sets on the way to its real
         // property; counting it would make two unrelated classes look alike.
         expect(oracle.propertiesOf('text-red-500')).toEqual(new Set(['color']));
+    });
+
+    it('does not read a font weight as a font family', () => {
+        // Both namespaces spell their declaration `--font-…`, so the family
+        // prefix matches every weight too. Letting one through would make
+        // `font: 'weight-chunky'` resolve as a family the project never
+        // declared, and the rule would go quiet on a real mistake.
+        expect(oracle.themeNames('fontFamilies')).toEqual(new Set(['display']));
+    });
+
+    it('still lists the weight under its own namespace', () => {
+        // The guard above must skip the key for families only, not drop it.
+        expect(oracle.themeNames('fontWeights')).toEqual(new Set(['chunky']));
     });
 
     it('reports null for a class that produces no rule', () => {

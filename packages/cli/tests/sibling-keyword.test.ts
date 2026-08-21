@@ -174,6 +174,21 @@ describe('findSiblingKeywordValues', () => {
             findSiblingKeywordValues([{ key: 'color', value: 'nonesuch', line: 1 }], TAILWIND),
         ).toEqual([]);
     });
+
+    it('stays silent when the design system will not say what the class sets', () => {
+        // The whole verdict rests on comparing two property sets. Tailwind
+        // answering `null` for either of them leaves nothing to compare, and
+        // guessing there would report a value on no evidence at all — the one
+        // failure this rule cannot afford, since a wrong report is what makes a
+        // project switch the check off.
+        const silent = oracle({ colors: ['red-500'] }, ['text-mystery'], {
+            'text-red-500': ['color'],
+        });
+
+        expect(
+            findSiblingKeywordValues([{ key: 'color', value: 'mystery', line: 1 }], silent),
+        ).toEqual([]);
+    });
 });
 
 describe('szValuePairs', () => {
@@ -224,5 +239,24 @@ describe('szValuePairs', () => {
         const source = `const A = () => <Card szs={{ header: { color: 'balance' } }} />;`;
 
         expect(szValuePairs(source)).toEqual([{ key: 'color', value: 'balance', line: 1 }]);
+    });
+
+    it('reads past a brace that is only a character inside a string', () => {
+        // The scan bounds itself by counting braces, so an escaped quote decides
+        // where a string ends and therefore which braces count. Reading `\\"` as
+        // the end of the string closes the attribute early, at a brace that is
+        // ordinary text, and every pair written after it goes unchecked.
+        const source = String.raw`const A = () => <div sz={{ label: "a\"}}", color: 'balance' }} />;`;
+
+        expect(szValuePairs(source)).toEqual([{ key: 'color', value: 'balance', line: 1 }]);
+    });
+
+    it('reports nothing for an sz attribute whose expression never closes', () => {
+        // A file mid-edit, or one this scanner reaches before the author has
+        // finished typing. There is no region to read, and taking the rest of
+        // the file as one would report pairs from whatever followed.
+        const source = `const A = () => <div sz={{ color: 'balance'`;
+
+        expect(szValuePairs(source)).toEqual([]);
     });
 });
