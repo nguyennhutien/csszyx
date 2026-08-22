@@ -61,11 +61,16 @@ export interface NextWatchCommandOptions {
  */
 export function canonicalWatchRoot(root: string): string {
     if (process.platform !== 'win32') return root;
+    /* v8 ignore start -- Windows-only: coverage is measured on Linux, where
+       the line above returns first. Both arms are pinned on the Windows CI
+       lane by the canonicalWatchRoot unit test, which resolves the runner's
+       8.3 temp path and asks for a root that does not exist. */
     try {
         return fs.realpathSync.native(root);
     } catch {
         return root;
     }
+    /* v8 ignore stop */
 }
 
 /** Minimal watcher factory kept injectable for lifecycle tests. */

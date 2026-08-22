@@ -85,9 +85,9 @@ describe('a directory that appears after the watcher started', () => {
             mkdirSync(join(root, 'app'), { recursive: true });
             writeFileSync(join(root, 'app/Card.tsx'), 'export const Card=()=> <div />;');
 
-            emit('addDir', join(root, 'app'));
+            emit('addDir', join(session.root, 'app'));
 
-            expect(added).toContain(join(root, 'app/Card.tsx'));
+            expect(added).toContain(join(session.root, 'app/Card.tsx'));
         } finally {
             await session.close();
         }
@@ -109,10 +109,10 @@ describe('a directory that appears after the watcher started', () => {
             writeFileSync(join(root, 'app/notes.md'), '# not a source\n');
             writeFileSync(join(root, 'app/Card.tsx'), 'export const Card=()=> <div />;');
 
-            emit('addDir', join(root, 'app'));
+            emit('addDir', join(session.root, 'app'));
 
-            expect(added).toContain(join(root, 'app/Card.tsx'));
-            expect(added).not.toContain(join(root, 'app/notes.md'));
+            expect(added).toContain(join(session.root, 'app/Card.tsx'));
+            expect(added).not.toContain(join(session.root, 'app/notes.md'));
         } finally {
             await session.close();
         }
@@ -144,10 +144,14 @@ describe('a directory that appears after the watcher started', () => {
             writeFileSync(join(root, 'app/generated.tsx'), 'export const G=()=> <div />;');
             writeFileSync(join(root, 'app/Card.tsx'), 'export const Card=()=> <div />;');
 
-            emit('addDir', join(root, 'app'));
+            // A real watcher reports paths under the root it was registered
+            // with, which on Windows is the canonical name — not the 8.3
+            // spelling the temp dir was created under. The fake has to do
+            // the same, or the ignore matcher is handed a path outside root.
+            emit('addDir', join(session.root, 'app'));
 
-            expect(added).toContain(join(root, 'app/Card.tsx'));
-            expect(added).not.toContain(join(root, 'app/generated.tsx'));
+            expect(added).toContain(join(session.root, 'app/Card.tsx'));
+            expect(added).not.toContain(join(session.root, 'app/generated.tsx'));
         } finally {
             await session.close();
         }
@@ -169,7 +173,7 @@ describe('a directory that appears after the watcher started', () => {
             { watch: factory, deliveryProbeTimeoutMs: 50 },
         );
         try {
-            emit('addDir', join(root, 'never-existed'));
+            emit('addDir', join(session.root, 'never-existed'));
 
             expect(added).toEqual([]);
             // The session is still usable, which is the point of swallowing it.
@@ -196,7 +200,7 @@ describe('a directory that appears after the watcher started', () => {
             mkdirSync(join(root, 'node_modules/pkg'), { recursive: true });
             writeFileSync(join(root, 'node_modules/pkg/index.tsx'), 'export const x=1;');
 
-            emit('addDir', join(root, 'node_modules/pkg'));
+            emit('addDir', join(session.root, 'node_modules/pkg'));
 
             expect(added).toEqual([]);
         } finally {
