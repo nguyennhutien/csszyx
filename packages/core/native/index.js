@@ -65,6 +65,32 @@ export function transformBatch(_files, options) {
     return binding.transformBatch(_files, options);
 }
 
+/**
+ * The migrate entry points arrived after the first native packages shipped,
+ * so a binding may load and still lack them.
+ *
+ * @param {string} name - The export the caller needs.
+ * @returns {Function} The binding's function.
+ */
+function migrateExport(name) {
+    const binding = loadNativeBinding();
+    if (typeof binding[name] !== 'function') {
+        throw new CsszyxNativeUnavailableError(
+            `csszyx native package ${cachedPackageName} predates migrate and does not export ${name}(). Update @csszyx/core and its platform package, or run migrate without CSSZYX_MIGRATE_ENGINE=rust.`,
+            cachedPackageName,
+        );
+    }
+    return binding[name];
+}
+
+export function migrateBatch(files, options) {
+    return migrateExport('migrateBatch')(files, options);
+}
+
+export function migrateHtml(source, options) {
+    return migrateExport('migrateHtml')(source, options);
+}
+
 function isModuleNotFoundForPackage(err, packageName) {
     if (err?.code !== 'MODULE_NOT_FOUND' && err?.code !== 'ERR_MODULE_NOT_FOUND') {
         return false;

@@ -74,6 +74,16 @@
         "types": "./dist/spacing-var.d.cts",
         "default": "./dist/spacing-var.cjs"
       }
+    },
+    "./migrate": {
+      "import": {
+        "types": "./dist/migrate-rust.d.mts",
+        "default": "./dist/migrate-rust.mjs"
+      },
+      "require": {
+        "types": "./dist/migrate-rust.d.cts",
+        "default": "./dist/migrate-rust.cjs"
+      }
     }
   },
   "files": [

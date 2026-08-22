@@ -17,6 +17,7 @@
 import { parse } from '@babel/parser';
 import * as t from '@babel/types';
 import { REMOVED_BOOLEAN_SUGAR, SUGGESTION_MAP } from '@csszyx/compiler';
+import { migrateRustBatch, migrateRustHtml } from '@csszyx/compiler/migrate';
 import { detectLineEnding, withLineEnding } from '../utils/line-endings.js';
 import { disambiguateFont } from './class-parser.js';
 import {
@@ -776,6 +777,10 @@ export function transformSource(
     filePath: string,
     options: TransformOptions = {},
 ): TransformResult {
+    if (migrateEngine() === 'rust') {
+        const [result] = migrateRustBatch([{ filename: filePath, source }], options);
+        return result as TransformResult;
+    }
     const warnings: string[] = [];
     const counters: TransformCounters = {
         classNamesTransformed: 0,
@@ -923,6 +928,19 @@ export function transformSource(
 }
 
 /**
+ * Which implementation of migrate runs: the TypeScript in this package, or
+ * its Rust port on the native core when `CSSZYX_MIGRATE_ENGINE=rust`. The
+ * port is held to the TypeScript byte for byte by the parity corpora in
+ * packages/core; the switch exists so it can be run against real projects
+ * before it becomes the default.
+ *
+ * @returns The engine the environment selects.
+ */
+export function migrateEngine(): 'ts' | 'rust' {
+    return process.env.CSSZYX_MIGRATE_ENGINE === 'rust' ? 'rust' : 'ts';
+}
+
+/**
  * Backwards-compatible alias kept for callers of the earlier name.
  * Uses the same Babel-based transformer internally.
  *
@@ -1019,6 +1037,7 @@ export function transformHtmlSourceSimple(
     source: string,
     options: HtmlTransformOptions = {},
 ): TransformResult {
+    if (migrateEngine() === 'rust') return migrateRustHtml(source, options) as TransformResult;
     const {
         braces = false,
         injectFouc = true,

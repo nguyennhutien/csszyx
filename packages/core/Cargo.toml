@@ -43,7 +43,8 @@ wasm-bindgen-test = "=0.3.43"
 
 [features]
 default = []
-native = ["dep:napi", "dep:napi-derive"]
+# The napi binary is where migrate ships, so the feature rides along.
+native = ["dep:napi", "dep:napi-derive", "migrate"]
 # The Rust side of `csszyx migrate`. Deliberately not part of `native-engine`:
 # the wasm parser artifact is built with that feature alone, and migrate is a
 # one-shot onboarding command that ships through the napi binary only.

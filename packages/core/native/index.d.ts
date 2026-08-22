@@ -138,7 +138,72 @@ export class CsszyxNativeUnavailableError extends Error {
 }
 
 /** Native binding shape exported by optional platform packages. */
+/** Source file passed to the native migrate. */
+export interface NativeMigrateFile {
+    /** Path used in warnings; every file is parsed as TSX. */
+    filename: string;
+    /** Source contents. */
+    source: string;
+}
+
+/** Options for the native migrate of JSX/TSX sources. */
+export interface NativeMigrateOptions {
+    /** Insert a `@sz-todo` comment above elements with unrecognized classes. */
+    injectTodos?: boolean;
+    /** Only normalize legacy sz keys; leave every className untouched. */
+    keysOnly?: boolean;
+    /** The migration-resolution map, as JSON text. */
+    customMapJson?: string;
+}
+
+/** Options for the native migrate of an HTML source. */
+export interface NativeMigrateHtmlOptions {
+    /** Wrap the sz attribute value in outer braces. */
+    braces?: boolean;
+    /** Inject the first-paint guard before `</head>` (default true). */
+    injectFouc?: boolean;
+    /** `cdn`, `local`, or absent for no runtime script. */
+    injectRuntime?: 'cdn' | 'local';
+    /** The script URL for `cdn`. */
+    cdnUrl?: string;
+    /** The script path for `local`. */
+    localPath?: string;
+}
+
+/** The counts of one migrated file. */
+export interface NativeMigrateStats {
+    classNamesTransformed: number;
+    classNamesSkipped: number;
+    classNamesSkippedComponent: number;
+    classesUnrecognized: string[];
+    /** Legacy sz keys rewritten; null when the file was never parsed. */
+    szKeysNormalized: number | null;
+}
+
+/** What migrate did to one file. */
+export interface NativeMigrateResult {
+    code: string;
+    changed: boolean;
+    warnings: string[];
+    stats: NativeMigrateStats;
+    potentiallyUnusedImports: string[];
+}
+
+/**
+ *
+ */
 export interface NativeBinding {
+    /**
+     * Migrates JSX/TSX sources with the native Rust core, one call for the
+     * whole job. Absent on platform packages that predate migrate.
+     */
+    migrateBatch?(
+        files: NativeMigrateFile[],
+        options?: NativeMigrateOptions,
+    ): NativeMigrateResult[];
+    /** Migrates one HTML source with the native Rust core. */
+    migrateHtml?(source: string, options?: NativeMigrateHtmlOptions): NativeMigrateResult;
+
     /**
      * Transforms source files with the native Rust core.
      *
@@ -180,3 +245,29 @@ export function transformBatch(
     files: NativeTransformFile[],
     options?: NativeTransformOptions,
 ): NativeTransformResult[];
+
+/**
+ * Migrates JSX/TSX sources with the native Rust core, one call for the whole job.
+ *
+ * @param files Sources to migrate.
+ * @param options Migrate options.
+ * @returns Results in input order.
+ * @throws CsszyxNativeUnavailableError when the platform package is missing or predates migrate.
+ */
+export function migrateBatch(
+    files: NativeMigrateFile[],
+    options?: NativeMigrateOptions,
+): NativeMigrateResult[];
+
+/**
+ * Migrates one HTML source with the native Rust core.
+ *
+ * @param source HTML source.
+ * @param options HTML migrate options.
+ * @returns The migrated source and its counts.
+ * @throws CsszyxNativeUnavailableError when the platform package is missing or predates migrate.
+ */
+export function migrateHtml(
+    source: string,
+    options?: NativeMigrateHtmlOptions,
+): NativeMigrateResult;
