@@ -106,6 +106,10 @@ function findSzTodoCommentEnd(source: string, open: number): number | null {
         return null;
     }
     const end = close + '*/}'.length;
+    // Consume the line break the comment sits on, in whichever convention
+    // the file uses; a CRLF file otherwise keeps a blank line where the
+    // comment stood.
+    if (source.startsWith('\r\n', end)) return end + 2;
     return source[end] === '\n' ? end + 1 : end;
 }
 
