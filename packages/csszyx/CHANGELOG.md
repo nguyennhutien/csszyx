@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.14.4](https://github.com/nguyennhutien/csszyx/compare/v0.14.3...v0.14.4) (2026-08-22)
+
+
+### Bug Fixes
+
+* compile breakpoints and font-stretch the same on every engine, and run the CLI on Windows ([#243](https://github.com/nguyennhutien/csszyx/issues/243)) ([db8b1b1](https://github.com/nguyennhutien/csszyx/commit/db8b1b17081168678481ebf847efe7145debec3f))
+
 ## [0.14.3](https://github.com/nguyennhutien/csszyx/compare/v0.14.2...v0.14.3) (2026-08-22)
 
 ### Bug Fixes
