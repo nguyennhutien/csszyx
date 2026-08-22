@@ -1,0 +1,415 @@
+#!/usr/bin/env node
+
+// Record what migrate's TypeScript answers for every class the project already
+// knows about, so the Rust port can be held to the same answers.
+//
+// Inputs, in order: every probe class of the migrate golden, every reverse
+// case of the sz-key matrix, every class of the pinned corpora, and the edge
+// cases below that none of those contain. Each class is recorded twice: as
+// `parseClass` sees it, and as `classNameToSzObject` converts it — the second
+// keeps its key order as text, because the sz object is what migrate writes.
+//
+// Usage:
+//   node --import tsx/esm scripts/gen-migrate-parity-corpus.mjs           # write
+//   node --import tsx/esm scripts/gen-migrate-parity-corpus.mjs --check   # CI: fail if stale
+
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
+import { parseClass } from '../packages/cli/src/migrate/class-parser.ts';
+import { classNameToSzObject } from '../packages/cli/src/migrate/variant-parser.ts';
+
+const repoRoot = path.resolve(import.meta.dirname, '..');
+const outPath = path.join(repoRoot, 'packages/core/tests/fixtures/migrate-parity-corpus.json');
+const check = process.argv.includes('--check');
+
+/**
+ * Shapes the goldens and corpora do not contain. Each one is here because it
+ * exercises a branch the others leave dark: modifiers, opacity forms, the
+ * gradient grammar, custom properties, JavaScript's Number() edge cases, and
+ * text outside the Basic Multilingual Plane, which the two languages index
+ * differently.
+ */
+const EDGE_CASES = [
+    '!p-4',
+    'p-4!',
+    '-mt-4',
+    '-inset-ring-2',
+    '-ring-2',
+    '-m-auto',
+    'w-[100px]!',
+    '[--x:1px]!',
+    'block!',
+    'grow!',
+    'p-4!',
+    'text-sm/6',
+    'text-[14px]/6',
+    'text-sm/[1.4]',
+    'text-sm/(--lh)',
+    'text-lg/7!',
+    'bg-red-500/50',
+    'bg-red-500/[50%]',
+    'bg-red-500/(--op)',
+    'bg-red-500/[0.5]',
+    'bg-red-500/foo',
+    'shadow-sm/12.5',
+    'shadow-(--s)/50',
+    'shadow-(color:--c)',
+    'shadow-(--s)',
+    'shadow-[0_1px_2px_red]',
+    'text-shadow-(color:--c)',
+    'text-shadow-sm',
+    'text-shadow-red-500',
+    'drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]',
+    'drop-shadow-xl',
+    'inset-shadow-[0_1px_2px_red]',
+    '-mt',
+    '-inset',
+    '-grow',
+    '-shrink',
+    'outline-2/50',
+    'ring-2/50',
+    'font-700/50',
+    'text-sm/foo',
+    'text-sm/-6',
+    "content-[']",
+    'content-["]',
+    'bg-[',
+    'w-]',
+    '[',
+    ']',
+    '(',
+    ')',
+    'drop-shadow-(color:--c)',
+    'drop-shadow-(--v)',
+    'text-shadow-(--v)',
+    'inset-shadow-(--v)',
+    'inset-shadow-sm',
+    'inset-shadow-(color:--c)',
+    'inset-shadow-red-500',
+    'bg-linear-to-r',
+    'bg-linear-45',
+    '-bg-linear-45',
+    'bg-linear-to-r/hsl',
+    'bg-linear-[45deg]',
+    'bg-linear-(--a)',
+    'bg-radial',
+    'bg-radial-[at_50%_75%]',
+    'bg-radial/oklab',
+    'bg-conic',
+    'bg-conic-90/oklch',
+    'bg-conic-(--angle)',
+    'bg-linear-[in_oklch,_red,_blue]/srgb',
+    'from-4%',
+    'from-12.5%',
+    'from-[300px]',
+    'via-10',
+    'to-red-500/20',
+    'to-(--c)',
+    '[--x:1px]',
+    '[--gap:theme(spacing.4)]',
+    '[color:red]',
+    '[--a:b:c]',
+    '[x]',
+    '[]',
+    '@container',
+    '@container/sidebar',
+    'group/item',
+    'peer/form',
+    'group',
+    'peer',
+    'bg-[center_top_1rem]',
+    'bg-[url(/a.png)]',
+    'bg-[top]',
+    'bg-none',
+    'bg-(--brand)',
+    'bg-[#fff]',
+    'font-stretch-(--s)',
+    'font-stretch-condensed',
+    'font-700',
+    'font-[Inter]',
+    'font-bold',
+    'font-sans',
+    'font-condensed',
+    "content-['x']",
+    'content-["y"]',
+    'content-(--c)',
+    'content-none',
+    'content-[attr(x)]',
+    'content-center',
+    'break-words',
+    'break-all',
+    'wrap-anywhere',
+    'flex-row-reverse',
+    'flex-wrap-reverse',
+    'flex-1',
+    'flex-[2_2_0%]',
+    'divide-x',
+    'divide-y-2',
+    'divide-red-500',
+    'border',
+    'border-t',
+    'border-x-2',
+    'border-[1.5px]',
+    'border-bs-2',
+    'border-px',
+    'border-dashed',
+    'border-red-500',
+    'border-4',
+    'outline-2',
+    'outline-[3px]',
+    'outline-dashed',
+    'outline-red-500',
+    'ring',
+    'ring-[3px]',
+    'ring-2',
+    'ring-red-500',
+    'ring-offset-2',
+    'ring-offset-red-500',
+    'inset-ring-1',
+    'inset-ring-[2px]',
+    'inset-ring-blue-500',
+    'snap-x',
+    'snap-foo',
+    'table-auto',
+    'table-foo',
+    'list-inside',
+    'list-[square]',
+    'list-disc',
+    'ease-in-out',
+    'ease-[cubic-bezier(0,0,1,1)]',
+    'ease-(--e)',
+    'w-1/2',
+    '-translate-x-1/2',
+    'translate-x-1/3',
+    'p-[calc(100%-1rem)]',
+    'grow',
+    'grow-0',
+    'text-[😀]',
+    'content-[😀_x]',
+    'w-[ä]',
+    'bg-[🎨]/50',
+    '[--emoji:😀]',
+    'text-[😀]/6',
+    'm-auto',
+    'p-foo',
+    'gap-x-px',
+    'text-2xl',
+    'text-[0.8rem]',
+    'text-red-500',
+    'text-center',
+    'text-balance',
+    'text-ellipsis',
+    'text-[#333]',
+    'transition-colors',
+    'transition-[width]',
+    'rotate-x-45',
+    'rotate-[17deg]',
+    '-rotate-45',
+    'stroke-2',
+    'stroke-[0.5rem]',
+    'stroke-red-500',
+    'object-cover',
+    'object-[25%_75%]',
+    'object-top',
+    'decoration-wavy',
+    'decoration-2',
+    'decoration-(--t)',
+    'decoration-[3px]',
+    'decoration-red-500',
+    'antialiased',
+    'block',
+    'hidden',
+    'truncate',
+    'leading-6',
+    'leading-[1.4]',
+    'max-w-prose',
+    'min-h-screen',
+    'h-dvh',
+    'w-screen',
+    'w-full',
+    '-w-full',
+    'w-px',
+    '-w-px',
+    'w-0x10',
+    'w-1e3',
+    'w-Infinity',
+    'w-.5',
+    'w-5.',
+    'w-+5',
+    'p-1_000',
+    'w-[]',
+    'bg-()',
+    'w-',
+    '-',
+    '!',
+    '',
+    ' ',
+    'hover:bg-red-500',
+    'md:p-4',
+    'p-4 m-2',
+    'bg-[]',
+    'outline-2.5',
+    'ring-1.5',
+    'stroke-1.5',
+    'ring-offset-1.5',
+    'inset-ring-0.5',
+    'font-1000',
+    'font-99',
+    'opacity-50',
+    'z-10',
+    '-z-10',
+    'order-first',
+    'col-span-2',
+    'grid-cols-[1fr_2fr]',
+    'aspect-video',
+    'aspect-[4/3]',
+    'inset-x-0',
+    'start-2',
+    'end-[3px]',
+    'bg-size-[50%]',
+    'prose-lg',
+    'mask-repeat-x',
+    'mask-repeat',
+    'sr-only',
+    'container',
+    'text-sm/6!',
+    'bg-red-500/50!',
+    'shadow-sm/50!',
+    'bg-linear-to-r!',
+    '[--x:1px]!',
+    'text-[14px]/[1.5]',
+    'text-[14px]/(--lh)',
+    'underline',
+    'no-underline',
+    'italic',
+    'uppercase',
+    'snap-mandatory',
+    'whitespace-nowrap',
+    'select-none',
+    'pointer-events-none',
+    'will-change-transform',
+    'backdrop-blur-sm',
+    'blur',
+    'blur-sm',
+    'grayscale',
+    'invert-0',
+    'scale-x-50',
+    '-scale-x-50',
+    'skew-y-3',
+    'origin-top-left',
+    'perspective-[1000px]',
+    'animate-spin',
+    'duration-300',
+    'delay-[1s]',
+    'accent-red-500',
+    'caret-(--c)',
+    'fill-none',
+    'forced-color-adjust-none',
+    'scheme-dark',
+    'field-sizing-content',
+    'columns-3xs',
+];
+
+const corpus = buildCorpus();
+const generated = `${JSON.stringify(corpus, null, 1)}\n`;
+const relative = path.relative(repoRoot, outPath);
+
+if (check) {
+    let current = '';
+    try {
+        current = readFileSync(outPath, 'utf8');
+    } catch {
+        fail(`${relative} is missing. Run pnpm gen:migrate-parity-corpus.`);
+    }
+    if (current !== generated) {
+        fail(
+            `${relative} is stale. Run pnpm gen:migrate-parity-corpus.\n` +
+                "This usually means migrate's TypeScript changed what it answers for a class.",
+        );
+    }
+    console.log('[gen-migrate-parity-corpus] up to date.');
+    process.exit(0);
+}
+
+writeFileSync(outPath, generated);
+console.log(`[gen-migrate-parity-corpus] Wrote ${relative} with ${corpus.count} classes.`);
+
+/**
+ * Collect every input class and record both answers for each.
+ *
+ * @returns {{ $comment: string, sources: Record<string, number>, count: number, entries: object[] }}
+ */
+function buildCorpus() {
+    const golden = JSON.parse(
+        readFileSync(
+            path.join(repoRoot, 'packages/cli/tests/generated/migrate-sz-golden.json'),
+            'utf8',
+        ),
+    );
+    const keyCases = JSON.parse(
+        readFileSync(path.join(repoRoot, 'packages/cli/tests/generated/sz-key-cases.json'), 'utf8'),
+    );
+    const corpusDir = path.join(repoRoot, 'scripts/corpus');
+
+    const goldenClasses = Object.values(golden.prefixes).flatMap(cases =>
+        cases.map(entry => entry.class),
+    );
+    const reverseClasses = Object.values(keyCases.keys).flatMap(entry => entry.reverse);
+    const corpusClasses = readdirSync(corpusDir)
+        .filter(file => file.endsWith('.txt'))
+        .sort()
+        .flatMap(file =>
+            readFileSync(path.join(corpusDir, file), 'utf8')
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line && !line.startsWith('#')),
+        );
+
+    const seen = new Set();
+    const entries = [];
+    for (const className of [
+        ...goldenClasses,
+        ...reverseClasses,
+        ...corpusClasses,
+        ...EDGE_CASES,
+    ]) {
+        if (seen.has(className)) continue;
+        seen.add(className);
+        const converted = classNameToSzObject(className);
+        entries.push({
+            c: className,
+            p: parseClass(className) ?? null,
+            o: {
+                sz: converted.szObject,
+                szText: JSON.stringify(converted.szObject),
+                u: converted.unrecognized,
+                k: converted.keepInClassName,
+            },
+        });
+    }
+
+    return {
+        $comment:
+            'GENERATED by scripts/gen-migrate-parity-corpus.mjs. Do not edit by hand. ' +
+            'Run pnpm gen:migrate-parity-corpus.',
+        sources: {
+            golden: goldenClasses.length,
+            keyCases: reverseClasses.length,
+            corpus: corpusClasses.length,
+            edgeCases: EDGE_CASES.length,
+        },
+        count: entries.length,
+        entries,
+    };
+}
+
+/**
+ * Report a generator failure and stop.
+ *
+ * @param {string} message - What went wrong.
+ */
+function fail(message) {
+    console.error(`[gen-migrate-parity-corpus] ${message}`);
+    process.exit(1);
+}

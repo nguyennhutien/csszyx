@@ -73,6 +73,10 @@ pub mod transform;
 /// Mangle map checksum module for SSR/CSR integrity.
 pub mod mangle;
 
+/// The Rust side of `csszyx migrate`: Tailwind class strings to sz objects.
+#[cfg(feature = "migrate")]
+pub mod migrate;
+
 /// NAPI entrypoints for the Node-native transform package.
 #[cfg(feature = "native")]
 pub mod native;

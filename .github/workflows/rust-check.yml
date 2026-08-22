@@ -68,8 +68,8 @@ jobs:
       # The crate's only `unsafe` block lives behind `native-engine`, so the
       # default clippy run above never lints it. Run clippy with the feature too
       # so the unsafe-block lints (undocumented_unsafe_blocks etc.) are enforced.
-      - name: Run clippy (native-engine)
-        run: cargo clippy --features native-engine --all-targets -- -D warnings
+      - name: Run clippy (native-engine, migrate)
+        run: cargo clippy --features native-engine,migrate --all-targets -- -D warnings
 
       - name: Run tests
         run: cargo test
@@ -86,8 +86,8 @@ jobs:
       # shape filtered by `transform::parser` plus one named binary, which
       # silently skipped every other gated test — 157 lines of fallback parity
       # assertions ran zero times here while the job stayed green.
-      - name: Run native engine tests
-        run: cargo test --features native-engine
+      - name: Run native engine and migrate tests
+        run: cargo test --features native-engine,migrate
 
       - name: Install wasm-pack
         run: cargo install wasm-pack --locked --version 0.14.0 || true

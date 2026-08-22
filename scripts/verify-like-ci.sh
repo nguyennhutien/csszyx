@@ -93,6 +93,7 @@ pnpm gen:parity-corpus:check
 pnpm gen:rust-tables:check
 pnpm gen:reverse-map:check
 pnpm gen:migrate-tables:check
+pnpm gen:migrate-parity-corpus:check
 pnpm gen:migrate-golden:check
 pnpm gen:sz-fallback-matrix:check
 pnpm gen:sz-allowlist:check
@@ -131,14 +132,14 @@ echo "[verify-like-ci] Rust gates (rustfmt, clippy x3 feature sets, native check
     cd "$REPO/packages/core"
     cargo fmt --all -- --check
     cargo clippy --all-targets -- -D warnings
-    cargo clippy --features native-engine --all-targets -- -D warnings
+    cargo clippy --features native-engine,migrate --all-targets -- -D warnings
     node scripts/check-native.mjs
     cargo test
     # Full native-engine run: inline tests of every gated module plus every
     # integration binary (parity corpuses, sz_fallback_parity,
     # parser_panic_fuzz). Name filters proved unsafe here — they silently
     # skip gated tests that don't match, and CI stays green.
-    cargo test --features native-engine
+    cargo test --features native-engine,migrate
 )
 
 echo "[verify-like-ci] Running unit tests through turbo (catches missing build deps)..."

@@ -347,6 +347,13 @@ jobs:
       - name: Check migrate Rust tables are current
         run: pnpm gen:migrate-tables:check
 
+      # What migrate's TypeScript answers for every class the goldens, the
+      # key matrix and the pinned corpora contain. The Rust port replays the
+      # same file and must answer identically, so the corpus is regenerated
+      # whenever the TypeScript changes. Fail if regenerating would change it.
+      - name: Check migrate parity corpus is current
+        run: pnpm gen:migrate-parity-corpus:check
+
       # The golden of what migrate WRITES, one probe class per prefix the
       # compiler can emit. The reverse-map check above only proves the table is
       # freshly derived; this one makes a change to the sz output a visible diff
