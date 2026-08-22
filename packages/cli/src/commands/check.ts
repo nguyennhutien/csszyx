@@ -30,6 +30,7 @@ import {
 } from '../scanner/sibling-keyword.js';
 import { type DeclaredToken, findThemeCollisions } from '../scanner/theme-collision.js';
 import { declaredThemeTokens } from '../scanner/theme-declarations.js';
+import { relativePosix, withPosixSeparators } from '../utils/posix-path.js';
 import { spinner } from '../utils/terminal-ui.js';
 
 /** Options for the `check` command. */
@@ -112,22 +113,6 @@ async function readSzSource(file: string): Promise<string | null> {
 
 /** Extensions the scan can lower. */
 const SOURCE_EXTENSIONS = new Set(['.jsx', '.tsx']);
-
-/**
- * Read a path the way the caller's shell wrote it.
- *
- * A hook on Windows hands over `src\\App.tsx`. Joined onto a posix cwd that
- * becomes a filename containing a literal backslash, which exists nowhere —
- * and the scan then reported it as a file it had checked and found clean.
- * The separator a hook happens to use is not a statement about the
- * filesystem, so it is normalised at the door.
- *
- * @param file - A path as given.
- * @returns The same path with forward slashes.
- */
-function withPosixSeparators(file: string): string {
-    return file.includes('\\') ? file.replaceAll('\\', '/') : file;
-}
 
 /** An explicit file list, split into what can be read and what cannot. */
 interface ListedFiles {
@@ -469,7 +454,7 @@ async function collectSzDiagnostics(files: string[], cwd: string): Promise<SzDia
     for (const file of files) {
         const source = await readSzSource(file);
         if (source === null) continue;
-        const currentFile = path.relative(cwd, file);
+        const currentFile = relativePosix(cwd, file);
         const pairs = szValuePairs(source);
         if (pairs.length > 0) pairsByFile.set(currentFile, pairs);
         for (const message of recordFileClasses(source, file, cwd, currentFile, classOrigins)) {
@@ -609,7 +594,7 @@ async function reportThemeCollisions(
     for (const entry of await findTailwindCssEntries(cwd)) {
         try {
             declared.push(
-                ...declaredThemeTokens(await readFile(entry, 'utf8'), path.relative(cwd, entry)),
+                ...declaredThemeTokens(await readFile(entry, 'utf8'), relativePosix(cwd, entry)),
             );
         } catch {
             // A stylesheet that cannot be read declares nothing this pass can

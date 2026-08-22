@@ -72,29 +72,42 @@ describe('@csszyx/core Integration', () => {
             // billed the large map ten times its local cost while the small
             // map, timed after the load passed, paid under three, and the
             // ratio failed on the load rather than on the code.
+            // CPU time, not wall-clock: a runner descheduled mid-call for
+            // another process adds to the clock but not to the work, and one
+            // such stall inside the large call is what a ratio test cannot
+            // tell from a regression.
+            const cpuMs = (): number => {
+                const { user, system } = process.cpuUsage();
+                return (user + system) / 1000;
+            };
             const timeBoth = (): { small: number; large: number } => {
                 compute_mangle_checksum(small);
                 compute_mangle_checksum(large);
                 let bestSmall = Number.POSITIVE_INFINITY;
                 let bestLarge = Number.POSITIVE_INFINITY;
                 for (let run = 0; run < 5; run++) {
-                    let start = performance.now();
+                    let start = cpuMs();
                     compute_mangle_checksum(small);
-                    bestSmall = Math.min(bestSmall, performance.now() - start);
-                    start = performance.now();
+                    bestSmall = Math.min(bestSmall, cpuMs() - start);
+                    start = cpuMs();
                     compute_mangle_checksum(large);
-                    bestLarge = Math.min(bestLarge, performance.now() - start);
+                    bestLarge = Math.min(bestLarge, cpuMs() - start);
                 }
                 return { small: bestSmall, large: bestLarge };
             };
 
             // Eight times the entries costs about eight times the work while
             // the cost stays linear, and about sixty-four times once it does
-            // not. The bound sits between the two, far enough above linear to
-            // survive a noisy runner and far enough below quadratic to fail
-            // the regression this guards against.
+            // not. Measured (2026-08-23, Apple M4, node 24), wall-clock:
+            // 8.5–8.9× alone, the same under coverage instrumentation, 12.4×
+            // under eight competing busy loops, 20× inside the full 397-file
+            // workspace run — where a bound of 20 failed twice on CI. A
+            // simulated quadratic boundary measured 78.7×. CPU time takes the
+            // load out of the numerator; the bound still sits about two times
+            // clear of both ends, so a regression that multiplies fails it
+            // and a loaded runner does not.
             const { small: smallMs, large: largeMs } = timeBoth();
-            expect(largeMs).toBeLessThan(smallMs * 20);
+            expect(largeMs).toBeLessThan(smallMs * 40);
         });
     });
 

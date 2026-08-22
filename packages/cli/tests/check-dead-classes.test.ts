@@ -36,7 +36,7 @@ function projectWith(files: Record<string, string>, options: { tailwind?: boolea
     roots.push(root);
     mkdirSync(path.join(root, 'node_modules'), { recursive: true });
     if (options.tailwind !== false) {
-        symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'dir');
+        symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'junction');
     }
     writeFileSync(path.join(root, 'package.json'), '{"name":"fixture"}\n', 'utf8');
     for (const [relative, content] of Object.entries(files)) {

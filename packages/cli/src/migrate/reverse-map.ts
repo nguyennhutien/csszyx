@@ -484,17 +484,6 @@ export const FONT_WEIGHT_KEYWORDS = new Set([
 
 export const FONT_FAMILY_KEYWORDS = new Set(['sans', 'serif', 'mono']);
 
-export const FONT_STRETCH_KEYWORDS = new Set([
-    'ultra-condensed',
-    'extra-condensed',
-    'condensed',
-    'semi-condensed',
-    'semi-expanded',
-    'expanded',
-    'extra-expanded',
-    'ultra-expanded',
-]);
-
 export const BORDER_WIDTH_KEYWORDS = new Set(['0', '2', '4', '8']);
 
 export const BORDER_STYLE_KEYWORDS = new Set([

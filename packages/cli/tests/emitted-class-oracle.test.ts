@@ -546,6 +546,12 @@ describe('findTailwindCssEntry — locating the stylesheet to compile', () => {
         roots.push(root);
         return root;
     };
+    // The entry finder hands back what fast-glob found, and fast-glob spells
+    // absolute paths with forward slashes on every platform. Every consumer
+    // only reads the file, so the spelling is internal — but an assertion
+    // built with `path.join` would carry backslashes on Windows and disagree
+    // with a correct answer.
+    const entry = (root: string, rel: string): string => `${root.split(path.sep).join('/')}/${rel}`;
     afterEach(() => {
         for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
     });
@@ -556,13 +562,13 @@ describe('findTailwindCssEntry — locating the stylesheet to compile', () => {
             'src/app.css': '@import "tailwindcss";\n@theme { --color-brand: #123; }',
             'src/other.css': '.hand-written { color: red; }',
         });
-        expect(await findTailwindCssEntry(root)).toBe(path.join(root, 'src/app.css'));
+        expect(await findTailwindCssEntry(root)).toBe(entry(root, 'src/app.css'));
     });
 
     it('accepts the single-quoted spelling', async () => {
         const root = tempRoot();
         write(root, { 'app.css': "@import 'tailwindcss';" });
-        expect(await findTailwindCssEntry(root)).toBe(path.join(root, 'app.css'));
+        expect(await findTailwindCssEntry(root)).toBe(entry(root, 'app.css'));
     });
 
     it('ignores a stylesheet inside a dependency', async () => {
@@ -577,7 +583,7 @@ describe('findTailwindCssEntry — locating the stylesheet to compile', () => {
             'deep/nested/late.css': '@import "tailwindcss";',
             'app.css': '@import "tailwindcss";',
         });
-        expect(await findTailwindCssEntry(root)).toBe(path.join(root, 'app.css'));
+        expect(await findTailwindCssEntry(root)).toBe(entry(root, 'app.css'));
     });
 
     it('returns null when the project has no Tailwind entry', async () => {

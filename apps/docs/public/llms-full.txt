@@ -3453,15 +3453,18 @@ Controlling the font weight.
 
 Controlling the font width.
 
-| Concept                | CSS Rule                 | Tailwind v4 Class     | `sz` Prop (Object Syntax) | Note |
-| :--------------------- | :----------------------- | :-------------------- | :------------------------ | :--- |
-| Font Stretch 50%       | `font-stretch: 50%`      | `font-stretch-50%`    | `{ fontStretch: '50%' }`  |      |
-| Font Stretch 75%       | `font-stretch: 75%`      | `font-stretch-75%`    | `{ fontStretch: '75%' }`  |      |
-| Font Stretch 100%      | `font-stretch: 100%`     | `font-stretch-100%`   | `{ fontStretch: '100%' }` |      |
-| Font Stretch 125%      | `font-stretch: 125%`     | `font-stretch-125%`   | `{ fontStretch: '125%' }` |      |
-| Font Stretch 150%      | `font-stretch: 150%`     | `font-stretch-150%`   | `{ fontStretch: '150%' }` |      |
-| Font Stretch Arbitrary | `font-stretch: 110%`     | `font-stretch-[110%]` | `{ fontStretch: '110%' }` |      |
-| CSS Variable           | `font-stretch: var(--s)` | `font-stretch-(--s)`  | `{ fontStretch: '--s' }`  |      |
+| Concept                | CSS Rule                        | Tailwind v4 Class              | `sz` Prop (Object Syntax)            | Note                                                                                |
+| :--------------------- | :------------------------------ | :----------------------------- | :----------------------------------- | :---------------------------------------------------------------------------------- |
+| Font Stretch 50%       | `font-stretch: 50%`             | `font-stretch-50%`             | `{ fontStretch: '50%' }`             |                                                                                     |
+| Font Stretch 75%       | `font-stretch: 75%`             | `font-stretch-75%`             | `{ fontStretch: '75%' }`             |                                                                                     |
+| Font Stretch 100%      | `font-stretch: 100%`            | `font-stretch-100%`            | `{ fontStretch: '100%' }`            |                                                                                     |
+| Font Stretch 125%      | `font-stretch: 125%`            | `font-stretch-125%`            | `{ fontStretch: '125%' }`            |                                                                                     |
+| Font Stretch 150%      | `font-stretch: 150%`            | `font-stretch-150%`            | `{ fontStretch: '150%' }`            |                                                                                     |
+| Font Stretch Keyword   | `font-stretch: condensed`       | `font-stretch-condensed`       | `{ fontStretch: 'condensed' }`       | Keywords keep the `font-stretch-` prefix; `font-condensed` is not a Tailwind class. |
+| Font Stretch Keyword   | `font-stretch: expanded`        | `font-stretch-expanded`        | `{ fontStretch: 'expanded' }`        |                                                                                     |
+| Font Stretch Keyword   | `font-stretch: ultra-condensed` | `font-stretch-ultra-condensed` | `{ fontStretch: 'ultra-condensed' }` |                                                                                     |
+| Font Stretch Arbitrary | `font-stretch: 110%`            | `font-stretch-[110%]`          | `{ fontStretch: '110%' }`            |                                                                                     |
+| CSS Variable           | `font-stretch: var(--s)`        | `font-stretch-(--s)`           | `{ fontStretch: '--s' }`             |                                                                                     |
 
 ## Font Variant Numeric
 

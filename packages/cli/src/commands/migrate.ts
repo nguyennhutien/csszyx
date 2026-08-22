@@ -13,6 +13,7 @@ import fg from 'fast-glob';
 
 import { transformHtmlSourceSimple, transformSource } from '../migrate/ast-transformer.js';
 import type { CsszyxTodoMap } from '../migrate/variant-parser.js';
+import { withPosixSeparators } from '../utils/posix-path.js';
 import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
 
 /**
@@ -268,7 +269,6 @@ async function scanMigrationFiles(
     context: MigrationContext,
     log: MigrationLog,
 ): Promise<string[] | null> {
-    const patterns = context.options.pattern ? [context.options.pattern] : ['**/*.{jsx,tsx,html}'];
     const ignore = [
         '**/node_modules/**',
         '**/dist/**',
@@ -279,6 +279,12 @@ async function scanMigrationFiles(
     ];
     const progress = spinner.start('Scanning for files...');
     try {
+        // Normalised inside the guarded region on purpose: a pattern that is
+        // not a string must land on the same soft failure as a glob fast-glob
+        // rejects, not on a TypeError before the spinner exists.
+        const patterns = context.options.pattern
+            ? [withPosixSeparators(context.options.pattern)]
+            : ['**/*.{jsx,tsx,html}'];
         const files = await fg(patterns, { cwd: context.cwd, ignore, absolute: true });
         progress.succeed(`Found ${files.length} files`);
         if (files.length === 0) reportNoMigrationFiles(context, log);

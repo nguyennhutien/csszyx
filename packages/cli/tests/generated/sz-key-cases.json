@@ -3898,6 +3898,24 @@
                         "fontStretch": "75%"
                     },
                     "class": "font-stretch-75%"
+                },
+                {
+                    "sz": {
+                        "fontStretch": "condensed"
+                    },
+                    "class": "font-stretch-condensed"
+                },
+                {
+                    "sz": {
+                        "fontStretch": "expanded"
+                    },
+                    "class": "font-stretch-expanded"
+                },
+                {
+                    "sz": {
+                        "fontStretch": "ultra-condensed"
+                    },
+                    "class": "font-stretch-ultra-condensed"
                 }
             ],
             "reverse": [
@@ -3906,7 +3924,10 @@
                 "font-stretch-125%",
                 "font-stretch-150%",
                 "font-stretch-50%",
-                "font-stretch-75%"
+                "font-stretch-75%",
+                "font-stretch-condensed",
+                "font-stretch-expanded",
+                "font-stretch-ultra-condensed"
             ]
         },
         "fontStyle": {

@@ -12,7 +12,7 @@ import path from 'node:path';
 
 import { runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
 import fg from 'fast-glob';
-
+import { withPosixSeparators } from '../utils/posix-path.js';
 import { colors, icons } from '../utils/terminal-ui.js';
 import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
@@ -39,7 +39,7 @@ export interface NextPrebuildCommandOptions {
 export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Promise<number> {
     const cwd = path.resolve(options.cwd ?? process.cwd());
     const root = path.resolve(options.root ?? cwd);
-    const pattern = options.pattern ?? DEFAULT_NEXT_SOURCE_PATTERN;
+    const pattern = withPosixSeparators(options.pattern ?? DEFAULT_NEXT_SOURCE_PATTERN);
 
     try {
         const mode = normalizeMode(options.mode);

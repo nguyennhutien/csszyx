@@ -38,6 +38,9 @@ on:
       next_state:
         description: The cross-process Next state surface changed, markdown and metadata excluded.
         value: ${{ jobs.classify.outputs.next_state }}
+      cli:
+        description: The CLI or a package it runs through changed, markdown and metadata excluded.
+        value: ${{ jobs.classify.outputs.cli }}
       turbo_affected:
         description: Changes are confined to workspace packages, so turbo `--affected` is safe.
         value: ${{ jobs.classify.outputs.turbo_affected }}
@@ -68,6 +71,7 @@ jobs:
       # pkg_code is true, anything else counts as-is (fail-open).
       runtime_critical: ${{ steps.refine.outputs.runtime_real }}
       next_state: ${{ steps.refine.outputs.next_real }}
+      cli: ${{ steps.refine.outputs.cli_real }}
       # 'true' only for PRs whose changes are confined to workspace
       # packages — the case where turbo's `--affected` is provably safe.
       # Pushes (main) and full_surface changes always run the full set.
@@ -185,6 +189,16 @@ jobs:
               # The gating logic moved here out of ci.yml, so a change to this
               # file decides what that matrix runs just as directly.
               - '.github/workflows/detect-changes.yml'
+            # The CLI is the part of csszyx a developer runs on their own
+            # machine, so it is the surface the Windows/macOS lane exists
+            # for. Its direct workspace dependencies are listed because a
+            # change there reaches the CLI's tests through the built dist.
+            cli:
+              - 'packages/cli/**'
+              - 'packages/compiler/**'
+              - 'packages/unplugin/**'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/detect-changes.yml'
             pkg_json:
               - '**/package.json'
             # Surfaces OUTSIDE the workspace package graph. Turbo's
@@ -246,6 +260,7 @@ jobs:
         env:
           RUNTIME_FILES: ${{ steps.filter.outputs.runtime_critical_files }}
           NEXT_FILES: ${{ steps.filter.outputs.next_state_files }}
+          CLI_FILES: ${{ steps.filter.outputs.cli_files }}
           PKG_CODE: ${{ steps.pkg-gate.outputs.pkg_code }}
         run: |
           refine() {
@@ -263,3 +278,4 @@ jobs:
           }
           echo "runtime_real=$(refine "$RUNTIME_FILES")" >> "$GITHUB_OUTPUT"
           echo "next_real=$(refine "$NEXT_FILES")" >> "$GITHUB_OUTPUT"
+          echo "cli_real=$(refine "$CLI_FILES")" >> "$GITHUB_OUTPUT"
