@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/core-linux-arm64-musl",
-  "version": "0.14.3",
+  "version": "0.14.4",
   "description": "Linux arm64 musl native binding for @csszyx/core",
   "license": "MIT",
   "repository": {

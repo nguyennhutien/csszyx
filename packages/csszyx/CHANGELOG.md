@@ -1,5 +1,19 @@
 # csszyx
 
+## [0.14.4](https://github.com/nguyennhutien/csszyx/compare/v0.14.3...v0.14.4) (2026-08-22)
+
+### Features
+
+* **mcp-server:** compile the reverse answer back before returning it ([#243](https://github.com/nguyennhutien/csszyx/issues/243))
+
+### Bug Fixes
+
+* compile breakpoints and font-stretch the same on every engine, and run the CLI on Windows ([#243](https://github.com/nguyennhutien/csszyx/issues/243))
+* **core:** lower min and max breakpoints as one variant on the native engine ([#243](https://github.com/nguyennhutien/csszyx/issues/243))
+* **compiler:** lower fontStretch keywords under the font-stretch prefix ([#243](https://github.com/nguyennhutien/csszyx/issues/243))
+* **cli:** read a Windows-style --pattern and emit posix paths everywhere ([#243](https://github.com/nguyennhutien/csszyx/issues/243))
+* **cli:** register the Next watch root under its canonical name ([#243](https://github.com/nguyennhutien/csszyx/issues/243))
+
 ## [0.14.3](https://github.com/nguyennhutien/csszyx/compare/v0.14.2...v0.14.3) (2026-08-22)
 
 ### Bug Fixes
