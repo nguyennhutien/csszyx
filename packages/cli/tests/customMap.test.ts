@@ -65,6 +65,18 @@ describe('classNameToSzObject — customMap routes', () => {
             });
         });
 
+        it('leaves the map untouched when later tokens nest into a mapped object', () => {
+            // One map serves every file of a migrate run. A token that nests
+            // into an object the map supplied must nest into the output, not
+            // into the map, or the next file to use the entry inherits it.
+            const customMap: CsszyxTodoMap = { card: { p: 4, hover: { shadow: 'md' } } };
+            const first = classNameToSzObject('card hover:m-2', customMap);
+            expect(first.szObject).toEqual({ p: 4, hover: { shadow: 'md', m: 2 } });
+            expect(customMap).toEqual({ card: { p: 4, hover: { shadow: 'md' } } });
+            const second = classNameToSzObject('card', customMap);
+            expect(second.szObject).toEqual({ p: 4, hover: { shadow: 'md' } });
+        });
+
         it('multiple custom tokens all object-routed', () => {
             const customMap = {
                 'btn-base': { px: 4, py: 2, rounded: 'md', weight: 'medium' },
