@@ -666,6 +666,10 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
                 // parameter rather than chaining a plain `:` like simple variants
                 // do, matching the JavaScript transform it replaced.
                 match property.key.as_str() {
+                    "min" | "max" => {
+                        lower_breakpoint_variant(nested, prefix, &property.key, classes);
+                        continue;
+                    }
                     "supports" => {
                         lower_bracket_param_variant(nested, prefix, "supports", classes);
                         continue;
@@ -743,6 +747,35 @@ fn lower_bracket_param_variant(
             let next_prefix = format!("{prefix}{name}-[{}]:", property.key);
             lower_object_into(body, &next_prefix, classes);
         }
+    }
+}
+
+/// Lowers a `min`/`max` breakpoint variant. The breakpoint joins its stem with
+/// a dash and is one variant segment: a named breakpoint (`min-md:`) or one
+/// already written in brackets passes through, any other value is a length
+/// and is bracketed (`min-[330px]:`). Without this arm the two stems fell
+/// through to the plain-variant path and came out as `min:330px:…` — three
+/// variants Tailwind does not have, so the rule generated no CSS.
+fn lower_breakpoint_variant(
+    object: &StaticSzObject,
+    prefix: &str,
+    kind: &str,
+    classes: &mut Vec<String>,
+) {
+    const NAMED: &[&str] = &["sm", "md", "lg", "xl", "2xl"];
+    for property in &object.properties {
+        let StaticSzValue::Object(body) = &property.value else {
+            continue;
+        };
+        let breakpoint = property.key.as_str();
+        let direct = NAMED.contains(&breakpoint)
+            || (breakpoint.starts_with('[') && breakpoint.ends_with(']'));
+        let next_prefix = if direct {
+            format!("{prefix}{kind}-{breakpoint}:")
+        } else {
+            format!("{prefix}{kind}-[{breakpoint}]:")
+        };
+        lower_object_into(body, &next_prefix, classes);
     }
 }
 
@@ -2607,6 +2640,76 @@ mod tests {
                 "group-aria-checked/card:m-2",
                 "group-aria-[x=1]/card:m-3",
                 "peer-has-[img]:p-4",
+            ]
+        );
+    }
+
+    #[test]
+    fn lowers_min_max_breakpoint_variants() {
+        // Each value shape exercises one branch of the bracket decision: a
+        // named breakpoint and a pre-bracketed one pass through, a length is
+        // bracketed, and a non-object value is skipped. The mutants that
+        // survived without this test were the empty body, and each half of
+        // the `named || bracketed` test flipped.
+        let object = StaticSzObject {
+            properties: vec![
+                property(
+                    "min",
+                    object(vec![
+                        property(
+                            "330px",
+                            object(vec![property("p", StaticSzValue::Number(1.0))]),
+                        ),
+                        property(
+                            "md",
+                            object(vec![property("p", StaticSzValue::Number(2.0))]),
+                        ),
+                        property(
+                            "[40rem]",
+                            object(vec![property("p", StaticSzValue::Number(3.0))]),
+                        ),
+                        // Only one bracket is not "already bracketed": the
+                        // key is a length with a stray character and is
+                        // wrapped like any other length.
+                        property(
+                            "[40rem",
+                            object(vec![property("p", StaticSzValue::Number(5.0))]),
+                        ),
+                        property("ignored", StaticSzValue::Boolean(false)),
+                    ]),
+                ),
+                property(
+                    "max",
+                    object(vec![property(
+                        "900px",
+                        object(vec![property(
+                            "display",
+                            StaticSzValue::String("none".into()),
+                        )]),
+                    )]),
+                ),
+                property(
+                    "hover",
+                    object(vec![property(
+                        "min",
+                        object(vec![property(
+                            "lg",
+                            object(vec![property("p", StaticSzValue::Number(4.0))]),
+                        )]),
+                    )]),
+                ),
+            ],
+        };
+
+        assert_eq!(
+            lower_static_sz_object(&object),
+            [
+                "min-[330px]:p-1",
+                "min-md:p-2",
+                "min-[40rem]:p-3",
+                "min-[[40rem]:p-5",
+                "max-[900px]:hidden",
+                "hover:min-lg:p-4",
             ]
         );
     }
