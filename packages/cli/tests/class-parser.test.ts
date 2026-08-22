@@ -308,8 +308,14 @@ describe('class-parser', () => {
 
         it('font stretch', () => {
             expect(parseClass('font-stretch-50%')).toEqual({ prop: 'fontStretch', value: '50%' });
-            expect(parseClass('font-condensed')).toEqual({
+            expect(parseClass('font-stretch-condensed')).toEqual({
                 prop: 'fontStretch',
+                value: 'condensed',
+            });
+            // Not a Tailwind class. It is read as a family name, the same as
+            // any other unknown `font-*` token, rather than as a stretch.
+            expect(parseClass('font-condensed')).toEqual({
+                prop: 'fontFamily',
                 value: 'condensed',
             });
         });

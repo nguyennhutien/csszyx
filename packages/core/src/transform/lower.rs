@@ -1320,7 +1320,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                     format!("{prefix}{grad}-[{value}]")
                 });
             }
-            // font-stretch: named keywords use the font- prefix (font-condensed),
+            // font-stretch: named keywords keep the font-stretch- prefix,
             // integer percents stay bare (font-stretch-50%), decimals bracket.
             if key == "fontStretch" {
                 return Some(format!("{prefix}{}", format_font_stretch(value)));
@@ -1489,7 +1489,7 @@ fn is_percent(value: &str) -> bool {
 }
 
 /// Lowers `fontStretch` to its bare Tailwind class (caller prepends the variant
-/// prefix): named keywords use the `font-` prefix (`font-condensed`), integer
+/// prefix): named keywords keep the `font-stretch-` prefix, integer
 /// percents stay bare (`font-stretch-50%`), decimals and other values arbitrary.
 pub(crate) fn format_font_stretch(value: &str) -> String {
     const KEYWORDS: &[&str] = &[
@@ -1504,7 +1504,7 @@ pub(crate) fn format_font_stretch(value: &str) -> String {
         "ultra-expanded",
     ];
     if KEYWORDS.contains(&value) {
-        format!("font-{value}")
+        format!("font-stretch-{value}")
     } else if value.starts_with("--") {
         format!("font-stretch-({value})")
     } else if is_percent(value) {
@@ -2936,7 +2936,7 @@ mod tests {
         assert_eq!(
             lower_static_sz_object(&object),
             [
-                "font-condensed",
+                "font-stretch-condensed",
                 "font-stretch-(--f)",
                 "font-stretch-50%",
                 "font-stretch-[50.5%]",

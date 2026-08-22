@@ -2782,7 +2782,7 @@ function formatDecorationThickness(value: string): string {
 
 /** Formats font-stretch keywords, variables, and percentages. */
 function formatFontStretch(value: string): string {
-    if (FONT_STRETCH_KEYWORDS.has(value)) return `font-${value}`;
+    if (FONT_STRETCH_KEYWORDS.has(value)) return `font-stretch-${value}`;
     if (value.startsWith('--')) return `font-stretch-(${value})`;
     if (!/^\d+(\.\d+)?%$/.test(value)) return `font-stretch-[${value}]`;
     const numeric = Number.parseFloat(value);

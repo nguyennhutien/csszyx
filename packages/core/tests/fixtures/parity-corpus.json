@@ -14842,6 +14842,63 @@
     "oxc": "font-stretch-75%"
   },
   {
+    "sz": "{\"fontStretch\":\"condensed\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "fontStretch",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "condensed"
+          }
+        }
+      ]
+    },
+    "oxc": "font-stretch-condensed"
+  },
+  {
+    "sz": "{\"fontStretch\":\"expanded\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "fontStretch",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "expanded"
+          }
+        }
+      ]
+    },
+    "oxc": "font-stretch-expanded"
+  },
+  {
+    "sz": "{\"fontStretch\":\"ultra-condensed\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "fontStretch",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "ultra-condensed"
+          }
+        }
+      ]
+    },
+    "oxc": "font-stretch-ultra-condensed"
+  },
+  {
     "sz": "{\"fontStyle\":\"normal\"}",
     "ir": {
       "properties": [

@@ -18,7 +18,6 @@ import {
     DECORATION_STYLE_KEYWORDS,
     DECORATION_THICKNESS_KEYWORDS,
     FONT_FAMILY_KEYWORDS,
-    FONT_STRETCH_KEYWORDS,
     FONT_WEIGHT_KEYWORDS,
     FRACTION_SUPPORTED,
     NEGATIVE_ALLOWED,
@@ -621,9 +620,10 @@ export function disambiguateFont(value: string): ParsedClass | null {
         // (the compiler re-wraps the bare value) instead of double-wrapping.
         return { prop: 'fontStretch', value: parseStringValue(stretchVal) };
     }
-    if (FONT_STRETCH_KEYWORDS.has(value)) {
-        return { prop: 'fontStretch', value };
-    }
+    // `font-condensed` is not a Tailwind class: stretch keywords live under
+    // `font-stretch-*`, which SORTED_PREFIXES routes before this function is
+    // reached. Reading the bare spelling as a stretch here would turn a class
+    // that generates no CSS into an sz value that does, hiding the mistake.
     // Arbitrary
     return { prop: 'fontFamily', value: parseStringValue(value) };
 }

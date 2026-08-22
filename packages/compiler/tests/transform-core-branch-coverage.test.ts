@@ -418,7 +418,7 @@ describe('string property handler chain', () => {
         expect(cls({ decorationThickness: '--t' })).toBe('decoration-(--t)');
     });
     it('fontStretch keyword / var / integer% / decimal% / arbitrary', () => {
-        expect(cls({ fontStretch: 'condensed' })).toBe('font-condensed');
+        expect(cls({ fontStretch: 'condensed' })).toBe('font-stretch-condensed');
         expect(cls({ fontStretch: '--f' })).toBe('font-stretch-(--f)');
         expect(cls({ fontStretch: '50%' })).toBe('font-stretch-50%');
         expect(cls({ fontStretch: '50.5%' })).toBe('font-stretch-[50.5%]');
