@@ -88,7 +88,7 @@ export const TOOLS = [
     {
         name: 'csszyx_reverse',
         description:
-            'Convert a Tailwind CSS class string into a csszyx sz object. Input: class string. Output: structured sz object + unrecognized classes.',
+            'Convert a Tailwind CSS class string into a csszyx sz object. Input: class string. Output: structured sz object, unrecognized classes, and roundTrip — the object compiled back to classes, with ok=false when that differs from the input. Do not use an answer whose roundTrip.ok is false.',
         inputSchema: {
             type: 'object' as const,
             properties: {
