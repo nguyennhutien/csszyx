@@ -452,6 +452,85 @@ jobs:
         with:
           directory: ./coverage
 
+  # The CLI is the part of csszyx a developer runs on their own machine, and
+  # until this job its suite had only ever run on Linux. Path separators,
+  # line endings and file watching are exactly the things a Linux run cannot
+  # speak for, so the suite runs on the two other hosts developers use.
+  # Ubuntu is not in the matrix: the `test` job already covers it.
+  #
+  # The whole dependency closure is built here, including the wasm engine,
+  # because the CLI's tests run real transforms through @csszyx/compiler.
+  # That makes this the first job to build @csszyx/core on Windows, which is
+  # deliberate: a build that only ever ran on Linux is a build nobody has
+  # proven. The native addon is not built, so the engine degrades to the
+  # wasm lane — the same lane the Linux `test` job runs.
+  cli-platform:
+    name: CLI (${{ matrix.os }})
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.release_please != 'true' &&
+      needs.detect-changes.outputs.cli == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    # macOS is on trial: its only unique signal is the file watcher, whose
+    # failures show up as timing flakes rather than stable reds. It reports
+    # but does not block until its pass rate over the first weeks is read
+    # and a decision is made. Windows blocks from day one.
+    continue-on-error: ${{ matrix.os == 'macos-14' }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Cache turbo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      # The Rust build of the wasm engine dominates this job's time on a
+      # cold runner; the registry and build directory are kept across runs so
+      # only a Cargo.lock change pays it again.
+      - name: Cache cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/core/target
+          key: cargo-wasm-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'packages/core/Cargo.toml') }}
+          restore-keys: |
+            cargo-wasm-${{ runner.os }}-
+
+      - name: Setup WASM toolchain
+        uses: ./.github/actions/setup-wasm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Everything the CLI imports, in dependency order, through turbo so a
+      # package whose inputs did not change comes from the cache.
+      - name: Build the CLI and what it runs through
+        shell: bash
+        run: pnpm exec turbo run build --filter=@csszyx/cli...
+
+      - name: Run the CLI suite
+        shell: bash
+        run: pnpm --filter @csszyx/cli exec vitest run
+
   # The Next Turbopack state layer relies on advisory locks, atomic rename,
   # path normalization, and child-process contention. Unit mocks on Ubuntu
   # cannot prove those contracts for APFS or NTFS, so run only the focused
@@ -658,6 +737,7 @@ jobs:
         lint,
         test,
         next-state-platform,
+        cli-platform,
         e2e,
         build,
       ]
