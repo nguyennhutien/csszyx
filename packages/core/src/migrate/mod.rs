@@ -13,10 +13,12 @@
 
 mod class_parser;
 mod class_rules;
+mod sz_codegen;
 mod value;
 mod variant_parser;
 
 pub use class_parser::parse_class;
+pub use sz_codegen::{sz_expression, sz_html_value, sz_object_literal};
 pub use value::{Extra, ParsedClass, SzObject, SzValue};
 pub use variant_parser::{
     class_name_to_sz_object, extract_variants, map_variant, tokenize, Conversion,

@@ -17,6 +17,10 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { parseClass } from '../packages/cli/src/migrate/class-parser.ts';
+import {
+    generateSzHtmlValue,
+    generateSzObjectLiteral,
+} from '../packages/cli/src/migrate/sz-codegen.ts';
 import { classNameToSzObject } from '../packages/cli/src/migrate/variant-parser.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -421,6 +425,34 @@ const CUSTOM_MAP = {
     'legacy-nested': { hover: { p: 4 }, 0: 'x', b: [1, { c: null }], n: 1.5, t: true },
     'legacy-flat': { hover: 'flat' },
     'p-4': { padding: 'custom' },
+    // Every shape the codegen spells differently: keys that need quoting,
+    // strings that need escaping, deep objects, arrays, a colour with a
+    // non-numeric opacity, gradients, null, false, numbers JavaScript prints
+    // with an exponent.
+    'legacy-codegen': {
+        '@md': { p: 4 },
+        'data-x': 1,
+        0: 'first',
+        s: "it's \\ new\nline\rreturn",
+        deep: { a: { b: { c: 1 } } },
+        arr: [{ p: 4 }, { color: 'r', op: 1 }, null, false, [1, 'x']],
+        c: { color: 'r', op: true },
+        c2: { color: [1, 2], op: { a: 1 } },
+        g: { gradient: 'linear', dir: 45, in: 'hsl' },
+        g2: { gradient: 'radial', dir: null },
+        g3: { gradient: "it's", in: 5 },
+        z: null,
+        f: false,
+        n: 1.5,
+        big: 1e21,
+        tiny: 1e-7,
+        é: 3,
+        ab_$1: 2,
+    },
+    'legacy-pair': { a: 1, b: { color: 'r', op: 2 } },
+    'legacy-pair-deep': { a: 1, b: { hover: { p: 4 } } },
+    'legacy-pair-array': { a: 1, b: [1] },
+    'legacy-pair-gradient': { a: 1, b: { gradient: 'conic' } },
 };
 
 /** Class strings converted against CUSTOM_MAP. */
@@ -464,6 +496,13 @@ const CUSTOM_MAP_CLASSES = [
     'hover:block legacy-flat hover:flex',
     'hover:block legacy-flat hover:p-4',
     'legacy-flat hover:p-4',
+    'legacy-codegen',
+    'legacy-pair',
+    'legacy-pair-deep',
+    'legacy-pair-array',
+    'legacy-pair-gradient',
+    'legacy-pair legacy-pair-deep',
+    'legacy-codegen p-8',
 ];
 
 const corpus = buildCorpus();
@@ -531,30 +570,15 @@ function buildCorpus() {
     ]) {
         if (seen.has(className)) continue;
         seen.add(className);
-        const converted = classNameToSzObject(className);
         entries.push({
             c: className,
             p: parseClass(className) ?? null,
-            o: {
-                sz: converted.szObject,
-                szText: JSON.stringify(converted.szObject),
-                u: converted.unrecognized,
-                k: converted.keepInClassName,
-            },
+            o: recordConversion(classNameToSzObject(className)),
         });
     }
 
     const customMapCases = CUSTOM_MAP_CLASSES.map(className => {
-        const converted = classNameToSzObject(className, CUSTOM_MAP);
-        return {
-            c: className,
-            o: {
-                sz: converted.szObject,
-                szText: JSON.stringify(converted.szObject),
-                u: converted.unrecognized,
-                k: converted.keepInClassName,
-            },
-        };
+        return { c: className, o: recordConversion(classNameToSzObject(className, CUSTOM_MAP)) };
     });
 
     return {
@@ -571,6 +595,25 @@ function buildCorpus() {
         entries,
         customMap: CUSTOM_MAP,
         customMapCases,
+    };
+}
+
+/**
+ * One conversion as the corpus records it: the sz object, its JSON text with
+ * the keys in order, what stayed in className, and the source text the
+ * codegen writes for it as an object literal and as an HTML attribute value.
+ *
+ * @param {ReturnType<typeof classNameToSzObject>} converted - The TypeScript's answer.
+ * @returns {object} The recorded shape.
+ */
+function recordConversion(converted) {
+    return {
+        sz: converted.szObject,
+        szText: JSON.stringify(converted.szObject),
+        u: converted.unrecognized,
+        k: converted.keepInClassName,
+        g: generateSzObjectLiteral(converted.szObject),
+        h: generateSzHtmlValue(converted.szObject),
     };
 }
 

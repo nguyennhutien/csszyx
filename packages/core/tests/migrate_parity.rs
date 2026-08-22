@@ -9,7 +9,9 @@
 
 #![cfg(feature = "migrate")]
 
-use csszyx_core::migrate::{class_name_to_sz_object, parse_class, SzObject};
+use csszyx_core::migrate::{
+    class_name_to_sz_object, parse_class, sz_html_value, sz_object_literal, SzObject,
+};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -48,6 +50,10 @@ struct Conversion {
     u: Vec<String>,
     /// Classes the map said to keep.
     k: Vec<String>,
+    /// The sz object as the codegen writes it: an object literal.
+    g: String,
+    /// The same as an HTML attribute value, outer braces stripped.
+    h: String,
 }
 
 fn corpus() -> Corpus {
@@ -177,6 +183,72 @@ fn custom_map_entries_resolve_exactly_as_the_typescript_resolves_them() {
     let corpus = corpus();
     assert!(corpus.custom_map_cases.len() > 20);
     assert_conversions(
+        corpus
+            .custom_map_cases
+            .iter()
+            .map(|case| (case.c.as_str(), &case.o)),
+        Some(&corpus.custom_map),
+    );
+}
+
+/// The codegen's two spellings of one conversion's sz object.
+fn spell(class_name: &str, custom_map: Option<&SzObject>) -> (String, String) {
+    let converted = class_name_to_sz_object(class_name, custom_map);
+    (
+        sz_object_literal(&converted.sz_object),
+        sz_html_value(&converted.sz_object, false),
+    )
+}
+
+fn assert_codegen<'a>(
+    cases: impl Iterator<Item = (&'a str, &'a Conversion)>,
+    custom_map: Option<&SzObject>,
+) {
+    let mut total = 0;
+    let mut mismatches = Vec::new();
+    for (class_name, expected) in cases {
+        total += 1;
+        let actual = spell(class_name, custom_map);
+        let wanted = (expected.g.clone(), expected.h.clone());
+        if actual != wanted {
+            mismatches.push(format!(
+                "  {class_name:?}\n      ts   = {wanted:?}\n      rust = {actual:?}"
+            ));
+        }
+    }
+    assert!(
+        mismatches.is_empty(),
+        "{} of {total} sz objects print differently from the TypeScript codegen:\n{}",
+        mismatches.len(),
+        mismatches
+            .iter()
+            .take(40)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+#[test]
+fn codegen_prints_exactly_what_the_typescript_codegen_prints() {
+    let corpus = corpus();
+    let multi_line = corpus
+        .entries
+        .iter()
+        .filter(|entry| entry.o.g.contains('\n'))
+        .count();
+    assert!(
+        multi_line > 50,
+        "only {multi_line} objects print on several lines"
+    );
+    assert_codegen(
+        corpus
+            .entries
+            .iter()
+            .map(|entry| (entry.c.as_str(), &entry.o)),
+        None,
+    );
+    assert_codegen(
         corpus
             .custom_map_cases
             .iter()
