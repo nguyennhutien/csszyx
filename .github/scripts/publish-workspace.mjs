@@ -7,6 +7,12 @@ import { pathToFileURL } from 'node:url';
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org';
 const DEFAULT_PUBLISH_ATTEMPTS = 5;
 const VISIBILITY_DELAYS_MS = [0, 2_000, 3_000, 5_000, 8_000, 13_000];
+// How long the final audit waits for a package the registry accepted but has
+// not exposed yet. Generous on purpose: by this point every upload is done, so
+// the only thing being spent is wall time, and the alternative is reporting a
+// complete release as failed — which is what happened when the audit looked
+// seventeen seconds after the slowest package was accepted.
+const AUDIT_DELAYS_MS = [5_000, 10_000, 20_000, 30_000, 60_000];
 
 /**
  * Return public workspace packages in dependency order.
@@ -149,6 +155,7 @@ export async function publishPackageSet(packages, options) {
         error = console.error,
         publishAttempts = DEFAULT_PUBLISH_ATTEMPTS,
         visibilityDelaysMs = VISIBILITY_DELAYS_MS,
+        auditDelaysMs = AUDIT_DELAYS_MS,
         requireOidc = false,
     } = options;
     const published = [];
@@ -224,11 +231,16 @@ export async function publishPackageSet(packages, options) {
         }
     }
 
+    // Every package above was either skipped as already present or accepted
+    // by the registry, so a version that is not visible here is one that has
+    // not propagated yet. The audit is the one place that waits for it: the
+    // publish loop deliberately does not, because re-sending an accepted
+    // package only conflicts with the copy already staged.
     const missing = [];
     for (const pkg of packages) {
-        if (!(await queryWithRetry(() => isPublished(pkg), sleep))) {
-            missing.push(`${pkg.name}@${pkg.version}`);
-        }
+        if (await queryWithRetry(() => isPublished(pkg), sleep)) continue;
+        if (await waitForPublished(pkg, isPublished, sleep, auditDelaysMs)) continue;
+        missing.push(`${pkg.name}@${pkg.version}`);
     }
     if (missing.length > 0) {
         throw new Error(
