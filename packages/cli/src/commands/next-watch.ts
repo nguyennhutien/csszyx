@@ -14,7 +14,7 @@ import { type NextSafelistWatchEvent, NextSafelistWatcher } from '@csszyx/unplug
 import { type ChokidarOptions, type FSWatcher, watch } from 'chokidar';
 import fg from 'fast-glob';
 import { Minimatch } from 'minimatch';
-
+import { withPosixSeparators } from '../utils/posix-path.js';
 import { colors, icons } from '../utils/terminal-ui.js';
 import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
@@ -86,7 +86,7 @@ export async function startNextWatch(
 ): Promise<NextWatchSession> {
     const cwd = path.resolve(options.cwd ?? process.cwd());
     const root = path.resolve(options.root ?? cwd);
-    const pattern = options.pattern ?? DEFAULT_NEXT_SOURCE_PATTERN;
+    const pattern = withPosixSeparators(options.pattern ?? DEFAULT_NEXT_SOURCE_PATTERN);
     const ignore = [...DEFAULT_NEXT_SOURCE_IGNORE, ...(options.extraIgnore ?? [])];
     const parserMode = normalizeParserMode(options.parserMode);
     const debounceMs = normalizeDebounceMs(options.debounceMs);

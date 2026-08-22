@@ -13,11 +13,10 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 
 import { sortStrings } from '@csszyx/compiler';
 import fg from 'fast-glob';
-
+import { relativePosix, withPosixSeparators } from '../utils/posix-path.js';
 import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
 
 /** Options for the `scan-collisions` command. */
@@ -122,7 +121,9 @@ function looksLikeToken(name: string): boolean {
  */
 export async function scanCollisions(options: ScanCollisionsOptions = {}): Promise<void> {
     const cwd = options.cwd ?? process.cwd();
-    const patterns = options.pattern ? [options.pattern] : ['**/*.{css,scss,sass,less}'];
+    const patterns = options.pattern
+        ? [withPosixSeparators(options.pattern)]
+        : ['**/*.{css,scss,sass,less}'];
     const ignore = [...DEFAULT_IGNORE, ...(options.ignore ?? [])];
 
     printHeader('csszyx scan-collisions — mangle token risks');
@@ -148,7 +149,7 @@ export async function scanCollisions(options: ScanCollisionsOptions = {}): Promi
         } catch {
             continue;
         }
-        const rel = path.relative(cwd, file);
+        const rel = relativePosix(cwd, file);
         for (const match of stripNonSelectorText(css).matchAll(CLASS_SELECTOR_RE)) {
             const name = match[1];
             if (looksLikeToken(name)) {
