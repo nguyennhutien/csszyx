@@ -1,5 +1,6 @@
 //! Generated transform lookup tables.
 
+pub(crate) mod migrate_tables;
 pub(crate) mod reverse_tables;
 pub(crate) mod sz_fallback_matrix;
 pub(crate) mod tables;
@@ -331,6 +332,260 @@ mod reverse_tables_tests {
     fn prefixes_are_unique_and_sorted() {
         for pair in REVERSE_PROPERTY_MAP.windows(2) {
             assert!(pair[0].0 < pair[1].0, "{} before {}", pair[0].0, pair[1].0);
+        }
+    }
+}
+
+#[cfg(test)]
+mod migrate_tables_tests {
+    use std::collections::BTreeMap;
+
+    use super::migrate_tables::{
+        boolean_value, reverse_boolean, reverse_variant, BooleanValue, BOOLEAN_VALUE_MAP,
+        KNOWN_BREAKPOINTS, KNOWN_VARIANTS, MIGRATE_SETS, REVERSE_BOOLEAN_MAP, REVERSE_VARIANT_MAP,
+        SORTED_PREFIXES,
+    };
+    use super::reverse_tables::REVERSE_PROPERTY_MAP;
+    use super::tables::is_known_variant;
+
+    /// migrate's hand-written tables, read back from the TypeScript that is
+    /// still their source of truth.
+    ///
+    /// The generator evaluates that module and renders what it finds, so its
+    /// `--check` already refuses a stale file. This reads the source text
+    /// instead, so the two cannot agree by both being wrong about what the
+    /// module evaluates to.
+    fn typescript_source() -> String {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../cli/src/migrate/reverse-map.ts"
+        );
+        std::fs::read_to_string(path).expect("migrate's reverse-map.ts is in packages/cli")
+    }
+
+    /// The quoted strings on one line of a table body, in order.
+    ///
+    /// The module is formatter-owned, so every quote on a line is paired:
+    /// the odd segments between quotes are the values.
+    fn quoted(line: &str) -> Vec<String> {
+        line.split('\'')
+            .skip(1)
+            .step_by(2)
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// Every `export const NAME = new Set([...])` in the module, spreads
+    /// resolved against the sets declared before them.
+    fn typescript_sets() -> BTreeMap<String, Vec<String>> {
+        let source = typescript_source();
+        let mut sets: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        let mut current: Option<(String, Vec<String>)> = None;
+        for line in source.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                continue;
+            }
+            if let Some((name, members)) = current.as_mut() {
+                if trimmed.starts_with("])") {
+                    sets.insert(name.clone(), members.clone());
+                    current = None;
+                } else if let Some(spread) = trimmed.strip_prefix("...") {
+                    let spread = spread.trim_end_matches(',');
+                    members.extend(sets[spread].iter().cloned());
+                } else {
+                    // A Set keeps the first of two equal members.
+                    for member in quoted(trimmed) {
+                        if !members.contains(&member) {
+                            members.push(member);
+                        }
+                    }
+                }
+                continue;
+            }
+            let Some(declaration) = trimmed.strip_prefix("export const ") else {
+                continue;
+            };
+            let Some((name, initializer)) = declaration.split_once(" = new Set([") else {
+                continue;
+            };
+            let members = quoted(initializer);
+            if initializer.contains("])") {
+                sets.insert(name.to_string(), members);
+            } else {
+                current = Some((name.to_string(), members));
+            }
+        }
+        sets
+    }
+
+    /// The lines of one `export const NAME: ... = {` block, comments dropped.
+    fn typescript_block(name: &str) -> Vec<String> {
+        let source = typescript_source();
+        let start = format!("export const {name}");
+        let mut lines = source
+            .lines()
+            .skip_while(|line| !line.starts_with(&start))
+            .skip_while(|line| !line.ends_with("= {"))
+            .skip(1)
+            .take_while(|line| !line.starts_with("};"))
+            .map(|line| line.trim().to_string())
+            .filter(|line| !line.starts_with("//"))
+            .collect::<Vec<_>>();
+        lines.retain(|line| !line.is_empty());
+        assert!(!lines.is_empty(), "no block for {name}");
+        lines
+    }
+
+    /// `key: 'value',` pairs of a string-valued record block.
+    fn typescript_string_record(name: &str) -> Vec<(String, String)> {
+        typescript_block(name)
+            .iter()
+            .filter_map(|line| {
+                let (key, rest) = line.split_once(": '")?;
+                let (value, _) = rest.split_once('\'')?;
+                Some((key.trim_matches('\'').to_string(), value.to_string()))
+            })
+            .collect()
+    }
+
+    /// One `'...'`-quoted field of an object literal, if the literal has it.
+    fn field(text: &str, field: &str) -> Option<String> {
+        let (_, after) = text.split_once(&format!("{field}: '"))?;
+        after.split_once('\'').map(|(value, _)| value.to_string())
+    }
+
+    #[test]
+    fn every_typescript_set_is_rendered_with_the_same_members() {
+        let typescript = typescript_sets();
+        let parsed = typescript.len();
+        assert!(parsed > 20, "parsed only {parsed} sets");
+        let rust: BTreeMap<String, Vec<String>> = MIGRATE_SETS
+            .iter()
+            .map(|(name, members, _)| {
+                (
+                    name.to_string(),
+                    members.iter().map(ToString::to_string).collect(),
+                )
+            })
+            .collect();
+        assert_eq!(rust, typescript);
+    }
+
+    #[test]
+    fn every_set_predicate_accepts_its_members_and_nothing_else() {
+        for (name, members, contains) in MIGRATE_SETS {
+            for member in *members {
+                assert!(contains(member), "{name} should contain {member}");
+            }
+            assert!(!contains("not-a-member"), "{name}");
+            assert!(!contains(""), "{name}");
+        }
+    }
+
+    #[test]
+    fn the_string_records_match_the_typescript_records() {
+        let rust = |pairs: &[(&str, &str)]| -> Vec<(String, String)> {
+            pairs
+                .iter()
+                .map(|(key, value)| (key.to_string(), value.to_string()))
+                .collect()
+        };
+        assert_eq!(
+            rust(REVERSE_BOOLEAN_MAP),
+            typescript_string_record("REVERSE_BOOLEAN_MAP")
+        );
+        assert_eq!(
+            rust(REVERSE_VARIANT_MAP),
+            typescript_string_record("REVERSE_VARIANT_MAP")
+        );
+    }
+
+    #[test]
+    fn the_boolean_value_map_matches_the_typescript_record() {
+        let mut expected = Vec::new();
+        let mut entry = String::new();
+        for line in typescript_block("BOOLEAN_VALUE_MAP") {
+            entry.push_str(&line);
+            entry.push(' ');
+            if !line.ends_with("},") {
+                continue;
+            }
+            let (class, object) = entry.split_once(": {").expect("an entry");
+            expected.push((
+                class.trim().trim_matches('\'').to_string(),
+                field(object, "prop").expect("prop"),
+                field(object, "value").expect("value"),
+                field(object, "cssProperty"),
+            ));
+            entry.clear();
+        }
+        let actual: Vec<(String, String, String, Option<String>)> = BOOLEAN_VALUE_MAP
+            .iter()
+            .map(|(class, entry)| {
+                (
+                    class.to_string(),
+                    entry.prop.to_string(),
+                    entry.value.to_string(),
+                    entry.css_property.map(str::to_string),
+                )
+            })
+            .collect();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn every_record_entry_looks_up_to_its_value() {
+        for (class, key) in REVERSE_BOOLEAN_MAP {
+            assert_eq!(reverse_boolean(class), Some(*key), "{class}");
+        }
+        for (variant, key) in REVERSE_VARIANT_MAP {
+            assert_eq!(reverse_variant(variant), Some(*key), "{variant}");
+        }
+        for (class, entry) in BOOLEAN_VALUE_MAP {
+            assert_eq!(boolean_value(class), Some(*entry), "{class}");
+        }
+        assert_eq!(reverse_boolean("not-a-class"), None);
+        assert_eq!(reverse_variant("not-a-variant"), None);
+        assert_eq!(boolean_value("not-a-class"), None);
+        assert_eq!(
+            boolean_value("antialiased"),
+            Some(BooleanValue {
+                prop: "fontSmoothing",
+                value: "grayscale",
+                css_property: Some("font-smoothing"),
+            })
+        );
+        assert_eq!(
+            boolean_value("snap-x"),
+            Some(BooleanValue {
+                prop: "snapType",
+                value: "x",
+                css_property: None
+            })
+        );
+    }
+
+    /// Longest-prefix matching only works if the longer prefix is tried
+    /// first: `border-t` must win over `border` for `border-t-2`.
+    #[test]
+    fn sorted_prefixes_are_the_reverse_map_prefixes_longest_first() {
+        let mut expected: Vec<&str> = REVERSE_PROPERTY_MAP
+            .iter()
+            .map(|(prefix, _)| *prefix)
+            .collect();
+        expected.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        assert_eq!(SORTED_PREFIXES, expected.as_slice());
+    }
+
+    /// migrate must not write a variant the compiler would then reject.
+    #[test]
+    fn migrate_only_knows_variants_the_compiler_accepts() {
+        for variant in KNOWN_VARIANTS {
+            assert!(is_known_variant(variant), "{variant}");
+        }
+        for breakpoint in KNOWN_BREAKPOINTS {
+            assert!(KNOWN_VARIANTS.contains(breakpoint), "{breakpoint}");
         }
     }
 }

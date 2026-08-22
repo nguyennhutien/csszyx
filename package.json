@@ -39,6 +39,8 @@
     "gen:rust-tables:check": "node --test scripts/extract-ts-tables.test.mjs && node scripts/generate-rust-transform-tables.mjs --check",
     "gen:reverse-map": "node scripts/generate-reverse-property-map.mjs",
     "gen:reverse-map:check": "node scripts/generate-reverse-property-map.mjs --check",
+    "gen:migrate-tables": "node --import tsx/esm scripts/gen-rust-migrate-tables.mjs",
+    "gen:migrate-tables:check": "node --import tsx/esm scripts/gen-rust-migrate-tables.mjs --check",
     "gen:migrate-golden": "node --import tsx/esm scripts/gen-migrate-golden.mjs",
     "gen:migrate-golden:check": "node --import tsx/esm scripts/gen-migrate-golden.mjs --check",
     "gen:key-tests": "node --import tsx/esm scripts/gen-key-tests.mjs",

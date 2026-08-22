@@ -340,6 +340,13 @@ jobs:
       - name: Check migrate reverse map is current
         run: pnpm gen:reverse-map:check
 
+      # migrate's own keyword sets and boolean class maps, rendered as Rust
+      # from the TypeScript that stays their source of truth. The module is
+      # evaluated, not parsed, so a spread or a sort renders as what it
+      # exports. Fail if regenerating would change the Rust file.
+      - name: Check migrate Rust tables are current
+        run: pnpm gen:migrate-tables:check
+
       # The golden of what migrate WRITES, one probe class per prefix the
       # compiler can emit. The reverse-map check above only proves the table is
       # freshly derived; this one makes a change to the sz output a visible diff

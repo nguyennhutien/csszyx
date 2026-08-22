@@ -618,7 +618,7 @@ export const COLOR_NAMES = new Set([
     'rose',
 ]);
 
-const COLOR_SCALE_NAMES = new Set([
+export const COLOR_SCALE_NAMES = new Set([
     'slate',
     'gray',
     'zinc',
