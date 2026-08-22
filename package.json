@@ -43,6 +43,8 @@
     "gen:migrate-tables:check": "node --import tsx/esm scripts/gen-rust-migrate-tables.mjs --check",
     "gen:migrate-parity-corpus": "node --import tsx/esm scripts/gen-migrate-parity-corpus.mjs",
     "gen:migrate-parity-corpus:check": "node --import tsx/esm scripts/gen-migrate-parity-corpus.mjs --check",
+    "gen:migrate-source-corpus": "node --import tsx/esm scripts/gen-migrate-source-parity-corpus.mjs",
+    "gen:migrate-source-corpus:check": "node --import tsx/esm scripts/gen-migrate-source-parity-corpus.mjs --check",
     "gen:migrate-golden": "node --import tsx/esm scripts/gen-migrate-golden.mjs",
     "gen:migrate-golden:check": "node --import tsx/esm scripts/gen-migrate-golden.mjs --check",
     "gen:key-tests": "node --import tsx/esm scripts/gen-key-tests.mjs",

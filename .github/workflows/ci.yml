@@ -354,6 +354,12 @@ jobs:
       - name: Check migrate parity corpus is current
         run: pnpm gen:migrate-parity-corpus:check
 
+      # The same for whole files: what the TypeScript transformer writes for
+      # a set of JSX and HTML sources, including the markers, the warnings
+      # and the stats. Fail if regenerating would change it.
+      - name: Check migrate source parity corpus is current
+        run: pnpm gen:migrate-source-corpus:check
+
       # The golden of what migrate WRITES, one probe class per prefix the
       # compiler can emit. The reverse-map check above only proves the table is
       # freshly derived; this one makes a change to the sz output a visible diff

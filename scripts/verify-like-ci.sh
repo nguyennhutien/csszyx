@@ -94,6 +94,7 @@ pnpm gen:rust-tables:check
 pnpm gen:reverse-map:check
 pnpm gen:migrate-tables:check
 pnpm gen:migrate-parity-corpus:check
+pnpm gen:migrate-source-corpus:check
 pnpm gen:migrate-golden:check
 pnpm gen:sz-fallback-matrix:check
 pnpm gen:sz-allowlist:check

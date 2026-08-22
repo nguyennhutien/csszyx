@@ -47,7 +47,13 @@ native = ["dep:napi", "dep:napi-derive"]
 # The Rust side of `csszyx migrate`. Deliberately not part of `native-engine`:
 # the wasm parser artifact is built with that feature alone, and migrate is a
 # one-shot onboarding command that ships through the napi binary only.
-migrate = []
+migrate = [
+    "dep:oxc_allocator",
+    "dep:oxc_ast",
+    "dep:oxc_ast_visit",
+    "dep:oxc_parser",
+    "dep:oxc_span",
+]
 native-engine = [
     "dep:oxc_allocator",
     "dep:oxc_ast",
