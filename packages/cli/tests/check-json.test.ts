@@ -35,7 +35,7 @@ function projectWith(files: Record<string, string>): string {
     const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'csszyx-json-')));
     roots.push(root);
     mkdirSync(path.join(root, 'node_modules'), { recursive: true });
-    symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'dir');
+    symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'junction');
     writeFileSync(path.join(root, 'package.json'), '{"name":"fixture"}\n', 'utf8');
     for (const [relative, content] of Object.entries(files)) {
         const file = path.join(root, relative);
