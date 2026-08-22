@@ -920,7 +920,8 @@ export function transformHtmlSourceSimple(
 
     // Inject FOUC prevention CSS before </head>
     if (injectFouc && output.includes('</head>') && !output.includes('csszyx: hide [sz]')) {
-        output = output.replace('</head>', `${withLineEnding(`${FOUC_CSS}\n`, eol)}</head>`);
+        const foucCss = withLineEnding(`${FOUC_CSS}\n`, eol);
+        output = output.replace('</head>', `${foucCss}</head>`);
         changed = true;
     }
 
