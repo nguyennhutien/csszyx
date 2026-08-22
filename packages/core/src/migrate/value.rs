@@ -1,27 +1,91 @@
 //! The values an sz object holds, and JavaScript's reading of numbers.
 //!
 //! migrate's output is consumed as JSON-shaped data, so the value model is
-//! JSON's: booleans, numbers, strings and ordered objects. Numbers follow
-//! JavaScript in both directions — `js_number` reads a string the way
-//! `Number()` does, and serialisation prints an integral double without a
-//! fraction the way `JSON.stringify` does — because the parity corpus is
-//! recorded from the TypeScript and compared byte for byte.
+//! JSON's: booleans, numbers, strings, arrays, null and ordered objects.
+//! Numbers follow JavaScript in both directions — `js_number` reads a string
+//! the way `Number()` does, and serialisation prints an integral double
+//! without a fraction the way `JSON.stringify` does — and objects print their
+//! keys in JavaScript's order, integer-like keys first, because the parity
+//! corpus is recorded from the TypeScript and compared byte for byte.
+
+use std::fmt;
+use std::ops::{Deref, DerefMut};
 
 use indexmap::IndexMap;
-use serde::ser::{Serialize, SerializeMap, Serializer};
+use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
+use serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer};
 
 /// An sz object: keys in insertion order, as migrate writes them.
-pub type SzObject = IndexMap<String, SzValue>;
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SzObject(pub IndexMap<String, SzValue>);
+
+impl SzObject {
+    /// An empty object.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The entries in the order JavaScript enumerates them: keys that are
+    /// array indices first, ascending, then the rest as inserted.
+    pub fn js_ordered(&self) -> impl Iterator<Item = (&String, &SzValue)> {
+        let mut indices: Vec<(u64, &String, &SzValue)> = self
+            .0
+            .iter()
+            .filter_map(|(key, value)| array_index(key).map(|index| (index, key, value)))
+            .collect();
+        indices.sort_by_key(|(index, _, _)| *index);
+        indices
+            .into_iter()
+            .map(|(_, key, value)| (key, value))
+            .chain(self.0.iter().filter(|(key, _)| array_index(key).is_none()))
+    }
+}
+
+impl Deref for SzObject {
+    type Target = IndexMap<String, SzValue>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for SzObject {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+/// Largest key JavaScript treats as an array index: 2^32 - 2.
+const MAX_ARRAY_INDEX: u64 = 4_294_967_294;
+
+/// The index a key denotes when JavaScript would enumerate it first: a
+/// canonical decimal integer with no leading zero, below 2^32 - 1.
+fn array_index(key: &str) -> Option<u64> {
+    if key.is_empty() || !key.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    if key.len() > 1 && key.starts_with('0') {
+        return None;
+    }
+    key.parse::<u64>()
+        .ok()
+        .filter(|index| *index <= MAX_ARRAY_INDEX)
+}
 
 /// One sz value.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SzValue {
+    /// JSON `null`, which only a migration-resolution map can supply.
+    Null,
     /// A boolean shorthand: `flex: true`.
     Bool(bool),
     /// A number, as JavaScript holds it.
     Number(f64),
     /// A string value.
     String(String),
+    /// A JSON array, which only a migration-resolution map can supply.
+    Array(Vec<Self>),
     /// A nested object: variants, `{ color, op }`, a gradient.
     Object(SzObject),
 }
@@ -47,16 +111,97 @@ impl From<bool> for SzValue {
 impl Serialize for SzValue {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
+            Self::Null => serializer.serialize_none(),
             Self::Bool(value) => serializer.serialize_bool(*value),
             Self::Number(value) => serialize_js_number(*value, serializer),
             Self::String(value) => serializer.serialize_str(value),
-            Self::Object(map) => {
-                let mut object = serializer.serialize_map(Some(map.len()))?;
-                for (key, value) in map {
-                    object.serialize_entry(key, value)?;
+            Self::Array(items) => {
+                let mut sequence = serializer.serialize_seq(Some(items.len()))?;
+                for item in items {
+                    sequence.serialize_element(item)?;
                 }
-                object.end()
+                sequence.end()
             }
+            Self::Object(object) => object.serialize(serializer),
+        }
+    }
+}
+
+impl Serialize for SzObject {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(self.len()))?;
+        for (key, value) in self.js_ordered() {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
+}
+
+struct SzValueVisitor;
+
+impl<'de> Visitor<'de> for SzValueVisitor {
+    type Value = SzValue;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a JSON value")
+    }
+
+    fn visit_bool<E: de::Error>(self, value: bool) -> Result<SzValue, E> {
+        Ok(SzValue::Bool(value))
+    }
+
+    fn visit_i64<E: de::Error>(self, value: i64) -> Result<SzValue, E> {
+        #[allow(clippy::cast_precision_loss)]
+        Ok(SzValue::Number(value as f64))
+    }
+
+    fn visit_u64<E: de::Error>(self, value: u64) -> Result<SzValue, E> {
+        #[allow(clippy::cast_precision_loss)]
+        Ok(SzValue::Number(value as f64))
+    }
+
+    fn visit_f64<E: de::Error>(self, value: f64) -> Result<SzValue, E> {
+        Ok(SzValue::Number(value))
+    }
+
+    fn visit_str<E: de::Error>(self, value: &str) -> Result<SzValue, E> {
+        Ok(SzValue::from(value))
+    }
+
+    fn visit_unit<E: de::Error>(self) -> Result<SzValue, E> {
+        Ok(SzValue::Null)
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, mut sequence: A) -> Result<SzValue, A::Error> {
+        let mut items = Vec::new();
+        while let Some(item) = sequence.next_element()? {
+            items.push(item);
+        }
+        Ok(SzValue::Array(items))
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, mut entries: A) -> Result<SzValue, A::Error> {
+        let mut object = SzObject::new();
+        while let Some((key, value)) = entries.next_entry::<String, SzValue>()? {
+            object.insert(key, value);
+        }
+        Ok(SzValue::Object(object))
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for SzValue {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(SzValueVisitor)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for SzObject {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        match SzValue::deserialize(deserializer)? {
+            SzValue::Object(object) => Ok(object),
+            other => Err(de::Error::custom(format!(
+                "expected an object, got {other:?}"
+            ))),
         }
     }
 }
@@ -190,7 +335,7 @@ const JS_WHITESPACE: &[char] = &[
     '\u{202F}', '\u{205F}', '\u{3000}', '\u{FEFF}',
 ];
 
-fn is_js_whitespace(character: char) -> bool {
+pub fn is_js_whitespace(character: char) -> bool {
     JS_WHITESPACE.contains(&character) || ('\u{2000}'..='\u{200A}').contains(&character)
 }
 
@@ -309,9 +454,49 @@ mod tests {
         object.insert("big".to_string(), SzValue::Number(1e17));
         object.insert("b".to_string(), SzValue::Bool(true));
         object.insert("s".to_string(), SzValue::from("x"));
+        object.insert("10".to_string(), SzValue::Null);
+        object.insert(
+            "2".to_string(),
+            SzValue::Array(vec![SzValue::Number(1.0), SzValue::Null]),
+        );
+        object.insert("02".to_string(), SzValue::from("not an index"));
+        object.insert("4294967295".to_string(), SzValue::from("too large"));
+        object.insert("4294967294".to_string(), SzValue::from("largest index"));
         assert_eq!(
             serde_json::to_string(&SzValue::Object(object)).unwrap(),
-            r#"{"z":2,"a":0.5,"n":null,"big":100000000000000000,"b":true,"s":"x"}"#
+            r#"{"2":[1,null],"10":null,"4294967294":"largest index","z":2,"a":0.5,"n":null,"big":100000000000000000,"b":true,"s":"x","02":"not an index","4294967295":"too large"}"#
+        );
+    }
+
+    #[test]
+    fn reads_json_back_in_its_order() {
+        let text = r#"{"z":{"y":[1,2.5,true,null,"s",{"k":false}]},"a":-3,"0":"first"}"#;
+        let value: SzValue = serde_json::from_str(text).unwrap();
+        let SzValue::Object(object) = &value else {
+            panic!("an object");
+        };
+        let keys: Vec<&String> = object.keys().collect();
+        assert_eq!(keys, ["z", "a", "0"]);
+        assert_eq!(
+            serde_json::to_string(&value).unwrap(),
+            r#"{"0":"first","z":{"y":[1,2.5,true,null,"s",{"k":false}]},"a":-3}"#
+        );
+        let object: SzObject = serde_json::from_str(text).unwrap();
+        assert_eq!(object.len(), 3);
+        assert!(serde_json::from_str::<SzObject>("[1]").is_err());
+    }
+
+    /// A deserializer handing the visitor a kind JSON has no spelling for
+    /// is refused with the visitor's own description of what it reads.
+    #[test]
+    fn refuses_a_value_kind_json_cannot_hold() {
+        use serde::de::value::{BytesDeserializer, Error};
+        use serde::Deserialize;
+
+        let error = SzValue::deserialize(BytesDeserializer::<Error>::new(b"raw")).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "invalid type: byte array, expected a JSON value"
         );
     }
 }

@@ -309,6 +309,161 @@ const EDGE_CASES = [
     'scheme-dark',
     'field-sizing-content',
     'columns-3xs',
+    // Whole class strings: conflicts in one variant scope, nesting, JavaScript's
+    // integer-key ordering, and every variant spelling mapVariant documents.
+    'block flex',
+    'block flex inline',
+    'block block',
+    'hover:block hover:flex block',
+    'md:hover:p-4 md:hover:m-2',
+    'text-sm/6 md:text-lg/7',
+    'group/item group-hover:p-4',
+    'p-4 hover:p-6 p-8',
+    'data-[x]:p-4 data-[0]:m-2 data-[10]:w-1 data-[2]:h-1',
+    'data-[x]:p-4 data-[00]:m-2 data-[-1]:w-1 data-[4294967295]:h-1 data-[4294967294]:g-1',
+    '[&>*]:p-4',
+    'hover:[&>*]:p-4',
+    'group-hover/sidebar:md:text-white',
+    'peer-checked/draft:block',
+    'group-[.is-published]:block',
+    'group-has-[a]:p-4',
+    'has-[img]:p-4',
+    'has-[:checked]:p-4',
+    'has-checked:p-4',
+    'not-hover:p-4',
+    'not-supports-[display:grid]:p-4',
+    'not-supports-[]:p-4',
+    'data-[active]:p-4',
+    'data-active:p-4',
+    'aria-checked:p-4',
+    'aria-[current=page]:p-4',
+    'supports-[display:grid]:p-4',
+    'supports-grid:p-4',
+    'min-[320px]:p-4',
+    'min-md:p-4',
+    'max-lg:p-4',
+    'max-[1024px]:p-4',
+    '@md:p-4',
+    '@md/sidebar:p-4',
+    '@min-[475px]:p-4',
+    '@max-[475px]:p-4',
+    '@min-[]:p-4',
+    '@min-[a]b]:p-4',
+    '@container:p-4',
+    '@container/main:p-4',
+    '@sm/a/b:p-4',
+    'focus-within:p-4',
+    'first-of-type:p-4',
+    'pointer-fine:p-4',
+    'group-data-[x]:p-4',
+    'group-aria-[y]:p-4',
+    'peer-has-[z]:p-4',
+    'group-has-z:p-4',
+    'group-data-z:p-4',
+    'group-(--x):p-4',
+    'group-[/x]:p-4',
+    'group-hover/:p-4',
+    'group-/name:p-4',
+    'group-[:p-4',
+    'peer-(:p-4',
+    'a:b:c:p-4',
+    'hover::p-4',
+    ':p-4',
+    'p-4:',
+    'hover:p-4:',
+    '[:p-4',
+    'hover:[p-4',
+    'hover:(p-4',
+    'antialiased subpixel-antialiased',
+    'underline no-underline line-through',
+    'hover:underline hover:no-underline',
+    '  p-4   m-2  ',
+    '\u00a0p-4\u3000m-2',
+    '\u0085p-4',
+    'italic not-italic italic',
+    'uppercase lowercase normal-case',
+    'block hidden',
+    'visible invisible collapse',
+    'static fixed absolute',
+    'group/item group-hover:p-4 group/x',
+    'hover:p-4 hover',
+    'p-4 p',
+    'hover:bg-red-500 hover:bg-red-500/50',
+    'text-sm/6 text-lg',
+    'md:text-sm/6 md:leading-8',
+    'flex md:flex hover:flex',
+    // A marker token replaces the variant object a conflict later tries to
+    // clean up, so the removal finds a string where it expects an object.
+    'group-hover:block group/item group-hover:flex',
+    'hover:block hover hover:flex',
+    'group-hover:block group/item group-hover:p-4',
+];
+
+/**
+ * A migration-resolution map exercising every entry kind the file format
+ * allows: an sz object, a Tailwind string that converts fully, partly or not
+ * at all, the three directives, and the values that count as unresolved.
+ */
+const CUSTOM_MAP = {
+    'legacy-card': { p: 4, rounded: 'lg', hover: { shadow: 'md' } },
+    'legacy-text': 'text-sm text-gray-700',
+    'legacy-mixed': 'p-2 not-a-class',
+    'legacy-none': 'not-a-class-either',
+    'legacy-keep': 'sz:keep',
+    'legacy-remove': 'sz:remove',
+    'legacy-todo': 'sz:todo',
+    'legacy-null': null,
+    'legacy-false': false,
+    'legacy-array': [1, 2],
+    'legacy-number': 3,
+    'legacy-true': true,
+    'legacy-empty': '',
+    'legacy-nested': { hover: { p: 4 }, 0: 'x', b: [1, { c: null }], n: 1.5, t: true },
+    'legacy-flat': { hover: 'flat' },
+    'p-4': { padding: 'custom' },
+};
+
+/** Class strings converted against CUSTOM_MAP. */
+const CUSTOM_MAP_CLASSES = [
+    'legacy-card',
+    'legacy-card hover:m-2',
+    'legacy-text',
+    'legacy-mixed',
+    'legacy-none',
+    'legacy-keep',
+    'legacy-remove',
+    'legacy-todo',
+    'legacy-null',
+    'legacy-false',
+    'legacy-array',
+    'legacy-number',
+    'legacy-true',
+    'legacy-empty',
+    'p-4',
+    'm-2 p-4 legacy-card',
+    'legacy-nested',
+    'legacy-nested hover:m-2',
+    'legacy-nested hover:p-8',
+    'block legacy-keep flex',
+    'hover:legacy-card',
+    'legacy-card legacy-card',
+    'legacy-card p-8',
+    'p-8 legacy-card',
+    'legacy-mixed legacy-none',
+    'hover:m-2 legacy-nested',
+    'legacy-nested b:p-4',
+    'legacy-nested 0:p-4',
+    'legacy-nested n:p-4',
+    'toString',
+    'constructor',
+    'hasOwnProperty',
+    '__proto__',
+    'valueOf p-4',
+    'legacy-card toString',
+    'legacy-nested hover:m-2 hover:p-8',
+    'hover:block legacy-flat hover:flex',
+    'hover:block legacy-flat hover:p-4',
+    'legacy-flat hover:p-4',
 ];
 
 const corpus = buildCorpus();
@@ -389,6 +544,19 @@ function buildCorpus() {
         });
     }
 
+    const customMapCases = CUSTOM_MAP_CLASSES.map(className => {
+        const converted = classNameToSzObject(className, CUSTOM_MAP);
+        return {
+            c: className,
+            o: {
+                sz: converted.szObject,
+                szText: JSON.stringify(converted.szObject),
+                u: converted.unrecognized,
+                k: converted.keepInClassName,
+            },
+        };
+    });
+
     return {
         $comment:
             'GENERATED by scripts/gen-migrate-parity-corpus.mjs. Do not edit by hand. ' +
@@ -401,6 +569,8 @@ function buildCorpus() {
         },
         count: entries.length,
         entries,
+        customMap: CUSTOM_MAP,
+        customMapCases,
     };
 }
 

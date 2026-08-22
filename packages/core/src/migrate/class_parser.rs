@@ -198,7 +198,9 @@ fn apply_important(result: ParsedClass, important: bool) -> ParsedClass {
         SzValue::String(text) => format!("{text}!"),
         SzValue::Bool(_) => "!".to_string(),
         SzValue::Number(number) => format!("{}!", js_number_to_string(*number)),
-        SzValue::Object(_) => return result,
+        // Only an object reaches here from the parser; the map-only kinds
+        // share the arm so the match stays total.
+        SzValue::Object(_) | SzValue::Array(_) | SzValue::Null => return result,
     };
     ParsedClass {
         prop: result.prop,

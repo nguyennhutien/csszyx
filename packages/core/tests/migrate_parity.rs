@@ -9,13 +9,18 @@
 
 #![cfg(feature = "migrate")]
 
-use csszyx_core::migrate::parse_class;
+use csszyx_core::migrate::{class_name_to_sz_object, parse_class, SzObject};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct Corpus {
     count: usize,
     entries: Vec<Entry>,
+    /// The migration-resolution map the custom-map cases were converted with.
+    #[serde(rename = "customMap")]
+    custom_map: SzObject,
+    #[serde(rename = "customMapCases")]
+    custom_map_cases: Vec<ConversionCase>,
 }
 
 #[derive(Deserialize)]
@@ -24,6 +29,25 @@ struct Entry {
     c: String,
     /// What `parseClass` answered, or `null`.
     p: Option<serde_json::Value>,
+    /// What `classNameToSzObject` answered.
+    o: Conversion,
+}
+
+#[derive(Deserialize)]
+struct ConversionCase {
+    c: String,
+    o: Conversion,
+}
+
+#[derive(Deserialize)]
+struct Conversion {
+    /// The sz object as `JSON.stringify` wrote it, keys in its order.
+    #[serde(rename = "szText")]
+    sz_text: String,
+    /// Classes left in `className`.
+    u: Vec<String>,
+    /// Classes the map said to keep.
+    k: Vec<String>,
 }
 
 fn corpus() -> Corpus {
@@ -80,5 +104,83 @@ fn parse_class_answers_exactly_what_the_typescript_parser_answers() {
             .cloned()
             .collect::<Vec<_>>()
             .join("\n")
+    );
+}
+
+/// One class string through the Rust conversion, rendered the way the
+/// corpus renders the TypeScript's answer.
+fn convert(class_name: &str, custom_map: Option<&SzObject>) -> (String, Vec<String>, Vec<String>) {
+    let converted = class_name_to_sz_object(class_name, custom_map);
+    (
+        serde_json::to_string(&converted.sz_object).expect("an sz object serialises"),
+        converted.unrecognized,
+        converted.keep_in_class_name,
+    )
+}
+
+fn assert_conversions<'a>(
+    cases: impl Iterator<Item = (&'a str, &'a Conversion)>,
+    custom_map: Option<&SzObject>,
+) {
+    let mut total = 0;
+    let mut mismatches = Vec::new();
+    for (class_name, expected) in cases {
+        total += 1;
+        let actual = convert(class_name, custom_map);
+        let wanted = (
+            expected.sz_text.clone(),
+            expected.u.clone(),
+            expected.k.clone(),
+        );
+        if actual != wanted {
+            mismatches.push(format!(
+                "  {class_name:?}\n      ts   = {wanted:?}\n      rust = {actual:?}"
+            ));
+        }
+    }
+    assert!(
+        mismatches.is_empty(),
+        "{} of {total} class strings convert differently from the TypeScript:\n{}",
+        mismatches.len(),
+        mismatches
+            .iter()
+            .take(40)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+#[test]
+fn class_name_to_sz_object_answers_exactly_what_the_typescript_answers() {
+    let corpus = corpus();
+    let converted = corpus
+        .entries
+        .iter()
+        .filter(|entry| entry.o.sz_text != "{}")
+        .count();
+    assert!(
+        converted > 2000,
+        "only {converted} class strings converted to anything"
+    );
+    assert_conversions(
+        corpus
+            .entries
+            .iter()
+            .map(|entry| (entry.c.as_str(), &entry.o)),
+        None,
+    );
+}
+
+#[test]
+fn custom_map_entries_resolve_exactly_as_the_typescript_resolves_them() {
+    let corpus = corpus();
+    assert!(corpus.custom_map_cases.len() > 20);
+    assert_conversions(
+        corpus
+            .custom_map_cases
+            .iter()
+            .map(|case| (case.c.as_str(), &case.o)),
+        Some(&corpus.custom_map),
     );
 }

@@ -4,9 +4,9 @@
   "golden": 804,
   "keyCases": 1437,
   "corpus": 2131,
-  "edgeCases": 278
+  "edgeCases": 362
  },
- "count": 3868,
+ "count": 3952,
  "entries": [
   {
    "c": "accent-2",
@@ -57933,6 +57933,1939 @@
      "delay": "1s"
     },
     "szText": "{\"delay\":\"1s\"}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "block flex",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "block",
+     "flex"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "block flex inline",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "block",
+     "flex",
+     "inline"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "block block",
+   "p": null,
+   "o": {
+    "sz": {
+     "display": "block"
+    },
+    "szText": "{\"display\":\"block\"}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "hover:block hover:flex block",
+   "p": null,
+   "o": {
+    "sz": {
+     "display": "block"
+    },
+    "szText": "{\"display\":\"block\"}",
+    "u": [
+     "hover:block",
+     "hover:flex"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "md:hover:p-4 md:hover:m-2",
+   "p": null,
+   "o": {
+    "sz": {
+     "md": {
+      "hover": {
+       "p": 4,
+       "m": 2
+      }
+     }
+    },
+    "szText": "{\"md\":{\"hover\":{\"p\":4,\"m\":2}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "text-sm/6 md:text-lg/7",
+   "p": {
+    "prop": "text",
+    "value": "sm",
+    "extra": {
+     "prop": "leading",
+     "value": "6 md:text-lg/7"
+    }
+   },
+   "o": {
+    "sz": {
+     "text": "sm",
+     "leading": 6,
+     "md": {
+      "text": "lg",
+      "leading": 7
+     }
+    },
+    "szText": "{\"text\":\"sm\",\"leading\":6,\"md\":{\"text\":\"lg\",\"leading\":7}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group/item group-hover:p-4",
+   "p": {
+    "prop": "group",
+    "value": "item group-hover:p-4"
+   },
+   "o": {
+    "sz": {
+     "group": {
+      "hover": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"group\":{\"hover\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "p-4 hover:p-6 p-8",
+   "p": null,
+   "o": {
+    "sz": {
+     "p": 8,
+     "hover": {
+      "p": 6
+     }
+    },
+    "szText": "{\"p\":8,\"hover\":{\"p\":6}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "data-[x]:p-4 data-[0]:m-2 data-[10]:w-1 data-[2]:h-1",
+   "p": null,
+   "o": {
+    "sz": {
+     "data": {
+      "0": {
+       "m": 2
+      },
+      "2": {
+       "h": 1
+      },
+      "10": {
+       "w": 1
+      },
+      "x": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"data\":{\"0\":{\"m\":2},\"2\":{\"h\":1},\"10\":{\"w\":1},\"x\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "data-[x]:p-4 data-[00]:m-2 data-[-1]:w-1 data-[4294967295]:h-1 data-[4294967294]:g-1",
+   "p": null,
+   "o": {
+    "sz": {
+     "data": {
+      "x": {
+       "p": 4
+      },
+      "00": {
+       "m": 2
+      },
+      "-1": {
+       "w": 1
+      },
+      "4294967295": {
+       "h": 1
+      }
+     }
+    },
+    "szText": "{\"data\":{\"x\":{\"p\":4},\"00\":{\"m\":2},\"-1\":{\"w\":1},\"4294967295\":{\"h\":1}}}",
+    "u": [
+     "data-[4294967294]:g-1"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "[&>*]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "[&>*]": {
+      "p": 4
+     }
+    },
+    "szText": "{\"[&>*]\":{\"p\":4}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "hover:[&>*]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "hover": {
+      "[&>*]": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"hover\":{\"[&>*]\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-hover/sidebar:md:text-white",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": {
+      "sidebar": {
+       "hover": {
+        "md": {
+         "color": "white"
+        }
+       }
+      }
+     }
+    },
+    "szText": "{\"group\":{\"sidebar\":{\"hover\":{\"md\":{\"color\":\"white\"}}}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "peer-checked/draft:block",
+   "p": null,
+   "o": {
+    "sz": {
+     "peer": {
+      "draft": {
+       "checked": {
+        "display": "block"
+       }
+      }
+     }
+    },
+    "szText": "{\"peer\":{\"draft\":{\"checked\":{\"display\":\"block\"}}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-[.is-published]:block",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": {
+      ".is-published": {
+       "display": "block"
+      }
+     }
+    },
+    "szText": "{\"group\":{\".is-published\":{\"display\":\"block\"}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-has-[a]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": {
+      "has": {
+       "a": {
+        "p": 4
+       }
+      }
+     }
+    },
+    "szText": "{\"group\":{\"has\":{\"a\":{\"p\":4}}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "has-[img]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "has": {
+      "img": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"has\":{\"img\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "has-[:checked]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "has": {
+      "checked": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"has\":{\"checked\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "has-checked:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "has": {
+      "checked": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"has\":{\"checked\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "not-hover:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "not": {
+      "hover": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"not\":{\"hover\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "not-supports-[display:grid]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "not": {
+      "supports": {
+       "display:grid": {
+        "p": 4
+       }
+      }
+     }
+    },
+    "szText": "{\"not\":{\"supports\":{\"display:grid\":{\"p\":4}}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "not-supports-[]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "not": {
+      "supports": {
+       "": {
+        "p": 4
+       }
+      }
+     }
+    },
+    "szText": "{\"not\":{\"supports\":{\"\":{\"p\":4}}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "data-[active]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "data": {
+      "active": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"data\":{\"active\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "data-active:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "data": {
+      "active": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"data\":{\"active\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "aria-checked:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "aria": {
+      "checked": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"aria\":{\"checked\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "aria-[current=page]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "aria": {
+      "current=page": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"aria\":{\"current=page\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "supports-[display:grid]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "supports": {
+      "display:grid": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"supports\":{\"display:grid\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "supports-grid:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "supports": {
+      "grid": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"supports\":{\"grid\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "min-[320px]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "min": {
+      "320px": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"min\":{\"320px\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "min-md:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "min": {
+      "md": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"min\":{\"md\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "max-lg:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "max": {
+      "lg": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"max\":{\"lg\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "max-[1024px]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "max": {
+      "1024px": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"max\":{\"1024px\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "@md:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "@md": {
+      "p": 4
+     }
+    },
+    "szText": "{\"@md\":{\"p\":4}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "@md/sidebar:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "@md": {
+      "sidebar": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"@md\":{\"sidebar\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "@min-[475px]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "@min": {
+      "475px": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"@min\":{\"475px\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "@max-[475px]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "@max": {
+      "475px": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"@max\":{\"475px\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "@min-[]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "@min-[]": {
+      "p": 4
+     }
+    },
+    "szText": "{\"@min-[]\":{\"p\":4}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "@min-[a]b]:p-4",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "@min-[a]b]:p-4"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "@container:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "@container": {
+      "p": 4
+     }
+    },
+    "szText": "{\"@container\":{\"p\":4}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "@container/main:p-4",
+   "p": {
+    "prop": "@container",
+    "value": "main:p-4"
+   },
+   "o": {
+    "sz": {
+     "@container": {
+      "main": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"@container\":{\"main\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "@sm/a/b:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "@sm": {
+      "a/b": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"@sm\":{\"a/b\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "focus-within:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "focusWithin": {
+      "p": 4
+     }
+    },
+    "szText": "{\"focusWithin\":{\"p\":4}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "first-of-type:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "firstOfType": {
+      "p": 4
+     }
+    },
+    "szText": "{\"firstOfType\":{\"p\":4}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "pointer-fine:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "pointerFine": {
+      "p": 4
+     }
+    },
+    "szText": "{\"pointerFine\":{\"p\":4}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-data-[x]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": {
+      "data": {
+       "x": {
+        "p": 4
+       }
+      }
+     }
+    },
+    "szText": "{\"group\":{\"data\":{\"x\":{\"p\":4}}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-aria-[y]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": {
+      "aria": {
+       "y": {
+        "p": 4
+       }
+      }
+     }
+    },
+    "szText": "{\"group\":{\"aria\":{\"y\":{\"p\":4}}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "peer-has-[z]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "peer": {
+      "has": {
+       "z": {
+        "p": 4
+       }
+      }
+     }
+    },
+    "szText": "{\"peer\":{\"has\":{\"z\":{\"p\":4}}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-has-z:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": {
+      "has": {
+       "z": {
+        "p": 4
+       }
+      }
+     }
+    },
+    "szText": "{\"group\":{\"has\":{\"z\":{\"p\":4}}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-data-z:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": {
+      "data": {
+       "z": {
+        "p": 4
+       }
+      }
+     }
+    },
+    "szText": "{\"group\":{\"data\":{\"z\":{\"p\":4}}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-(--x):p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": {
+      "--x": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"group\":{\"--x\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-[/x]:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": {
+      "/x": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"group\":{\"/x\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-hover/:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": {
+      "hover": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"group\":{\"hover\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-/name:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": {
+      "name": {
+       "": {
+        "p": 4
+       }
+      }
+     }
+    },
+    "szText": "{\"group\":{\"name\":{\"\":{\"p\":4}}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-[:p-4",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "group-[:p-4"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "peer-(:p-4",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "peer-(:p-4"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "a:b:c:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "a": {
+      "b": {
+       "c": {
+        "p": 4
+       }
+      }
+     }
+    },
+    "szText": "{\"a\":{\"b\":{\"c\":{\"p\":4}}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "hover::p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "hover": {
+      "": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"hover\":{\"\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": ":p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "": {
+      "p": 4
+     }
+    },
+    "szText": "{\"\":{\"p\":4}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "p-4:",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "p-4:"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "hover:p-4:",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "hover:p-4:"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "[:p-4",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "[:p-4"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "hover:[p-4",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "hover:[p-4"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "hover:(p-4",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "hover:(p-4"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "antialiased subpixel-antialiased",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "antialiased",
+     "subpixel-antialiased"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "underline no-underline line-through",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "underline",
+     "no-underline",
+     "line-through"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "hover:underline hover:no-underline",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "hover:underline",
+     "hover:no-underline"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "  p-4   m-2  ",
+   "p": null,
+   "o": {
+    "sz": {
+     "p": 4,
+     "m": 2
+    },
+    "szText": "{\"p\":4,\"m\":2}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": " p-4　m-2",
+   "p": null,
+   "o": {
+    "sz": {
+     "p": 4,
+     "m": 2
+    },
+    "szText": "{\"p\":4,\"m\":2}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "p-4",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "p-4"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "italic not-italic italic",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "italic",
+     "not-italic",
+     "italic"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "uppercase lowercase normal-case",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "uppercase",
+     "lowercase",
+     "normal-case"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "block hidden",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "block",
+     "hidden"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "visible invisible collapse",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "visible",
+     "invisible",
+     "collapse"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "static fixed absolute",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "static",
+     "fixed",
+     "absolute"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "group/item group-hover:p-4 group/x",
+   "p": {
+    "prop": "group",
+    "value": "item group-hover:p-4 group/x"
+   },
+   "o": {
+    "sz": {
+     "group": "x"
+    },
+    "szText": "{\"group\":\"x\"}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "hover:p-4 hover",
+   "p": null,
+   "o": {
+    "sz": {
+     "hover": {
+      "p": 4
+     }
+    },
+    "szText": "{\"hover\":{\"p\":4}}",
+    "u": [
+     "hover"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "p-4 p",
+   "p": null,
+   "o": {
+    "sz": {
+     "p": 4
+    },
+    "szText": "{\"p\":4}",
+    "u": [
+     "p"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "hover:bg-red-500 hover:bg-red-500/50",
+   "p": null,
+   "o": {
+    "sz": {
+     "hover": {
+      "bg": {
+       "color": "red-500",
+       "op": 50
+      }
+     }
+    },
+    "szText": "{\"hover\":{\"bg\":{\"color\":\"red-500\",\"op\":50}}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "text-sm/6 text-lg",
+   "p": {
+    "prop": "text",
+    "value": "sm",
+    "extra": {
+     "prop": "leading",
+     "value": "6 text-lg"
+    }
+   },
+   "o": {
+    "sz": {
+     "text": "lg",
+     "leading": 6
+    },
+    "szText": "{\"text\":\"lg\",\"leading\":6}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "md:text-sm/6 md:leading-8",
+   "p": null,
+   "o": {
+    "sz": {
+     "md": {
+      "text": "sm",
+      "leading": 8
+     }
+    },
+    "szText": "{\"md\":{\"text\":\"sm\",\"leading\":8}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "flex md:flex hover:flex",
+   "p": null,
+   "o": {
+    "sz": {
+     "display": "flex",
+     "md": {
+      "display": "flex"
+     },
+     "hover": {
+      "display": "flex"
+     }
+    },
+    "szText": "{\"display\":\"flex\",\"md\":{\"display\":\"flex\"},\"hover\":{\"display\":\"flex\"}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "group-hover:block group/item group-hover:flex",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": "item"
+    },
+    "szText": "{\"group\":\"item\"}",
+    "u": [
+     "group-hover:block",
+     "group-hover:flex"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "hover:block hover hover:flex",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "hover",
+     "hover:block",
+     "hover:flex"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "group-hover:block group/item group-hover:p-4",
+   "p": null,
+   "o": {
+    "sz": {
+     "group": {
+      "hover": {
+       "p": 4
+      }
+     }
+    },
+    "szText": "{\"group\":{\"hover\":{\"p\":4}}}",
+    "u": [],
+    "k": []
+   }
+  }
+ ],
+ "customMap": {
+  "legacy-card": {
+   "p": 4,
+   "rounded": "lg",
+   "hover": {
+    "shadow": "md"
+   }
+  },
+  "legacy-text": "text-sm text-gray-700",
+  "legacy-mixed": "p-2 not-a-class",
+  "legacy-none": "not-a-class-either",
+  "legacy-keep": "sz:keep",
+  "legacy-remove": "sz:remove",
+  "legacy-todo": "sz:todo",
+  "legacy-null": null,
+  "legacy-false": false,
+  "legacy-array": [
+   1,
+   2
+  ],
+  "legacy-number": 3,
+  "legacy-true": true,
+  "legacy-empty": "",
+  "legacy-nested": {
+   "0": "x",
+   "hover": {
+    "p": 4
+   },
+   "b": [
+    1,
+    {
+     "c": null
+    }
+   ],
+   "n": 1.5,
+   "t": true
+  },
+  "legacy-flat": {
+   "hover": "flat"
+  },
+  "p-4": {
+   "padding": "custom"
+  }
+ },
+ "customMapCases": [
+  {
+   "c": "legacy-card",
+   "o": {
+    "sz": {
+     "p": 4,
+     "rounded": "lg",
+     "hover": {
+      "shadow": "md"
+     }
+    },
+    "szText": "{\"p\":4,\"rounded\":\"lg\",\"hover\":{\"shadow\":\"md\"}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-card hover:m-2",
+   "o": {
+    "sz": {
+     "p": 4,
+     "rounded": "lg",
+     "hover": {
+      "shadow": "md",
+      "m": 2
+     }
+    },
+    "szText": "{\"p\":4,\"rounded\":\"lg\",\"hover\":{\"shadow\":\"md\",\"m\":2}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-text",
+   "o": {
+    "sz": {
+     "text": "sm",
+     "color": "gray-700"
+    },
+    "szText": "{\"text\":\"sm\",\"color\":\"gray-700\"}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-mixed",
+   "o": {
+    "sz": {
+     "p": 2
+    },
+    "szText": "{\"p\":2}",
+    "u": [
+     "not-a-class"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-none",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "legacy-none"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-keep",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [],
+    "k": [
+     "legacy-keep"
+    ]
+   }
+  },
+  {
+   "c": "legacy-remove",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-todo",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "legacy-todo"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-null",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "legacy-null"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-false",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "legacy-false"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-array",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "legacy-array"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-number",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "legacy-number"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-true",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "legacy-true"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-empty",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "legacy-empty"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "p-4",
+   "o": {
+    "sz": {
+     "padding": "custom"
+    },
+    "szText": "{\"padding\":\"custom\"}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "m-2 p-4 legacy-card",
+   "o": {
+    "sz": {
+     "m": 2,
+     "padding": "custom",
+     "p": 4,
+     "rounded": "lg",
+     "hover": {
+      "shadow": "md"
+     }
+    },
+    "szText": "{\"m\":2,\"padding\":\"custom\",\"p\":4,\"rounded\":\"lg\",\"hover\":{\"shadow\":\"md\"}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-nested",
+   "o": {
+    "sz": {
+     "0": "x",
+     "hover": {
+      "p": 4
+     },
+     "b": [
+      1,
+      {
+       "c": null
+      }
+     ],
+     "n": 1.5,
+     "t": true
+    },
+    "szText": "{\"0\":\"x\",\"hover\":{\"p\":4},\"b\":[1,{\"c\":null}],\"n\":1.5,\"t\":true}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-nested hover:m-2",
+   "o": {
+    "sz": {
+     "0": "x",
+     "hover": {
+      "p": 4,
+      "m": 2
+     },
+     "b": [
+      1,
+      {
+       "c": null
+      }
+     ],
+     "n": 1.5,
+     "t": true
+    },
+    "szText": "{\"0\":\"x\",\"hover\":{\"p\":4,\"m\":2},\"b\":[1,{\"c\":null}],\"n\":1.5,\"t\":true}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-nested hover:p-8",
+   "o": {
+    "sz": {
+     "0": "x",
+     "hover": {
+      "p": 8
+     },
+     "b": [
+      1,
+      {
+       "c": null
+      }
+     ],
+     "n": 1.5,
+     "t": true
+    },
+    "szText": "{\"0\":\"x\",\"hover\":{\"p\":8},\"b\":[1,{\"c\":null}],\"n\":1.5,\"t\":true}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "block legacy-keep flex",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "block",
+     "flex"
+    ],
+    "k": [
+     "legacy-keep"
+    ]
+   }
+  },
+  {
+   "c": "hover:legacy-card",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "hover:legacy-card"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-card legacy-card",
+   "o": {
+    "sz": {
+     "p": 4,
+     "rounded": "lg",
+     "hover": {
+      "shadow": "md"
+     }
+    },
+    "szText": "{\"p\":4,\"rounded\":\"lg\",\"hover\":{\"shadow\":\"md\"}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-card p-8",
+   "o": {
+    "sz": {
+     "p": 8,
+     "rounded": "lg",
+     "hover": {
+      "shadow": "md"
+     }
+    },
+    "szText": "{\"p\":8,\"rounded\":\"lg\",\"hover\":{\"shadow\":\"md\"}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "p-8 legacy-card",
+   "o": {
+    "sz": {
+     "p": 4,
+     "rounded": "lg",
+     "hover": {
+      "shadow": "md"
+     }
+    },
+    "szText": "{\"p\":4,\"rounded\":\"lg\",\"hover\":{\"shadow\":\"md\"}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-mixed legacy-none",
+   "o": {
+    "sz": {
+     "p": 2
+    },
+    "szText": "{\"p\":2}",
+    "u": [
+     "not-a-class",
+     "legacy-none"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "hover:m-2 legacy-nested",
+   "o": {
+    "sz": {
+     "0": "x",
+     "hover": {
+      "p": 4
+     },
+     "b": [
+      1,
+      {
+       "c": null
+      }
+     ],
+     "n": 1.5,
+     "t": true
+    },
+    "szText": "{\"0\":\"x\",\"hover\":{\"p\":4},\"b\":[1,{\"c\":null}],\"n\":1.5,\"t\":true}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-nested b:p-4",
+   "o": {
+    "sz": {
+     "0": "x",
+     "hover": {
+      "p": 4
+     },
+     "b": [
+      1,
+      {
+       "c": null
+      }
+     ],
+     "n": 1.5,
+     "t": true
+    },
+    "szText": "{\"0\":\"x\",\"hover\":{\"p\":4},\"b\":[1,{\"c\":null}],\"n\":1.5,\"t\":true}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-nested 0:p-4",
+   "o": {
+    "sz": {
+     "0": {
+      "p": 4
+     },
+     "hover": {
+      "p": 4
+     },
+     "b": [
+      1,
+      {
+       "c": null
+      }
+     ],
+     "n": 1.5,
+     "t": true
+    },
+    "szText": "{\"0\":{\"p\":4},\"hover\":{\"p\":4},\"b\":[1,{\"c\":null}],\"n\":1.5,\"t\":true}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-nested n:p-4",
+   "o": {
+    "sz": {
+     "0": "x",
+     "hover": {
+      "p": 4
+     },
+     "b": [
+      1,
+      {
+       "c": null
+      }
+     ],
+     "n": {
+      "p": 4
+     },
+     "t": true
+    },
+    "szText": "{\"0\":\"x\",\"hover\":{\"p\":4},\"b\":[1,{\"c\":null}],\"n\":{\"p\":4},\"t\":true}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "toString",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "toString"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "constructor",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "constructor"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "hasOwnProperty",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "hasOwnProperty"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "__proto__",
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "valueOf p-4",
+   "o": {
+    "sz": {
+     "padding": "custom"
+    },
+    "szText": "{\"padding\":\"custom\"}",
+    "u": [
+     "valueOf"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-card toString",
+   "o": {
+    "sz": {
+     "p": 4,
+     "rounded": "lg",
+     "hover": {
+      "shadow": "md"
+     }
+    },
+    "szText": "{\"p\":4,\"rounded\":\"lg\",\"hover\":{\"shadow\":\"md\"}}",
+    "u": [
+     "toString"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-nested hover:m-2 hover:p-8",
+   "o": {
+    "sz": {
+     "0": "x",
+     "hover": {
+      "p": 8,
+      "m": 2
+     },
+     "b": [
+      1,
+      {
+       "c": null
+      }
+     ],
+     "n": 1.5,
+     "t": true
+    },
+    "szText": "{\"0\":\"x\",\"hover\":{\"p\":8,\"m\":2},\"b\":[1,{\"c\":null}],\"n\":1.5,\"t\":true}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "hover:block legacy-flat hover:flex",
+   "o": {
+    "sz": {
+     "hover": "flat"
+    },
+    "szText": "{\"hover\":\"flat\"}",
+    "u": [
+     "hover:block",
+     "hover:flex"
+    ],
+    "k": []
+   }
+  },
+  {
+   "c": "hover:block legacy-flat hover:p-4",
+   "o": {
+    "sz": {
+     "hover": {
+      "p": 4
+     }
+    },
+    "szText": "{\"hover\":{\"p\":4}}",
+    "u": [],
+    "k": []
+   }
+  },
+  {
+   "c": "legacy-flat hover:p-4",
+   "o": {
+    "sz": {
+     "hover": {
+      "p": 4
+     }
+    },
+    "szText": "{\"hover\":{\"p\":4}}",
     "u": [],
     "k": []
    }
