@@ -2,12 +2,11 @@
 
 // Generate Rust transform lookup tables from the TypeScript compiler source.
 
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { readTableSource } from './extract-ts-tables.mjs';
+import { formatRust, rustString } from './render-rust.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const outPath = path.join(repoRoot, 'packages/core/src/transform/generated/tables.rs');
@@ -16,7 +15,7 @@ const check = process.argv.includes('--check');
 
 const tables = readTables();
 
-const generated = formatRust(renderRust(tables));
+const generated = formatRust(renderRust(tables), 'generate-rust-transform-tables');
 
 if (check) {
     const current = readFileSync(outPath, 'utf8');
@@ -246,28 +245,6 @@ function renderMatchPatterns(entries) {
     return entries
         .map((key, index) => `${index === 0 ? '        ' : '        | '}${rustString(key)}`)
         .join('\n');
-}
-
-function rustString(value) {
-    return JSON.stringify(value);
-}
-
-function formatRust(rustSource) {
-    const tempDir = mkdtempSync(path.join(os.tmpdir(), 'csszyx-rust-tables-'));
-    const tempPath = path.join(tempDir, 'tables.rs');
-
-    try {
-        writeFileSync(tempPath, rustSource);
-        const result = spawnSync('rustfmt', [tempPath], { encoding: 'utf8' });
-        if (result.status !== 0) {
-            console.error(result.stderr);
-            fail('rustfmt failed for generated tables');
-        }
-
-        return readFileSync(tempPath, 'utf8');
-    } finally {
-        rmSync(tempDir, { force: true, recursive: true });
-    }
 }
 
 function fail(message) {

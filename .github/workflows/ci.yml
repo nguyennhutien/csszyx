@@ -334,7 +334,9 @@ jobs:
       # migrate's reverse map is the same PROPERTY_MAP read backwards. It used
       # to be written out by hand and drifted: two prefixes went missing, and
       # round-trip tests could not see it because the wrong sz key still lowers
-      # to the class it came from. Fail if regenerating would change it.
+      # to the class it came from. One generator run writes the TypeScript
+      # table and its Rust rendering in packages/core; fail if regenerating
+      # would change either, so the two engines read one table.
       - name: Check migrate reverse map is current
         run: pnpm gen:reverse-map:check
 

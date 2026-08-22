@@ -1,5 +1,6 @@
 //! Generated transform lookup tables.
 
+pub(crate) mod reverse_tables;
 pub(crate) mod sz_fallback_matrix;
 pub(crate) mod tables;
 
@@ -244,6 +245,92 @@ mod diagnostic_table_tests {
 
         for key in ["maskLinear", "p", "bg"] {
             assert_eq!(key_migration_note(key), None, "{key}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod reverse_tables_tests {
+    use super::reverse_tables::{
+        reverse_property_key, EXTRA_REVERSE_PREFIXES, REVERSE_PROPERTY_MAP,
+    };
+    use super::tables::property_prefix;
+
+    /// The TypeScript rendering of the same table, as migrate reads it today.
+    ///
+    /// Both renderings come out of one generator run, so `pnpm gen:reverse-map
+    /// --check` already refuses a stale pair. This reads the TypeScript back in
+    /// anyway: the check proves the files match the generator, and this proves
+    /// the two files say the same thing to their two readers.
+    fn typescript_entries() -> Vec<(String, String)> {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../cli/src/migrate/generated/reverse-property-map.ts"
+        );
+        let source = std::fs::read_to_string(path)
+            .expect("the TypeScript reverse map is generated into packages/cli");
+        source
+            .lines()
+            .filter_map(|line| {
+                let (key, rest) = line.strip_prefix("    ")?.split_once(": '")?;
+                let (value, _) = rest.split_once('\'')?;
+                Some((key.trim_matches('\'').to_string(), value.to_string()))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_rust_table_lists_exactly_what_the_typescript_table_lists() {
+        let typescript = typescript_entries();
+        let parsed = typescript.len();
+        assert!(parsed > 200, "parsed only {parsed} entries");
+        let rust: Vec<(String, String)> = REVERSE_PROPERTY_MAP
+            .iter()
+            .map(|(prefix, key)| (prefix.to_string(), key.to_string()))
+            .collect();
+        assert_eq!(rust, typescript);
+    }
+
+    #[test]
+    fn every_listed_prefix_looks_up_to_its_key() {
+        for (prefix, key) in REVERSE_PROPERTY_MAP {
+            assert_eq!(reverse_property_key(prefix), Some(*key), "{prefix}");
+        }
+        assert_eq!(reverse_property_key("not-a-prefix"), None);
+        assert_eq!(reverse_property_key(""), None);
+    }
+
+    /// The inversion is only right if the forward table lowers the chosen key
+    /// back to the prefix. The extras are exactly the prefixes the forward
+    /// table cannot reach, so for those the same lookup must disagree.
+    #[test]
+    fn every_inverted_prefix_is_what_the_forward_table_lowers_its_key_to() {
+        assert!(!EXTRA_REVERSE_PREFIXES.is_empty());
+        for (prefix, key) in REVERSE_PROPERTY_MAP {
+            if EXTRA_REVERSE_PREFIXES.contains(prefix) {
+                assert_ne!(
+                    property_prefix(key),
+                    Some(*prefix),
+                    "{prefix} is not an extra"
+                );
+            } else {
+                assert_eq!(property_prefix(key), Some(*prefix), "{prefix} -> {key}");
+            }
+        }
+        for prefix in EXTRA_REVERSE_PREFIXES {
+            assert!(
+                REVERSE_PROPERTY_MAP
+                    .iter()
+                    .any(|(listed, _)| listed == prefix),
+                "extra {prefix} is missing from the table"
+            );
+        }
+    }
+
+    #[test]
+    fn prefixes_are_unique_and_sorted() {
+        for pair in REVERSE_PROPERTY_MAP.windows(2) {
+            assert!(pair[0].0 < pair[1].0, "{} before {}", pair[0].0, pair[1].0);
         }
     }
 }
