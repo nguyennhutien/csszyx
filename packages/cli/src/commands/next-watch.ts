@@ -35,6 +35,39 @@ export interface NextWatchCommandOptions {
     silent?: boolean;
 }
 
+/**
+ * The name the filesystem will report events under for `root`.
+ *
+ * On Windows a path can be spelled several ways for one directory: an 8.3
+ * short name (`C:\\Users\\RUNNER~1`, which is what `%TEMP%` gives on GitHub's
+ * runners), a junction, a `subst` drive. libuv records the directory exactly
+ * as registered, long-paths every event it receives, and then asserts that
+ * the event's name starts with the registered one — an assert, not an error,
+ * so the first deleted folder under the watcher aborts the process with
+ * nothing in any log (Node 24.16+ / libuv 1.52; the upstream fix is merged
+ * and not yet in a Node release). Registering the canonical name is what
+ * removes the mismatch, and it is what Vite does for the same reason.
+ *
+ * Windows only: on macOS the canonical name differs for the temp directory
+ * (`/var` is a link to `/private/var`), and nothing there asserts, so the
+ * spelling the user gave is kept as the one they will see in output.
+ *
+ * A root that cannot be resolved — a mapped network drive that refuses the
+ * final-path query, a RAM disk — is watched under the name given: a watcher
+ * that starts is worth more than one that refuses to.
+ *
+ * @param root Absolute watch root as given.
+ * @returns The root to register with the watcher.
+ */
+export function canonicalWatchRoot(root: string): string {
+    if (process.platform !== 'win32') return root;
+    try {
+        return fs.realpathSync.native(root);
+    } catch {
+        return root;
+    }
+}
+
 /** Minimal watcher factory kept injectable for lifecycle tests. */
 export type NextWatchFactory = (
     paths: string | readonly string[],
@@ -44,6 +77,12 @@ export type NextWatchFactory = (
 /** Dependencies that can be replaced by tests. */
 export interface NextWatchDependencies {
     watch?: NextWatchFactory;
+    /**
+     * Resolve the watch root to the name the filesystem reports events under.
+     * Present so the canonicalisation can be driven from a test on any host;
+     * the default is {@link canonicalWatchRoot}.
+     */
+    realpath?: (root: string) => string;
     /**
      * How long to wait for the watcher to report the readiness probe before
      * starting anyway. Present so tests can reach the give-up path without
@@ -85,7 +124,7 @@ export async function startNextWatch(
     dependencies: NextWatchDependencies = {},
 ): Promise<NextWatchSession> {
     const cwd = path.resolve(options.cwd ?? process.cwd());
-    const root = path.resolve(options.root ?? cwd);
+    const root = (dependencies.realpath ?? canonicalWatchRoot)(path.resolve(options.root ?? cwd));
     const pattern = withPosixSeparators(options.pattern ?? DEFAULT_NEXT_SOURCE_PATTERN);
     const ignore = [...DEFAULT_NEXT_SOURCE_IGNORE, ...(options.extraIgnore ?? [])];
     const parserMode = normalizeParserMode(options.parserMode);
