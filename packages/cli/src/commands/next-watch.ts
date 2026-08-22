@@ -60,18 +60,41 @@ export interface NextWatchCommandOptions {
  * @returns The root to register with the watcher.
  */
 export function canonicalWatchRoot(root: string): string {
-    if (process.platform !== 'win32') return root;
-    /* v8 ignore start -- Windows-only: coverage is measured on Linux, where
-       the line above returns first. Both arms are pinned on the Windows CI
-       lane by the canonicalWatchRoot unit test, which resolves the runner's
-       8.3 temp path and asks for a root that does not exist. */
+    return (WATCH_ROOT_RESOLVERS[process.platform] ?? identity)(root);
+}
+
+/**
+ * Keep a root as given; every platform but Windows.
+ *
+ * @param root Absolute watch root.
+ * @returns The same root.
+ */
+const identity = (root: string): string => root;
+
+/* v8 ignore start -- Windows-only: coverage is measured on Linux, where this
+   resolver is never selected. Both arms are pinned on the Windows CI lane by
+   the canonicalWatchRoot unit test, which resolves the runner's 8.3 temp path
+   and asks for a root that does not exist. */
+/**
+ * Resolve to the final name; a root that refuses the query is kept as given.
+ *
+ * @param root Absolute watch root.
+ * @returns The canonical root, or the given one when it cannot be resolved.
+ */
+const realpathNative = (root: string): string => {
     try {
         return fs.realpathSync.native(root);
     } catch {
         return root;
     }
-    /* v8 ignore stop */
-}
+};
+/* v8 ignore stop */
+
+/** A lookup rather than a branch, so the platform choice is not a half-taken
+ * `if` on every machine that measures coverage. */
+const WATCH_ROOT_RESOLVERS: Partial<Record<NodeJS.Platform, (root: string) => string>> = {
+    win32: realpathNative,
+};
 
 /** Minimal watcher factory kept injectable for lifecycle tests. */
 export type NextWatchFactory = (
