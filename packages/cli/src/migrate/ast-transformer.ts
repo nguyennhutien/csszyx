@@ -17,6 +17,7 @@
 import { parse } from '@babel/parser';
 import * as t from '@babel/types';
 import { REMOVED_BOOLEAN_SUGAR, SUGGESTION_MAP } from '@csszyx/compiler';
+import { detectLineEnding, withLineEnding } from '../utils/line-endings.js';
 import { disambiguateFont } from './class-parser.js';
 import {
     handleClsxCall,
@@ -755,11 +756,16 @@ export function transformSource(
     }
 
     // ── Step 3: Apply replacements (from end to start to preserve positions) ─
+    // Generated text is written with `\n`; a CRLF file must not end up with
+    // two conventions, so each insertion is converted as it lands. Only the
+    // inserted text is converted — the lines this pass did not touch are
+    // already in the file's own convention.
+    const eol = detectLineEnding(source);
     let output = source;
     const sorted = [...replacements];
     sorted.sort((a, b) => b.start - a.start);
     for (const r of sorted) {
-        output = output.slice(0, r.start) + r.text + output.slice(r.end);
+        output = output.slice(0, r.start) + withLineEnding(r.text, eol) + output.slice(r.end);
     }
 
     // ── Step 4: Detect potentially unused imports ────────────────────────
@@ -902,6 +908,7 @@ export function transformHtmlSourceSimple(
     let changed = false;
 
     // Match class="..." (double quotes) — standard HTML attribute
+    const eol = detectLineEnding(source);
     let output = source.replace(/\bclass="([^"]*)"/g, (match, classStr: string) => {
         return processClassAttr(match, classStr, '"');
     });
@@ -913,7 +920,7 @@ export function transformHtmlSourceSimple(
 
     // Inject FOUC prevention CSS before </head>
     if (injectFouc && output.includes('</head>') && !output.includes('csszyx: hide [sz]')) {
-        output = output.replace('</head>', `${FOUC_CSS}\n</head>`);
+        output = output.replace('</head>', `${withLineEnding(`${FOUC_CSS}\n`, eol)}</head>`);
         changed = true;
     }
 
@@ -922,7 +929,7 @@ export function transformHtmlSourceSimple(
         const scriptSrc = injectRuntime === 'cdn' ? cdnUrl : localPath;
         const scriptTag = `<script src="${scriptSrc}"></script>`;
         if (!output.includes(scriptSrc)) {
-            output = output.replace('</body>', `${scriptTag}\n</body>`);
+            output = output.replace('</body>', `${scriptTag}${eol}</body>`);
             changed = true;
         }
     }
@@ -949,7 +956,7 @@ export function transformHtmlSourceSimple(
             return match;
         }
 
-        const szVal = generateSzHtmlValue(szObject, braces);
+        const szVal = withLineEnding(generateSzHtmlValue(szObject, braces), eol);
         changed = true;
         classNamesTransformed++;
 
