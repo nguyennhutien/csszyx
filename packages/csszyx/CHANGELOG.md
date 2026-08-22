@@ -1,5 +1,11 @@
 # csszyx
 
+## [0.14.3](https://github.com/nguyennhutien/csszyx/compare/v0.14.2...v0.14.3) (2026-08-22)
+
+### Bug Fixes
+
+* **cli:** keep a migrated file's line endings ([#240](https://github.com/nguyennhutien/csszyx/issues/240))
+
 ## [0.14.2](https://github.com/nguyennhutien/csszyx/compare/v0.14.1...v0.14.2) (2026-08-21)
 
 ### Features
