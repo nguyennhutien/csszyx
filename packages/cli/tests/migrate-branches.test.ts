@@ -6,7 +6,7 @@
  */
 import fs, { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import path, { join } from 'node:path';
 import readline from 'node:readline';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -139,8 +139,12 @@ describe('migrate write-failure branches', () => {
         const target = join(dir, 'App.tsx');
         writeFileSync(target, 'export const A = () => <div className="p-4 bg-blue-500" />;');
         const real = fs.writeFileSync;
+        // migrate writes to the path fast-glob found, which is spelled with
+        // forward slashes on every platform; match on the file, not the
+        // separator, or the spy never fires on Windows and nothing is denied.
+        const isTarget = (p: string): boolean => path.resolve(p) === path.resolve(target);
         vi.spyOn(fs, 'writeFileSync').mockImplementation(((p: fs.PathOrFileDescriptor, ...rest) => {
-            if (typeof p === 'string' && p === target) throw new Error('EACCES: denied');
+            if (typeof p === 'string' && isTarget(p)) throw new Error('EACCES: denied');
             return (real as unknown as (...a: unknown[]) => unknown)(p, ...rest);
         }) as typeof fs.writeFileSync);
         await migrate({ cwd: dir });
