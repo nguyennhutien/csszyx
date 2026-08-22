@@ -2,11 +2,10 @@
 // removed so the published package and turbo's cache see the directory as
 // plain files. This used to be a shell `rm -f` in the build script — the one
 // POSIX command in the chain — which a Windows shell cannot run.
-import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, it } from 'node:test';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { stripWasmPackGitignore } from './strip-wasm-pack-gitignore.mjs';
 
@@ -26,10 +25,10 @@ describe('stripWasmPackGitignore', () => {
 
         const removed = stripWasmPackGitignore(root);
 
-        assert.equal(removed.length, 3);
+        expect(removed).toHaveLength(3);
         for (const dir of ['pkg', 'pkg-node', 'pkg-parser']) {
-            assert.equal(existsSync(path.join(root, dir, '.gitignore')), false);
-            assert.equal(existsSync(path.join(root, dir, 'csszyx_core_bg.wasm')), true);
+            expect(existsSync(path.join(root, dir, '.gitignore'))).toBe(false);
+            expect(existsSync(path.join(root, dir, 'csszyx_core_bg.wasm'))).toBe(true);
         }
     });
 
@@ -38,6 +37,6 @@ describe('stripWasmPackGitignore', () => {
         root = mkdtempSync(path.join(tmpdir(), 'csszyx-wasm-gi-'));
         mkdirSync(path.join(root, 'pkg'));
 
-        assert.deepEqual(stripWasmPackGitignore(root), []);
+        expect(stripWasmPackGitignore(root)).toEqual([]);
     });
 });
