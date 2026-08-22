@@ -323,3 +323,41 @@ test('reads a staged-version conflict as the registry already holding it', () =>
         false,
     );
 });
+
+test('the final audit waits for a package the registry accepted but has not exposed', async () => {
+    // A publish that exited clean is on the registry; the audit's job is to
+    // wait for it to appear, not to re-check once and give up. A release once
+    // published all twenty-one packages and still failed, because the audit
+    // looked seventeen seconds after the slowest one was accepted.
+    let queries = 0;
+    const slept = [];
+    const result = await publishPackageSet([pkg('mcp')], {
+        isPublished: async () => {
+            queries += 1;
+            // Invisible through the publish loop AND the audit's first look.
+            return queries > 10;
+        },
+        runPublish: async () => ({ code: 0, stdout: 'published', stderr: '' }),
+        sleep: async ms => {
+            slept.push(ms);
+        },
+        log: () => {},
+        error: () => {},
+    });
+
+    assert.deepEqual(result.published, ['mcp@1.2.3']);
+    assert.ok(slept.some(ms => ms > 0), 'the audit should have waited');
+});
+
+test('the final audit still fails for a package that never appears', async () => {
+    await assert.rejects(
+        publishPackageSet([pkg('ghost')], {
+            isPublished: async () => false,
+            runPublish: async () => ({ code: 0, stdout: 'published', stderr: '' }),
+            sleep: async () => {},
+            log: () => {},
+            error: () => {},
+        }),
+        /Final npm audit found missing packages/,
+    );
+});
