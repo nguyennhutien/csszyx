@@ -1199,6 +1199,9 @@ npx @csszyx/cli migrate --resolve-todos .csszyx-todo.json
 
 Reads `.csszyx-todo.json` and applies it during migration.
 `--resolve-todos` is **read-only**: it never writes to the todo file.
+On a file an earlier pass already migrated, the classes the map decides merge into the
+element's existing `sz={{ … }}` object; a key that object already sets is left alone and
+reported, and undecided classes keep their `@sz-todo` marker.
 Still-unresolved classes appear in the console and log only.
 Re-run `--audit` to get a fresh snapshot when ready.
 

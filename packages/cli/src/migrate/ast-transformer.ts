@@ -27,8 +27,12 @@ import {
     isClsxLikeName,
     type PatternResult,
 } from './dynamic-patterns.js';
-import { generateSzExpression, generateSzHtmlValue } from './sz-codegen.js';
-import { type CsszyxTodoMap, classNameToSzObject } from './variant-parser.js';
+import {
+    generateSzExpression,
+    generateSzHtmlValue,
+    generateSzObjectLiteral,
+} from './sz-codegen.js';
+import { type CsszyxTodoMap, classNameToSzObject, tokenize } from './variant-parser.js';
 
 const BACKSLASH = String.fromCodePoint(92);
 
@@ -431,7 +435,7 @@ function handleJsxAttribute(
         return;
     }
     if (hasSiblingSzAttribute(parent)) {
-        context.counters.classNamesSkipped++;
+        if (!mergeIntoSiblingSz(node, parent, context)) context.counters.classNamesSkipped++;
         return;
     }
 
@@ -502,6 +506,129 @@ function hasSiblingSzAttribute(parent: VisitNode | null): boolean {
             t.isJSXIdentifier(attribute.name) &&
             attribute.name.name === 'sz',
     );
+}
+
+/**
+ * Merges a className into the static sz prop beside it — the resolve pass
+ * meeting an element an earlier pass already migrated.
+ *
+ * A plain migration skips such an element to protect hand-written sz. The
+ * documented loop runs `--resolve-todos` on migrated files, though, so with a
+ * resolution map in play the classes the map decides are appended to the
+ * existing sz object and removed from className. A key the sz object already
+ * sets is never overridden: the element is left alone and reported. Either
+ * way the still-unrecognized classes are re-marked, because the resolve pass
+ * strips every marker before it looks at the file.
+ *
+ * @param node - className JSX attribute.
+ * @param parent - Attribute parent node.
+ * @param context - Shared migration state.
+ * @returns Whether the className was merged; `false` leaves it skipped.
+ */
+function mergeIntoSiblingSz(
+    node: t.JSXAttribute,
+    parent: VisitNode | null,
+    context: JsxMigrationContext,
+): boolean {
+    const { customMap } = context.options;
+    if (!customMap || !t.isStringLiteral(node.value) || !t.isJSXOpeningElement(parent)) {
+        return false;
+    }
+    const szObject = findStaticSzObject(parent);
+    const range = readAttributeRange(node);
+    if (!szObject || !range || szObject.start == null || szObject.end == null) return false;
+
+    const trimmed = node.value.value.trim();
+    const converted = classNameToSzObject(trimmed, customMap);
+    const remaining = [...converted.keepInClassName, ...converted.unrecognized];
+    const resolvedKeys = Object.keys(converted.szObject);
+    const classNameChanged = remaining.join(' ') !== tokenize(trimmed).join(' ');
+    const remark = () => {
+        context.classesUnrecognized.push(...converted.unrecognized);
+        injectTodoComment(converted.unrecognized, parent, context.options, context.replacements);
+    };
+
+    if (resolvedKeys.length === 0 && !classNameChanged) {
+        remark();
+        return false;
+    }
+    const existingKeys = new Set(
+        szObject.properties.map(property =>
+            t.isObjectProperty(property) && !property.computed
+                ? readSzPropertyKey(property.key)
+                : null,
+        ),
+    );
+    const clashes = resolvedKeys.filter(key => existingKeys.has(key));
+    if (clashes.length > 0) {
+        context.warnings.push(
+            `[${context.filePath}] Cannot merge resolved classes into the existing sz prop on ` +
+                `<${jsxElementName(parent)}>: ${clashes.join(', ')} ` +
+                `${clashes.length === 1 ? 'is' : 'are'} already set. Resolve by hand.`,
+        );
+        remark();
+        return false;
+    }
+
+    if (resolvedKeys.length > 0) {
+        const last = szObject.properties.at(-1);
+        if (last?.end == null) {
+            context.replacements.push({
+                start: szObject.start,
+                end: szObject.end,
+                text: generateSzObjectLiteral(converted.szObject),
+            });
+        } else {
+            context.replacements.push({
+                start: last.end,
+                end: last.end,
+                text: `, ${generateSzHtmlValue(converted.szObject)}`,
+            });
+        }
+    }
+    if (remaining.length === 0) {
+        // Take the space before the attribute with it, or two attributes end
+        // up separated by two.
+        const start = context.source[range.start - 1] === ' ' ? range.start - 1 : range.start;
+        context.replacements.push({ start, end: range.end, text: '' });
+    } else if (classNameChanged) {
+        context.replacements.push({ ...range, text: `className="${remaining.join(' ')}"` });
+    }
+    context.counters.classNamesTransformed++;
+    remark();
+    return true;
+}
+
+/**
+ * The object literal of a static `sz={{ … }}` attribute on an element.
+ *
+ * @param element - JSX opening element.
+ * @returns The object expression, or null when sz is absent or dynamic.
+ */
+function findStaticSzObject(element: t.JSXOpeningElement): t.ObjectExpression | null {
+    for (const attribute of element.attributes) {
+        if (
+            t.isJSXAttribute(attribute) &&
+            t.isJSXIdentifier(attribute.name) &&
+            attribute.name.name === 'sz'
+        ) {
+            const value = attribute.value;
+            return t.isJSXExpressionContainer(value) && t.isObjectExpression(value.expression)
+                ? value.expression
+                : null;
+        }
+    }
+    return null;
+}
+
+/**
+ * The tag name of a JSX opening element, for a message.
+ *
+ * @param element - JSX opening element.
+ * @returns The identifier name, or `element` for any other name shape.
+ */
+function jsxElementName(element: t.JSXOpeningElement): string {
+    return t.isJSXIdentifier(element.name) ? element.name.name : 'element';
 }
 
 /**

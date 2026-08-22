@@ -229,6 +229,13 @@ Tailwind strings are converted.
 `--resolve-todos` is **read-only** — it never writes to the todo file. Still-unresolved
 `sz:todo` entries appear in the console and log only.
 
+On a file an earlier pass already migrated, an element reads
+`className="mystery" sz={{ … }}`. The resolve pass merges the classes the map
+decides into that existing sz object and drops them from `className`; a key the
+sz object already sets is never overridden — the element is left as is and
+reported, so you resolve it by hand. Classes the map does not decide stay in
+`className` and keep their `@sz-todo` marker.
+
 ## Display Utilities
 
 When migrating Tailwind display classes, csszyx emits the canonical `display`
