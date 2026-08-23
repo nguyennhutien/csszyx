@@ -15,7 +15,12 @@ import { isRustMigrateAvailable } from '@csszyx/compiler/migrate';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { migrate } from '../src/commands/migrate.js';
-import { transformHtmlSourceSimple, transformSource } from '../src/migrate/ast-transformer.js';
+import {
+    transformHtmlSourceSimple,
+    transformHtmlSourceTs,
+    transformSource,
+    transformSourceTs,
+} from '../src/migrate/ast-transformer.js';
 
 const FILES: Record<string, string> = {
     'src/Static.tsx': 'export const A = () => <div className="p-4 bg-blue-500 mystery" />;\n',
@@ -53,15 +58,29 @@ describe('CSSZYX_MIGRATE_ENGINE', () => {
     it.skipIf(!isRustMigrateAvailable())(
         'transforms one source identically under either engine',
         () => {
+            // The TypeScript side is named, not selected. `transformSource`
+            // dispatches on the switch, and the native engine is the default
+            // now, so asking it twice would compare the port with itself.
             const source = FILES['src/Dynamic.tsx'] as string;
-            const expected = transformSource(source, 'Dynamic.tsx', { injectTodos: true });
+            const expected = transformSourceTs(source, 'Dynamic.tsx', { injectTodos: true });
             vi.stubEnv('CSSZYX_MIGRATE_ENGINE', 'rust');
             expect(transformSource(source, 'Dynamic.tsx', { injectTodos: true })).toEqual(expected);
             const html = FILES['public/page.html'] as string;
-            vi.unstubAllEnvs();
-            const expectedHtml = transformHtmlSourceSimple(html, { injectRuntime: 'cdn' });
-            vi.stubEnv('CSSZYX_MIGRATE_ENGINE', 'rust');
+            const expectedHtml = transformHtmlSourceTs(html, { injectRuntime: 'cdn' });
             expect(transformHtmlSourceSimple(html, { injectRuntime: 'cdn' })).toEqual(expectedHtml);
+        },
+    );
+
+    it.skipIf(!isRustMigrateAvailable())(
+        'the two entry points really are two implementations',
+        () => {
+            // A parser rejects this with its own wording. If these ever agree,
+            // every comparison above is a mirror and passes for nothing.
+            const source = '<div className="" /><span className="x" />';
+            vi.stubEnv('CSSZYX_MIGRATE_ENGINE', 'rust');
+            expect(transformSource(source, 'canary.tsx').warnings[0]).not.toBe(
+                transformSourceTs(source, 'canary.tsx').warnings[0],
+            );
         },
     );
 

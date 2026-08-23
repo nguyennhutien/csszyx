@@ -11,6 +11,11 @@
 // snippets that reach every branch, synthetic files in the shapes the
 // benchmark uses, and the real components under apps/docs.
 //
+// The TypeScript implementation is named directly rather than reached through
+// `transformSource`: that dispatches on the engine switch, and once the native
+// engine became the default it would record the native answers as the
+// TypeScript's — a corpus of the port compared against itself.
+//
 // Usage:
 //   node --import tsx/esm scripts/gen-migrate-source-parity-corpus.mjs           # write
 //   node --import tsx/esm scripts/gen-migrate-source-parity-corpus.mjs --check   # CI: fail if stale
@@ -19,8 +24,8 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import {
-    transformHtmlSourceSimple,
-    transformSource,
+    transformHtmlSourceTs,
+    transformSourceTs,
 } from '../packages/cli/src/migrate/ast-transformer.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -575,7 +580,7 @@ function buildCorpus() {
         cases.push({
             src: index,
             options: customMap ? { ...rest, customMap: true } : rest,
-            result: transformSource(source, file, options),
+            result: transformSourceTs(source, file, options),
         });
     };
 
@@ -600,7 +605,7 @@ function buildCorpus() {
                 name,
                 source,
                 options,
-                result: transformHtmlSourceSimple(source, options),
+                result: transformHtmlSourceTs(source, options),
             });
         }
     }

@@ -31,8 +31,8 @@ import {
 } from '@csszyx/compiler/migrate';
 
 import {
-    transformHtmlSourceSimple,
-    transformSource,
+    transformHtmlSourceTs,
+    transformSourceTs,
 } from '../packages/cli/src/migrate/ast-transformer.ts';
 import { parseClass } from '../packages/cli/src/migrate/class-parser.ts';
 import {
@@ -252,6 +252,7 @@ let checked = 0;
 let changed = 0;
 const failures = [];
 
+assertTwoImplementations();
 runSweep();
 if (!options.sweepOnly && failures.length < options.maxFailures) {
     runRandom();
@@ -259,6 +260,30 @@ if (!options.sweepOnly && failures.length < options.maxFailures) {
 
 report();
 process.exit(failures.length > 0 ? 1 : 0);
+
+/**
+ * Prove the two sides are two implementations before comparing them.
+ *
+ * Both are reached through this file's imports, and one of those used to be
+ * the engine switch — which, once the native engine became the default,
+ * quietly made every comparison the native engine against itself. It passed.
+ * A parser rejects this source with its own wording, so the two must
+ * disagree here; if they agree, the harness is holding a mirror.
+ */
+function assertTwoImplementations() {
+    const source = '<div className="" /><span className="x" />';
+    const ts = transformSourceTs(source, 'canary.tsx', {}).warnings[0] ?? '';
+    const rust = migrateRustBatch([{ filename: 'canary.tsx', source }], {})[0]?.warnings[0] ?? '';
+    if (!ts.startsWith('Parse error') || !rust.startsWith('Parse error') || ts === rust) {
+        console.error(
+            '[migrate-parity] the two sides answered the canary identically, so this run would ' +
+                'compare one implementation with itself. Check that the TypeScript entry point ' +
+                'is imported directly and does not dispatch on CSSZYX_MIGRATE_ENGINE.\n' +
+                `  ts   = ${JSON.stringify(ts)}\n  rust = ${JSON.stringify(rust)}`,
+        );
+        process.exit(1);
+    }
+}
 
 /**
  * The prefixes whose sz key depends on the shape of their value.
@@ -337,8 +362,8 @@ function runRandom() {
 function check(generated) {
     checked += 1;
     const ts = generated.isHtml
-        ? transformHtmlSourceSimple(generated.source, generated.options)
-        : transformSource(generated.source, generated.filename, generated.options);
+        ? transformHtmlSourceTs(generated.source, generated.options)
+        : transformSourceTs(generated.source, generated.filename, generated.options);
     const rust = generated.isHtml
         ? migrateRustHtml(generated.source, generated.options)
         : migrateRustBatch(

@@ -703,6 +703,7 @@ fn unknown_property_diagnostics(
     let location = relativize_diagnostic_path(&file.filename, root_dir);
     let mut out = Vec::new();
     let mut unknown = Vec::new();
+    let mut dead_weights: Vec<(String, u32)> = Vec::new();
     let mut dead_steps = Vec::new();
     let mut removed_sugar = Vec::new();
     let mut border_side_styles = Vec::new();
@@ -775,6 +776,9 @@ fn unknown_property_diagnostics(
                 "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
             ));
         }
+        dead_weights.clear();
+        super::lower::collect_dead_weight_values(object, &mut dead_weights);
+        push_dead_weight_diagnostics(file, &dead_weights, &location, &mut lines, &mut out);
         removed_sugar.clear();
         super::lower::collect_removed_boolean_sugar(object, &mut removed_sugar);
         push_removed_sugar_diagnostics(file, &removed_sugar, &location, &mut lines, &mut out);
@@ -842,6 +846,30 @@ fn relativize_diagnostic_path(filename: &str, root_dir: Option<&str>) -> String 
 /// runtime warning for these keys never fires for source this pass compiled,
 /// so silence here meant a style vanished with nothing to search for. Names the
 /// canonical spelling and the codemod, mirroring the runtime channel's wording.
+/// Reports each `weight` value written as a numeric string.
+///
+/// Tailwind spells weights through `--font-weight-*`, so `font-700` is not a
+/// utility and generates no CSS. The class is still emitted — the diagnostic
+/// reports what Tailwind will do with what the author wrote rather than
+/// rewriting it — and the wording is the TypeScript compiler's
+/// `warnDeadWeightValue`, so flipping `build.parser` does not change the log.
+fn push_dead_weight_diagnostics(
+    file: &TransformFile,
+    found: &[(String, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    for (value, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        out.push(format!(
+            "[csszyx] \"weight: '{value}'\" at {location}:{line}: Tailwind spells a numeric font weight through --font-weight-*, so \"font-{value}\" generates no CSS. Write weight: {value} as a number, which brackets to \"font-[{value}]\"."
+        ));
+    }
+}
+
 fn push_removed_sugar_diagnostics(
     file: &TransformFile,
     found: &[(String, &'static str, &'static str, u32)],
@@ -1002,6 +1030,53 @@ mod tests {
         CssVariableMapEntry, GlobalVarAliasEntry, ParserPath, TransformFile, TransformOptions,
         TransformProducer,
     };
+
+    /// A weight written as a numeric string emits a class Tailwind does not
+    /// serve, and the build has to say so — silently emitting `font-700`,
+    /// which generates no CSS, is how the defect went unseen. The wording is
+    /// the TypeScript compiler's, so flipping `build.parser` does not change
+    /// the build log.
+    #[test]
+    fn a_numeric_string_weight_is_reported_with_the_wording_the_typescript_uses() {
+        let file = TransformFile {
+            filename: "/repo/App.tsx".to_string(),
+            source: "export const A = () => <div sz={{ weight: \"700\", hover: { weight: \"550\" } }} />;"
+                .to_string(),
+        };
+        let result = transform_file(&file);
+        assert_eq!(
+            result.diagnostics,
+            vec![
+                "[csszyx] \"weight: '700'\" at /repo/App.tsx:1: Tailwind spells a numeric font weight through --font-weight-*, so \"font-700\" generates no CSS. Write weight: 700 as a number, which brackets to \"font-[700]\".".to_string(),
+                "[csszyx] \"weight: '550'\" at /repo/App.tsx:1: Tailwind spells a numeric font weight through --font-weight-*, so \"font-550\" generates no CSS. Write weight: 550 as a number, which brackets to \"font-[550]\".".to_string(),
+            ],
+            "code was: {}",
+            result.code
+        );
+        // The class is still emitted: the diagnostic reports what Tailwind
+        // will do with what the author wrote, it does not rewrite it.
+        assert!(result.classes.iter().any(|class| class == "font-700"));
+    }
+
+    /// The spellings Tailwind does serve stay quiet, or the diagnostic would
+    /// be noise on every correct file.
+    #[test]
+    fn a_weight_tailwind_serves_is_not_reported() {
+        let file = TransformFile {
+            filename: "/repo/App.tsx".to_string(),
+            source: "export const A = () => <div sz={{ weight: \"bold\", z: \"700\", text: \"700\" }} />;"
+                .to_string(),
+        };
+        let result = transform_file(&file);
+        assert!(
+            !result
+                .diagnostics
+                .iter()
+                .any(|line| line.contains("font weight")),
+            "{:?}",
+            result.diagnostics
+        );
+    }
 
     #[test]
     fn diagnostic_paths_are_relative_only_below_the_configured_root() {

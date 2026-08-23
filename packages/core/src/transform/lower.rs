@@ -278,6 +278,51 @@ pub(crate) fn collect_removed_boolean_sugar(
     }
 }
 
+/// Collects `weight` values written as a numeric STRING.
+///
+/// Tailwind spells weights through `--font-weight-*`, so `font-700` is not a
+/// utility and generates no CSS; that is why the NUMBER form brackets. A
+/// string takes the generic path and emits the bare class, which styles
+/// nothing. The class is still emitted, as a dead spacing step is: the
+/// diagnostic reports what Tailwind will do with what the author wrote.
+///
+/// Same descent rules as [`collect_dead_spacing_steps`].
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_dead_weight_values(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::String(value) => {
+                if property.key == "weight" && is_unsigned_decimal(value) {
+                    out.push((value.clone(), property.span.start));
+                }
+            }
+            StaticSzValue::Object(nested) => {
+                if matches!(
+                    property.key.as_str(),
+                    "css"
+                        | "bgImg"
+                        | "supports"
+                        | "data"
+                        | "not"
+                        | "aria"
+                        | "has"
+                        | "group"
+                        | "peer"
+                ) {
+                    continue;
+                }
+                if property_prefix(&property.key).is_some()
+                    && object_string_property(nested, "color").is_some()
+                {
+                    continue;
+                }
+                collect_dead_weight_values(nested, out);
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_dead_spacing_steps(
     object: &StaticSzObject,

@@ -830,6 +830,30 @@ export function transformSource(
         const [result] = migrateRustBatch([{ filename: filePath, source }], options);
         return result as TransformResult;
     }
+    return transformSourceTs(source, filePath, options);
+}
+
+/**
+ * The TypeScript implementation, reached without consulting the engine
+ * switch.
+ *
+ * Every harness that holds the two implementations to each other has to name
+ * the one it wants. Going through `transformSource` was safe only while the
+ * TypeScript was the default: the moment the native engine became it, the
+ * corpus generator recorded the native answers as the TypeScript's and the
+ * comparison became the native engine against itself. It passed, and proved
+ * nothing.
+ *
+ * @param source - Source file content.
+ * @param filePath - Path used in warnings.
+ * @param options - Transformation options.
+ * @returns The migrated source and its counts.
+ */
+export function transformSourceTs(
+    source: string,
+    filePath: string,
+    options: TransformOptions = {},
+): TransformResult {
     const warnings: string[] = [];
     const counters: TransformCounters = {
         classNamesTransformed: 0,
@@ -1115,6 +1139,21 @@ export function transformHtmlSourceSimple(
     options: HtmlTransformOptions = {},
 ): TransformResult {
     if (migrateEngine() === 'rust') return migrateRustHtml(source, options) as TransformResult;
+    return transformHtmlSourceTs(source, options);
+}
+
+/**
+ * The TypeScript HTML pass, reached without consulting the engine switch.
+ * See `transformSourceTs` for why a harness must name its implementation.
+ *
+ * @param source - HTML source file content.
+ * @param options - HTML transform options.
+ * @returns The migrated source and its counts.
+ */
+export function transformHtmlSourceTs(
+    source: string,
+    options: HtmlTransformOptions = {},
+): TransformResult {
     const {
         braces = false,
         injectFouc = true,

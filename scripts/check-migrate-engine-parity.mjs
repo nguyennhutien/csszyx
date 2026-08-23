@@ -25,8 +25,8 @@ import {
 import fg from 'fast-glob';
 
 import {
-    transformHtmlSourceSimple,
-    transformSource,
+    transformHtmlSourceTs,
+    transformSourceTs,
 } from '../packages/cli/src/migrate/ast-transformer.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -124,7 +124,7 @@ function compare(files) {
         // One call for the whole set, the way a migrate run sends a job.
         const rustResults = migrateRustBatch(sources, options);
         sources.forEach((entry, index) => {
-            const ts = transformSource(entry.source, entry.filename, options);
+            const ts = transformSourceTs(entry.source, entry.filename, options);
             const rust = rustResults[index];
             comparisons++;
             if (ts.changed) changed++;
@@ -137,7 +137,7 @@ function compare(files) {
     for (const file of htmlFiles) {
         const source = readFileSync(file, 'utf8');
         for (const [name, options] of HTML_OPTION_SETS) {
-            const ts = transformHtmlSourceSimple(source, options);
+            const ts = transformHtmlSourceTs(source, options);
             const rust = migrateRustHtml(source, options);
             comparisons++;
             if (ts.changed) changed++;
