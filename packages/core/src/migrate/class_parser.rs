@@ -359,19 +359,48 @@ mod tests {
         None
     }
 
-    /// A rule no class in the corpus reaches is a rule the parity test
+    /// Every `font: '…'` value the source corpus holds inside an sz object.
+    ///
+    /// The rule tables have two callers, not one: a class, and the legacy
+    /// sz-key normaliser, which resolves `font` through the same table. A
+    /// gate that walks only the class path calls the sz-key rule dead — it
+    /// did, the rule was deleted on its word, and `font: 'stretch-condensed'`
+    /// migrated to a font FAMILY on one engine and a stretch on the other
+    /// until the divergence was found by hand. Both callers are walked here.
+    fn sz_key_font_values() -> Vec<String> {
+        let corpus = include_str!("../../tests/fixtures/migrate-source-parity-corpus.json");
+        let mut values = Vec::new();
+        let mut rest = corpus;
+        // An sz value is single-quoted in the source, and JSON leaves a
+        // single quote alone, so it reads here exactly as it was written.
+        while let Some(found) = rest.find("font: '") {
+            rest = &rest[found + "font: '".len()..];
+            if let Some(end) = rest.find('\'') {
+                values.push(rest[..end].to_string());
+            }
+        }
+        assert!(values.len() > 3, "parsed only {} font values", values.len());
+        values
+    }
+
+    /// A rule no caller in the corpora reaches is a rule the parity tests
     /// cannot check, so it is refused rather than carried as dead weight.
     #[test]
-    fn every_rule_decides_at_least_one_corpus_class() {
+    fn every_rule_is_reached_by_some_caller() {
         let corpus: Corpus = serde_json::from_str(include_str!(
             "../../tests/fixtures/migrate-parity-corpus.json"
         ))
         .expect("the migrate parity corpus is JSON");
-        let hits: HashSet<(&str, usize)> = corpus
+        let mut hits: HashSet<(&str, usize)> = corpus
             .entries
             .iter()
             .filter_map(|entry| decided_by(&entry.c))
             .collect();
+        for value in sz_key_font_values() {
+            if let Some((index, _)) = select(rules_for("font"), &Shape::read(&value)) {
+                hits.insert(("font", index));
+            }
+        }
 
         let unreached: Vec<String> = RULE_TABLES
             .iter()

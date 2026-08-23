@@ -78,6 +78,8 @@ pub enum Test {
     /// `(color:--c)`: the custom property names the colour, not the value.
     ParenColor,
     ParenOrArbitraryDimension,
+    /// The value begins with a fixed marker.
+    StartsWith(&'static str),
     /// `[center_top_1rem]`: several tokens led by a position keyword.
     BracketPositionList,
 }
@@ -138,7 +140,7 @@ use Emit::{
 use Prop::{Key, Prefix, PrefixPos, Reverse};
 use Test::{
     Always, ArbitraryDimension, Bracket, BracketPositionList, Digits, Integer, Is, Keyword, OneOf,
-    Paren, ParenColor, ParenOrArbitraryDimension, Percent, ThreeDigits,
+    Paren, ParenColor, ParenOrArbitraryDimension, Percent, StartsWith, ThreeDigits,
 };
 
 /// Prefixes where the `/` modifier is the utility's own opacity, not a colour.
@@ -202,9 +204,22 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
                 Key("fontFamily"),
                 Verbatim,
             ),
-            // `font-stretch-*` never arrives here: `font-stretch` is a longer
-            // prefix and is tried first. `font-condensed` is not a Tailwind
-            // class, so the bare keyword is a family like any other word.
+            // No CLASS reaches this: `font-stretch` is a longer prefix and
+            // wins the longest-prefix match. The sz KEY path does — the
+            // normaliser resolves a legacy `font: 'stretch-condensed'`
+            // through this same table — so the rule is live, and a
+            // reachability gate that walks only classes calls it dead.
+            //
+            // That caller reads the KEY and keeps the value it already had,
+            // so the emit below is never evaluated; it names what the key
+            // path leaves behind rather than what a class would want, which
+            // is `condensed` without the marker. Migrating the value is a
+            // behaviour change the TypeScript has not made either — today it
+            // writes `fontStretch: 'stretch-condensed'`, which compiles to
+            // `font-stretch-[stretch-condensed]` and generates no useful CSS.
+            rule!(StartsWith("stretch-"), Key("fontStretch"), Unwrapped),
+            // `font-condensed` is not a Tailwind class, so a bare keyword is
+            // a family like any other word.
             rule!(Always, Key("fontFamily"), Unwrapped),
         ],
     ),
@@ -480,6 +495,7 @@ fn matches(test: &Test, shape: &Shape<'_>) -> bool {
         Paren => shape.paren.is_some(),
         ParenColor => shape.paren.is_some_and(|inner| inner.starts_with("color:")),
         ParenOrArbitraryDimension => shape.paren.is_some() || is_arbitrary_dimension(value),
+        StartsWith(marker) => value.starts_with(marker),
         BracketPositionList => shape.bracket.is_some_and(|inner| {
             let inner = decode_arbitrary_spaces(inner);
             inner.contains(' ')
