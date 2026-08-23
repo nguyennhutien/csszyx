@@ -58,9 +58,21 @@ struct HtmlCase {
     result: serde_json::Value,
 }
 
+/// Read a corpus at run time rather than `include_str!`.
+///
+/// These files are megabytes. Embedding them puts the whole text in the test
+/// binary as a literal, which rustc then carries through codegen with full
+/// debug info — several test binaries compile at once, and on a 16 GB machine
+/// that was enough to push the whole `cargo test` compile into swap. Reading
+/// the file costs a syscall and keeps the binary small.
+fn read_corpus(name: &str) -> String {
+    let path = format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
+    std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("reading {path}: {error}"))
+}
+
 fn corpus() -> Corpus {
-    let json = include_str!("fixtures/migrate-source-parity-corpus.json");
-    serde_json::from_str(json).expect("the migrate source parity corpus is JSON")
+    let json = read_corpus("migrate-source-parity-corpus.json");
+    serde_json::from_str(&json).expect("the migrate source parity corpus is JSON")
 }
 
 /// The warning a parser failure produces starts with this; the rest is the

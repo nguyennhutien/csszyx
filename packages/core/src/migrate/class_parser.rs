@@ -317,6 +317,18 @@ mod tests {
     use super::*;
     use crate::migrate::class_rules::{rules_for, select, RULE_TABLES};
 
+    /// Read a corpus at run time rather than `include_str!`.
+    ///
+    /// These files are megabytes. Embedding them puts the whole text in the
+    /// test binary as a literal, which rustc carries through codegen with full
+    /// debug info — several test binaries compile at once, and on a 16 GB
+    /// machine that was enough to push the whole `cargo test` compile into
+    /// swap. Reading the file costs a syscall and keeps the binary small.
+    fn read_corpus(name: &str) -> String {
+        let path = format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
+        std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("reading {path}: {error}"))
+    }
+
     #[derive(serde::Deserialize)]
     struct Corpus {
         entries: Vec<Entry>,
@@ -368,9 +380,9 @@ mod tests {
     /// migrated to a font FAMILY on one engine and a stretch on the other
     /// until the divergence was found by hand. Both callers are walked here.
     fn sz_key_font_values() -> Vec<String> {
-        let corpus = include_str!("../../tests/fixtures/migrate-source-parity-corpus.json");
+        let corpus = read_corpus("migrate-source-parity-corpus.json");
         let mut values = Vec::new();
-        let mut rest = corpus;
+        let mut rest = corpus.as_str();
         // An sz value is single-quoted in the source, and JSON leaves a
         // single quote alone, so it reads here exactly as it was written.
         while let Some(found) = rest.find("font: '") {
@@ -387,10 +399,8 @@ mod tests {
     /// cannot check, so it is refused rather than carried as dead weight.
     #[test]
     fn every_rule_is_reached_by_some_caller() {
-        let corpus: Corpus = serde_json::from_str(include_str!(
-            "../../tests/fixtures/migrate-parity-corpus.json"
-        ))
-        .expect("the migrate parity corpus is JSON");
+        let corpus: Corpus = serde_json::from_str(&read_corpus("migrate-parity-corpus.json"))
+            .expect("the migrate parity corpus is JSON");
         let mut hits: HashSet<(&str, usize)> = corpus
             .entries
             .iter()
