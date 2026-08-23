@@ -19,6 +19,7 @@ import * as t from '@babel/types';
 import { REMOVED_BOOLEAN_SUGAR, SUGGESTION_MAP } from '@csszyx/compiler';
 import { migrateRustBatch, migrateRustHtml } from '@csszyx/compiler/migrate';
 import { detectLineEnding, withLineEnding } from '../utils/line-endings.js';
+import { escapeSingleQuotedString } from '../utils/string-escape.js';
 import { disambiguateFont } from './class-parser.js';
 import {
     handleClsxCall,
@@ -265,10 +266,54 @@ function normalizeAmbiguousFontProperty(
 ): boolean {
     if (keyName !== 'font' || prop.key.start == null || prop.key.end == null) return false;
     const fontValue = readFontLiteralValue(prop.value);
-    const resolved = fontValue === null ? undefined : disambiguateFont(fontValue)?.prop;
-    if (!resolved || resolved === 'font') return false;
-    pushSzKeyReplacement(prop.key, resolved, replacements);
+    const resolved = fontValue === null ? undefined : disambiguateFont(fontValue);
+    if (!resolved || resolved.prop === 'font') return false;
+    pushSzKeyReplacement(prop.key, resolved.prop, replacements);
+    pushResolvedFontValue(prop.value, fontValue, resolved.value, replacements);
     return true;
+}
+
+/**
+ * Rewrites the value too when resolving the key changed it.
+ *
+ * A stretch value carries a marker the new key already says:
+ * `font: 'stretch-condensed'` means `fontStretch: 'condensed'`, and keeping
+ * the marker compiles to `font-stretch-[stretch-condensed]`, which sets
+ * font-stretch to a word CSS does not know — the class is emitted and the
+ * style is silently lost.
+ *
+ * Only a string replaces a string, and only when it actually differs. A
+ * weight resolves to a NUMBER, and the two spellings are different classes
+ * (`weight: '700'` is `font-700`, `weight: 700` is `font-[700]`), so a value
+ * that resolved to anything but a different non-empty string is left as the
+ * author wrote it.
+ *
+ * @param value - The property's value node.
+ * @param original - The value as text, as `disambiguateFont` read it.
+ * @param resolved - The value that disambiguation produced.
+ * @param replacements - Source-edit sink.
+ */
+function pushResolvedFontValue(
+    value: t.ObjectProperty['value'],
+    original: string | null,
+    resolved: unknown,
+    replacements: Replacement[],
+): void {
+    if (
+        typeof resolved !== 'string' ||
+        resolved === '' ||
+        resolved === original ||
+        !t.isStringLiteral(value) ||
+        value.start == null ||
+        value.end == null
+    ) {
+        return;
+    }
+    replacements.push({
+        start: value.start,
+        end: value.end,
+        text: `'${escapeSingleQuotedString(resolved)}'`,
+    });
 }
 
 /**

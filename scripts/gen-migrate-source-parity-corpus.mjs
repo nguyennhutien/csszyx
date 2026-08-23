@@ -293,6 +293,7 @@ const SNIPPETS = [
     ['sz-normalize-font-stretch-var', "<div sz={{ font: 'stretch-(--s)' }} />", DEFAULT],
     ['sz-normalize-font-stretch-bracket', "<div sz={{ font: 'stretch-[75%]' }} />", DEFAULT],
     ['sz-normalize-font-stretch-bare', "<div sz={{ font: 'stretch-' }} />", DEFAULT],
+    ['sz-normalize-font-two-digits', '<div sz={{ font: 99 }} />', DEFAULT],
     ['sz-normalize-prose-target', "<div sz={{ scrollbarColor: 'x' }} />", DEFAULT],
     ['sz-normalize-sugar-false', '<div sz={{ flex: false }} />', DEFAULT],
     ['sz-normalize-dynamic', '<div sz={styles} />', DEFAULT, KEYS],

@@ -149,7 +149,7 @@ fn format_object_value(object: &SzObject, indent: usize) -> String {
 }
 
 /// A single-quoted JavaScript string literal.
-fn quoted(text: &str) -> String {
+pub(super) fn quoted(text: &str) -> String {
     format!("'{}'", escape_single_quoted(text))
 }
 

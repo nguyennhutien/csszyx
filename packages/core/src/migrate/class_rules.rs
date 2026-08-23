@@ -102,6 +102,8 @@ pub enum Emit {
     ParseValue,
     /// The general value reading, the class's sign ignored.
     ParseValueUnsigned,
+    /// The value after a fixed marker, unwrapped.
+    AfterMarker(&'static str),
 }
 
 /// Which sz key the matched rule writes.
@@ -134,8 +136,8 @@ macro_rules! rule {
 }
 
 use Emit::{
-    BracketInner, Literal, Number, ParenColorInner, ParenInner, ParseValue, ParseValueUnsigned,
-    SignedNumber, Unwrapped, Verbatim,
+    AfterMarker, BracketInner, Literal, Number, ParenColorInner, ParenInner, ParseValue,
+    ParseValueUnsigned, SignedNumber, Unwrapped, Verbatim,
 };
 use Prop::{Key, Prefix, PrefixPos, Reverse};
 use Test::{
@@ -210,14 +212,15 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
             // through this same table — so the rule is live, and a
             // reachability gate that walks only classes calls it dead.
             //
-            // That caller reads the KEY and keeps the value it already had,
-            // so the emit below is never evaluated; it names what the key
-            // path leaves behind rather than what a class would want, which
-            // is `condensed` without the marker. Migrating the value is a
-            // behaviour change the TypeScript has not made either — today it
-            // writes `fontStretch: 'stretch-condensed'`, which compiles to
-            // `font-stretch-[stretch-condensed]` and generates no useful CSS.
-            rule!(StartsWith("stretch-"), Key("fontStretch"), Unwrapped),
+            // The marker belongs to the old key, so the new one drops it:
+            // keeping it writes `fontStretch: 'stretch-condensed'`, which
+            // compiles to an arbitrary value that sets font-stretch to a
+            // word CSS does not know.
+            rule!(
+                StartsWith("stretch-"),
+                Key("fontStretch"),
+                AfterMarker("stretch-")
+            ),
             // `font-condensed` is not a Tailwind class, so a bare keyword is
             // a family like any other word.
             rule!(Always, Key("fontFamily"), Unwrapped),
@@ -526,6 +529,7 @@ pub fn emit(rule: &Rule, prefix: &str, shape: &Shape<'_>, negative: bool) -> SzV
         BracketInner => SzValue::from(decode_arbitrary_spaces(shape.bracket.unwrap_or_default())),
         ParseValue => parse_value(prefix, value, negative),
         ParseValueUnsigned => parse_value(prefix, value, false),
+        AfterMarker(marker) => SzValue::from(parse_string_value(&value[marker.len()..])),
     }
 }
 

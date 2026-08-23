@@ -27,6 +27,48 @@ describe('migrate normalizes legacy sz prop keys', () => {
         expect(transform({ p: 4, weight: 'bold' }).className).toBe('p-4 font-bold');
     });
 
+    it('resolves a legacy stretch value, not just its key', () => {
+        // The key rename alone leaves the marker on the value, and
+        // `fontStretch: 'stretch-condensed'` compiles to an arbitrary value
+        // that sets font-stretch to a word CSS does not know — the class is
+        // emitted, the style is silently lost.
+        const out = run("<div sz={{ font: 'stretch-condensed' }} />");
+        expect(out.code).toBe("<div sz={{ fontStretch: 'condensed' }} />");
+        expect(out.stats.szKeysNormalized).toBe(1);
+        expect(transform({ fontStretch: 'condensed' }).className).toBe('font-stretch-condensed');
+    });
+
+    it('keeps the percentage and custom-property forms of a stretch value', () => {
+        expect(run("<div sz={{ font: 'stretch-75%' }} />").code).toBe(
+            "<div sz={{ fontStretch: '75%' }} />",
+        );
+        expect(transform({ fontStretch: '75%' }).className).toBe('font-stretch-75%');
+        expect(run("<div sz={{ font: 'stretch-(--s)' }} />").code).toBe(
+            "<div sz={{ fontStretch: '--s' }} />",
+        );
+        expect(transform({ fontStretch: '--s' }).className).toBe('font-stretch-(--s)');
+    });
+
+    it('leaves a weight value alone, because its spelling decides its class', () => {
+        // `weight: '700'` is `font-700` and `weight: 700` is `font-[700]`, so
+        // rewriting the value here would change what the file compiles to.
+        expect(run("<div sz={{ font: '700' }} />").code).toBe("<div sz={{ weight: '700' }} />");
+        expect(transform({ weight: '700' }).className).toBe('font-700');
+        expect(run('<div sz={{ font: 700 }} />').code).toBe('<div sz={{ weight: 700 }} />');
+        expect(run("<div sz={{ font: 'bold' }} />").code).toBe("<div sz={{ weight: 'bold' }} />");
+        expect(run("<div sz={{ font: 'sans' }} />").code).toBe(
+            "<div sz={{ fontFamily: 'sans' }} />",
+        );
+    });
+
+    it('leaves a stretch marker with nothing after it alone', () => {
+        // Neither spelling generates useful CSS, so there is nothing to gain
+        // by rewriting a value that carries no keyword.
+        expect(run("<div sz={{ font: 'stretch-' }} />").code).toBe(
+            "<div sz={{ fontStretch: 'stretch-' }} />",
+        );
+    });
+
     it('recurses into nested variant objects', () => {
         const out = run("<div sz={{ hover: { backgroundColor: 'red' } }} />");
         expect(out.code).toBe("<div sz={{ hover: { bg: 'red' } }} />");

@@ -5,10 +5,12 @@
 //! key it does not know is left alone.
 
 use oxc_ast::ast::{Expression, ObjectExpression, ObjectPropertyKind, PropertyKey, PropertyKind};
+use oxc_span::GetSpan;
 
 use super::class_rules::{self, Shape};
 use super::source::Replacement;
-use super::value::js_number_to_string;
+use super::sz_codegen::quoted;
+use super::value::{js_number_to_string, SzValue};
 use crate::transform::generated::tables::{key_suggestion, removed_boolean_sugar_replacement};
 
 /// Rewrite every legacy key in the object, recursing into nested variant
@@ -123,7 +125,48 @@ fn normalize_ambiguous_font(
     let (_, rule) = class_rules::select(class_rules::rules_for("font"), &shape)
         .expect("the font rule table ends in a catch-all rule");
     push_key_replacement(key, &class_rules::prop_name(rule, "font"), replacements);
+    push_resolved_value(
+        property,
+        &value,
+        &class_rules::emit(rule, "font", &shape, false),
+        replacements,
+    );
     true
+}
+
+/// Rewrite the value too when resolving the key changed it.
+///
+/// A stretch value carries a marker the new key already says:
+/// `font: 'stretch-condensed'` means `fontStretch: 'condensed'`, and keeping
+/// the marker compiles to an arbitrary value that sets font-stretch to a word
+/// CSS does not know — the class is emitted and the style is silently lost.
+///
+/// Only a string replaces a string, and only when it differs. A weight
+/// resolves to a NUMBER, and the two spellings are different classes
+/// (`weight: '700'` is `font-700`, `weight: 700` is `font-[700]`), so
+/// anything but a different non-empty string leaves the author's value alone.
+fn push_resolved_value(
+    property: &oxc_ast::ast::ObjectProperty<'_>,
+    original: &str,
+    resolved: &SzValue,
+    replacements: &mut Vec<Replacement>,
+) {
+    let SzValue::String(resolved) = resolved else {
+        return;
+    };
+    if resolved.is_empty() || resolved == original {
+        return;
+    }
+    // Only a string literal reaches here. A numeric one resolves either to a
+    // number, which the guard above returned on, or to its own text through
+    // the catch-all, which the equality returned on — so the span below is
+    // always a quoted value being replaced by a quoted value.
+    let span = property.value.span();
+    replacements.push(Replacement {
+        start: span.start as usize,
+        end: span.end as usize,
+        text: quoted(resolved),
+    });
 }
 
 /// A key the compiler's suggestion table renames to one bare canonical key.
