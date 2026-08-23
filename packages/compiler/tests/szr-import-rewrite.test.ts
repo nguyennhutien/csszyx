@@ -1,5 +1,5 @@
 /**
- * The szr import rewrite: proof matrix and three-engine decision parity.
+ * The szr import rewrite: proof matrix and decision parity across the lanes.
  *
  * `import { szr } from '@csszyx/runtime'` ships the browser transform because
  * the barrel's szr must lower sz OBJECTS standalone. When a file provably
@@ -23,17 +23,17 @@ import {
     countSzrWordOccurrencesOutsideComments,
     szrRewriteProofHolds,
 } from '../src/szr-import-rewrite.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
-import { transformSource } from '../src/transform-select.js';
-import { transformWasm } from '../src/transform-wasm.js';
+import { ENGINES } from './engine-parity-harness.js';
 
 type Engine = (source: string, filename?: string) => { code?: string };
 
-const LANES: ReadonlyArray<readonly [string, Engine]> = [
-    ['auto', transformSource],
-    ['wasm', transformWasm as Engine],
-    ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
-];
+/**
+ * Both artifacts of the one engine. The shared list drops the `auto`
+ * selector — `transform-select.test.ts` owns that — and refuses to run in CI
+ * with the native artifact missing, which a hand-rolled list here could not
+ * notice.
+ */
+const LANES = ENGINES;
 
 /**
  * Whether one engine rewrote the file's szr import to a core entry.
@@ -170,7 +170,7 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
     });
 });
 
-describe('three-engine decision parity', () => {
+describe('decision parity across the lanes', () => {
     const all = [...REWRITE_CASES, ...KEEP_CASES];
     it.each(all)('every engine agrees on: %s', (_name, source) => {
         const verdicts = LANES.map(([, engine]) => rewrites(engine, source));

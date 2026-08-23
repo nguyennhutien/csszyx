@@ -11,15 +11,14 @@
  * hoisted its minus in front of the whole selector (`-hover:translate-x-full`)
  * on the JS lanes, while Rust placed it correctly.
  *
- * Both fixes are pinned here as three-engine parity: the decision lives in
+ * Both fixes are pinned here as lane parity: the decision lives in
  * `variantStringPrefix` (transform-core.ts) and `variant_string_prefix`
  * (lower.rs), which must agree shape for shape.
  */
 import { describe, expect, it } from 'vitest';
 import { variantStringPrefix } from '../src/transform-core.js';
 import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
-import { transformSource } from '../src/transform-select.js';
-import { transformWasm } from '../src/transform-wasm.js';
+import { ENGINES } from './engine-parity-harness.js';
 
 /** [sz object source, expected className] — the Tailwind-valid output. */
 const VARIANT_STRING_CASES: ReadonlyArray<readonly [string, string]> = [
@@ -91,10 +90,13 @@ function classNameFor(
     return transform(source, '/p/t.tsx').code?.match(/className="([^"]*)"/)?.[1];
 }
 
-const LANES = [
-    ['auto', transformSource],
-    ['wasm', transformWasm],
-] as const;
+/**
+ * Both artifacts of the one engine. This list used to be the `auto` selector
+ * plus wasm, which left the native artifact untested here entirely — and on
+ * a machine without the binary the selector IS wasm, so it compared one
+ * artifact with itself.
+ */
+const LANES = ENGINES;
 
 describe.each(LANES)('%s lane', (_lane, transform) => {
     it.each(VARIANT_STRING_CASES)('joins a variant string with a colon: %s', (szObject, want) => {

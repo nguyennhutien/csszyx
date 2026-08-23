@@ -16,7 +16,7 @@ import { describe, it } from 'vitest';
 
 import { ENGINES, expectParity } from './engine-parity-harness.js';
 
-describe('mask layers — three-engine parity', () => {
+describe('mask layers — lane parity', () => {
     it('linear angles, including the negative and variable forms', () => {
         expectParity('{ maskLinear: { angle: 45 } }', 'mask-linear-45');
         expectParity('{ maskLinear: { angle: -45 } }', '-mask-linear-45');
