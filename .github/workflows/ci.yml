@@ -418,6 +418,15 @@ jobs:
       - name: Build host native engine
         run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
+      # Both migrate engines over a generated set, right after the addon is
+      # built. The committed corpora hold the cases someone wrote down; this
+      # walks the product that decides an sz key — every value-dependent
+      # prefix against every value shape — plus seeded random whole files.
+      # It is exhaustive where the space is finite on purpose: sampling that
+      # product at random missed a real one-unit divergence in 8000 files.
+      - name: Check both migrate engines agree
+        run: pnpm fuzz:migrate-engine-parity
+
       # Build the core WASM (pkg-node) explicitly so the WASM-dependent unit
       # tests are deterministic regardless of turbo's build ordering. The
       # runtime parity gate (tests/wasm-runtime-parity.test.ts) replays the
