@@ -2,9 +2,10 @@
  * `CSSZYX_MIGRATE_ENGINE=rust` routes migrate through the native core.
  *
  * The port's parity with the TypeScript is proven in packages/core and
- * packages/compiler; this pins the CLI seam: the switch is read, a single
- * source goes through, and a whole run sends its JSX files as one batch and
- * writes the same files the TypeScript engine writes.
+ * packages/compiler, and which engine a run picks is pinned in
+ * migrate-engine-select.test.ts. This pins the CLI seam itself: a single
+ * source goes through either engine the same, and a whole run sends its JSX
+ * files as one batch and writes the same files the TypeScript engine writes.
  */
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -14,11 +15,7 @@ import { isRustMigrateAvailable } from '@csszyx/compiler/migrate';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { migrate } from '../src/commands/migrate.js';
-import {
-    migrateEngine,
-    transformHtmlSourceSimple,
-    transformSource,
-} from '../src/migrate/ast-transformer.js';
+import { transformHtmlSourceSimple, transformSource } from '../src/migrate/ast-transformer.js';
 
 const FILES: Record<string, string> = {
     'src/Static.tsx': 'export const A = () => <div className="p-4 bg-blue-500 mystery" />;\n',
@@ -51,14 +48,6 @@ describe('CSSZYX_MIGRATE_ENGINE', () => {
     afterEach(() => {
         vi.unstubAllEnvs();
         vi.restoreAllMocks();
-    });
-
-    it('selects the TypeScript engine unless asked for rust', () => {
-        expect(migrateEngine()).toBe('ts');
-        vi.stubEnv('CSSZYX_MIGRATE_ENGINE', 'rust');
-        expect(migrateEngine()).toBe('rust');
-        vi.stubEnv('CSSZYX_MIGRATE_ENGINE', 'RUST');
-        expect(migrateEngine()).toBe('ts');
     });
 
     it.skipIf(!isRustMigrateAvailable())(

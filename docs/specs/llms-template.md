@@ -933,6 +933,14 @@ reported, and undecided classes keep their `@sz-todo` marker.
 Still-unresolved classes appear in the console and log only.
 Re-run `--audit` to get a fresh snapshot when ready.
 
+### Which engine runs
+
+`migrate` runs on the native Rust engine, and falls back to the TypeScript one when the
+platform has no prebuilt binary — both write the same output byte for byte, so the fallback
+costs time and nothing else. `CSSZYX_MIGRATE_ENGINE=ts` forces the TypeScript engine;
+`CSSZYX_MIGRATE_ENGINE=rust` requires the native one and fails when it is absent, rather than
+quietly running the other.
+
 ### `--inject-todos` — mark unrecognized classes in code
 
 ```bash

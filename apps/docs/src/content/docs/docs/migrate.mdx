@@ -298,6 +298,25 @@ npx @csszyx/cli migrate --resolve-todos .csszyx-todo.json
 npx @csszyx/cli migrate --audit
 ```
 
+## Which Engine Runs
+
+`migrate` runs on the native Rust engine that ships with csszyx. On a platform
+with no prebuilt binary it falls back to the TypeScript implementation instead
+of failing — both write the same output, byte for byte, so the fallback costs
+time and nothing else. The engine a run used is recorded in its log under
+`.csszyx/logs/`.
+
+`CSSZYX_MIGRATE_ENGINE` overrides the choice:
+
+```bash
+CSSZYX_MIGRATE_ENGINE=ts npx @csszyx/cli migrate     # force the TypeScript engine
+CSSZYX_MIGRATE_ENGINE=rust npx @csszyx/cli migrate   # require the native engine
+```
+
+Asking for an engine by name is a stricter request than taking the default:
+`=rust` fails when the platform has no binary rather than quietly running the
+other one, so a comparison between the two stays meaningful.
+
 ## HTML Files
 
 For plain HTML files (no JSX build step), csszyx converts `class="..."` to

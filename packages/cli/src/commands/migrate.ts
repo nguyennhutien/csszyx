@@ -260,6 +260,9 @@ function startMigrationLog(context: MigrationContext): MigrationLog {
         : '';
     log.writeLine(`Mode: ${mode}${resolution}`);
     log.writeLine(`injectTodos: ${context.injectTodos}`);
+    // Which engine ran belongs in the log, not on the console: both write the
+    // same bytes, so it only matters when someone asks why a run was slow.
+    log.writeLine(`engine: ${migrateEngine()}`);
     log.writeLine('');
     if (!isGitignored(context.cwd, '.csszyx')) {
         printWarn(

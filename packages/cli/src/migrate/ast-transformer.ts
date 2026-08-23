@@ -17,7 +17,11 @@
 import { parse } from '@babel/parser';
 import * as t from '@babel/types';
 import { REMOVED_BOOLEAN_SUGAR, SUGGESTION_MAP } from '@csszyx/compiler';
-import { migrateRustBatch, migrateRustHtml } from '@csszyx/compiler/migrate';
+import {
+    isRustMigrateAvailable,
+    migrateRustBatch,
+    migrateRustHtml,
+} from '@csszyx/compiler/migrate';
 import { detectLineEnding, withLineEnding } from '../utils/line-endings.js';
 import { escapeSingleQuotedString } from '../utils/string-escape.js';
 import { disambiguateFont } from './class-parser.js';
@@ -973,16 +977,44 @@ export function transformSource(
 }
 
 /**
- * Which implementation of migrate runs: the TypeScript in this package, or
- * its Rust port on the native core when `CSSZYX_MIGRATE_ENGINE=rust`. The
- * port is held to the TypeScript byte for byte by the parity corpora in
- * packages/core; the switch exists so it can be run against real projects
- * before it becomes the default.
+ * Which implementation of migrate runs.
  *
- * @returns The engine the environment selects.
+ * The native port is the default, and the TypeScript is the fallback for a
+ * platform with no binary: both write the same bytes — held to it by the
+ * parity corpora in packages/core and by `pnpm fuzz:migrate-engine-parity` —
+ * so falling back changes how long a run takes and nothing else, and says so
+ * only in the run's log.
+ *
+ * Naming an engine is a different request from taking the default. A run that
+ * asks for the native engine and quietly gets the TypeScript one would make a
+ * comparison between them meaningless, so that fails instead of degrading.
+ *
+ * @param requested - The `CSSZYX_MIGRATE_ENGINE` value, if the caller has one.
+ * @param isAvailable - Whether the native engine can run here.
+ * @returns The engine to run.
+ * @throws When an engine is named that cannot run, or is not a known name.
  */
-export function migrateEngine(): 'ts' | 'rust' {
-    return process.env.CSSZYX_MIGRATE_ENGINE === 'rust' ? 'rust' : 'ts';
+export function migrateEngine(
+    requested: string | undefined = process.env.CSSZYX_MIGRATE_ENGINE,
+    isAvailable: () => boolean = isRustMigrateAvailable,
+): 'ts' | 'rust' {
+    if (requested === undefined || requested === '') {
+        return isAvailable() ? 'rust' : 'ts';
+    }
+    if (requested === 'ts') return 'ts';
+    if (requested !== 'rust') {
+        throw new Error(
+            `CSSZYX_MIGRATE_ENGINE must be 'rust' or 'ts', not ${JSON.stringify(requested)}.`,
+        );
+    }
+    if (!isAvailable()) {
+        throw new Error(
+            'CSSZYX_MIGRATE_ENGINE=rust was asked for, but this install has no native binary ' +
+                'for the platform. Install the platform package, or unset the variable to let ' +
+                'migrate fall back to the TypeScript engine.',
+        );
+    }
+    return 'rust';
 }
 
 /**
