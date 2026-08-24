@@ -174,7 +174,7 @@ function guarded<T>(call: () => T): T {
  * never had is absent, not null.
  *
  * @param result - The native result.
- * @returns The same result with `szKeysNormalized` omitted when null.
+ * @returns The same result with `szKeysNormalized` omitted when absent.
  */
 function readResult(result: NativeMigrateResult): MigrateRustResult {
     const { szKeysNormalized, ...counts } = result.stats;
@@ -182,7 +182,10 @@ function readResult(result: NativeMigrateResult): MigrateRustResult {
         code: result.code,
         changed: result.changed,
         warnings: result.warnings,
-        stats: szKeysNormalized === null ? counts : { ...counts, szKeysNormalized },
+        // The HTML pass has no sz keys to normalize and the binding carries
+        // that absence as undefined rather than null, so the count is tested
+        // for rather than compared against one spelling of missing.
+        stats: typeof szKeysNormalized === 'number' ? { ...counts, szKeysNormalized } : counts,
         potentiallyUnusedImports: result.potentiallyUnusedImports,
     };
 }

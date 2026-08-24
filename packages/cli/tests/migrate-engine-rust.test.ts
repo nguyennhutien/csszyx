@@ -28,6 +28,9 @@ const FILES: Record<string, string> = {
         'import clsx from "clsx";\nexport const B = ({ on }) => <div className={clsx("p-4", on && "m-2")} />;\n',
     'src/Legacy.tsx': 'export const C = () => <div sz={{ padding: 4, flex: true }} />;\n',
     'public/page.html': '<html><head></head><body><div class="p-4 mystery">x</div></body></html>\n',
+    // Nothing to migrate: the per-file path and the batch path both have to
+    // drop it, and only the per-file one runs under the TypeScript engine.
+    'src/Nothing.tsx': 'export const N = () => <div id="x">plain</div>;\n',
 };
 
 function fixture(): string {

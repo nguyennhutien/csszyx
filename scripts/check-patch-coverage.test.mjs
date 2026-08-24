@@ -82,7 +82,29 @@ describe('patch coverage', () => {
         // able to tell "this language was never measured" from "this file has
         // no test" — they call for opposite fixes.
         assert.ok(isMeasurable('packages/core/src/transform/parser.rs'));
-        assert.ok(isMeasurable('packages/core/src/native.rs'));
+    });
+
+    it('exempts the napi bindings, which the coverage run does not compile', () => {
+        // `cov:rust` builds with `native-engine,migrate`; the bindings sit
+        // behind `native`, so no report can mention them however well they are
+        // tested — and they are, through the built addon. This entry stops
+        // being right the moment that feature list gains `native`.
+        assert.ok(!isMeasurable('packages/core/src/native.rs'));
+    });
+
+    it('exempts a rust file with no function, which has nothing to execute', () => {
+        // A module that only lists its submodules and re-exports them gets no
+        // record from llvm-cov. Keyed on the absence of a function rather than
+        // on the file name, so a module that grows one is measured again.
+        const asModule = () => 'mod a;\npub use a::B;\n';
+        const asCode = () => 'pub fn f() -> u8 { 1 }\n';
+        assert.ok(!isMeasurable('packages/core/src/migrate/mod.rs', asModule));
+        assert.ok(isMeasurable('packages/core/src/migrate/mod.rs', asCode));
+    });
+
+    it('exempts a package config, which sits beside src and is never executed', () => {
+        assert.ok(!isMeasurable('packages/compiler/build.config.ts'));
+        assert.ok(isMeasurable('packages/compiler/src/index.ts'));
     });
 
     it('defaults the base to the main branch and the reports to the CI set', () => {

@@ -622,7 +622,10 @@ impl<'a> Migration<'_, '_> {
                 end: range.1,
                 text: String::new(),
             });
-        } else if class_name_changed {
+        } else {
+            // Reaching here at all means the map decided something, and a
+            // class it resolved is a class that left `remaining` — so the
+            // attribute has changed and there is no unchanged case to guard.
             self.replacements.push(Replacement {
                 start: range.0,
                 end: range.1,

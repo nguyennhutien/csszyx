@@ -549,13 +549,7 @@ function isCustomComponentAttribute(parent: VisitNode | null): boolean {
  * @returns Whether migration would create a duplicate sz attribute.
  */
 function hasSiblingSzAttribute(parent: VisitNode | null): boolean {
-    if (!t.isJSXOpeningElement(parent)) return false;
-    return parent.attributes.some(
-        attribute =>
-            t.isJSXAttribute(attribute) &&
-            t.isJSXIdentifier(attribute.name) &&
-            attribute.name.name === 'sz',
-    );
+    return t.isJSXOpeningElement(parent) && findSzAttribute(parent) !== undefined;
 }
 
 /**
@@ -641,7 +635,10 @@ function mergeIntoSiblingSz(
         // up separated by two.
         const start = context.source[range.start - 1] === ' ' ? range.start - 1 : range.start;
         context.replacements.push({ start, end: range.end, text: '' });
-    } else if (classNameChanged) {
+    } else {
+        // Reaching here at all means the map decided something, and a class
+        // it resolved is a class that left `remaining` — so the attribute has
+        // changed and there is no unchanged case to guard against.
         context.replacements.push({ ...range, text: `className="${remaining.join(' ')}"` });
     }
     context.counters.classNamesTransformed++;
@@ -656,19 +653,34 @@ function mergeIntoSiblingSz(
  * @returns The object expression, or null when sz is absent or dynamic.
  */
 function findStaticSzObject(element: t.JSXOpeningElement): t.ObjectExpression | null {
+    const value = findSzAttribute(element)?.value;
+    return t.isJSXExpressionContainer(value) && t.isObjectExpression(value.expression)
+        ? value.expression
+        : null;
+}
+
+/**
+ * The element's `sz` attribute, whatever its value.
+ *
+ * One lookup for the two questions asked about it — whether migration would
+ * duplicate the prop, and what object the resolve pass can merge into. Asking
+ * separately left the second search unable to fail, so its miss was a branch
+ * no test could take.
+ *
+ * @param element - JSX opening element.
+ * @returns The attribute, or undefined when the element has none.
+ */
+function findSzAttribute(element: t.JSXOpeningElement): t.JSXAttribute | undefined {
     for (const attribute of element.attributes) {
         if (
             t.isJSXAttribute(attribute) &&
             t.isJSXIdentifier(attribute.name) &&
             attribute.name.name === 'sz'
         ) {
-            const value = attribute.value;
-            return t.isJSXExpressionContainer(value) && t.isObjectExpression(value.expression)
-                ? value.expression
-                : null;
+            return attribute;
         }
     }
-    return null;
+    return undefined;
 }
 
 /**

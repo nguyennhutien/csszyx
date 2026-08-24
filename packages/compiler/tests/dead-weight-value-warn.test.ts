@@ -12,7 +12,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { type SzObject, transform } from '../src/transform-core.js';
+import { type SzObject, setSzWarnLocation, transform } from '../src/transform-core.js';
 
 describe('dead font-weight value warning', () => {
     beforeEach(() => {
@@ -53,6 +53,16 @@ describe('dead font-weight value warning', () => {
             expect(warns({ weight: value } as SzObject), value).toEqual([]);
         }
         expect(warns({ weight: 700 } as SzObject)).toEqual([]);
+    });
+
+    it('names the place the value was written when the build supplies one', () => {
+        setSzWarnLocation('App.tsx:12');
+        try {
+            const [message] = warns({ weight: '300' } as SzObject);
+            expect(message).toContain('at App.tsx:12');
+        } finally {
+            setSzWarnLocation(undefined);
+        }
     });
 
     it('stays quiet for a numeric string on any other key', () => {

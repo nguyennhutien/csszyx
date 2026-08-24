@@ -11,10 +11,25 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { transformSource } from '../src/migrate/ast-transformer.js';
+import { transformSource, transformSourceTs } from '../src/migrate/ast-transformer.js';
 
-const run = (source: string, customMap: Record<string, unknown>, injectTodos = false) =>
-    transformSource(source, 'Card.tsx', { customMap, injectTodos });
+/**
+ * Both implementations on every case, asserted equal before the case reads
+ * the answer. The native engine is the default, so calling the dispatcher
+ * alone would leave the TypeScript this suite was written against dark —
+ * and a rule that lives in two places has to be pinned in both.
+ *
+ * @param source - The JSX source to migrate.
+ * @param customMap - The migration-resolution map the pass runs with.
+ * @param injectTodos - Whether unresolved classes get a marker comment.
+ * @returns What the TypeScript implementation wrote.
+ */
+const run = (source: string, customMap: Record<string, unknown>, injectTodos = false) => {
+    const options = { customMap, injectTodos };
+    const ts = transformSourceTs(source, 'Card.tsx', options);
+    expect(transformSource(source, 'Card.tsx', options)).toEqual(ts);
+    return ts;
+};
 
 describe('resolve-todos merges into an existing sz prop', () => {
     it('appends the resolved classes and drops an emptied className', () => {
@@ -90,9 +105,53 @@ describe('resolve-todos merges into an existing sz prop', () => {
         }
     });
 
+    it('names every clashing key, not just the first', () => {
+        const source = '<div sz={{ p: 2, m: 3 }} className="two" />';
+        const out = run(source, { two: { p: 4, m: 5 } }, true);
+        expect(out.code).toBe(source);
+        expect(out.warnings[0]).toContain('p, m are already set');
+    });
+
+    it('reads past a spread and an sz written with a computed key', () => {
+        // The spread is not a JSX attribute and the computed key has no static
+        // name, so both are skipped while the search carries on.
+        const out = run('<div {...rest} sz={{ [k]: 1, m: 2 }} className="mystery" />', {
+            mystery: { p: 4 },
+        });
+        expect(out.code).toBe('<div {...rest} sz={{ [k]: 1, m: 2, p: 4 }} />');
+    });
+
+    it('drops a className the map emptied even when it resolved no key', () => {
+        const out = run('<div sz={{ m: 1 }} className="gone" />', { gone: 'sz:remove' });
+        expect(out.code).toBe('<div sz={{ m: 1 }} />');
+        expect(out.changed).toBe(true);
+    });
+
+    it('rewrites a className the map only shortened', () => {
+        const out = run('<div sz={{ m: 1 }} className="gone other" />', { gone: 'sz:remove' });
+        expect(out.code).toBe('<div sz={{ m: 1 }} className="other" />');
+    });
+
+    it('does not eat a character when nothing separates the attributes', () => {
+        const out = run('<div sz={{ m: 1 }}className="mystery" />', { mystery: { p: 4 } });
+        // The space that remains is the one before `/>` in the source; the
+        // attribute took no character with it because none preceded it.
+        expect(out.code).toBe('<div sz={{ m: 1, p: 4 }} />');
+    });
+
+    it('describes an element whose name is not a plain identifier', () => {
+        // A namespaced tag is not a component — migration applies — but it has
+        // no bare name to put in the message.
+        const source = '<svg:rect sz={{ p: 2 }} className="mystery" />';
+        const out = run(source, { mystery: { p: 4 } }, true);
+        expect(out.code).toBe(source);
+        expect(out.warnings[0]).toContain('on <element>:');
+    });
+
     it('still skips the element when no map is given', () => {
         const source = '<div sz={{ m: 1 }} className="p-4" />';
-        const out = transformSource(source, 'Card.tsx');
+        const out = transformSourceTs(source, 'Card.tsx');
+        expect(transformSource(source, 'Card.tsx')).toEqual(out);
         expect(out.code).toBe(source);
         expect(out.changed).toBe(false);
     });

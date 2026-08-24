@@ -48,6 +48,15 @@ const UNMEASURED = [
     // the coverage runs actually measure — an entry here that later becomes
     // instrumented is a gate silently not doing its job.
     /^apps\//,
+    // The TypeScript coverage run measures `packages/*/src/**`. A package's
+    // build, test or lint config sits beside `src`, is read by a tool rather
+    // than executed by a test, and can never carry a hit.
+    /^packages\/[^/]+\/[^/]+\.[cm]?ts$/,
+    // The Rust coverage run enables `native-engine,migrate`. The napi
+    // bindings live behind `native`, so they are not compiled into the run
+    // that produces the report and cannot appear in it. They are exercised
+    // through the built addon instead — see the compiler's migrate suites.
+    /^packages\/core\/src\/native\.rs$/,
 ];
 
 /** Extensions the coverage runs instrument. Anything else is not measurable. */
@@ -223,9 +232,34 @@ export function parseDiffHunks(diff) {
  * @param file - Repo-relative path.
  * @returns True when the file should be measured.
  */
-export function isMeasurable(file) {
+export function isMeasurable(file, readSource = path => readFileSync(path, 'utf8')) {
     if (!MEASURED_EXTENSION.test(file)) return false;
-    return !UNMEASURED.some(pattern => pattern.test(file));
+    if (UNMEASURED.some(pattern => pattern.test(file))) return false;
+    return !isRustWithoutCode(file, readSource);
+}
+
+/**
+ * Whether a Rust file declares no function, and so has nothing to execute.
+ *
+ * `llvm-cov` writes no record for such a file — a module that only lists its
+ * submodules and re-exports them is the usual case — and a missing record
+ * would otherwise read as a file the run forgot to measure. Keyed on the
+ * absence of a function rather than on the name `mod.rs`, so a module that
+ * grows one stops being exempt without anyone remembering to notice.
+ *
+ * @param file - Repo-relative path.
+ * @param readSource - Reader, injected for tests.
+ * @returns True when the file cannot carry a hit.
+ */
+function isRustWithoutCode(file, readSource) {
+    if (!file.endsWith('.rs')) return false;
+    try {
+        return !/\bfn\s/.test(readSource(path.resolve(process.cwd(), file)));
+    } catch {
+        // A file the diff names but the tree no longer has was deleted; the
+        // report cannot mention it either way.
+        return true;
+    }
 }
 
 /**

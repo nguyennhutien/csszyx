@@ -1,6 +1,6 @@
 import { transform } from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
-import { transformSource } from '../src/migrate/ast-transformer.js';
+import { transformSource, transformSourceTs } from '../src/migrate/ast-transformer.js';
 
 /**
  * TRANSITIONAL (0.9.10 → 0.10.0): `csszyx migrate` rewrites legacy keys inside
@@ -9,7 +9,20 @@ import { transformSource } from '../src/migrate/ast-transformer.js';
  * intended. (Remove with the normalizer at v1.)
  */
 describe('migrate normalizes legacy sz prop keys', () => {
-    const run = (src: string) => transformSource(src, 'test.tsx');
+    /**
+     * Both implementations on every case, asserted equal before the case
+     * reads the answer. The native engine is the default, so calling the
+     * dispatcher alone would leave the TypeScript this suite was written
+     * against dark.
+     *
+     * @param src - The JSX source to migrate.
+     * @returns What the TypeScript implementation wrote.
+     */
+    const run = (src: string) => {
+        const ts = transformSourceTs(src, 'test.tsx');
+        expect(transformSource(src, 'test.tsx')).toEqual(ts);
+        return ts;
+    };
 
     it('rewrites removed boolean sugar to the canonical value-keyed form', () => {
         const out = run('<div sz={{ flex: true }} />');
