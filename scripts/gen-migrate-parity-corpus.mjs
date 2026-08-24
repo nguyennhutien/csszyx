@@ -48,6 +48,10 @@ const EDGE_CASES = [
     'w-x/2',
     'text-[px]', // an arbitrary length needs a magnitude, not just a unit
     'text-[abcpx]', // ...and the magnitude has to be numeric
+    'border-z', // a one-letter side that is not a side
+    'border-tr', // two letters that happen to sit next to each other in the
+    // set of side letters, which a substring test would wave through
+    'text-sm/1.x', // a leading modifier whose decimal is not a number
     'w-px', // the two bare words a size accepts, which a fraction check
     'w-full', // ...must not swallow on the way past
     '-ring-2', // a signed number keeps its sign through the emit step

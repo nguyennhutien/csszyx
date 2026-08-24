@@ -4,9 +4,9 @@
   "golden": 804,
   "keyCases": 1437,
   "corpus": 2131,
-  "edgeCases": 376
+  "edgeCases": 379
  },
- "count": 3963,
+ "count": 3966,
  "entries": [
   {
    "c": "accent-2",
@@ -63349,6 +63349,62 @@
     "k": [],
     "g": "{ color: 'abcpx' }",
     "h": "color: 'abcpx'"
+   }
+  },
+  {
+   "c": "border-z",
+   "p": {
+    "prop": "borderColor",
+    "value": "z"
+   },
+   "o": {
+    "sz": {
+     "borderColor": "z"
+    },
+    "szText": "{\"borderColor\":\"z\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderColor: 'z' }",
+    "h": "borderColor: 'z'"
+   }
+  },
+  {
+   "c": "border-tr",
+   "p": {
+    "prop": "borderColor",
+    "value": "tr"
+   },
+   "o": {
+    "sz": {
+     "borderColor": "tr"
+    },
+    "szText": "{\"borderColor\":\"tr\"}",
+    "u": [],
+    "k": [],
+    "g": "{ borderColor: 'tr' }",
+    "h": "borderColor: 'tr'"
+   }
+  },
+  {
+   "c": "text-sm/1.x",
+   "p": {
+    "prop": "text",
+    "value": "sm",
+    "extra": {
+     "prop": "leading",
+     "value": "1.x"
+    }
+   },
+   "o": {
+    "sz": {
+     "text": "sm",
+     "leading": "1.x"
+    },
+    "szText": "{\"text\":\"sm\",\"leading\":\"1.x\"}",
+    "u": [],
+    "k": [],
+    "g": "{ text: 'sm', leading: '1.x' }",
+    "h": "text: 'sm', leading: '1.x'"
    }
   },
   {
