@@ -63,7 +63,10 @@ const MAX_ARRAY_INDEX: u64 = 4_294_967_294;
 /// The index a key denotes when JavaScript would enumerate it first: a
 /// canonical decimal integer with no leading zero, below 2^32 - 1.
 fn array_index(key: &str) -> Option<u64> {
-    if key.is_empty() || !key.bytes().all(|byte| byte.is_ascii_digit()) {
+    // Only the digit check earns its place. An empty key is refused by the
+    // parse below anyway, while a signed one such as `+12` is not: Rust reads
+    // it and JavaScript does not call it an index.
+    if !key.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }
     if key.len() > 1 && key.starts_with('0') {
@@ -238,7 +241,12 @@ pub fn js_number_to_string(value: f64) -> String {
         return "NaN".to_string();
     }
     if value.is_infinite() {
-        return if value > 0.0 { "Infinity" } else { "-Infinity" }.to_string();
+        return if value.is_sign_positive() {
+            "Infinity"
+        } else {
+            "-Infinity"
+        }
+        .to_string();
     }
     if value == 0.0 {
         return "0".to_string();
@@ -385,6 +393,28 @@ pub struct Extra {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn spells_out_which_literals_javascript_accepts() {
+        // This mirrors JavaScript's grammar on purpose, rather than leaning on
+        // Rust's own parser to agree. The two happen to refuse the same
+        // strings today, so nothing downstream notices when this is wrong —
+        // which is exactly why it is pinned here rather than through a caller.
+        for text in ["1", "1.5", ".5", "5.", "1e5", "1E-5", "+1.5", "-1.5e+5"] {
+            assert!(
+                is_js_decimal_literal(text),
+                "{text} is a JavaScript literal"
+            );
+        }
+        for text in [
+            "1.x", "x.1", ".", "1.2.3", "", "1e", "1e+", "inf", "nan", "1_000",
+        ] {
+            assert!(
+                !is_js_decimal_literal(text),
+                "{text} is not a JavaScript literal"
+            );
+        }
+    }
 
     #[test]
     fn reads_numbers_the_way_javascript_does() {
