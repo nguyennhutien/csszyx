@@ -553,6 +553,38 @@ function hasSiblingSzAttribute(parent: VisitNode | null): boolean {
 }
 
 /**
+ * Extends an existing static sz object literal with the resolved keys.
+ *
+ * An object that already has properties is edited after its last one, so the
+ * source keeps whatever formatting the author gave it. An empty one has no
+ * property to append after, so it is rewritten whole.
+ *
+ * @param szObject - The `sz={{ … }}` object literal being extended.
+ * @param start - Source offset the literal begins at.
+ * @param end - Source offset the literal ends at.
+ * @param resolved - The sz object the resolved classes converted to.
+ * @param context - Shared migration state.
+ */
+function appendResolvedToSzObject(
+    szObject: t.ObjectExpression,
+    start: number,
+    end: number,
+    resolved: Record<string, unknown>,
+    context: JsxMigrationContext,
+): void {
+    const last = szObject.properties.at(-1);
+    if (last?.end == null) {
+        context.replacements.push({ start, end, text: generateSzObjectLiteral(resolved) });
+        return;
+    }
+    context.replacements.push({
+        start: last.end,
+        end: last.end,
+        text: `, ${generateSzHtmlValue(resolved)}`,
+    });
+}
+
+/**
  * Merges a className into the static sz prop beside it — the resolve pass
  * meeting an element an earlier pass already migrated.
  *
@@ -615,20 +647,13 @@ function mergeIntoSiblingSz(
     }
 
     if (resolvedKeys.length > 0) {
-        const last = szObject.properties.at(-1);
-        if (last?.end == null) {
-            context.replacements.push({
-                start: szObject.start,
-                end: szObject.end,
-                text: generateSzObjectLiteral(converted.szObject),
-            });
-        } else {
-            context.replacements.push({
-                start: last.end,
-                end: last.end,
-                text: `, ${generateSzHtmlValue(converted.szObject)}`,
-            });
-        }
+        appendResolvedToSzObject(
+            szObject,
+            szObject.start,
+            szObject.end,
+            converted.szObject,
+            context,
+        );
     }
     if (remaining.length === 0) {
         // Take the space before the attribute with it, or two attributes end
