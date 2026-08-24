@@ -29,7 +29,12 @@ export default defineConfig({
             // Still emit the coverage report when a test fails (e.g. a flaky
             // timing test under instrumentation load) so the numbers are visible.
             reportOnFailure: true,
-            include: ['packages/*/src/**/*.{ts,tsx}'],
+            // `native/` sits outside `src` because it is the hand-written
+            // JavaScript that ships to resolve and load the platform binary —
+            // not build output. Left out of the denominator it was invisible
+            // here while Sonar, which reads the same report but its own file
+            // list, counted every line of it as uncovered.
+            include: ['packages/*/src/**/*.{ts,tsx}', 'packages/*/native/**/*.js'],
             exclude: [
                 '**/*.d.ts',
                 '**/dist/**',

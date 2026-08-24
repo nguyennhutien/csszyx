@@ -102,6 +102,15 @@ describe('patch coverage', () => {
         assert.ok(isMeasurable('packages/core/src/migrate/mod.rs', asCode));
     });
 
+    it('measures hand-written js that ships, but not build output', () => {
+        // The native loader is JavaScript beside `src`, not under it, and it
+        // ships. Excluding `.js` wholesale did not read as leniency — the gate
+        // declined to ask, so a changed file with no test reported as covered.
+        assert.ok(isMeasurable('packages/core/native/index.js'));
+        assert.ok(!isMeasurable('packages/core/dist/index.js'));
+        assert.ok(!isMeasurable('scripts/build-native.js'));
+    });
+
     it('exempts a package config, which sits beside src and is never executed', () => {
         assert.ok(!isMeasurable('packages/compiler/build.config.ts'));
         assert.ok(isMeasurable('packages/compiler/src/index.ts'));

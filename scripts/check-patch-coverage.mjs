@@ -57,10 +57,24 @@ const UNMEASURED = [
     // that produces the report and cannot appear in it. They are exercised
     // through the built addon instead — see the compiler's migrate suites.
     /^packages\/core\/src\/native\.rs$/,
+    // Build output. It never mattered while `.js` was unmeasurable outright;
+    // now that the shipped loader is measured, a committed `dist` would be
+    // reported as source with no test.
+    /(^|\/)dist\//,
 ];
 
-/** Extensions the coverage runs instrument. Anything else is not measurable. */
-const MEASURED_EXTENSION = /\.(?:[cm]?tsx?|rs)$/;
+/**
+ * Extensions the coverage runs instrument. Anything else is not measurable.
+ *
+ * `.js` is here for the hand-written JavaScript that ships beside a package's
+ * `src` — the native loader is the only one today. Leaving it out did not make
+ * the gate lenient in a visible way: it made the gate decline to ask, so a
+ * changed file with no test reported as fully covered. Sonar reads the same
+ * report against its own file list and said 0 of 6, which is how the gap was
+ * found. Widen `include` in vitest.config.ts alongside this, or the lines land
+ * in no report and read as an unmeasured language instead.
+ */
+const MEASURED_EXTENSION = /\.(?:[cm]?tsx?|rs|js)$/;
 
 /**
  * Resolve an lcov source path to one the diff also uses.
