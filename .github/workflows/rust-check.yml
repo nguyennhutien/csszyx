@@ -125,6 +125,13 @@ jobs:
   # only happens when a pull request touches one of the hand-written byte
   # scanners. --timeout-multiplier bounds the window relative to the measured
   # baseline rather than pinning an absolute that would drift with runner speed.
+  #
+  # Sharded because the budget is per pull request, not per line: a change that
+  # adds a module rather than editing one produces mutants in proportion to its
+  # size. The port of migrate generated 697 against a 45-minute ceiling sized
+  # for ordinary diffs, and hit the ceiling with most of them unrun. Raising the
+  # ceiling only moves the wall and lengthens the feedback loop; splitting the
+  # work keeps a shard near the ordinary case and leaves room above it.
   mutate-diff:
     name: Mutation (changed lines)
     if: >-
@@ -133,8 +140,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     concurrency:
-      group: mutate-diff-${{ github.event.pull_request.number }}
+      # The shard belongs in the group. A job-level concurrency group is shared
+      # by every matrix instance, so without it the shards cancel each other
+      # and the run reports on whichever one happened to start last.
+      group: mutate-diff-${{ github.event.pull_request.number }}-${{ matrix.shard }}
       cancel-in-progress: true
+    strategy:
+      # One shard timing out still leaves three real results, and cancelling
+      # them would turn a partial answer into none.
+      fail-fast: false
+      matrix:
+        # cargo-mutants numbers shards from ZERO: --shard k/n requires k < n,
+        # so a one-based list would spend a job on an invalid 4/4 and never ask
+        # for slice 0/4 at all.
+        shard: [0, 1, 2, 3]
     steps:
       # Full history: the wrapper scopes the run with `git merge-base HEAD main`
       # and a shallow clone has no merge base to find.
@@ -182,5 +201,6 @@ jobs:
         run: >-
           bash scripts/mutants.sh diff
           --features native-engine,migrate
+          --shard ${{ matrix.shard }}/4
           --timeout-multiplier 3
           --minimum-test-timeout 30
