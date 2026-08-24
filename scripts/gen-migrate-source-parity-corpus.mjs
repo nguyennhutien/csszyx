@@ -44,6 +44,11 @@ const CUSTOM_MAP = {
     gone: 'sz:remove',
     pending: 'sz:todo',
     'p-4': { padding: 'custom' },
+    // Keys a class never produces, but a hand-written map can. Whether a key
+    // is written bare or in quotes is decided by a check that reads the first
+    // character, and these are the characters an identifier may start with
+    // besides a letter.
+    'odd-keys': { _leading: 1, $sigil: 2, 'not-an-identifier': 3 },
 };
 
 const DEFAULT = {};
@@ -224,6 +229,58 @@ const SNIPPETS = [
         'import-clsx-used-after-class-name',
         'import clsx from "clsx";\nexport const A = () => <div className={clsx("p-4")} />;\nconst x = clsx("a");',
         DEFAULT,
+    ],
+    [
+        // `||` where the code only ever looks for `&&`. A guard that matched
+        // any logical operator would read this as the and-form and keep the
+        // string that follows it.
+        'clsx-or-not-and',
+        '<div className={clsx("p-4", cond || "m-2")} />',
+        DEFAULT,
+    ],
+    ['template-or-not-and', '<div className={`${cond || "m-2"} p-4`} />', DEFAULT],
+    [
+        // A negated condition is parenthesised when it is compound. These two
+        // are compound in different ways: one carries spaces and no operator
+        // between the names, the other an operator and no spaces. Testing for
+        // either alone lets one of them through unparenthesised, and the
+        // negation then binds to the first name only.
+        'ternary-condition-spaced',
+        '<div className={a === b ? "p-4" : "m-2"} />',
+        DEFAULT,
+    ],
+    ['ternary-condition-unspaced-or', '<div className={a||b ? "p-4" : "m-2"} />', DEFAULT],
+    [
+        // The parser is asked not to keep parentheses as nodes of their own.
+        // Left at its default it keeps them, and everything that reads through
+        // an expression then has one more wrapper to see past.
+        'class-name-in-parentheses',
+        '<div className={("p-4")} />',
+        DEFAULT,
+    ],
+    [
+        // Imports clsx, never calls it, and has no className to migrate. The
+        // report of a possibly unused import is gated on the file having
+        // changed at all, and this is the file that separates the two.
+        'import-clsx-untouched-file',
+        'import clsx from "clsx";\nexport const A = () => <div />;',
+        DEFAULT,
+    ],
+    [
+        // Two names for the same helper. Collecting them dedupes by name, and
+        // a comparison written the other way round would keep only the first.
+        'import-clsx-two-names',
+        'import clsx from "clsx";\nimport cn from "clsx";\nexport const A = () => <div className={clsx("p-4")} />;',
+        DEFAULT,
+    ],
+    ['class-name-with-odd-map-keys', '<div className="odd-keys" />', MAP],
+    [
+        // An object whose members are not all plain key-value pairs. Reading
+        // the keys has to skip a method and an accessor rather than treat
+        // their names as sz keys.
+        'sz-object-with-method-and-accessor',
+        'const A = () => <div sz={{ p: 4, m() {}, get z() { return 1; } }} className="mystery" />;',
+        MAP,
     ],
     [
         // Exactly 2^63. Below it an integral double is an exact i64 and prints
@@ -429,6 +486,15 @@ const FILE_SENSITIVE = new Set([
 
 /** HTML sources: `[name, source, options...]`. */
 const HTML_SNIPPETS = [
+    [
+        // The attribute at the very start of the text. Deciding whether the
+        // word begins here means looking at the character before it, and there
+        // is none — so the check that there is one is load-bearing rather than
+        // defensive.
+        'html-class-at-offset-zero',
+        'class="p-4">x</div>',
+        {},
+    ],
     [
         'html-basic',
         '<html><head><title>x</title></head><body><div class="p-4 bg-blue-500">x</div></body></html>',

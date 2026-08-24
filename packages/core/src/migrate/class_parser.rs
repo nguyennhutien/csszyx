@@ -157,9 +157,13 @@ fn parse_exact_prefix(prefix: &'static str, negative: bool) -> Option<ParsedClas
     if prefix == "divide-x" || prefix == "divide-y" || prefix == "border" {
         return Some(ParsedClass::new(prop, true));
     }
+    // Named rather than searched. A substring test would also accept a
+    // two-letter suffix that happens to sit next to itself in the list, such
+    // as "tr" or "se", and only the length test beside it was keeping those
+    // out — a pairing that holds today because no such prefix exists yet.
     let border_side = prefix
         .strip_prefix("border-")
-        .is_some_and(|side| side.len() == 1 && "trblxyse".contains(side));
+        .is_some_and(|side| matches!(side, "t" | "r" | "b" | "l" | "x" | "y" | "s" | "e"));
     border_side.then(|| ParsedClass::new(prop, true))
 }
 
