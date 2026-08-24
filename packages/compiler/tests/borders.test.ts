@@ -134,6 +134,16 @@ describe('borders — border width', () => {
     it('{ border: "--w" } → border-(--w) (css variable)', () => {
         expect(t({ border: '--w' })).toBe('border-(--w)');
     });
+
+    it('{ border: "var(--w)" } → border-[var(--w)] (written out, not shorthand)', () => {
+        // The two spellings of the same variable take different routes on
+        // purpose: a bare `--w` becomes Tailwind's variable shorthand, while
+        // one already written as `var(...)` is passed through as an arbitrary
+        // value. Both emit the same CSS, so nothing here fails loudly if the
+        // second one starts collapsing into the first — which is why the
+        // boundary is pinned rather than left to the shorthand case alone.
+        expect(t({ border: 'var(--w)' })).toBe('border-[var(--w)]');
+    });
 });
 
 describe('borders — border color', () => {
