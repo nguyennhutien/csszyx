@@ -226,6 +226,22 @@ const SNIPPETS = [
         DEFAULT,
     ],
     [
+        // Exactly 2^63. Below it an integral double is an exact i64 and prints
+        // without an exponent; at it the cast overflows, so the boundary is
+        // the one value that tells a correct comparison from an off-by-one.
+        'sz-number-at-i64-boundary',
+        'const A = () => <div sz={{ z: 9223372036854775808, order: 9223372036854775807 }} />;',
+        DEFAULT,
+    ],
+    [
+        // JavaScript enumerates integer-like keys first, and an empty key is
+        // not one. Nothing a class produces is empty, so only a hand-written
+        // object reaches the check that says so.
+        'sz-empty-string-key',
+        "const A = () => <div sz={{ '': 1, padding: 2 }} />;",
+        DEFAULT,
+    ],
+    [
         'import-clsx-optional-call-after-class-name',
         'import clsx from "clsx";\nexport const A = () => <div className={clsx("p-4")} />;\nconst x = clsx?.("a");',
         DEFAULT,
