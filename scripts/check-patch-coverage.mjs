@@ -50,8 +50,12 @@ const UNMEASURED = [
     /^apps\//,
     // The TypeScript coverage run measures `packages/*/src/**`. A package's
     // build, test or lint config sits beside `src`, is read by a tool rather
-    // than executed by a test, and can never carry a hit.
+    // than executed by a test, and can never carry a hit. The workspace's own
+    // configs sit at the root for the same reason and are read the same way —
+    // `vitest.config.ts` among them, which is how a run that edits the
+    // coverage settings ends up reporting the settings file as untested.
     /^packages\/[^/]+\/[^/]+\.[cm]?ts$/,
+    /^[^/]+\.[cm]?ts$/,
     // The Rust coverage run enables `native-engine,migrate`. The napi
     // bindings live behind `native`, so they are not compiled into the run
     // that produces the report and cannot appear in it. They are exercised

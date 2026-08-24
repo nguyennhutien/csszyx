@@ -116,6 +116,13 @@ describe('patch coverage', () => {
         assert.ok(isMeasurable('packages/compiler/src/index.ts'));
     });
 
+    it('exempts a workspace config at the root, read by a tool rather than run', () => {
+        // Editing the coverage settings otherwise reports the settings file
+        // as a changed line with no test, which no test could ever give it.
+        assert.ok(!isMeasurable('vitest.config.ts'));
+        assert.ok(!isMeasurable('eslint.config.ts'));
+    });
+
     it('defaults the base to the main branch and the reports to the CI set', () => {
         const parsed = parseArgs([]);
 
