@@ -169,9 +169,18 @@ jobs:
       # engine only exists behind native-engine, and without it every mutant
       # lands in a crate whose transform module is compiled out and reports back
       # as unviable — a green run that measured nothing.
+      #
+      # migrate is named too, and it is the more dangerous omission. It is a
+      # separate feature on purpose, so a run without it compiles the migrate
+      # module out — and a mutant in code that is not compiled builds fine and
+      # passes every test, which reports as MISSED rather than unviable. That
+      # reads as a weak suite instead of a run that measured nothing, and sends
+      # whoever acts on it to write tests for lines that already have them.
+      # Measured on one mutant: "replace == with != in is_word_char" is MISSED
+      # under native-engine alone and CAUGHT under native-engine,migrate.
       - name: Mutate the diff
         run: >-
           bash scripts/mutants.sh diff
-          --features native-engine
+          --features native-engine,migrate
           --timeout-multiplier 3
           --minimum-test-timeout 30
