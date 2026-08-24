@@ -4,9 +4,9 @@
   "golden": 804,
   "keyCases": 1437,
   "corpus": 2131,
-  "edgeCases": 362
+  "edgeCases": 373
  },
- "count": 3952,
+ "count": 3960,
  "entries": [
   {
    "c": "accent-2",
@@ -63227,6 +63227,159 @@
    }
   },
   {
+   "c": "from-abc%",
+   "p": {
+    "prop": "from",
+    "value": "abc%"
+   },
+   "o": {
+    "sz": {
+     "from": "abc%"
+    },
+    "szText": "{\"from\":\"abc%\"}",
+    "u": [],
+    "k": [],
+    "g": "{ from: 'abc%' }",
+    "h": "from: 'abc%'"
+   }
+  },
+  {
+   "c": "from-1.x%",
+   "p": {
+    "prop": "from",
+    "value": "1.x%"
+   },
+   "o": {
+    "sz": {
+     "from": "1.x%"
+    },
+    "szText": "{\"from\":\"1.x%\"}",
+    "u": [],
+    "k": [],
+    "g": "{ from: '1.x%' }",
+    "h": "from: '1.x%'"
+   }
+  },
+  {
+   "c": "from-x.1%",
+   "p": {
+    "prop": "from",
+    "value": "x.1%"
+   },
+   "o": {
+    "sz": {
+     "from": "x.1%"
+    },
+    "szText": "{\"from\":\"x.1%\"}",
+    "u": [],
+    "k": [],
+    "g": "{ from: 'x.1%' }",
+    "h": "from: 'x.1%'"
+   }
+  },
+  {
+   "c": "w-1/x",
+   "p": {
+    "prop": "w",
+    "value": 1
+   },
+   "o": {
+    "sz": {
+     "w": 1
+    },
+    "szText": "{\"w\":1}",
+    "u": [],
+    "k": [],
+    "g": "{ w: 1 }",
+    "h": "w: 1"
+   }
+  },
+  {
+   "c": "w-x/2",
+   "p": {
+    "prop": "w",
+    "value": {
+     "color": "x",
+     "op": 2
+    }
+   },
+   "o": {
+    "sz": {
+     "w": {
+      "color": "x",
+      "op": 2
+     }
+    },
+    "szText": "{\"w\":{\"color\":\"x\",\"op\":2}}",
+    "u": [],
+    "k": [],
+    "g": "{ w: { color: 'x', op: 2 } }",
+    "h": "w: { color: 'x', op: 2 }"
+   }
+  },
+  {
+   "c": "text-[px]",
+   "p": {
+    "prop": "color",
+    "value": "px"
+   },
+   "o": {
+    "sz": {
+     "color": "px"
+    },
+    "szText": "{\"color\":\"px\"}",
+    "u": [],
+    "k": [],
+    "g": "{ color: 'px' }",
+    "h": "color: 'px'"
+   }
+  },
+  {
+   "c": "text-[abcpx]",
+   "p": {
+    "prop": "color",
+    "value": "abcpx"
+   },
+   "o": {
+    "sz": {
+     "color": "abcpx"
+    },
+    "szText": "{\"color\":\"abcpx\"}",
+    "u": [],
+    "k": [],
+    "g": "{ color: 'abcpx' }",
+    "h": "color: 'abcpx'"
+   }
+  },
+  {
+   "c": "-ring-2",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-ring-2"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
+   "c": "-inset-ring-4",
+   "p": null,
+   "o": {
+    "sz": {},
+    "szText": "{}",
+    "u": [
+     "-inset-ring-4"
+    ],
+    "k": [],
+    "g": "{}",
+    "h": ""
+   }
+  },
+  {
    "c": "!p-4",
    "p": null,
    "o": {
@@ -63265,20 +63418,6 @@
     "szText": "{}",
     "u": [
      "-inset-ring-2"
-    ],
-    "k": [],
-    "g": "{}",
-    "h": ""
-   }
-  },
-  {
-   "c": "-ring-2",
-   "p": null,
-   "o": {
-    "sz": {},
-    "szText": "{}",
-    "u": [
-     "-ring-2"
     ],
     "k": [],
     "g": "{}",

@@ -92,8 +92,6 @@ pub enum Emit {
     Unwrapped,
     /// The integer the value reads as.
     Number,
-    /// The integer, negated when the class was.
-    SignedNumber,
     ParenInner,
     ParenColorInner,
     /// The bracket's inside with underscores read as spaces.
@@ -137,7 +135,7 @@ macro_rules! rule {
 
 use Emit::{
     AfterMarker, BracketInner, Literal, Number, ParenColorInner, ParenInner, ParseValue,
-    ParseValueUnsigned, SignedNumber, Unwrapped, Verbatim,
+    ParseValueUnsigned, Unwrapped, Verbatim,
 };
 use Prop::{Key, Prefix, PrefixPos, Reverse};
 use Test::{
@@ -345,7 +343,7 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
     (
         "ring",
         &[
-            rule!(Integer, Key("ring"), SignedNumber),
+            rule!(Integer, Key("ring"), Number),
             rule!(ArbitraryDimension, Key("ring"), Unwrapped),
             rule!(Always, Key("ringColor"), Unwrapped),
         ],
@@ -360,7 +358,7 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
     (
         "inset-ring",
         &[
-            rule!(Integer, Key("insetRing"), SignedNumber),
+            rule!(Integer, Key("insetRing"), Number),
             rule!(ArbitraryDimension, Key("insetRing"), Unwrapped),
             rule!(Always, Key("insetRingColor"), Unwrapped),
         ],
@@ -515,10 +513,6 @@ pub fn emit(rule: &Rule, prefix: &str, shape: &Shape<'_>, negative: bool) -> SzV
         Literal(literal) => SzValue::from(*literal),
         Unwrapped => SzValue::from(parse_string_value(value)),
         Number => SzValue::Number(shape.number.unwrap_or(f64::NAN)),
-        SignedNumber => {
-            let number = shape.number.unwrap_or(f64::NAN);
-            SzValue::Number(if negative { -number } else { number })
-        }
         ParenInner => SzValue::from(shape.paren.unwrap_or_default()),
         ParenColorInner => SzValue::from(
             shape
@@ -665,9 +659,6 @@ pub fn parse_value(prefix: &str, value: &str, negative: bool) -> SzValue {
         return SzValue::from(signed_string(inner, negative));
     }
     if tables::fraction_supported(prefix) && is_fraction(value) {
-        return SzValue::from(signed_string(value, negative));
-    }
-    if value == "px" || value == "full" {
         return SzValue::from(signed_string(value, negative));
     }
     if value == "auto" || value == "screen" {

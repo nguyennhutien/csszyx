@@ -35,6 +35,23 @@ const check = process.argv.includes('--check');
  * differently.
  */
 const EDGE_CASES = [
+    // ── values a prefix must REJECT ──
+    // Every class above is one Tailwind would emit, so the corpus only ever
+    // asked whether a valid value is read correctly. These ask the opposite:
+    // that a value of the wrong shape falls through to the rule beneath it.
+    // Mutation testing found the gap — breaking each shape test below changed
+    // no answer, because nothing had ever handed it something to refuse.
+    'from-abc%', // a percentage position needs digits before the sign
+    'from-1.x%', // ...on both sides of the point
+    'from-x.1%',
+    'w-1/x', // a fraction needs digits either side of the slash
+    'w-x/2',
+    'text-[px]', // an arbitrary length needs a magnitude, not just a unit
+    'text-[abcpx]', // ...and the magnitude has to be numeric
+    'w-px', // the two bare words a size accepts, which a fraction check
+    'w-full', // ...must not swallow on the way past
+    '-ring-2', // a signed number keeps its sign through the emit step
+    '-inset-ring-4',
     '!p-4',
     'p-4!',
     '-mt-4',
