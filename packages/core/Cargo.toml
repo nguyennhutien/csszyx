@@ -24,7 +24,9 @@ wasm-bindgen = "=0.2.93"
 sha2 = "0.10"
 hex = "0.4"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# raw_value: the migrate serialiser writes numbers as JavaScript spells them
+# rather than as the JSON float writer would, which disagrees above 2^63.
+serde_json = { version = "1.0", features = ["raw_value"] }
 serde-wasm-bindgen = "0.6.5"
 indexmap = { version = "2", features = ["serde"] }
 napi = { version = "3.10.5", default-features = false, features = ["napi4"], optional = true }

@@ -52,6 +52,13 @@ const EDGE_CASES = [
     'w-full', // ...must not swallow on the way past
     '-ring-2', // a signed number keeps its sign through the emit step
     '-inset-ring-4',
+    // Numbers where the two engines could spell the same double differently.
+    // 2^63 is where a JSON float writer reaches for an exponent while
+    // JavaScript keeps writing digits, and 1e21 is where JavaScript finally
+    // switches. The shortest form of 2^63 is also not its exact expansion.
+    'z-9223372036854775808',
+    'z-100000000000000000000',
+    'z-1000000000000000000000',
     '!p-4',
     'p-4!',
     '-mt-4',

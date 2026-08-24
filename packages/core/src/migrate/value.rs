@@ -14,6 +14,7 @@ use std::ops::{Deref, DerefMut};
 use indexmap::IndexMap;
 use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer};
+use serde_json::value::RawValue;
 
 /// An sz object: keys in insertion order, as migrate writes them.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -215,14 +216,16 @@ fn serialize_js_number<S: Serializer>(value: f64, serializer: S) -> Result<S::Ok
     if !value.is_finite() {
         return serializer.serialize_none();
     }
-    // An integral double below 2^63 is exactly an i64, which prints without
-    // a fraction or an exponent, as JavaScript prints it up to 1e21.
-    if value.fract() == 0.0 && value.abs() < 9_223_372_036_854_775_808.0 {
-        // Integral and in range: the cast is exact.
-        #[allow(clippy::cast_possible_truncation)]
-        return serializer.serialize_i64(value as i64);
+    // Write the digits JavaScript would, rather than letting the JSON layer
+    // choose. Its float writer switches to an exponent from 2^63 up, while
+    // JavaScript keeps writing digits until 1e21 — so the two disagree on
+    // every integral value in between, and on 1e20.
+    let text = js_number_to_string(value);
+    match RawValue::from_string(text) {
+        Ok(raw) => raw.serialize(serializer),
+        // Unreachable for a finite double, which always formats as valid JSON.
+        Err(_) => serializer.serialize_f64(value),
     }
-    serializer.serialize_f64(value)
 }
 
 /// Format a number the way JavaScript's `String(number)` does.
@@ -249,9 +252,10 @@ pub fn js_number_to_string(value: f64) -> String {
             _ => exponent,
         };
     }
-    if value.fract() == 0.0 {
-        return format!("{value:.0}");
-    }
+    // Display is shortest-round-trip, which is the rule JavaScript prints by.
+    // Formatting an integral value as a fixed decimal instead writes its exact
+    // expansion, and above 2^53 the two part company: 2^63 is exactly
+    // 9223372036854775808, and JavaScript writes 9223372036854776000.
     format!("{value}")
 }
 
