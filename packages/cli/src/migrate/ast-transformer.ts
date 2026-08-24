@@ -86,7 +86,10 @@ type VisitNode = t.Node | ReturnType<typeof parse>;
 
 interface AstVisitors {
     ImportDeclaration?: (node: t.ImportDeclaration) => void;
-    CallExpression?: (node: t.CallExpression, ancestors: VisitNode[]) => void;
+    CallExpression?: (
+        node: t.CallExpression | t.OptionalCallExpression,
+        ancestors: VisitNode[],
+    ) => void;
     JSXAttribute?: (node: t.JSXAttribute, parent: VisitNode | null) => void;
 }
 
@@ -124,7 +127,9 @@ function injectTodoComment(
 function walkAst(node: VisitNode, visitors: AstVisitors, ancestors: VisitNode[] = []): void {
     if (t.isImportDeclaration(node)) {
         visitors.ImportDeclaration?.(node);
-    } else if (t.isCallExpression(node)) {
+        // An optional call is a separate node type here, and missing it read
+        // as the callee never being called at all.
+    } else if (t.isCallExpression(node) || t.isOptionalCallExpression(node)) {
         visitors.CallExpression?.(node, ancestors);
     } else if (t.isJSXAttribute(node)) {
         visitors.JSXAttribute?.(node, ancestors.at(-1) ?? null);

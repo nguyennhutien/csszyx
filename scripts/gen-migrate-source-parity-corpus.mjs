@@ -214,6 +214,23 @@ const SNIPPETS = [
         DEFAULT,
     ],
     [
+        // Same file with the order swapped. Whether clsx is still needed is
+        // decided by a depth counter that rises on entering a className and
+        // falls on leaving it, so a use that comes BEFORE any className is
+        // read at depth zero and would be seen even if the fall never
+        // happened. Only a use that comes after one can tell the two apart —
+        // and getting it wrong tells the reader to delete an import their
+        // file still calls.
+        'import-clsx-used-after-class-name',
+        'import clsx from "clsx";\nexport const A = () => <div className={clsx("p-4")} />;\nconst x = clsx("a");',
+        DEFAULT,
+    ],
+    [
+        'import-clsx-optional-call-after-class-name',
+        'import clsx from "clsx";\nexport const A = () => <div className={clsx("p-4")} />;\nconst x = clsx?.("a");',
+        DEFAULT,
+    ],
+    [
         'import-clsx-no-change',
         'import clsx from "clsx";\nexport const A = () => <div className={clsx(foo)} />;',
         DEFAULT,
