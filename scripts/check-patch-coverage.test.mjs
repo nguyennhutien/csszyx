@@ -116,6 +116,14 @@ describe('patch coverage', () => {
         assert.ok(isMeasurable('packages/compiler/src/index.ts'));
     });
 
+    it('exempts a documentation example, which is written to be read', () => {
+        // It imports the built artifact, so no unit test drives it without a
+        // build. Sonar excludes it too; a file one list measures and the other
+        // does not is the gap this gate keeps being wrong about.
+        assert.ok(!isMeasurable('packages/core/examples/basic-usage.ts'));
+        assert.ok(isMeasurable('packages/core/src/index.ts'));
+    });
+
     it('exempts a workspace config at the root, read by a tool rather than run', () => {
         // Editing the coverage settings otherwise reports the settings file
         // as a changed line with no test, which no test could ever give it.

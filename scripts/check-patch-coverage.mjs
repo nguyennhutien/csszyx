@@ -56,6 +56,11 @@ const UNMEASURED = [
     // coverage settings ends up reporting the settings file as untested.
     /^packages\/[^/]+\/[^/]+\.[cm]?ts$/,
     /^[^/]+\.[cm]?ts$/,
+    // A snippet written for a reader to copy, not a code path the package
+    // takes. It imports the built wasm artifact, so no unit test can drive it
+    // without a build first. Sonar excludes it for the same reason, and the
+    // two lists disagreeing is what this gate exists to prevent.
+    /^packages\/[^/]+\/examples\//,
     // The Rust coverage run enables `native-engine,migrate`. The napi
     // bindings live behind `native`, so they are not compiled into the run
     // that produces the report and cannot appear in it. They are exercised
