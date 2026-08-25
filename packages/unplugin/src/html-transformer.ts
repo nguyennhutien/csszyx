@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 
 import type { CssVariableMangleValue, TokenData } from '@csszyx/compiler';
 import { CSSZYX_GLOBAL_ALIAS_PREFIX } from '@csszyx/types';
+import { createLegacyInlineInstaller } from './legacy-inline-installer.js';
 import { sortStrings } from './sort.js';
 import { replaceEveryLiteral, unicodeEscape } from './string-escape.js';
 
@@ -40,7 +41,12 @@ export function safeJsonForScriptTag(value: unknown, prettyPrint = false): strin
 }
 
 /**
- * Injection mode for mangle map.
+ * Carrier for the inert hydration census — DATA, never executable code.
+ *
+ * `script` is a `<script type="application/json">` data block: browsers do
+ * not evaluate it and a `script-src` policy does not apply to it. It is the
+ * form `@csszyx/runtime`'s hydration verification reads back from the DOM.
+ * Executable installation is a separate decision ({@link HtmlInjectionOptions.inlineInstaller}).
  */
 export type InjectionMode = 'inline' | 'script' | 'both';
 
@@ -49,10 +55,10 @@ export type InjectionMode = 'inline' | 'script' | 'both';
  */
 export interface HtmlInjectionOptions {
     /**
-     * How to inject the mangle map.
+     * Where the inert census goes.
      * - 'inline': As data-sz-map attribute on <html>
-     * - 'script': As <script id="__CSSZYX_MANGLE_MAP__"> in <head>
-     * - 'both': Both methods
+     * - 'script': As <script id="__CSSZYX_MANGLE_MAP__" type="application/json"> in <head>
+     * - 'both': Both carriers
      *
      * @default 'script'
      */
@@ -84,15 +90,17 @@ export interface HtmlInjectionOptions {
     globalVarAliasPrefix?: string;
 
     /**
-     * Whether the HTML also installs `window.__csszyx`.
+     * Also emit the legacy EXECUTABLE inline installer for `window.__csszyx`.
      *
-     * The checksum payload ships either way — hydration verification reads it
-     * from the DOM. Disable when the JS bundle owns the runtime object, so the
-     * census is not serialized into both the page and the bundle.
+     * Off by default: an inline `<script>` is refused by a strict
+     * Content-Security-Policy, and the runtime map's correctness delivery is
+     * the bundle module. The census ships either way — hydration verification
+     * reads it from the DOM. Only the deprecated `html` / `both` delivery
+     * modes ask for this.
      *
-     * @default true
+     * @default false
      */
-    installRuntimeObject?: boolean;
+    inlineInstaller?: boolean;
 }
 
 /**
@@ -184,7 +192,7 @@ export function injectMangleMapScript(
         prettyPrint = false,
         varMangleMap = {},
         globalVarAliasPrefix = CSSZYX_GLOBAL_ALIAS_PREFIX,
-        installRuntimeObject = true,
+        inlineInstaller = false,
     } = options;
     const checksumMap = createHydrationMangleMap(mangleMap, varMangleMap);
 
@@ -204,11 +212,17 @@ export function injectMangleMapScript(
         : safeJsonForScriptTag(mangleMap);
 
     const scriptTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">${jsonContent}</script>`;
-    const prefixContent = safeJsonForScriptTag(globalVarAliasPrefix);
-    const debugScript = `<script>(function(){var m=${classMapExpr};var vm=${varMapContent};var gp=${prefixContent};var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}var cs=document.documentElement.getAttribute("data-sz-checksum")||"";window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:cs,decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()</script>`;
+    const legacyInstaller = inlineInstaller
+        ? `<script>${createLegacyInlineInstaller({
+              mapExpr: classMapExpr,
+              varMapExpr: varMapContent,
+              prefixExpr: safeJsonForScriptTag(globalVarAliasPrefix),
+              checksumExpr: 'document.documentElement.getAttribute("data-sz-checksum")||""',
+          })}</script>`
+        : null;
 
     // Inject before </head> or before </html> if no head
-    const combined = installRuntimeObject ? `${scriptTag}\n${debugScript}` : scriptTag;
+    const combined = legacyInstaller === null ? scriptTag : `${scriptTag}\n${legacyInstaller}`;
     if (html.includes('</head>')) {
         return html.replace('</head>', `${combined}\n</head>`);
     } else if (html.includes('</html>')) {

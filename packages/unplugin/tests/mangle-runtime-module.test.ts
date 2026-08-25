@@ -25,80 +25,74 @@ import {
 } from '../src/virtual-modules.js';
 import { freshFixtureRoot } from './fixture-root.js';
 
-interface InstalledRuntime {
-    mangleMap: Record<string, string>;
-    varMangleMap: Record<string, string | string[]>;
-    checksum: string;
-    decode: (token: string) => string | undefined;
-    encode: (cls: string) => string | undefined;
-    decodeVar: (token: string) => string[];
-    encodeVar: (name: string) => string | string[] | undefined;
-    decodeGlobalVar: (token: string) => string | undefined;
-    decodeAll: (el: { className: string }) => string[];
-}
-
 const MAP = { 'flex-col': 'm7', 'mx-0': 'z' };
 const VAR_MAP = { '--_sz-a': ['v1', 'v2'], '--_sz-b': 'v3' };
 
+/** What the generated module hands to `installMangleRuntime`. */
+interface InstallInput {
+    mangleMap: Record<string, string>;
+    varMangleMap: Record<string, string | string[]>;
+    checksum: string;
+    globalVarAliasPrefix: string;
+    exposeDebugGlobal: boolean;
+}
+
 /**
  * Substitute the placeholders the way output processing does, then execute the
- * generated module body against a fake `window`.
+ * generated module body against a stub `installMangleRuntime`.
+ *
  * @param prefix - Global CSS variable alias prefix baked into the module.
- * @param window - Fake window object; omit to simulate SSR (no window global).
- * @param window.__csszyx - Pre-existing runtime object, when present.
- * @param checksum - Value substituted for the checksum placeholder.
- * @returns The installed runtime object, when the module installed one.
+ * @param exposeDebugGlobal - Whether the module asks for `window.__csszyx`.
+ * @returns The argument the module passed to the installer.
  */
-function runModule(
-    prefix: string,
-    window?: { __csszyx?: unknown },
-    checksum = 'sum-1',
-): InstalledRuntime | undefined {
-    const source = createMangleRuntimeModule(prefix)
+function runModule(prefix: string, exposeDebugGlobal?: boolean): InstallInput | undefined {
+    const source = createMangleRuntimeModule(prefix, exposeDebugGlobal)
         .split(MANGLE_MAP_PLACEHOLDER)
         .join(JSON.stringify(MAP))
         .split(VAR_MANGLE_MAP_PLACEHOLDER)
         .join(JSON.stringify(VAR_MAP))
         .split(CHECKSUM_PLACEHOLDER)
-        .join(checksum);
-    const context: Record<string, unknown> = window === undefined ? {} : { window };
-    // The generated source is an ES module whose only statement besides consts
-    // is the guarded install; strip the export so `vm` can run it as a script.
-    runInNewContext(source.replace('export {};', ''), context);
-    return (window as { __csszyx?: InstalledRuntime } | undefined)?.__csszyx;
+        .join('sum-1');
+    let installed: InstallInput | undefined;
+    const context = {
+        installMangleRuntime: (input: InstallInput) => {
+            installed = input;
+        },
+    };
+    // The generated source is an ES module: one import, one call. Strip the
+    // import so `vm` can run it as a script against the stub.
+    const importLine = /^import \{ installMangleRuntime \} from '@csszyx\/runtime\/core';$/m;
+    expect(source).toMatch(importLine);
+    runInNewContext(source.replace(importLine, ''), context);
+    return installed;
 }
 
 describe('createMangleRuntimeModule', () => {
-    it('installs the full runtime object when no window object exists', () => {
-        const window: { __csszyx?: unknown } = {};
-        const runtime = runModule('--app-', window);
-
-        expect(runtime).toBeDefined();
-        expect(runtime?.mangleMap).toEqual(MAP);
-        expect(runtime?.checksum).toBe('sum-1');
-        expect(runtime?.encode('flex-col')).toBe('m7');
-        expect(runtime?.decode('m7')).toBe('flex-col');
-        expect(runtime?.decode('unknown')).toBeUndefined();
-        expect(runtime?.decodeVar('v1')).toEqual(['--_sz-a']);
-        expect(runtime?.decodeVar('v3')).toEqual(['--_sz-b']);
-        expect(runtime?.encodeVar('--_sz-b')).toBe('v3');
-        expect(runtime?.decodeAll({ className: 'm7 z keep' })).toEqual([
-            'flex-col',
-            'mx-0',
-            'keep',
-        ]);
+    it('registers the final map through the runtime installer, not a window global', () => {
+        const source = createMangleRuntimeModule('--app-');
+        // Correctness goes through the registry inside @csszyx/runtime; the
+        // module never touches `window` itself.
+        expect(source).not.toContain('window');
+        // Placeholders, not live values: substitution happens at output
+        // processing, after the mangle passes.
+        expect(source).toContain(MANGLE_MAP_PLACEHOLDER);
+        expect(source).toContain(VAR_MANGLE_MAP_PLACEHOLDER);
+        expect(source).toContain(CHECKSUM_PLACEHOLDER);
     });
 
-    it('never replaces an existing runtime object', () => {
-        const existing = { checksum: 'html-script' };
-        const window: { __csszyx?: unknown } = { __csszyx: existing };
-        runModule('--app-', window, 'sum-2');
-
-        expect(window.__csszyx).toBe(existing);
+    it('passes every input to installMangleRuntime', () => {
+        expect(runModule('--app-')).toEqual({
+            mangleMap: MAP,
+            varMangleMap: VAR_MAP,
+            checksum: 'sum-1',
+            globalVarAliasPrefix: '--app-',
+            exposeDebugGlobal: false,
+        });
     });
 
-    it('is inert without a window (SSR)', () => {
-        expect(() => runModule('--app-', undefined, 'sum-3')).not.toThrow();
+    it('asks for the debug global only when the build opted in', () => {
+        expect(runModule('--app-', true)?.exposeDebugGlobal).toBe(true);
+        expect(runModule('--app-', false)?.exposeDebugGlobal).toBe(false);
     });
 
     it('resolves through the virtual module registry', () => {
@@ -174,6 +168,58 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
         expect(out?.code ?? '').toContain(MANGLE_RUNTIME_VIRTUAL_ID);
     });
 
+    it('attaches the registration module to the HTML entry when a mangled build has a map', async () => {
+        // Per-consumer injection only reaches modules the plugin processes; a
+        // pre-compiled wrapper package under node_modules that imports the
+        // runtime itself gets none. The HTML entry is the one guaranteed
+        // ancestor of every module in the page, so the tag goes there — as
+        // the first module script, which vite turns into the first import of
+        // the entry, evaluated before the app and everything it imports.
+        const { call, root } = pluginHarness();
+        mkdirSync(resolve(root, 'src'), { recursive: true });
+        writeFileSync(
+            resolve(root, 'src/A.tsx'),
+            'export const A = () => <div sz={{ p: 4 }} />;',
+            'utf8',
+        );
+        await call('configResolved', { root, command: 'build' });
+        await call('buildEnd');
+
+        const out = (await call(
+            'transformIndexHtml',
+            '<html><head></head><body></body></html>',
+        )) as {
+            html: string;
+            tags: { tag: string; attrs: Record<string, string>; injectTo: string }[];
+        };
+        expect(typeof out).toBe('object');
+        expect(out.tags).toEqual([
+            {
+                tag: 'script',
+                attrs: { type: 'module', src: MANGLE_RUNTIME_VIRTUAL_ID },
+                injectTo: 'head-prepend',
+            },
+        ]);
+        expect(out.html).toContain('__CSSZYX_MANGLE_MAP__');
+        expect(out.html).not.toMatch(/<script>/);
+    });
+
+    it('attaches no module tag when there is nothing to register', async () => {
+        const cases: Record<string, unknown>[] = [
+            // mangled but the census is empty
+            {},
+            // the deprecated html mode owns delivery through the inline script
+            { mangleMapDelivery: 'html' },
+        ];
+        for (const production of cases) {
+            const { call, root } = pluginHarness(production);
+            await call('configResolved', { root, command: 'build' });
+            await call('buildEnd');
+            const out = await call('transformIndexHtml', '<html><head></head><body></body></html>');
+            expect(typeof out, JSON.stringify(production)).toBe('string');
+        }
+    });
+
     it('does not inject in a dev server (mangling forced off)', async () => {
         const { call, root } = pluginHarness();
         await call('configResolved', { root, command: 'serve' });
@@ -189,7 +235,8 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
         await call('configResolved', { root, command: 'build' });
 
         const loaded = (await call('load', RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID)) as string;
-        expect(loaded).toContain('window.__csszyx');
+        expect(loaded).toContain('installMangleRuntime(');
+        expect(loaded).toContain('exposeDebugGlobal: false');
         // Placeholders, not live values: substitution happens at output
         // processing, after the mangle passes.
         expect(loaded).toContain(MANGLE_MAP_PLACEHOLDER);

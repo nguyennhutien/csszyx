@@ -77,7 +77,8 @@ export interface MangleMap {
 export type CssVariableMangleValue = string | string[];
 
 /**
- * Debug helper object injected as `window.__csszyx` by the unplugin.
+ * The runtime mangle registry, as exposed on `window.__csszyx` when
+ * `production.mangleDebugGlobal` is on (or by the deprecated inline installer).
  */
 export interface CsszyxDebugHelpers {
     /** Original class name to mangled class name. */

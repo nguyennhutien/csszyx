@@ -73,6 +73,13 @@ import {
     injectRecoveryManifest,
 } from './html-transformer.js';
 import { escapeForDoubleQuotedString, escapeJsonForInlineScript } from './inline-script-escape.js';
+import { createLegacyInlineInstaller } from './legacy-inline-installer.js';
+import {
+    isLegacyMangleMapDelivery,
+    legacyMangleMapDeliveryMessage,
+    needsRuntimeMangleRegistration,
+    resolveMangleMapDelivery,
+} from './mangle-delivery.js';
 import {
     computeMangleSizeVerdict,
     createMangleSizeAccount,
@@ -2769,22 +2776,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // once from the output hook where the whole picture exists.
     const transformMangledSources = new Set<string>();
     const transformExternalClasses = new Set<string>();
-    // Which delivery channels carry the runtime mangle map. Both channels ship
-    // the whole census, so a build that needs only one was paying for the map
-    // twice across HTML and JS. Defaults to 'both': dropping a channel is only
-    // safe against a known deployment shape, and guessing wrong leaves runtime
-    // helpers mapless while the CSS ships mangled.
-    const mangleMapDelivery = options.production?.mangleMapDelivery ?? 'both';
-    if (!['both', 'html', 'bundle'].includes(mangleMapDelivery)) {
-        // A typo ('htlm') would otherwise read as 'both' through the two
-        // negative comparisons below — silently, in the option whose whole
-        // point is narrowing against a known deployment shape.
-        throw new Error(
-            `[csszyx] production.mangleMapDelivery must be 'both', 'html' or 'bundle'; got ${JSON.stringify(mangleMapDelivery)}.`,
-        );
+    // Which delivery channels carry the runtime mangle map. Unset resolves to
+    // 'bundle': registration from inside the JS bundle needs no CSP exception,
+    // and the HTML-entry module tag (transformIndexHtml) makes it reach every
+    // consumer the inline script used to. 'html'/'both' still emit the
+    // executable inline installer and are deprecated; the warning below fires
+    // once per build so the author hears it exactly once.
+    const mangleMapDelivery = resolveMangleMapDelivery(options.production?.mangleMapDelivery);
+    let legacyDeliveryWarned = false;
+    /** Warn once that an explicit legacy delivery mode emits inline script. */
+    function warnLegacyDeliveryOnce(): void {
+        if (
+            legacyDeliveryWarned ||
+            !manglingEnabled ||
+            !isLegacyMangleMapDelivery(mangleMapDelivery)
+        ) {
+            return;
+        }
+        legacyDeliveryWarned = true;
+        emitWarning(legacyMangleMapDeliveryMessage(mangleMapDelivery.mode));
     }
-    const deliverMapInHtml = mangleMapDelivery !== 'bundle';
-    const deliverMapInBundle = mangleMapDelivery !== 'html';
     // Weighs the map against the CSS it bought. Counts channels that actually
     // shipped rather than the configured ones: a webpack build never takes the
     // bundle module, and a library build emits no HTML, so charging for a
@@ -4779,7 +4790,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             transformedCode = `${transformedCode.slice(0, htmlTag.close)} ${attrName}="${CHECKSUM_PLACEHOLDER}"${transformedCode.slice(htmlTag.close)}`;
         }
 
-        const debugScript = `<script dangerouslySetInnerHTML={{__html: \`(function(){var m=${MANGLE_MAP_PLACEHOLDER};var vm=${VAR_MANGLE_MAP_PLACEHOLDER};var gp=decodeURIComponent(${escapeJsonForInlineScript(JSON.stringify(encodedGlobalVarAliasPrefix))});var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:"${CHECKSUM_PLACEHOLDER}",decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()\`}} />`;
+        // The webpack lane has no bundle delivery, so a MANGLED build still
+        // ships the map through this executable inline installer (a strict CSP
+        // needs a nonce or hash for it — documented contract). A build with
+        // nothing to register must not pay that: an installer with an empty
+        // map does nothing but trip the policy. The map is read from the
+        // prescan census when it has not been frozen yet; the prescan is the
+        // build's only class source, so "empty now" is "empty at the end".
+        const mangleMap = mangleMapFrozen ? state.mangleMap : computeMangleMap();
+        if (!needsRuntimeMangleRegistration(manglingEnabled, mangleMap)) {
+            return transformedCode;
+        }
+        const installer = createLegacyInlineInstaller({
+            mapExpr: MANGLE_MAP_PLACEHOLDER,
+            varMapExpr: VAR_MANGLE_MAP_PLACEHOLDER,
+            prefixExpr: `decodeURIComponent(${escapeJsonForInlineScript(JSON.stringify(encodedGlobalVarAliasPrefix))})`,
+            checksumExpr: `"${CHECKSUM_PLACEHOLDER}"`,
+        });
+        const debugScript = `<script dangerouslySetInnerHTML={{__html: \`${installer}\`}} />`;
         const bodyTag = findOpeningTag(transformedCode, 'body');
         if (bodyTag) {
             transformedCode = `${transformedCode.slice(0, bodyTag.close + 1)}${debugScript}${transformedCode.slice(bodyTag.close + 1)}`;
@@ -4942,7 +4970,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // production build).
         if (
             !manglingEnabled ||
-            !deliverMapInBundle ||
+            !mangleMapDelivery.bundleModule ||
             !shouldProcessSource(id) ||
             !MANGLE_RUNTIME_CONSUMER_RE.test(transformedCode) ||
             transformedCode.includes(MANGLE_RUNTIME_VIRTUAL_ID)
@@ -5044,7 +5072,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // output processing fills from the FINAL map, after the
                     // mangle passes have run over the chunk.
                     sizeAccount.channels.add('bundle');
-                    return createMangleRuntimeModule(globalVarAliasPrefix);
+                    return createMangleRuntimeModule(
+                        globalVarAliasPrefix,
+                        options.production?.mangleDebugGlobal === true,
+                    );
                 }
                 if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
                     return createThemeGroupsModule(themeGroupTokens());
@@ -5308,9 +5339,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // injection + transformIndexHtml); this lane ships the map the
                 // way it always did, so a narrowed value would silently not
                 // narrow anything.
-                if (manglingEnabled && mangleMapDelivery !== 'both') {
+                if (
+                    manglingEnabled &&
+                    mangleMapDelivery.explicit &&
+                    mangleMapDelivery.mode !== 'both'
+                ) {
                     console.warn(
-                        `[csszyx] production.mangleMapDelivery: '${mangleMapDelivery}' has no ` +
+                        `[csszyx] production.mangleMapDelivery: '${mangleMapDelivery.mode}' has no ` +
                             'effect on the webpack lane — map delivery only narrows on vite/rollup builds.',
                     );
                 }
@@ -5368,6 +5403,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // watch mode — `rollup -w` here, and vite build --watch
                     // through the same rollup context.
                     activeFramework = 'rollup';
+                    warnLegacyDeliveryOnce();
                 },
             },
 
@@ -5401,6 +5437,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         manglingEnabled = false;
                         emitWarning(watchModeMangleMessage());
                     }
+                    warnLegacyDeliveryOnce();
                     evictTransformCacheOnce();
                     // Pre-scan source files so Tailwind can discover classes
                     prescanAndWriteClasses();
@@ -5580,13 +5617,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // needs no fallback.
                         const injectedMangleMap = manglingEnabled ? state.mangleMap : {};
                         let result = injectHydrationData(html, injectedMangleMap, state.checksum, {
-                            // Always 'script'; the checksum itself is injected by
-                            // injectHydrationData regardless of this mode.
+                            // Always 'script' — the inert JSON census; the
+                            // checksum attribute is injected regardless.
                             mode: 'script',
                             minify: process.env.NODE_ENV === 'production',
                             varMangleMap: state.varMangleMap,
                             globalVarAliasPrefix,
-                            installRuntimeObject: deliverMapInHtml,
+                            // Executable inline script only on the deprecated
+                            // delivery modes, and never for a map nobody reads.
+                            inlineInstaller:
+                                mangleMapDelivery.inlineInstaller &&
+                                needsRuntimeMangleRegistration(manglingEnabled, injectedMangleMap),
                         });
                         // The hydration-verify contract reads the JSON tag from
                         // the DOM, so the census ships in the HTML whenever the
@@ -5618,6 +5659,32 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                                 );
                             }
                             result = injectRecoveryManifest(result, manifest);
+                        }
+                        // Bundle delivery: attach the registration module to
+                        // the HTML entry itself. Per-consumer injection only
+                        // reaches modules the plugin processes — a pre-compiled
+                        // wrapper package under node_modules that imports the
+                        // runtime gets none — and at the source level such a
+                        // consumer is indistinguishable from no consumer. The
+                        // HTML is the one guaranteed ancestor of every module
+                        // in the page: vite turns a module `src` into the first
+                        // import of the entry, evaluated before the app and
+                        // everything it imports, and drops the tag from the
+                        // built HTML. Nothing to attach when nothing needs a map.
+                        if (
+                            mangleMapDelivery.bundleModule &&
+                            needsRuntimeMangleRegistration(manglingEnabled, injectedMangleMap)
+                        ) {
+                            return {
+                                html: result,
+                                tags: [
+                                    {
+                                        tag: 'script',
+                                        attrs: { type: 'module', src: MANGLE_RUNTIME_VIRTUAL_ID },
+                                        injectTo: 'head-prepend',
+                                    },
+                                ],
+                            };
                         }
                         return result;
                     },

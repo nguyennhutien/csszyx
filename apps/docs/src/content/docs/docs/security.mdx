@@ -90,3 +90,67 @@ served HTML and recompute it.
 via the CSSOM (still no inline content). Under a strict CSP that blocks
 `<style>` element creation, ensure `adoptedStyleSheets` is available (the primary
 path), or supply a nonce for the fallback element.
+
+### JavaScript: csszyx emits no inline script
+
+A production build puts **no executable inline JavaScript** into your HTML.
+Everything csszyx adds to the document is inert data:
+
+- `data-sz-checksum` on `<html>`;
+- `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">` — the hydration
+  census. A `type="application/json"` block is data, not a script: the browser
+  never evaluates it and `script-src` does not apply to it.
+
+The runtime mangle map — what `szr`, `szv`, `szcn` and `dynamic()` need when
+`production.mangle` is on — is registered from a module **inside your own JS
+bundle** (`mangleMapDelivery: 'bundle'`, the default). It is covered by whatever
+already allows your bundle: `script-src 'self'`, or your nonce or hash. csszyx
+never needs `'unsafe-inline'`; **do not add it for csszyx.**
+
+Two lanes still carry an inline installer, and both are named so you can decide:
+
+- `mangleMapDelivery: 'html'` / `'both'` — **deprecated**, kept for one migration
+  window. They emit the legacy executable installer and a strict policy refuses
+  it. Migrate to `'bundle'`; the build warns once when it sees them.
+- **webpack** (Next.js `--webpack`) has no bundle delivery yet, so a *mangled*
+  build ships the map through one inline installer in the root layout. Give it
+  a nonce or hash the way you do for your framework's own inline scripts. An
+  unmangled webpack build emits nothing.
+
+### Enforce your CSP locally
+
+csszyx cannot know your application's full policy, so mirror the deployment
+header in Vite itself. Then a violation fails `vite preview` and CI instead of
+surfacing in production:
+
+```ts
+// vite.config.ts
+import { randomBytes } from 'node:crypto';
+import { defineConfig } from 'vite';
+
+// The production policy, verbatim. `style-src 'unsafe-inline'` is for your own
+// inline `style` attributes; csszyx needs nothing here either way.
+const csp =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:";
+
+// `vite dev` injects its own inline client and the React refresh preamble.
+// Those get a nonce — never 'unsafe-inline' — and csszyx still gets nothing.
+const devNonce = randomBytes(16).toString('base64');
+
+export default defineConfig({
+  preview: { headers: { 'Content-Security-Policy': csp } },
+  html: { cspNonce: devNonce },
+  server: {
+    headers: {
+      'Content-Security-Policy': csp
+        .replace("script-src 'self'", `script-src 'self' 'nonce-${devNonce}'`)
+        .concat('; connect-src \'self\' ws: wss:'),
+    },
+  },
+});
+```
+
+`preview` is the regression gate: it serves the real build under the enforced
+policy. The dev nonce exists only because Vite's own tooling is inline; a fixed
+nonce is not a substitute for the production header, and `Content-Security-
+Policy-Report-Only` is an inventory, not a gate.

@@ -52,7 +52,7 @@ describe('html-transformer', () => {
         });
 
         it('should inject debug script with window.__csszyx helper', () => {
-            const result = injectMangleMapScript(sampleHtml, sampleMap);
+            const result = injectMangleMapScript(sampleHtml, sampleMap, { inlineInstaller: true });
             expect(result).toContain('window.__csszyx=');
             expect(result).toContain('decode:function');
             expect(result).toContain('encode:function');
@@ -61,14 +61,14 @@ describe('html-transformer', () => {
 
         it('should inject before </html> if no </head>', () => {
             const noHead = '<html><body></body></html>';
-            const result = injectMangleMapScript(noHead, sampleMap);
+            const result = injectMangleMapScript(noHead, sampleMap, { inlineInstaller: true });
             expect(result).toContain('</html>');
             expect(result).toContain('window.__csszyx=');
         });
 
         it('should append at end if no closing tags', () => {
             const plain = '<div>content</div>';
-            const result = injectMangleMapScript(plain, sampleMap);
+            const result = injectMangleMapScript(plain, sampleMap, { inlineInstaller: true });
             expect(result).toContain(plain);
             expect(result).toContain('window.__csszyx=');
         });
@@ -86,7 +86,7 @@ describe('html-transformer', () => {
         });
 
         it('should ship the class map once on class-only builds', () => {
-            const result = injectMangleMapScript(sampleHtml, sampleMap);
+            const result = injectMangleMapScript(sampleHtml, sampleMap, { inlineInstaller: true });
             const mapJson = JSON.stringify(sampleMap);
 
             // The checksum <script> keeps the payload; the installer re-reads it
@@ -96,7 +96,7 @@ describe('html-transformer', () => {
         });
 
         it('should install helpers from the checksum payload on class-only builds', () => {
-            const result = injectMangleMapScript(sampleHtml, sampleMap);
+            const result = injectMangleMapScript(sampleHtml, sampleMap, { inlineInstaller: true });
             const debugScript = result.match(/<script>(\(function\(\).*?)<\/script>/)?.[1];
             const payload = result.match(
                 /id="__CSSZYX_MANGLE_MAP__" type="application\/json">([^<]*)</,
@@ -123,7 +123,7 @@ describe('html-transformer', () => {
         });
 
         it('should install an empty map when the checksum payload is stripped', () => {
-            const result = injectMangleMapScript(sampleHtml, sampleMap);
+            const result = injectMangleMapScript(sampleHtml, sampleMap, { inlineInstaller: true });
             const debugScript = result.match(/<script>(\(function\(\).*?)<\/script>/)?.[1];
 
             const win = {} as { __csszyx?: { encode(original: string): string | undefined } };
@@ -136,21 +136,22 @@ describe('html-transformer', () => {
             expect(win.__csszyx?.encode('p-4')).toBeUndefined();
         });
 
-        it('should keep the checksum payload when the bundle owns the runtime object', () => {
-            const result = injectMangleMapScript(sampleHtml, sampleMap, {
-                installRuntimeObject: false,
-            });
+        it('emits no executable script unless the installer is asked for', () => {
+            // Secure default: a caller has to opt into inline executable code.
+            // The inert census is data (type="application/json") and stays —
+            // hydration verification reads it from the DOM.
+            const result = injectMangleMapScript(sampleHtml, sampleMap);
 
-            // Hydration verification still reads the payload from the DOM…
             expect(result).toContain('<script id="__CSSZYX_MANGLE_MAP__" type="application/json">');
             expect(result).toContain(JSON.stringify(sampleMap));
-            // …but the page no longer carries the installer.
             expect(result).not.toContain('window.__csszyx=');
+            expect(result).not.toMatch(/<script>/);
         });
 
         it('should include CSS variable map in checksum payload and debug helpers', () => {
             const result = injectMangleMapScript(sampleHtml, sampleMap, {
                 varMangleMap: sampleVarMap,
+                inlineInstaller: true,
             });
 
             expect(result).toContain(
@@ -165,6 +166,7 @@ describe('html-transformer', () => {
         it('should reverse one-to-many CSS variable maps for debug helpers', () => {
             const result = injectMangleMapScript(sampleHtml, sampleMap, {
                 varMangleMap: mixedTierVarMap,
+                inlineInstaller: true,
             });
 
             expect(result).toContain(`var vm=${JSON.stringify(mixedTierVarMap)}`);
@@ -174,6 +176,7 @@ describe('html-transformer', () => {
         it('should decode global variable aliases without treating dynamic vars as global', () => {
             const result = injectMangleMapScript(sampleHtml, sampleMap, {
                 varMangleMap: globalVarMap,
+                inlineInstaller: true,
             });
             const debugScript = result.match(/<script>(\(function\(\).*?)<\/script>/)?.[1];
             expect(debugScript).toBeDefined();
@@ -198,6 +201,7 @@ describe('html-transformer', () => {
             const result = injectMangleMapScript(sampleHtml, sampleMap, {
                 varMangleMap: { '--brand-primary': '--gxz', '--other': '---gz' },
                 globalVarAliasPrefix: '--gx',
+                inlineInstaller: true,
             });
             const debugScript = result.match(/<script>(\(function\(\).*?)<\/script>/)?.[1];
             expect(debugScript).toBeDefined();
@@ -222,6 +226,7 @@ describe('html-transformer', () => {
             const hostilePrefix = '</script><script>globalThis.pwned=true</script>\u2028';
             const result = injectMangleMapScript(sampleHtml, sampleMap, {
                 globalVarAliasPrefix: hostilePrefix,
+                inlineInstaller: true,
             });
 
             expect(result).not.toContain(hostilePrefix);
@@ -259,9 +264,17 @@ describe('html-transformer', () => {
     });
 
     describe('injectHydrationData', () => {
-        it('should inject checksum and script tag by default (script mode)', () => {
+        it('should inject checksum and the inert census by default (script mode)', () => {
             const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum);
             expect(result).toContain('data-sz-checksum="a1b2c3d4e5f67890"');
+            expect(result).toContain('__CSSZYX_MANGLE_MAP__');
+            expect(result).not.toContain('window.__csszyx=');
+        });
+
+        it('emits the legacy installer only when inlineInstaller is set', () => {
+            const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum, {
+                inlineInstaller: true,
+            });
             expect(result).toContain('window.__csszyx=');
         });
 
@@ -280,7 +293,7 @@ describe('html-transformer', () => {
             });
             expect(result).toContain('data-sz-checksum');
             expect(result).toContain('data-sz-map');
-            expect(result).toContain('window.__csszyx=');
+            expect(result).toContain('__CSSZYX_MANGLE_MAP__');
         });
 
         it('should support minify option', () => {

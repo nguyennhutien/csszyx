@@ -47,6 +47,15 @@ export {
 } from './hydration.js';
 // Re-export lite helpers so consumers can import everything from @csszyx/runtime
 export { __szBoolClass, __szColorVar, __szSpacingVar, __szUnitVar } from './lite.js';
+// Runtime mangle registry — installed by the bundled registration module
+export {
+    clearMangleRegistry,
+    getMangleRegistry,
+    installMangleRuntime,
+    type MangleRegistry,
+    type MangleRegistryInput,
+    type MangleVarValue,
+} from './mangle-registry.js';
 // Mangle-aware className merge (last-wins override) for layered components
 export { _szcn, szcn, szDecode } from './merge-classes.js';
 

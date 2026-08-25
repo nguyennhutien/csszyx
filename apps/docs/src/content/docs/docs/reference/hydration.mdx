@@ -230,19 +230,21 @@ interface SSRContext {
 }
 ```
 
-## The `window.__csszyx` Runtime Object
+## The Runtime Mangle Registry
 
-Every production-mangled build installs `window.__csszyx`, carrying the mangle
-map and its lookup helpers. It is delivered twice, first-wins: an inline script
-in the build-emitted HTML, and a generated module inside the JS bundle itself
-(vite/rollup lanes) that installs only when the HTML script has not already —
-so pages the build does not own, such as a bundle embedded in a host shell or
-served under a CSP that strips inline scripts, still receive the map.
+A production-mangled build registers the mangle map with `@csszyx/runtime` from
+a generated module inside the JS bundle (vite/rollup lanes) — attached to every
+HTML entry ahead of the app, and to every module that imports the runtime. The
+built HTML carries no executable inline script, so the registration is covered by
+whatever `script-src` already allows your bundle, and pages the build does not
+own (a bundle embedded in a host shell) receive the map the same way.
 `mangleMap` stays class-only, while `varMangleMap` contains CSS variable
 mappings when `production.mangleVars` is enabled.
 
 ```ts
-interface CsszyxRuntimeObject {
+import { getMangleRegistry, installMangleRuntime } from '@csszyx/runtime';
+
+interface MangleRegistry {
   mangleMap: Record<string, string>;
   varMangleMap: Record<string, string | string[]>;
   checksum: string;
@@ -255,10 +257,16 @@ interface CsszyxRuntimeObject {
 }
 ```
 
-The runtime helpers (`szr`, `szcn`, `szDecode`) read this object for their
-mangle-aware paths; when it is absent they fall back to identity behavior. For
-application code, prefer the typed wrappers from `@csszyx/runtime` over
-touching `window.__csszyx` directly.
+The runtime helpers (`szr`, `szcn`, `szDecode`) read the registry for their
+mangle-aware paths; when it is absent they fall back to identity behavior.
+`getMangleRegistry()` returns it (or `null`); `installMangleRuntime()` is what
+the generated module calls and is idempotent per checksum.
+
+`window.__csszyx` is **opt-in**: set `production.mangleDebugGlobal: true` and the
+same registry object is assigned to the global for devtools inspection. Nothing
+about correctness depends on it. The deprecated `mangleMapDelivery: 'html'` /
+`'both'` modes and mangled **webpack** builds still install it from their inline
+installer.
 
 ## Example: Manual Hydration Guard
 

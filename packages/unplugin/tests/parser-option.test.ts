@@ -127,12 +127,21 @@ describe('csszyx parser selection', () => {
         const [prePlugin] = vitePlugin({
             build: { emitManifest: true, parser: 'wasm', cache: false },
             production: {
+                // The layout installer only exists for a mangled build with a
+                // class census (the webpack lane's delivery); an unmangled
+                // build has nothing to install and must emit no inline script.
+                mangle: true,
                 mangleGlobalVars: {
                     enabled: false,
                     aliasPrefix: hostilePrefix,
                 },
             },
         }) as TransformHook[];
+        prePlugin.transform.call(
+            { warn: vi.fn() },
+            'const App = () => <div sz={{ p: 4 }} />;',
+            '/repo/src/App.tsx',
+        );
 
         const result = prePlugin.transform.call(
             { warn: vi.fn() },

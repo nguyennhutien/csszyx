@@ -44,6 +44,16 @@ export default defineConfig({
             },
         },
         {
+            // The production build of the same playground, served by `vite
+            // preview` under an ENFORCED `script-src 'self'` policy.
+            name: 'vite-react-csp',
+            testMatch: /csp\.spec/,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:5180',
+            },
+        },
+        {
             name: 'dynamic',
             testMatch: /dynamic\.spec/,
             use: {
@@ -169,6 +179,17 @@ export default defineConfig({
             reuseExistingServer: !process.env.CI,
             stdout: 'pipe',
             stderr: 'pipe',
+        },
+        {
+            // Production build + preview: the only server here that enforces a
+            // Content-Security-Policy header (see the playground's vite config).
+            command: 'pnpm run build && pnpm run preview --port 5180 --strictPort',
+            cwd: '../../playground/vite-react',
+            url: 'http://localhost:5180',
+            reuseExistingServer: !process.env.CI,
+            stdout: 'pipe',
+            stderr: 'pipe',
+            timeout: 120000,
         },
         {
             command: 'pnpm run dev -- --port 5174 --strictPort',

@@ -150,7 +150,8 @@ interface ProductionConfig {
   mangleVars: boolean; // Opt into dynamic sz CSS variable mangling and hoisting
   mangleVarHoistMaxDepth: number; // Max cascade depth for mangleVars hoisting
   mangleGlobalVars?: GlobalVarMangleConfig; // Explicit global token alias tier
-  mangleMapDelivery?: 'both' | 'html' | 'bundle'; // Where the runtime map ships
+  mangleMapDelivery?: 'both' | 'html' | 'bundle'; // Where the runtime map ships (default 'bundle')
+  mangleDebugGlobal?: boolean; // Expose the registry as window.__csszyx (default false)
   injectChecksum: boolean; // Add hydration checksum to HTML
   minify: boolean; // Minify output
 }
@@ -221,42 +222,61 @@ compressed response the arithmetic usually comes out flat or slightly negative:
   short of paying for their own map entry.
 
 Measured on the `vite-react` playground (151 censused names), `mangle: true` costs
-about **+2 KB gzipped** against the same build with mangling off; `mangleMapDelivery:
-'html'` brings that to roughly **+0.7 KB**. Enable mangling when you want the class
+about **+2 KB gzipped** against the same build with mangling off with the map
+shipped twice (the deprecated `'both'`); the default `'bundle'` delivery ships
+one copy. Enable mangling when you want the class
 names unreadable, and treat the byte delta as a rounding error in either direction.
 :::
 
 #### `mangleMapDelivery`
 
 The runtime mangle map is what lets `szr`, `szv`, `szcn`, and `szDecode` speak the
-same class names as the mangled CSS. It reaches the browser two ways, and by
-default a build ships **both**:
+same class names as the mangled CSS. By default it is registered from a module
+**inside your JS bundle**, which needs no Content-Security-Policy exception:
 
-| Value      | Inline script in HTML | Module in the JS bundle | Use when                                                       |
-| ---------- | --------------------- | ----------------------- | -------------------------------------------------------------- |
-| `'both'`   | ✅                    | ✅                      | Default. Always correct, pays for the map twice.               |
-| `'html'`   | ✅                    | ❌                      | The app serves its own csszyx-built HTML and allows inline scripts. |
-| `'bundle'` | ❌                    | ✅                      | The bundle is embedded in a host page csszyx never built, or a CSP strips inline scripts. |
+| Value      | Inline script in HTML | Module in the JS bundle | Status |
+| ---------- | --------------------- | ----------------------- | ------ |
+| `'bundle'` | ❌                    | ✅                      | **Default.** CSP-safe; works on pages the build does not own (a bundle embedded in a host shell). |
+| `'html'`   | ✅                    | ❌                      | Deprecated. The legacy executable inline installer; refused by `script-src 'self'`. |
+| `'both'`   | ✅                    | ✅                      | Deprecated. Inline installer plus bundle module; the map ships twice. |
 
-```ts
-production: { mangle: true, mangleMapDelivery: 'html' }
-```
+The bundle module is attached to every HTML entry the build emits, ahead of the
+app, and to every source module that imports the runtime — so a pre-compiled
+component library under `node_modules` that calls `szr` itself is covered too.
 
-The hydration checksum payload ships in every mode, so SSR verification is
-unaffected — which also means `'bundle'` still emits the JSON census tag into
-HTML the build owns (hydration verify reads it from the DOM); the value only
-drops the runtime installer script. Narrow this only against a deployment shape
-you know: if the page never receives the delivery you picked, runtime helpers
-silently fall back to original class names while the CSS ships mangled — the
-styles simply do not apply. When in doubt, leave it at `'both'`.
+The hydration census is unaffected: the inert
+`<script type="application/json">` tag and the checksum attribute ship in every
+mode (hydration verify reads them from the DOM), and CSP does not evaluate a
+data block. See [Security → CSP](/docs/security/#content-security-policy-csp).
+
+:::caution[`'html'` and `'both'` are deprecated]
+They exist for one migration window. The build warns once when it sees them,
+and a later major removes them. If you set one of them for the inline
+installer, drop the option: `'bundle'` delivers the same map through the
+bundle. If you set `'html'` to save bytes, `'bundle'` is already one copy.
+:::
 
 :::note[vite/rollup lanes only]
-Delivery narrowing runs where the map is injected — the **vite/rollup** hooks.
-A webpack build ships the map the way it always did and warns when a narrowed
-value would silently do nothing; esbuild builds keep readable class names
-entirely. An unknown value fails the build instead of silently reading as
-`'both'`.
+Delivery runs where the map is injected — the **vite/rollup** hooks. The
+webpack lane has no bundle delivery: a mangled webpack build ships the map
+through one inline installer in the root layout regardless, and warns when an
+explicit value would silently do nothing; esbuild builds keep readable class
+names entirely. An unknown value fails the build.
 :::
+
+#### `mangleDebugGlobal`
+
+```ts
+production: { mangle: true, mangleDebugGlobal: true }
+```
+
+Also assigns the runtime registry to `window.__csszyx` (`mangleMap`,
+`varMangleMap`, `checksum`, `encode`, `decode`, `encodeVar`, `decodeVar`,
+`decodeGlobalVar`, `decodeAll`) for inspection in devtools. Off by default: the
+helpers read the registry internally, so nothing about correctness depends on
+the global, and a production page should carry no inspection surface it did not
+ask for. Honoured by the bundle delivery; the deprecated inline installer always
+assigns the global.
 
 :::note[Mangling follows your bundler, not your framework]
 Class mangling (and the collision warning above) run wherever csszyx builds your

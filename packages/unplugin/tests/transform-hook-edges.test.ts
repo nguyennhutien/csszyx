@@ -24,10 +24,15 @@ interface Booted {
     transform: (code: string, id: string) => Promise<unknown>;
 }
 
-async function boot(options = {}): Promise<Booted> {
+async function boot(options = {}, files: Record<string, string> = {}): Promise<Booted> {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-transform-edge-'));
     tempDirs.push(root);
     fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    // On disk before `configResolved`: the build settles the mangle map from
+    // the prescan, so a module the prescan never walked never reaches the map.
+    for (const [file, source] of Object.entries(files)) {
+        fs.writeFileSync(path.join(root, file), source, 'utf8');
+    }
     const plugins = vitePlugin(options);
     const ctx: Ctx = { warn() {}, error() {} };
     const invoke = async (hookName: string, ...args: unknown[]): Promise<unknown> => {
@@ -217,9 +222,41 @@ describe('transform hook branch edges', () => {
         } | null;
         expect(result).not.toBeNull();
         // production.minify shortens the attribute name to data-sz-cs and injects
-        // the checksum placeholder and the debug script after <body>.
+        // the checksum placeholder. No installer: mangling is off, so there is
+        // no map for an executable inline script to install — and that script
+        // is what a strict CSP refuses (field-reported).
         expect(result?.code).toContain('data-sz-cs="___CSSZYX_CHECKSUM___"');
-        expect(result?.code).toContain('window.__csszyx');
+        expect(result?.code).not.toContain('window.__csszyx');
+        expect(result?.code).not.toContain('dangerouslySetInnerHTML');
+    });
+
+    it('installs the map from the layout only when a mangled build has one', async () => {
+        const { root, transform } = await boot(
+            { production: { mangle: true } },
+            { 'src/A.tsx': 'export const A = () => <div sz={{ p: 4 }} />;' },
+        );
+        const code =
+            'export default function RootLayout(){return <html lang="en"><body>x</body></html>;}';
+        const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {
+            code: string;
+        } | null;
+        // The webpack lane has no bundle delivery, so a mangled build still
+        // ships the map through the layout installer, with placeholders the
+        // output pass fills from the final map.
+        expect(result?.code).toContain('<body><script dangerouslySetInnerHTML');
+        expect(result?.code).toContain('window.__csszyx=');
+        expect(result?.code).toContain('___CSSZYX_MANGLE_MAP___');
+    });
+
+    it('does not install from the layout when mangling is on but the census is empty', async () => {
+        const { root, transform } = await boot({ production: { mangle: true } });
+        const code =
+            'export default function RootLayout(){return <html lang="en"><body>x</body></html>;}';
+        const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {
+            code: string;
+        } | null;
+        expect(result?.code).toContain('data-sz-checksum="___CSSZYX_CHECKSUM___"');
+        expect(result?.code).not.toContain('window.__csszyx');
     });
 
     it('injects the checksum attribute into a layout with no <body> tag', async () => {
@@ -245,7 +282,10 @@ describe('transform hook branch edges', () => {
     });
 
     it('skips body-prefixed custom elements before the real body tag', async () => {
-        const { root, transform } = await boot();
+        const { root, transform } = await boot(
+            { production: { mangle: true } },
+            { 'src/A.tsx': 'export const A = () => <div sz={{ p: 4 }} />;' },
+        );
         const code =
             'export default function Doc(){return <html><bodyguard /><body>x</body></html>;}';
         const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {

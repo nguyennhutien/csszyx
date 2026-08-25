@@ -45,6 +45,7 @@ export type {
     GlobalVarMangleMode,
     GlobalVarUnsafeUsageMode,
     HydrationConfig,
+    MangleMapDelivery,
     PartialCsszyxConfig,
     ProductionConfig,
 } from './config.js';

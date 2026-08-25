@@ -100,42 +100,43 @@ test.describe('Edge Case Tests (Next.js)', () => {
         expect(checksum).toBeTruthy();
         expect(checksum).toHaveLength(16);
 
-        // window.__csszyx helper should be available after script execution
+        // This playground is a mangled Next.js build on the WEBPACK lane, which
+        // has no bundle delivery yet: its documented contract is exactly one
+        // csszyx-owned inline installer in the root layout, so the debug global
+        // is present here (unlike the vite lanes, where it is opt-in).
         const helper = await page.evaluate(() => {
             const h = (window as Record<string, any>).__csszyx;
-            if (!h) {
-                return null;
-            }
-            return {
-                mangleMap: h.mangleMap,
-                checksum: h.checksum,
-                hasDecode: typeof h.decode === 'function',
-                hasEncode: typeof h.encode === 'function',
-                hasDecodeAll: typeof h.decodeAll === 'function',
-            };
+            return h
+                ? {
+                      mangleMap: h.mangleMap as Record<string, string>,
+                      checksum: h.checksum as string,
+                      hasDecode: typeof h.decode === 'function',
+                      hasEncode: typeof h.encode === 'function',
+                      hasDecodeAll: typeof h.decodeAll === 'function',
+                  }
+                : null;
         });
-
-        if (helper) {
-            // mangleMap should be an object with string values
-            expect(typeof helper.mangleMap).toBe('object');
-            const keys = Object.keys(helper.mangleMap);
-            expect(keys.length).toBeGreaterThan(0);
-
-            // Each value should be a short mangled name
-            for (const key of keys.slice(0, 5)) {
-                expect(typeof helper.mangleMap[key]).toBe('string');
-                expect(helper.mangleMap[key].length).toBeLessThanOrEqual(3);
-            }
-
-            // Helper API should be present
-            expect(helper.hasDecode).toBe(true);
-            expect(helper.hasEncode).toBe(true);
-            expect(helper.hasDecodeAll).toBe(true);
-
-            if (helper.checksum) {
-                expect(helper.checksum).toBe(checksum);
-            }
+        expect(helper).not.toBeNull();
+        const keys = Object.keys(helper?.mangleMap ?? {});
+        expect(keys.length).toBeGreaterThan(0);
+        for (const key of keys.slice(0, 5)) {
+            expect(typeof helper?.mangleMap[key]).toBe('string');
+            expect(helper?.mangleMap[key].length).toBeLessThanOrEqual(3);
         }
+        expect(helper?.hasDecode).toBe(true);
+        expect(helper?.hasEncode).toBe(true);
+        expect(helper?.hasDecodeAll).toBe(true);
+        expect(helper?.checksum).toBe(checksum);
+
+        // And exactly that one installer. Matched by its opening, not by a
+        // substring: Next's own flight payload (`self.__next_f.push`) carries
+        // the layout markup as a string and would match `window.__csszyx=`.
+        const installers = await page.evaluate(() =>
+            [...document.querySelectorAll('script:not([src])')]
+                .map(s => s.textContent ?? '')
+                .filter(text => text.startsWith('(function(){var m=')),
+        );
+        expect(installers).toHaveLength(1);
     });
 
     test('hover case has hover-related classes', async ({ page }) => {
