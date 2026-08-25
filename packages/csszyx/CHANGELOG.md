@@ -1,5 +1,23 @@
 # csszyx
 
+## [0.14.5](https://github.com/nguyennhutien/csszyx/compare/v0.14.4...v0.14.5) (2026-08-25)
+
+### Features
+
+* **cli:** run migrate on the native engine by default, falling back when absent ([#245](https://github.com/nguyennhutien/csszyx/issues/245))
+* **cli:** run migrate on the native Rust core behind CSSZYX_MIGRATE_ENGINE=rust ([#245](https://github.com/nguyennhutien/csszyx/issues/245))
+
+### Bug Fixes
+
+* **cli:** stop migrate writing later tokens into the resolution map ([#245](https://github.com/nguyennhutien/csszyx/issues/245))
+* **cli:** let a resolve pass merge into the sz prop an earlier migration wrote ([#245](https://github.com/nguyennhutien/csszyx/issues/245))
+* **core:** keep the font-stretch rule the sz-key path needs ([#245](https://github.com/nguyennhutien/csszyx/issues/245))
+* **cli:** resolve a legacy font value, not only its key ([#245](https://github.com/nguyennhutien/csszyx/issues/245))
+* **compiler:** report a font weight written as a string instead of emitting a dead class ([#245](https://github.com/nguyennhutien/csszyx/issues/245))
+* **cli:** see a call written with optional chaining ([#245](https://github.com/nguyennhutien/csszyx/issues/245))
+* **core:** spell a number the way JavaScript spells it ([#245](https://github.com/nguyennhutien/csszyx/issues/245))
+* **core:** state the number invariant instead of handling it ([#245](https://github.com/nguyennhutien/csszyx/issues/245))
+
 ## [0.14.4](https://github.com/nguyennhutien/csszyx/compare/v0.14.3...v0.14.4) (2026-08-22)
 
 ### Features
