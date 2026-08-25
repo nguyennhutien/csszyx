@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/unplugin",
-  "version": "0.14.4",
+  "version": "0.14.5",
   "description": "Vite and Webpack integration for csszyx",
   "keywords": [
     "csszyx",

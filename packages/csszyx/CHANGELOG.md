@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.14.5](https://github.com/nguyennhutien/csszyx/compare/v0.14.4...v0.14.5) (2026-08-25)
+
+
+### Features
+
+* **cli:** run migrate on the native engine by default, falling back when absent ([#245](https://github.com/nguyennhutien/csszyx/issues/245)) ([5cf0322](https://github.com/nguyennhutien/csszyx/commit/5cf03225dd9ae4954aab226bfadd5e9513a63b5a))
+
 ## [0.14.4](https://github.com/nguyennhutien/csszyx/compare/v0.14.3...v0.14.4) (2026-08-22)
 
 ### Features
