@@ -5,6 +5,7 @@
 
 use napi_derive::napi;
 
+use crate::migrate::{self, HtmlTransformOptions, InjectRuntime, SzObject};
 use crate::transform::{
     transform_batch_with_options, GlobalVarAliasEntry, ParserPath, RecoveryMode, TransformFile,
     TransformOptions, TransformProducer, TransformResult, TransformTimings,
@@ -297,4 +298,158 @@ const fn parser_path_to_js(path: ParserPath) -> &'static str {
         ParserPath::Static => "static",
         ParserPath::Semantic => "semantic",
     }
+}
+
+/// Source file passed from JavaScript to the native migrate.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeMigrateFile {
+    /// Path used in warnings and to pick the parser's view of the file.
+    pub filename: String,
+    /// Source contents.
+    pub source: String,
+}
+
+/// Options passed from JavaScript to the native migrate.
+#[derive(Debug, Default)]
+#[napi(object)]
+pub struct NativeMigrateOptions {
+    /// Insert a `@sz-todo` comment above elements with unrecognised classes.
+    pub inject_todos: Option<bool>,
+    /// Only normalise legacy sz keys; leave every className untouched.
+    pub keys_only: Option<bool>,
+    /// The migration-resolution map, as JSON text.
+    pub custom_map_json: Option<String>,
+}
+
+/// Options passed from JavaScript to the native HTML migrate.
+#[derive(Debug, Default)]
+#[napi(object)]
+pub struct NativeMigrateHtmlOptions {
+    /// Wrap the sz attribute value in outer braces.
+    pub braces: Option<bool>,
+    /// Inject the first-paint guard before `</head>`.
+    pub inject_fouc: Option<bool>,
+    /// `cdn`, `local`, or absent for no runtime script.
+    pub inject_runtime: Option<String>,
+    /// The script URL for `cdn`.
+    pub cdn_url: Option<String>,
+    /// The script path for `local`.
+    pub local_path: Option<String>,
+}
+
+/// The counts of one migrated file.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeMigrateStats {
+    /// className attributes rewritten.
+    pub class_names_transformed: u32,
+    /// className attributes left alone.
+    pub class_names_skipped: u32,
+    /// className kept on capitalised components.
+    pub class_names_skipped_component: u32,
+    /// Classes the parser did not know.
+    pub classes_unrecognized: Vec<String>,
+    /// Legacy sz keys rewritten; absent when the file was never parsed.
+    pub sz_keys_normalized: Option<u32>,
+}
+
+/// What migrate did to one file.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeMigrateResult {
+    /// The migrated source.
+    pub code: String,
+    /// Whether anything was written.
+    pub changed: bool,
+    /// Why something was left alone, each prefixed with the file path.
+    pub warnings: Vec<String>,
+    /// The counts.
+    pub stats: NativeMigrateStats,
+    /// Composition helpers imported but no longer called after migration.
+    pub potentially_unused_imports: Vec<String>,
+}
+
+impl From<migrate::TransformResult> for NativeMigrateResult {
+    fn from(result: migrate::TransformResult) -> Self {
+        Self {
+            code: result.code,
+            changed: result.changed,
+            warnings: result.warnings,
+            stats: NativeMigrateStats {
+                class_names_transformed: result.stats.class_names_transformed,
+                class_names_skipped: result.stats.class_names_skipped,
+                class_names_skipped_component: result.stats.class_names_skipped_component,
+                classes_unrecognized: result.stats.classes_unrecognized,
+                sz_keys_normalized: result.stats.sz_keys_normalized,
+            },
+            potentially_unused_imports: result.potentially_unused_imports,
+        }
+    }
+}
+
+/// Migrates a batch of JSX/TSX sources with the native Rust core: one call
+/// for the whole job, because a call per file costs more than the parse.
+///
+/// # Errors
+///
+/// Returns a NAPI error when `customMapJson` is not a JSON object.
+#[napi(js_name = "migrateBatch")]
+pub fn migrate_batch_native(
+    files: Vec<NativeMigrateFile>,
+    options: Option<NativeMigrateOptions>,
+) -> napi::Result<Vec<NativeMigrateResult>> {
+    let options = options.unwrap_or_default();
+    let custom_map = options
+        .custom_map_json
+        .as_deref()
+        .map(serde_json::from_str::<SzObject>)
+        .transpose()
+        .map_err(|error| {
+            napi::Error::from_reason(format!("customMapJson is not a JSON object: {error}"))
+        })?;
+    let migrate_options = migrate::TransformOptions {
+        inject_todos: options.inject_todos.unwrap_or(false),
+        keys_only: options.keys_only.unwrap_or(false),
+        custom_map: custom_map.as_ref(),
+    };
+    Ok(files
+        .into_iter()
+        .map(|file| {
+            migrate::transform_source(&file.source, &file.filename, &migrate_options).into()
+        })
+        .collect())
+}
+
+/// Migrates one HTML source with the native Rust core.
+///
+/// # Errors
+///
+/// Returns a NAPI error when `injectRuntime` is not `cdn`, `local` or absent.
+// napi hands a JavaScript string over as an owned `String`.
+#[allow(clippy::needless_pass_by_value)]
+#[napi(js_name = "migrateHtml")]
+pub fn migrate_html_native(
+    source: String,
+    options: Option<NativeMigrateHtmlOptions>,
+) -> napi::Result<NativeMigrateResult> {
+    let options = options.unwrap_or_default();
+    let inject_runtime = match options.inject_runtime.as_deref() {
+        None | Some("" | "false") => InjectRuntime::Off,
+        Some("cdn") => InjectRuntime::Cdn,
+        Some("local") => InjectRuntime::Local,
+        Some(other) => {
+            return Err(napi::Error::from_reason(format!(
+                "injectRuntime must be 'cdn', 'local' or false, got {other}"
+            )))
+        }
+    };
+    let html_options = HtmlTransformOptions {
+        braces: options.braces.unwrap_or(false),
+        inject_fouc: options.inject_fouc.unwrap_or(true),
+        inject_runtime,
+        cdn_url: options.cdn_url,
+        local_path: options.local_path,
+    };
+    Ok(migrate::transform_html_source(&source, &html_options).into())
 }

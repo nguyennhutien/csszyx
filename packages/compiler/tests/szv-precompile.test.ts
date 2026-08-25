@@ -1,5 +1,5 @@
 /**
- * The szv per-key precompile: decision matrix, three-engine parity, and the
+ * The szv per-key precompile: decision matrix, lane parity, and the
  * runtime oracle.
  *
  * `szr(F(selection))` pays a full object lowering per render; when `F` is a
@@ -29,17 +29,17 @@ import {
     szvConfigFreeOfOverlap,
     szvFactoryAccountingHolds,
 } from '../src/szv-precompile.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
-import { transformSource } from '../src/transform-select.js';
-import { transformWasm } from '../src/transform-wasm.js';
+import { ENGINES } from './engine-parity-harness.js';
 
 type Engine = (source: string, filename?: string) => { code?: string; usesSzvPick?: boolean };
 
-const LANES: ReadonlyArray<readonly [string, Engine]> = [
-    ['auto', transformSource],
-    ['wasm', transformWasm as Engine],
-    ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
-];
+/**
+ * Both artifacts of the one engine. The shared list drops the `auto`
+ * selector — `transform-select.test.ts` owns that — and refuses to run in CI
+ * with the native artifact missing, which a hand-rolled list here could not
+ * notice.
+ */
+const LANES = ENGINES;
 
 const IMPORTS = "import { szr } from '@csszyx/runtime';\nimport { szv } from '@csszyx/runtime';\n";
 
@@ -298,7 +298,7 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
     });
 });
 
-describe('three-engine output parity', () => {
+describe('output parity across the lanes', () => {
     it.each(MATRIX)('identical shape for: %s', (_name, body) => {
         const shapes = LANES.map(([, engine]) =>
             JSON.stringify(outputShape(engine, IMPORTS + body)),

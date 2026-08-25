@@ -1,5 +1,5 @@
 /**
- * Cross-module szv statics: registry extraction and the three-engine consumer.
+ * Cross-module szv statics: registry extraction and the consumer in each lane.
  *
  * The design-system pattern — `export const cardSz = szv(<config>)` in one
  * module, `szr(cardSz(selection))` in another — was invisible to the per-file
@@ -14,21 +14,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import { extractCrossModuleRegistryEntries } from '../src/cross-module-extract.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
-import { transformSource } from '../src/transform-select.js';
-import { transformWasm } from '../src/transform-wasm.js';
+import { ENGINES } from './engine-parity-harness.js';
 
-type Engine = (
-    source: string,
-    filename?: string,
-    options?: { crossModuleStatics?: Record<string, Record<string, unknown>> },
-) => { code?: string; usesSzvPick?: boolean };
-
-const LANES: ReadonlyArray<readonly [string, Engine]> = [
-    ['auto', transformSource as Engine],
-    ['wasm', transformWasm as Engine],
-    ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
-];
+/**
+ * Both artifacts of the one engine. The shared list drops the `auto`
+ * selector — `transform-select.test.ts` owns that — and refuses to run in CI
+ * with the native artifact missing, which a hand-rolled list here could not
+ * notice.
+ */
+const LANES = ENGINES;
 
 const CARD_CONFIG = {
     base: { rounded: 'lg' },
@@ -166,7 +160,7 @@ describe.each(LANES)('%s lane', (_lane, engine) => {
     });
 });
 
-describe('three-engine cross-module parity', () => {
+describe('cross-module parity across the lanes', () => {
     const sources = [
         `${IMPORTS}export const cls = szr(cardSz({ pad: 'lg' }));`,
         `${IMPORTS}export const C = ({ s }) => szr(cardSz(s));`,

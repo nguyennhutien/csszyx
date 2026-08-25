@@ -48,10 +48,42 @@ const UNMEASURED = [
     // the coverage runs actually measure — an entry here that later becomes
     // instrumented is a gate silently not doing its job.
     /^apps\//,
+    // The TypeScript coverage run measures `packages/*/src/**`. A package's
+    // build, test or lint config sits beside `src`, is read by a tool rather
+    // than executed by a test, and can never carry a hit. The workspace's own
+    // configs sit at the root for the same reason and are read the same way —
+    // `vitest.config.ts` among them, which is how a run that edits the
+    // coverage settings ends up reporting the settings file as untested.
+    /^packages\/[^/]+\/[^/]+\.[cm]?ts$/,
+    /^[^/]+\.[cm]?ts$/,
+    // A snippet written for a reader to copy, not a code path the package
+    // takes. It imports the built wasm artifact, so no unit test can drive it
+    // without a build first. Sonar excludes it for the same reason, and the
+    // two lists disagreeing is what this gate exists to prevent.
+    /^packages\/[^/]+\/examples\//,
+    // The Rust coverage run enables `native-engine,migrate`. The napi
+    // bindings live behind `native`, so they are not compiled into the run
+    // that produces the report and cannot appear in it. They are exercised
+    // through the built addon instead — see the compiler's migrate suites.
+    /^packages\/core\/src\/native\.rs$/,
+    // Build output. It never mattered while `.js` was unmeasurable outright;
+    // now that the shipped loader is measured, a committed `dist` would be
+    // reported as source with no test.
+    /(^|\/)dist\//,
 ];
 
-/** Extensions the coverage runs instrument. Anything else is not measurable. */
-const MEASURED_EXTENSION = /\.(?:[cm]?tsx?|rs)$/;
+/**
+ * Extensions the coverage runs instrument. Anything else is not measurable.
+ *
+ * `.js` is here for the hand-written JavaScript that ships beside a package's
+ * `src` — the native loader is the only one today. Leaving it out did not make
+ * the gate lenient in a visible way: it made the gate decline to ask, so a
+ * changed file with no test reported as fully covered. Sonar reads the same
+ * report against its own file list and said 0 of 6, which is how the gap was
+ * found. Widen `include` in vitest.config.ts alongside this, or the lines land
+ * in no report and read as an unmeasured language instead.
+ */
+const MEASURED_EXTENSION = /\.(?:[cm]?tsx?|rs|js)$/;
 
 /**
  * Resolve an lcov source path to one the diff also uses.
@@ -223,9 +255,34 @@ export function parseDiffHunks(diff) {
  * @param file - Repo-relative path.
  * @returns True when the file should be measured.
  */
-export function isMeasurable(file) {
+export function isMeasurable(file, readSource = path => readFileSync(path, 'utf8')) {
     if (!MEASURED_EXTENSION.test(file)) return false;
-    return !UNMEASURED.some(pattern => pattern.test(file));
+    if (UNMEASURED.some(pattern => pattern.test(file))) return false;
+    return !isRustWithoutCode(file, readSource);
+}
+
+/**
+ * Whether a Rust file declares no function, and so has nothing to execute.
+ *
+ * `llvm-cov` writes no record for such a file — a module that only lists its
+ * submodules and re-exports them is the usual case — and a missing record
+ * would otherwise read as a file the run forgot to measure. Keyed on the
+ * absence of a function rather than on the name `mod.rs`, so a module that
+ * grows one stops being exempt without anyone remembering to notice.
+ *
+ * @param file - Repo-relative path.
+ * @param readSource - Reader, injected for tests.
+ * @returns True when the file cannot carry a hit.
+ */
+function isRustWithoutCode(file, readSource) {
+    if (!file.endsWith('.rs')) return false;
+    try {
+        return !/\bfn\s/.test(readSource(path.resolve(process.cwd(), file)));
+    } catch {
+        // A file the diff names but the tree no longer has was deleted; the
+        // report cannot mention it either way.
+        return true;
+    }
 }
 
 /**

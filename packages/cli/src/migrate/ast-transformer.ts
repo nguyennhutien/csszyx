@@ -17,7 +17,13 @@
 import { parse } from '@babel/parser';
 import * as t from '@babel/types';
 import { REMOVED_BOOLEAN_SUGAR, SUGGESTION_MAP } from '@csszyx/compiler';
+import {
+    isRustMigrateAvailable,
+    migrateRustBatch,
+    migrateRustHtml,
+} from '@csszyx/compiler/migrate';
 import { detectLineEnding, withLineEnding } from '../utils/line-endings.js';
+import { escapeSingleQuotedString } from '../utils/string-escape.js';
 import { disambiguateFont } from './class-parser.js';
 import {
     handleClsxCall,
@@ -27,8 +33,12 @@ import {
     isClsxLikeName,
     type PatternResult,
 } from './dynamic-patterns.js';
-import { generateSzExpression, generateSzHtmlValue } from './sz-codegen.js';
-import { type CsszyxTodoMap, classNameToSzObject } from './variant-parser.js';
+import {
+    generateSzExpression,
+    generateSzHtmlValue,
+    generateSzObjectLiteral,
+} from './sz-codegen.js';
+import { type CsszyxTodoMap, classNameToSzObject, tokenize } from './variant-parser.js';
 
 const BACKSLASH = String.fromCodePoint(92);
 
@@ -76,7 +86,10 @@ type VisitNode = t.Node | ReturnType<typeof parse>;
 
 interface AstVisitors {
     ImportDeclaration?: (node: t.ImportDeclaration) => void;
-    CallExpression?: (node: t.CallExpression, ancestors: VisitNode[]) => void;
+    CallExpression?: (
+        node: t.CallExpression | t.OptionalCallExpression,
+        ancestors: VisitNode[],
+    ) => void;
     JSXAttribute?: (node: t.JSXAttribute, parent: VisitNode | null) => void;
 }
 
@@ -114,7 +127,9 @@ function injectTodoComment(
 function walkAst(node: VisitNode, visitors: AstVisitors, ancestors: VisitNode[] = []): void {
     if (t.isImportDeclaration(node)) {
         visitors.ImportDeclaration?.(node);
-    } else if (t.isCallExpression(node)) {
+        // An optional call is a separate node type here, and missing it read
+        // as the callee never being called at all.
+    } else if (t.isCallExpression(node) || t.isOptionalCallExpression(node)) {
         visitors.CallExpression?.(node, ancestors);
     } else if (t.isJSXAttribute(node)) {
         visitors.JSXAttribute?.(node, ancestors.at(-1) ?? null);
@@ -260,10 +275,54 @@ function normalizeAmbiguousFontProperty(
 ): boolean {
     if (keyName !== 'font' || prop.key.start == null || prop.key.end == null) return false;
     const fontValue = readFontLiteralValue(prop.value);
-    const resolved = fontValue === null ? undefined : disambiguateFont(fontValue)?.prop;
-    if (!resolved || resolved === 'font') return false;
-    pushSzKeyReplacement(prop.key, resolved, replacements);
+    const resolved = fontValue === null ? undefined : disambiguateFont(fontValue);
+    if (!resolved || resolved.prop === 'font') return false;
+    pushSzKeyReplacement(prop.key, resolved.prop, replacements);
+    pushResolvedFontValue(prop.value, fontValue, resolved.value, replacements);
     return true;
+}
+
+/**
+ * Rewrites the value too when resolving the key changed it.
+ *
+ * A stretch value carries a marker the new key already says:
+ * `font: 'stretch-condensed'` means `fontStretch: 'condensed'`, and keeping
+ * the marker compiles to `font-stretch-[stretch-condensed]`, which sets
+ * font-stretch to a word CSS does not know — the class is emitted and the
+ * style is silently lost.
+ *
+ * Only a string replaces a string, and only when it actually differs. A
+ * weight resolves to a NUMBER, and the two spellings are different classes
+ * (`weight: '700'` is `font-700`, `weight: 700` is `font-[700]`), so a value
+ * that resolved to anything but a different non-empty string is left as the
+ * author wrote it.
+ *
+ * @param value - The property's value node.
+ * @param original - The value as text, as `disambiguateFont` read it.
+ * @param resolved - The value that disambiguation produced.
+ * @param replacements - Source-edit sink.
+ */
+function pushResolvedFontValue(
+    value: t.ObjectProperty['value'],
+    original: string | null,
+    resolved: unknown,
+    replacements: Replacement[],
+): void {
+    if (
+        typeof resolved !== 'string' ||
+        resolved === '' ||
+        resolved === original ||
+        !t.isStringLiteral(value) ||
+        value.start == null ||
+        value.end == null
+    ) {
+        return;
+    }
+    replacements.push({
+        start: value.start,
+        end: value.end,
+        text: `'${escapeSingleQuotedString(resolved)}'`,
+    });
 }
 
 /**
@@ -431,7 +490,7 @@ function handleJsxAttribute(
         return;
     }
     if (hasSiblingSzAttribute(parent)) {
-        context.counters.classNamesSkipped++;
+        if (!mergeIntoSiblingSz(node, parent, context)) context.counters.classNamesSkipped++;
         return;
     }
 
@@ -495,13 +554,173 @@ function isCustomComponentAttribute(parent: VisitNode | null): boolean {
  * @returns Whether migration would create a duplicate sz attribute.
  */
 function hasSiblingSzAttribute(parent: VisitNode | null): boolean {
-    if (!t.isJSXOpeningElement(parent)) return false;
-    return parent.attributes.some(
-        attribute =>
+    return t.isJSXOpeningElement(parent) && findSzAttribute(parent) !== undefined;
+}
+
+/**
+ * Extends an existing static sz object literal with the resolved keys.
+ *
+ * An object that already has properties is edited after its last one, so the
+ * source keeps whatever formatting the author gave it. An empty one has no
+ * property to append after, so it is rewritten whole.
+ *
+ * @param szObject - The `sz={{ … }}` object literal being extended.
+ * @param start - Source offset the literal begins at.
+ * @param end - Source offset the literal ends at.
+ * @param resolved - The sz object the resolved classes converted to.
+ * @param context - Shared migration state.
+ */
+function appendResolvedToSzObject(
+    szObject: t.ObjectExpression,
+    start: number,
+    end: number,
+    resolved: Record<string, unknown>,
+    context: JsxMigrationContext,
+): void {
+    const last = szObject.properties.at(-1);
+    if (last?.end == null) {
+        context.replacements.push({ start, end, text: generateSzObjectLiteral(resolved) });
+        return;
+    }
+    context.replacements.push({
+        start: last.end,
+        end: last.end,
+        text: `, ${generateSzHtmlValue(resolved)}`,
+    });
+}
+
+/**
+ * Merges a className into the static sz prop beside it — the resolve pass
+ * meeting an element an earlier pass already migrated.
+ *
+ * A plain migration skips such an element to protect hand-written sz. The
+ * documented loop runs `--resolve-todos` on migrated files, though, so with a
+ * resolution map in play the classes the map decides are appended to the
+ * existing sz object and removed from className. A key the sz object already
+ * sets is never overridden: the element is left alone and reported. Either
+ * way the still-unrecognized classes are re-marked, because the resolve pass
+ * strips every marker before it looks at the file.
+ *
+ * @param node - className JSX attribute.
+ * @param parent - Attribute parent node.
+ * @param context - Shared migration state.
+ * @returns Whether the className was merged; `false` leaves it skipped.
+ */
+function mergeIntoSiblingSz(
+    node: t.JSXAttribute,
+    parent: VisitNode | null,
+    context: JsxMigrationContext,
+): boolean {
+    const { customMap } = context.options;
+    if (!customMap || !t.isStringLiteral(node.value) || !t.isJSXOpeningElement(parent)) {
+        return false;
+    }
+    const szObject = findStaticSzObject(parent);
+    const range = readAttributeRange(node);
+    if (!szObject || !range || szObject.start == null || szObject.end == null) return false;
+
+    const trimmed = node.value.value.trim();
+    const converted = classNameToSzObject(trimmed, customMap);
+    const remaining = [...converted.keepInClassName, ...converted.unrecognized];
+    const resolvedKeys = Object.keys(converted.szObject);
+    const classNameChanged = remaining.join(' ') !== tokenize(trimmed).join(' ');
+    const remark = () => {
+        context.classesUnrecognized.push(...converted.unrecognized);
+        injectTodoComment(converted.unrecognized, parent, context.options, context.replacements);
+    };
+
+    if (resolvedKeys.length === 0 && !classNameChanged) {
+        remark();
+        return false;
+    }
+    const existingKeys = new Set(
+        szObject.properties.map(property =>
+            t.isObjectProperty(property) && !property.computed
+                ? readSzPropertyKey(property.key)
+                : null,
+        ),
+    );
+    const clashes = resolvedKeys.filter(key => existingKeys.has(key));
+    if (clashes.length > 0) {
+        context.warnings.push(
+            `[${context.filePath}] Cannot merge resolved classes into the existing sz prop on ` +
+                `<${jsxElementName(parent)}>: ${clashes.join(', ')} ` +
+                `${clashes.length === 1 ? 'is' : 'are'} already set. Resolve by hand.`,
+        );
+        remark();
+        return false;
+    }
+
+    if (resolvedKeys.length > 0) {
+        appendResolvedToSzObject(
+            szObject,
+            szObject.start,
+            szObject.end,
+            converted.szObject,
+            context,
+        );
+    }
+    if (remaining.length === 0) {
+        // Take the space before the attribute with it, or two attributes end
+        // up separated by two.
+        const start = context.source[range.start - 1] === ' ' ? range.start - 1 : range.start;
+        context.replacements.push({ start, end: range.end, text: '' });
+    } else {
+        // Reaching here at all means the map decided something, and a class
+        // it resolved is a class that left `remaining` — so the attribute has
+        // changed and there is no unchanged case to guard against.
+        context.replacements.push({ ...range, text: `className="${remaining.join(' ')}"` });
+    }
+    context.counters.classNamesTransformed++;
+    remark();
+    return true;
+}
+
+/**
+ * The object literal of a static `sz={{ … }}` attribute on an element.
+ *
+ * @param element - JSX opening element.
+ * @returns The object expression, or null when sz is absent or dynamic.
+ */
+function findStaticSzObject(element: t.JSXOpeningElement): t.ObjectExpression | null {
+    const value = findSzAttribute(element)?.value;
+    return t.isJSXExpressionContainer(value) && t.isObjectExpression(value.expression)
+        ? value.expression
+        : null;
+}
+
+/**
+ * The element's `sz` attribute, whatever its value.
+ *
+ * One lookup for the two questions asked about it — whether migration would
+ * duplicate the prop, and what object the resolve pass can merge into. Asking
+ * separately left the second search unable to fail, so its miss was a branch
+ * no test could take.
+ *
+ * @param element - JSX opening element.
+ * @returns The attribute, or undefined when the element has none.
+ */
+function findSzAttribute(element: t.JSXOpeningElement): t.JSXAttribute | undefined {
+    for (const attribute of element.attributes) {
+        if (
             t.isJSXAttribute(attribute) &&
             t.isJSXIdentifier(attribute.name) &&
-            attribute.name.name === 'sz',
-    );
+            attribute.name.name === 'sz'
+        ) {
+            return attribute;
+        }
+    }
+    return undefined;
+}
+
+/**
+ * The tag name of a JSX opening element, for a message.
+ *
+ * @param element - JSX opening element.
+ * @returns The identifier name, or `element` for any other name shape.
+ */
+function jsxElementName(element: t.JSXOpeningElement): string {
+    return t.isJSXIdentifier(element.name) ? element.name.name : 'element';
 }
 
 /**
@@ -645,6 +864,34 @@ function applyDynamicClassMigration(
  * @returns {TransformResult} Transformed code and stats.
  */
 export function transformSource(
+    source: string,
+    filePath: string,
+    options: TransformOptions = {},
+): TransformResult {
+    if (migrateEngine() === 'rust') {
+        const [result] = migrateRustBatch([{ filename: filePath, source }], options);
+        return result as TransformResult;
+    }
+    return transformSourceTs(source, filePath, options);
+}
+
+/**
+ * The TypeScript implementation, reached without consulting the engine
+ * switch.
+ *
+ * Every harness that holds the two implementations to each other has to name
+ * the one it wants. Going through `transformSource` was safe only while the
+ * TypeScript was the default: the moment the native engine became it, the
+ * corpus generator recorded the native answers as the TypeScript's and the
+ * comparison became the native engine against itself. It passed, and proved
+ * nothing.
+ *
+ * @param source - Source file content.
+ * @param filePath - Path used in warnings.
+ * @param options - Transformation options.
+ * @returns The migrated source and its counts.
+ */
+export function transformSourceTs(
     source: string,
     filePath: string,
     options: TransformOptions = {},
@@ -796,6 +1043,47 @@ export function transformSource(
 }
 
 /**
+ * Which implementation of migrate runs.
+ *
+ * The native port is the default, and the TypeScript is the fallback for a
+ * platform with no binary: both write the same bytes — held to it by the
+ * parity corpora in packages/core and by `pnpm fuzz:migrate-engine-parity` —
+ * so falling back changes how long a run takes and nothing else, and says so
+ * only in the run's log.
+ *
+ * Naming an engine is a different request from taking the default. A run that
+ * asks for the native engine and quietly gets the TypeScript one would make a
+ * comparison between them meaningless, so that fails instead of degrading.
+ *
+ * @param requested - The `CSSZYX_MIGRATE_ENGINE` value, if the caller has one.
+ * @param isAvailable - Whether the native engine can run here.
+ * @returns The engine to run.
+ * @throws When an engine is named that cannot run, or is not a known name.
+ */
+export function migrateEngine(
+    requested: string | undefined = process.env.CSSZYX_MIGRATE_ENGINE,
+    isAvailable: () => boolean = isRustMigrateAvailable,
+): 'ts' | 'rust' {
+    if (requested === undefined || requested === '') {
+        return isAvailable() ? 'rust' : 'ts';
+    }
+    if (requested === 'ts') return 'ts';
+    if (requested !== 'rust') {
+        throw new Error(
+            `CSSZYX_MIGRATE_ENGINE must be 'rust' or 'ts', not ${JSON.stringify(requested)}.`,
+        );
+    }
+    if (!isAvailable()) {
+        throw new Error(
+            'CSSZYX_MIGRATE_ENGINE=rust was asked for, but this install has no native binary ' +
+                'for the platform. Install the platform package, or unset the variable to let ' +
+                'migrate fall back to the TypeScript engine.',
+        );
+    }
+    return 'rust';
+}
+
+/**
  * Backwards-compatible alias kept for callers of the earlier name.
  * Uses the same Babel-based transformer internally.
  *
@@ -889,6 +1177,22 @@ const FOUC_CSS = `<style>
  * @returns {TransformResult} Transformed code and stats.
  */
 export function transformHtmlSourceSimple(
+    source: string,
+    options: HtmlTransformOptions = {},
+): TransformResult {
+    if (migrateEngine() === 'rust') return migrateRustHtml(source, options) as TransformResult;
+    return transformHtmlSourceTs(source, options);
+}
+
+/**
+ * The TypeScript HTML pass, reached without consulting the engine switch.
+ * See `transformSourceTs` for why a harness must name its implementation.
+ *
+ * @param source - HTML source file content.
+ * @param options - HTML transform options.
+ * @returns The migrated source and its counts.
+ */
+export function transformHtmlSourceTs(
     source: string,
     options: HtmlTransformOptions = {},
 ): TransformResult {

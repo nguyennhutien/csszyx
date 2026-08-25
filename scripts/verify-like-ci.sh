@@ -92,6 +92,9 @@ pnpm gen:key-tests:check
 pnpm gen:parity-corpus:check
 pnpm gen:rust-tables:check
 pnpm gen:reverse-map:check
+pnpm gen:migrate-tables:check
+pnpm gen:migrate-parity-corpus:check
+pnpm gen:migrate-source-corpus:check
 pnpm gen:migrate-golden:check
 pnpm gen:sz-fallback-matrix:check
 pnpm gen:sz-allowlist:check
@@ -125,19 +128,24 @@ env -u RUSTUP_TOOLCHAIN pnpm --filter @csszyx/core native:build -- --clean --nat
 # invisible until CI: the default build, `native-engine` (transform engine in
 # engine.rs), and `native` (the napi/FFI binding in native.rs, checked by
 # check-native.mjs — e.g. a redundant clone there is default-clippy-invisible).
+# Both migrate engines over a generated set. Needs the host addon built
+# above, so it sits here rather than with the generator checks.
+echo "[verify-like-ci] migrate engine parity (sweep + seeded random)..."
+pnpm fuzz:migrate-engine-parity
+
 echo "[verify-like-ci] Rust gates (rustfmt, clippy x3 feature sets, native check, cargo test, parity harnesses)..."
 (
     cd "$REPO/packages/core"
     cargo fmt --all -- --check
     cargo clippy --all-targets -- -D warnings
-    cargo clippy --features native-engine --all-targets -- -D warnings
+    cargo clippy --features native-engine,migrate --all-targets -- -D warnings
     node scripts/check-native.mjs
     cargo test
     # Full native-engine run: inline tests of every gated module plus every
     # integration binary (parity corpuses, sz_fallback_parity,
     # parser_panic_fuzz). Name filters proved unsafe here — they silently
     # skip gated tests that don't match, and CI stays green.
-    cargo test --features native-engine
+    cargo test --features native-engine,migrate
 )
 
 echo "[verify-like-ci] Running unit tests through turbo (catches missing build deps)..."

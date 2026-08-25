@@ -8,10 +8,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
-
+import { migrateRustBatch } from '@csszyx/compiler/migrate';
 import fg from 'fast-glob';
 
-import { transformHtmlSourceSimple, transformSource } from '../migrate/ast-transformer.js';
+import {
+    migrateEngine,
+    transformHtmlSourceSimple,
+    transformSource,
+} from '../migrate/ast-transformer.js';
 import type { CsszyxTodoMap } from '../migrate/variant-parser.js';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
@@ -164,7 +168,8 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
 
     const summary = createMigrationSummary();
     const progress = spinner.start('Migrating...');
-    for (const filePath of files) processMigrationFile(filePath, context, summary, log);
+    if (migrateEngine() === 'rust') processMigrationBatch(files, context, summary, log);
+    else for (const filePath of files) processMigrationFile(filePath, context, summary, log);
     progress.succeed('Migration complete');
 
     reportMigrationSummary(context, summary, log);
@@ -255,6 +260,9 @@ function startMigrationLog(context: MigrationContext): MigrationLog {
         : '';
     log.writeLine(`Mode: ${mode}${resolution}`);
     log.writeLine(`injectTodos: ${context.injectTodos}`);
+    // Which engine ran belongs in the log, not on the console: both write the
+    // same bytes, so it only matters when someone asks why a run was slow.
+    log.writeLine(`engine: ${migrateEngine()}`);
     log.writeLine('');
     if (!isGitignored(context.cwd, '.csszyx')) {
         printWarn(
@@ -324,6 +332,62 @@ function createMigrationSummary(): MigrationSummary {
     };
 }
 
+/** One file read and screened for the selected mode, ready to transform. */
+interface MigrationInput {
+    filePath: string;
+    isHtml: boolean;
+    /** The source the transformer sees: markers stripped on a resolve pass. */
+    source: string;
+}
+
+/** Reads one candidate file, or null when the selected mode has nothing to do in it. */
+function readMigrationInput(filePath: string, context: MigrationContext): MigrationInput | null {
+    const source = fs.readFileSync(filePath, 'utf-8');
+    const isHtml = filePath.endsWith('.html');
+    if (context.options.keysOnly && isHtml) return null;
+    if (!hasMigrationAttributes(source, isHtml, Boolean(context.options.keysOnly))) return null;
+    return {
+        filePath,
+        isHtml,
+        source: context.resolveTodosPath && !isHtml ? stripSzTodoComments(source) : source,
+    };
+}
+
+/** The HTML options the command passes through. */
+function htmlOptions(context: MigrationContext) {
+    return {
+        braces: context.options.braces,
+        injectFouc: context.options.injectFouc,
+        injectRuntime: context.options.injectRuntime,
+        cdnUrl: context.options.cdnUrl,
+        localPath: context.options.localPath,
+    };
+}
+
+/** The JSX options the command passes through. */
+function sourceOptions(context: MigrationContext) {
+    return {
+        injectTodos: context.injectTodos,
+        customMap: context.customMap,
+        keysOnly: context.options.keysOnly,
+    };
+}
+
+/** Aggregates, writes and reports one transformed file. */
+function finishMigrationFile(
+    filePath: string,
+    result: ReturnType<typeof transformSource>,
+    context: MigrationContext,
+    summary: MigrationSummary,
+    log: MigrationLog,
+): void {
+    summary.warnings.push(...result.warnings);
+    if (!result.changed) return;
+    aggregateMigrationResult(filePath, result, context, summary);
+    if (!writeMigratedFile(filePath, result.code, context, log)) return;
+    reportMigratedFile(filePath, result.stats, context, log);
+}
+
 /** Processes and aggregates one candidate source file. */
 function processMigrationFile(
     filePath: string,
@@ -331,30 +395,40 @@ function processMigrationFile(
     summary: MigrationSummary,
     log: MigrationLog,
 ): void {
-    const source = fs.readFileSync(filePath, 'utf-8');
-    const isHtml = filePath.endsWith('.html');
-    if (context.options.keysOnly && isHtml) return;
-    if (!hasMigrationAttributes(source, isHtml, Boolean(context.options.keysOnly))) return;
-    const processSource =
-        context.resolveTodosPath && !isHtml ? stripSzTodoComments(source) : source;
-    const result = isHtml
-        ? transformHtmlSourceSimple(processSource, {
-              braces: context.options.braces,
-              injectFouc: context.options.injectFouc,
-              injectRuntime: context.options.injectRuntime,
-              cdnUrl: context.options.cdnUrl,
-              localPath: context.options.localPath,
-          })
-        : transformSource(processSource, filePath, {
-              injectTodos: context.injectTodos,
-              customMap: context.customMap,
-              keysOnly: context.options.keysOnly,
-          });
-    summary.warnings.push(...result.warnings);
-    if (!result.changed) return;
-    aggregateMigrationResult(filePath, result, context, summary);
-    if (!writeMigratedFile(filePath, result.code, context, log)) return;
-    reportMigratedFile(filePath, result.stats, context, log);
+    const input = readMigrationInput(filePath, context);
+    if (!input) return;
+    const result = input.isHtml
+        ? transformHtmlSourceSimple(input.source, htmlOptions(context))
+        : transformSource(input.source, filePath, sourceOptions(context));
+    finishMigrationFile(filePath, result, context, summary, log);
+}
+
+/**
+ * Processes every candidate file through the native engine: the JSX files in
+ * one call, because the boundary crossing costs more than a file's parse,
+ * and the HTML files one by one as the text pass is.
+ */
+function processMigrationBatch(
+    files: string[],
+    context: MigrationContext,
+    summary: MigrationSummary,
+    log: MigrationLog,
+): void {
+    const inputs = files
+        .map(filePath => readMigrationInput(filePath, context))
+        .filter((input): input is MigrationInput => input !== null);
+    const jsxInputs = inputs.filter(input => !input.isHtml);
+    const jsxResults = migrateRustBatch(
+        jsxInputs.map(input => ({ filename: input.filePath, source: input.source })),
+        sourceOptions(context),
+    );
+    let next = 0;
+    for (const input of inputs) {
+        const result = input.isHtml
+            ? transformHtmlSourceSimple(input.source, htmlOptions(context))
+            : (jsxResults[next++] as ReturnType<typeof transformSource>);
+        finishMigrationFile(input.filePath, result, context, summary, log);
+    }
 }
 
 /** Checks whether a source file contains attributes relevant to the selected mode. */

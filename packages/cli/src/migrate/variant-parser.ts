@@ -519,7 +519,9 @@ function applyCustomMapToken(
 
     switch (entry.action) {
         case 'sz':
-            Object.assign(state.szObject, entry.value);
+            // The map's object is shared by every className this run converts;
+            // nesting later tokens into it would write them into the map.
+            Object.assign(state.szObject, cloneParsedValue(entry.value) as Record<string, unknown>);
             if (entry.cascade?.length) state.unrecognized.push(...entry.cascade);
             return true;
         case 'keep':

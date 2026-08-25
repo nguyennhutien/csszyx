@@ -10,6 +10,7 @@ export default defineBuildConfig({
         // Browser-pure transform (no Babel deps). Tree-shakes cleanly
         // for browser bundles via @csszyx/dynamic + @csszyx/runtime.
         './src/transform-core',
+        './src/migrate-rust',
     ],
     declaration: 'node16',
     rollup: {

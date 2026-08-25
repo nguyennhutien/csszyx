@@ -14,20 +14,19 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { __resetSzWarnDedupForTests } from '../src/transform-core.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
 import { transformSource } from '../src/transform-select.js';
 import { transformWasm } from '../src/transform-wasm.js';
-import { captureWarnings, type ParityEngine } from './engine-parity-harness.js';
+import { captureWarnings, ENGINES, type ParityEngine } from './engine-parity-harness.js';
 
-/** [lane, engine, property key]. Keys stay distinct so the dedup case
- * below can still observe a genuine second-lane silence. */
-const LANES: ReadonlyArray<readonly [string, ParityEngine, string]> = [
-    ['auto', transformSource, 'p'],
-    ['wasm', transformWasm as ParityEngine, 'm'],
-    ...(isRustTransformAvailable()
-        ? ([['rust', transformRust as ParityEngine, 'w']] as const)
-        : []),
-];
+/**
+ * Both artifacts of the one engine, each probing a DIFFERENT property key so
+ * the dedup case below can still observe a genuine second-lane silence. The
+ * shared list drops the `auto` selector — `transform-select.test.ts` owns
+ * that — and refuses to run in CI with the native artifact missing.
+ */
+const LANES: ReadonlyArray<readonly [string, ParityEngine, string]> = ENGINES.map(
+    ([lane, engine], index) => [lane, engine, (['p', 'm'] as const)[index] ?? 'w'] as const,
+);
 
 beforeEach(() => {
     // The warning set is process-wide by design; without the reset the

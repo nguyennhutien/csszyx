@@ -1,6 +1,6 @@
 import { transform } from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
-import { transformSource } from '../src/migrate/ast-transformer.js';
+import { transformSource, transformSourceTs } from '../src/migrate/ast-transformer.js';
 
 /**
  * TRANSITIONAL (0.9.10 → 0.10.0): `csszyx migrate` rewrites legacy keys inside
@@ -9,7 +9,20 @@ import { transformSource } from '../src/migrate/ast-transformer.js';
  * intended. (Remove with the normalizer at v1.)
  */
 describe('migrate normalizes legacy sz prop keys', () => {
-    const run = (src: string) => transformSource(src, 'test.tsx');
+    /**
+     * Both implementations on every case, asserted equal before the case
+     * reads the answer. The native engine is the default, so calling the
+     * dispatcher alone would leave the TypeScript this suite was written
+     * against dark.
+     *
+     * @param src - The JSX source to migrate.
+     * @returns What the TypeScript implementation wrote.
+     */
+    const run = (src: string) => {
+        const ts = transformSourceTs(src, 'test.tsx');
+        expect(transformSource(src, 'test.tsx')).toEqual(ts);
+        return ts;
+    };
 
     it('rewrites removed boolean sugar to the canonical value-keyed form', () => {
         const out = run('<div sz={{ flex: true }} />');
@@ -25,6 +38,48 @@ describe('migrate normalizes legacy sz prop keys', () => {
         expect(out.code).toBe("<div sz={{ p: 4, weight: 'bold' }} />");
         expect(out.stats.szKeysNormalized).toBe(2);
         expect(transform({ p: 4, weight: 'bold' }).className).toBe('p-4 font-bold');
+    });
+
+    it('resolves a legacy stretch value, not just its key', () => {
+        // The key rename alone leaves the marker on the value, and
+        // `fontStretch: 'stretch-condensed'` compiles to an arbitrary value
+        // that sets font-stretch to a word CSS does not know — the class is
+        // emitted, the style is silently lost.
+        const out = run("<div sz={{ font: 'stretch-condensed' }} />");
+        expect(out.code).toBe("<div sz={{ fontStretch: 'condensed' }} />");
+        expect(out.stats.szKeysNormalized).toBe(1);
+        expect(transform({ fontStretch: 'condensed' }).className).toBe('font-stretch-condensed');
+    });
+
+    it('keeps the percentage and custom-property forms of a stretch value', () => {
+        expect(run("<div sz={{ font: 'stretch-75%' }} />").code).toBe(
+            "<div sz={{ fontStretch: '75%' }} />",
+        );
+        expect(transform({ fontStretch: '75%' }).className).toBe('font-stretch-75%');
+        expect(run("<div sz={{ font: 'stretch-(--s)' }} />").code).toBe(
+            "<div sz={{ fontStretch: '--s' }} />",
+        );
+        expect(transform({ fontStretch: '--s' }).className).toBe('font-stretch-(--s)');
+    });
+
+    it('leaves a weight value alone, because its spelling decides its class', () => {
+        // `weight: '700'` is `font-700` and `weight: 700` is `font-[700]`, so
+        // rewriting the value here would change what the file compiles to.
+        expect(run("<div sz={{ font: '700' }} />").code).toBe("<div sz={{ weight: '700' }} />");
+        expect(transform({ weight: '700' }).className).toBe('font-700');
+        expect(run('<div sz={{ font: 700 }} />').code).toBe('<div sz={{ weight: 700 }} />');
+        expect(run("<div sz={{ font: 'bold' }} />").code).toBe("<div sz={{ weight: 'bold' }} />");
+        expect(run("<div sz={{ font: 'sans' }} />").code).toBe(
+            "<div sz={{ fontFamily: 'sans' }} />",
+        );
+    });
+
+    it('leaves a stretch marker with nothing after it alone', () => {
+        // Neither spelling generates useful CSS, so there is nothing to gain
+        // by rewriting a value that carries no keyword.
+        expect(run("<div sz={{ font: 'stretch-' }} />").code).toBe(
+            "<div sz={{ fontStretch: 'stretch-' }} />",
+        );
     });
 
     it('recurses into nested variant objects', () => {

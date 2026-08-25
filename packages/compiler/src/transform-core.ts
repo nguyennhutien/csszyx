@@ -1312,6 +1312,40 @@ function warnDeadSpacingStep(key: string, value: number): void {
     );
 }
 
+/** Weight values already nudged about the bare numeric class (once each). */
+const _warnedWeightValues = new Set<string>();
+
+/**
+ * Warns when a font weight is written as a numeric STRING.
+ *
+ * Tailwind v4 spells weights through `--font-weight-*`, so `font-700` is not
+ * a utility and generates no CSS; that is why the NUMBER form is bracketed
+ * (`{ weight: 700 }` emits `font-[700]`). A string took the generic path and
+ * emitted the bare class instead, which styled nothing and said nothing.
+ *
+ * The class is still emitted, the way a dead spacing step is: the warning
+ * reports what Tailwind will do with what the author wrote, rather than
+ * rewriting it into something they did not.
+ *
+ * @param rawKey - The sz property key.
+ * @param value - The string value about to be emitted bare.
+ */
+function warnDeadWeightValue(rawKey: string, value: string): void {
+    if (rawKey !== 'weight' || !szDevWarningsEnabled() || !/^\d+(?:\.\d+)?$/.test(value)) {
+        return;
+    }
+    if (_warnedWeightValues.has(value)) return;
+    _warnedWeightValues.add(value);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] "weight: '${value}'"${at}: Tailwind spells a numeric font weight through ` +
+            `--font-weight-*, so "font-${value}" generates no CSS. Write weight: ${value} as a ` +
+            'number, which brackets to "font-[' +
+            value +
+            ']".',
+    );
+}
+
 /** Custom theme tokens already nudged about slash-opacity (once per token). */
 const _warnedOpacityTokens = new Set<string>();
 
@@ -3605,6 +3639,7 @@ function collectFallbackProperty(
     }
     if (typeof value === 'string') {
         if (/^-?\d+(?:\.\d+)?$/.test(value)) warnDeadSpacingStep(rawKey, Number(value));
+        warnDeadWeightValue(rawKey, value);
         classes.push(buildGenericStringClass(rawKey, key, value, prefix));
     }
 }

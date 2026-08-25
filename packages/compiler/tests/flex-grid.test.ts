@@ -471,6 +471,10 @@ describe('flexbox & grid — align items', () => {
         expect(t({ items: 'start' })).toBe('items-start');
     });
 
+    it('{ items: "center" } → items-center', () => {
+        expect(t({ items: 'center' })).toBe('items-center');
+    });
+
     it('{ items: "center-safe" } → items-center-safe', () => {
         expect(t({ items: 'center-safe' })).toBe('items-center-safe');
     });

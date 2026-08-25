@@ -1,7 +1,7 @@
 /**
  * Unit net for the cross-module registry's collection and resolution rules.
  *
- * The three-engine consumer and the extractor have their own suites in the
+ * The consumer in each lane and the extractor have their own suites in the
  * compiler package; what was untested was THIS layer — which files enter the
  * registry, and how a transformed file's import specifiers probe it. A wrong
  * probe here silently costs the optimization (safe direction), but a wrong

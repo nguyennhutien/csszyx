@@ -68,8 +68,8 @@ jobs:
       # The crate's only `unsafe` block lives behind `native-engine`, so the
       # default clippy run above never lints it. Run clippy with the feature too
       # so the unsafe-block lints (undocumented_unsafe_blocks etc.) are enforced.
-      - name: Run clippy (native-engine)
-        run: cargo clippy --features native-engine --all-targets -- -D warnings
+      - name: Run clippy (native-engine, migrate)
+        run: cargo clippy --features native-engine,migrate --all-targets -- -D warnings
 
       - name: Run tests
         run: cargo test
@@ -86,8 +86,8 @@ jobs:
       # shape filtered by `transform::parser` plus one named binary, which
       # silently skipped every other gated test — 157 lines of fallback parity
       # assertions ran zero times here while the job stayed green.
-      - name: Run native engine tests
-        run: cargo test --features native-engine
+      - name: Run native engine and migrate tests
+        run: cargo test --features native-engine,migrate
 
       - name: Install wasm-pack
         run: cargo install wasm-pack --locked --version 0.14.0 || true
@@ -125,6 +125,13 @@ jobs:
   # only happens when a pull request touches one of the hand-written byte
   # scanners. --timeout-multiplier bounds the window relative to the measured
   # baseline rather than pinning an absolute that would drift with runner speed.
+  #
+  # Sharded because the budget is per pull request, not per line: a change that
+  # adds a module rather than editing one produces mutants in proportion to its
+  # size. The port of migrate generated 697 against a 45-minute ceiling sized
+  # for ordinary diffs, and hit the ceiling with most of them unrun. Raising the
+  # ceiling only moves the wall and lengthens the feedback loop; splitting the
+  # work keeps a shard near the ordinary case and leaves room above it.
   mutate-diff:
     name: Mutation (changed lines)
     if: >-
@@ -133,8 +140,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     concurrency:
-      group: mutate-diff-${{ github.event.pull_request.number }}
+      # The shard belongs in the group. A job-level concurrency group is shared
+      # by every matrix instance, so without it the shards cancel each other
+      # and the run reports on whichever one happened to start last.
+      group: mutate-diff-${{ github.event.pull_request.number }}-${{ matrix.shard }}
       cancel-in-progress: true
+    strategy:
+      # One shard timing out still leaves three real results, and cancelling
+      # them would turn a partial answer into none.
+      fail-fast: false
+      matrix:
+        # cargo-mutants numbers shards from ZERO: --shard k/n requires k < n,
+        # so a one-based list would spend a job on an invalid 4/4 and never ask
+        # for slice 0/4 at all.
+        shard: [0, 1, 2, 3]
     steps:
       # Full history: the wrapper scopes the run with `git merge-base HEAD main`
       # and a shallow clone has no merge base to find.
@@ -169,9 +188,19 @@ jobs:
       # engine only exists behind native-engine, and without it every mutant
       # lands in a crate whose transform module is compiled out and reports back
       # as unviable — a green run that measured nothing.
+      #
+      # migrate is named too, and it is the more dangerous omission. It is a
+      # separate feature on purpose, so a run without it compiles the migrate
+      # module out — and a mutant in code that is not compiled builds fine and
+      # passes every test, which reports as MISSED rather than unviable. That
+      # reads as a weak suite instead of a run that measured nothing, and sends
+      # whoever acts on it to write tests for lines that already have them.
+      # Measured on one mutant: "replace == with != in is_word_char" is MISSED
+      # under native-engine alone and CAUGHT under native-engine,migrate.
       - name: Mutate the diff
         run: >-
           bash scripts/mutants.sh diff
-          --features native-engine
+          --features native-engine,migrate
+          --shard ${{ matrix.shard }}/4
           --timeout-multiplier 3
           --minimum-test-timeout 30

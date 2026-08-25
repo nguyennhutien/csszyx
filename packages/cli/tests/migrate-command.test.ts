@@ -177,6 +177,33 @@ describe('migrate clsx and comment-strip edges', () => {
     });
 });
 
+describe('migrate resolve loop on an already-migrated file', () => {
+    it('merges the map into the sz prop the first pass wrote and clears its marker', async () => {
+        mute();
+        vi.spyOn(console, 'info').mockImplementation(() => {});
+        const cwd = fixture();
+        const file = join(cwd, 'src/Loop.tsx');
+        writeFileSync(file, 'export const L = () => <div className="p-4 mystery-class">x</div>;\n');
+        // First pass: p-4 migrates, mystery-class stays marked.
+        await migrate({ cwd, injectTodos: true });
+        const first = readFileSync(file, 'utf8');
+        expect(first).toContain('sz={{ p: 4 }}');
+        expect(first).toContain('className="mystery-class"');
+        expect(first).toContain('@sz-todo: mystery-class');
+        // The documented loop: audit, decide, resolve.
+        await migrate({ cwd, audit: true });
+        writeFileSync(
+            join(cwd, '.csszyx-todo.json'),
+            JSON.stringify({ 'mystery-class': { m: 1 } }),
+        );
+        await migrate({ cwd, resolveTodos: '.csszyx-todo.json' });
+        const resolved = readFileSync(file, 'utf8');
+        expect(resolved).toContain('sz={{ p: 4, m: 1 }}');
+        expect(resolved).not.toContain('className=');
+        expect(resolved).not.toContain('@sz-todo');
+    });
+});
+
 describe('migrate reporting overflow paths', () => {
     it('reports still-unresolved todos and overflows past five warnings', async () => {
         const logs = mute();

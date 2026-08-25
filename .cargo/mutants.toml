@@ -26,10 +26,13 @@
 # anyway, but --in-place is what actually prevents it.
 # ---------------------------------------------------------------------------
 
-# The engine only exists behind this feature; without it cargo-mutants would
-# mutate a crate whose transform module is compiled out and report everything
-# as unviable.
-features = ["native-engine"]
+# Both features, and for different reasons. Without `native-engine` the
+# transform module compiles out and every mutant reports as UNVIABLE — a run
+# that measured nothing, which at least announces itself. Without `migrate`
+# that module compiles out instead, and a mutant in code that is not compiled
+# builds and passes, so it reports as MISSED. That reads as a weak suite and
+# sends whoever acts on it to write tests for lines that already have them.
+features = ["native-engine", "migrate"]
 
 # Safety net for a run that somehow skips --in-place: honour .gitignore so the
 # copy excludes node_modules, .pnpm-store, target/ and dist/ (all ignored),

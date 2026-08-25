@@ -278,6 +278,51 @@ pub(crate) fn collect_removed_boolean_sugar(
     }
 }
 
+/// Collects `weight` values written as a numeric STRING.
+///
+/// Tailwind spells weights through `--font-weight-*`, so `font-700` is not a
+/// utility and generates no CSS; that is why the NUMBER form brackets. A
+/// string takes the generic path and emits the bare class, which styles
+/// nothing. The class is still emitted, as a dead spacing step is: the
+/// diagnostic reports what Tailwind will do with what the author wrote.
+///
+/// Same descent rules as [`collect_dead_spacing_steps`].
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_dead_weight_values(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::String(value) => {
+                if property.key == "weight" && is_unsigned_decimal(value) {
+                    out.push((value.clone(), property.span.start));
+                }
+            }
+            StaticSzValue::Object(nested) => {
+                if matches!(
+                    property.key.as_str(),
+                    "css"
+                        | "bgImg"
+                        | "supports"
+                        | "data"
+                        | "not"
+                        | "aria"
+                        | "has"
+                        | "group"
+                        | "peer"
+                ) {
+                    continue;
+                }
+                if property_prefix(&property.key).is_some()
+                    && object_string_property(nested, "color").is_some()
+                {
+                    continue;
+                }
+                collect_dead_weight_values(nested, out);
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_dead_spacing_steps(
     object: &StaticSzObject,
@@ -2215,6 +2260,8 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "native-engine")]
+    use super::collect_dead_weight_values;
     use super::{
         build_mask_radial_classes, build_mask_slot_classes, build_mask_stop_classes,
         collect_unknown_sz_keys, format_color_opacity_object, format_mask_position,
@@ -2237,6 +2284,57 @@ mod tests {
 
     fn object(properties: Vec<StaticSzProperty>) -> StaticSzValue {
         StaticSzValue::Object(StaticSzObject { properties })
+    }
+
+    /// The descent rule for the dead-weight warning, which no Rust test
+    /// reached before: the diagnostic it feeds is asserted from the
+    /// JavaScript side, and `cargo test` never runs that suite. Mutation
+    /// testing reports such a function as untested however well it is covered
+    /// elsewhere, and it is right to — nothing here was checking it.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn descends_past_a_colour_object_but_not_into_one() {
+        let dead = || StaticSzValue::String("700".to_string());
+        let colour = || StaticSzValue::String("red".to_string());
+        let collect = |key: &str, nested: Vec<StaticSzProperty>| {
+            let mut out = Vec::new();
+            collect_dead_weight_values(
+                &StaticSzObject {
+                    properties: vec![property(key, object(nested))],
+                },
+                &mut out,
+            );
+            out
+        };
+
+        // A nested object under a property key that also carries a colour is
+        // the shape of a colour with a modifier, and is not searched.
+        assert!(
+            collect(
+                "bg",
+                vec![property("color", colour()), property("weight", dead())]
+            )
+            .is_empty(),
+            "a colour object is not searched"
+        );
+        // Take the colour away and the same key is searched, because both
+        // halves of that test have to hold for the skip to apply.
+        assert_eq!(
+            collect("bg", vec![property("weight", dead())]).len(),
+            1,
+            "without a colour, the object is searched"
+        );
+        // Keep the colour but hang it off a key that is not a property, and it
+        // is searched again.
+        assert_eq!(
+            collect(
+                "hover",
+                vec![property("color", colour()), property("weight", dead())]
+            )
+            .len(),
+            1,
+            "a variant key is searched even with a colour"
+        );
     }
 
     #[test]

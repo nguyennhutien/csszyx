@@ -1,5 +1,5 @@
 /**
- * sz array composition — later-wins semantics, 3-engine parity.
+ * sz array composition — later-wins semantics, lane parity.
  *
  * `sz={[a, b]}` composes with LATER WINS: on the same property, a later
  * element's value overrides an earlier one's. Two lanes, one semantic:
@@ -170,7 +170,7 @@ const FIXTURES: Fixture[] = [
     },
 ];
 
-describe('sz array composition — later wins (3-engine parity)', () => {
+describe('sz array composition — later wins (lane parity)', () => {
     for (const fixture of FIXTURES) {
         it(fixture.name, () => {
             const oxc = run('wasm', fixture.attr);

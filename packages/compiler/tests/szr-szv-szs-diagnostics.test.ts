@@ -19,9 +19,7 @@ import {
     SZ_FALLBACK_SZV_SUGGESTION,
     szsUnsupportedDiagnostic,
 } from '../src/sz-fallback-matrix.js';
-import { isRustTransformAvailable, transformRust } from '../src/transform-rust.js';
-import { transformSource } from '../src/transform-select.js';
-import { transformWasm } from '../src/transform-wasm.js';
+import { ENGINES } from './engine-parity-harness.js';
 
 const RUNTIME_IMPORT = "import { szr, szv, dynamic } from '@csszyx/runtime';\n";
 const VUI_IMPORT = "import { Popup } from '@vbd/vui';\n";
@@ -66,11 +64,13 @@ const SZS_WARNING_SOURCES: ReadonlyArray<readonly [string, string]> = [
 
 type Engine = (source: string, filename?: string) => { diagnostics?: string[] };
 
-const LANES: ReadonlyArray<readonly [string, Engine]> = [
-    ['auto', transformSource],
-    ['wasm', transformWasm as Engine],
-    ...(isRustTransformAvailable() ? ([['rust', transformRust as Engine]] as const) : []),
-];
+/**
+ * Both artifacts of the one engine. The shared list drops the `auto`
+ * selector — `transform-select.test.ts` owns that — and refuses to run in CI
+ * with the native artifact missing, which a hand-rolled list here could not
+ * notice.
+ */
+const LANES = ENGINES;
 
 /**
  * Diagnostics for one source, with the project-scan tip filtered out.

@@ -58,7 +58,7 @@ const controlSz = szv({ variants: { layout: {
     panel: { grow: 1, m: 4 },
 } } });`;
 
-describe('szv catalog — per-key leniency (3-engine parity)', () => {
+describe('szv catalog — per-key leniency (lane parity)', () => {
     it('multi-key variant objects extract every side (the field-reported case)', () => {
         expectCatalogParity(`${IMPORT}${CONTROL}`, ['grow-1', 'mx-0', 'my-4', 'm-4']);
     });

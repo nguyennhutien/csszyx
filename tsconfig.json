@@ -11,6 +11,7 @@
         "paths": {
             "@csszyx/core": ["./packages/core/pkg"],
             "@csszyx/compiler": ["./packages/compiler/src"],
+            "@csszyx/compiler/migrate": ["./packages/compiler/src/migrate-rust.ts"],
             "@csszyx/types": ["./packages/types/src"],
             "@csszyx/runtime": ["./packages/runtime/src"],
             "@csszyx/cli": ["./packages/cli/src"],

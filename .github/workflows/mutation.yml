@@ -77,10 +77,16 @@ jobs:
       # unviable — a green run that measured nothing. Stating it here keeps the
       # scheduled sweep correct even if that config file is absent or edited.
       #
+      # migrate is named for the same reason and fails worse when it is not:
+      # its module is compiled out without it, and a mutant in code that is not
+      # compiled builds and passes, so it reports as MISSED rather than
+      # unviable. A sweep reporting a module's whole surface as missed reads as
+      # a suite worth fixing rather than a run worth rerunning.
+      #
       # --in-place matters even on a throwaway runner: without it cargo-mutants
       # copies the whole workspace per build job.
       - name: Run shard
-        run: cargo mutants --in-place --features native-engine --shard ${{ matrix.shard }}/8
+        run: cargo mutants --in-place --features native-engine,migrate --shard ${{ matrix.shard }}/8
 
       - name: Upload shard outcomes
         # Always: a shard that times out still carries the outcomes of every

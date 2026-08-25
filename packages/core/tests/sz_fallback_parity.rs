@@ -1,4 +1,4 @@
-//! Three-engine parity for the sz runtime-fallback diagnostic matrix.
+//! Lane parity for the sz runtime-fallback diagnostic matrix.
 //!
 //! Every expected string below is the BABEL lane's exact output for the same
 //! source, captured from `transformSourceCode` — not hand-written. The suite
