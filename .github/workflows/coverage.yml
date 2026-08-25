@@ -35,7 +35,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # Full history: the patch gate at the end asks git which lines the branch
+      # changed, and a shallow clone has no base commit to answer against.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Make the base resolvable
+        run: git fetch --no-tags origin main:main || true
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
@@ -111,3 +118,12 @@ jobs:
           flags: rust
           name: rust
           fail_ci_if_error: true
+
+      # Every changed line covered, measured here rather than trusted to the
+      # service the reports are uploaded to. codecov.yml asks for a 100% patch
+      # on both languages, but Codecov posts no status on a pull request in
+      # this repository, so that target had nothing enforcing it — and the
+      # local script that does enforce it only runs when somebody remembers to
+      # run it. This step is that script, on the reports this job just built.
+      - name: Patch coverage
+        run: pnpm check:patch-coverage
