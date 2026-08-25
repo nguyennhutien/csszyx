@@ -240,6 +240,36 @@ const SNIPPETS = [
     ],
     ['template-or-not-and', '<div className={`${cond || "m-2"} p-4`} />', DEFAULT],
     [
+        // A negated condition, which is what an empty first branch turns into.
+        // It is parenthesised when compound, and these two are compound in
+        // different ways: one carries spaces without an operator between the
+        // names, the other an operator without spaces. Testing for either
+        // alone lets one through bare, and the negation then binds to the
+        // first name only.
+        'ternary-empty-consequent-spaced',
+        '<div className={clsx(a === b ? "" : "m-2")} />',
+        DEFAULT,
+    ],
+    [
+        'ternary-empty-consequent-unspaced-or',
+        '<div className={clsx(a||b ? "" : "m-2")} />',
+        DEFAULT,
+    ],
+    [
+        // A member that is not a plain key-value pair, named the same as a key
+        // the map resolves to. Reading it as a key would report a clash and
+        // refuse the merge, so the name has to collide for the difference to
+        // show at all.
+        'sz-accessor-named-like-a-resolved-key',
+        'const A = () => <div sz={{ get p() { return 1; } }} className="mystery" />;',
+        MAP,
+    ],
+    [
+        'sz-method-named-like-a-resolved-key',
+        'const A = () => <div sz={{ p() {} }} className="mystery" />;',
+        MAP,
+    ],
+    [
         // A negated condition is parenthesised when it is compound. These two
         // are compound in different ways: one carries spaces and no operator
         // between the names, the other an operator and no spaces. Testing for

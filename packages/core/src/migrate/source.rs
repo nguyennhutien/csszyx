@@ -612,10 +612,13 @@ impl<'a> Migration<'_, '_> {
         if remaining.is_empty() {
             // Take the space before the attribute with it, or two attributes
             // end up separated by two.
-            let start = if range.0 > 0 && self.source.as_bytes()[range.0 - 1] == b' ' {
-                range.0 - 1
-            } else {
-                range.0
+            // Asking for the previous offset rather than testing for one. An
+            // attribute always sits after its element's name, so there is
+            // always a character before it, and a comparison against zero
+            // states a bound the shape of the source already gives.
+            let start = match range.0.checked_sub(1) {
+                Some(previous) if self.source.as_bytes()[previous] == b' ' => previous,
+                _ => range.0,
             };
             self.replacements.push(Replacement {
                 start,
