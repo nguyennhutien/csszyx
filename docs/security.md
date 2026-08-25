@@ -50,12 +50,11 @@ The primary injection path uses a constructable `CSSStyleSheet` +
 strict CSP, ensure `adoptedStyleSheets` is available or provide a nonce for the
 fallback element.
 
-JavaScript: a production build emits **no executable inline script**. The HTML
-carries only inert data (`data-sz-checksum`, and the
+JavaScript: a production build emits **no executable inline script**, on any
+bundler lane. The HTML carries only inert data (`data-sz-checksum`, and the
 `<script type="application/json">` hydration census, which `script-src` does not
 apply to). The runtime mangle map is registered from a module inside your own
-bundle (`mangleMapDelivery: 'bundle'`, the default), so `script-src 'self'` or
-your nonce/hash covers it — never add `'unsafe-inline'` for csszyx. The
-deprecated `'html'`/`'both'` modes and mangled **webpack** builds still ship one
-inline installer; the full contract and a local-enforcement recipe are in the
-docs site's Security page.
+bundle — a virtual module on Vite/Rollup, a generated `.csszyx/` file on webpack
+— so `script-src 'self'` or your nonce/hash covers it. Never add
+`'unsafe-inline'` for csszyx. The full contract and a local-enforcement recipe
+are on the docs site's Security page.

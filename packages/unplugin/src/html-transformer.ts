@@ -10,8 +10,6 @@
 import { createHash } from 'node:crypto';
 
 import type { CssVariableMangleValue, TokenData } from '@csszyx/compiler';
-import { CSSZYX_GLOBAL_ALIAS_PREFIX } from '@csszyx/types';
-import { createLegacyInlineInstaller } from './legacy-inline-installer.js';
 import { sortStrings } from './sort.js';
 import { replaceEveryLiteral, unicodeEscape } from './string-escape.js';
 
@@ -46,7 +44,8 @@ export function safeJsonForScriptTag(value: unknown, prettyPrint = false): strin
  * `script` is a `<script type="application/json">` data block: browsers do
  * not evaluate it and a `script-src` policy does not apply to it. It is the
  * form `@csszyx/runtime`'s hydration verification reads back from the DOM.
- * Executable installation is a separate decision ({@link HtmlInjectionOptions.inlineInstaller}).
+ * csszyx emits no executable inline script at all; this is the whole of what
+ * it puts in the document besides the checksum attribute.
  */
 export type InjectionMode = 'inline' | 'script' | 'both';
 
@@ -83,24 +82,6 @@ export interface HtmlInjectionOptions {
      * hydration checksum script includes both class and variable namespaces.
      */
     varMangleMap?: Record<string, CssVariableMangleValue>;
-
-    /**
-     * Prefix used for generated global CSS custom-property aliases.
-     */
-    globalVarAliasPrefix?: string;
-
-    /**
-     * Also emit the legacy EXECUTABLE inline installer for `window.__csszyx`.
-     *
-     * Off by default: an inline `<script>` is refused by a strict
-     * Content-Security-Policy, and the runtime map's correctness delivery is
-     * the bundle module. The census ships either way — hydration verification
-     * reads it from the DOM. Only the deprecated `html` / `both` delivery
-     * modes ask for this.
-     *
-     * @default false
-     */
-    inlineInstaller?: boolean;
 }
 
 /**
@@ -188,49 +169,19 @@ export function injectMangleMapScript(
     mangleMap: Record<string, string>,
     options: HtmlInjectionOptions = {},
 ): string {
-    const {
-        prettyPrint = false,
-        varMangleMap = {},
-        globalVarAliasPrefix = CSSZYX_GLOBAL_ALIAS_PREFIX,
-        inlineInstaller = false,
-    } = options;
+    const { prettyPrint = false, varMangleMap = {} } = options;
     const checksumMap = createHydrationMangleMap(mangleMap, varMangleMap);
-
-    const jsonContent = safeJsonForScriptTag(checksumMap, prettyPrint);
-    const varMapContent = safeJsonForScriptTag(varMangleMap);
-
-    // Class-only builds make the checksum payload byte-identical to the class
-    // map, so the installer re-reads the JSON the document already carries
-    // instead of shipping a second literal of every censused name. Variable
-    // mangling namespaces the payload (`class:` / `var:`), which no longer
-    // reconstructs into the two separate maps, so those builds keep the
-    // literal. Falls back to an empty map if the tag is ever stripped, which
-    // matches the no-map behaviour the runtime helpers already tolerate.
-    const reuseChecksumPayload = Object.keys(varMangleMap).length === 0;
-    const classMapExpr = reuseChecksumPayload
-        ? '(function(){var e=document.getElementById("__CSSZYX_MANGLE_MAP__");return e?JSON.parse(e.textContent):{}})()'
-        : safeJsonForScriptTag(mangleMap);
-
-    const scriptTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">${jsonContent}</script>`;
-    const legacyInstaller = inlineInstaller
-        ? `<script>${createLegacyInlineInstaller({
-              mapExpr: classMapExpr,
-              varMapExpr: varMapContent,
-              prefixExpr: safeJsonForScriptTag(globalVarAliasPrefix),
-              checksumExpr: 'document.documentElement.getAttribute("data-sz-checksum")||""',
-          })}</script>`
-        : null;
+    const scriptTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">${safeJsonForScriptTag(checksumMap, prettyPrint)}</script>`;
 
     // Inject before </head> or before </html> if no head
-    const combined = legacyInstaller === null ? scriptTag : `${scriptTag}\n${legacyInstaller}`;
     if (html.includes('</head>')) {
-        return html.replace('</head>', `${combined}\n</head>`);
+        return html.replace('</head>', `${scriptTag}\n</head>`);
     } else if (html.includes('</html>')) {
-        return html.replace('</html>', `${combined}\n</html>`);
+        return html.replace('</html>', `${scriptTag}\n</html>`);
     }
 
     // No closing tags found, append at the end
-    return html + combined;
+    return html + scriptTag;
 }
 
 /**

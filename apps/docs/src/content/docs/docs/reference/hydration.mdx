@@ -233,11 +233,11 @@ interface SSRContext {
 ## The Runtime Mangle Registry
 
 A production-mangled build registers the mangle map with `@csszyx/runtime` from
-a generated module inside the JS bundle (vite/rollup lanes) — attached to every
-HTML entry ahead of the app, and to every module that imports the runtime. The
-built HTML carries no executable inline script, so the registration is covered by
-whatever `script-src` already allows your bundle, and pages the build does not
-own (a bundle embedded in a host shell) receive the map the same way.
+a generated module inside the JS bundle — attached to every HTML entry ahead of
+the app, and to every module that imports the runtime. The built HTML carries no
+executable inline script on any lane, so the registration is covered by whatever
+`script-src` already allows your bundle, and pages the build does not own (a
+bundle embedded in a host shell) receive the map the same way.
 `mangleMap` stays class-only, while `varMangleMap` contains CSS variable
 mappings when `production.mangleVars` is enabled.
 
@@ -264,9 +264,32 @@ the generated module calls and is idempotent per checksum.
 
 `window.__csszyx` is **opt-in**: set `production.mangleDebugGlobal: true` and the
 same registry object is assigned to the global for devtools inspection. Nothing
-about correctness depends on it. The deprecated `mangleMapDelivery: 'html'` /
-`'both'` modes and mangled **webpack** builds still install it from their inline
-installer.
+about correctness depends on it, and nothing else installs it.
+
+### Reading the map on a page you cannot rebuild
+
+`mangleDebugGlobal` is a build option, so it cannot help with a build that is
+already deployed. The census can: every build emits it into the HTML as inert
+JSON, so devtools alone answers "what was this class originally?".
+
+```js
+// In the console, on any csszyx-built page:
+const map = JSON.parse(document.getElementById('__CSSZYX_MANGLE_MAP__').textContent);
+
+// Class-only build: original → token. With mangleVars on, keys are namespaced
+// (`class:p-4`, `var:--_sz-p`), so strip the prefix first.
+const classes = Object.fromEntries(
+  Object.entries(map)
+    .filter(([key]) => !key.startsWith('var:'))
+    .map(([key, token]) => [key.replace(/^class:/, ''), token]),
+);
+
+classes['p-4'];                                             // → the token
+Object.entries(classes).find(([, token]) => token === 'z'); // → the original
+```
+
+`build.emitManifest` writes the same data to `csszyx-manifest.json` next to the
+build output, if you would rather read it server-side than in a browser.
 
 ## Example: Manual Hydration Guard
 

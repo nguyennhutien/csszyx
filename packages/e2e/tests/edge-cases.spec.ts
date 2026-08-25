@@ -100,10 +100,19 @@ test.describe('Edge Case Tests (Next.js)', () => {
         expect(checksum).toBeTruthy();
         expect(checksum).toHaveLength(16);
 
-        // This playground is a mangled Next.js build on the WEBPACK lane, which
-        // has no bundle delivery yet: its documented contract is exactly one
-        // csszyx-owned inline installer in the root layout, so the debug global
-        // is present here (unlike the vite lanes, where it is opt-in).
+        // The inert census: `application/json`, never evaluated, so a strict
+        // script-src does not apply. This is what makes a mangled class
+        // traceable back to its original name in a production page without a
+        // rebuild, and what `verifyMangleMapIntegrity()` reads from the DOM.
+        const census = (await page.evaluate(() =>
+            JSON.parse(document.getElementById('__CSSZYX_MANGLE_MAP__')?.textContent ?? 'null'),
+        )) as Record<string, string> | null;
+        expect(census).not.toBeNull();
+        expect(Object.keys(census ?? {}).length).toBeGreaterThan(0);
+
+        // This playground opts into `production.mangleDebugGlobal` (its
+        // mangle-map viewer reads the global), so the registry the bundle
+        // installed is reachable here.
         const helper = await page.evaluate(() => {
             const h = (window as Record<string, any>).__csszyx;
             return h
@@ -128,15 +137,16 @@ test.describe('Edge Case Tests (Next.js)', () => {
         expect(helper?.hasDecodeAll).toBe(true);
         expect(helper?.checksum).toBe(checksum);
 
-        // And exactly that one installer. Matched by its opening, not by a
-        // substring: Next's own flight payload (`self.__next_f.push`) carries
-        // the layout markup as a string and would match `window.__csszyx=`.
+        // And no csszyx-owned inline installer anywhere — the webpack lane
+        // registers from the bundle too. Matched by the installer's opening
+        // rather than a substring: Next's flight payload (`self.__next_f.push`)
+        // carries layout markup as a string.
         const installers = await page.evaluate(() =>
             [...document.querySelectorAll('script:not([src])')]
                 .map(s => s.textContent ?? '')
                 .filter(text => text.startsWith('(function(){var m=')),
         );
-        expect(installers).toHaveLength(1);
+        expect(installers).toEqual([]);
     });
 
     test('hover case has hover-related classes', async ({ page }) => {

@@ -150,7 +150,6 @@ interface ProductionConfig {
   mangleVars: boolean; // Opt into dynamic sz CSS variable mangling and hoisting
   mangleVarHoistMaxDepth: number; // Max cascade depth for mangleVars hoisting
   mangleGlobalVars?: GlobalVarMangleConfig; // Explicit global token alias tier
-  mangleMapDelivery?: 'both' | 'html' | 'bundle'; // Where the runtime map ships (default 'bundle')
   mangleDebugGlobal?: boolean; // Expose the registry as window.__csszyx (default false)
   injectChecksum: boolean; // Add hydration checksum to HTML
   minify: boolean; // Minify output
@@ -228,40 +227,28 @@ one copy. Enable mangling when you want the class
 names unreadable, and treat the byte delta as a rounding error in either direction.
 :::
 
-#### `mangleMapDelivery`
+#### Where the runtime mangle map ships
 
-The runtime mangle map is what lets `szr`, `szv`, `szcn`, and `szDecode` speak the
-same class names as the mangled CSS. By default it is registered from a module
-**inside your JS bundle**, which needs no Content-Security-Policy exception:
-
-| Value      | Inline script in HTML | Module in the JS bundle | Status |
-| ---------- | --------------------- | ----------------------- | ------ |
-| `'bundle'` | ❌                    | ✅                      | **Default.** CSP-safe; works on pages the build does not own (a bundle embedded in a host shell). |
-| `'html'`   | ✅                    | ❌                      | Deprecated. The legacy executable inline installer; refused by `script-src 'self'`. |
-| `'both'`   | ✅                    | ✅                      | Deprecated. Inline installer plus bundle module; the map ships twice. |
-
-The bundle module is attached to every HTML entry the build emits, ahead of the
-app, and to every source module that imports the runtime — so a pre-compiled
+The runtime mangle map is what lets `szr`, `szv`, `szcn`, and `szDecode` speak
+the same class names as the mangled CSS. It is registered from a module
+**inside your JS bundle** — a virtual module on Vite/Rollup, a generated
+`.csszyx/mangle-runtime.mjs` on webpack — attached to every HTML entry ahead of
+the app and to every source module that imports the runtime, so a pre-compiled
 component library under `node_modules` that calls `szr` itself is covered too.
 
-The hydration census is unaffected: the inert
-`<script type="application/json">` tag and the checksum attribute ship in every
-mode (hydration verify reads them from the DOM), and CSP does not evaluate a
-data block. See [Security → CSP](/docs/security/#content-security-policy-csp).
+There is nothing to configure, and the built HTML never carries an executable
+inline `<script>`, so a strict `script-src 'self'` policy needs no exception.
+See [Security → CSP](/docs/security/#content-security-policy-csp).
 
-:::caution[`'html'` and `'both'` are deprecated]
-They exist for one migration window. The build warns once when it sees them,
-and a later major removes them. If you set one of them for the inline
-installer, drop the option: `'bundle'` delivers the same map through the
-bundle. If you set `'html'` to save bytes, `'bundle'` is already one copy.
-:::
+The hydration census is separate: the inert
+`<script type="application/json">` tag and the checksum attribute always ship
+(hydration verify reads them from the DOM), and CSP does not evaluate a data
+block.
 
-:::note[vite/rollup lanes only]
-Delivery runs where the map is injected — the **vite/rollup** hooks. The
-webpack lane has no bundle delivery: a mangled webpack build ships the map
-through one inline installer in the root layout regardless, and warns when an
-explicit value would silently do nothing; esbuild builds keep readable class
-names entirely. An unknown value fails the build.
+:::caution[`mangleMapDelivery` was removed]
+It used to choose between an inline installer script and the bundle module. The
+inline lane is gone, so the option has nothing left to select; a build that
+still passes it warns once and ignores the value. Delete the line.
 :::
 
 #### `mangleDebugGlobal`
@@ -275,8 +262,7 @@ Also assigns the runtime registry to `window.__csszyx` (`mangleMap`,
 `decodeGlobalVar`, `decodeAll`) for inspection in devtools. Off by default: the
 helpers read the registry internally, so nothing about correctness depends on
 the global, and a production page should carry no inspection surface it did not
-ask for. Honoured by the bundle delivery; the deprecated inline installer always
-assigns the global.
+ask for. Nothing else assigns the global.
 
 :::note[Mangling follows your bundler, not your framework]
 Class mangling (and the collision warning above) run wherever csszyx builds your

@@ -222,15 +222,13 @@ describe('transform hook branch edges', () => {
         } | null;
         expect(result).not.toBeNull();
         // production.minify shortens the attribute name to data-sz-cs and injects
-        // the checksum placeholder. No installer: mangling is off, so there is
-        // no map for an executable inline script to install — and that script
-        // is what a strict CSP refuses (field-reported).
+        // the checksum placeholder. Nothing executable: the inline installer a
+        // strict CSP refuses (field-reported) is gone from every lane.
         expect(result?.code).toContain('data-sz-cs="___CSSZYX_CHECKSUM___"');
         expect(result?.code).not.toContain('window.__csszyx');
-        expect(result?.code).not.toContain('dangerouslySetInnerHTML');
     });
 
-    it('installs the map from the layout only when a mangled build has one', async () => {
+    it('injects the inert census into a layout so the map is readable from the DOM', async () => {
         const { root, transform } = await boot(
             { production: { mangle: true } },
             { 'src/A.tsx': 'export const A = () => <div sz={{ p: 4 }} />;' },
@@ -240,23 +238,30 @@ describe('transform hook branch edges', () => {
         const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {
             code: string;
         } | null;
-        // The webpack lane has no bundle delivery, so a mangled build still
-        // ships the map through the layout installer, with placeholders the
-        // output pass fills from the final map.
-        expect(result?.code).toContain('<body><script dangerouslySetInnerHTML');
-        expect(result?.code).toContain('window.__csszyx=');
-        expect(result?.code).toContain('___CSSZYX_MANGLE_MAP___');
+        // Data, not script: this is the payload `verifyMangleMapIntegrity()`
+        // reads from the DOM, and it is what makes a mangled class traceable
+        // back to its original name in devtools without a rebuild. The vite
+        // lane emits it from `transformIndexHtml`; this lane had neither.
+        expect(result?.code).toContain('id="__CSSZYX_MANGLE_MAP__"');
+        expect(result?.code).toContain('type="application/json"');
+        expect(result?.code).toContain('___CSSZYX_CENSUS___');
     });
 
-    it('does not install from the layout when mangling is on but the census is empty', async () => {
-        const { root, transform } = await boot({ production: { mangle: true } });
+    it('never installs the map from the layout, even on a mangled build with a census', async () => {
+        const { root, transform } = await boot(
+            { production: { mangle: true } },
+            { 'src/A.tsx': 'export const A = () => <div sz={{ p: 4 }} />;' },
+        );
         const code =
             'export default function RootLayout(){return <html lang="en"><body>x</body></html>;}';
         const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {
             code: string;
         } | null;
+        // The map reaches the page through the bundle on every lane; the
+        // layout carries the checksum attribute and inert data only.
         expect(result?.code).toContain('data-sz-checksum="___CSSZYX_CHECKSUM___"');
         expect(result?.code).not.toContain('window.__csszyx');
+        expect(result?.code).not.toMatch(/<script(?![^>]*application\/json)/);
     });
 
     it('injects the checksum attribute into a layout with no <body> tag', async () => {
@@ -282,15 +287,13 @@ describe('transform hook branch edges', () => {
     });
 
     it('skips body-prefixed custom elements before the real body tag', async () => {
-        const { root, transform } = await boot(
-            { production: { mangle: true } },
-            { 'src/A.tsx': 'export const A = () => <div sz={{ p: 4 }} />;' },
-        );
+        const { root, transform } = await boot();
         const code =
             'export default function Doc(){return <html><bodyguard /><body>x</body></html>;}';
         const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {
             code: string;
         } | null;
-        expect(result?.code).toContain('<bodyguard /><body><script');
+        expect(result?.code).toContain('<html data-sz-checksum="___CSSZYX_CHECKSUM___">');
+        expect(result?.code).toContain('<bodyguard /><body><script id="__CSSZYX_MANGLE_MAP__"');
     });
 });

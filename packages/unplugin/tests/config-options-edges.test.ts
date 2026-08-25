@@ -53,10 +53,18 @@ describe('include filter', () => {
 });
 
 describe('production option validation', () => {
-    it('rejects an unknown mangle-map delivery lane instead of widening it', () => {
-        expect(() => vitePlugin({ production: { mangleMapDelivery: 'htlm' as never } })).toThrow(
-            /mangleMapDelivery must be 'both', 'html' or 'bundle'/,
-        );
+    it('tells the author that mangleMapDelivery no longer exists instead of ignoring it', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            expect(() =>
+                vitePlugin({ production: { mangleMapDelivery: 'html' as never } }),
+            ).not.toThrow();
+            expect(warn).toHaveBeenCalledWith(
+                expect.stringContaining('production.mangleMapDelivery has been removed'),
+            );
+        } finally {
+            warn.mockRestore();
+        }
     });
 });
 

@@ -172,28 +172,12 @@ describe('production mangle is covered by the content hash', () => {
         expectHashCoversBytes(plain.css, mangled.css, 'css');
     }, 60_000);
 
-    it('gives the JS chunk a different name under mangleMapDelivery html', async () => {
+    it('gives the JS chunk a different name when class mangling changes its bytes', async () => {
         const root = createFixture(FIXTURE_FILES);
-        const plain = await buildFixture(root, 'dist/plain', {
-            production: { mangle: false, mangleMapDelivery: 'html' },
-        });
-        const mangled = await buildFixture(root, 'dist/mangled', {
-            production: { mangle: true, mangleMapDelivery: 'html' },
-        });
+        const plain = await buildFixture(root, 'dist/plain', { production: { mangle: false } });
+        const mangled = await buildFixture(root, 'dist/mangled', { production: { mangle: true } });
 
         expect(mangled.js[0]?.text).not.toContain('"m-3 mx-4"');
-        expectHashCoversBytes(plain.js, mangled.js, 'js');
-    }, 60_000);
-
-    it('gives the JS chunk a different name under mangleMapDelivery both', async () => {
-        const root = createFixture(FIXTURE_FILES);
-        const plain = await buildFixture(root, 'dist/plain', {
-            production: { mangle: false, mangleMapDelivery: 'both' },
-        });
-        const mangled = await buildFixture(root, 'dist/mangled', {
-            production: { mangle: true, mangleMapDelivery: 'both' },
-        });
-
         expectHashCoversBytes(plain.js, mangled.js, 'js');
     }, 60_000);
 

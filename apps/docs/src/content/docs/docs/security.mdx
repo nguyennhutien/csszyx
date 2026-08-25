@@ -103,19 +103,15 @@ Everything csszyx adds to the document is inert data:
 
 The runtime mangle map — what `szr`, `szv`, `szcn` and `dynamic()` need when
 `production.mangle` is on — is registered from a module **inside your own JS
-bundle** (`mangleMapDelivery: 'bundle'`, the default). It is covered by whatever
+bundle**, on every lane: Vite and Rollup import it through a virtual module,
+webpack through a generated file under `.csszyx/`. It is covered by whatever
 already allows your bundle: `script-src 'self'`, or your nonce or hash. csszyx
 never needs `'unsafe-inline'`; **do not add it for csszyx.**
 
-Two lanes still carry an inline installer, and both are named so you can decide:
-
-- `mangleMapDelivery: 'html'` / `'both'` — **deprecated**, kept for one migration
-  window. They emit the legacy executable installer and a strict policy refuses
-  it. Migrate to `'bundle'`; the build warns once when it sees them.
-- **webpack** (Next.js `--webpack`) has no bundle delivery yet, so a *mangled*
-  build ships the map through one inline installer in the root layout. Give it
-  a nonce or hash the way you do for your framework's own inline scripts. An
-  unmangled webpack build emits nothing.
+There is no option to change this and nothing to configure. The
+`production.mangleMapDelivery` option that used to choose between an inline
+script and the bundle has been removed — a build that still sets it is warned
+once and the value ignored.
 
 ### Enforce your CSP locally
 

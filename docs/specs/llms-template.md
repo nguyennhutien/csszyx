@@ -734,11 +734,12 @@ utility names should not be readable in the production bundle.
 ```
 
 Output: `<div class="z y x" />` — the CSS `.z { padding: 1rem }` etc. is injected
-automatically. The runtime map is registered from a module inside the JS bundle
-(`production.mangleMapDelivery: 'bundle'`, the default) — the built HTML carries no
-executable inline script, so a strict CSP (`script-src 'self'`) needs no exception;
-`'html'`/`'both'` (the legacy inline installer) are deprecated. `window.__csszyx` is
-opt-in via `production.mangleDebugGlobal: true`; helpers read the registry directly.
+automatically. The runtime map is registered from a module inside the JS bundle on
+every lane (virtual module on vite/rollup, generated `.csszyx/` file on webpack), so
+the built HTML carries no executable inline script and a strict CSP
+(`script-src 'self'`) needs no exception. There is no delivery option;
+`production.mangleMapDelivery` was removed. `window.__csszyx` is opt-in via
+`production.mangleDebugGlobal: true`; helpers read the registry directly.
 
 If an `sz`-generated utility also appears as a static string or template quasi in a
 source-level `class` or `className` attribute/property (including a `clsx(...)`

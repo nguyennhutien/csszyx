@@ -58,8 +58,9 @@ separate `varMangleMap` (see the [hydration reference](/docs/reference/hydration
 The `<script type="application/json">` above is an inert data block: the
 browser never evaluates it and a `script-src` policy does not apply to it. The
 runtime map the helpers need is registered by a generated module inside the JS
-bundle, not by inline script — so the same build works on a page csszyx never
-transformed (embedded in a host application's shell) and under a strict CSP.
+bundle on every lane, not by inline script — so the same build works on a page
+csszyx never transformed (embedded in a host application's shell) and under a
+strict CSP.
 See [Security → CSP](/docs/security/#content-security-policy-csp).
 :::
 

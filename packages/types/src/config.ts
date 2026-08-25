@@ -91,37 +91,6 @@ export interface ProductionConfig {
     mangleExclude?: string[];
 
     /**
-     * Where the runtime mangle map is delivered to the browser.
-     *
-     * The map is what lets runtime helpers (`szr`, `szv`, `szcn`, `szDecode`)
-     * speak the same class names as the mangled CSS.
-     *
-     * - `'bundle'` (default) — a module inside the JS bundle registers the map
-     *   with `@csszyx/runtime`. Works on pages the build does not own (a
-     *   bundle embedded in a host shell) and needs no Content-Security-Policy
-     *   exception: the built HTML carries no executable inline script.
-     * - `'html'` — **deprecated.** The legacy executable inline installer in
-     *   build-emitted HTML, and nothing in the bundle. Refused by a strict CSP
-     *   (`script-src 'self'`) unless you add a nonce or hash for it.
-     * - `'both'` — **deprecated.** Inline installer plus bundle module; the
-     *   map ships twice.
-     *
-     * The hydration census is unaffected — the inert
-     * `<script type="application/json">` tag and the checksum attribute ship
-     * in every mode (hydration verify reads them from the DOM); CSP does not
-     * evaluate a data block.
-     *
-     * The vite/rollup lanes honour every value and warn once per build on a
-     * deprecated one. The webpack lane has no bundle delivery: a mangled
-     * webpack build ships the map through its layout installer regardless and
-     * warns when an explicit value would silently do nothing. An unknown value
-     * fails the build.
-     *
-     * @default 'bundle'
-     */
-    mangleMapDelivery?: MangleMapDelivery;
-
-    /**
      * Expose the runtime mangle registry as `window.__csszyx` for debugging.
      *
      * The registry (`mangleMap`, `decode`, `encode`, `decodeVar`, …) is what
@@ -161,11 +130,6 @@ export interface ProductionConfig {
      */
     minify: boolean;
 }
-
-/**
- * Delivery channels for the runtime mangle map.
- */
-export type MangleMapDelivery = 'both' | 'html' | 'bundle';
 
 /**
  * Supported global custom-property optimization mode.

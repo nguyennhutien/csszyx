@@ -23,6 +23,8 @@ const nextConfig: NextConfig = {
                     // and the hydration map, so this playground opts in.
                     mangle: true,
                     mangleVars: true,
+                    // The mangle-map viewer component reads `window.__csszyx`.
+                    mangleDebugGlobal: true,
                 },
             }),
         );

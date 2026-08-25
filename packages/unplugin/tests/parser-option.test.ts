@@ -122,40 +122,6 @@ describe('csszyx parser selection', () => {
         expect(result.code).not.toContain('bg-(--brand-primary)');
     });
 
-    it('encodes custom global alias prefixes in injected layout scripts', () => {
-        const hostilePrefix = '--</script>${globalThis.pwned=true}`';
-        const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false },
-            production: {
-                // The layout installer only exists for a mangled build with a
-                // class census (the webpack lane's delivery); an unmangled
-                // build has nothing to install and must emit no inline script.
-                mangle: true,
-                mangleGlobalVars: {
-                    enabled: false,
-                    aliasPrefix: hostilePrefix,
-                },
-            },
-        }) as TransformHook[];
-        prePlugin.transform.call(
-            { warn: vi.fn() },
-            'const App = () => <div sz={{ p: 4 }} />;',
-            '/repo/src/App.tsx',
-        );
-
-        const result = prePlugin.transform.call(
-            { warn: vi.fn() },
-            'export default function RootLayout(){return <html><body /></html>}',
-            '/repo/app/layout.tsx',
-        ) as { code: string };
-
-        expect(result.code).not.toContain(hostilePrefix);
-        expect(result.code).not.toContain('${globalThis.pwned=true}');
-        expect(result.code).toContain(
-            `decodeURIComponent(${JSON.stringify(encodeURIComponent(hostilePrefix))})`,
-        );
-    });
-
     it('rewrites CSS assets with the validated explicit global variable alias plan', () => {
         const [prePlugin, , postPlugin] = vitePlugin({
             build: { emitManifest: true, parser: 'wasm', cache: false },

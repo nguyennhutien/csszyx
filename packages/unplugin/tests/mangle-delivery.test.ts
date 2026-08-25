@@ -6,14 +6,12 @@
  * nobody. The truth table here is what keeps a lane from emitting an
  * installer for a map no runtime helper reads.
  */
+
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import {
-    isLegacyMangleMapDelivery,
-    legacyMangleMapDeliveryMessage,
-    needsRuntimeMangleRegistration,
-    resolveMangleMapDelivery,
-} from '../src/mangle-delivery.js';
-import { rollupPlugin, vitePlugin } from '../src/unplugin.js';
+import { needsRuntimeMangleRegistration } from '../src/mangle-delivery.js';
+import { vitePlugin } from '../src/unplugin.js';
 import { freshFixtureRoot } from './fixture-root.js';
 
 describe('needsRuntimeMangleRegistration', () => {
@@ -34,114 +32,78 @@ describe('needsRuntimeMangleRegistration', () => {
     });
 });
 
-describe('resolveMangleMapDelivery', () => {
-    it('defaults to bundle: no inline installer, bundle module on', () => {
-        expect(resolveMangleMapDelivery(undefined)).toEqual({
-            mode: 'bundle',
-            explicit: false,
-            inlineInstaller: false,
-            bundleModule: true,
-        });
+describe('the removed mangleMapDelivery option', () => {
+    const removedWarnings = (warn: ReturnType<typeof vi.spyOn>): number =>
+        warn.mock.calls.filter(call => String(call[0]).includes('mangleMapDelivery')).length;
+
+    it('warns once that the option no longer exists, for any value', () => {
+        for (const value of ['html', 'both', 'bundle', 'htlm']) {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+            try {
+                vitePlugin({ production: { mangleMapDelivery: value } as never });
+                expect(removedWarnings(warn), value).toBe(1);
+                expect(warn.mock.calls[0]?.[0]).toContain('has been removed');
+            } finally {
+                warn.mockRestore();
+            }
+        }
     });
 
-    it.each([
-        ['bundle', false, true],
-        ['html', true, false],
-        ['both', true, true],
-    ] as const)('%s → inline %s, bundle %s', (mode, inline, bundle) => {
-        const resolved = resolveMangleMapDelivery(mode);
-        expect(resolved).toEqual({
-            mode,
-            explicit: true,
-            inlineInstaller: inline,
-            bundleModule: bundle,
-        });
-        expect(isLegacyMangleMapDelivery(resolved)).toBe(inline);
-    });
-
-    it('rejects an unknown value instead of reading it as a mode', () => {
-        expect(() => resolveMangleMapDelivery('htlm')).toThrow(
-            /mangleMapDelivery must be 'both', 'html' or 'bundle'; got "htlm"/,
-        );
-    });
-
-    it('names the mode and the remedy in the deprecation message', () => {
-        const message = legacyMangleMapDeliveryMessage('html');
-        expect(message).toContain("'html'");
-        expect(message).toContain("'bundle'");
-        expect(message).toContain("script-src 'self'");
+    it('is silent when the option is absent', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            vitePlugin({ production: { mangle: true } });
+            expect(removedWarnings(warn)).toBe(0);
+        } finally {
+            warn.mockRestore();
+        }
     });
 });
 
-/**
- * Drive one plugin instance's hooks directly.
- *
- * @param plugins - Plugin array from a factory.
- * @returns Hook caller.
- */
-function hookCaller(plugins: unknown[]) {
-    const ctx = { warn() {}, error() {}, emitFile() {}, addWatchFile() {} };
-    return async (hookName: string, ...args: unknown[]): Promise<unknown> => {
-        const plugin = plugins.find(p => p && hookName in (p as Record<string, unknown>));
-        if (!plugin) return undefined;
-        const hook = (plugin as Record<string, unknown>)[hookName];
-        const fn = (typeof hook === 'function' ? hook : (hook as { handler?: unknown })?.handler) as
-            | ((...a: unknown[]) => unknown)
-            | undefined;
-        return fn ? await fn.apply(ctx, args) : undefined;
-    };
-}
+describe('census placeholder substitution', () => {
+    it('fills the layout census from the final map, escaped for any quoting', async () => {
+        // The census travels through the chunk as a placeholder because the map
+        // is not final until the mangle passes have run. Output processing
+        // substitutes it — and the payload has to survive whatever quoting a
+        // minifier later picks for the string it sits in.
+        const root = freshFixtureRoot('census-substitution');
+        mkdirSync(resolve(root, 'src'), { recursive: true });
+        writeFileSync(
+            resolve(root, 'src/A.tsx'),
+            'export const A = () => <div sz={{ p: 4 }} />;',
+            'utf8',
+        );
+        const plugins = vitePlugin({ production: { mangle: true } }) as unknown as Record<
+            string,
+            unknown
+        >[];
+        const ctx = { warn() {}, error() {}, emitFile() {}, addWatchFile() {} };
+        const call = async (hookName: string, ...args: unknown[]): Promise<unknown> => {
+            const plugin = plugins.find(p => p && hookName in p);
+            const hook = plugin?.[hookName];
+            const fn = (
+                typeof hook === 'function' ? hook : (hook as { handler?: unknown })?.handler
+            ) as ((...a: unknown[]) => unknown) | undefined;
+            return fn ? await fn.apply(ctx, args) : undefined;
+        };
+        await call('configResolved', { root, command: 'build' });
+        const layout = (await call(
+            'transform',
+            'export default function RootLayout(){return <html lang="en"><body>x</body></html>;}',
+            `${root}/app/layout.tsx`,
+        )) as { code: string };
+        expect(layout.code).toContain('___CSSZYX_CENSUS___');
+        await call('buildEnd');
 
-describe('legacy delivery warning', () => {
-    const legacyWarnings = (warn: ReturnType<typeof vi.spyOn>): number =>
-        warn.mock.calls.filter(call => String(call[0]).includes('emits an executable inline'))
-            .length;
-
-    it('vite warns once per build for an explicit html mode', async () => {
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        try {
-            const call = hookCaller(
-                vitePlugin({ production: { mangle: true, mangleMapDelivery: 'html' } }),
-            );
-            const root = freshFixtureRoot('legacy-delivery-vite');
-            await call('configResolved', { root, command: 'build' });
-            await call('configResolved', { root, command: 'build' });
-            expect(legacyWarnings(warn)).toBe(1);
-        } finally {
-            warn.mockRestore();
-        }
-    });
-
-    it('rollup warns once for an explicit both mode', () => {
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        try {
-            const plugins = rollupPlugin({
-                production: { mangle: true, mangleMapDelivery: 'both' },
-            }) as unknown as { buildStart?: () => void }[];
-            const plugin = plugins.find(p => typeof p.buildStart === 'function');
-            plugin?.buildStart?.();
-            plugin?.buildStart?.();
-            expect(legacyWarnings(warn)).toBe(1);
-        } finally {
-            warn.mockRestore();
-        }
-    });
-
-    it('stays silent for the default, for bundle, and when mangling is off', async () => {
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        try {
-            const root = freshFixtureRoot('legacy-delivery-silent');
-            for (const production of [
-                { mangle: true },
-                { mangle: true, mangleMapDelivery: 'bundle' as const },
-                { mangle: false, mangleMapDelivery: 'html' as const },
-            ]) {
-                const call = hookCaller(vitePlugin({ production }));
-                await call('configResolved', { root, command: 'build' });
-            }
-            expect(legacyWarnings(warn)).toBe(0);
-        } finally {
-            warn.mockRestore();
+        const rendered = (await call('renderChunk', layout.code)) as { code: string } | null;
+        const code = rendered?.code ?? layout.code;
+        expect(code).not.toContain('___CSSZYX_CENSUS___');
+        // Escaped, so no quote of the payload can close the literal it lands in.
+        // Keys are plain class names here; `mangleVars` would namespace them.
+        expect(code).toContain('\\u0022p-4\\u0022');
+        for (const quote of ['"', "'", '`']) {
+            const payload = code.slice(code.indexOf('__html'), code.indexOf('}}'));
+            expect(payload.split(quote).length - 1, `bare ${quote} in payload`).toBeLessThan(3);
         }
     });
 });

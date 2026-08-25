@@ -2,17 +2,15 @@
  * Unit net for the self-installing runtime mangle-map module.
  *
  * The module is generated source that executes in the app bundle, so these
- * tests run the generated code in a sandboxed context and assert the install
- * contract: install only when absent, mirror the HTML script's object shape,
- * and stay inert without a `window`.
+ * tests run the generated code in a sandboxed context and assert what it hands
+ * to `installMangleRuntime`: the final map through placeholders, and the debug
+ * opt-in the build configured.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
-import { describe, expect, it, vi } from 'vitest';
-import webpack from 'webpack';
-import { unplugin as rawInstance, vitePlugin, webpackPlugin } from '../src/unplugin.js';
+import { describe, expect, it } from 'vitest';
+import { vitePlugin } from '../src/unplugin.js';
 import {
     CHECKSUM_PLACEHOLDER,
     createMangleRuntimeModule,
@@ -148,18 +146,8 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
         expect(occurrences(second?.code ?? first?.code ?? '')).toBe(1);
     });
 
-    it('skips bundle delivery when the map is delivered by the HTML only', async () => {
-        const { call, root } = pluginHarness({ mangleMapDelivery: 'html' });
-        await call('configResolved', { root, command: 'build' });
-
-        const out = (await call('transform', RUNTIME_CONSUMER, `${root}/src/a.ts`)) as {
-            code?: string;
-        } | null;
-        expect(out?.code ?? RUNTIME_CONSUMER).not.toContain(MANGLE_RUNTIME_VIRTUAL_ID);
-    });
-
-    it('keeps bundle delivery when the HTML no longer installs the object', async () => {
-        const { call, root } = pluginHarness({ mangleMapDelivery: 'bundle' });
+    it('injects the import into every processed runtime consumer', async () => {
+        const { call, root } = pluginHarness();
         await call('configResolved', { root, command: 'build' });
 
         const out = (await call('transform', RUNTIME_CONSUMER, `${root}/src/a.ts`)) as {
@@ -204,20 +192,12 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
         expect(out.html).not.toMatch(/<script>/);
     });
 
-    it('attaches no module tag when there is nothing to register', async () => {
-        const cases: Record<string, unknown>[] = [
-            // mangled but the census is empty
-            {},
-            // the deprecated html mode owns delivery through the inline script
-            { mangleMapDelivery: 'html' },
-        ];
-        for (const production of cases) {
-            const { call, root } = pluginHarness(production);
-            await call('configResolved', { root, command: 'build' });
-            await call('buildEnd');
-            const out = await call('transformIndexHtml', '<html><head></head><body></body></html>');
-            expect(typeof out, JSON.stringify(production)).toBe('string');
-        }
+    it('attaches no module tag when the census is empty', async () => {
+        const { call, root } = pluginHarness();
+        await call('configResolved', { root, command: 'build' });
+        await call('buildEnd');
+        const out = await call('transformIndexHtml', '<html><head></head><body></body></html>');
+        expect(typeof out).toBe('string');
     });
 
     it('does not inject in a dev server (mangling forced off)', async () => {
@@ -241,97 +221,5 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
         // processing, after the mangle passes.
         expect(loaded).toContain(MANGLE_MAP_PLACEHOLDER);
         expect(loaded).toContain(CHECKSUM_PLACEHOLDER);
-    });
-
-    it('a webpack build never receives the module, in any mode', async () => {
-        // Webpack parses the `virtual:` specifier's colon as a URI scheme and
-        // fails the build with an UnhandledSchemeError before any resolve
-        // plugin runs (field-caught by the Next playground build), so bundle
-        // delivery is rollup-convention only — the webpack lane keeps its own
-        // map delivery. The dev-mode mangling guard stays as well: dev CSS is
-        // unmangled, so no lane may deliver a real map in development.
-        const plugin = rawInstance.raw({}, { framework: 'webpack' }) as unknown as {
-            vite: { configResolved: (config: unknown) => void };
-            webpack: (compiler: unknown) => void;
-            transform: (this: unknown, code: string, id: string) => Promise<unknown> | unknown;
-        };
-        const root = freshFixtureRoot('mangle-runtime-webpack-dev');
-        const ctx = { warn() {}, error() {} };
-        // configResolved only prepares the root here; the webpack hook below
-        // then records the lane, exactly as a real webpack build would before
-        // any module transforms.
-        plugin.vite.configResolved({ root, command: 'build' });
-        const webpackCompiler = (mode: string, watchMode = false) => ({
-            options: { mode },
-            watchMode,
-            context: root,
-            hooks: {
-                beforeCompile: { tap: () => undefined },
-                thisCompilation: { tap: () => undefined },
-            },
-        });
-
-        plugin.webpack(webpackCompiler('production'));
-        const prodOut = (await plugin.transform.call(
-            ctx,
-            RUNTIME_CONSUMER,
-            `${root}/src/a.ts`,
-        )) as { code?: string } | null;
-        expect(prodOut?.code ?? RUNTIME_CONSUMER).not.toContain(MANGLE_RUNTIME_VIRTUAL_ID);
-
-        plugin.webpack(webpackCompiler('development'));
-        const devOut = (await plugin.transform.call(ctx, RUNTIME_CONSUMER, `${root}/src/a.ts`)) as {
-            code?: string;
-        } | null;
-        expect(devOut?.code ?? RUNTIME_CONSUMER).not.toContain(MANGLE_RUNTIME_VIRTUAL_ID);
-
-        expect(() => plugin.webpack(webpackCompiler('production', true))).not.toThrow();
-    });
-
-    it('accepts rollup and vite watch modes while disabling their stale registry', () => {
-        const plugin = rawInstance.raw(
-            { production: { mangle: true } },
-            { framework: 'rollup' },
-        ) as unknown as {
-            rollup: { buildStart: (this: { meta: { watchMode: boolean } }) => void };
-            vite: { configResolved: (config: unknown) => void };
-        };
-        const root = mkdtempSync(resolve(tmpdir(), 'csszyx-watch-registry-'));
-        mkdirSync(resolve(root, 'src'));
-        writeFileSync(
-            resolve(root, 'src/styles.ts'),
-            "import { szv } from '@csszyx/runtime'; export const card = szv({ base: { p: 1 } });",
-        );
-
-        try {
-            expect(() =>
-                plugin.rollup.buildStart.call({ meta: { watchMode: true } }),
-            ).not.toThrow();
-            expect(() =>
-                plugin.vite.configResolved({ root, command: 'build', build: { watch: {} } }),
-            ).not.toThrow();
-        } finally {
-            rmSync(root, { recursive: true, force: true });
-        }
-    });
-
-    it('warns when webpack receives a delivery mode it cannot narrow', () => {
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        const compiler = webpack({
-            mode: 'production',
-            context: process.cwd(),
-            entry: {},
-            plugins: [
-                webpackPlugin({
-                    production: { mangle: true, mangleMapDelivery: 'html' },
-                }),
-            ],
-        });
-
-        expect(warn).toHaveBeenCalledWith(
-            expect.stringContaining('has no effect on the webpack lane'),
-        );
-        void compiler.close(() => undefined);
-        warn.mockRestore();
     });
 });
