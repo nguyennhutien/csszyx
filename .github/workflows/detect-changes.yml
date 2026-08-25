@@ -144,6 +144,11 @@ jobs:
               # (scripts/gen-key-tests.mjs → sz-key-cases.json); a snippet edit
               # can make the committed fixture stale, so it must run the suite.
               - 'docs/specs/snippets/**'
+              # The coverage workflow decides what the coverage numbers are and now
+              # enforces them. Left out, a change to it rides in on a pull request
+              # where the job it changes never runs, and main is the first place
+              # the new version is tried.
+              - '.github/workflows/coverage.yml'
               # package.json and pnpm-lock.yaml are intentionally NOT here — both
               # go through content-aware gates below (pkg-gate / lock-gate), so a
               # metadata-only package.json edit or a pure-transitive lockfile
