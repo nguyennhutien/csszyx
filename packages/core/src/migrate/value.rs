@@ -223,12 +223,15 @@ fn serialize_js_number<S: Serializer>(value: f64, serializer: S) -> Result<S::Ok
     // choose. Its float writer switches to an exponent from 2^63 up, while
     // JavaScript keeps writing digits until 1e21 — so the two disagree on
     // every integral value in between, and on 1e20.
+    //
+    // The text is a JSON number by construction: the branch above has taken
+    // the three non-finite doubles away, and every finite one formats as
+    // digits, a point, or an exponent. Saying so with an expect keeps the
+    // claim in one place; handling an error instead would add a line no input
+    // can reach and no test can cover.
     let text = js_number_to_string(value);
-    match RawValue::from_string(text) {
-        Ok(raw) => raw.serialize(serializer),
-        // Unreachable for a finite double, which always formats as valid JSON.
-        Err(_) => serializer.serialize_f64(value),
-    }
+    let raw = RawValue::from_string(text).expect("a finite double formats as a JSON number");
+    raw.serialize(serializer)
 }
 
 /// Format a number the way JavaScript's `String(number)` does.
