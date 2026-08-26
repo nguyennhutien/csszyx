@@ -126,6 +126,13 @@ export interface NativeTransformResult {
     parserPath: 'fastRegex' | 'static' | 'semantic';
 }
 
+/**
+ * What the caller was trying to run. It selects what the error offers
+ * instead: the transform can fall back to the wasm engine, migrate cannot —
+ * the wasm artifact is built without it.
+ */
+export type NativePurpose = 'transform' | 'migrate';
+
 /** Error thrown when the native transform package is not installed/available. */
 export class CsszyxNativeUnavailableError extends Error {
     /** Stable machine-readable error code. */
@@ -134,7 +141,11 @@ export class CsszyxNativeUnavailableError extends Error {
     readonly packageName: NativePlatformPackage | null;
 
     /** Creates a native-unavailable error. */
-    constructor(message?: string, packageName?: NativePlatformPackage | null);
+    constructor(
+        message?: string,
+        packageName?: NativePlatformPackage | null,
+        purpose?: NativePurpose,
+    );
 }
 
 /** Native binding shape exported by optional platform packages. */
@@ -238,10 +249,13 @@ export function getNativePackageName(): NativePlatformPackage | null;
  * Loads the native binding from the current or provided platform package.
  *
  * @param packageName Optional package name override for tests and platform probes.
+ * @param purpose What the caller needs the binding for; it decides what an
+ * unavailable engine offers instead.
  * @returns Native binding after platform packages are available.
  */
 export function loadNativeBinding(
     packageName?: NativePlatformPackage | string | null,
+    purpose?: NativePurpose,
 ): NativeBinding;
 
 /**
