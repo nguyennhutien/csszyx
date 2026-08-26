@@ -1,12 +1,14 @@
 /**
  * `csszyx migrate` on the native Rust core.
  *
- * The CLI's TypeScript transformer is still the shipped implementation; this
- * module exposes its Rust port through the same binding the build-time
- * transform uses, for the CLI to opt into with `CSSZYX_MIGRATE_ENGINE=rust`.
- * The port is held to the TypeScript byte for byte by the parity corpora in
- * `packages/core/tests`; this file only carries the options across and makes
- * the result read the way the TypeScript's does.
+ * This is how `csszyx migrate` runs. It exposes the engine through the same
+ * binding the build-time transform uses; the file carries the options across
+ * and shapes the result, and holds no migration logic of its own.
+ *
+ * There is no second implementation to fall back to. On a platform with no
+ * `@csszyx/core-<platform>` package these throw, which is the honest answer:
+ * a silent second implementation is what the parity corpora existed to
+ * police.
  *
  * @module
  */
@@ -19,6 +21,17 @@ import {
     migrateParseClass,
     type NativeMigrateResult,
 } from '@csszyx/core/native';
+
+/**
+ * One entry of the migration-resolution file.
+ *
+ * An object maps the class to sz directly; a string names another class to
+ * read instead; `null` drops the class; `false` keeps it in `className`.
+ */
+export type CsszyxTodoEntry = Record<string, unknown> | string | null | false;
+
+/** The migration-resolution file: class names mapped to resolution entries. */
+export type CsszyxTodoMap = Record<string, CsszyxTodoEntry>;
 
 /** One source to migrate. */
 export interface MigrateRustFile {
@@ -35,7 +48,7 @@ export interface MigrateRustOptions {
     /** Only normalize legacy sz keys; leave every className untouched. */
     keysOnly?: boolean;
     /** The parsed migration-resolution map. */
-    customMap?: Record<string, unknown>;
+    customMap?: CsszyxTodoMap;
 }
 
 /** Options for migrating an HTML source. */

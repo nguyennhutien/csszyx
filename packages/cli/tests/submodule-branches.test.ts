@@ -7,7 +7,10 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { transformHtmlSourceSimple, transformSource } from '../src/migrate/ast-transformer.js';
+import {
+    migrateHtml as transformHtmlSourceSimple,
+    migrateSource as transformSource,
+} from '../src/migrate.js';
 
 describe('HTML class attribute branches', () => {
     it('skips a whitespace-only class attribute', () => {

@@ -10,6 +10,16 @@
  * @module @csszyx/cli
  */
 
+// Migrate utilities — used by @csszyx/mcp-server.
+//
+// These run on the native engine and throw when the platform package is
+// absent, which is the whole behaviour change: there is no longer a second
+// implementation to fall back to.
+export type {
+    CsszyxTodoEntry,
+    CsszyxTodoMap,
+    MigrateRustResult as MigrateResult,
+} from '@csszyx/compiler/migrate';
 export type { GenerateTypesOptions } from './commands/generate-types.js';
 export { generateTypes } from './commands/generate-types.js';
 export type { GeneratorOptions } from './generator/type-generator.js';
@@ -18,11 +28,7 @@ export {
     generateTypeDeclarations,
     writeDeclarationFile,
 } from './generator/type-generator.js';
-// Migrate utilities — used by @csszyx/mcp-server
-export type { TransformResult as MigrateResult } from './migrate/ast-transformer.js';
-export { transformSource as migrateSource } from './migrate/ast-transformer.js';
-export type { CsszyxTodoEntry, CsszyxTodoMap } from './migrate/variant-parser.js';
-export { classNameToSzObject } from './migrate/variant-parser.js';
+export { classNameToSzObject, migrateSource } from './migrate.js';
 export type { ResolvedTheme, ScanResult } from './scanner/tailwind-scanner.js';
 export {
     extractScreenKeys,

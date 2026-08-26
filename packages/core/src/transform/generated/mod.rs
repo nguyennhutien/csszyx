@@ -266,10 +266,10 @@ mod reverse_tables_tests {
     fn typescript_entries() -> Vec<(String, String)> {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../cli/src/migrate/generated/reverse-property-map.ts"
+            "/../compiler/src/migrate-tables/generated/reverse-property-map.ts"
         );
         let source = std::fs::read_to_string(path)
-            .expect("the TypeScript reverse map is generated into packages/cli");
+            .expect("the TypeScript reverse map is generated into packages/compiler");
         source
             .lines()
             .filter_map(|line| {
@@ -358,9 +358,9 @@ mod migrate_tables_tests {
     fn typescript_source() -> String {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../cli/src/migrate/reverse-map.ts"
+            "/../compiler/src/migrate-tables/reverse-map.ts"
         );
-        std::fs::read_to_string(path).expect("migrate's reverse-map.ts is in packages/cli")
+        std::fs::read_to_string(path).expect("migrate's reverse-map.ts is in packages/compiler")
     }
 
     /// The quoted strings on one line of a table body, in order.

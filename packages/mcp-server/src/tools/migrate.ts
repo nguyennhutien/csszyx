@@ -1,6 +1,7 @@
 /**
  * csszyx_migrate — Transform a JSX/TSX snippet, replacing className with sz prop.
- * Calls migrateSource() from @csszyx/cli (Babel AST — handles clsx, ternaries, template literals).
+ * Calls migrateSource() from @csszyx/cli, which runs the native engine —
+ * it handles clsx, ternaries and template literals.
  * Example: '<div className="p-4 bg-blue-500" />' → '<div sz={{ p: 4, bg: "blue-500" }} />'
  *
  * Optional: pass customMap (a parsed migration-resolution map) for custom class names.

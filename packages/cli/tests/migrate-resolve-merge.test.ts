@@ -11,25 +11,16 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { transformSource, transformSourceTs } from '../src/migrate/ast-transformer.js';
+import { migrateSource as transformSource } from '../src/migrate.js';
 
 /**
- * Both implementations on every case, asserted equal before the case reads
- * the answer. The native engine is the default, so calling the dispatcher
- * alone would leave the TypeScript this suite was written against dark —
- * and a rule that lives in two places has to be pinned in both.
- *
  * @param source - The JSX source to migrate.
  * @param customMap - The migration-resolution map the pass runs with.
  * @param injectTodos - Whether unresolved classes get a marker comment.
- * @returns What the TypeScript implementation wrote.
+ * @returns What migrate wrote.
  */
-const run = (source: string, customMap: Record<string, unknown>, injectTodos = false) => {
-    const options = { customMap, injectTodos };
-    const ts = transformSourceTs(source, 'Card.tsx', options);
-    expect(transformSource(source, 'Card.tsx', options)).toEqual(ts);
-    return ts;
-};
+const run = (source: string, customMap: Record<string, unknown>, injectTodos = false) =>
+    transformSource(source, 'Card.tsx', { customMap, injectTodos });
 
 describe('resolve-todos merges into an existing sz prop', () => {
     it('appends the resolved classes and drops an emptied className', () => {
@@ -150,8 +141,7 @@ describe('resolve-todos merges into an existing sz prop', () => {
 
     it('still skips the element when no map is given', () => {
         const source = '<div sz={{ m: 1 }} className="p-4" />';
-        const out = transformSourceTs(source, 'Card.tsx');
-        expect(transformSource(source, 'Card.tsx')).toEqual(out);
+        const out = transformSource(source, 'Card.tsx');
         expect(out.code).toBe(source);
         expect(out.changed).toBe(false);
     });

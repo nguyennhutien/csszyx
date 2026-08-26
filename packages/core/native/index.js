@@ -76,7 +76,7 @@ function migrateExport(name) {
     const binding = loadNativeBinding();
     if (typeof binding[name] !== 'function') {
         throw new CsszyxNativeUnavailableError(
-            `csszyx native package ${cachedPackageName} predates migrate and does not export ${name}(). Update @csszyx/core and its platform package, or run migrate without CSSZYX_MIGRATE_ENGINE=rust.`,
+            `csszyx native package ${cachedPackageName} predates migrate and does not export ${name}(). Update @csszyx/core and its platform package to a version that carries migrate.`,
             cachedPackageName,
         );
     }

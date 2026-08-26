@@ -85,29 +85,6 @@ node --test .github/scripts/detect-pkg-code-changes.test.mjs
 node --test .github/scripts/detect-lock-code-changes.test.mjs
 node packages/core/scripts/validate-native-packages.mjs
 
-# Cheap generated-artefact staleness gates first — these fail in seconds and
-# catch the most common drift (forgetting to regenerate a committed fixture).
-echo "[verify-like-ci] Generated-artefact staleness gates (sz-key fixture, parity corpus, rust tables)..."
-pnpm gen:key-tests:check
-pnpm gen:parity-corpus:check
-pnpm gen:rust-tables:check
-pnpm gen:reverse-map:check
-pnpm gen:migrate-tables:check
-pnpm gen:migrate-parity-corpus:check
-pnpm gen:migrate-source-corpus:check
-pnpm gen:migrate-golden:check
-pnpm gen:sz-fallback-matrix:check
-pnpm gen:sz-allowlist:check
-pnpm gen:box-role:check
-pnpm gen:llms:check
-pnpm check:key-corpus
-# Derives the var-hostile key list from the pinned Tailwind rather than trusting
-# the hand-written one. A Tailwind upgrade that adds an arbitrary-value form for
-# one of these keys must take it off the list, or csszyx keeps dropping a class
-# that would now work.
-pnpm check:var-hostile-keys
-pnpm check:szcn-collision-blocklist
-
 # Builds the addon, loads it the way a consumer does, and removes it again —
 # it owns a whole CI job, so it cleans up after itself. That last part is why
 # it runs BEFORE the shared build below rather than after: run afterwards, it
@@ -122,17 +99,34 @@ echo "[verify-like-ci] Building host native engine (matches CI step)..."
 # pre-delete every platform package: host and devcontainer share this worktree.
 env -u RUSTUP_TOOLCHAIN pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
+# Generated-artefact staleness gates — these fail in seconds and catch the
+# most common drift (forgetting to regenerate a committed fixture). They ask
+# the engine what a class becomes, so they run after the addon is built.
+echo "[verify-like-ci] Generated-artefact staleness gates (sz-key fixture, parity corpus, rust tables)..."
+pnpm gen:key-tests:check
+pnpm gen:parity-corpus:check
+pnpm gen:rust-tables:check
+pnpm gen:reverse-map:check
+pnpm gen:migrate-tables:check
+pnpm gen:migrate-golden:check
+pnpm gen:sz-fallback-matrix:check
+pnpm gen:sz-allowlist:check
+pnpm gen:box-role:check
+pnpm gen:llms:check
+pnpm check:key-corpus
+# Derives the var-hostile key list from the pinned Tailwind rather than trusting
+# the hand-written one. A Tailwind upgrade that adds an arbitrary-value form for
+# one of these keys must take it off the list, or csszyx keeps dropping a class
+# that would now work.
+pnpm check:var-hostile-keys
+pnpm check:szcn-collision-blocklist
+
 # The Rust gates live in a separate workflow (rust-check.yml), so a local run
 # that only mirrored ci.yml would miss them. Clippy must run under EVERY feature
 # set CI uses, or a lint that only trips under a non-default feature stays
 # invisible until CI: the default build, `native-engine` (transform engine in
 # engine.rs), and `native` (the napi/FFI binding in native.rs, checked by
 # check-native.mjs — e.g. a redundant clone there is default-clippy-invisible).
-# Both migrate engines over a generated set. Needs the host addon built
-# above, so it sits here rather than with the generator checks.
-echo "[verify-like-ci] migrate engine parity (sweep + seeded random)..."
-pnpm fuzz:migrate-engine-parity
-
 echo "[verify-like-ci] Rust gates (rustfmt, clippy x3 feature sets, native check, cargo test, parity harnesses)..."
 (
     cd "$REPO/packages/core"

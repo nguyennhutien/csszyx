@@ -8,6 +8,10 @@
  *
  * Round-trip: TW class → invert PROPERTY_MAP prefix → sz object → transform() → compare
  *
+ * Both halves run on the engine that ships: the class is read by the native
+ * migrate and lowered by the native transform, so a pass here is a statement
+ * about csszyx, not about a second implementation of it.
+ *
  * Usage:
  *   pnpm corpus:check                    — print report, exit 0 always
  *   pnpm corpus:check --fail-fast        — exit 1 if any gap (broken or unmapped)
@@ -23,7 +27,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { parseClass } from '../packages/cli/src/migrate/class-parser.js';
+import { migrateRustParseClass as parseClass } from '../packages/compiler/src/migrate-rust.js';
 import { transform } from '../packages/compiler/src/transform-core.js';
 import { classToSzCandidates } from './check-corpus-candidates.js';
 

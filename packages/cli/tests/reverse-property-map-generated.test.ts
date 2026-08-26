@@ -17,12 +17,12 @@
 import { PROPERTY_MAP } from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
 
-import { REVERSE_PROPERTY_MAP } from '../src/migrate/generated/reverse-property-map.js';
+import { REVERSE_PROPERTY_MAP } from '../../compiler/src/migrate-tables/generated/reverse-property-map.js';
 import {
     AMBIGUOUS_PREFIX_CHOICE,
     EXTRA_REVERSE_PREFIXES,
     SPECIAL_LOWERING_PREFIXES,
-} from '../src/migrate/prefix-choice.js';
+} from '../../compiler/src/migrate-tables/prefix-choice.js';
 
 /**
  * Every sz key the compiler lowers to a given prefix.

@@ -1,22 +1,22 @@
 /**
  * csszyx migrate - Convert Tailwind className to sz prop.
  *
- * Babel AST for JSX/TSX (static + dynamic classNames), regex for HTML files.
- * Supports --dry-run, --ignore patterns.
+ * Runs on the native engine: the JSX/TSX files in one call, because crossing
+ * the boundary costs more than a file's parse, and the HTML files one by one
+ * as the text pass is. Supports --dry-run, --ignore patterns.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
-import { migrateRustBatch } from '@csszyx/compiler/migrate';
+import {
+    type CsszyxTodoMap,
+    type MigrateRustResult,
+    migrateRustBatch,
+    migrateRustHtml,
+} from '@csszyx/compiler/migrate';
 import fg from 'fast-glob';
 
-import {
-    migrateEngine,
-    transformHtmlSourceSimple,
-    transformSource,
-} from '../migrate/ast-transformer.js';
-import type { CsszyxTodoMap } from '../migrate/variant-parser.js';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
 
@@ -168,8 +168,7 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
 
     const summary = createMigrationSummary();
     const progress = spinner.start('Migrating...');
-    if (migrateEngine() === 'rust') processMigrationBatch(files, context, summary, log);
-    else for (const filePath of files) processMigrationFile(filePath, context, summary, log);
+    processMigrationBatch(files, context, summary, log);
     progress.succeed('Migration complete');
 
     reportMigrationSummary(context, summary, log);
@@ -260,9 +259,6 @@ function startMigrationLog(context: MigrationContext): MigrationLog {
         : '';
     log.writeLine(`Mode: ${mode}${resolution}`);
     log.writeLine(`injectTodos: ${context.injectTodos}`);
-    // Which engine ran belongs in the log, not on the console: both write the
-    // same bytes, so it only matters when someone asks why a run was slow.
-    log.writeLine(`engine: ${migrateEngine()}`);
     log.writeLine('');
     if (!isGitignored(context.cwd, '.csszyx')) {
         printWarn(
@@ -376,7 +372,7 @@ function sourceOptions(context: MigrationContext) {
 /** Aggregates, writes and reports one transformed file. */
 function finishMigrationFile(
     filePath: string,
-    result: ReturnType<typeof transformSource>,
+    result: MigrateRustResult,
     context: MigrationContext,
     summary: MigrationSummary,
     log: MigrationLog,
@@ -386,21 +382,6 @@ function finishMigrationFile(
     aggregateMigrationResult(filePath, result, context, summary);
     if (!writeMigratedFile(filePath, result.code, context, log)) return;
     reportMigratedFile(filePath, result.stats, context, log);
-}
-
-/** Processes and aggregates one candidate source file. */
-function processMigrationFile(
-    filePath: string,
-    context: MigrationContext,
-    summary: MigrationSummary,
-    log: MigrationLog,
-): void {
-    const input = readMigrationInput(filePath, context);
-    if (!input) return;
-    const result = input.isHtml
-        ? transformHtmlSourceSimple(input.source, htmlOptions(context))
-        : transformSource(input.source, filePath, sourceOptions(context));
-    finishMigrationFile(filePath, result, context, summary, log);
 }
 
 /**
@@ -425,8 +406,8 @@ function processMigrationBatch(
     let next = 0;
     for (const input of inputs) {
         const result = input.isHtml
-            ? transformHtmlSourceSimple(input.source, htmlOptions(context))
-            : (jsxResults[next++] as ReturnType<typeof transformSource>);
+            ? migrateRustHtml(input.source, htmlOptions(context))
+            : (jsxResults[next++] as MigrateRustResult);
         finishMigrationFile(input.filePath, result, context, summary, log);
     }
 }
@@ -441,7 +422,7 @@ function hasMigrationAttributes(source: string, isHtml: boolean, keysOnly: boole
 /** Aggregates one changed transformation result. */
 function aggregateMigrationResult(
     filePath: string,
-    result: ReturnType<typeof transformSource>,
+    result: MigrateRustResult,
     context: MigrationContext,
     summary: MigrationSummary,
 ): void {
@@ -483,7 +464,7 @@ function writeMigratedFile(
 /** Reports one changed file to the console and migration log. */
 function reportMigratedFile(
     filePath: string,
-    stats: ReturnType<typeof transformSource>['stats'],
+    stats: MigrateRustResult['stats'],
     context: MigrationContext,
     log: MigrationLog,
 ): void {

@@ -438,3 +438,228 @@ fn remove_nested(object: &mut SzObject, key_path: &[String], prop: &str) {
         object.shift_remove(key);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_variants, map_variant, tokenize};
+
+    /// `map_variant` answers owned strings; compare against literals.
+    fn mapped(variant: &str) -> Vec<String> {
+        map_variant(variant)
+    }
+
+    #[test]
+    fn tokenize_splits_on_javascript_whitespace_and_drops_the_gaps() {
+        assert_eq!(
+            tokenize("p-4 bg-blue-500 flex"),
+            ["p-4", "bg-blue-500", "flex"]
+        );
+        assert_eq!(tokenize("  p-4   bg-blue-500  "), ["p-4", "bg-blue-500"]);
+        assert_eq!(tokenize("p-4"), ["p-4"]);
+        assert!(tokenize("").is_empty());
+        assert!(tokenize("   ").is_empty());
+    }
+
+    #[test]
+    fn extract_variants_splits_on_colons_outside_brackets() {
+        assert_eq!(extract_variants("p-4"), (vec![], "p-4"));
+        assert_eq!(
+            extract_variants("hover:bg-blue-500"),
+            (vec!["hover"], "bg-blue-500")
+        );
+        assert_eq!(
+            extract_variants("md:hover:bg-blue-500"),
+            (vec!["md", "hover"], "bg-blue-500")
+        );
+    }
+
+    #[test]
+    fn extract_variants_keeps_a_bracketed_colon_inside_its_variant() {
+        // A colon inside brackets belongs to the variant's own syntax, so
+        // splitting on it would tear `supports-[display:grid]` in half.
+        assert_eq!(
+            extract_variants("supports-[display:grid]:grid"),
+            (vec!["supports-[display:grid]"], "grid")
+        );
+        assert_eq!(
+            extract_variants("aria-[current=page]:font-bold"),
+            (vec!["aria-[current=page]"], "font-bold")
+        );
+        assert_eq!(
+            extract_variants("not-supports-[display:grid]:flex"),
+            (vec!["not-supports-[display:grid]"], "flex")
+        );
+    }
+
+    #[test]
+    fn extract_variants_walks_bytes_without_cutting_a_character() {
+        // The scan is byte-indexed; a multi-byte character inside a variant
+        // must not be split, and the base class keeps its own.
+        assert_eq!(
+            extract_variants(r#"data-[icon=🧭:active]:content-["🚀"]"#),
+            (vec!["data-[icon=🧭:active]"], r#"content-["🚀"]"#)
+        );
+    }
+
+    #[test]
+    fn extract_variants_reads_named_groups_data_attributes_and_container_queries() {
+        assert_eq!(
+            extract_variants("group-hover/sidebar:text-white"),
+            (vec!["group-hover/sidebar"], "text-white")
+        );
+        assert_eq!(
+            extract_variants("data-[active]:bg-blue-500"),
+            (vec!["data-[active]"], "bg-blue-500")
+        );
+        assert_eq!(
+            extract_variants("min-[320px]:text-center"),
+            (vec!["min-[320px]"], "text-center")
+        );
+        assert_eq!(extract_variants("@md:flex"), (vec!["@md"], "flex"));
+        assert_eq!(
+            extract_variants("@md/sidebar:block"),
+            (vec!["@md/sidebar"], "block")
+        );
+        assert_eq!(
+            extract_variants("@min-[475px]:flex"),
+            (vec!["@min-[475px]"], "flex")
+        );
+    }
+
+    #[test]
+    fn map_variant_passes_a_single_word_variant_through() {
+        for variant in [
+            "hover",
+            "focus",
+            "active",
+            "disabled",
+            "first",
+            "last",
+            "odd",
+            "even",
+            "before",
+            "after",
+            "placeholder",
+            "dark",
+            "light",
+            "sm",
+            "md",
+            "lg",
+            "xl",
+            "2xl",
+        ] {
+            assert_eq!(mapped(variant), [variant], "{variant}");
+        }
+    }
+
+    #[test]
+    fn map_variant_camel_cases_a_multi_word_variant() {
+        // The sz key is a JavaScript identifier, so the hyphenated Tailwind
+        // spelling cannot survive as-is.
+        for (variant, key) in [
+            ("focus-within", "focusWithin"),
+            ("focus-visible", "focusVisible"),
+            ("first-of-type", "firstOfType"),
+            ("last-of-type", "lastOfType"),
+            ("motion-reduce", "motionReduce"),
+            ("motion-safe", "motionSafe"),
+            ("placeholder-shown", "placeholderShown"),
+            ("read-only", "readOnly"),
+        ] {
+            assert_eq!(mapped(variant), [key], "{variant}");
+        }
+    }
+
+    #[test]
+    fn map_variant_nests_group_and_peer_and_puts_the_name_before_the_state() {
+        for (variant, keys) in [
+            ("group-hover", vec!["group", "hover"]),
+            ("group-hover/sidebar", vec!["group", "sidebar", "hover"]),
+            ("peer-checked", vec!["peer", "checked"]),
+            ("peer-checked/draft", vec!["peer", "draft", "checked"]),
+            ("group-[.is-published]", vec!["group", ".is-published"]),
+            ("group-has-[a]", vec!["group", "has", "a"]),
+            ("group-focus-within", vec!["group", "focusWithin"]),
+            (
+                "peer-focus-visible/label",
+                vec!["peer", "label", "focusVisible"],
+            ),
+        ] {
+            assert_eq!(mapped(variant), keys, "{variant}");
+        }
+    }
+
+    #[test]
+    fn map_variant_reads_a_data_or_aria_attribute_with_or_without_brackets() {
+        // Tailwind v4 allows dropping the brackets for a bare attribute name,
+        // so both spellings have to land on the same sz key path.
+        for (variant, keys) in [
+            ("group-data-[active]", vec!["group", "data", "active"]),
+            ("group-data-active", vec!["group", "data", "active"]),
+            ("group-data-open", vec!["group", "data", "open"]),
+            ("group-data-closed", vec!["group", "data", "closed"]),
+            ("group-data-disabled", vec!["group", "data", "disabled"]),
+            ("group-data-[open]", vec!["group", "data", "open"]),
+            (
+                "group-data-[state=open]",
+                vec!["group", "data", "state=open"],
+            ),
+            (
+                "group-data-[active='true']",
+                vec!["group", "data", "active='true'"],
+            ),
+            (
+                "group-data-[orientation=horizontal]",
+                vec!["group", "data", "orientation=horizontal"],
+            ),
+            ("group-aria-checked", vec!["group", "aria", "checked"]),
+            ("group-aria-expanded", vec!["group", "aria", "expanded"]),
+            (
+                "group-aria-[current=page]",
+                vec!["group", "aria", "current=page"],
+            ),
+            ("peer-data-[active]", vec!["peer", "data", "active"]),
+            ("peer-data-active", vec!["peer", "data", "active"]),
+            ("peer-data-[state=open]", vec!["peer", "data", "state=open"]),
+            ("data-[active]", vec!["data", "active"]),
+            ("data-[state=open]", vec!["data", "state=open"]),
+            ("aria-checked", vec!["aria", "checked"]),
+            ("aria-[current=page]", vec!["aria", "current=page"]),
+        ] {
+            assert_eq!(mapped(variant), keys, "{variant}");
+        }
+    }
+
+    #[test]
+    fn map_variant_unwraps_has_not_supports_and_the_breakpoint_forms() {
+        for (variant, keys) in [
+            ("has-[img]", vec!["has", "img"]),
+            ("has-[:checked]", vec!["has", "checked"]),
+            ("not-hover", vec!["not", "hover"]),
+            ("not-first", vec!["not", "first"]),
+            (
+                "not-supports-[display:grid]",
+                vec!["not", "supports", "display:grid"],
+            ),
+            ("supports-[display:grid]", vec!["supports", "display:grid"]),
+            ("min-[320px]", vec!["min", "320px"]),
+            ("max-[600px]", vec!["max", "600px"]),
+            ("min-md", vec!["min", "md"]),
+        ] {
+            assert_eq!(mapped(variant), keys, "{variant}");
+        }
+    }
+
+    #[test]
+    fn map_variant_keeps_a_container_query_and_an_arbitrary_selector_whole() {
+        for (variant, keys) in [
+            ("@md", vec!["@md"]),
+            ("@md/sidebar", vec!["@md", "sidebar"]),
+            ("@min-[475px]", vec!["@min", "475px"]),
+            ("@container", vec!["@container"]),
+            ("[&>span]", vec!["[&>span]"]),
+        ] {
+            assert_eq!(mapped(variant), keys, "{variant}");
+        }
+    }
+}

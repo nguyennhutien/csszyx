@@ -12,8 +12,7 @@ import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
-import { transformSource } from '../packages/cli/src/migrate/ast-transformer.js';
-import { classNameToSzObject } from '../packages/cli/src/migrate/variant-parser.js';
+import { migrateRustBatch, migrateRustClassName } from '../packages/compiler/src/migrate-rust.js';
 
 interface CliOptions {
     /** Synthetic component counts to benchmark. */
@@ -155,7 +154,7 @@ function runBenchmarks(opts: CliOptions): BenchRow[] {
                 opts,
                 () => {
                     for (const className of fixtures.repeatedClassNames) {
-                        classNameToSzObject(className);
+                        migrateRustClassName(className);
                     }
                 },
                 'Reverse parser only. Repeated design-system class strings exercise token-cache hits.',
@@ -166,7 +165,7 @@ function runBenchmarks(opts: CliOptions): BenchRow[] {
                 opts,
                 () => {
                     for (const className of fixtures.uniqueClassNames) {
-                        classNameToSzObject(className);
+                        migrateRustClassName(className);
                     }
                 },
                 'Reverse parser only. Mostly unique arbitrary values exercise cache-miss overhead.',
@@ -176,7 +175,9 @@ function runBenchmarks(opts: CliOptions): BenchRow[] {
                 size,
                 opts,
                 () => {
-                    transformSource(fixtures.staticSource, `/bench/static-${size}.tsx`);
+                    migrateRustBatch([
+                        { filename: `/bench/static-${size}.tsx`, source: fixtures.staticSource },
+                    ]);
                 },
                 'Full JSX/TSX migration with one static className per component.',
             ),
@@ -185,7 +186,9 @@ function runBenchmarks(opts: CliOptions): BenchRow[] {
                 size,
                 opts,
                 () => {
-                    transformSource(fixtures.dynamicSource, `/bench/dynamic-${size}.tsx`);
+                    migrateRustBatch([
+                        { filename: `/bench/dynamic-${size}.tsx`, source: fixtures.dynamicSource },
+                    ]);
                 },
                 'Full JSX/TSX migration with clsx, ternary, logical, and template literal patterns.',
             ),
@@ -194,7 +197,9 @@ function runBenchmarks(opts: CliOptions): BenchRow[] {
                 size,
                 opts,
                 () => {
-                    transformSource(fixtures.skipSource, `/bench/skip-${size}.ts`);
+                    migrateRustBatch([
+                        { filename: `/bench/skip-${size}.ts`, source: fixtures.skipSource },
+                    ]);
                 },
                 'Fast-path early-exit on non-JSX TypeScript files (no className, no cva). Models real-world utility/type/helper files migrate visits but never modifies.',
             ),

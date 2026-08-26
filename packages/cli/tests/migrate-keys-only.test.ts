@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { transformSource } from '../src/migrate/ast-transformer.js';
+import { migrateSource as transformSource } from '../src/migrate.js';
 
 /**
  * TRANSITIONAL (0.9.10 → 0.10.0): `migrate --keys-only` normalizes legacy sz-prop
