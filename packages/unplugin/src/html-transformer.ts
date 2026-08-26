@@ -145,6 +145,29 @@ export function injectChecksum(html: string, checksum: string, minify = false): 
 }
 
 /**
+ * Put a `<script>` tag at the end of the document head.
+ *
+ * Both injectors place a JSON data block that a runtime reads back by id, and
+ * both have to cope with HTML that a framework may have emitted without a
+ * head, or without a closing `</html>` — a fragment rendered into a shell,
+ * for instance. Where the tag lands decides whether the runtime finds it, so
+ * the rule is written once rather than kept in step in two places.
+ *
+ * @param html - HTML content.
+ * @param scriptTag - The tag to insert.
+ * @returns The HTML with the tag inserted.
+ */
+function withScriptTag(html: string, scriptTag: string): string {
+    if (html.includes('</head>')) {
+        return html.replace('</head>', `${scriptTag}\n</head>`);
+    }
+    if (html.includes('</html>')) {
+        return html.replace('</html>', `${scriptTag}\n</html>`);
+    }
+    return html + scriptTag;
+}
+
+/**
  * Injects mangle map as a script tag in HTML.
  *
  * @param {string} html - HTML content
@@ -173,15 +196,7 @@ export function injectMangleMapScript(
     const checksumMap = createHydrationMangleMap(mangleMap, varMangleMap);
     const scriptTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">${safeJsonForScriptTag(checksumMap, prettyPrint)}</script>`;
 
-    // Inject before </head> or before </html> if no head
-    if (html.includes('</head>')) {
-        return html.replace('</head>', `${scriptTag}\n</head>`);
-    } else if (html.includes('</html>')) {
-        return html.replace('</html>', `${scriptTag}\n</html>`);
-    }
-
-    // No closing tags found, append at the end
-    return html + scriptTag;
+    return withScriptTag(html, scriptTag);
 }
 
 /**
@@ -440,10 +455,5 @@ export function injectRecoveryManifest(html: string, manifest: RecoveryManifest)
     const json = JSON.stringify(manifest);
     const scriptTag = `<script id="__SZ_RECOVERY_MANIFEST__" type="application/json">${json}</script>`;
 
-    if (html.includes('</head>')) {
-        return html.replace('</head>', `${scriptTag}\n</head>`);
-    } else if (html.includes('</html>')) {
-        return html.replace('</html>', `${scriptTag}\n</html>`);
-    }
-    return html + scriptTag;
+    return withScriptTag(html, scriptTag);
 }
