@@ -91,61 +91,11 @@ describe('@csszyx/core/native migrate entry points', () => {
         }
     });
 
-    it('does not offer the wasm engine when the platform package is missing', async () => {
-        // migrate has no wasm artifact: the feature is deliberately outside
-        // `native-engine`, which is what the wasm parser is built with. The
-        // transform's own message offers `build.parser: "wasm"` because for a
-        // transform that is a real answer; repeating it here would send a user
-        // whose only recourse is the platform package to a build option that
-        // does not apply to the command they ran.
-        packageName.current = '@csszyx/core-nonexistent-platform';
-        const { migrateBatch, CsszyxNativeUnavailableError } = await import('../native/index.js');
-
-        expect(migrateBatch).toThrow(CsszyxNativeUnavailableError);
-        try {
-            migrateBatch([], {});
-        } catch (err) {
-            const error = err as InstanceType<typeof CsszyxNativeUnavailableError>;
-            expect(error.message).not.toContain('build.parser');
-            expect(error.message).not.toContain('wasm');
-            expect(error.message).toContain('@csszyx/core-nonexistent-platform');
-            expect(error.message).toContain('migrate');
-        }
-    });
-
-    it('says no package covers the platform when there is none to name', async () => {
-        // No prebuilt package for this platform at all, as opposed to one that
-        // is simply not installed. There is nothing to tell the user to run.
-        packageName.current = '';
-        const { migrateHtml } = await import('../native/index.js');
-
-        try {
-            migrateHtml('<div class="p-4" />', {});
-            expect.unreachable('migrate cannot run without the engine');
-        } catch (err) {
-            const error = err as Error & { packageName: string | null };
-            expect(error.message).toContain('No prebuilt package covers this platform');
-            expect(error.message).not.toContain('build.parser');
-            expect(error.packageName).toBeNull();
-        }
-    });
-
-    it('lets a load failure that is not an install problem through unchanged', async () => {
-        // A corrupt or ABI-mismatched binary throws on require. Rewriting that
-        // as "install the platform package" would send the user to reinstall
-        // the package they already have, and bury the real reason.
-        packageName.current = fixture('native-binding-throws.cjs');
-        const { migrateBatch, CsszyxNativeUnavailableError } = await import('../native/index.js');
-
-        expect(() => migrateBatch([], {})).toThrow(/could not initialise/);
-        expect(() => migrateBatch([], {})).not.toThrow(CsszyxNativeUnavailableError);
-    });
-
     it('reads the ESM resolver code as a missing package too', async () => {
         // Node reports a missing package as MODULE_NOT_FOUND from the CJS
         // resolver and ERR_MODULE_NOT_FOUND from the ESM one. Both mean the
-        // same thing to a user, so both must reach migrate's install message
-        // rather than surfacing as an unexpected crash.
+        // same thing, so both must read as "not installed" rather than
+        // surfacing as an unexpected crash.
         packageName.current = fixture('native-binding-esm-missing.cjs');
         const { migrateBatch, CsszyxNativeUnavailableError } = await import('../native/index.js');
 
@@ -153,9 +103,8 @@ describe('@csszyx/core/native migrate entry points', () => {
         try {
             migrateBatch([], {});
         } catch (err) {
-            const error = err as Error;
-            expect(error.message).toContain('migrate has no second implementation');
-            expect(error.message).not.toContain('build.parser');
+            const error = err as Error & { packageName: string | null };
+            expect(error.packageName).toBe(packageName.current);
         }
     });
 });

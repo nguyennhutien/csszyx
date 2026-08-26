@@ -6,10 +6,9 @@
  * message nobody has ever seen is a message nobody has checked. The binding
  * is replaced here with one that fails the way a missing package fails.
  *
- * The fake speaks the words the real binding speaks, because this file checks
- * that the layer above carries them through unchanged. Whether the binding
- * chooses those words is a separate question, answered where it lives:
- * `packages/core/tests/native-migrate.test.ts`.
+ * The fake speaks the LOADER's words — the transform-shaped message a real
+ * binding throws — because the point of these tests is that migrate does not
+ * pass them on. The loader has a wasm engine to offer and migrate does not.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -21,13 +20,9 @@ class FakeUnavailable extends Error {
      */
     constructor(packageName: string | null) {
         super(
-            [
-                'csszyx migrate needs the native engine, and this install has none.',
-                packageName === null
-                    ? 'No prebuilt package covers this platform.'
-                    : `Install the optional package for this platform: ${packageName}.`,
-                'migrate has no second implementation to fall back to, so it stops here rather than answering differently. Building and the runtime are unaffected.',
-            ].join(' '),
+            'csszyx native Rust transform is not available for this install. ' +
+                'The wasm build of the engine (build.parser: "wasm") covers this ' +
+                'platform until the native package is installed.',
         );
         this.name = 'CsszyxNativeUnavailableError';
         this.packageName = packageName;
@@ -64,23 +59,28 @@ describe('the native migrate on an install without it', () => {
             RustMigrateUnavailableError,
         );
         expect(() => migrateRustBatch([])).toThrow(/@csszyx\/core-darwin-arm64/);
-        // Carried through once, not decorated: the layer above used to append
-        // the package name a second time.
         try {
             migrateRustBatch([]);
         } catch (error) {
             const { message } = error as Error;
+            // Named once. It used to be appended a second time.
             expect(message.match(/@csszyx\/core-darwin-arm64/g)).toHaveLength(1);
-            // migrate has no wasm artifact, so the transform's offer of
-            // `build.parser` must never reach a migrate user.
+            // The loader's offer of the wasm engine is real for a transform
+            // and a dead end for migrate, so it must not be carried through.
             expect(message).not.toContain('build.parser');
+            expect(message).toContain('no second implementation');
         }
     });
 
     it('says no package covers the platform when there is none to name', async () => {
         const { migrateRustHtml } = await import('../src/migrate-rust.js');
         expect(() => migrateRustHtml('<div class="p-4" />')).toThrow(
-            /No prebuilt package covers this platform/,
+            /no prebuilt package covers this platform/,
         );
+        try {
+            migrateRustHtml('<div class="p-4" />');
+        } catch (error) {
+            expect((error as Error).message).not.toContain('build.parser');
+        }
     });
 });

@@ -7,37 +7,17 @@ const require = createRequire(import.meta.url);
 let cachedBinding;
 let cachedPackageName;
 
-/**
- * What a caller can do instead, per thing they were trying to run.
- *
- * The transform has a second implementation and migrate does not: the wasm
- * artifact is built without the migrate feature. Offering `build.parser` to a
- * migrate user would send them to a bundler option that cannot help with the
- * command they ran, so the recourse is chosen by what they asked for.
- */
-const RECOURSE = {
-    transform:
-        'The wasm build of the engine (build.parser: "wasm") covers this platform until the native package is installed.',
-    migrate:
-        'migrate has no second implementation to fall back to, so it stops here rather than answering differently. Building and the runtime are unaffected.',
-};
-
-const NEEDS = {
-    transform: 'csszyx native Rust transform is not available for this install.',
-    migrate: 'csszyx migrate needs the native engine, and this install has none.',
-};
-
 export class CsszyxNativeUnavailableError extends Error {
-    constructor(message, packageName = getNativePackageName(), purpose = 'transform') {
+    constructor(message, packageName = getNativePackageName()) {
         super(
             message ??
                 [
-                    NEEDS[purpose],
-                    packageName
-                        ? `Expected optional package: ${packageName}.`
-                        : 'No prebuilt package covers this platform.',
-                    RECOURSE[purpose],
-                ].join(' '),
+                    'csszyx native Rust transform is not available for this install.',
+                    packageName ? `Expected optional package: ${packageName}.` : null,
+                    'The wasm build of the engine (build.parser: "wasm") covers this platform until the native package is installed.',
+                ]
+                    .filter(Boolean)
+                    .join(' '),
         );
         this.name = 'CsszyxNativeUnavailableError';
         this.code = 'CSSZYX_NATIVE_UNAVAILABLE';
@@ -45,13 +25,16 @@ export class CsszyxNativeUnavailableError extends Error {
     }
 }
 
-export function loadNativeBinding(packageName = getNativePackageName(), purpose = 'transform') {
+export function loadNativeBinding(packageName = getNativePackageName()) {
     if (cachedBinding && cachedPackageName === packageName) {
         return cachedBinding;
     }
 
     if (!packageName) {
-        throw new CsszyxNativeUnavailableError(undefined, null, purpose);
+        throw new CsszyxNativeUnavailableError(
+            'csszyx native Rust transform is not available on this platform. The wasm build of the engine (build.parser: "wasm") covers it.',
+            null,
+        );
     }
 
     let loaded;
@@ -59,7 +42,7 @@ export function loadNativeBinding(packageName = getNativePackageName(), purpose 
         loaded = require(packageName);
     } catch (err) {
         if (isModuleNotFoundForPackage(err, packageName)) {
-            throw new CsszyxNativeUnavailableError(undefined, packageName, purpose);
+            throw new CsszyxNativeUnavailableError(undefined, packageName);
         }
         throw err;
     }
@@ -86,14 +69,14 @@ export function transformBatch(_files, options) {
  * The migrate entry points arrived after the first native packages shipped,
  * so a binding may load and still lack them.
  *
- * The load is asked for on migrate's behalf, so a missing platform package is
- * reported in migrate's terms rather than the transform's — see RECOURSE.
+ * What an unavailable engine means for migrate is decided by the caller that
+ * knows: `@csszyx/compiler`'s migrate wrapper, which has no wasm lane to offer.
  *
  * @param {string} name - The export the caller needs.
  * @returns {Function} The binding's function.
  */
 function migrateExport(name) {
-    const binding = loadNativeBinding(getNativePackageName(), 'migrate');
+    const binding = loadNativeBinding();
     if (typeof binding[name] !== 'function') {
         throw new CsszyxNativeUnavailableError(
             `csszyx native package ${cachedPackageName} predates migrate and does not export ${name}(). Update @csszyx/core and its platform package to a version that carries migrate.`,
