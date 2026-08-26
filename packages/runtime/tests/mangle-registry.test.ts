@@ -139,6 +139,31 @@ describe('installMangleRuntime', () => {
     });
 });
 
+describe("the registry reads only a map's own keys", () => {
+    // The maps arrive from a bundle, so they are attacker-influenced input in
+    // the same sense a JSON payload is. Both loops that build the reverse
+    // maps guard with hasOwnProperty; without it, anything on the prototype
+    // chain would be read back as if the build had emitted it.
+    it('ignores an inherited key on either map', () => {
+        const inheritedClass = Object.create({ 'inherited-class': 'zz' }) as Record<string, string>;
+        inheritedClass['p-4'] = 'z';
+        const inheritedVar = Object.create({ '--inherited': 'vv' }) as Record<string, string>;
+        inheritedVar['--_sz-a'] = 'v1';
+
+        const registry = installMangleRuntime({
+            mangleMap: inheritedClass,
+            varMangleMap: inheritedVar,
+            checksum: 'sum-inherited',
+            globalVarAliasPrefix: '---g',
+        });
+
+        expect(registry.decode('z')).toBe('p-4');
+        expect(registry.decode('zz')).toBeUndefined();
+        expect(registry.decodeVar('v1')).toEqual(['--_sz-a']);
+        expect(registry.decodeVar('vv')).toEqual([]);
+    });
+});
+
 describe('runtime helpers read the registry', () => {
     it('lowerSz mangles through the registry without any window.__csszyx', () => {
         installMangleRuntime({ mangleMap: MAP, checksum: 'sum-1' });
