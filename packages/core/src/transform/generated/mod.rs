@@ -378,7 +378,12 @@ mod migrate_tables_tests {
     /// Every `export const NAME = new Set([...])` in the module, spreads
     /// resolved against the sets declared before them.
     fn typescript_sets() -> BTreeMap<String, Vec<String>> {
-        let source = typescript_source();
+        parse_sets(&typescript_source())
+    }
+
+    /// The same, over source text handed in — so the parser's own failure
+    /// modes can be exercised without a module that has to exhibit them.
+    fn parse_sets(source: &str) -> BTreeMap<String, Vec<String>> {
         let mut sets: BTreeMap<String, Vec<String>> = BTreeMap::new();
         let mut current: Option<(String, Vec<String>)> = None;
         for line in source.lines() {
@@ -468,6 +473,16 @@ mod migrate_tables_tests {
     fn field(text: &str, field: &str) -> Option<String> {
         let (_, after) = text.split_once(&format!("{field}: '"))?;
         after.split_once('\'').map(|(value, _)| value.to_string())
+    }
+
+    #[test]
+    #[should_panic(expected = "MISSING is spread before it is declared")]
+    fn a_spread_of_an_undeclared_set_names_what_it_could_not_find() {
+        // The reader resolves a spread against the sets it has already seen,
+        // so a name it has not seen is either a reordering or a declaration it
+        // failed to parse — which is what a new type annotation once caused.
+        // Indexing answered "no entry found for key" for both.
+        parse_sets("export const A: ReadonlySet<string> = new Set([\n  ...MISSING,\n]);\n");
     }
 
     #[test]
