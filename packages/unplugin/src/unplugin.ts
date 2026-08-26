@@ -82,7 +82,7 @@ import {
     needsRuntimeMangleRegistration,
     removedMangleMapDeliveryMessage,
 } from './mangle-delivery.js';
-import { ensureMangleRuntimeFile } from './mangle-runtime-file.js';
+import { applyMangleRuntimeEntry, ensureMangleRuntimeFile } from './mangle-runtime-file.js';
 import {
     computeMangleSizeVerdict,
     createMangleSizeAccount,
@@ -5011,7 +5011,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param compiler - The webpack compiler this plugin instance runs under.
      */
     function applyWebpackMangleRuntimeEntry(compiler: WebpackCompiler): void {
-        const root = compiler.context || process.cwd();
+        // `compiler.context` is a constructor argument in webpack 5, so it is
+        // always a string by the time a plugin applies.
+        const root = compiler.context;
         const file = ensureMangleRuntimeFile(
             path.join(root, '.csszyx'),
             globalVarAliasPrefix,
@@ -5021,17 +5023,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // file the runtime helpers fall back to original class names, which is
         // visible in the page rather than wrong at the byte level.
         if (file === null) return;
-        // Read off the compiler rather than importing webpack: this package
-        // declares it optional, and the two copies would not share classes.
-        const entryPlugin = compiler.webpack?.EntryPlugin;
-        if (entryPlugin === undefined) return;
-        // `name: undefined` is what makes it GLOBAL — prepended to every
-        // entrypoint instead of creating one of its own.
-        new entryPlugin(root, file, { name: undefined }).apply(compiler);
-        // Charged here rather than from a load hook: this lane resolves the
-        // module through webpack's own graph, so nothing else observes that it
-        // shipped, and an uncharged channel understates what the map cost.
-        sizeAccount.channels.add('bundle');
+        if (applyMangleRuntimeEntry(compiler, root, file)) {
+            // Charged here rather than from a load hook: this lane resolves
+            // the module through webpack's own graph, so nothing else observes
+            // that it shipped, and an uncharged channel understates the cost.
+            sizeAccount.channels.add('bundle');
+        }
     }
 
     /**

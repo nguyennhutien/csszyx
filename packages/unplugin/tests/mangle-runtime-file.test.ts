@@ -11,7 +11,11 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ensureMangleRuntimeFile, MANGLE_RUNTIME_FILE_MARKER } from '../src/mangle-runtime-file.js';
+import {
+    applyMangleRuntimeEntry,
+    ensureMangleRuntimeFile,
+    MANGLE_RUNTIME_FILE_MARKER,
+} from '../src/mangle-runtime-file.js';
 
 const roots: string[] = [];
 
@@ -76,5 +80,41 @@ describe('the write is atomic', () => {
 
         expect(ensureMangleRuntimeFile(join(root, '.csszyx'), '---g', false)).toBeNull();
         expect(readdirSync(join(root, '.csszyx'))).toEqual(['mangle-runtime.mjs']);
+    });
+});
+
+describe('applyMangleRuntimeEntry', () => {
+    it('registers a global entry through the compiler own webpack copy', () => {
+        const applied: Array<[string, string, { name: undefined }]> = [];
+        let appliedTo: unknown;
+        class FakeEntryPlugin {
+            constructor(
+                readonly context: string,
+                readonly entry: string,
+                readonly options: { name: undefined },
+            ) {
+                applied.push([context, entry, options]);
+            }
+            apply(compiler: unknown): void {
+                appliedTo = compiler;
+            }
+        }
+        const compiler = { webpack: { EntryPlugin: FakeEntryPlugin } };
+
+        expect(applyMangleRuntimeEntry(compiler, '/root', '/root/.csszyx/x.mjs')).toBe(true);
+        // `name: undefined` is the global form; a named entry would create one
+        // of its own instead of prepending to every entrypoint.
+        expect(applied).toEqual([['/root', '/root/.csszyx/x.mjs', { name: undefined }]]);
+        expect(appliedTo).toBe(compiler);
+    });
+
+    it('registers nothing when the compiler carries no plugin class', () => {
+        // Anything webpack-shaped that is not webpack 5. No entry beats a
+        // crash: the build keeps unmangled runtime class names, the same
+        // degraded answer an unwritable directory gives.
+        expect(applyMangleRuntimeEntry({}, '/root', '/root/.csszyx/x.mjs')).toBe(false);
+        expect(applyMangleRuntimeEntry({ webpack: {} }, '/root', '/root/.csszyx/x.mjs')).toBe(
+            false,
+        );
     });
 });

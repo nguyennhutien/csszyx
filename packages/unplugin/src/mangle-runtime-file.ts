@@ -85,3 +85,45 @@ export function ensureMangleRuntimeFile(
         return null;
     }
 }
+
+/** The part of a webpack compiler this module needs. */
+export interface MangleEntryCompiler {
+    /** webpack's own exports, so the plugin class comes from the build's copy. */
+    webpack?: {
+        EntryPlugin?: new (
+            context: string,
+            entry: string,
+            options: { name: undefined },
+        ) => { apply(compiler: unknown): void };
+    };
+}
+
+/**
+ * Prepend the registration module to every entrypoint of a webpack build.
+ *
+ * The plugin class is read off the compiler rather than imported: this
+ * package declares webpack optional, and a second copy would not share
+ * classes with the one running the build. A compiler that does not carry
+ * one — anything webpack-shaped that is not webpack 5 — gets no entry rather
+ * than a crash, which leaves the build with unmangled runtime class names
+ * and the same degraded behaviour as an unwritable output directory.
+ *
+ * @param compiler - The compiler the plugin is applying to.
+ * @param context - Directory the entry specifier resolves from.
+ * @param file - Path returned by {@link ensureMangleRuntimeFile}.
+ * @returns True when the entry was registered.
+ */
+export function applyMangleRuntimeEntry(
+    compiler: MangleEntryCompiler,
+    context: string,
+    file: string,
+): boolean {
+    const EntryPlugin = compiler.webpack?.EntryPlugin;
+    if (EntryPlugin === undefined) {
+        return false;
+    }
+    // `name: undefined` is what makes it GLOBAL — prepended to every
+    // entrypoint instead of becoming one of its own.
+    new EntryPlugin(context, file, { name: undefined }).apply(compiler);
+    return true;
+}
