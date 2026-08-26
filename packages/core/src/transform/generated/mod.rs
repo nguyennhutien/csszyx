@@ -406,9 +406,16 @@ mod migrate_tables_tests {
             let Some(declaration) = trimmed.strip_prefix("export const ") else {
                 continue;
             };
-            let Some((name, initializer)) = declaration.split_once(" = new Set([") else {
+            let Some((declared, initializer)) = declaration.split_once(" = new Set([") else {
                 continue;
             };
+            // The compiler package builds its declarations in isolation, so an
+            // exported table states its own type. The name is what precedes
+            // that annotation, and a spread below looks the name up.
+            let name = declared
+                .split_once(':')
+                .map_or(declared, |(name, _)| name)
+                .trim();
             let members = quoted(initializer);
             if initializer.contains("])") {
                 sets.insert(name.to_string(), members);
