@@ -105,9 +105,11 @@ describe('webpack production build with mangling', () => {
         expect(bundle).toMatch(/"mx-0":\s*"[A-Za-z][A-Za-z0-9]*"/);
         expect(bundle).not.toContain('___CSSZYX_');
         expect(bundle).not.toContain('window.__csszyx=');
-        // Registered from the file, not from a virtual id this lane cannot take.
-        expect(bundle).toContain(MANGLE_RUNTIME_FILE_MARKER);
+        // From the generated file, never the virtual id this lane cannot take.
         expect(bundle).not.toContain('virtual:csszyx/mangle-runtime');
+        // A GLOBAL entry, so the registration is evaluated before the app code
+        // that may call a runtime helper at module scope.
+        expect(bundle.indexOf('installMangleRuntime')).toBeLessThan(bundle.indexOf('szv)('));
     }, 60_000);
 
     it('still builds when the generated directory cannot be written', async () => {
@@ -120,5 +122,63 @@ describe('webpack production build with mangling', () => {
         const bundle = await buildOnce(root);
         expect(bundle).not.toContain('installMangleRuntime');
         expect(bundle).not.toContain('window.__csszyx=');
+    }, 60_000);
+});
+
+/**
+ * An app whose runtime helpers are reached WITHOUT an `import … from
+ * 'csszyx'` line: a CJS `require`, and a pre-compiled kit under
+ * `node_modules` the plugin never processes.
+ *
+ * Both are invisible to the per-module import injection — the first because
+ * the specifier is not in an import clause, the second because the plugin
+ * skips `node_modules` — while the class map is non-empty either way. The
+ * lane must register the map from the build itself, not from whichever module
+ * happened to be transformed.
+ *
+ * @returns Absolute project root.
+ */
+function projectWithoutImportSyntax(): string {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-wp-nolane-')));
+    roots.push(root);
+    mkdirSync(join(root, 'src'), { recursive: true });
+    mkdirSync(join(root, 'node_modules/ui-kit'), { recursive: true });
+    writeFileSync(
+        join(root, 'node_modules/ui-kit/package.json'),
+        JSON.stringify({ name: 'ui-kit', version: '1.0.0', main: './index.js' }),
+        'utf8',
+    );
+    writeFileSync(
+        join(root, 'node_modules/ui-kit/index.js'),
+        [
+            "const { szr } = require('@csszyx/runtime');",
+            'exports.kitClass = () => szr({ mx: 0 });',
+        ].join('\n'),
+        'utf8',
+    );
+    writeFileSync(
+        join(root, 'src/index.js'),
+        [
+            "const { szv } = require('@csszyx/runtime');",
+            "const { kitClass } = require('ui-kit');",
+            'exports.card = szv({ base: { p: 4, m: 3 }, variants: { tone: { a: { mx: 0 }, b: { mx: 4 } } } });',
+            'exports.cls = kitClass();',
+        ].join('\n'),
+        'utf8',
+    );
+    return root;
+}
+
+describe('webpack registers the map without a per-module import', () => {
+    it('registers for a require() consumer and an unprocessed node_modules kit', async () => {
+        const root = projectWithoutImportSyntax();
+        const bundle = await buildOnce(root);
+
+        // No module in this project carries `from '@csszyx/runtime'`, so the
+        // per-module injection reaches nothing. The registration must still be
+        // in the bundle, carrying the final map.
+        expect(bundle).toContain('installMangleRuntime');
+        expect(bundle).toMatch(/"mx-0":\s*"[A-Za-z][A-Za-z0-9]*"/);
+        expect(bundle).not.toContain('___CSSZYX_');
     }, 60_000);
 });

@@ -1,21 +1,17 @@
 /**
- * The generated registration module webpack imports.
+ * The generated registration module webpack takes as a global entry.
  *
  * Webpack cannot take the `virtual:` specifier the other lanes resolve, so it
- * reads a real file instead. These are the two things that file has to get
- * right off the happy path: an unwritable output directory must not fail the
- * build, and the specifier must resolve as a PATH rather than as a package
- * name from wherever the importing module sits.
+ * reads a real file instead. These are the things that file has to get right
+ * off the happy path: an unwritable output directory must not fail the build,
+ * and a write must never be observable half-done — the server and client
+ * compilations share one project directory and run at the same time.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-    ensureMangleRuntimeFile,
-    MANGLE_RUNTIME_FILE_MARKER,
-    mangleRuntimeSpecifier,
-} from '../src/mangle-runtime-file.js';
+import { ensureMangleRuntimeFile, MANGLE_RUNTIME_FILE_MARKER } from '../src/mangle-runtime-file.js';
 
 const roots: string[] = [];
 
@@ -60,25 +56,25 @@ describe('ensureMangleRuntimeFile', () => {
     });
 });
 
-describe('mangleRuntimeSpecifier', () => {
-    it('prefixes a sibling path so it is not read as a package name', () => {
+describe('the write is atomic', () => {
+    it('leaves no staging file behind on success', () => {
         const root = tempRoot();
-        mkdirSync(join(root, '.csszyx'), { recursive: true });
-        const file = join(root, MANGLE_RUNTIME_FILE_MARKER);
+        ensureMangleRuntimeFile(join(root, '.csszyx'), '---g', false);
 
-        // Without the prefix this reads `.csszyx/mangle-runtime.mjs`, which a
-        // bundler resolves as a package.
-        expect(mangleRuntimeSpecifier(join(root, 'src.js'), file)).toBe(
-            './.csszyx/mangle-runtime.mjs',
-        );
+        // A reader of the generated directory during a parallel compilation
+        // must never find a half-written module: the content is staged under
+        // another name and renamed into place.
+        expect(readdirSync(join(root, '.csszyx'))).toEqual(['mangle-runtime.mjs']);
     });
 
-    it('leaves an already-relative parent path alone', () => {
+    it('leaves no staging file behind when the rename cannot happen', () => {
         const root = tempRoot();
-        const file = join(root, MANGLE_RUNTIME_FILE_MARKER);
+        // A DIRECTORY where the module belongs: the write succeeds, the
+        // rename fails with EISDIR.
+        const target = join(root, '.csszyx', 'mangle-runtime.mjs');
+        mkdirSync(target, { recursive: true });
 
-        expect(mangleRuntimeSpecifier(join(root, 'src/deep/a.ts'), file)).toBe(
-            '../../.csszyx/mangle-runtime.mjs',
-        );
+        expect(ensureMangleRuntimeFile(join(root, '.csszyx'), '---g', false)).toBeNull();
+        expect(readdirSync(join(root, '.csszyx'))).toEqual(['mangle-runtime.mjs']);
     });
 });

@@ -82,11 +82,7 @@ import {
     needsRuntimeMangleRegistration,
     removedMangleMapDeliveryMessage,
 } from './mangle-delivery.js';
-import {
-    ensureMangleRuntimeFile,
-    MANGLE_RUNTIME_FILE_MARKER,
-    mangleRuntimeSpecifier,
-} from './mangle-runtime-file.js';
+import { ensureMangleRuntimeFile } from './mangle-runtime-file.js';
 import {
     computeMangleSizeVerdict,
     createMangleSizeAccount,
@@ -2799,9 +2795,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         console.warn(removedMangleMapDeliveryMessage());
     }
     // Weighs the map against the CSS it bought. Counts channels that actually
-    // shipped rather than the configured ones: a webpack build never takes the
-    // bundle module, and a library build emits no HTML, so charging for a
-    // channel the build did not use would overstate the cost.
+    // shipped rather than the ones a build could have used: a library build
+    // emits no HTML, so charging for a channel the build did not use would
+    // overstate the cost.
     const sizeAccount: MangleSizeAccount = createMangleSizeAccount();
     // User can raise/lower the AST node budget per build via the existing
     // `BuildConfig.astBudgetLimit` field in @csszyx/types. Undefined here =
@@ -4965,13 +4961,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Rewritten source when the module needs the map, otherwise null.
      */
     function injectMangleRuntime(transformedCode: string, id: string): string | null {
-        if (
-            activeFramework !== 'vite' &&
-            activeFramework !== 'rollup' &&
-            activeFramework !== 'webpack'
-        ) {
-            // esbuild never receives csszyx virtual imports today and is left
-            // out until exercised.
+        // Rollup-convention lanes only. webpack registers the map as an entry
+        // of its own (see `applyWebpackMangleRuntimeEntry`), which reaches
+        // consumers no per-module scan can: a `require()` call, a dynamic
+        // import, or a pre-compiled package under `node_modules` the plugin
+        // never processes. esbuild receives no csszyx virtual imports today
+        // and is left out until exercised.
+        if (activeFramework !== 'vite' && activeFramework !== 'rollup') {
             return null;
         }
         // Guard order is cost order: flag, then the short id, and only then
@@ -4981,45 +4977,61 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             !manglingEnabled ||
             !shouldProcessSource(id) ||
             !MANGLE_RUNTIME_CONSUMER_RE.test(transformedCode) ||
-            transformedCode.includes(MANGLE_RUNTIME_VIRTUAL_ID) ||
-            transformedCode.includes(MANGLE_RUNTIME_FILE_MARKER)
+            transformedCode.includes(MANGLE_RUNTIME_VIRTUAL_ID)
         ) {
             return null;
         }
         // After any use directive, not prepended: an import ahead of
         // `'use server'` would demote the directive to a plain string and the
         // RSC boundary guard would misclassify the module.
-        const specifier = mangleRuntimeImportSpecifier(id);
-        return specifier === null
-            ? null
-            : insertRuntimeImport(transformedCode, `import '${specifier}';\n`);
+        return insertRuntimeImport(transformedCode, `import '${MANGLE_RUNTIME_VIRTUAL_ID}';\n`);
     }
 
     /**
-     * The specifier one module uses to reach the registration.
+     * Register the mangle map as an entry of the webpack build.
      *
      * webpack parses the colon in `virtual:` as a URI scheme and fails the
-     * build before any resolve plugin runs, so that lane imports a real
-     * generated file instead — the same answer `theme-groups-file.ts` gives to
-     * the same constraint.
+     * build before any resolve plugin runs, so this lane registers from a real
+     * generated file — the same answer `theme-groups-file.ts` gives to the
+     * same constraint. What differs is how the file is reached.
      *
-     * @param id - Module being transformed.
-     * @returns The specifier, or null when the file could not be written.
+     * Importing it from each transformed consumer is not enough here, because
+     * this lane has no HTML entry to fall back on the way vite does. Anything
+     * the transform never sees — a `require()` call, a dynamic import, a
+     * pre-compiled kit under `node_modules` — would use runtime helpers with
+     * no map registered, and its classes would reach the DOM under names the
+     * mangled CSS has no rule for. A global entry is prepended to every
+     * entrypoint by webpack itself, so registration is a property of the build
+     * rather than of which modules happened to be transformed.
+     *
+     * Written and applied once per compiler, at plugin-apply time: webpack
+     * caches transformed modules across builds, so a rebuild can replay an
+     * injected import without running the transform that created the file.
+     *
+     * @param compiler - The webpack compiler this plugin instance runs under.
      */
-    function mangleRuntimeImportSpecifier(id: string): string | null {
-        if (activeFramework !== 'webpack') {
-            return MANGLE_RUNTIME_VIRTUAL_ID;
-        }
+    function applyWebpackMangleRuntimeEntry(compiler: WebpackCompiler): void {
+        const root = compiler.context || process.cwd();
         const file = ensureMangleRuntimeFile(
-            path.join(state.rootDir, '.csszyx'),
+            path.join(root, '.csszyx'),
             globalVarAliasPrefix,
             options.production?.mangleDebugGlobal === true,
         );
-        if (file === null) return null;
-        // `split` always yields a first element, so there is nothing to fall
-        // back to: an id with no query answers with the whole id.
-        const [from] = id.split('?');
-        return mangleRuntimeSpecifier(from, file);
+        // An unwritable output directory must not fail the build; without the
+        // file the runtime helpers fall back to original class names, which is
+        // visible in the page rather than wrong at the byte level.
+        if (file === null) return;
+        // Read off the compiler rather than importing webpack: this package
+        // declares it optional, and the two copies would not share classes.
+        const entryPlugin = compiler.webpack?.EntryPlugin;
+        if (entryPlugin === undefined) return;
+        // `name: undefined` is what makes it GLOBAL — prepended to every
+        // entrypoint instead of creating one of its own.
+        new entryPlugin(root, file, { name: undefined }).apply(compiler);
+        // Charged here rather than from a load hook: this lane resolves the
+        // module through webpack's own graph, so nothing else observes that it
+        // shipped, and an uncharged channel understates what the map cost.
+        sizeAccount.channels.add('bundle');
     }
 
     /**
@@ -5373,6 +5385,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // used to prevent by accident.
                 if (compiler.options?.mode === 'development') {
                     manglingEnabled = false;
+                }
+                if (manglingEnabled) {
+                    applyWebpackMangleRuntimeEntry(compiler);
                 }
                 compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
                     announceActiveParser();

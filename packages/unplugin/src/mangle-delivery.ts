@@ -1,12 +1,18 @@
 /**
  * Whether a build has a runtime mangle map worth registering.
  *
- * Three lanes decide independently where the map goes — the Vite HTML entry,
- * the per-consumer import injection, and webpack's generated file — and a
- * consumer with mangling OFF still received an executable inline installer
+ * A consumer with mangling OFF still received an executable inline installer
  * carrying an empty map, which a `script-src 'self'` policy refused
- * (field-reported). One predicate, called by every lane, is what keeps a
- * fourth lane from reintroducing that.
+ * (field-reported). This is the predicate that decides an empty map is not
+ * worth shipping.
+ *
+ * It answers for the ONE lane that can ask it: the Vite HTML entry, which
+ * attaches its tag after `finalizeMangleMap()`. The other two lanes decide
+ * before the map exists — the per-consumer import is inserted while modules
+ * are still being transformed, and webpack's global entry is registered at
+ * plugin-apply time — so both register unconditionally and an empty map costs
+ * them a registration that resolves nothing. Neither can emit an inline
+ * script, which is what the field report was about.
  *
  * @module mangle-delivery
  */

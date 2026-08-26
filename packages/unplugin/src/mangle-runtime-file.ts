@@ -16,6 +16,13 @@
  * until the mangle passes have run over the emitted assets — webpack's
  * `processAssets` substitutes them there.
  *
+ * Where the two part ways is how the module is reached. Theme groups are
+ * imported by the modules that use `szcn`; the mangle map is registered as a
+ * GLOBAL webpack entry instead, because this lane has no HTML entry to fall
+ * back on and a per-module import reaches only what the plugin transforms —
+ * not a `require()` call, a dynamic import, or a pre-compiled package under
+ * `node_modules`.
+ *
  * The path is stable for a given project, so it stays out of any loader's
  * cache identity: only the file's contents change between builds.
  *
@@ -29,12 +36,7 @@ import { createMangleRuntimeModule } from './virtual-modules.js';
 /** File name inside the project's generated-output directory. */
 const MANGLE_RUNTIME_FILE = 'mangle-runtime.mjs';
 
-/**
- * Substring that identifies an already-injected file import.
- *
- * Re-entrant transforms must not stack a second registration, and the
- * specifier is relative so it cannot be matched by a fixed string.
- */
+/** The generated module's path, relative to the project root. */
 export const MANGLE_RUNTIME_FILE_MARKER: string = `.csszyx/${MANGLE_RUNTIME_FILE}`;
 
 /**
@@ -51,38 +53,35 @@ export function ensureMangleRuntimeFile(
     exposeDebugGlobal: boolean,
 ): string | null {
     const target = path.join(outputDir, MANGLE_RUNTIME_FILE);
+    // A write, then a rename. Next compiles the server and the client in
+    // parallel — in separate processes when the build worker is on — over one
+    // project directory, so a plain write would truncate the file while the
+    // other compiler is reading it and hand that side an empty module. The
+    // rename is atomic within a directory, and the process id keeps the two
+    // temporaries apart.
+    const staging = `${target}.${process.pid}.tmp`;
     try {
         fs.mkdirSync(outputDir, { recursive: true });
         fs.writeFileSync(
-            target,
+            staging,
             createMangleRuntimeModule(globalVarAliasPrefix, exposeDebugGlobal),
             'utf8',
         );
+        fs.renameSync(staging, target);
         return target;
     } catch {
+        // A failed rename leaves the staging file behind; a failed write may
+        // too. Neither is worth failing a build over, but neither belongs in
+        // the project either.
+        try {
+            fs.rmSync(staging, { force: true });
+        } catch {
+            // Nothing further to try.
+        }
         // A read-only or unwritable output directory must not fail the build.
         // Without the file the runtime helpers fall back to original class
         // names — the same behaviour as a build with mangling off — which is
         // visible in the page rather than silently wrong at the byte level.
         return null;
     }
-}
-
-/**
- * Build the import specifier one module uses to reach the registration.
- *
- * Relative rather than absolute: a bundler resolves a relative specifier the
- * same way on every platform, while an absolute POSIX path is a Windows
- * hazard.
- *
- * @param fromFile - Module being transformed.
- * @param mangleRuntimeFile - Path returned by {@link ensureMangleRuntimeFile}.
- * @returns A specifier that resolves from `fromFile`.
- */
-export function mangleRuntimeSpecifier(fromFile: string, mangleRuntimeFile: string): string {
-    const relative = path.relative(path.dirname(fromFile), mangleRuntimeFile).replaceAll('\\', '/');
-    // `startsWith('.')` is NOT the test: the generated file lives in a DOT
-    // directory, so a sibling import reads `.csszyx/mangle-runtime.mjs`, which
-    // a bundler resolves as a package name rather than a path.
-    return relative.startsWith('./') || relative.startsWith('../') ? relative : `./${relative}`;
 }

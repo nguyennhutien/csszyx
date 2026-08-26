@@ -104,7 +104,8 @@ Everything csszyx adds to the document is inert data:
 The runtime mangle map — what `szr`, `szv`, `szcn` and `dynamic()` need when
 `production.mangle` is on — is registered from a module **inside your own JS
 bundle**, on every lane: Vite and Rollup import it through a virtual module,
-webpack through a generated file under `.csszyx/`. It is covered by whatever
+webpack through a generated file under `.csszyx/` prepended to every
+entrypoint. It is covered by whatever
 already allows your bundle: `script-src 'self'`, or your nonce or hash. csszyx
 never needs `'unsafe-inline'`; **do not add it for csszyx.**
 

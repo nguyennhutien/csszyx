@@ -232,9 +232,13 @@ names unreadable, and treat the byte delta as a rounding error in either directi
 The runtime mangle map is what lets `szr`, `szv`, `szcn`, and `szDecode` speak
 the same class names as the mangled CSS. It is registered from a module
 **inside your JS bundle** — a virtual module on Vite/Rollup, a generated
-`.csszyx/mangle-runtime.mjs` on webpack — attached to every HTML entry ahead of
-the app and to every source module that imports the runtime, so a pre-compiled
-component library under `node_modules` that calls `szr` itself is covered too.
+`.csszyx/mangle-runtime.mjs` on webpack.
+
+Every lane attaches it ahead of your app code rather than relying on which
+files import the runtime: Vite and Rollup put it on the HTML entry, webpack
+prepends it to every entrypoint. So a pre-compiled component library under
+`node_modules` that calls `szr` itself is covered, and so is a `require()` or a
+dynamic `import()` that no source scan would see.
 
 There is nothing to configure, and the built HTML never carries an executable
 inline `<script>`, so a strict `script-src 'self'` policy needs no exception.

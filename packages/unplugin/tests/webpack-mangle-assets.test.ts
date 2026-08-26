@@ -62,6 +62,17 @@ async function runWebpack(root: string): Promise<void> {
             assetModuleFilename: 'assets/[name][ext]',
         },
         module: { rules: [{ test: /\.css$/, type: 'asset/resource' }] },
+        // A mangling webpack build always carries the map-registration entry,
+        // and that module imports the runtime. This fixture is a bare temp
+        // directory with no `node_modules`, so the import is declared external
+        // — the assertions below are about the emitted assets, not about what
+        // the runtime package contains.
+        externals: [
+            ({ request }, callback) =>
+                request?.startsWith('@csszyx/runtime')
+                    ? callback(undefined, `commonjs ${request}`)
+                    : callback(),
+        ],
         plugins: [
             new EmitExtraAssetsPlugin(),
             webpackPlugin({
