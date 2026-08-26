@@ -392,7 +392,15 @@ mod migrate_tables_tests {
                     current = None;
                 } else if let Some(spread) = trimmed.strip_prefix("...") {
                     let spread = spread.trim_end_matches(',');
-                    members.extend(sets[spread].iter().cloned());
+                    // Named, because indexing answers "no entry found for key"
+                    // and that says nothing about which table went missing.
+                    // A spread reads a set declared ABOVE it, so a miss means
+                    // either the order changed or the name was not parsed —
+                    // the latter is what a new type annotation once caused.
+                    let spread_members = sets
+                        .get(spread)
+                        .unwrap_or_else(|| panic!("{spread} is spread before it is declared"));
+                    members.extend(spread_members.iter().cloned());
                 } else {
                     // A Set keeps the first of two equal members.
                     for member in quoted(trimmed) {

@@ -11,16 +11,31 @@
 //! notice a class nobody has added to it, but any change to an answer it
 //! already holds fails closed. New coverage belongs in the unit tests beside
 //! the code, and in the corpus round-trip, which asks Tailwind itself.
+//!
+//! An answer here is a decision, not a law, and `record_the_corpus` below is
+//! how a decision gets changed: it rewrites the file from the engine as it
+//! stands, so re-baselining shows up as a reviewable diff of exactly the
+//! answers that moved. Without it the only ways to change one would be
+//! editing a megabyte of JSON by hand or deleting the test.
 
 #![cfg(feature = "migrate")]
 
 use csszyx_core::migrate::{
     class_name_to_sz_object, parse_class, sz_html_value, sz_object_literal, SzObject,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
+mod common;
+use common::{read_corpus, write_corpus};
+
+#[derive(Deserialize, Serialize)]
 struct Corpus {
+    /// Field order here IS the file's key order; the recorder writes it back.
+    #[serde(rename = "$comment")]
+    comment: String,
+    /// Where the classes came from. Carried verbatim: the generator that
+    /// produced the breakdown is gone, and the recorder does not re-derive it.
+    sources: Box<serde_json::value::RawValue>,
     count: usize,
     entries: Vec<Entry>,
     /// The migration-resolution map the custom-map cases were converted with.
@@ -30,7 +45,7 @@ struct Corpus {
     custom_map_cases: Vec<ConversionCase>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct Entry {
     /// The class as migrate receives it.
     c: String,
@@ -40,14 +55,16 @@ struct Entry {
     o: Conversion,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct ConversionCase {
     c: String,
     o: Conversion,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct Conversion {
+    /// The sz object itself. Field order here IS the file's key order.
+    sz: SzObject,
     /// The sz object as `JSON.stringify` wrote it, keys in its order.
     #[serde(rename = "szText")]
     sz_text: String,
@@ -59,18 +76,6 @@ struct Conversion {
     g: String,
     /// The same as an HTML attribute value, outer braces stripped.
     h: String,
-}
-
-/// Read a corpus at run time rather than `include_str!`.
-///
-/// These files are megabytes. Embedding them puts the whole text in the test
-/// binary as a literal, which rustc then carries through codegen with full
-/// debug info — several test binaries compile at once, and on a 16 GB machine
-/// that was enough to push the whole `cargo test` compile into swap. Reading
-/// the file costs a syscall and keeps the binary small.
-fn read_corpus(name: &str) -> String {
-    let path = format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
-    std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("reading {path}: {error}"))
 }
 
 fn corpus() -> Corpus {
@@ -272,4 +277,50 @@ fn codegen_prints_exactly_what_the_typescript_codegen_prints() {
             .map(|case| (case.c.as_str(), &case.o)),
         Some(&corpus.custom_map),
     );
+}
+
+/// What the fixture says about itself. The generator that first wrote the
+/// file is gone, so the header names the recorder that maintains it now.
+const COMMENT: &str = "RECORDED from the Rust engine. Do not edit by hand. Re-baseline with: cargo test --features migrate --test migrate_parity -- --ignored";
+
+/// One class as the corpus records it, from the engine as it stands now.
+fn record(class_name: &str, custom_map: Option<&SzObject>) -> Conversion {
+    let converted = class_name_to_sz_object(class_name, custom_map);
+    Conversion {
+        sz_text: serde_json::to_string(&converted.sz_object).expect("an sz object serialises"),
+        g: sz_object_literal(&converted.sz_object),
+        h: sz_html_value(&converted.sz_object, false),
+        u: converted.unrecognized,
+        k: converted.keep_in_class_name,
+        sz: converted.sz_object,
+    }
+}
+
+/// Rewrite the corpus with what this engine answers today.
+///
+/// Ignored, so a normal `cargo test` never touches the fixture. Run it when a
+/// change to migrate is meant to change an answer:
+///
+/// ```text
+/// cargo test --features migrate --test migrate_parity -- --ignored
+/// ```
+///
+/// It keeps the case list exactly as it is — the classes were chosen by a
+/// generator that no longer exists — and re-records only the answers, so the
+/// diff is the behaviour change and nothing else. Formatting matches the file
+/// it replaces: one-space indent, struct field order as the key order.
+#[test]
+#[ignore = "rewrites a committed fixture; run it only to re-baseline"]
+fn record_the_corpus() {
+    let mut corpus = corpus();
+    corpus.comment = COMMENT.to_string();
+    for entry in &mut corpus.entries {
+        entry.p = parse_class(&entry.c)
+            .map(|parsed| serde_json::to_value(parsed).expect("a parsed class serialises"));
+        entry.o = record(&entry.c, None);
+    }
+    for case in &mut corpus.custom_map_cases {
+        case.o = record(&case.c, Some(&corpus.custom_map));
+    }
+    write_corpus("migrate-parity-corpus.json", &corpus);
 }
