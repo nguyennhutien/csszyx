@@ -55,7 +55,9 @@ test.describe('production build under script-src self', () => {
     }) => {
         const observe = await observeCsp(page);
         await page.goto('/?page=szv');
-        await page.waitForLoadState('networkidle');
+        // The element is the signal, not the network: a refused script fires
+        // its violation before the app renders, and waiting on an idle network
+        // waits on whatever else the page happens to fetch.
         await expect(page.getByTestId('szv-standalone')).toBeVisible();
 
         const { violations, consoleErrors } = await observe();
@@ -80,7 +82,6 @@ test.describe('production build under script-src self', () => {
         // the map was registered — from the bundle, since the HTML has no
         // executable script to do it.
         await page.goto('/?page=szv');
-        await page.waitForLoadState('networkidle');
         const element = page.getByTestId('szv-arbitrary');
         await expect(element).toBeVisible();
 

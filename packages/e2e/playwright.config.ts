@@ -186,7 +186,12 @@ export default defineConfig({
             command: 'pnpm run build && pnpm run preview --port 5180 --strictPort',
             cwd: '../../playground/vite-react',
             url: 'http://localhost:5180',
-            reuseExistingServer: !process.env.CI,
+            // Never reuse. Every other server here is a dev server that reads
+            // sources live, so an already-running one is serving this commit.
+            // This one serves `dist/`, and reuse would skip the build in the
+            // command above — the CSP suite would then pass against whatever
+            // an earlier run happened to leave there.
+            reuseExistingServer: false,
             stdout: 'pipe',
             stderr: 'pipe',
             timeout: 120000,
