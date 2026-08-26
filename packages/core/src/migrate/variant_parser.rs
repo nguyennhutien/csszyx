@@ -16,7 +16,12 @@ use super::value::{is_js_whitespace, SzObject, SzValue};
 use crate::transform::generated::migrate_tables::reverse_variant;
 
 /// What a `className` converts to.
-#[derive(Clone, Debug, Default, PartialEq)]
+///
+/// Serialised because the class-level question crosses both engine
+/// boundaries: the corpus round-trip, the per-key matrix and the sz golden
+/// ask what a class becomes, and read the answer as JSON.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Conversion {
     /// The merged sz object.
     pub sz_object: SzObject,

@@ -31,7 +31,9 @@ describe('@csszyx/core/native migrate entry points', () => {
 
     it('forwards to the binding and returns what it answers', async () => {
         packageName.current = fixture('native-binding-migrate.cjs');
-        const { migrateBatch, migrateHtml } = await import('../native/index.js');
+        const { migrateBatch, migrateHtml, migrateClassName, migrateParseClass } = await import(
+            '../native/index.js'
+        );
 
         expect(migrateBatch([{ filename: 'App.tsx', source: '' }], { injectTodos: true })).toEqual({
             called: 'migrateBatch',
@@ -43,6 +45,17 @@ describe('@csszyx/core/native migrate entry points', () => {
             source: '<div class="p-4"></div>',
             options: { injectTodos: false },
         });
+        // The class-level entry points answer as JSON so this binding and the
+        // wasm one return the same bytes for the same class.
+        expect(JSON.parse(migrateClassName('p-4', '{"btn":{}}'))).toEqual({
+            called: 'migrateClassName',
+            className: 'p-4',
+            customMapJson: '{"btn":{}}',
+        });
+        expect(JSON.parse(migrateParseClass('p-4'))).toEqual({
+            called: 'migrateParseClass',
+            className: 'p-4',
+        });
     });
 
     it('names the package and the missing export when the binding predates migrate', async () => {
@@ -51,13 +64,19 @@ describe('@csszyx/core/native migrate entry points', () => {
         // through would fail as "binding.migrateBatch is not a function",
         // which says nothing about updating the platform package.
         packageName.current = fixture('native-binding.cjs');
-        const { migrateBatch, migrateHtml, CsszyxNativeUnavailableError } = await import(
-            '../native/index.js'
-        );
+        const {
+            migrateBatch,
+            migrateHtml,
+            migrateClassName,
+            migrateParseClass,
+            CsszyxNativeUnavailableError,
+        } = await import('../native/index.js');
 
         for (const [call, exportName] of [
             [() => migrateBatch([], {}), 'migrateBatch'],
             [() => migrateHtml('', {}), 'migrateHtml'],
+            [() => migrateClassName('p-4'), 'migrateClassName'],
+            [() => migrateParseClass('p-4'), 'migrateParseClass'],
         ] as const) {
             expect(call).toThrow(CsszyxNativeUnavailableError);
             try {

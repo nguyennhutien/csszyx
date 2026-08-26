@@ -15,7 +15,9 @@ import { describe, expect, it } from 'vitest';
 import {
     isRustMigrateAvailable,
     migrateRustBatch,
+    migrateRustClassName,
     migrateRustHtml,
+    migrateRustParseClass,
     RustMigrateUnavailableError,
 } from '../src/migrate-rust.js';
 
@@ -123,6 +125,46 @@ describe('migrateRustBatch', () => {
             expect(() => migrateRustHtml('<div class="p-4" />')).toThrow(
                 RustMigrateUnavailableError,
             );
+        },
+    );
+});
+
+describe('the class-level entry points', () => {
+    // The file entry points cannot answer what ONE class becomes, which is
+    // the question the corpus round-trip, the per-key matrix and the sz
+    // golden all ask. These cross as JSON so the answer keeps sz value order.
+    it.skipIf(!isRustMigrateAvailable())('converts a whole className attribute', () => {
+        expect(migrateRustClassName('p-4 not-a-tailwind-class')).toEqual({
+            szObject: { p: 4 },
+            unrecognized: ['not-a-tailwind-class'],
+            keepInClassName: [],
+        });
+    });
+
+    it.skipIf(!isRustMigrateAvailable())('lets a resolution map answer first', () => {
+        expect(migrateRustClassName('btn', { btn: { p: 4 } })).toEqual({
+            szObject: { p: 4 },
+            unrecognized: [],
+            keepInClassName: [],
+        });
+    });
+
+    it.skipIf(!isRustMigrateAvailable())('reads one class, or says it cannot', () => {
+        expect(migrateRustParseClass('p-4')).toEqual({ prop: 'p', value: 4 });
+        expect(migrateRustParseClass('not-a-tailwind-class')).toBeNull();
+    });
+
+    it.skipIf(!isRustMigrateAvailable())('refuses a resolution map that is not an object', () => {
+        expect(() =>
+            migrateRustClassName('btn', [1] as unknown as Record<string, unknown>),
+        ).toThrow(/resolution map/);
+    });
+
+    it.skipIf(isRustMigrateAvailable())(
+        'names the install problem when the engine is absent',
+        () => {
+            expect(() => migrateRustClassName('p-4')).toThrow(RustMigrateUnavailableError);
+            expect(() => migrateRustParseClass('p-4')).toThrow(RustMigrateUnavailableError);
         },
     );
 });

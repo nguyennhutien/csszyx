@@ -91,6 +91,14 @@ export function migrateHtml(source, options) {
     return migrateExport('migrateHtml')(source, options);
 }
 
+export function migrateClassName(className, customMapJson) {
+    return migrateExport('migrateClassName')(className, customMapJson);
+}
+
+export function migrateParseClass(className) {
+    return migrateExport('migrateParseClass')(className);
+}
+
 function isModuleNotFoundForPackage(err, packageName) {
     if (err?.code !== 'MODULE_NOT_FOUND' && err?.code !== 'ERR_MODULE_NOT_FOUND') {
         return false;

@@ -203,6 +203,16 @@ export interface NativeBinding {
     ): NativeMigrateResult[];
     /** Migrates one HTML source with the native Rust core. */
     migrateHtml?(source: string, options?: NativeMigrateHtmlOptions): NativeMigrateResult;
+    /**
+     * Converts one whole `className` attribute to an sz object, as JSON.
+     * Absent on platform packages that predate migrate.
+     */
+    migrateClassName?(className: string, customMapJson?: string): string;
+    /**
+     * Reads one Tailwind utility as an sz prop and value, as JSON, answering
+     * `null` when the parser does not know the class.
+     */
+    migrateParseClass?(className: string): string;
 
     /**
      * Transforms source files with the native Rust core.
@@ -271,3 +281,25 @@ export function migrateHtml(
     source: string,
     options?: NativeMigrateHtmlOptions,
 ): NativeMigrateResult;
+
+/**
+ * Converts one whole `className` attribute to an sz object, as JSON.
+ *
+ * The answer crosses as JSON so this binding and the wasm artifact return the
+ * same bytes for the same class.
+ *
+ * @param className The whole class attribute value.
+ * @param customMapJson The migration-resolution map, as JSON.
+ * @returns The conversion, as JSON.
+ * @throws CsszyxNativeUnavailableError when the platform package is missing or predates migrate.
+ */
+export function migrateClassName(className: string, customMapJson?: string): string;
+
+/**
+ * Reads one Tailwind utility as an sz prop and value, as JSON.
+ *
+ * @param className One Tailwind utility class.
+ * @returns The parsed class as JSON, or `"null"` when the parser does not know it.
+ * @throws CsszyxNativeUnavailableError when the platform package is missing or predates migrate.
+ */
+export function migrateParseClass(className: string): string;

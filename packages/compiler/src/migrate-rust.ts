@@ -14,7 +14,9 @@
 import {
     CsszyxNativeUnavailableError,
     migrateBatch,
+    migrateClassName,
     migrateHtml,
+    migrateParseClass,
     type NativeMigrateResult,
 } from '@csszyx/core/native';
 
@@ -67,6 +69,28 @@ export interface MigrateRustResult {
     warnings: string[];
     stats: MigrateRustStats;
     potentiallyUnusedImports: string[];
+}
+
+/** What one whole `className` attribute becomes. */
+export interface MigrateRustConversion {
+    /** The merged sz object. */
+    szObject: Record<string, unknown>;
+    /** Tokens migrate could not convert, which stay in `className`. */
+    unrecognized: string[];
+    /** Tokens the resolution map said to keep in `className`. */
+    keepInClassName: string[];
+}
+
+/** One Tailwind utility read as an sz prop and value. */
+export interface MigrateRustParsedClass {
+    /** The sz key. */
+    prop: string;
+    /** The sz value. */
+    value: unknown;
+    /** The single CSS property the utility sets, when the class names one. */
+    cssProperty?: string;
+    /** A companion prop: `text-sm/6` is `text` plus `leading`. */
+    extra?: { prop: string; value: unknown };
 }
 
 /** The native migrate cannot run in this install. */
@@ -188,4 +212,39 @@ function readResult(result: NativeMigrateResult): MigrateRustResult {
         stats: typeof szKeysNormalized === 'number' ? { ...counts, szKeysNormalized } : counts,
         potentiallyUnusedImports: result.potentiallyUnusedImports,
     };
+}
+
+/**
+ * Convert one whole `className` attribute to an sz object.
+ *
+ * The class-level question the file entry points cannot answer: the corpus
+ * round-trip, the per-key matrix and the sz golden all ask what a class
+ * becomes, with no source file around it.
+ *
+ * @param className - The whole class attribute value.
+ * @param customMap - The migration-resolution map.
+ * @returns The sz object plus the tokens that stay in `className`.
+ * @throws RustMigrateUnavailableError when the native engine cannot run here.
+ */
+export function migrateRustClassName(
+    className: string,
+    customMap?: Record<string, unknown>,
+): MigrateRustConversion {
+    return guarded(
+        () =>
+            JSON.parse(
+                migrateClassName(className, customMap ? JSON.stringify(customMap) : undefined),
+            ) as MigrateRustConversion,
+    );
+}
+
+/**
+ * Read one Tailwind utility as an sz prop and value.
+ *
+ * @param className - One Tailwind utility class.
+ * @returns The parsed class, or null when the parser does not know it.
+ * @throws RustMigrateUnavailableError when the native engine cannot run here.
+ */
+export function migrateRustParseClass(className: string): MigrateRustParsedClass | null {
+    return guarded(() => JSON.parse(migrateParseClass(className)) as MigrateRustParsedClass | null);
 }
