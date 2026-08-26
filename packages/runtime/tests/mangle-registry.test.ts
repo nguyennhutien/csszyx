@@ -49,11 +49,9 @@ describe('installMangleRuntime', () => {
         expect(registry.encodeVar('--_sz-a')).toEqual(['v1', 'v2']);
         expect(registry.decodeGlobalVar('---gz')).toBe('--brand');
         expect(registry.decodeGlobalVar('v3')).toBeUndefined();
-        expect(registry.decodeAll({ className: 'z y keep' } as Element)).toEqual([
-            'p-4',
-            'mx-0',
-            'keep',
-        ]);
+        const element = document.createElement('div');
+        element.setAttribute('class', 'z y keep');
+        expect(registry.decodeAll(element)).toEqual(['p-4', 'mx-0', 'keep']);
     });
 
     it('defaults the optional inputs', () => {
@@ -63,7 +61,7 @@ describe('installMangleRuntime', () => {
         expect(registry.decodeVar('anything')).toEqual([]);
         // No alias prefix means no global aliases were planned for the build.
         expect(registry.decodeGlobalVar('---gz')).toBeUndefined();
-        expect(registry.decodeAll({} as Element)).toEqual([]);
+        expect(registry.decodeAll(document.createElement('div'))).toEqual([]);
     });
 
     it('ignores inherited keys on a var map that carries a prototype', () => {
@@ -195,5 +193,21 @@ describe('runtime helpers read the registry', () => {
         };
         expect(szr({ p: 4 })).toBe('z');
         expect(szcn('y', 'x')).toBe('x');
+    });
+});
+
+describe('decodeAll reads the class attribute, not the property', () => {
+    it('decodes an SVG element, whose className is not a string', () => {
+        const registry = installMangleRuntime({ mangleMap: MAP, checksum: 'sum-svg' });
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'z keep');
+        // `element.className` on an SVGElement is an SVGAnimatedString, not a
+        // string: reading it and calling `.split` throws.
+        expect(registry.decodeAll(svg)).toEqual(['p-4', 'keep']);
+    });
+
+    it('answers empty for an element with no class attribute', () => {
+        const registry = installMangleRuntime({ mangleMap: MAP, checksum: 'sum-svg' });
+        expect(registry.decodeAll(document.createElement('div'))).toEqual([]);
     });
 });

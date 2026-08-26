@@ -125,9 +125,11 @@ function createRegistry(input: MangleRegistryInput): MangleRegistry {
         // No prefix means no global aliases were planned for this build.
         decodeGlobalVar: alias =>
             prefix !== undefined && alias.startsWith(prefix) ? reverseVar[alias]?.[0] : undefined,
+        // `getAttribute`, not `className`: on an SVG element the property is
+        // an SVGAnimatedString, and reading it as a string throws.
         decodeAll: element =>
-            (element.className || '')
-                .split(' ')
+            (element.getAttribute('class') ?? '')
+                .split(/\s+/)
                 .filter(Boolean)
                 .map(token => reverse[token] ?? token),
     };
