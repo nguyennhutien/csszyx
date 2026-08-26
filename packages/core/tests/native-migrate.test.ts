@@ -45,8 +45,8 @@ describe('@csszyx/core/native migrate entry points', () => {
             source: '<div class="p-4"></div>',
             options: { injectTodos: false },
         });
-        // The class-level entry points answer as JSON so this binding and the
-        // wasm one return the same bytes for the same class.
+        // The class-level entry points answer as JSON because an sz value is
+        // recursive and order-sensitive.
         expect(JSON.parse(migrateClassName('p-4', '{"btn":{}}'))).toEqual({
             called: 'migrateClassName',
             className: 'p-4',
@@ -88,6 +88,28 @@ describe('@csszyx/core/native migrate entry points', () => {
                 expect(error.message).toContain('native-binding.cjs');
                 expect(error.packageName).toBe(packageName.current);
             }
+        }
+    });
+
+    it('does not offer the wasm engine when the platform package is missing', async () => {
+        // migrate has no wasm artifact: the feature is deliberately outside
+        // `native-engine`, which is what the wasm parser is built with. The
+        // transform's own message offers `build.parser: "wasm"` because for a
+        // transform that is a real answer; repeating it here would send a user
+        // whose only recourse is the platform package to a build option that
+        // does not apply to the command they ran.
+        packageName.current = '@csszyx/core-nonexistent-platform';
+        const { migrateBatch, CsszyxNativeUnavailableError } = await import('../native/index.js');
+
+        expect(migrateBatch).toThrow(CsszyxNativeUnavailableError);
+        try {
+            migrateBatch([], {});
+        } catch (err) {
+            const error = err as InstanceType<typeof CsszyxNativeUnavailableError>;
+            expect(error.message).not.toContain('build.parser');
+            expect(error.message).not.toContain('wasm');
+            expect(error.message).toContain('@csszyx/core-nonexistent-platform');
+            expect(error.message).toContain('migrate');
         }
     });
 });

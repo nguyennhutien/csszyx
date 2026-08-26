@@ -298,24 +298,30 @@ npx @csszyx/cli migrate --resolve-todos .csszyx-todo.json
 npx @csszyx/cli migrate --audit
 ```
 
-## Which Engine Runs
+## What migrate needs
 
-`migrate` runs on the native Rust engine that ships with csszyx. On a platform
-with no prebuilt binary it falls back to the TypeScript implementation instead
-of failing — both write the same output, byte for byte, so the fallback costs
-time and nothing else. The engine a run used is recorded in its log under
-`.csszyx/logs/`.
+`migrate` runs on the native engine and needs the `@csszyx/core-<platform>`
+package for your platform. npm installs it for you on Linux, macOS and Windows,
+for x64 and arm64 — it is an optional dependency resolved at install time.
 
-`CSSZYX_MIGRATE_ENGINE` overrides the choice:
+There is no second implementation behind it. On a platform with no prebuilt
+binary, or after an install that skipped optional packages, migrate reports the
+missing package and stops rather than producing different output:
 
-```bash
-CSSZYX_MIGRATE_ENGINE=ts npx @csszyx/cli migrate     # force the TypeScript engine
-CSSZYX_MIGRATE_ENGINE=rust npx @csszyx/cli migrate   # require the native engine
+```
+csszyx migrate needs the native engine, and this install has none.
+Install the optional package for this platform: @csszyx/core-linux-x64-gnu.
 ```
 
-Asking for an engine by name is a stricter request than taking the default:
-`=rust` fails when the platform has no binary rather than quietly running the
-other one, so a comparison between the two stays meaningful.
+Building and the runtime are unaffected by this — those fall back to the WASM
+build of the engine that ships inside `@csszyx/core`. migrate is the one command
+that cannot, because the WASM artifact is built without it.
+
+:::note[Removed in 0.15.0]
+`CSSZYX_MIGRATE_ENGINE` selected between a Rust and a TypeScript engine while
+both existed. The TypeScript one is gone, so the variable has nothing to choose
+and is ignored. Remove it from any script that sets it.
+:::
 
 ## HTML Files
 

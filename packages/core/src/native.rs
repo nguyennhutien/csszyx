@@ -424,8 +424,8 @@ pub fn migrate_batch_native(
 /// Converts one whole `className` attribute to an sz object, as JSON.
 ///
 /// The class-level question the file entry points cannot answer. The answer
-/// crosses as JSON so this adapter and the wasm one return the same bytes for
-/// the same class, which is what lets a generator run on either artifact.
+/// crosses as JSON because an sz value is recursive and order-sensitive, and
+/// `serde_json` already writes the shape the generators compare against.
 ///
 /// # Errors
 ///

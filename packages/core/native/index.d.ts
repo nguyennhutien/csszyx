@@ -285,8 +285,8 @@ export function migrateHtml(
 /**
  * Converts one whole `className` attribute to an sz object, as JSON.
  *
- * The answer crosses as JSON so this binding and the wasm artifact return the
- * same bytes for the same class.
+ * The answer crosses as JSON because an sz value is recursive and
+ * order-sensitive, and the JSON is the shape the generators compare against.
  *
  * @param className The whole class attribute value.
  * @param customMapJson The migration-resolution map, as JSON.

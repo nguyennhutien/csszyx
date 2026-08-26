@@ -198,9 +198,10 @@ function guarded<T>(call: () => T): T {
         return call();
     } catch (error) {
         if (error instanceof CsszyxNativeUnavailableError) {
-            throw new RustMigrateUnavailableError(
-                `${error.message}; native package: ${error.packageName ?? 'unsupported platform'}`,
-            );
+            // Passed through, not decorated: the native layer answers in
+            // migrate's own words and already names the platform package, so
+            // appending it again said the same thing twice.
+            throw new RustMigrateUnavailableError(error.message);
         }
         throw error;
     }

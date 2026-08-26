@@ -69,11 +69,34 @@ export function transformBatch(_files, options) {
  * The migrate entry points arrived after the first native packages shipped,
  * so a binding may load and still lack them.
  *
+ * Both failures answer in migrate's own words rather than the transform's.
+ * The transform offers `build.parser: "wasm"` when its platform package is
+ * missing, and that is a real answer for a transform — but migrate has no
+ * wasm artifact to fall back to, and `build.parser` is a bundler option that
+ * has nothing to do with the command the user ran. Repeating it would send
+ * someone whose only recourse is the platform package to a setting that
+ * cannot help them.
+ *
  * @param {string} name - The export the caller needs.
  * @returns {Function} The binding's function.
  */
 function migrateExport(name) {
-    const binding = loadNativeBinding();
+    let binding;
+    try {
+        binding = loadNativeBinding();
+    } catch (err) {
+        if (err?.code !== 'CSSZYX_NATIVE_UNAVAILABLE') throw err;
+        throw new CsszyxNativeUnavailableError(
+            [
+                `csszyx migrate needs the native engine, and this install has none.`,
+                err.packageName
+                    ? `Install the optional package for this platform: ${err.packageName}.`
+                    : 'No prebuilt package covers this platform.',
+                'migrate has no second implementation to fall back to, so it stops here rather than answering differently. Building and the runtime are unaffected.',
+            ].join(' '),
+            err.packageName,
+        );
+    }
     if (typeof binding[name] !== 'function') {
         throw new CsszyxNativeUnavailableError(
             `csszyx native package ${cachedPackageName} predates migrate and does not export ${name}(). Update @csszyx/core and its platform package to a version that carries migrate.`,

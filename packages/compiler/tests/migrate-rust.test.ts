@@ -125,6 +125,16 @@ describe('migrateRustBatch', () => {
             expect(() => migrateRustHtml('<div class="p-4" />')).toThrow(
                 RustMigrateUnavailableError,
             );
+            // migrate has no wasm artifact, so the transform's offer of
+            // `build.parser: "wasm"` must not reach a migrate user; and the
+            // platform package is named once, not twice.
+            try {
+                migrateRustBatch([]);
+            } catch (error) {
+                const { message } = error as RustMigrateUnavailableError;
+                expect(message).not.toContain('build.parser');
+                expect(message).not.toContain('native package:');
+            }
         },
     );
 });
