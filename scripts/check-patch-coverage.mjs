@@ -48,6 +48,11 @@ const UNMEASURED = [
     // the coverage runs actually measure — an entry here that later becomes
     // instrumented is a gate silently not doing its job.
     /^apps\//,
+    // A playground app is a demo target the build is exercised against, not a
+    // package the coverage run measures. Its config is read by a bundler, and
+    // its source is driven by the e2e suite rather than a unit test, so a
+    // changed line there can never carry a hit record.
+    /^playground\//,
     // The TypeScript coverage run measures `packages/*/src/**`. A package's
     // build, test or lint config sits beside `src`, is read by a tool rather
     // than executed by a test, and can never carry a hit. The workspace's own
