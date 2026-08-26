@@ -5023,12 +5023,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // file the runtime helpers fall back to original class names, which is
         // visible in the page rather than wrong at the byte level.
         if (file === null) return;
-        if (applyMangleRuntimeEntry(compiler, root, file)) {
-            // Charged here rather than from a load hook: this lane resolves
-            // the module through webpack's own graph, so nothing else observes
-            // that it shipped, and an uncharged channel understates the cost.
-            sizeAccount.channels.add('bundle');
-        }
+        // The channel is charged from the callback rather than from a load
+        // hook: this lane resolves the module through webpack's own graph, so
+        // nothing else observes that it shipped, and an uncharged channel
+        // understates what the map cost.
+        applyMangleRuntimeEntry(compiler, root, file, () => sizeAccount.channels.add('bundle'));
     }
 
     /**

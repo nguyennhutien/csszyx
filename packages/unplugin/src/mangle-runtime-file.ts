@@ -111,19 +111,23 @@ export interface MangleEntryCompiler {
  * @param compiler - The compiler the plugin is applying to.
  * @param context - Directory the entry specifier resolves from.
  * @param file - Path returned by {@link ensureMangleRuntimeFile}.
- * @returns True when the entry was registered.
+ * @param onRegistered - Run once the entry is in the build, so a caller can
+ *   account for bytes that are now certain to ship. Not run when there is no
+ *   plugin class, which is the whole reason it is a callback rather than a
+ *   returned flag: the decision lives here, where it is testable.
  */
 export function applyMangleRuntimeEntry(
     compiler: MangleEntryCompiler,
     context: string,
     file: string,
-): boolean {
+    onRegistered: () => void,
+): void {
     const EntryPlugin = compiler.webpack?.EntryPlugin;
     if (EntryPlugin === undefined) {
-        return false;
+        return;
     }
     // `name: undefined` is what makes it GLOBAL — prepended to every
     // entrypoint instead of becoming one of its own.
     new EntryPlugin(context, file, { name: undefined }).apply(compiler);
-    return true;
+    onRegistered();
 }

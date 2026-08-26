@@ -100,21 +100,30 @@ describe('applyMangleRuntimeEntry', () => {
             }
         }
         const compiler = { webpack: { EntryPlugin: FakeEntryPlugin } };
+        let registered = 0;
 
-        expect(applyMangleRuntimeEntry(compiler, '/root', '/root/.csszyx/x.mjs')).toBe(true);
+        applyMangleRuntimeEntry(compiler, '/root', '/root/.csszyx/x.mjs', () => {
+            registered += 1;
+        });
         // `name: undefined` is the global form; a named entry would create one
         // of its own instead of prepending to every entrypoint.
         expect(applied).toEqual([['/root', '/root/.csszyx/x.mjs', { name: undefined }]]);
         expect(appliedTo).toBe(compiler);
+        // The map's bytes are certain to ship only once the entry is in.
+        expect(registered).toBe(1);
     });
 
     it('registers nothing when the compiler carries no plugin class', () => {
         // Anything webpack-shaped that is not webpack 5. No entry beats a
         // crash: the build keeps unmangled runtime class names, the same
         // degraded answer an unwritable directory gives.
-        expect(applyMangleRuntimeEntry({}, '/root', '/root/.csszyx/x.mjs')).toBe(false);
-        expect(applyMangleRuntimeEntry({ webpack: {} }, '/root', '/root/.csszyx/x.mjs')).toBe(
-            false,
-        );
+        let registered = 0;
+        const count = () => {
+            registered += 1;
+        };
+        applyMangleRuntimeEntry({}, '/root', '/root/.csszyx/x.mjs', count);
+        applyMangleRuntimeEntry({ webpack: {} }, '/root', '/root/.csszyx/x.mjs', count);
+        // Nothing shipped, so nothing is charged for.
+        expect(registered).toBe(0);
     });
 });
