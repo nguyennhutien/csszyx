@@ -161,6 +161,14 @@ pnpm exec eslint .
 echo "[verify-like-ci] ReDoS gate (recheck)..."
 pnpm lint:redos
 
+# CodeQL reports this class as js/bad-tag-filter and was the only thing
+# checking it, so the first report arrived after a push — the same reason the
+# ReDoS gate above and the Sonar mirrors below are local. A tag filter that
+# cannot see `<SCRIPT>` fails OPEN, and these filters are what assert that no
+# build emits executable inline script.
+echo "[verify-like-ci] Tag-filter regexes on changed files (mirrors CodeQL)..."
+pnpm check:tag-filters
+
 echo "[verify-like-ci] Type-check..."
 pnpm type-check
 
