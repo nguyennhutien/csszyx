@@ -11,7 +11,6 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
-
 import {
     acquireNextSafelistStateLock,
     atomicRenameWithRetry,
@@ -21,6 +20,7 @@ import {
     resolveNextSafelistStatePaths,
     writeNextSafelistShard,
 } from '../src/next-safelist-state.js';
+import { SAFELIST_HEADER } from '../src/safelist-format.js';
 
 const tempDirs: string[] = [];
 
@@ -74,10 +74,7 @@ describe('Next safelist state', () => {
             shardCount: 1,
         });
         expect(readFileSync(paths.outputPath, 'utf8')).toBe(
-            '<div class="[&amp;_.tab-item-header]:py-0!"></div>\n' +
-                '<div class="bg-red-500"></div>\n<div class="p-8"></div>\n' +
-                '<!-- csszyx exact scanner candidates -->\n' +
-                '[&_.tab-item-header]:py-0!\nbg-red-500\np-8\n',
+            `${SAFELIST_HEADER}[&_.tab-item-header]:py-0!\nbg-red-500\np-8\n`,
         );
         // The snapshot stores resolved OS-native paths, and JSON escapes
         // Windows backslashes to `\\`, so a raw substring match against the
@@ -130,9 +127,7 @@ describe('Next safelist state', () => {
 
         expect(result.tombstonedSourceCount).toBe(1);
         expect(result.classCount).toBe(0);
-        expect(readFileSync(paths.outputPath, 'utf8')).toBe(
-            '<!-- csszyx Next safelist: empty -->\n',
-        );
+        expect(readFileSync(paths.outputPath, 'utf8')).toBe(SAFELIST_HEADER);
         expect(readFileSync(paths.snapshotPath, 'utf8')).not.toContain(sourcePath);
     });
 

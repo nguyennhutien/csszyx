@@ -15,6 +15,7 @@ import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { loadNativeBinding } from '../../core/native/index.js';
+import { SAFELIST_HEADER } from '../src/safelist-format.js';
 import { vitePlugin } from '../src/unplugin.js';
 
 type ViteConfigHook = {
@@ -64,8 +65,7 @@ function runPrescan(root: string, parser: 'rust' | 'wasm', cache: boolean): stri
     const [prePlugin] = vitePlugin({ build: { parser, cache } }) as ViteConfigHook[];
     prePlugin?.configResolved?.({ root });
     const html = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
-    const classList = html.match(/class="([^"]*)"/)?.[1] ?? '';
-    return [...new Set(classList.split(/\s+/).filter(Boolean))].sort();
+    return [...new Set(html.slice(SAFELIST_HEADER.length).split(/\s+/).filter(Boolean))].sort();
 }
 
 describe('prescan cache equivalence (off == cold == warm)', () => {

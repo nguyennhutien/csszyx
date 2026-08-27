@@ -16,6 +16,7 @@ import { basename, join } from 'node:path';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadNativeBinding } from '../../core/native/index.js';
+import { SAFELIST_HEADER } from '../src/safelist-format.js';
 import { vitePlugin } from '../src/unplugin.js';
 
 const FIXTURE_FILES: Record<string, string> = {
@@ -113,8 +114,8 @@ async function buildWith(parser: 'rust' | 'wasm'): Promise<BuildArtifacts> {
     // debug filenames — normalize it so the diff sees only real emission
     // differences.
     const normalizedBundle = bundle.split(basename(root)).join('FIXTURE-ROOT');
-    const safelistHtml = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
-    const rawCandidates = safelistHtml.split('<!-- csszyx exact scanner candidates -->\n')[1] ?? '';
+    const safelist = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
+    const rawCandidates = safelist.slice(SAFELIST_HEADER.length);
     const safelistTokens = [...new Set(rawCandidates.split(/\s+/).filter(Boolean))].sort();
     return { bundle: normalizedBundle, safelistTokens };
 }

@@ -11,10 +11,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
-
 import { readNextGenerationManifest } from '../src/next-generation-manifest.js';
 import { acquireNextSafelistStateLock } from '../src/next-safelist-state.js';
 import { type NextTurboLoaderContext, runNextTurboLoader } from '../src/next-turbo-loader.js';
+import { SAFELIST_HEADER } from '../src/safelist-format.js';
 import { _resetThemeGroupsFileCache } from '../src/theme-groups-file.js';
 
 const tempDirs: string[] = [];
@@ -176,9 +176,7 @@ describe('Next Turbopack loader core', () => {
         expect(second.shardPath).toBe(first.shardPath);
         expect(readdirSync(second.context.safelist.shardsDir)).toHaveLength(1);
         expect(second.materialized).toBe(true);
-        expect(readFileSync(second.context.safelist.outputPath, 'utf8')).toBe(
-            '<!-- csszyx Next safelist: empty -->\n',
-        );
+        expect(readFileSync(second.context.safelist.outputPath, 'utf8')).toBe(SAFELIST_HEADER);
     });
 
     it('fails closed in production when the generation manifest is absent', () => {

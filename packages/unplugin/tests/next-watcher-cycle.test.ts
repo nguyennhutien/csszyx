@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
-
 import {
     readNextGenerationManifest,
     validateNextGenerationManifest,
@@ -11,6 +10,7 @@ import {
 import { writeNextSafelistShard } from '../src/next-safelist-state.js';
 import { createNextStateContext } from '../src/next-state-context.js';
 import { runNextWatcherCycle } from '../src/next-watcher-cycle.js';
+import { SAFELIST_HEADER } from '../src/safelist-format.js';
 
 const tempDirs: string[] = [];
 
@@ -126,8 +126,6 @@ describe('Next watcher cycle', () => {
 
         expect(result.materialize.tombstonedSourceCount).toBe(1);
         expect(result.materialize.classCount).toBe(0);
-        expect(readFileSync(ctx.safelist.outputPath, 'utf8')).toBe(
-            '<!-- csszyx Next safelist: empty -->\n',
-        );
+        expect(readFileSync(ctx.safelist.outputPath, 'utf8')).toBe(SAFELIST_HEADER);
     });
 });

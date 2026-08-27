@@ -11,9 +11,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
-
 import { readNextGenerationManifest } from '../src/next-generation-manifest.js';
 import { type NextPrebuildOptions, runNextPrebuild } from '../src/next-prebuild.js';
+import { SAFELIST_HEADER } from '../src/safelist-format.js';
 
 const tempDirs: string[] = [];
 
@@ -201,9 +201,7 @@ describe('Next Turbopack prebuild core', () => {
         expect(second.classCount).toBe(0);
         expect(second.sourceCount).toBe(1);
         expect(readdirSync(second.context.safelist.shardsDir)).toHaveLength(1);
-        expect(readFileSync(second.safelistOutputPath, 'utf8')).toBe(
-            '<!-- csszyx Next safelist: empty -->\n',
-        );
+        expect(readFileSync(second.safelistOutputPath, 'utf8')).toBe(SAFELIST_HEADER);
     });
 
     it('rejects production CSS variable mangling unless explicitly opted in', () => {

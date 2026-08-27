@@ -24,6 +24,7 @@ import { basename, dirname, join } from 'node:path';
 import type { PartialCsszyxConfig } from '@csszyx/types';
 import { compile } from '@tailwindcss/node';
 import { build, type Plugin } from 'vite';
+import { SAFELIST_HEADER } from '../src/safelist-format.js';
 import { vitePlugin } from '../src/unplugin.js';
 
 export { executableInlineScripts } from './executable-inline-scripts.js';
@@ -74,11 +75,7 @@ export function tailwindSourceNonePlugin(root: string): Plugin {
                 onDependency: () => undefined,
             });
             const safelist = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
-            const candidates = (
-                safelist.split('<!-- csszyx exact scanner candidates -->\n')[1] ?? ''
-            )
-                .split(/\s+/)
-                .filter(Boolean);
+            const candidates = safelist.slice(SAFELIST_HEADER.length).split(/\s+/).filter(Boolean);
             return { code: compiler.build(candidates), map: null };
         },
     };

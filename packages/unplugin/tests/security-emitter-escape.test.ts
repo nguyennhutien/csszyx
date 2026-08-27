@@ -1,6 +1,5 @@
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { escapeHtmlAttribute, renderTailwindScannerCandidates } from '../src/html-escape.js';
 import { generateThemeDts, type ThemeTypeWriterOptions } from '../src/theme-type-writer.js';
 
 const emptyTheme = {
@@ -22,27 +21,6 @@ function dts(theme: Partial<typeof emptyTheme>): string {
     };
     return generateThemeDts(opts);
 }
-
-describe('escapeHtmlAttribute (safelist writer F3)', () => {
-    it('escapes characters that could break out of a class="…" attribute', () => {
-        expect(escapeHtmlAttribute('a"><script>')).toBe('a&quot;&gt;&lt;script&gt;');
-    });
-
-    it('preserves arbitrary selectors in the raw scanner section', () => {
-        const candidates = [
-            '[&_.tab-item-header]:py-0!',
-            '[&>span]:text-sm',
-            '[&[data-a="x"][data-b=\'y\']]:text-sm',
-        ];
-        const output = renderTailwindScannerCandidates(candidates);
-        for (const candidate of candidates) expect(output).toContain(`${candidate}\n`);
-    });
-
-    it('leaves a normal class list byte-identical', () => {
-        const classes = 'bg-red-500 md:flex space-y-4 p-2';
-        expect(escapeHtmlAttribute(classes)).toBe(classes);
-    });
-});
 
 describe('generateThemeDts emitter escaping (F2)', () => {
     it('emits valid tokens byte-identically', () => {
