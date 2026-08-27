@@ -26,6 +26,8 @@ import { compile } from '@tailwindcss/node';
 import { build, type Plugin } from 'vite';
 import { vitePlugin } from '../src/unplugin.js';
 
+export { executableInlineScripts } from './executable-inline-scripts.js';
+
 /** Artifacts of one fixture build. */
 export interface ViteAppBuild {
     /** Fixture root (already realpath'd). */
@@ -93,7 +95,7 @@ export function tailwindSourceNonePlugin(root: string): Plugin {
  */
 export function readMangleMapFromHtml(html: string): Record<string, string> | null {
     const source = html.match(
-        /<script id="__CSSZYX_MANGLE_MAP__" type="application\/json">([^<]*)<\/script>/,
+        /<script id="__CSSZYX_MANGLE_MAP__" type="application\/json">([^<]*)<\/script\s*>/i,
     )?.[1];
     if (source === undefined) return null;
     const payload = JSON.parse(source) as Record<string, string>;
@@ -102,33 +104,6 @@ export function readMangleMapFromHtml(html: string): Record<string, string> | nu
             .filter(([key]) => !key.startsWith('var:'))
             .map(([key, value]) => [key.replace(/^class:/, ''), value]),
     );
-}
-
-/**
- * Every `<script>` in the document that a `script-src 'self'` policy would
- * refuse: inline (no `src`) and executable (no `type`, or a JavaScript type).
- *
- * `type="application/json"` data blocks are not scripts to CSP and are not
- * returned; a blanket `<script` assertion would flag the inert census.
- *
- * @param html Built HTML.
- * @returns The bodies of the executable inline scripts, in document order.
- */
-export function executableInlineScripts(html: string): string[] {
-    const found: string[] = [];
-    for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
-        const attrs = match[1];
-        if (/\bsrc\s*=/i.test(attrs)) continue;
-        const type = /\btype\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]?.trim().toLowerCase();
-        const executable =
-            type === undefined ||
-            type === '' ||
-            type === 'module' ||
-            type === 'text/javascript' ||
-            type === 'application/javascript';
-        if (executable) found.push(match[2]);
-    }
-    return found;
 }
 
 /**

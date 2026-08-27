@@ -21,6 +21,7 @@ import {
     resolveVirtualModule,
     VAR_MANGLE_MAP_PLACEHOLDER,
 } from '../src/virtual-modules.js';
+import { executableInlineScripts } from './executable-inline-scripts.js';
 import { freshFixtureRoot } from './fixture-root.js';
 
 const MAP = { 'flex-col': 'm7', 'mx-0': 'z' };
@@ -189,7 +190,7 @@ describe('mangle-runtime import injection (plugin hooks)', () => {
             },
         ]);
         expect(out.html).toContain('__CSSZYX_MANGLE_MAP__');
-        expect(out.html).not.toMatch(/<script>/);
+        expect(executableInlineScripts(out.html)).toEqual([]);
     });
 
     it('attaches no module tag when the census is empty', async () => {

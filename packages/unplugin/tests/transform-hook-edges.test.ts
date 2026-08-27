@@ -261,7 +261,7 @@ describe('transform hook branch edges', () => {
         // layout carries the checksum attribute and inert data only.
         expect(result?.code).toContain('data-sz-checksum="___CSSZYX_CHECKSUM___"');
         expect(result?.code).not.toContain('window.__csszyx');
-        expect(result?.code).not.toMatch(/<script(?![^>]*application\/json)/);
+        expect(result?.code).not.toMatch(/<script(?![^>]*application\/json)/i);
     });
 
     it('injects the checksum attribute into a layout with no <body> tag', async () => {

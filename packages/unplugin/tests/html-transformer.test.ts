@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import {
     createHydrationMangleMap,
     injectChecksum,
@@ -8,6 +7,7 @@ import {
     injectMangleMapScript,
     transformIndexHtml,
 } from '../src/html-transformer.js';
+import { executableInlineScripts } from './executable-inline-scripts.js';
 
 describe('html-transformer', () => {
     const sampleHtml = '<html lang="en"><head></head><body></body></html>';
@@ -84,7 +84,7 @@ describe('html-transformer', () => {
             expect(result).toContain('<script id="__CSSZYX_MANGLE_MAP__" type="application/json">');
             expect(result).toContain(JSON.stringify(sampleMap));
             expect(result).not.toContain('window.__csszyx=');
-            expect(result).not.toMatch(/<script>/);
+            expect(executableInlineScripts(result)).toEqual([]);
         });
 
         it('should include CSS variable map in the census payload', () => {
@@ -95,7 +95,7 @@ describe('html-transformer', () => {
             expect(result).toContain(
                 JSON.stringify(createHydrationMangleMap(sampleMap, sampleVarMap)),
             );
-            expect(result).not.toMatch(/<script>/);
+            expect(executableInlineScripts(result)).toEqual([]);
         });
     });
 

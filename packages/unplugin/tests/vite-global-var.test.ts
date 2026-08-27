@@ -16,8 +16,8 @@ import { extname, join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { type PluginOption, build as viteBuild } from 'vite';
 import { afterEach, describe, expect, it } from 'vitest';
-
 import { vitePlugin } from '../src/unplugin.js';
+import { executableInlineScripts } from './executable-inline-scripts.js';
 
 const requireFromHere = createRequire(import.meta.url);
 const tempDirs: string[] = [];
@@ -57,7 +57,7 @@ describe('vite global variable aliases', () => {
         expect(html).toContain('"var:--brand-secondary":"---gy"');
         // The runtime map travels inside the bundle (the default delivery);
         // the HTML carries only the inert census and no executable script.
-        expect(html).not.toMatch(/<script>/);
+        expect(executableInlineScripts(html)).toEqual([]);
         // Quote-agnostic: the minifier is free to pick `'`, `"` or a template
         // literal for the map's strings.
         expect(js.replace(/\s/g, '').replace(/[`']/g, '"')).toContain(
