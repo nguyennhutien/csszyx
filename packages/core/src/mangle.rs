@@ -287,6 +287,56 @@ mod tests {
         );
     }
 
+    /// The canonical form, frozen.
+    ///
+    /// These values are the contract between this crate and the TypeScript
+    /// runtime, and the pair of tests holding them is what keeps the two from
+    /// drifting. The runtime asserts the SAME numbers against the WebAssembly
+    /// build of this crate, so changing the form here turns this test red,
+    /// updating it turns the runtime's copy red, and the runtime's copy only
+    /// goes green again once `pkg-node` has been rebuilt. Without that, a
+    /// change to this function and a stale WebAssembly artifact agree with each
+    /// other and nothing notices.
+    ///
+    /// Update deliberately, and rebuild `pkg-node` in the same change.
+    #[test]
+    fn the_canonical_form_is_frozen() {
+        let cases: [(MangleMap, &str); 6] = [
+            (MangleMap::new(), "e3b0c44298fc1c14"),
+            (
+                [("a".to_string(), "b".to_string())].into(),
+                "95dd1eb0a569dbd2",
+            ),
+            (
+                [
+                    ("hover:bg-red-500".to_string(), "a".to_string()),
+                    ("md:focus:ring-2".to_string(), "b".to_string()),
+                ]
+                .into(),
+                "217d2abd522e4601",
+            ),
+            (
+                [("a:b".to_string(), "c".to_string())].into(),
+                "8a37856518dacc57",
+            ),
+            (
+                [("a".to_string(), "b:c".to_string())].into(),
+                "b8d47370810d318b",
+            ),
+            (
+                [
+                    ("after:content-[\"\u{1F389}\"]".to_string(), "a".to_string()),
+                    ("after:content-[\"\u{E000}\"]".to_string(), "b".to_string()),
+                ]
+                .into(),
+                "5bc13806268685f8",
+            ),
+        ];
+        for (map, expected) in cases {
+            assert_eq!(compute_checksum_internal(&map), expected);
+        }
+    }
+
     /// A real variant class still checksums, and still answers the same thing
     /// every time — the separator fix must not cost determinism.
     #[test]

@@ -2,13 +2,17 @@
  * Every regex in changed source that matches an HTML tag must be able to see
  * the tag however a browser would spell it.
  *
- * CodeQL flags this class as `js/bad-tag-filter`, and CodeQL is the only thing
- * that was checking it, so the first report arrived after a push. The defect it
- * catches is a filter that fails OPEN: `/<script>/` reports a clean page for
- * `<SCRIPT>` and `</script >`, both of which a browser executes. Where the
- * filter is the assertion behind a security property — csszyx asserts that no
- * build emits executable inline script — a filter that fails open means the
- * property can break with every test still green.
+ * A csszyx invariant, NOT a stand-in for CodeQL. `pnpm codeql:local` runs the
+ * real queries; running the service's own tool rather than re-implementing its
+ * logic is settled policy here, because a text match cannot answer the
+ * reachability question CodeQL asks, and a rule that catches a minimal example
+ * has not been shown to catch a real one. Run both — neither replaces the other.
+ *
+ * What this owns is narrower and belongs to this repository. csszyx asserts
+ * that no build emits executable inline script, and the assertions proving it
+ * are regexes over built HTML. Such a filter fails OPEN: `/<script>/` reports a
+ * clean page for `<SCRIPT>` and for `</script >`, both of which a browser runs,
+ * so the suite keeps reporting the property holds while it breaks.
  *
  * Scoped to changed files, the way the Sonar mirrors are, because the rule is
  * about what a change introduces.
@@ -87,6 +91,7 @@ for (const finding of findings) {
 console.error(
     `\n✖ ${findings.length} tag-matching regex(es) can miss a spelling a browser accepts.` +
         '\n  Add the `i` flag, and match a close tag as `<\\/tag\\s*>`.' +
-        '\n  This is the same defect CodeQL reports as js/bad-tag-filter.',
+        '\n  CodeQL reports this class too, as js/bad-tag-filter. Run `pnpm codeql:local`' +
+        '\n  for the real queries — this check does not stand in for them.',
 );
 process.exit(1);
