@@ -95,7 +95,7 @@ export function tailwindSourceNonePlugin(root: string): Plugin {
  */
 export function readMangleMapFromHtml(html: string): Record<string, string> | null {
     const source = html.match(
-        /<script id="__CSSZYX_MANGLE_MAP__" type="application\/json">([^<]*)<\/script\s*>/i,
+        /<script id="__CSSZYX_MANGLE_MAP__" type="application\/json">([^<]*)<\/script[^>]*>/i,
     )?.[1];
     if (source === undefined) return null;
     const payload = JSON.parse(source) as Record<string, string>;

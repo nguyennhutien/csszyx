@@ -271,28 +271,18 @@ function webCryptoUnavailable(): string | null {
 }
 
 /**
- * Order two strings by code point, which is the order Rust puts them in.
- *
- * Rust compares strings by their UTF-8 bytes, and UTF-8 byte order is code
- * point order. JavaScript's `<` compares UTF-16 code units instead, and the two
- * disagree above the basic plane: a surrogate sits at D800-DFFF, below every
- * character in E000-FFFF, while the code point it encodes is above all of them.
- * Biasing a surrogate past the basic plane restores the order Rust uses,
- * without encoding anything.
+ * Order two byte sequences the way Rust orders the strings they encode.
  *
  * @param a - left operand.
  * @param b - right operand.
  * @returns negative, zero or positive, for `Array.prototype.sort`.
  */
-function compareByCodePoint(a: string, b: string): number {
+function compareBytes(a: Uint8Array, b: Uint8Array): number {
     const shared = Math.min(a.length, b.length);
     for (let i = 0; i < shared; i++) {
-        let left = a.charCodeAt(i);
-        let right = b.charCodeAt(i);
-        if (left === right) continue;
-        if (left >= 0xd800 && left <= 0xdfff) left += 0x10000;
-        if (right >= 0xd800 && right <= 0xdfff) right += 0x10000;
-        return left - right;
+        const left = a[i] as number;
+        const right = b[i] as number;
+        if (left !== right) return left - right;
     }
     return a.length - b.length;
 }
@@ -316,19 +306,27 @@ export async function computeMangleChecksumAsync(map: MangleMap): Promise<string
     if (unavailable !== null) {
         throw new Error(unavailable);
     }
-    // Same order and same shape as the Rust core: see compareByCodePoint for
-    // the order, and the core's compute_checksum_internal for why each field
-    // carries its length. A name holding the separator — every variant class
-    // holds a colon — would otherwise let two different maps render the same
-    // text and share a checksum.
+    // Sort by the bytes that get hashed, which is what the Rust core compares.
+    // Comparing the strings instead is a tenth of a millisecond cheaper on a
+    // five-hundred-name map and wrong: JavaScript would order the text it holds
+    // while the core orders the text it received, and an unpaired surrogate
+    // survives the first and not the second. Encoding once per name settles it
+    // without anyone having to reason about surrogates.
+    //
+    // The shape carries a length per field. See the core's
+    // compute_checksum_internal: a name holding the separator — every variant
+    // class holds a colon — would otherwise let two different maps render the
+    // same text and share a checksum.
+    const encoder = new TextEncoder();
     const canonical = Object.keys(map)
-        .sort(compareByCodePoint)
-        .map(key => {
+        .map(key => ({ key, bytes: encoder.encode(key) }))
+        .sort((a, b) => compareBytes(a.bytes, b.bytes))
+        .map(({ key }) => {
             const value = map[key] as string;
             return `${key.length}:${key}:${value.length}:${value}`;
         })
         .join('|');
-    const bytes = new TextEncoder().encode(canonical);
+    const bytes = encoder.encode(canonical);
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     let hex = '';
     for (const b of new Uint8Array(digest)) {

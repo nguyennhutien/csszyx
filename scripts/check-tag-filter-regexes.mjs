@@ -66,8 +66,12 @@ function findingsIn(file) {
             if (!new RegExp(TAG, 'i').test(body)) continue;
             const reasons = [];
             if (!flags.includes('i')) reasons.push('no `i` flag, so an upper-case tag slips past');
-            if (/<\\?\/[a-z]+>/i.test(body)) {
-                reasons.push('close tag is not whitespace-tolerant, so `</tag >` slips past');
+            // A close tag may carry anything up to its `>`. Tolerating only
+            // whitespace is still too strict: CodeQL rejected a pattern ending
+            // in `\\s*>` for missing a close tag with an attribute after the
+            // name, which a browser accepts and runs.
+            if (/<\\?\/[a-z]+(\\s\*)?>/i.test(body)) {
+                reasons.push('close tag must allow anything up to `>` — `</tag foo>` is legal');
             }
             if (reasons.length > 0) {
                 findings.push({ file, line: index + 1, source: match[0], reasons });
@@ -90,7 +94,7 @@ for (const finding of findings) {
 }
 console.error(
     `\n✖ ${findings.length} tag-matching regex(es) can miss a spelling a browser accepts.` +
-        '\n  Add the `i` flag, and match a close tag as `<\\/tag\\s*>`.' +
+        '\n  Add the `i` flag, and match a close tag as `<\\/tag[^>]*>`.' +
         '\n  CodeQL reports this class too, as js/bad-tag-filter. Run `pnpm codeql:local`' +
         '\n  for the real queries — this check does not stand in for them.',
 );

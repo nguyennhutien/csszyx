@@ -157,6 +157,29 @@ describe('mangle checksum parity (TypeScript vs the Rust core)', () => {
         expect(await computeMangleChecksumAsync(own)).toBe(compute_mangle_checksum({ 'p-4': 'a' }));
     });
 
+    it.each([
+        ['a private-use character', 'k\uE000z'],
+        ['the last two code points in the basic plane', 'k\uFFFEz'],
+    ])('orders an unpaired surrogate against %s the way the core does', async (_l, other) => {
+        // Ordering by the text JavaScript holds gets this wrong: an unpaired
+        // surrogate survives in a JavaScript string and does not survive the
+        // trip into the core, so the two sides would be ordering different
+        // characters. Ordering by the bytes that get hashed settles it.
+        await expectAgreement({ 'k\uD800z': 'a', [other]: 'b' });
+    });
+
+    it('cannot be asked about a name that collides with its own replacement', async () => {
+        // Recorded as a limit rather than asserted as behaviour. `k\uD800z` and
+        // `k\uFFFDz` are two names in JavaScript and encode to the same bytes,
+        // so the core receives ONE entry where the runtime has two. No ordering
+        // can reconcile a map that changed size crossing the boundary. Nothing
+        // reads source text can produce such a name, which is why this is a
+        // note and not a defect.
+        const map = { 'k\uD800z': 'a', 'k\uFFFDz': 'b' };
+        expect(Object.keys(map)).toHaveLength(2);
+        expect(await computeMangleChecksumAsync(map)).not.toBe(compute_mangle_checksum(map));
+    });
+
     it('normalises an unpaired surrogate the same way on both sides', async () => {
         // Neither engine can encode one, and both replace it. Recorded rather
         // than relied on: a compiler reading source text cannot produce a class

@@ -3,9 +3,10 @@
  *
  * This is the assertion the CSP contract rests on, so it is written once and
  * shared. The tag matching is deliberately liberal: HTML tag names are
- * case-insensitive and a close tag may carry trailing whitespace, so a filter
- * that only recognises the exact lowercase spelling reports a clean page for
- * `<SCRIPT>` or `</script >`. That is a filter that fails open, which for this
+ * case-insensitive and a close tag may carry anything up to its `>` — spaces,
+ * tabs, newlines, even an attribute — so a filter that only recognises the
+ * exact lowercase spelling reports a clean page for `<SCRIPT>`, `</script >`
+ * or a close tag with junk before the bracket. That is a filter that fails open, which for this
  * assertion means a build could start emitting executable script and every
  * test would still pass.
  *
@@ -26,7 +27,7 @@
  */
 export function executableInlineScripts(html: string): string[] {
     const found: string[] = [];
-    for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+    for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)) {
         const attrs = match[1];
         if (/\bsrc\s*=/i.test(attrs)) continue;
         const type = /\btype\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]?.trim().toLowerCase();
