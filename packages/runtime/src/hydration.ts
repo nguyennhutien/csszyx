@@ -271,19 +271,28 @@ function webCryptoUnavailable(): string | null {
 }
 
 /**
- * Order two byte sequences the way Rust orders the strings they encode:
- * shorter-is-smaller on a shared prefix, first differing byte otherwise.
+ * Order two strings by code point, which is the order Rust puts them in.
+ *
+ * Rust compares strings by their UTF-8 bytes, and UTF-8 byte order is code
+ * point order. JavaScript's `<` compares UTF-16 code units instead, and the two
+ * disagree above the basic plane: a surrogate sits at D800-DFFF, below every
+ * character in E000-FFFF, while the code point it encodes is above all of them.
+ * Biasing a surrogate past the basic plane restores the order Rust uses,
+ * without encoding anything.
  *
  * @param a - left operand.
  * @param b - right operand.
  * @returns negative, zero or positive, for `Array.prototype.sort`.
  */
-function compareBytes(a: Uint8Array, b: Uint8Array): number {
+function compareByCodePoint(a: string, b: string): number {
     const shared = Math.min(a.length, b.length);
     for (let i = 0; i < shared; i++) {
-        const left = a[i] as number;
-        const right = b[i] as number;
-        if (left !== right) return left - right;
+        let left = a.charCodeAt(i);
+        let right = b.charCodeAt(i);
+        if (left === right) continue;
+        if (left >= 0xd800 && left <= 0xdfff) left += 0x10000;
+        if (right >= 0xd800 && right <= 0xdfff) right += 0x10000;
+        return left - right;
     }
     return a.length - b.length;
 }
@@ -291,7 +300,8 @@ function compareBytes(a: Uint8Array, b: Uint8Array): number {
 /**
  * Recompute a mangle map's checksum the same way the Rust core does
  * (`compute_checksum_internal`): SHA-256 over the entries sorted by key and
- * formatted `orig:mangle`, joined by `|`, hex-encoded, first 16 chars (64 bits).
+ * formatted `<origLen>:<orig>:<mangleLen>:<mangle>`, joined by `|`, hex-encoded,
+ * first 16 chars (64 bits). The lengths count UTF-16 code units.
  *
  * Uses the Web Crypto API (`crypto.subtle`), so it works WITHOUT the WASM core —
  * unlike the WASM-only sync path. Async because `crypto.subtle.digest` is async.
@@ -306,18 +316,19 @@ export async function computeMangleChecksumAsync(map: MangleMap): Promise<string
     if (unavailable !== null) {
         throw new Error(unavailable);
     }
-    const encoder = new TextEncoder();
-    // Sort the way the Rust core does. It compares Rust strings, which is a
-    // comparison of their UTF-8 bytes, while JavaScript's `<` compares UTF-16
-    // code units. The two disagree the moment a key carries a character above
-    // the basic plane, and a different order is a different checksum — so the
-    // keys are ordered by the same bytes Rust orders them by.
-    const keys = Object.keys(map)
-        .map(key => ({ key, bytes: encoder.encode(key) }))
-        .sort((a, b) => compareBytes(a.bytes, b.bytes))
-        .map(entry => entry.key);
-    const canonical = keys.map(key => `${key}:${map[key]}`).join('|');
-    const bytes = encoder.encode(canonical);
+    // Same order and same shape as the Rust core: see compareByCodePoint for
+    // the order, and the core's compute_checksum_internal for why each field
+    // carries its length. A name holding the separator — every variant class
+    // holds a colon — would otherwise let two different maps render the same
+    // text and share a checksum.
+    const canonical = Object.keys(map)
+        .sort(compareByCodePoint)
+        .map(key => {
+            const value = map[key] as string;
+            return `${key.length}:${key}:${value.length}:${value}`;
+        })
+        .join('|');
+    const bytes = new TextEncoder().encode(canonical);
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     let hex = '';
     for (const b of new Uint8Array(digest)) {

@@ -2,10 +2,22 @@ import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeMangleChecksumAsync, verifyMangleChecksumAsync } from '../src/hydration.js';
 
+/**
+ * The canonical form spelled out again, by hand, over Node's own SHA-256.
+ *
+ * Deliberately a second implementation rather than a call into the one under
+ * test: it is only worth something as a check while it is written
+ * independently. It sorts with plain `<`, so it agrees with the real thing on
+ * every name inside the basic plane and is not used for the cases that leave
+ * it — those compare against the Rust core instead.
+ *
+ * @param map - the mangle map to fingerprint.
+ * @returns the 16-character checksum.
+ */
 function referenceChecksum(map: Record<string, string>): string {
     const canonical = Object.keys(map)
         .sort()
-        .map(k => `${k}:${map[k]}`)
+        .map(k => `${k.length}:${k}:${(map[k] as string).length}:${map[k]}`)
         .join('|');
     return createHash('sha256').update(canonical).digest('hex').slice(0, 16);
 }
@@ -17,8 +29,10 @@ describe('computeMangleChecksumAsync', () => {
     });
 
     it('reproduces the known Rust algorithm output for a fixed map', async () => {
-        // SHA-256("a:b") → first 16 hex chars, the documented Rust format.
-        expect(await computeMangleChecksumAsync({ a: 'b' })).toBe('6783a31eabf68ccc');
+        // SHA-256("1:a:1:b") → first 16 hex chars: each field carries its
+        // length so a name holding a colon cannot be read two ways. Taken from
+        // the Rust core, which is the side that defines the form.
+        expect(await computeMangleChecksumAsync({ a: 'b' })).toBe('95dd1eb0a569dbd2');
     });
 
     it('is order-independent (entries are sorted by key)', async () => {
@@ -48,7 +62,30 @@ describe('key ordering, which has to match the Rust core byte for byte', () => {
         // JavaScript reference above sorts the way this case exists to reject;
         // the value is what the Rust core derives from these same two keys.
         const map = { 'after:content-["\u{1F389}"]': 'a', 'after:content-["\uE000"]': 'b' };
-        expect(await computeMangleChecksumAsync(map)).toBe('16ab28d275e608f9');
+        expect(await computeMangleChecksumAsync(map)).toBe('5bc13806268685f8');
+    });
+});
+
+describe('names that carry the characters the canonical form separates on', () => {
+    it('tells a colon in a name apart from a colon in a value', async () => {
+        // Every variant class is a name with a colon in it, so this is the
+        // common shape rather than a contrived one.
+        const nameHasIt = await computeMangleChecksumAsync({ 'a:b': 'c' });
+        const valueHasIt = await computeMangleChecksumAsync({ a: 'b:c' });
+        expect(nameHasIt).not.toBe(valueHasIt);
+    });
+
+    it('tells a pipe in a name apart from two entries', async () => {
+        const nameHasIt = await computeMangleChecksumAsync({ 'a|b': 'c' });
+        const twoEntries = await computeMangleChecksumAsync({ a: 'b', c: 'd' });
+        expect(nameHasIt).not.toBe(twoEntries);
+    });
+
+    it('still fingerprints a real variant class, the same way twice', async () => {
+        const map = { 'hover:bg-red-500': 'a', 'md:focus:ring-2': 'b' };
+        const once = await computeMangleChecksumAsync(map);
+        expect(once).toHaveLength(16);
+        expect(await computeMangleChecksumAsync(map)).toBe(once);
     });
 });
 
