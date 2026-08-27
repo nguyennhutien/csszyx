@@ -103,6 +103,16 @@
         "types": "./dist/next-watcher.d.cts",
         "default": "./dist/next-watcher.cjs"
       }
+    },
+    "./postcss": {
+      "import": {
+        "types": "./dist/postcss.d.mts",
+        "default": "./dist/postcss.mjs"
+      },
+      "require": {
+        "types": "./dist/postcss.d.cts",
+        "default": "./dist/postcss.cjs"
+      }
     }
   },
   "main": "dist/index.cjs",
