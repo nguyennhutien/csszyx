@@ -250,6 +250,45 @@ export function verifyMangleChecksum(expectedChecksum: string): boolean {
 }
 
 /**
+ * Why Web Crypto cannot be used here, or null when it can.
+ *
+ * `crypto.subtle` exists only in a secure context, so a page served over plain
+ * HTTP from anything but localhost does not have it. Both the compute and the
+ * verify path need this answer and both need to say the same thing about it,
+ * so the sentence lives here once.
+ *
+ * @returns the reason, or null when Web Crypto is available.
+ */
+function webCryptoUnavailable(): string | null {
+    if (typeof crypto === 'undefined' || crypto.subtle === undefined) {
+        return (
+            '[csszyx] Web Crypto is unavailable, so the mangle checksum cannot be recomputed. ' +
+            'crypto.subtle exists only in a secure context: serve the page over HTTPS, or ' +
+            'from localhost. Nothing was verified.'
+        );
+    }
+    return null;
+}
+
+/**
+ * Order two byte sequences the way Rust orders the strings they encode:
+ * shorter-is-smaller on a shared prefix, first differing byte otherwise.
+ *
+ * @param a - left operand.
+ * @param b - right operand.
+ * @returns negative, zero or positive, for `Array.prototype.sort`.
+ */
+function compareBytes(a: Uint8Array, b: Uint8Array): number {
+    const shared = Math.min(a.length, b.length);
+    for (let i = 0; i < shared; i++) {
+        const left = a[i] as number;
+        const right = b[i] as number;
+        if (left !== right) return left - right;
+    }
+    return a.length - b.length;
+}
+
+/**
  * Recompute a mangle map's checksum the same way the Rust core does
  * (`compute_checksum_internal`): SHA-256 over the entries sorted by key and
  * formatted `orig:mangle`, joined by `|`, hex-encoded, first 16 chars (64 bits).
@@ -258,14 +297,27 @@ export function verifyMangleChecksum(expectedChecksum: string): boolean {
  * unlike the WASM-only sync path. Async because `crypto.subtle.digest` is async.
  *
  * @param map - the mangle map to checksum.
- * @returns the 16-char hex checksum (matches the Rust output byte-for-byte for
- *          ASCII class names).
+ * @returns the 16-char hex checksum, byte-for-byte what the Rust core derives
+ *          from the same map, whatever characters the class names carry.
+ * @throws when Web Crypto is unavailable, which means an insecure context.
  */
 export async function computeMangleChecksumAsync(map: MangleMap): Promise<string> {
-    const canonical = sortStrings(Object.keys(map))
-        .map(key => `${key}:${map[key]}`)
-        .join('|');
-    const bytes = new TextEncoder().encode(canonical);
+    const unavailable = webCryptoUnavailable();
+    if (unavailable !== null) {
+        throw new Error(unavailable);
+    }
+    const encoder = new TextEncoder();
+    // Sort the way the Rust core does. It compares Rust strings, which is a
+    // comparison of their UTF-8 bytes, while JavaScript's `<` compares UTF-16
+    // code units. The two disagree the moment a key carries a character above
+    // the basic plane, and a different order is a different checksum — so the
+    // keys are ordered by the same bytes Rust orders them by.
+    const keys = Object.keys(map)
+        .map(key => ({ key, bytes: encoder.encode(key) }))
+        .sort((a, b) => compareBytes(a.bytes, b.bytes))
+        .map(entry => entry.key);
+    const canonical = keys.map(key => `${key}:${map[key]}`).join('|');
+    const bytes = encoder.encode(canonical);
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     let hex = '';
     for (const b of new Uint8Array(digest)) {
@@ -299,8 +351,16 @@ export async function verifyMangleChecksumAsync(
     if (!target) {
         return false;
     }
-    const actual = await computeMangleChecksumAsync(target);
-    return actual === expectedChecksum;
+    // Fail closed, and say so. Answering `false` alone would read as a tampered
+    // map; the caller needs to know the check never ran. Warned in production
+    // too: a caller believing integrity was verified when it was not is exactly
+    // the state this function exists to prevent.
+    const unavailable = webCryptoUnavailable();
+    if (unavailable !== null) {
+        console.warn(unavailable);
+        return false;
+    }
+    return (await computeMangleChecksumAsync(target)) === expectedChecksum;
 }
 
 /**

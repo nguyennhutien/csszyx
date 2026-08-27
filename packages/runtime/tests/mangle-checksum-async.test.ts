@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { computeMangleChecksumAsync, verifyMangleChecksumAsync } from '../src/hydration.js';
 
 function referenceChecksum(map: Record<string, string>): string {
@@ -34,6 +34,24 @@ describe('computeMangleChecksumAsync', () => {
     });
 });
 
+describe('key ordering, which has to match the Rust core byte for byte', () => {
+    it('orders a key that is a prefix of another before it', async () => {
+        // Exercises the tail of the byte comparison: the shared bytes run out
+        // and length decides. `p` sorts before `p-4`, which sorts before `p-40`.
+        const map = { 'p-40': 'c', p: 'a', 'p-4': 'b' };
+        expect(await computeMangleChecksumAsync(map)).toBe(referenceChecksum(map));
+    });
+
+    it('orders by UTF-8 bytes, not UTF-16 units, once a key leaves the basic plane', async () => {
+        // JavaScript's `<` puts the emoji first; UTF-8 bytes put U+E000 first,
+        // and UTF-8 is what the Rust core compares. Hard-coded because the
+        // JavaScript reference above sorts the way this case exists to reject;
+        // the value is what the Rust core derives from these same two keys.
+        const map = { 'after:content-["\u{1F389}"]': 'a', 'after:content-["\uE000"]': 'b' };
+        expect(await computeMangleChecksumAsync(map)).toBe('16ab28d275e608f9');
+    });
+});
+
 describe('verifyMangleChecksumAsync', () => {
     it('returns true for a matching checksum and false for a tampered map', async () => {
         const map = { 'p-4': 'a', 'm-2': 'b' };
@@ -46,5 +64,47 @@ describe('verifyMangleChecksumAsync', () => {
 
     it('returns false when no map is available', async () => {
         expect(await verifyMangleChecksumAsync('whatever')).toBe(false);
+    });
+});
+
+/**
+ * Web Crypto is a secure-context API: `crypto.subtle` is undefined over plain
+ * HTTP on anything but localhost. An intranet deployment served that way is a
+ * real place for this code to run, and an unguarded `crypto.subtle.digest`
+ * there throws a TypeError that names nothing and reaches the caller as a
+ * rejected promise rather than an answer.
+ */
+describe('without Web Crypto, which is what an insecure context looks like', () => {
+    const MAP = { 'p-4': 'a' };
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+    });
+
+    it.each([
+        ['crypto.subtle is missing', { subtle: undefined }],
+        ['crypto itself is missing', undefined],
+    ])('says why it cannot compute when %s', async (_label, stub) => {
+        vi.stubGlobal('crypto', stub);
+
+        await expect(computeMangleChecksumAsync(MAP)).rejects.toThrow(/secure context/i);
+    });
+
+    it('fails closed instead of rejecting, and says the check did not happen', async () => {
+        vi.stubGlobal('crypto', { subtle: undefined });
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        await expect(verifyMangleChecksumAsync('whatever', MAP)).resolves.toBe(false);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0]?.[0]).toMatch(/secure context/i);
+    });
+
+    it('does not report a false match when the checksum would have been right', async () => {
+        const real = await computeMangleChecksumAsync(MAP);
+        vi.stubGlobal('crypto', { subtle: undefined });
+        vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        await expect(verifyMangleChecksumAsync(real, MAP)).resolves.toBe(false);
     });
 });

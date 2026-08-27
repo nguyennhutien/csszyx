@@ -121,7 +121,9 @@ Synchronous, so it can only recompute the checksum through the Rust core's
 shape, accepts it, and says so only in development — a `true` from this
 function does not on its own mean a checksum was recomputed. Prefer
 [`verifyMangleChecksumAsync`](/docs/reference/runtime/), which recomputes
-through the Web Crypto API and needs no WebAssembly and no CSP exception.
+through the Web Crypto API and needs no WebAssembly and no CSP exception. It
+answers `false` and warns where Web Crypto is unavailable — an insecure
+context — rather than claiming a match it could not compute.
 
 ### `validateHydrationClass(mangledClass, map)`
 

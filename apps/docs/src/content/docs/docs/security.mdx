@@ -107,6 +107,12 @@ const trustworthy = await verifyMangleChecksumAsync(expectedChecksum);
 Full signature in the
 [runtime reference](/docs/reference/runtime/).
 
+One deployment note: Web Crypto is a secure-context API, so `crypto.subtle`
+does not exist over plain HTTP on anything but localhost. Served that way, the
+verifier answers `false` and warns that the check did not run, rather than
+reporting a match it could not confirm. If you serve an intranet build over
+HTTP, that is the answer you will get.
+
 ## Content Security Policy (CSP)
 
 `@csszyx/dynamic`'s primary path uses a constructable `CSSStyleSheet` +
