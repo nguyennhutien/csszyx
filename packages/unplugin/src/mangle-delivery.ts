@@ -35,8 +35,10 @@ export function needsRuntimeMangleRegistration(
     mangleMap: Readonly<Record<string, string>>,
 ): boolean {
     if (!manglingEnabled) return false;
-    for (const _ in mangleMap) return true;
-    return false;
+    // Own keys only, matching the registry: it guards both reverse-map loops
+    // with hasOwnProperty, so a key carried on a prototype is not something
+    // the build emitted and must not make this answer yes.
+    return Object.keys(mangleMap).length > 0;
 }
 
 /**
