@@ -22,6 +22,7 @@
 set -euo pipefail
 
 SKIP_E2E=0
+CODEQL_RAN=0
 for arg in "$@"; do
     case "$arg" in
         --no-e2e) SKIP_E2E=1 ;;
@@ -254,9 +255,41 @@ pnpm check:package-size
 echo "[verify-like-ci] Wasm-lane smoke (real vite build through both engine artifacts)..."
 bash scripts/smoke-wasm-lane.sh
 
+# The one reporting service whose findings no lint rule stands in for, and the
+# only one that can be run here rather than waited for. Three outcomes, kept
+# apart on purpose: findings fail the run, a missing CLI does not — it would
+# stop every machine that has not spent the gigabyte — and the closing line
+# below tells the truth about which of those happened. A run that passed
+# without looking must not read the same as a run that passed.
+echo "[verify-like-ci] CodeQL (the queries GitHub runs, run here instead of after)..."
+set +e
+bash scripts/codeql-local.sh
+CODEQL_STATUS=$?
+set -e
+case "$CODEQL_STATUS" in
+    0) CODEQL_RAN=1 ;;
+    2) CODEQL_RAN=0 ;;
+    *) exit "$CODEQL_STATUS" ;;
+esac
+
 if [ "$SKIP_E2E" -eq 0 ]; then
     echo "[verify-like-ci] Playwright e2e (full suite — slowest step)..."
     pnpm --filter @csszyx/e2e exec playwright test
 fi
 
-echo "[verify-like-ci] All steps green. Safe to push."
+if [ "$CODEQL_RAN" -eq 1 ]; then
+    echo "[verify-like-ci] All steps green, CodeQL included. Safe to push."
+else
+    cat <<'PARTIAL'
+
+[verify-like-ci] Every step that ran is green — but CodeQL did NOT run, so this
+                 is not the full mirror. Its findings will arrive on the pull
+                 request instead, which is the round trip this script exists to
+                 avoid. Install the CLI to close the gap:
+
+                   https://github.com/github/codeql-cli-binaries/releases
+                   (about 1.1 GB compressed, and a few GB unpacked)
+
+                 Then re-run, or run `pnpm codeql:local` on its own.
+PARTIAL
+fi
