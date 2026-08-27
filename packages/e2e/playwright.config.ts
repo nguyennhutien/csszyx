@@ -44,6 +44,18 @@ export default defineConfig({
             },
         },
         {
+            // Its own project so it can run serially: the spec edits a
+            // playground source file, and a parallel worker loading the same
+            // dev server mid-edit would race the rewrite.
+            name: 'vite-safelist-hmr',
+            testMatch: /vite-safelist-hmr\.spec/,
+            fullyParallel: false,
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:5173',
+            },
+        },
+        {
             // The production build of the same playground, served by `vite
             // preview` under an ENFORCED `script-src 'self'` policy.
             name: 'vite-react-csp',
