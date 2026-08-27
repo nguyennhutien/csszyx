@@ -101,7 +101,7 @@ interface WatchedPath {
  * Render everything needed to tell a deaf watcher from an idle one.
  *
  * Which files get their TEXT read is stated per entry rather than inferred
- * from the extension. The safelist is `csszyx-classes.html`, so an
+ * from the extension. The safelist is `.csszyx/csszyx-classes.txt`, so an
  * extension rule written for a `.txt` would have silently dropped the one
  * value the assertion actually reads.
  *

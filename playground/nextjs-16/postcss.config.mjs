@@ -9,7 +9,7 @@ const config = {
     plugins: {
         // Points Tailwind at the csszyx safelists; must run before Tailwind.
         '@csszyx/unplugin/postcss': xmodLane
-            ? { safelistFiles: ['.csszyx/xmod/classes.html'] }
+            ? { safelistFiles: ['.csszyx/xmod/classes.txt'] }
             : {},
         '@tailwindcss/postcss': {},
     },

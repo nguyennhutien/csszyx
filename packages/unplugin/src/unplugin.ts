@@ -110,6 +110,10 @@ import {
     appendTailwindSourceDirective,
     computeSafelistRelPath,
     cssImportsTailwind,
+    findLegacySourceDirective,
+    legacySourceMessage,
+    removeLegacySafelists,
+    SAFELIST_FILE,
     stripCssBlockComments,
 } from './safelist-source.js';
 
@@ -117,6 +121,7 @@ export {
     appendTailwindSourceDirective,
     computeSafelistRelPath,
     cssImportsTailwind,
+    SAFELIST_FILE,
 } from './safelist-source.js';
 
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
@@ -2915,7 +2920,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         state.varMangleEntriesByFile.set(GLOBAL_VAR_ALIAS_MAP_OWNER, earlyGlobalVarAliasEntries);
     }
 
-    const SAFELIST_FILENAME = 'csszyx-classes.html';
+    const SAFELIST_FILENAME = SAFELIST_FILE;
     // Module flavours included: the engine-parity harness caught the prescan
     // walk skipping `.mjs` entirely — every class in such a file was silently
     // dead under Tailwind `source(none)` on ALL engines.
@@ -3655,7 +3660,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Writes the safelist manifest (csszyx-classes.html) from the given class set.
+     * Writes the safelist file from the given class set.
      * No-ops if the file content is already up to date.
      *
      * The file is plain text, one candidate per line; see safelist-format.ts
@@ -3678,7 +3683,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
             }
             if (existing !== content) {
+                fs.mkdirSync(path.dirname(safelistPath), { recursive: true });
                 fs.writeFileSync(safelistPath, content);
+                removeLegacySafelists(state.rootDir, console.warn);
             }
         } catch {
             // Non-fatal: Tailwind just won't see prescanned classes
@@ -4778,6 +4785,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         id: string,
     ): { code: string; map: null } | null {
         state.sawAnyCss = true;
+        // A stylesheet still pointing at the pre-0.15.0 safelist would scan
+        // nothing and lose every csszyx class in silence; stop the build and
+        // say what replaced it.
+        const [cssFile] = id.split('?');
+        const legacy = findLegacySourceDirective(code, cssFile);
+        if (legacy !== null) {
+            throw new Error(legacySourceMessage(cssFile, legacy.target));
+        }
         if (!cssImportsTailwind(code)) return null;
         state.sawTailwindEntry = true;
         // Recorded before the candidate check below returns: an entry with
@@ -5364,7 +5379,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 assertNoRSCGraphViolation(state.rscModules);
                 // csszyx rewrites sz props into Tailwind class names, but Tailwind
                 // only emits CSS for classes a source/@source covers. The generated
-                // classes live in csszyx-classes.html, which nothing imports — so
+                // classes live in the safelist file, which nothing imports — so
                 // without a CSS entry importing "tailwindcss" (where csszyx injects
                 // the @source), the rewritten classes silently resolve to no styles.
                 if (
@@ -5620,7 +5635,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
                 /**
                  * Vite HMR hook: re-runs theme scan when a watched CSS file changes,
-                 * and incrementally updates csszyx-classes.html when a source file gains new sz classes.
+                 * and incrementally updates the safelist when a source file gains new sz classes.
                  * @param ctx - HMR context containing the changed file
                  * @returns The modules a safelist write affects, so Vite hot-updates
                  * the stylesheet instead of reloading the page; undefined otherwise,

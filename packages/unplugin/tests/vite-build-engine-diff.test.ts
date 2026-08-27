@@ -114,7 +114,7 @@ async function buildWith(parser: 'rust' | 'wasm'): Promise<BuildArtifacts> {
     // debug filenames — normalize it so the diff sees only real emission
     // differences.
     const normalizedBundle = bundle.split(basename(root)).join('FIXTURE-ROOT');
-    const safelist = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
+    const safelist = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
     const rawCandidates = safelist.slice(SAFELIST_HEADER.length);
     const safelistTokens = [...new Set(rawCandidates.split(/\s+/).filter(Boolean))].sort();
     return { bundle: normalizedBundle, safelistTokens };

@@ -36,7 +36,7 @@ const importerPath = fileURLToPath(
     new URL('../../../playground/nextjs-16/app/turbo-xmod/page.tsx', import.meta.url),
 );
 const safelistPath = fileURLToPath(
-    new URL('../../../playground/nextjs-16/.csszyx/xmod/classes.html', import.meta.url),
+    new URL('../../../playground/nextjs-16/.csszyx/xmod/classes.txt', import.meta.url),
 );
 
 const BASELINE_LITERAL = 'p: 7';

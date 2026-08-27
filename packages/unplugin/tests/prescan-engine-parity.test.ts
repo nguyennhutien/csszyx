@@ -206,7 +206,7 @@ function runPrescan(parser: 'rust' | 'wasm'): {
 
     let html = '';
     try {
-        html = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
+        html = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
     } catch {
         // Leave tokens empty — the assertions below will point straight at the
         // engine whose prescan produced nothing.

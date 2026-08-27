@@ -44,7 +44,7 @@ describe('Next safelist state', () => {
         expect(paths.cacheDir).toBe(join(root, '.csszyx/cache'));
         expect(paths.shardsDir).toBe(join(root, '.csszyx/cache/safelist-shards'));
         expect(paths.snapshotPath).toBe(join(root, '.csszyx/cache/safelist.snapshot.json'));
-        expect(paths.outputPath).toBe(join(root, 'csszyx-classes.html'));
+        expect(paths.outputPath).toBe(join(root, '.csszyx/csszyx-classes.txt'));
     });
 
     it('merges source shards into a deterministic Tailwind source file', () => {

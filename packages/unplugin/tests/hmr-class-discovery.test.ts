@@ -11,7 +11,7 @@ import { renderSafelistFile, SAFELIST_HEADER } from '../src/safelist-format.js';
  * Tests for the incremental HMR class discovery logic in unplugin.ts.
  *
  * These tests verify the behaviour of the handleHotUpdate extension:
- * - New sz classes discovered in a changed file update csszyx-classes.html
+ * - New sz classes discovered in a changed file update .csszyx/csszyx-classes.txt
  * - Files with no new classes do NOT trigger a file write
  * - Files without sz props are skipped early (perf guard)
  *
@@ -24,7 +24,7 @@ describe('HMR incremental class discovery', () => {
 
     beforeEach(() => {
         tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-hmr-'));
-        safelistPath = path.join(tmpDir, 'csszyx-classes.html');
+        safelistPath = path.join(tmpDir, '.csszyx/csszyx-classes.txt');
     });
 
     afterEach(() => {
@@ -38,14 +38,14 @@ describe('HMR incremental class discovery', () => {
 
     /**
      * @param classes - the full set of discovered classes to write
-     * @param dir - directory to write csszyx-classes.html into
+     * @param dir - directory to write .csszyx/csszyx-classes.txt into
      * @returns true if the file was written, false if it was already up to date
      */
     function writeSafelistFile(classes: Set<string>, dir: string): boolean {
         if (classes.size === 0) {
             return false;
         }
-        const p = path.join(dir, 'csszyx-classes.html');
+        const p = path.join(dir, '.csszyx/csszyx-classes.txt');
         const content = renderSafelistFile(Array.from(classes));
         let existing = '';
         try {
@@ -58,6 +58,7 @@ describe('HMR incremental class discovery', () => {
         if (existing === content) {
             return false;
         }
+        fs.mkdirSync(path.dirname(p), { recursive: true });
         fs.writeFileSync(p, content);
         return true;
     }
@@ -67,7 +68,7 @@ describe('HMR incremental class discovery', () => {
      * transforms it, collects new classes, conditionally updates the manifest.
      * @param fileContent - the new content of the changed source file
      * @param existingClasses - the current class set (mutated in place)
-     * @param dir - directory containing csszyx-classes.html
+     * @param dir - directory containing .csszyx/csszyx-classes.txt
      * @returns an object with wrote (whether the manifest was updated) and newClasses (list of added classes)
      */
     function simulateHotUpdate(
@@ -108,7 +109,7 @@ describe('HMR incremental class discovery', () => {
     // Tests
     // ---------------------------------------------------------------------------
 
-    it('writes csszyx-classes.html when a new sz class is discovered', () => {
+    it('writes .csszyx/csszyx-classes.txt when a new sz class is discovered', () => {
         const classes = new Set<string>(['p-4', 'bg-blue-500']);
         // Initial manifest
         writeSafelistFile(classes, tmpDir);

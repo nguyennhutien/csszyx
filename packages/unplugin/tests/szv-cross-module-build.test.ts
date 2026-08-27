@@ -284,8 +284,8 @@ async function buildPackageFixture(optIn: boolean): Promise<{ js: string; warnin
         warnings,
         // Absent when nothing was discovered, which is itself the answer for
         // the not-opted-in case.
-        safelist: existsSync(join(repo, 'app', 'csszyx-classes.html'))
-            ? readFileSync(join(repo, 'app', 'csszyx-classes.html'), 'utf8')
+        safelist: existsSync(join(repo, 'app', '.csszyx/csszyx-classes.txt'))
+            ? readFileSync(join(repo, 'app', '.csszyx/csszyx-classes.txt'), 'utf8')
             : '',
     };
 }

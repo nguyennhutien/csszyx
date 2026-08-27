@@ -56,7 +56,7 @@ describe('handleHotUpdate incremental discovery (real hook)', () => {
         const file = path.join(root, 'src/Plain.tsx');
         fs.writeFileSync(file, 'export const Plain = () => <div className="p-4" />;');
         await hotUpdate(file);
-        expect(fs.existsSync(path.join(root, 'csszyx-classes.html'))).toBe(false);
+        expect(fs.existsSync(path.join(root, '.csszyx/csszyx-classes.txt'))).toBe(false);
     });
 
     it('survives a file that fails to parse', async () => {
@@ -81,7 +81,7 @@ describe('handleHotUpdate incremental discovery (real hook)', () => {
         const file = path.join(root, 'src/App.tsx');
         fs.writeFileSync(file, 'export const App = () => <div sz={{ m: 3 }} />;');
         await hotUpdate(file);
-        const safelist = path.join(root, 'csszyx-classes.html');
+        const safelist = path.join(root, '.csszyx/csszyx-classes.txt');
         expect(fs.existsSync(safelist)).toBe(true);
         expect(fs.readFileSync(safelist, 'utf8')).toContain('m-3');
         // A second update with the same content discovers nothing new.
@@ -159,7 +159,7 @@ describe('the safelist file must not full-reload the page', () => {
             },
         };
         const affected = await call('handleHotUpdate', {
-            file: path.join(root, 'csszyx-classes.html'),
+            file: path.join(root, '.csszyx/csszyx-classes.txt'),
             server,
             modules: [],
         });
@@ -191,7 +191,7 @@ describe('the safelist file must not full-reload the page', () => {
         // scanned. Answering nothing leaves both of those free to fire.
         await expect(
             call('handleHotUpdate', {
-                file: path.join(root, 'csszyx-classes.html'),
+                file: path.join(root, '.csszyx/csszyx-classes.txt'),
                 server,
                 modules: [],
             }),

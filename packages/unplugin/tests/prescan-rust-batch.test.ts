@@ -93,7 +93,7 @@ describe('rust prescan batching', () => {
             { filename: appPath, source: 'export const App = () => <div sz={{ p: 4 }} />;' },
             { filename: cardPath, source: 'export const Card = () => <div sz={{ m: 2 }} />;' },
         ]);
-        expect(readFileSync(join(root, 'csszyx-classes.html'), 'utf8')).toBe(
+        expect(readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8')).toBe(
             `${SAFELIST_HEADER}p-4\nm-2\n`,
         );
     });

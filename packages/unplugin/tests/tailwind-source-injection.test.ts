@@ -10,7 +10,7 @@ import {
 } from '../src/unplugin';
 
 /**
- * The `@source "./csszyx-classes.html"` directive is how csszyx makes its
+ * The `@source "./.csszyx/csszyx-classes.txt"` directive is how csszyx makes its
  * generated class list visible to Tailwind v4 (the safelist file is not
  * imported anywhere, so Tailwind never scans it otherwise). The previous
  * implementation spliced the directive next to the `@import "tailwindcss…"`
@@ -21,7 +21,7 @@ import {
  * append behaviour so that regression cannot return.
  */
 describe('appendTailwindSourceDirective', () => {
-    const REL = './csszyx-classes.html';
+    const REL = './.csszyx/csszyx-classes.txt';
     const directive = `@source "${REL}";`;
 
     const importForms: Array<[string, string]> = [
@@ -71,9 +71,9 @@ describe('appendTailwindSourceDirective', () => {
     it('preserves the exact relative path it is given', () => {
         const out = appendTailwindSourceDirective(
             '@import "tailwindcss";',
-            '../../csszyx-classes.html',
+            '../../.csszyx/csszyx-classes.txt',
         ) as string;
-        expect(out).toContain('@source "../../csszyx-classes.html";');
+        expect(out).toContain('@source "../../.csszyx/csszyx-classes.txt";');
     });
 
     it('treats empty input safely', () => {
@@ -90,7 +90,7 @@ describe('appendTailwindSourceDirective', () => {
  */
 describe('computeSafelistRelPath', () => {
     const root = path.sep === '\\' ? 'C:\\proj' : '/proj';
-    const file = 'csszyx-classes.html';
+    const file = '.csszyx/csszyx-classes.txt';
     const at = (...segs: string[]): string => path.join(root, ...segs);
 
     it('CSS at the project root → ./<file>', () => {

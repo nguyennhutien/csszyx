@@ -100,7 +100,7 @@ export default {
 // next.config.mjs
 import { csszyxTurbopack } from '@csszyx/unplugin/next';
 export default {
-  turbopack: csszyxTurbopack({}, { safelistOutputFile: '.csszyx/next-loader-classes.html' }),
+  turbopack: csszyxTurbopack(),
 };
 \`\`\`
 - Do NOT set an \`as\` field on the loader rule — the helper omits it; an \`as\`

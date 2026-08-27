@@ -150,7 +150,7 @@ describe('prescan AST budget', () => {
         expect(budgetWarnings[0]).toContain('src/Big.tsx');
         expect(budgetWarnings[0]).toContain('astBudgetLimit');
         // The healthy sibling file still reaches the safelist.
-        expect(readFileSync(join(root, 'csszyx-classes.html'), 'utf8')).toContain('m-2');
+        expect(readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8')).toContain('m-2');
     });
 
     it('surfaces a transform-time AST budget diagnostic in production mode', () => {
@@ -194,7 +194,7 @@ export const Page = () => (<div>${'<span className="cell">x</span>'.repeat(30_00
         }) as ViteConfigHook[];
         prePlugin.configResolved?.({ root });
 
-        const safelist = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
+        const safelist = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
         expect(safelist).toContain('mx-0');
         expect(safelist).toContain('my-4');
         const budgetWarnings = warn.mock.calls

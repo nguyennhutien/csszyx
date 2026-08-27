@@ -90,7 +90,7 @@ async function runWebpack(root: string, alias?: Record<string, string>): Promise
         });
     });
     try {
-        return readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
+        return readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
     } catch {
         // A build that safelisted nothing writes no file, which the assertions
         // read as "no classes" — the same thing it means.

@@ -292,7 +292,7 @@ cli.command(
     .option('--parser-mode <mode>', 'rust | wasm (default: rust)')
     .option(
         '--output-file <path>',
-        'Tailwind @source safelist output (default: csszyx-classes.html)',
+        'Tailwind @source safelist output (default: .csszyx/csszyx-classes.txt)',
     )
     .option('--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)')
     .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
@@ -314,7 +314,7 @@ cli.command('next-watch [pattern]', 'Maintain the Next.js Turbopack csszyx safel
     .option('--parser-mode <mode>', 'rust | wasm (default: rust)')
     .option(
         '--output-file <path>',
-        'Tailwind @source safelist output (default: csszyx-classes.html)',
+        'Tailwind @source safelist output (default: .csszyx/csszyx-classes.txt)',
     )
     .option('--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)')
     .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')

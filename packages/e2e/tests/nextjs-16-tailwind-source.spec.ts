@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 
 const sourcePath = fileURLToPath(
-    new URL('../../../playground/nextjs-16/csszyx-classes.html', import.meta.url),
+    new URL('../../../playground/nextjs-16/.csszyx/csszyx-classes.txt', import.meta.url),
 );
 const placeholderSource =
     '<!-- Tailwind @source target used by the Next 16 Turbopack source probe. -->\n';

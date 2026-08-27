@@ -67,7 +67,6 @@ export interface TurbopackConfig {
  * export default {
  *   turbopack: csszyxTurbopack(
  *     { resolveAlias: { 'maplibre-gl': 'maplibre-gl/dist/maplibre-gl.js' } },
- *     { safelistOutputFile: '.csszyx/next-loader-classes.html' },
  *   ),
  * };
  */

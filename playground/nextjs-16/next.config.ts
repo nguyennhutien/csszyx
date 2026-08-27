@@ -45,7 +45,7 @@ if (enableTurboCsszyxLoader) {
                 loader: '@csszyx/unplugin/next-turbo-loader',
                 options: {
                     parserMode: 'rust',
-                    safelistOutputFile: '.csszyx/next-loader-classes.html',
+                    safelistOutputFile: '.csszyx/next-loader-classes.txt',
                     config: {
                         mangleVars: false,
                     },
@@ -64,7 +64,7 @@ if (enableTurboCsszyxLoader) {
                 loader: '@csszyx/unplugin/next-turbo-loader',
                 options: {
                     parserMode: 'rust',
-                    safelistOutputFile: '.csszyx/next-loader-classes.html',
+                    safelistOutputFile: '.csszyx/next-loader-classes.txt',
                     config: {
                         mangleVars: false,
                     },
@@ -95,7 +95,7 @@ if (enableTurboXmod) {
                     // This route's own safelist and cache, matching
                     // `watch:xmod`. Sharing either with the main lane would put
                     // the two watchers back on one file and undo the isolation.
-                    safelistOutputFile: '.csszyx/xmod/classes.html',
+                    safelistOutputFile: '.csszyx/xmod/classes.txt',
                     cacheDir: '.csszyx/xmod/cache',
                     config: {
                         mangleVars: false,
@@ -121,7 +121,7 @@ if (enableTurboBroad) {
     // (must match `csszyx next prebuild`'s hash — the 0.9.3 real-app failure).
     turbopack = csszyxTurbopack(turbopack ?? {}, {
         glob: './app/turbo-broad/*.tsx',
-        safelistOutputFile: '.csszyx/next-loader-classes.html',
+        safelistOutputFile: '.csszyx/next-loader-classes.txt',
     });
     if (forceBroadAs && turbopack && turbopack.rules) {
         // Guard: reintroduce the bug. The .tsx.tsx self-match needs `as` to equal

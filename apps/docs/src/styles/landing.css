@@ -6,8 +6,7 @@
 /* Tailwind CSS base layer */
 @import "tailwindcss";
 
-/* csszyx-generated class names — Tailwind scans this to generate CSS for sz props */
-@source "../../csszyx-classes.html";
+/* csszyx injects an @source for its generated classes into this entry. */
 /* Exclude AI reference files — they contain example class strings that produce invalid CSS */
 @source not "../../public/llms.txt";
 @source not "../../public/llms-full.txt";

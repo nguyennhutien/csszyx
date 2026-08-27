@@ -69,7 +69,7 @@ describe('a native prescan batch that throws', () => {
         // The classes are the point: a fallback that ran but collected nothing
         // would leave the safelist empty and the CSS missing, which is the
         // failure the batch path exists to avoid making worse.
-        const safelist = join(root, 'csszyx-classes.html');
+        const safelist = join(root, '.csszyx/csszyx-classes.txt');
         const { readFileSync, existsSync } = await import('node:fs');
         expect(existsSync(safelist)).toBe(true);
         const written = readFileSync(safelist, 'utf8');

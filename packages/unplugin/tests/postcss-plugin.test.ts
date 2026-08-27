@@ -35,6 +35,7 @@ function projectRoot(): string {
     const root = mkdtempSync(join(realpathSync(tmpdir()), 'csszyx-postcss-'));
     tempDirs.push(root);
     mkdirSync(join(root, 'app'));
+    mkdirSync(join(root, '.csszyx'));
     // Tailwind resolves `@import "tailwindcss"` from the stylesheet's own
     // directory; give the temp project the node_modules that holds tailwindcss.
     symlinkSync(TAILWIND_NODE_MODULES, join(root, 'node_modules'), 'dir');
@@ -60,14 +61,13 @@ async function run(
 }
 
 describe('csszyx PostCSS plugin', () => {
-    it('adds an @source for each csszyx safelist, relative to the stylesheet', async () => {
+    it('adds an @source for the csszyx safelist, relative to the stylesheet', async () => {
         const root = projectRoot();
         const css = await run(root, '@import "tailwindcss" source(none);\n@source "../app";\n');
         expect(css).toBe(
             '@import "tailwindcss" source(none);\n' +
                 '@source "../app";\n' +
-                '@source "../csszyx-classes.html";\n' +
-                '@source "../.csszyx/next-loader-classes.html";\n',
+                '@source "../.csszyx/csszyx-classes.txt";\n',
         );
     });
 
@@ -76,13 +76,12 @@ describe('csszyx PostCSS plugin', () => {
         const once = await run(
             root,
             '@import "tailwindcss";\n' +
-                "@source '../csszyx-classes.html';\n" +
+                "@source '../.csszyx/csszyx-classes.txt';\n" +
                 '@source inline("underline");\n',
         );
         const twice = await run(root, once);
         expect(twice).toBe(once);
-        expect(once.match(/csszyx-classes\.html/g)).toHaveLength(1);
-        expect(once.match(/next-loader-classes\.html/g)).toHaveLength(1);
+        expect(once.match(/csszyx-classes\.txt/g)).toHaveLength(1);
     });
 
     it('leaves a stylesheet alone unless it imports tailwindcss', async () => {
@@ -118,7 +117,7 @@ describe('csszyx PostCSS plugin', () => {
             const result = await postcss([csszyxPostcss()]).process('@import "tailwindcss";\n', {
                 from: join(root, 'app/globals.css'),
             });
-            expect(result.css).toContain('@source "../csszyx-classes.html";');
+            expect(result.css).toContain('@source "../.csszyx/csszyx-classes.txt";');
         } finally {
             process.chdir(previous);
         }
@@ -126,7 +125,10 @@ describe('csszyx PostCSS plugin', () => {
 
     it('makes Tailwind read the safelist csszyx wrote, with nothing else named', async () => {
         const root = projectRoot();
-        writeFileSync(join(root, 'csszyx-classes.html'), renderSafelistFile(['p-4', 'space-y-4']));
+        writeFileSync(
+            join(root, '.csszyx/csszyx-classes.txt'),
+            renderSafelistFile(['p-4', 'space-y-4']),
+        );
         const css = await run(root, '@import "tailwindcss" source(none);\n');
 
         const compiler = await compile(css, { base: join(root, 'app'), onDependency() {} });

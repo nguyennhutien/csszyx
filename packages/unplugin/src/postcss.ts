@@ -18,6 +18,8 @@ import {
     computeSafelistRelPath,
     DEFAULT_SAFELIST_FILES,
     importParamsNameTailwind,
+    isDanglingLegacySource,
+    legacySourceMessage,
 } from './safelist-source.js';
 
 /** Options for {@link csszyxPostcss}. */
@@ -53,13 +55,20 @@ function rootImportsTailwind(root: Root): boolean {
 
 /**
  * @param root - parsed stylesheet
+ * @param file - absolute path of the stylesheet
  * @returns the path each existing `@source` at-rule names, unquoted
+ * @throws when one of them still names a pre-0.15.0 safelist that is gone
  */
-function existingSourcePaths(root: Root): Set<string> {
+function existingSourcePaths(root: Root, file: string): Set<string> {
     const paths = new Set<string>();
     root.walkAtRules('source', rule => {
         const match = /^["']([^"']*)["']$/.exec(rule.params.trim());
-        if (match?.[1] !== undefined) paths.add(match[1]);
+        const target = match?.[1];
+        if (target === undefined) return;
+        if (isDanglingLegacySource(target, file)) {
+            throw new Error(legacySourceMessage(file, target));
+        }
+        paths.add(target);
     });
     return paths;
 }
@@ -79,7 +88,7 @@ const csszyxPostcss: PluginCreator<CsszyxPostcssOptions> = (options = {}) => {
         Once(root, { AtRule }) {
             const file = root.source?.input.file;
             if (file === undefined || !rootImportsTailwind(root)) return;
-            const present = existingSourcePaths(root);
+            const present = existingSourcePaths(root, file);
             for (const safelistFile of safelistFiles) {
                 const relPath = computeSafelistRelPath(projectRoot, safelistFile, file);
                 if (present.has(relPath)) continue;

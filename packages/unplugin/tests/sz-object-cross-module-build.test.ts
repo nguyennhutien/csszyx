@@ -119,7 +119,7 @@ async function buildFixture(
     expect(js.length).toBeGreaterThan(0);
     let safelist = '';
     try {
-        safelist = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
+        safelist = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
     } catch {
         // A build that safelisted nothing writes no file; the assertions read
         // that as "no classes", which is what it means.
