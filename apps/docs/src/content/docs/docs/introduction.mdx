@@ -56,6 +56,13 @@ CSSzyx solves this with object syntax:
 Each phase is incremental. During dev, HMR updates `csszyx-classes.html` when new
 sz props are added — no server restart needed.
 
+The safelist is written as HTML because Tailwind's scanner reads markup, and Vite
+reloads the page for any changed `.html` it cannot match to a module. csszyx
+therefore tells Vite which modules a safelist write actually affects — your
+Tailwind entry stylesheets, since they `@source` the file — so a class the project
+has never used before arrives as a **CSS hot update**. Component state, scroll
+position and open dialogs survive.
+
 ## Key Features
 
 <CardGrid>
