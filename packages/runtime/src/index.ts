@@ -38,6 +38,7 @@ export {
     isValidMangleMap,
     loadMangleMapFromDOM,
     type MangleMap,
+    readChecksumAttribute,
     type SSRContext,
     startHydration,
     validateHydrationClass,

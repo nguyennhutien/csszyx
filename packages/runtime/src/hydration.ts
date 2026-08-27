@@ -209,6 +209,20 @@ export function loadMangleMapFromDOM(): MangleMap | null {
 }
 
 /**
+ * Read the mangle checksum the build stamped on an element.
+ *
+ * The build writes `data-sz-checksum`, or `data-sz-cs` when `production.minify`
+ * is on — which it is by default. Readers therefore have to accept both, and
+ * they all come through here so the two names cannot drift apart again.
+ *
+ * @param element - the element the build stamped, normally `<html>`.
+ * @returns the checksum, or undefined when the element carries neither name.
+ */
+export function readChecksumAttribute(element: HTMLElement): string | undefined {
+    return element.dataset.szChecksum ?? element.dataset.szCs;
+}
+
+/**
  * Verifies mangle map checksum from HTML tag.
  *
  * Compares the checksum in the data-sz-checksum attribute with the
@@ -230,7 +244,7 @@ export function verifyMangleChecksum(expectedChecksum: string): boolean {
     }
 
     const htmlElement = document.documentElement;
-    const actualChecksum = htmlElement.dataset.szChecksum;
+    const actualChecksum = readChecksumAttribute(htmlElement);
 
     return actualChecksum === expectedChecksum;
 }
@@ -314,7 +328,7 @@ export function verifyMangleMapIntegrity(): boolean {
 
     // Get checksum from HTML
     const htmlElement = document.documentElement;
-    const checksum = htmlElement.dataset.szChecksum;
+    const checksum = readChecksumAttribute(htmlElement);
 
     if (!checksum) {
         console.warn('[csszyx] No checksum found in HTML');
@@ -637,7 +651,7 @@ export function isHydrating(): boolean {
     // Check for React hydration (common pattern)
     if (window.__NEXT_DATA__ || window.__REMIX_CONTEXT__) {
         // These frameworks set hydration state
-        return document.documentElement.dataset.szChecksum !== undefined;
+        return readChecksumAttribute(document.documentElement) !== undefined;
     }
 
     return false;
@@ -666,7 +680,7 @@ export function getSSRContext(): SSRContext | null {
     }
 
     const htmlElement = document.documentElement;
-    const checksum = htmlElement.dataset.szChecksum;
+    const checksum = readChecksumAttribute(htmlElement);
     const buildId = htmlElement.dataset.szBuildId;
 
     if (!checksum || !buildId) {
