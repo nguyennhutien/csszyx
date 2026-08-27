@@ -100,8 +100,9 @@ checksum key. Global aliases use the same `var:` namespace, for example
 
 ### `verifyMangleChecksum(expectedChecksum)`
 
-Compares the expected mangle checksum with the checksum embedded on
-`<html data-sz-checksum="...">`. Returns `true` if they match.
+Compares the expected mangle checksum with the checksum the build embedded on
+`<html>`. Reads `data-sz-checksum`, or `data-sz-cs` when `production.minify`
+wrote the short name — which it does by default. Returns `true` if they match.
 
 ```ts
 function verifyMangleChecksum(expectedChecksum: string): boolean;
@@ -114,6 +115,13 @@ Validates the injected mangle map against the embedded checksum.
 ```ts
 function verifyMangleMapIntegrity(): boolean;
 ```
+
+Synchronous, so it can only recompute the checksum through the Rust core's
+`verify_mangle_checksum` global. Without that global it validates the map's
+shape, accepts it, and says so only in development — a `true` from this
+function does not on its own mean a checksum was recomputed. Prefer
+[`verifyMangleChecksumAsync`](/docs/reference/runtime/), which recomputes
+through the Web Crypto API and needs no WebAssembly and no CSP exception.
 
 ### `validateHydrationClass(mangledClass, map)`
 

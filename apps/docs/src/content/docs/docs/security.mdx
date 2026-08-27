@@ -82,6 +82,31 @@ catches accidental server/client drift, not an attacker who can rewrite the
 served HTML and recompute it.
 </Aside>
 
+### Do not add `'wasm-unsafe-eval'` for this
+
+`verifyMangleMapIntegrity()` is synchronous, so the only way it can recompute a
+SHA-256 is through the Rust core's `verify_mangle_checksum` global. The runtime
+never instantiates that core itself, so the global exists only if you wired it
+up. When it is absent the map is schema-validated and accepted, and today that
+degraded state is reported only in development.
+
+Wiring the core up to close that gap would mean adding `'wasm-unsafe-eval'` to
+`script-src`, because a strict policy blocks WebAssembly instantiation without
+it. **Do not.** `verifyMangleChecksumAsync` derives the same checksum through
+the Web Crypto API, which is allowed under plain `script-src 'self'`, and it
+verifies rather than assumes. Widening a policy is the wrong price for a check
+that is explicitly tamper-detection.
+
+```ts
+import { verifyMangleChecksumAsync } from '@csszyx/runtime';
+
+// Reads the map off the page when you do not pass one.
+const trustworthy = await verifyMangleChecksumAsync(expectedChecksum);
+```
+
+Full signature in the
+[runtime reference](/docs/reference/runtime/).
+
 ## Content Security Policy (CSP)
 
 `@csszyx/dynamic`'s primary path uses a constructable `CSSStyleSheet` +
@@ -96,7 +121,8 @@ path), or supply a nonce for the fallback element.
 A production build puts **no executable inline JavaScript** into your HTML.
 Everything csszyx adds to the document is inert data:
 
-- `data-sz-checksum` on `<html>`;
+- the hydration checksum on `<html>` — written as `data-sz-checksum`, or as
+  `data-sz-cs` when `production.minify` is on, which is the default;
 - `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">` — the hydration
   census. A `type="application/json"` block is data, not a script: the browser
   never evaluates it and `script-src` does not apply to it.
