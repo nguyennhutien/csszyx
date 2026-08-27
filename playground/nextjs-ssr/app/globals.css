@@ -3,11 +3,11 @@
    monorepo root and scans docs/snippets/tests (which carry `url(...)`/`{value}`
    and `cursor-[url(h.cur)]` examples as text), generating broken `url()`
    classes the Next css-loader cannot resolve. source(none) + explicit @source
-   is the only deterministic scope; csszyx also auto-injects the safelist. */
+   is the only deterministic scope; the csszyx safelist is added by the PostCSS
+   plugin in postcss.config.mjs. */
 @import "tailwindcss" source(none);
 @source "../app";
 @source "../components";
-@source "../csszyx-classes.html";
 
 @theme {
     --color-csszyx-primary: #6366f1;

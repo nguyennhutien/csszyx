@@ -184,9 +184,31 @@ behaviour before relying on it.
    };
    ```
 
-3. **Keep the Tailwind safelist fresh.** Point `@source` at the safelist file
-   and run the csszyx watcher/prebuild around Next. Production builds
-   fail-closed (`Next Turbopack production cache is not ready`) until
+3. **Let PostCSS point Tailwind at the safelist.** Turbopack gives csszyx no
+   hook into your stylesheet, so the `@source` directive the other bundlers
+   inject for you comes from a PostCSS plugin here. List it **before**
+   `@tailwindcss/postcss` — Tailwind compiles the stylesheet in its own pass,
+   so a plugin after it is too late. `csszyx init` writes this file for you.
+
+   ```js
+   // postcss.config.mjs
+   export default {
+     plugins: {
+       '@csszyx/unplugin/postcss': {},
+       '@tailwindcss/postcss': {},
+     },
+   };
+   ```
+
+   The plugin names every safelist csszyx writes, relative to each stylesheet
+   that imports `tailwindcss`, and skips a path you already wrote yourself. A
+   safelist that does not exist yet is fine: Tailwind scans nothing for it and
+   does not fail. Pass `{ safelistFiles: ['…'] }` if you moved the output with
+   `--output-file`.
+
+4. **Keep the Tailwind safelist fresh.** Run the csszyx watcher/prebuild
+   around Next. Production builds fail-closed
+   (`Next Turbopack production cache is not ready`) until
    `csszyx next prebuild` has seeded the safelist and generation manifest,
    so wire both flows into your scripts:
 

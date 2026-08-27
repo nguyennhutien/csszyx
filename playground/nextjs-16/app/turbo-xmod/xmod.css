@@ -7,9 +7,9 @@
    `@source`) was the one that could not keep up.
 
    This entry names only what this route owns, so nothing else in the suite can
-   move it. `source(none)` for the same reason globals.css uses it: the auto
+   move it; the route's own safelist comes from postcss.config.mjs, which hands
+   the csszyx plugin only that file when this lane runs. `source(none)` for the same reason globals.css uses it: the auto
    base resolves up to the monorepo root and scans docs that carry `url(...)`
    examples as text. */
 @import "tailwindcss" source(none);
 @source "./";
-@source "../../.csszyx/xmod/classes.html";

@@ -5,7 +5,7 @@
  * unknown-framework manual-instructions branch, tsconfig.app.json fallback, and
  * the sz-types append path. execa is mocked so nothing is actually installed.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -141,8 +141,11 @@ describe('init Next.js existing-config paths', () => {
         const nextCfg = 'module.exports = { reactStrictMode: true };\n';
         write(cwd, 'next.config.js', nextCfg);
         await init({ yes: true, cwd });
-        // Existing postcss kept, no postcss.config.mjs created.
+        // Existing postcss kept, no postcss.config.mjs created, and the one
+        // line the author has to add is spelled out.
         expect(readFileSync(join(cwd, 'postcss.config.js'), 'utf8')).toBe(postcss);
+        expect(existsSync(join(cwd, 'postcss.config.mjs'))).toBe(false);
+        expect(logs.join('\n')).toContain("'@csszyx/unplugin/postcss': {}");
         // next.config left alone (too risky) and the manual warning printed.
         expect(readFileSync(join(cwd, 'next.config.js'), 'utf8')).toBe(nextCfg);
         expect(logs.join('\n')).toContain('Could not auto-inject');
