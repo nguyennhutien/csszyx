@@ -35,7 +35,7 @@ import { type VueAdapterOptions, preprocess as vuePreprocess } from '@csszyx/vue
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
 import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
-import type { PluginOption } from 'vite';
+import type { ModuleNode, PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
 import { findClassNameAuthorConflicts } from './class-name-authors.js';
@@ -184,6 +184,13 @@ interface PluginState {
      * emit their CSS (no entry → the classes resolve to no styles, silently).
      */
     sawTailwindEntry: boolean;
+    /**
+     * Absolute paths of every CSS file seen importing `tailwindcss`, without
+     * their query. These are the modules whose generated CSS changes when the
+     * safelist does, which is what lets a dev server hot-update instead of
+     * reloading — see the `handleHotUpdate` safelist branch.
+     */
+    tailwindEntryFiles: Set<string>;
     /**
      * True once ANY CSS file passed through the transform hook. The missing-entry
      * warning only fires when csszyx actually observed the CSS pipeline but found
@@ -2969,6 +2976,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         scanCssTheme: null,
         autoThemeCssFiles: [],
         sawTailwindEntry: false,
+        tailwindEntryFiles: new Set<string>(),
         sawAnyCss: false,
         tailwindWarningEmitted: false,
         tailwindEntryScoped: false,
@@ -4722,6 +4730,56 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Record a hot-updated file that produced no classes, and bail.
+     *
+     * Three paths reach it — a file with no `sz` at all, one the parser
+     * refused, and one the transform left alone — and all three owe the same
+     * bookkeeping: the file's global-var usage and its now-empty CSS-variable
+     * contribution have to be written down, or a class it used to own stays in
+     * the build after the edit removed it.
+     *
+     * @param file - The changed file.
+     * @param content - Its current contents.
+     * @returns Nothing, so a caller can `return` it directly.
+     */
+    function recordUntransformedHotFile(file: string, content: string): undefined {
+        trackGlobalVarSourceFile(file, content);
+        recordFileVarMangleEntries(state, file, []);
+        recordFileCSSVariableMetrics(state, file, null);
+        return undefined;
+    }
+
+    /**
+     * The dev-server modules whose CSS a safelist write changes.
+     *
+     * One project can have several Tailwind entries — a monorepo package and
+     * an app shell each importing `tailwindcss` — and the `@source` directive
+     * goes into every one of them, so every one regenerates.
+     *
+     * A module graph is asked by FILE rather than by id: one stylesheet can
+     * hold several module ids at once, since Vite appends `?direct`, `?used`
+     * and friends depending on how the page reached it, and a reload avoided
+     * for one of them is a reload taken for another.
+     *
+     * @param moduleGraph - The dev server's module graph.
+     * @param moduleGraph.getModulesByFile - Lookup by file path. An entry the
+     *   graph has not loaded yet contributes nothing, and an empty result is
+     *   what the caller wants — see the safelist branch for why silence would
+     *   be worse.
+     * @returns Every module the entries currently occupy, possibly empty.
+     */
+    function tailwindEntryModules(moduleGraph: {
+        getModulesByFile: (file: string) => Iterable<ModuleNode> | undefined;
+    }): ModuleNode[] {
+        const modules: ModuleNode[] = [];
+        for (const file of state.tailwindEntryFiles) {
+            const found = moduleGraph.getModulesByFile(file);
+            if (found) modules.push(...found);
+        }
+        return modules;
+    }
+
+    /**
      * Process a Tailwind CSS entry and inject the generated-class source.
      *
      * @param code CSS source.
@@ -4735,6 +4793,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         state.sawAnyCss = true;
         if (!cssImportsTailwind(code)) return null;
         state.sawTailwindEntry = true;
+        // Recorded before the candidate check below returns: an entry with
+        // nothing to inject yet is still the entry a later safelist write has
+        // to hot-update, and the first write is exactly the one that used to
+        // reload the page.
+        // `split` always yields a first element, so an id with no query
+        // answers with the whole id.
+        const [entryFile] = id.split('?');
+        state.tailwindEntryFiles.add(entryFile);
         if (cssHasContentScope(code)) state.tailwindEntryScoped = true;
         if (!hasInjectableTailwindCandidate(state.classes)) return null;
 
@@ -5569,6 +5635,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                  * Vite HMR hook: re-runs theme scan when a watched CSS file changes,
                  * and incrementally updates csszyx-classes.html when a source file gains new sz classes.
                  * @param ctx - HMR context containing the changed file
+                 * @returns The modules a safelist write affects, so Vite hot-updates
+                 * the stylesheet instead of reloading the page; undefined otherwise,
+                 * which leaves Vite's own handling in place.
                  */
                 handleHotUpdate(ctx) {
                     // First edit = the initial module-load wave is over; any
@@ -5616,13 +5685,39 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         }
                     }
 
+                    // The safelist is markup Tailwind scans, so it is named
+                    // `.html` — and Vite full-reloads the page for any changed
+                    // `.html` that matched no module. Growing the class set
+                    // therefore threw away React state, scroll position and
+                    // open dialogs on the first use of each new utility per
+                    // server lifetime, while the stylesheet had already been
+                    // hot-updated correctly in the same tick (field-reported).
+                    //
+                    // Naming the Tailwind entries as the modules this change
+                    // affects is simply true: they `@source` the safelist, so
+                    // their generated CSS is what a safelist write changes.
+                    // Vite then takes its ordinary CSS-update path.
+                    if (ctx.file === path.join(state.rootDir, SAFELIST_FILENAME)) {
+                        // Answered even when the lookup finds nothing, because
+                        // an EMPTY set is the safe answer here and silence is
+                        // not. Two things read this set and both reload on
+                        // silence: Vite, whose empty-set branch sends a reload
+                        // addressed to the safelist path — which its client
+                        // drops unless the browser is viewing that file — and
+                        // `@tailwindcss/vite`, whose own hot update sends an
+                        // unaddressed one while it still sees modules for a
+                        // file it scanned. Emptying the set stands both down.
+                        // Measured both ways against a real dev server.
+                        return tailwindEntryModules(ctx.server.moduleGraph);
+                    }
+
                     // Incremental sz class discovery: when a source file changes, scan it
                     // immediately and update csszyx-classes.html if new classes are found.
                     // This ensures Tailwind generates CSS for new sz props without a dev restart.
                     // handleHotUpdate fires before the module is re-transformed, so we must
                     // read and transform the file ourselves to discover any new classes.
                     if (!shouldProcessSource(ctx.file)) {
-                        return;
+                        return undefined;
                     }
 
                     let fileContent: string, result: SourceTransformResult;
@@ -5630,7 +5725,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         fileContent = fs.readFileSync(ctx.file, 'utf-8');
                     } catch {
                         refreshSzvRegistryEntry(ctx.file, null);
-                        return;
+                        return undefined;
                     }
 
                     // Before the importers re-transform: an edited factory must
@@ -5653,10 +5748,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         !fileContent.includes('szs=') &&
                         !/\bsz\s*:\s*["'{]/.test(fileContent)
                     ) {
-                        trackGlobalVarSourceFile(ctx.file, fileContent);
-                        recordFileVarMangleEntries(state, ctx.file, []);
-                        recordFileCSSVariableMetrics(state, ctx.file, null);
-                        return;
+                        return recordUntransformedHotFile(ctx.file, fileContent);
                     }
 
                     try {
@@ -5668,17 +5760,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             performance.now() - hmrTransformStarted,
                         );
                     } catch {
-                        trackGlobalVarSourceFile(ctx.file, fileContent);
-                        recordFileVarMangleEntries(state, ctx.file, []);
-                        recordFileCSSVariableMetrics(state, ctx.file, null);
-                        return;
+                        return recordUntransformedHotFile(ctx.file, fileContent);
                     }
 
                     if (!result.transformed) {
-                        trackGlobalVarSourceFile(ctx.file, fileContent);
-                        recordFileVarMangleEntries(state, ctx.file, []);
-                        recordFileCSSVariableMetrics(state, ctx.file, null);
-                        return;
+                        return recordUntransformedHotFile(ctx.file, fileContent);
                     }
 
                     const sizeBefore = state.classes.size;
@@ -5702,6 +5788,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME);
                         ctx.server.watcher.emit('change', safelistPath);
                     }
+                    return undefined;
                 },
                 transformIndexHtml: {
                     order: 'pre',
