@@ -20,7 +20,8 @@ pub type MangleMap = HashMap<String, String>;
 /// # Algorithm
 ///
 /// 1. Sort all entries by original class name (determinism)
-/// 2. Create canonical string: "orig1:mangle1|orig2:mangle2|..."
+/// 2. Create canonical string: "<len>:<orig>:<len>:<mangle>|..." — the lengths
+///    keep it decodable one way only, because a class name can hold a colon
 /// 3. Compute SHA-256 hash
 /// 4. Take first 16 hex characters (64 bits, ~1.8e19 possible values)
 ///
@@ -79,11 +80,29 @@ pub fn compute_checksum_internal(map: &MangleMap) -> String {
     let mut entries: Vec<(&String, &String)> = map.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
 
-    // Step 2: Create canonical string representation
-    // Format: "orig1:mangle1|orig2:mangle2|..."
+    // Step 2: Create canonical string representation.
+    //
+    // Format: "<origLen>:<orig>:<mangleLen>:<mangle>" per entry, joined by "|".
+    //
+    // The lengths are what make the form injective, and they are not
+    // decoration. Class names carry the separators: every variant class has a
+    // colon in it, and arbitrary content can carry a pipe. Without lengths,
+    // {"a:b": "c"} and {"a": "b:c"} both render "a:b:c" and hash the same, so
+    // two different maps share a checksum. With them, a reader knows exactly
+    // how far the name runs and the form can be decoded one way only.
+    //
+    // Lengths count UTF-16 code units, which JavaScript reads for free off
+    // `String.prototype.length`. Counting them here costs a pass over a string
+    // this build already holds, and the browser is the side worth sparing.
     let canonical = entries
         .iter()
-        .map(|(orig, mangled)| format!("{orig}:{mangled}"))
+        .map(|(orig, mangled)| {
+            format!(
+                "{}:{orig}:{}:{mangled}",
+                orig.encode_utf16().count(),
+                mangled.encode_utf16().count()
+            )
+        })
         .collect::<Vec<_>>()
         .join("|");
 
@@ -242,5 +261,95 @@ mod tests {
         // real performance (typically <5ms in debug builds). A tight wall-clock
         // bound is flaky on loaded CI runners.
         assert!(elapsed.as_millis() < 500);
+    }
+
+    /// Two different maps must not share a checksum just because a class name
+    /// carries the character the canonical form separates fields with. Every
+    /// variant class does: `hover:bg-red-500` is a name with a colon in it.
+    #[test]
+    fn a_name_carrying_a_separator_does_not_collide_with_a_value_carrying_it() {
+        let colon_in_key: MangleMap = [("a:b".to_string(), "c".to_string())].into();
+        let colon_in_value: MangleMap = [("a".to_string(), "b:c".to_string())].into();
+        assert_ne!(
+            compute_checksum_internal(&colon_in_key),
+            compute_checksum_internal(&colon_in_value)
+        );
+
+        let pipe_in_key: MangleMap = [("a|b".to_string(), "c".to_string())].into();
+        let two_entries: MangleMap = [
+            ("a".to_string(), "b".to_string()),
+            ("c".to_string(), "d".to_string()),
+        ]
+        .into();
+        assert_ne!(
+            compute_checksum_internal(&pipe_in_key),
+            compute_checksum_internal(&two_entries)
+        );
+    }
+
+    /// The canonical form, frozen.
+    ///
+    /// These values are the contract between this crate and the TypeScript
+    /// runtime, and the pair of tests holding them is what keeps the two from
+    /// drifting. The runtime asserts the SAME numbers against the WebAssembly
+    /// build of this crate, so changing the form here turns this test red,
+    /// updating it turns the runtime's copy red, and the runtime's copy only
+    /// goes green again once `pkg-node` has been rebuilt. Without that, a
+    /// change to this function and a stale WebAssembly artifact agree with each
+    /// other and nothing notices.
+    ///
+    /// Update deliberately, and rebuild `pkg-node` in the same change.
+    #[test]
+    fn the_canonical_form_is_frozen() {
+        let cases: [(MangleMap, &str); 6] = [
+            (MangleMap::new(), "e3b0c44298fc1c14"),
+            (
+                [("a".to_string(), "b".to_string())].into(),
+                "95dd1eb0a569dbd2",
+            ),
+            (
+                [
+                    ("hover:bg-red-500".to_string(), "a".to_string()),
+                    ("md:focus:ring-2".to_string(), "b".to_string()),
+                ]
+                .into(),
+                "217d2abd522e4601",
+            ),
+            (
+                [("a:b".to_string(), "c".to_string())].into(),
+                "8a37856518dacc57",
+            ),
+            (
+                [("a".to_string(), "b:c".to_string())].into(),
+                "b8d47370810d318b",
+            ),
+            (
+                [
+                    ("after:content-[\"\u{1F389}\"]".to_string(), "a".to_string()),
+                    ("after:content-[\"\u{E000}\"]".to_string(), "b".to_string()),
+                ]
+                .into(),
+                "5bc13806268685f8",
+            ),
+        ];
+        for (map, expected) in cases {
+            assert_eq!(compute_checksum_internal(&map), expected);
+        }
+    }
+
+    /// A real variant class still checksums, and still answers the same thing
+    /// every time — the separator fix must not cost determinism.
+    #[test]
+    fn a_variant_class_checksums_the_same_way_twice() {
+        let map: MangleMap = [
+            ("hover:bg-red-500".to_string(), "a".to_string()),
+            ("md:focus:ring-2".to_string(), "b".to_string()),
+        ]
+        .into();
+        assert_eq!(
+            compute_checksum_internal(&map),
+            compute_checksum_internal(&map)
+        );
+        assert_eq!(compute_checksum_internal(&map).len(), 16);
     }
 }

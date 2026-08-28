@@ -115,7 +115,9 @@ function checkBuildOutput(cwd: string, verbose = false): void {
     if (htmlFiles.length === 0) return;
     printSuccess(`Found ${htmlFiles.length} HTML file(s)`);
     const html = fs.readFileSync(path.join(distDir, String(htmlFiles[0])), 'utf-8');
-    if (html.includes('data-sz-checksum')) {
+    // The build shortens the attribute to `data-sz-cs` when production.minify
+    // is on, which is the default, so doctor has to know both spellings.
+    if (html.includes('data-sz-checksum') || html.includes('data-sz-cs')) {
         printSuccess('Checksum injection working');
         return;
     }

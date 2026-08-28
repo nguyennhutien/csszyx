@@ -100,8 +100,9 @@ checksum key. Global aliases use the same `var:` namespace, for example
 
 ### `verifyMangleChecksum(expectedChecksum)`
 
-Compares the expected mangle checksum with the checksum embedded on
-`<html data-sz-checksum="...">`. Returns `true` if they match.
+Compares the expected mangle checksum with the checksum the build embedded on
+`<html>`. Reads `data-sz-checksum`, or `data-sz-cs` when `production.minify`
+wrote the short name — which it does by default. Returns `true` if they match.
 
 ```ts
 function verifyMangleChecksum(expectedChecksum: string): boolean;
@@ -114,6 +115,15 @@ Validates the injected mangle map against the embedded checksum.
 ```ts
 function verifyMangleMapIntegrity(): boolean;
 ```
+
+Synchronous, so it can only recompute the checksum through the Rust core's
+`verify_mangle_checksum` global. Without that global it validates the map's
+shape, accepts it, and says so only in development — a `true` from this
+function does not on its own mean a checksum was recomputed. Prefer
+[`verifyMangleChecksumAsync`](/docs/reference/runtime/), which recomputes
+through the Web Crypto API and needs no WebAssembly and no CSP exception. It
+answers `false` and warns where Web Crypto is unavailable — an insecure
+context — rather than claiming a match it could not compute.
 
 ### `validateHydrationClass(mangledClass, map)`
 
@@ -230,19 +240,21 @@ interface SSRContext {
 }
 ```
 
-## The `window.__csszyx` Runtime Object
+## The Runtime Mangle Registry
 
-Every production-mangled build installs `window.__csszyx`, carrying the mangle
-map and its lookup helpers. It is delivered twice, first-wins: an inline script
-in the build-emitted HTML, and a generated module inside the JS bundle itself
-(vite/rollup lanes) that installs only when the HTML script has not already —
-so pages the build does not own, such as a bundle embedded in a host shell or
-served under a CSP that strips inline scripts, still receive the map.
+A production-mangled build registers the mangle map with `@csszyx/runtime` from
+a generated module inside the JS bundle — attached to every HTML entry ahead of
+the app, and to every module that imports the runtime. The built HTML carries no
+executable inline script on any lane, so the registration is covered by whatever
+`script-src` already allows your bundle, and pages the build does not own (a
+bundle embedded in a host shell) receive the map the same way.
 `mangleMap` stays class-only, while `varMangleMap` contains CSS variable
 mappings when `production.mangleVars` is enabled.
 
 ```ts
-interface CsszyxRuntimeObject {
+import { getMangleRegistry, installMangleRuntime } from '@csszyx/runtime';
+
+interface MangleRegistry {
   mangleMap: Record<string, string>;
   varMangleMap: Record<string, string | string[]>;
   checksum: string;
@@ -255,10 +267,39 @@ interface CsszyxRuntimeObject {
 }
 ```
 
-The runtime helpers (`szr`, `szcn`, `szDecode`) read this object for their
-mangle-aware paths; when it is absent they fall back to identity behavior. For
-application code, prefer the typed wrappers from `@csszyx/runtime` over
-touching `window.__csszyx` directly.
+The runtime helpers (`szr`, `szcn`, `szDecode`) read the registry for their
+mangle-aware paths; when it is absent they fall back to identity behavior.
+`getMangleRegistry()` returns it (or `null`); `installMangleRuntime()` is what
+the generated module calls and is idempotent per checksum.
+
+`window.__csszyx` is **opt-in**: set `production.mangleDebugGlobal: true` and the
+same registry object is assigned to the global for devtools inspection. Nothing
+about correctness depends on it, and nothing else installs it.
+
+### Reading the map on a page you cannot rebuild
+
+`mangleDebugGlobal` is a build option, so it cannot help with a build that is
+already deployed. The census can: every build emits it into the HTML as inert
+JSON, so devtools alone answers "what was this class originally?".
+
+```js
+// In the console, on any csszyx-built page:
+const map = JSON.parse(document.getElementById('__CSSZYX_MANGLE_MAP__').textContent);
+
+// Class-only build: original → token. With mangleVars on, keys are namespaced
+// (`class:p-4`, `var:--_sz-p`), so strip the prefix first.
+const classes = Object.fromEntries(
+  Object.entries(map)
+    .filter(([key]) => !key.startsWith('var:'))
+    .map(([key, token]) => [key.replace(/^class:/, ''), token]),
+);
+
+classes['p-4'];                                             // → the token
+Object.entries(classes).find(([, token]) => token === 'z'); // → the original
+```
+
+`build.emitManifest` writes the same data to `csszyx-manifest.json` next to the
+build output, if you would rather read it server-side than in a browser.
 
 ## Example: Manual Hydration Guard
 

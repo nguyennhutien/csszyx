@@ -135,8 +135,9 @@ function szcn(...inputs: (string | false | null | undefined)[]): string
 npm `tailwind-merge` cannot do this job here: in a production build csszyx
 **mangles** owned classes (`gap-2` → `q3`, `gap-8` → `q7`), and tailwind-merge
 can't tell `q3`/`q7` are the same utility. `szcn` decodes each token through the
-runtime reverse mangle map (`window.__csszyx.decode`) before grouping, so
-overrides keep working with mangling on.
+runtime mangle registry (`getMangleRegistry().decode`, registered by the build
+from inside the bundle) before grouping, so overrides keep working with
+mangling on.
 
 ```tsx twoslash
 import { szcn } from '@csszyx/runtime';

@@ -91,39 +91,17 @@ export interface ProductionConfig {
     mangleExclude?: string[];
 
     /**
-     * Where the runtime mangle map is delivered to the browser.
+     * Expose the runtime mangle registry as `window.__csszyx` for debugging.
      *
-     * The map is what lets runtime helpers (`szr`, `szv`, `szcn`, `szDecode`)
-     * speak the same class names as the mangled CSS. It travels two ways: an
-     * inline script in build-emitted HTML, and a module inside the JS bundle
-     * for pages the build does not own (a bundle embedded in a host shell, or
-     * a CSP that strips inline scripts).
+     * The registry (`mangleMap`, `decode`, `encode`, `decodeVar`, …) is what
+     * runtime helpers read internally; nothing about correctness depends on
+     * the global. It is off by default so a production page carries no
+     * inspection surface it did not ask for. Only the bundle delivery honours
+     * it; the deprecated inline installer always assigns the global.
      *
-     * Both deliveries carry the full census, so a build that ships both pays
-     * for the map twice across HTML and JS. Narrow this when the app knows
-     * which delivery it actually needs:
-     *
-     * - `'both'` — inline script plus bundle module. Always correct.
-     * - `'html'` — inline script only. For apps that serve their own
-     *   csszyx-built HTML and allow inline scripts.
-     * - `'bundle'` — bundle module only. For embedded builds and CSP setups
-     *   that strip inline scripts.
-     *
-     * The hydration checksum payload is unaffected — it ships in every mode,
-     * so `'bundle'` still emits the JSON census tag into HTML the build owns
-     * (hydration verify reads it from the DOM); the value only drops the
-     * runtime installer script. Choosing a delivery the page does not receive
-     * leaves runtime helpers without a map, which passes original class names
-     * through while the CSS ships mangled, so narrow this only against a
-     * known deployment shape.
-     *
-     * Narrowing runs where the map is injected — the vite/rollup lanes. A
-     * webpack build ships the map unchanged and warns that the value has no
-     * effect there; an unknown value fails the build.
-     *
-     * @default 'both'
+     * @default false
      */
-    mangleMapDelivery?: MangleMapDelivery;
+    mangleDebugGlobal?: boolean;
 
     /**
      * Alias stable app-owned global CSS custom properties.
@@ -152,11 +130,6 @@ export interface ProductionConfig {
      */
     minify: boolean;
 }
-
-/**
- * Delivery channels for the runtime mangle map.
- */
-export type MangleMapDelivery = 'both' | 'html' | 'bundle';
 
 /**
  * Supported global custom-property optimization mode.

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     escapeForDoubleQuotedString,
     escapeJsonForInlineScript,
+    escapeJsonForStringLiteral,
 } from '../src/inline-script-escape.js';
 import { runGeneratedCode } from './vm-test-utils.js';
 
@@ -80,5 +81,52 @@ describe('escapeForDoubleQuotedString', () => {
 
     it('is a no-op for strings with no backslashes or quotes', () => {
         expect(escapeForDoubleQuotedString('p-4 md:flex')).toBe('p-4 md:flex');
+    });
+});
+
+describe('escapeJsonForStringLiteral', () => {
+    /**
+     * Evaluate the escaped payload inside a string literal of each quoting a
+     * minifier might pick, and assert the runtime value is the original JSON.
+     *
+     * @param json - The payload to round-trip.
+     */
+    function roundTripsInEveryQuoting(json: string): void {
+        const escaped = escapeJsonForStringLiteral(json);
+        for (const quote of ['"', "'", '`']) {
+            // A real parse, not a hand-rolled unescaper: the claim under test
+            // is what a JavaScript parser makes of the emitted literal, and a
+            // model of the parser would just repeat the implementation's own
+            // assumptions back at it.
+            const value = new Function(`return ${quote}${escaped}${quote};`)() as string;
+            expect(value, `quoting ${quote}`).toBe(json);
+        }
+    }
+
+    it('survives every quoting a minifier might choose', () => {
+        // Next's production build re-quoted a template literal into double
+        // quotes; the payload's own quotes then closed the string and the
+        // server chunk failed to parse.
+        roundTripsInEveryQuoting(JSON.stringify({ 'class:p-4': 'z', 'class:mx-0': 'y' }));
+    });
+
+    it('survives class names carrying quotes, backslashes and interpolation', () => {
+        roundTripsInEveryQuoting(
+            JSON.stringify({
+                "class:[content:'x']": 'z',
+                'class:[content:"y"]': 'w',
+                'class:[--v:`${x}`]': 'v',
+                'class:[--w:a\\b]': 'u',
+            }),
+        );
+    });
+
+    it('leaves no character that could terminate a literal or a script tag', () => {
+        const escaped = escapeJsonForStringLiteral(
+            JSON.stringify({ 'a</script><b>&': 'c\'d"e`f$g\\h' }),
+        );
+        for (const hazard of ['"', "'", '`', '$', '<', '>']) {
+            expect(escaped, `must not contain a bare ${hazard}`).not.toContain(hazard);
+        }
     });
 });

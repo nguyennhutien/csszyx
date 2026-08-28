@@ -25,6 +25,14 @@ import { MAX_SZ_DEPTH, SzDepthError } from '@csszyx/compiler/browser';
 import { getSzLowering } from './lowering-slot.js';
 
 export {
+    clearMangleRegistry,
+    getMangleRegistry,
+    installMangleRuntime,
+    type MangleRegistry,
+    type MangleRegistryInput,
+    type MangleVarValue,
+} from './mangle-registry.js';
+export {
     __szvPick,
     __szvPick1,
     type SzvCompiledTable,

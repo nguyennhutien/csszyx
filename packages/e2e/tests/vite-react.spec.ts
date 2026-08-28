@@ -97,11 +97,14 @@ test.describe('Vite-React Playground', () => {
         await expect.poll(() => paddingTopPx(cardA)).toBeGreaterThan(initialCardAPadding);
         await expect.poll(() => paddingTopPx(cardB)).toBeGreaterThan(initialCardBPadding);
 
-        const varMap = await page.evaluate(() => window.__csszyx?.varMangleMap);
-        expect(varMap).toEqual({ '--_sz-p': '--cz' });
-
-        const decoded = await page.evaluate(() => window.__csszyx?.decodeVar?.('--cz'));
-        expect(decoded).toEqual(['--_sz-p']);
+        // The variable map ships in the inert hydration census (data, not
+        // script); `window.__csszyx` is opt-in and the dev server installs
+        // nothing executable.
+        const census = await page.evaluate(() =>
+            JSON.parse(document.getElementById('__CSSZYX_MANGLE_MAP__')?.textContent ?? 'null'),
+        );
+        expect(census).toMatchObject({ 'var:--_sz-p': '--cz' });
+        expect(await page.evaluate(() => window.__csszyx)).toBeUndefined();
     });
 });
 

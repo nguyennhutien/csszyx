@@ -24,10 +24,15 @@ interface Booted {
     transform: (code: string, id: string) => Promise<unknown>;
 }
 
-async function boot(options = {}): Promise<Booted> {
+async function boot(options = {}, files: Record<string, string> = {}): Promise<Booted> {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-transform-edge-'));
     tempDirs.push(root);
     fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    // On disk before `configResolved`: the build settles the mangle map from
+    // the prescan, so a module the prescan never walked never reaches the map.
+    for (const [file, source] of Object.entries(files)) {
+        fs.writeFileSync(path.join(root, file), source, 'utf8');
+    }
     const plugins = vitePlugin(options);
     const ctx: Ctx = { warn() {}, error() {} };
     const invoke = async (hookName: string, ...args: unknown[]): Promise<unknown> => {
@@ -217,9 +222,46 @@ describe('transform hook branch edges', () => {
         } | null;
         expect(result).not.toBeNull();
         // production.minify shortens the attribute name to data-sz-cs and injects
-        // the checksum placeholder and the debug script after <body>.
+        // the checksum placeholder. Nothing executable: the inline installer a
+        // strict CSP refuses (field-reported) is gone from every lane.
         expect(result?.code).toContain('data-sz-cs="___CSSZYX_CHECKSUM___"');
-        expect(result?.code).toContain('window.__csszyx');
+        expect(result?.code).not.toContain('window.__csszyx');
+    });
+
+    it('injects the inert census into a layout so the map is readable from the DOM', async () => {
+        const { root, transform } = await boot(
+            { production: { mangle: true } },
+            { 'src/A.tsx': 'export const A = () => <div sz={{ p: 4 }} />;' },
+        );
+        const code =
+            'export default function RootLayout(){return <html lang="en"><body>x</body></html>;}';
+        const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {
+            code: string;
+        } | null;
+        // Data, not script: this is the payload `verifyMangleMapIntegrity()`
+        // reads from the DOM, and it is what makes a mangled class traceable
+        // back to its original name in devtools without a rebuild. The vite
+        // lane emits it from `transformIndexHtml`; this lane had neither.
+        expect(result?.code).toContain('id="__CSSZYX_MANGLE_MAP__"');
+        expect(result?.code).toContain('type="application/json"');
+        expect(result?.code).toContain('___CSSZYX_CENSUS___');
+    });
+
+    it('never installs the map from the layout, even on a mangled build with a census', async () => {
+        const { root, transform } = await boot(
+            { production: { mangle: true } },
+            { 'src/A.tsx': 'export const A = () => <div sz={{ p: 4 }} />;' },
+        );
+        const code =
+            'export default function RootLayout(){return <html lang="en"><body>x</body></html>;}';
+        const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {
+            code: string;
+        } | null;
+        // The map reaches the page through the bundle on every lane; the
+        // layout carries the checksum attribute and inert data only.
+        expect(result?.code).toContain('data-sz-checksum="___CSSZYX_CHECKSUM___"');
+        expect(result?.code).not.toContain('window.__csszyx');
+        expect(result?.code).not.toMatch(/<script(?![^>]*application\/json)/i);
     });
 
     it('injects the checksum attribute into a layout with no <body> tag', async () => {
@@ -251,6 +293,7 @@ describe('transform hook branch edges', () => {
         const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {
             code: string;
         } | null;
-        expect(result?.code).toContain('<bodyguard /><body><script');
+        expect(result?.code).toContain('<html data-sz-checksum="___CSSZYX_CHECKSUM___">');
+        expect(result?.code).toContain('<bodyguard /><body><script id="__CSSZYX_MANGLE_MAP__"');
     });
 });

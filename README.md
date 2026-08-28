@@ -155,7 +155,9 @@ const cls = dynamic({ p: 4, bg: "blue-500" }); // injects CSS if not already in 
 
 ## Debugging
 
-In development the plugin attaches a debug helper to `window`:
+A mangled build keeps its map in a runtime registry inside the bundle — no
+inline script, CSP-safe. Opt into a devtools handle with
+`production: { mangle: true, mangleDebugGlobal: true }`:
 
 ```ts
 window.__csszyx.decode("z"); // → 'p-4'
@@ -164,6 +166,9 @@ window.__csszyx.decodeAll(element); // → ['p-4', 'bg-red-500']
 window.__csszyx.mangleMap; // full map
 window.__csszyx.checksum; // SHA-256 hex
 ```
+
+From code, `getMangleRegistry()` from `@csszyx/runtime` returns the same object
+without the global.
 
 ## Documentation
 

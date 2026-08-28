@@ -189,12 +189,14 @@ describe('mangleSizeMessage', () => {
         expect(mangleSizeMessage(verdict)).toContain('bundle + html (2 copies)');
     });
 
-    it('points at the delivery knob as the cheaper fix', () => {
+    it('explains the second copy instead of pointing at a knob that no longer exists', () => {
         const verdict = computeMangleSizeVerdict(
             account(5000, 4990, ['html', 'bundle']),
             bigPayload,
         );
-        expect(mangleSizeMessage(verdict)).toContain('mangleMapDelivery');
+        const message = mangleSizeMessage(verdict);
+        expect(message).not.toContain('mangleMapDelivery');
+        expect(message).toContain('hydration checksum');
     });
 
     it('states the code saving instead of disclaiming it', () => {

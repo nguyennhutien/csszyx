@@ -10,7 +10,6 @@
 import { createHash } from 'node:crypto';
 
 import type { CssVariableMangleValue, TokenData } from '@csszyx/compiler';
-import { CSSZYX_GLOBAL_ALIAS_PREFIX } from '@csszyx/types';
 import { sortStrings } from './sort.js';
 import { replaceEveryLiteral, unicodeEscape } from './string-escape.js';
 
@@ -40,7 +39,13 @@ export function safeJsonForScriptTag(value: unknown, prettyPrint = false): strin
 }
 
 /**
- * Injection mode for mangle map.
+ * Carrier for the inert hydration census — DATA, never executable code.
+ *
+ * `script` is a `<script type="application/json">` data block: browsers do
+ * not evaluate it and a `script-src` policy does not apply to it. It is the
+ * form `@csszyx/runtime`'s hydration verification reads back from the DOM.
+ * csszyx emits no executable inline script at all; this is the whole of what
+ * it puts in the document besides the checksum attribute.
  */
 export type InjectionMode = 'inline' | 'script' | 'both';
 
@@ -49,10 +54,10 @@ export type InjectionMode = 'inline' | 'script' | 'both';
  */
 export interface HtmlInjectionOptions {
     /**
-     * How to inject the mangle map.
+     * Where the inert census goes.
      * - 'inline': As data-sz-map attribute on <html>
-     * - 'script': As <script id="__CSSZYX_MANGLE_MAP__"> in <head>
-     * - 'both': Both methods
+     * - 'script': As <script id="__CSSZYX_MANGLE_MAP__" type="application/json"> in <head>
+     * - 'both': Both carriers
      *
      * @default 'script'
      */
@@ -77,22 +82,6 @@ export interface HtmlInjectionOptions {
      * hydration checksum script includes both class and variable namespaces.
      */
     varMangleMap?: Record<string, CssVariableMangleValue>;
-
-    /**
-     * Prefix used for generated global CSS custom-property aliases.
-     */
-    globalVarAliasPrefix?: string;
-
-    /**
-     * Whether the HTML also installs `window.__csszyx`.
-     *
-     * The checksum payload ships either way — hydration verification reads it
-     * from the DOM. Disable when the JS bundle owns the runtime object, so the
-     * census is not serialized into both the page and the bundle.
-     *
-     * @default true
-     */
-    installRuntimeObject?: boolean;
 }
 
 /**
@@ -156,6 +145,29 @@ export function injectChecksum(html: string, checksum: string, minify = false): 
 }
 
 /**
+ * Put a `<script>` tag at the end of the document head.
+ *
+ * Both injectors place a JSON data block that a runtime reads back by id, and
+ * both have to cope with HTML that a framework may have emitted without a
+ * head, or without a closing `</html>` — a fragment rendered into a shell,
+ * for instance. Where the tag lands decides whether the runtime finds it, so
+ * the rule is written once rather than kept in step in two places.
+ *
+ * @param html - HTML content.
+ * @param scriptTag - The tag to insert.
+ * @returns The HTML with the tag inserted.
+ */
+function withScriptTag(html: string, scriptTag: string): string {
+    if (html.includes('</head>')) {
+        return html.replace('</head>', `${scriptTag}\n</head>`);
+    }
+    if (html.includes('</html>')) {
+        return html.replace('</html>', `${scriptTag}\n</html>`);
+    }
+    return html + scriptTag;
+}
+
+/**
  * Injects mangle map as a script tag in HTML.
  *
  * @param {string} html - HTML content
@@ -180,43 +192,11 @@ export function injectMangleMapScript(
     mangleMap: Record<string, string>,
     options: HtmlInjectionOptions = {},
 ): string {
-    const {
-        prettyPrint = false,
-        varMangleMap = {},
-        globalVarAliasPrefix = CSSZYX_GLOBAL_ALIAS_PREFIX,
-        installRuntimeObject = true,
-    } = options;
+    const { prettyPrint = false, varMangleMap = {} } = options;
     const checksumMap = createHydrationMangleMap(mangleMap, varMangleMap);
+    const scriptTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">${safeJsonForScriptTag(checksumMap, prettyPrint)}</script>`;
 
-    const jsonContent = safeJsonForScriptTag(checksumMap, prettyPrint);
-    const varMapContent = safeJsonForScriptTag(varMangleMap);
-
-    // Class-only builds make the checksum payload byte-identical to the class
-    // map, so the installer re-reads the JSON the document already carries
-    // instead of shipping a second literal of every censused name. Variable
-    // mangling namespaces the payload (`class:` / `var:`), which no longer
-    // reconstructs into the two separate maps, so those builds keep the
-    // literal. Falls back to an empty map if the tag is ever stripped, which
-    // matches the no-map behaviour the runtime helpers already tolerate.
-    const reuseChecksumPayload = Object.keys(varMangleMap).length === 0;
-    const classMapExpr = reuseChecksumPayload
-        ? '(function(){var e=document.getElementById("__CSSZYX_MANGLE_MAP__");return e?JSON.parse(e.textContent):{}})()'
-        : safeJsonForScriptTag(mangleMap);
-
-    const scriptTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">${jsonContent}</script>`;
-    const prefixContent = safeJsonForScriptTag(globalVarAliasPrefix);
-    const debugScript = `<script>(function(){var m=${classMapExpr};var vm=${varMapContent};var gp=${prefixContent};var r={};var vr={};for(var k in m)r[m[k]]=k;for(var vk in vm){var vv=vm[vk];var vs=Array.isArray(vv)?vv:[vv];for(var vi=0;vi<vs.length;vi++)(vr[vs[vi]]||(vr[vs[vi]]=[])).push(vk)}var cs=document.documentElement.getAttribute("data-sz-checksum")||"";window.__csszyx={mangleMap:m,varMangleMap:vm,checksum:cs,decode:function(c){return r[c]},encode:function(c){return m[c]},decodeVar:function(v){return vr[v]||[]},encodeVar:function(v){return vm[v]},decodeGlobalVar:function(v){var a=vr[v]||[];return v.indexOf(gp)===0?a[0]:void 0},decodeAll:function(el){return(el.className||"").split(" ").map(function(c){return r[c]||c})}}})()</script>`;
-
-    // Inject before </head> or before </html> if no head
-    const combined = installRuntimeObject ? `${scriptTag}\n${debugScript}` : scriptTag;
-    if (html.includes('</head>')) {
-        return html.replace('</head>', `${combined}\n</head>`);
-    } else if (html.includes('</html>')) {
-        return html.replace('</html>', `${combined}\n</html>`);
-    }
-
-    // No closing tags found, append at the end
-    return html + combined;
+    return withScriptTag(html, scriptTag);
 }
 
 /**
@@ -475,10 +455,5 @@ export function injectRecoveryManifest(html: string, manifest: RecoveryManifest)
     const json = JSON.stringify(manifest);
     const scriptTag = `<script id="__SZ_RECOVERY_MANIFEST__" type="application/json">${json}</script>`;
 
-    if (html.includes('</head>')) {
-        return html.replace('</head>', `${scriptTag}\n</head>`);
-    } else if (html.includes('</html>')) {
-        return html.replace('</html>', `${scriptTag}\n</html>`);
-    }
-    return html + scriptTag;
+    return withScriptTag(html, scriptTag);
 }

@@ -8,8 +8,8 @@
  * in a production build csszyx MANGLES owned classes (`gap-2` → `q3`,
  * `gap-8` → `q7`), and tailwind-merge can't tell `q3`/`q7` are the same utility.
  *
- * csszyx owns the reverse mangle map, exposed at runtime as
- * `window.__csszyx.decode(mangled) → original`. So this merge decodes each token
+ * csszyx owns the reverse mangle map, registered at runtime by the bundled
+ * module (`getMangleRegistry().decode(mangled) → original`). So this merge decodes each token
  * to its original name, derives a conflict key (variant prefix + utility prefix),
  * keeps the LAST token per key, and returns the survivors (still in their
  * original — possibly mangled — token form, so the DOM matches the built CSS).
@@ -30,6 +30,7 @@
  * @module
  */
 import { BOX_ROLE_TOKENS } from './box-role-map.generated.js';
+import { getMangleRegistry } from './mangle-registry.js';
 import { classifyAmbiguousValue, getSzcnGroupsGeneration } from './merge-groups.js';
 import { BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT, normalizeBase, stripVariant } from './split-box.js';
 
@@ -69,10 +70,10 @@ const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
  * @param token - A class token, possibly mangled.
  * @returns The original class name.
  */
-/** The runtime mangle bridge an inline script or the bundled module installs. */
+/** The runtime mangle bridge: the registry, or the legacy inline-script object. */
 interface MangleBridge {
     decode?: (c: string) => string | undefined;
-    mangleMap?: Record<string, string>;
+    mangleMap?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -81,10 +82,14 @@ interface MangleBridge {
  * here — every token needs both the decode bridge (conflict classification)
  * and the encode map (output form), and one read serves both.
  *
+ * The registry the bundled module installs comes first; `globalThis.__csszyx`
+ * is the object the deprecated inline HTML installer assigns and stays
+ * readable for one migration window.
+ *
  * @returns The installed bridge object, or undefined.
  */
 function mangleBridge(): MangleBridge | undefined {
-    return (globalThis as { __csszyx?: MangleBridge }).__csszyx;
+    return getMangleRegistry() ?? (globalThis as { __csszyx?: MangleBridge }).__csszyx;
 }
 
 /**

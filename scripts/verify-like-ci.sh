@@ -161,6 +161,14 @@ pnpm exec eslint .
 echo "[verify-like-ci] ReDoS gate (recheck)..."
 pnpm lint:redos
 
+# A csszyx invariant, not a CodeQL mirror: `pnpm codeql:local` runs the real
+# queries and nothing here replaces it. What this owns is that the regexes
+# asserting "no build emits executable inline script" can see a script tag
+# however a browser spells it. Such a filter fails OPEN, so the suite would keep
+# reporting the property holds while it breaks.
+echo "[verify-like-ci] Tag filters in changed source can see every spelling..."
+pnpm check:tag-filters
+
 echo "[verify-like-ci] Type-check..."
 pnpm type-check
 

@@ -80,6 +80,7 @@
     "lint:fast": "biome check",
     "lint": "biome check --write && eslint . --fix --cache --cache-location node_modules/.cache/eslint",
     "lint:check": "biome check && eslint . --cache --cache-location node_modules/.cache/eslint && node --test scripts/toolchain-major-migration.test.mjs",
+    "check:tag-filters": "node scripts/check-tag-filter-regexes.mjs",
     "lint:redos": "RECHECK_BACKEND=pure eslint --quiet --config eslint.redos.config.mjs 'packages/*/src/**/*.{ts,tsx,mts,cts,mjs,cjs,js}'",
     "lint:complexity": "biome lint --config-path=biome.complexity.json --max-diagnostics=1000 packages || true",
     "type-check": "node node_modules/@typescript/native/lib/tsc.js -b",

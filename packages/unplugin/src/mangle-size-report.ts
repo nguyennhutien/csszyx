@@ -190,6 +190,7 @@ export function mangleSizeMessage(verdict: MangleSizeVerdict): string | null {
         'payload, because utility class names compress far better than the map they need. ' +
         'If you enabled it for size, set `production.mangle: false`. If you enabled it to hide ' +
         'class names, this is the expected price and you can ignore this. ' +
-        'Narrowing `production.mangleMapDelivery` removes a map copy when only one channel is needed.'
+        'Two copies is not a misconfiguration: the bundle carries the map the runtime reads, and ' +
+        'the HTML carries the same census for the hydration checksum.'
     );
 }

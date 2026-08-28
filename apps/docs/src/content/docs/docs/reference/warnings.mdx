@@ -492,8 +492,7 @@ is not a bug — it is the safe answer when the token is genuinely ambiguous.
 | Message | Kind |
 | --- | --- |
 | `[csszyx] {n} plugin option(s) are not recognized and have no effect:` followed by one line per key — ``  - `{key}` ``, ``  - `{key}` was replaced by `{renamedTo}` ``, or ``  - `{key}` — did you mean `{suggestion}`? `` — and closing with `An unread option is silent, so whatever you configured it for is not happening.` | Warning, fires in production |
-| **Thrown.** `[csszyx] production.mangleMapDelivery must be 'both', 'html' or 'bundle'; got {value}.` | Error |
-| `[csszyx] production.mangleMapDelivery: '{value}' has no effect on the webpack lane — map delivery only narrows on vite/rollup builds.` | Ungated warning |
+| `[csszyx] production.mangleMapDelivery has been removed and is ignored. The runtime mangle map is always registered from inside the JS bundle now, on every lane, so the built HTML never carries an executable inline <script> and a strict script-src 'self' policy needs no exception. Delete the option. (\`window.__csszyx\` is now opt-in through \`production.mangleDebugGlobal\`.)` | Warning, once per build, whenever the removed option is set |
 | **Thrown.** `[csszyx] Invalid production.mangleGlobalVars config:` + errors | Error |
 | **Thrown.** `production.mangleGlobalVars.mode only supports 'alias'. A full rename needs every reference rewritten, including the ones csszyx cannot see.` | Error, listed under the line above |
 | **Thrown.** `production.mangleGlobalVars.onUnsafeUsage only supports 'error'. An unsafe usage means a token would be aliased where the rename cannot be proven complete, so there is nothing safe to downgrade it to.` | Error, listed under the line above |
@@ -629,7 +628,7 @@ with a different remedy pointing at the CSS pipeline instead.
 ### Mangling made the build bigger
 
 ```text
-[csszyx] production.mangle is making this build BIGGER: +{n} B gzipped. The runtime mangle map costs {n} B via {channels}, while the mangled CSS saves {n} B and the shortened classes in code save {n} B. Mangling is a name-obfuscation feature; over a compressed response it does not reduce payload, because utility class names compress far better than the map they need. If you enabled it for size, set `production.mangle: false`. If you enabled it to hide class names, this is the expected price and you can ignore this. Narrowing `production.mangleMapDelivery` removes a map copy when only one channel is needed.
+[csszyx] production.mangle is making this build BIGGER: +{n} B gzipped. The runtime mangle map costs {n} B via {channels}, while the mangled CSS saves {n} B and the shortened classes in code save {n} B. Mangling is a name-obfuscation feature; over a compressed response it does not reduce payload, because utility class names compress far better than the map they need. If you enabled it for size, set `production.mangle: false`. If you enabled it to hide class names, this is the expected price and you can ignore this. Two copies is not a misconfiguration: the bundle carries the map the runtime reads, and the HTML carries the same census for the hydration checksum.
 ```
 
 The CSS clause flips to `the mangled CSS COSTS {n} B (short tokens compress

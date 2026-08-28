@@ -39,10 +39,15 @@ import { gzipSync } from 'node:zlib';
  * closure 22,008 B. Re-measure with `pnpm check:package-size` after a build. */
 export const SIZE_BUDGETS = [
     {
+        // Raised from 20,480 for the mangle registry, measured 2026-08-26 at
+        // 20,758 B. The map used to reach the runtime helpers through a debug
+        // global that an inline HTML script installed, which strict CSP
+        // refuses; registering it from inside the bundle moved that code into
+        // the shipped runtime, so the growth is the fix rather than drift.
         name: '@csszyx/runtime export closure',
         kind: 'package-exports',
         target: 'packages/runtime',
-        maxGzipBytes: 20_480,
+        maxGzipBytes: 22_800,
     },
     {
         name: '@csszyx/dynamic export closure',

@@ -100,42 +100,53 @@ test.describe('Edge Case Tests (Next.js)', () => {
         expect(checksum).toBeTruthy();
         expect(checksum).toHaveLength(16);
 
-        // window.__csszyx helper should be available after script execution
+        // The inert census: `application/json`, never evaluated, so a strict
+        // script-src does not apply. This is what makes a mangled class
+        // traceable back to its original name in a production page without a
+        // rebuild, and what `verifyMangleMapIntegrity()` reads from the DOM.
+        const census = (await page.evaluate(() =>
+            JSON.parse(document.getElementById('__CSSZYX_MANGLE_MAP__')?.textContent ?? 'null'),
+        )) as Record<string, string> | null;
+        expect(census).not.toBeNull();
+        expect(Object.keys(census ?? {}).length).toBeGreaterThan(0);
+
+        // This playground opts into `production.mangleDebugGlobal` (its
+        // mangle-map viewer reads the global), so the registry the bundle
+        // installed is reachable here.
         const helper = await page.evaluate(() => {
             const h = (window as Record<string, any>).__csszyx;
-            if (!h) {
-                return null;
-            }
-            return {
-                mangleMap: h.mangleMap,
-                checksum: h.checksum,
-                hasDecode: typeof h.decode === 'function',
-                hasEncode: typeof h.encode === 'function',
-                hasDecodeAll: typeof h.decodeAll === 'function',
-            };
+            return h
+                ? {
+                      mangleMap: h.mangleMap as Record<string, string>,
+                      checksum: h.checksum as string,
+                      hasDecode: typeof h.decode === 'function',
+                      hasEncode: typeof h.encode === 'function',
+                      hasDecodeAll: typeof h.decodeAll === 'function',
+                  }
+                : null;
         });
-
-        if (helper) {
-            // mangleMap should be an object with string values
-            expect(typeof helper.mangleMap).toBe('object');
-            const keys = Object.keys(helper.mangleMap);
-            expect(keys.length).toBeGreaterThan(0);
-
-            // Each value should be a short mangled name
-            for (const key of keys.slice(0, 5)) {
-                expect(typeof helper.mangleMap[key]).toBe('string');
-                expect(helper.mangleMap[key].length).toBeLessThanOrEqual(3);
-            }
-
-            // Helper API should be present
-            expect(helper.hasDecode).toBe(true);
-            expect(helper.hasEncode).toBe(true);
-            expect(helper.hasDecodeAll).toBe(true);
-
-            if (helper.checksum) {
-                expect(helper.checksum).toBe(checksum);
-            }
+        expect(helper).not.toBeNull();
+        const keys = Object.keys(helper?.mangleMap ?? {});
+        expect(keys.length).toBeGreaterThan(0);
+        for (const key of keys.slice(0, 5)) {
+            expect(typeof helper?.mangleMap[key]).toBe('string');
+            expect(helper?.mangleMap[key].length).toBeLessThanOrEqual(3);
         }
+        expect(helper?.hasDecode).toBe(true);
+        expect(helper?.hasEncode).toBe(true);
+        expect(helper?.hasDecodeAll).toBe(true);
+        expect(helper?.checksum).toBe(checksum);
+
+        // And no csszyx-owned inline installer anywhere — the webpack lane
+        // registers from the bundle too. Matched by the installer's opening
+        // rather than a substring: Next's flight payload (`self.__next_f.push`)
+        // carries layout markup as a string.
+        const installers = await page.evaluate(() =>
+            [...document.querySelectorAll('script:not([src])')]
+                .map(s => s.textContent ?? '')
+                .filter(text => text.startsWith('(function(){var m=')),
+        );
+        expect(installers).toEqual([]);
     });
 
     test('hover case has hover-related classes', async ({ page }) => {

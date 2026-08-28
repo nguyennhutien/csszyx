@@ -22,11 +22,19 @@ import {
 } from '@csszyx/compiler/browser';
 
 import { setSzLowering } from './lowering-slot.js';
+import { getMangleRegistry } from './mangle-registry.js';
 
 /** A frozen map of original class names to their mangled SSR equivalents. */
 type RuntimeMangleMap = Readonly<Record<string, string>>;
 
-/** Global slots that may expose the SSR/runtime mangle map. */
+/**
+ * Global slots that may expose the SSR/runtime mangle map.
+ *
+ * `__csszyx` is the LEGACY bridge: the object the deprecated inline HTML
+ * installer (`mangleMapDelivery: 'html' | 'both'`) assigns. The registry is
+ * the delivery every current build uses; the bridge stays readable for one
+ * migration window.
+ */
 interface CsszyxMangleGlobals {
     __csszyx_ssr_mangle_map?: RuntimeMangleMap;
     __csszyx?: {
@@ -62,12 +70,15 @@ export function lowerSz(szProp: object | readonly object[]): string {
     }
 
     const globals = globalThis as typeof globalThis & CsszyxMangleGlobals;
-    const ssrMangleMap = globals.__csszyx_ssr_mangle_map || globals.__csszyx?.mangleMap;
-    const browserMangleMap =
-        typeof window !== 'undefined'
+    // SSR first (the plugin sets it in the build process), then the registry
+    // the bundled module installed, then the legacy inline-script bridge.
+    const legacyMangleMap =
+        globals.__csszyx?.mangleMap ||
+        (typeof window !== 'undefined'
             ? (window as Window & CsszyxMangleGlobals).__csszyx?.mangleMap
-            : undefined;
-    const activeMangleMap = ssrMangleMap || browserMangleMap;
+            : undefined);
+    const activeMangleMap =
+        globals.__csszyx_ssr_mangle_map || getMangleRegistry()?.mangleMap || legacyMangleMap;
 
     if (activeMangleMap) {
         return className

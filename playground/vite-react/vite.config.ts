@@ -4,9 +4,19 @@ import csszyx from 'csszyx/vite';
 
 import tailwindcss from '@tailwindcss/vite';
 
+// The policy a strict deployment enforces, mirrored here so a csszyx-owned
+// inline script would fail `vite preview` (and the e2e CSP project) instead of
+// a consumer's pen test. `script-src 'self'` is the gate; `style-src
+// 'unsafe-inline'` only covers the playground's own inline `style` attributes.
+const PRODUCTION_CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'";
+
 export default defineConfig({
   resolve: {
     tsconfigPaths: false,
+  },
+  preview: {
+    headers: { 'Content-Security-Policy': PRODUCTION_CSP },
   },
   plugins: [
     // IMPORTANT: csszyx must run BEFORE react plugin AND tailwindcss

@@ -82,6 +82,37 @@ catches accidental server/client drift, not an attacker who can rewrite the
 served HTML and recompute it.
 </Aside>
 
+### Do not add `'wasm-unsafe-eval'` for this
+
+`verifyMangleMapIntegrity()` is synchronous, so the only way it can recompute a
+SHA-256 is through the Rust core's `verify_mangle_checksum` global. The runtime
+never instantiates that core itself, so the global exists only if you wired it
+up. When it is absent the map is schema-validated and accepted, and today that
+degraded state is reported only in development.
+
+Wiring the core up to close that gap would mean adding `'wasm-unsafe-eval'` to
+`script-src`, because a strict policy blocks WebAssembly instantiation without
+it. **Do not.** `verifyMangleChecksumAsync` derives the same checksum through
+the Web Crypto API, which is allowed under plain `script-src 'self'`, and it
+verifies rather than assumes. Widening a policy is the wrong price for a check
+that is explicitly tamper-detection.
+
+```ts
+import { verifyMangleChecksumAsync } from '@csszyx/runtime';
+
+// Reads the map off the page when you do not pass one.
+const trustworthy = await verifyMangleChecksumAsync(expectedChecksum);
+```
+
+Full signature in the
+[runtime reference](/docs/reference/runtime/).
+
+One deployment note: Web Crypto is a secure-context API, so `crypto.subtle`
+does not exist over plain HTTP on anything but localhost. Served that way, the
+verifier answers `false` and warns that the check did not run, rather than
+reporting a match it could not confirm. If you serve an intranet build over
+HTTP, that is the answer you will get.
+
 ## Content Security Policy (CSP)
 
 `@csszyx/dynamic`'s primary path uses a constructable `CSSStyleSheet` +
@@ -90,3 +121,65 @@ served HTML and recompute it.
 via the CSSOM (still no inline content). Under a strict CSP that blocks
 `<style>` element creation, ensure `adoptedStyleSheets` is available (the primary
 path), or supply a nonce for the fallback element.
+
+### JavaScript: csszyx emits no inline script
+
+A production build puts **no executable inline JavaScript** into your HTML.
+Everything csszyx adds to the document is inert data:
+
+- the hydration checksum on `<html>` — written as `data-sz-checksum`, or as
+  `data-sz-cs` when `production.minify` is on, which is the default;
+- `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">` — the hydration
+  census. A `type="application/json"` block is data, not a script: the browser
+  never evaluates it and `script-src` does not apply to it.
+
+The runtime mangle map — what `szr`, `szv`, `szcn` and `dynamic()` need when
+`production.mangle` is on — is registered from a module **inside your own JS
+bundle**, on every lane: Vite and Rollup import it through a virtual module,
+webpack through a generated file under `.csszyx/` prepended to every
+entrypoint. It is covered by whatever
+already allows your bundle: `script-src 'self'`, or your nonce or hash. csszyx
+never needs `'unsafe-inline'`; **do not add it for csszyx.**
+
+There is no option to change this and nothing to configure. The
+`production.mangleMapDelivery` option that used to choose between an inline
+script and the bundle has been removed — a build that still sets it is warned
+once and the value ignored.
+
+### Enforce your CSP locally
+
+csszyx cannot know your application's full policy, so mirror the deployment
+header in Vite itself. Then a violation fails `vite preview` and CI instead of
+surfacing in production:
+
+```ts
+// vite.config.ts
+import { randomBytes } from 'node:crypto';
+import { defineConfig } from 'vite';
+
+// The production policy, verbatim. `style-src 'unsafe-inline'` is for your own
+// inline `style` attributes; csszyx needs nothing here either way.
+const csp =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:";
+
+// `vite dev` injects its own inline client and the React refresh preamble.
+// Those get a nonce — never 'unsafe-inline' — and csszyx still gets nothing.
+const devNonce = randomBytes(16).toString('base64');
+
+export default defineConfig({
+  preview: { headers: { 'Content-Security-Policy': csp } },
+  html: { cspNonce: devNonce },
+  server: {
+    headers: {
+      'Content-Security-Policy': csp
+        .replace("script-src 'self'", `script-src 'self' 'nonce-${devNonce}'`)
+        .concat('; connect-src \'self\' ws: wss:'),
+    },
+  },
+});
+```
+
+`preview` is the regression gate: it serves the real build under the enforced
+policy. The dev nonce exists only because Vite's own tooling is inline; a fixed
+nonce is not a substitute for the production header, and `Content-Security-
+Policy-Report-Only` is an inventory, not a gate.

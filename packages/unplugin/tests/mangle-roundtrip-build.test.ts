@@ -17,24 +17,11 @@
  *   5. szcn dedupes mangled tokens through the real `__csszyx.decode` bridge
  *      built from the extracted map (the field acceptance for merge parity).
  */
-import {
-    mkdirSync,
-    mkdtempSync,
-    readdirSync,
-    readFileSync,
-    realpathSync,
-    rmSync,
-    writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
-import { szcn } from '@csszyx/runtime';
-import { compile } from '@tailwindcss/node';
-import { build, type Plugin } from 'vite';
+import { clearMangleRegistry, installMangleRuntime, szcn } from '@csszyx/runtime';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { loadNativeBinding } from '../../core/native/index.js';
 import { escapeJsonForInlineScript } from '../src/inline-script-escape.js';
-import { vitePlugin } from '../src/unplugin.js';
+import { buildViteApp, cleanupViteAppBuilds } from './vite-app-build.js';
 
 const FIXTURE_FILES: Record<string, string> = {
     'index.html': `<!doctype html>
@@ -78,35 +65,6 @@ interface MangleArtifacts {
     map: Record<string, string>;
 }
 
-const tempDirs: string[] = [];
-
-/**
- * Compile the fixture's source(none) stylesheet from csszyx's exact safelist.
- *
- * @param root Fixture root containing csszyx-classes.html.
- * @returns Vite transform plugin standing in for Tailwind's final CSS phase.
- */
-function tailwindSourceNonePlugin(root: string): Plugin {
-    return {
-        name: 'fixture-tailwind-source-none',
-        enforce: 'pre',
-        async transform(code, id) {
-            if (!id.endsWith('/src/styles.css')) return null;
-            const compiler = await compile(code, {
-                base: process.cwd(),
-                onDependency: () => undefined,
-            });
-            const safelist = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
-            const candidates = (
-                safelist.split('<!-- csszyx exact scanner candidates -->\n')[1] ?? ''
-            )
-                .split(/\s+/)
-                .filter(Boolean);
-            return { code: compiler.build(candidates), map: null };
-        },
-    };
-}
-
 /**
  * Build the fixture app with production mangling and extract the artifacts.
  *
@@ -114,69 +72,17 @@ function tailwindSourceNonePlugin(root: string): Plugin {
  * @returns normalized JS + CSS output and the mangle map from the built HTML.
  */
 async function buildWithMangle(parser: 'rust' | 'wasm'): Promise<MangleArtifacts> {
-    // realpath the temp root so the path handed to vite matches the realpath
-    // vite's build-html plugin resolves internally. On macOS os.tmpdir() is a
-    // /var -> /private/var symlink; without this the emitted index.html name is
-    // computed relative to the un-realpath'd root and escapes the bundle dir
-    // (same guard as vite-global-var.test.ts).
-    const root = mkdtempSync(join(realpathSync(tmpdir()), `csszyx-mangle-rt-${parser}-`));
-    tempDirs.push(root);
-    mkdirSync(join(root, 'src'), { recursive: true });
-    for (const [file, source] of Object.entries(FIXTURE_FILES)) {
-        writeFileSync(join(root, file), source, 'utf8');
-    }
-
-    await build({
-        root,
-        logLevel: 'silent',
-        plugins: [
-            vitePlugin({ build: { parser, cache: false }, production: { mangle: true } }),
-            tailwindSourceNonePlugin(root),
-        ],
-        esbuild: {
-            jsx: 'transform',
-            jsxFactory: 'h',
-            jsxFragment: 'Fragment',
-            jsxInject: 'const h = (t, p, ...c) => ({ t, p, c }); const Fragment = "f";',
-        },
-        build: {
-            minify: false,
-            rollupOptions: { external: ['@csszyx/runtime', 'csszyx'] },
-        },
+    const built = await buildViteApp({
+        name: `mangle-rt-${parser}`,
+        files: FIXTURE_FILES,
+        plugin: { build: { parser }, production: { mangle: true } },
     });
-
-    const assetsDir = join(root, 'dist', 'assets');
-    const assets = readdirSync(assetsDir).sort();
-    const readAll = (ext: string): string =>
-        assets
-            .filter(f => f.endsWith(ext))
-            .map(f => readFileSync(join(assetsDir, f), 'utf8'))
-            .join('\n');
-    const js = readAll('.js').split(basename(root)).join('FIXTURE-ROOT');
-    const css = readAll('.css');
-    if (js.length === 0 || css.length === 0) {
-        throw new Error(`vite build (${parser}) produced empty assets in ${assetsDir}`);
+    // The canonical payload is the inert __CSSZYX_MANGLE_MAP__ census: it is
+    // the one form present in every delivery mode.
+    if (built.map === null) {
+        throw new Error(`no mangle map census injected into the built HTML (${parser})`);
     }
-
-    const html = readFileSync(join(root, 'dist', 'index.html'), 'utf8');
-    // The canonical payload is the __CSSZYX_MANGLE_MAP__ JSON tag: on
-    // class-only builds the installer re-reads it instead of embedding a
-    // second `var m={…}` literal, so the tag is the only form present in
-    // every variant. Builds with variable mangling namespace its keys with
-    // `class:`; strip that so the assertions below see plain class names.
-    const mapSource = html.match(
-        /<script id="__CSSZYX_MANGLE_MAP__" type="application\/json">([^<]*)<\/script>/,
-    )?.[1];
-    if (!mapSource) {
-        throw new Error(`no mangle map script injected into the built HTML (${parser})`);
-    }
-    const payload = JSON.parse(mapSource) as Record<string, string>;
-    const map = Object.fromEntries(
-        Object.entries(payload)
-            .filter(([key]) => !key.startsWith('var:'))
-            .map(([key, value]) => [key.replace(/^class:/, ''), value]),
-    );
-    return { js, css, map };
+    return { js: built.js, css: built.css, map: built.map };
 }
 
 const OWNED_CLASSES = ['m-3', 'mx-0', 'mx-4', 'text-red-500', 'hover:bg-zinc-100'];
@@ -232,9 +138,7 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
     }, 60_000);
 
     afterAll(() => {
-        for (const dir of tempDirs.splice(0)) {
-            rmSync(dir, { recursive: true, force: true });
-        }
+        cleanupViteAppBuilds();
     });
 
     it('both engine builds produce the identical mangle map', () => {
@@ -286,34 +190,29 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
         expect(rust.js, 'mixed clsx token must survive').toContain('p-4 dems-panel');
     });
 
-    it('the bundle self-installs the runtime mangle map for pages without the HTML script', () => {
-        // Field-reported: an embedded build served by a host shell never loads
-        // the transformed index.html, so the inline map script is absent and
-        // runtime-resolved classes reach the DOM unmangled while the CSS ships
-        // mangled. The bundle itself must therefore carry the installer.
-        expect(rust.js, 'self-installer must be bundled').toMatch(/window\.__csszyx\s*=/);
-        expect(rust.js, 'installer must never clobber the HTML script').toMatch(
-            /typeof window\s*!==\s*["']undefined["']\s*&&\s*!window\.__csszyx/,
-        );
-        // The bundled map must be the FINAL map — the same entries the HTML
-        // script carries — substituted after the mangle passes, so its keys
-        // are original class names, not re-mangled tokens.
-        expect(collapseWhitespace(rust.js), 'bundled map must be the final HTML map').toContain(
+    it('the bundle registers the runtime mangle map itself, never through window.__csszyx', () => {
+        // Field-reported twice: an embedded build served by a host shell never
+        // loads the transformed index.html, and a strict CSP refuses an inline
+        // installer. The bundle itself must therefore carry the registration —
+        // through the runtime registry, not a debug global.
+        expect(rust.js, 'registry install must be bundled').toContain('installMangleRuntime(');
+        expect(rust.js, 'no window global by default').not.toMatch(/window\.__csszyx\s*=/);
+        expect(rust.js).toContain('exposeDebugGlobal: false');
+        // The bundled map must be the FINAL map — the same entries the census
+        // carries — substituted after the mangle passes, so its keys are
+        // original class names, not re-mangled tokens.
+        expect(collapseWhitespace(rust.js), 'bundled map must be the final census map').toContain(
             collapseWhitespace(escapeJsonForInlineScript(JSON.stringify(rust.map))),
         );
         expect(rust.js, 'placeholders must be substituted').not.toContain('___CSSZYX_');
-        expect(wasm.js, 'installer must be parser-independent').toMatch(/window\.__csszyx\s*=/);
+        expect(wasm.js, 'registration must be parser-independent').toContain(
+            'installMangleRuntime(',
+        );
     });
 
-    it('szcn dedupes mangled tokens through the decode bridge built from the map', () => {
-        // Reconstruct exactly what the injected inline script builds at runtime
-        // (in a browser `window` IS `globalThis`, which is what szcn reads).
-        const reverse = new Map(Object.entries(rust.map).map(([orig, tok]) => [tok, orig]));
-        (globalThis as { __csszyx?: unknown }).__csszyx = {
-            mangleMap: rust.map,
-            decode: (token: string) => reverse.get(token),
-            encode: (cls: string) => rust.map[cls],
-        };
+    it('szcn dedupes mangled tokens through the registry built from the map', () => {
+        // Install exactly what the bundled module installs at runtime.
+        installMangleRuntime({ mangleMap: rust.map, checksum: 'round-trip' });
         try {
             const mx0 = rust.map['mx-0'] as string;
             const mx4 = rust.map['mx-4'] as string;
@@ -324,7 +223,7 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
             const red = rust.map['text-red-500'] as string;
             expect(szcn(mx0, red)).toBe(`${mx0} ${red}`);
         } finally {
-            (globalThis as { __csszyx?: unknown }).__csszyx = undefined;
+            clearMangleRegistry();
         }
     });
 });
