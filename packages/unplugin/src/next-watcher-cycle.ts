@@ -9,6 +9,7 @@ import {
     type AtomicWriteOptions,
     acquireNextSafelistStateLock,
     materializeNextSafelist,
+    NEXT_WATCH_LOCK_COMMAND,
     type NextSafelistMaterializeResult,
     type NextSafelistStateLockOptions,
 } from './next-safelist-state.js';
@@ -50,7 +51,7 @@ export function runNextWatcherCycle(
     const lock = acquireNextSafelistStateLock(lockPath, {
         root: context.root,
         mode: context.manifestExpectation.mode,
-        command: 'csszyx next watch',
+        command: NEXT_WATCH_LOCK_COMMAND,
         ...options.lockOptions,
     });
 
