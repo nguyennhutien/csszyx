@@ -109,6 +109,7 @@
     "@csszyx/ts-plugin": "workspace:*",
     "@types/node": "^22.20.1",
     "@types/vscode": "^1.125.0",
+    "@typescript/vfs": "^1.6.4",
     "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.2",
     "typescript": "^6.0.3",
