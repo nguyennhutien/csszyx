@@ -4,6 +4,11 @@
  * through both real classifiers — a relationship-rule change that lands on only
  * one side fails here instead of in a user's editor.
  */
+import {
+    createDefaultMapFromNodeModules,
+    createSystem,
+    createVirtualTypeScriptEnvironment,
+} from '@typescript/vfs';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', () => ({
@@ -164,29 +169,55 @@ function companionServes(text: string, cursor: number): boolean {
     return (items?.length ?? 0) > 0;
 }
 
+const PLUGIN_FILE = '/virtual/drift.tsx';
+const COMPILER_OPTIONS: ts.CompilerOptions = { jsx: ts.JsxEmit.ReactJSX, allowJs: true };
+
+/**
+ * One TypeScript environment for the whole table.
+ *
+ * A language service loads the standard library when it first builds a program,
+ * and building one per case is what made this file the slowest in the package —
+ * measured, eleven fresh services cost 839ms against 66ms for one reused, and on
+ * a CI runner the same shape reached 25s and tripped the 5s timeout.
+ *
+ * Reuse needs the service to notice the file changed, which it decides from the
+ * script VERSION rather than the content: hand it the same version twice and it
+ * answers from the parse it already has, so every case after the first would be
+ * graded against the first case's source and the suite would pass without
+ * checking anything. `updateFile` from `@typescript/vfs` — the TypeScript team's
+ * own virtual file system, which the Playground runs on — owns that bookkeeping,
+ * which is why this does not hand-roll a counter.
+ */
+const pluginFiles = createDefaultMapFromNodeModules(COMPILER_OPTIONS, ts);
+// The root file has to exist before the environment is built, and the seed has
+// to be non-empty: an empty string reads back as a missing file and the program
+// fails to construct. Every case replaces it through `updateFile` below.
+pluginFiles.set(PLUGIN_FILE, 'export {};');
+const pluginEnv = createVirtualTypeScriptEnvironment(
+    createSystem(pluginFiles),
+    [PLUGIN_FILE],
+    ts,
+    COMPILER_OPTIONS,
+);
+
 /** Plugin verdict via the real classifier on an in-memory language service.
  * @param text - Document text with cursor removed.
  * @param cursor - Cursor offset.
  * @returns Whether key entries were computed.
  */
 function pluginServes(text: string, cursor: number): boolean {
-    const fileName = '/virtual/drift.tsx';
-    const files: Record<string, string> = { [fileName]: text };
-    const host: ts.LanguageServiceHost = {
-        getScriptFileNames: () => [fileName],
-        getScriptVersion: () => '1',
-        getScriptSnapshot: file => {
-            const content =
-                files[file] ?? (ts.sys.fileExists(file) ? ts.sys.readFile(file) : undefined);
-            return content === undefined ? undefined : ts.ScriptSnapshot.fromString(content);
-        },
-        getCurrentDirectory: () => '/virtual',
-        getCompilationSettings: () => ({ jsx: ts.JsxEmit.ReactJSX, allowJs: true }),
-        getDefaultLibFileName: options => ts.getDefaultLibFilePath(options),
-        fileExists: file => file in files || ts.sys.fileExists(file),
-        readFile: file => files[file] ?? ts.sys.readFile(file),
-    };
-    const service = ts.createLanguageService(host);
+    const fileName = PLUGIN_FILE;
+    // Empty content does not merely fail this case, it poisons every later one:
+    // the virtual system reads a file back through a truthiness check, so `''`
+    // makes the source file vanish and the NEXT `updateFile` throws
+    // "Did not find a source file". No verdict in the table can reach here empty
+    // — removing the cursor marker cannot empty a source — so this guards the
+    // table against a future row rather than the code against itself.
+    if (text.trim().length === 0) {
+        throw new Error('relation-drift verdict sources must not be empty');
+    }
+    pluginEnv.updateFile(fileName, text);
+    const service = pluginEnv.languageService;
     const entries = computeSzEntries({
         tsMod: ts as never,
         languageService: service as never,
