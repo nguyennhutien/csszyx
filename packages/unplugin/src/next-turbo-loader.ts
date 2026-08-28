@@ -18,7 +18,12 @@ import {
 } from './next-generation-manifest.js';
 import { readPackageVersion } from './next-package-version.js';
 import { injectNextRuntimeImports } from './next-runtime-injection.js';
-import { type AtomicWriteOptions, writeNextSafelistShard } from './next-safelist-state.js';
+import {
+    type AtomicWriteOptions,
+    NEXT_WATCH_LOCK_COMMAND,
+    NextSafelistStateLockedError,
+    writeNextSafelistShard,
+} from './next-safelist-state.js';
 import {
     type NextSourceParserMode,
     type NextSourceTransformOutput,
@@ -202,15 +207,39 @@ export function runNextTurboLoader(
     // for this file. Empty class sets are still written so removing the last
     // `sz` prop actively removes that file's old classes.
     if (options.materializeSafelist !== false && shardResult.changed) {
-        runNextWatcherCycle(context, {
-            writeOptions: options.writeOptions,
-            lockOptions: {
-                root: context.root,
-                mode: context.manifestExpectation.mode,
-                command: 'csszyx next turbo-loader',
-            },
-        });
-        materialized = true;
+        try {
+            runNextWatcherCycle(context, {
+                writeOptions: options.writeOptions,
+                lockOptions: {
+                    root: context.root,
+                    mode: context.manifestExpectation.mode,
+                    command: 'csszyx next turbo-loader',
+                },
+            });
+            materialized = true;
+        } catch (error) {
+            // A watcher holding this lock is not a conflict. The shard above is
+            // already on disk, the watcher is driven by shard filesystem events
+            // rather than source ones, and materializing reads every shard — so
+            // the write that lost the race is the write that wakes the winner,
+            // and the winner's pass will include it. Yielding here is the
+            // shorter path to the same state.
+            //
+            // The documented Next setup runs `csszyx next watch` beside
+            // `next dev`, so this overlap is the normal case rather than an
+            // edge one. The critical section is under a millisecond, which is
+            // exactly why it went unnoticed until a loaded CI runner landed
+            // inside it and the page stopped compiling.
+            //
+            // Any other holder still throws: two loaders in one cycle means
+            // something is wrong, and that has to stay loud.
+            if (
+                !(error instanceof NextSafelistStateLockedError) ||
+                error.holder.command !== NEXT_WATCH_LOCK_COMMAND
+            ) {
+                throw error;
+            }
+        }
     }
 
     // The loader's transformed `code` is a pure function of `source` plus the

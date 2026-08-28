@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { readNextGenerationManifest } from '../src/next-generation-manifest.js';
+import { acquireNextSafelistStateLock } from '../src/next-safelist-state.js';
 import { type NextTurboLoaderContext, runNextTurboLoader } from '../src/next-turbo-loader.js';
 import { _resetThemeGroupsFileCache } from '../src/theme-groups-file.js';
 
@@ -370,5 +371,122 @@ describe('szcn theme groups on the Turbopack lane', () => {
 
         expect(readFileSync(join(root, '.csszyx/theme-groups.mjs'), 'utf8')).toContain('"late"');
         expect(result.code).toContain('theme-groups.mjs');
+    });
+});
+
+/**
+ * What the loader does when someone else already holds the safelist lock.
+ *
+ * The documented Next Turbopack setup runs `csszyx next watch` alongside
+ * `next dev`, and both materialize the safelist through the same lock. The
+ * critical section is short — under a millisecond on a real shard set — but
+ * the lock refuses a live holder outright, so an overlap surfaced as a module
+ * build failure and the page stopped compiling. Measured on a CI run of this
+ * repository, three Turbopack suites failed that way while the same tree
+ * passed on the pull request.
+ *
+ * The loader does not need to win. It writes its shard BEFORE it reaches the
+ * lock, and the watcher is driven by shard filesystem events rather than by
+ * source ones, so the write that lost the race is the write that wakes the
+ * winner. Yielding is not a fallback here; it is the shorter path to the same
+ * state.
+ *
+ * A holder that is NOT a watcher gets no such treatment: two loaders in one
+ * cycle means something is wrong, and that still has to be loud.
+ */
+describe('Next Turbopack loader under lock contention', () => {
+    function tempRoot(): string {
+        const dir = mkdtempSync(join(tmpdir(), 'csszyx-loader-lock-'));
+        tempDirs.push(dir);
+        return dir;
+    }
+
+    function loaderContext(root: string, filename: string): NextTurboLoaderContext {
+        return {
+            resourcePath: filename,
+            rootContext: root,
+            context: join(root, 'src'),
+            mode: 'development',
+            addDependency: () => undefined,
+        } as NextTurboLoaderContext;
+    }
+
+    /**
+     * Hold the lock the loader itself would take.
+     *
+     * The path is read off a real loader run rather than recomputed, because
+     * the loader resolves its own root by walking up for the nearest package.
+     * A lock held anywhere else is not contention — it is two processes
+     * quietly working on different files, which is what an earlier draft of
+     * this suite measured without noticing.
+     *
+     * @param cacheDir - the loader's own resolved cache directory.
+     * @param command - what the competing holder calls itself.
+     * @returns a release function for the held lock.
+     */
+    function holdLock(cacheDir: string, command: string): () => void {
+        mkdirSync(cacheDir, { recursive: true });
+        const lock = acquireNextSafelistStateLock(join(cacheDir, 'state.lock'), {
+            root: cacheDir,
+            mode: 'development',
+            command,
+        });
+        return lock.release;
+    }
+
+    /**
+     * @param root - project root.
+     * @param file - path to write, relative to the root. Each case uses its
+     *   own so a later run is a fresh transform rather than a cache hit.
+     * @returns the loader result for one source file carrying an sz prop.
+     */
+    function runLoader(root: string, file = 'src/App.tsx'): ReturnType<typeof runNextTurboLoader> {
+        const source = `export const App=()=> <div sz={{ p: ${file.length} }} />;`;
+        const filename = join(root, file);
+        mkdirSync(join(root, 'src'), { recursive: true });
+        writeFileSync(filename, source, 'utf8');
+        return runNextTurboLoader(source, loaderContext(root, filename), {
+            parserMode: 'auto',
+            config: { mangleVars: false },
+            nextVersion: '16.2.7',
+            csszyxVersion: '0.9.0',
+            compilerVersion: '0.9.0',
+            nativeVersion: '0.9.0-test',
+            writeOptions: { retryDelayMs: 0 },
+        });
+    }
+
+    it('yields to a live watcher: shard written, materialization left to it, no throw', () => {
+        const root = tempRoot();
+        // One clean run first, to learn the directory the loader locks on.
+        const cacheDir = runLoader(root, 'src/Warm.tsx').context.cacheDir;
+        const release = holdLock(cacheDir, 'csszyx next watch');
+        try {
+            const result = runLoader(root, 'src/Yield.tsx');
+
+            expect(result.shardPath && existsSync(result.shardPath)).toBe(true);
+            expect(result.materialized).toBe(false);
+        } finally {
+            release();
+        }
+    });
+
+    it('still throws when the holder is another loader', () => {
+        const root = tempRoot();
+        const cacheDir = runLoader(root, 'src/Warm.tsx').context.cacheDir;
+        const release = holdLock(cacheDir, 'csszyx next turbo-loader');
+        try {
+            expect(() => runLoader(root, 'src/Loud.tsx')).toThrow(/already locked by process/);
+        } finally {
+            release();
+        }
+    });
+
+    it('materializes as usual when nothing holds the lock', () => {
+        const root = tempRoot();
+        const result = runLoader(root);
+
+        expect(result.materialized).toBe(true);
+        expect(existsSync(result.context.safelist.outputPath)).toBe(true);
     });
 });

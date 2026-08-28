@@ -252,7 +252,7 @@ export function acquireNextSafelistStateLock(
     } catch (error) {
         const existing = readLockMetadata(lockPath);
         if (existing) {
-            throw new Error(formatLiveLockError(existing));
+            throw new NextSafelistStateLockedError(existing);
         }
         throw error;
     }
@@ -260,7 +260,7 @@ export function acquireNextSafelistStateLock(
     const existing = readLockMetadata(lockPath);
     if (existing && isLockLive(existing, options)) {
         releaseAdvisory();
-        throw new Error(formatLiveLockError(existing));
+        throw new NextSafelistStateLockedError(existing);
     }
     try {
         atomicWriteFileSync(lockPath, `${JSON.stringify(metadata, null, 2)}\n`);
@@ -709,6 +709,30 @@ function isProcessAlive(pid: number): boolean {
         return false;
     }
 }
+
+/**
+ * Raised when the safelist state lock is held by a live owner.
+ *
+ * Carries the owner's own metadata, so a caller can decide what to do about a
+ * particular owner without reading the message. The Turbopack loader is the
+ * one caller that does: a watcher holding this lock is not a conflict for it,
+ * because the shard it just wrote is what wakes that watcher.
+ */
+export class NextSafelistStateLockedError extends Error {
+    readonly holder: NextSafelistStateLockMetadata;
+
+    /**
+     * @param holder - metadata read from the lock file.
+     */
+    constructor(holder: NextSafelistStateLockMetadata) {
+        super(formatLiveLockError(holder));
+        this.name = 'NextSafelistStateLockedError';
+        this.holder = holder;
+    }
+}
+
+/** The `command` a `csszyx next watch` process records on the lock. */
+export const NEXT_WATCH_LOCK_COMMAND = 'csszyx next watch';
 
 /**
  *
