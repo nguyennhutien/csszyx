@@ -389,7 +389,7 @@ impl From<migrate::TransformResult> for NativeMigrateResult {
 }
 
 /// Migrates a batch of JSX/TSX sources with the native Rust core: one call
-/// for the whole job, because a call per file costs more than the parse.
+/// for the whole job, answering in input order.
 ///
 /// # Errors
 ///

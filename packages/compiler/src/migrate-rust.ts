@@ -25,8 +25,11 @@ import {
 /**
  * One entry of the migration-resolution file.
  *
- * An object maps the class to sz directly; a string names another class to
- * read instead; `null` drops the class; `false` keeps it in `className`.
+ * An object maps the class to sz directly. A string is either another class
+ * string to read instead, or one of the directives: `sz:keep` leaves the class
+ * in `className`, `sz:remove` drops it, `sz:todo` marks it still unresolved.
+ * `null` and `false` read as unresolved, which is what they meant before the
+ * directives existed.
  */
 export type CsszyxTodoEntry = Record<string, unknown> | string | null | false;
 
@@ -162,7 +165,7 @@ export function isRustMigrateAvailable(): boolean {
 
 /**
  * Migrate JSX/TSX sources with the native Rust core: one call for the whole
- * job, because the boundary crossing costs more than the parse.
+ * job, which keeps the results in input order without a cursor per file.
  *
  * @param files - Sources to migrate.
  * @param options - Migrate options.

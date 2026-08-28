@@ -2,10 +2,9 @@
  * The programmatic migrate surface, on the engine that ships.
  *
  * `@csszyx/mcp-server` and the migrate test suites call migrate a file at a
- * time and a class at a time. The engine batches files, because crossing the
- * native boundary costs more than a file's parse, so the per-file entry here
- * is a batch of one — kept because a caller with one snippet should not have
- * to know that.
+ * time and a class at a time. The engine takes a batch, so the per-file entry
+ * here is a batch of one — kept because a caller with one snippet should not
+ * have to know that.
  *
  * There is no TypeScript implementation behind these any more. On a platform
  * with no `@csszyx/core-<platform>` package they throw rather than degrade,
