@@ -169,20 +169,26 @@ describe('mangle checksum parity (TypeScript vs the Rust core)', () => {
     });
 
     it('cannot be asked about a name that collides with its own replacement', async () => {
-        // Recorded as a limit rather than asserted as behaviour. `k\uD800z` and
-        // `k\uFFFDz` are two names in JavaScript and encode to the same bytes,
-        // so the core receives ONE entry where the runtime has two. No ordering
-        // can reconcile a map that changed size crossing the boundary. Nothing
-        // reads source text can produce such a name, which is why this is a
-        // note and not a defect.
-        // Built by assignment, not as a literal. The two names differ in
-        // JavaScript and the assertion below proves it, but a tool whose own
-        // strings are UTF-8 cannot tell them apart in source — CodeQL reads
-        // the literal form as one property written twice. That it cannot is
-        // the same limit this case is about.
-        const map: MangleMapLike = {};
-        map['k\uD800z'] = 'a';
-        map['k\uFFFDz'] = 'b';
+        // Recorded as a limit rather than asserted as behaviour. A name holding
+        // an unpaired surrogate and the same name holding its replacement
+        // character are two names in JavaScript and encode to the same UTF-8
+        // bytes, so the core receives ONE entry where the runtime has two. No
+        // ordering reconciles a map that changed size crossing the boundary,
+        // and nothing reading source text can produce such a name, which is why
+        // this is a note and not a defect.
+        //
+        // The two are built from their code units rather than written as
+        // escapes, and that is load-bearing twice over. A tool whose own
+        // strings are UTF-8 cannot keep them apart in SOURCE either — CodeQL
+        // folds the escaped forms into one property and reports the second
+        // write as dead, which is this very limit, met one layer earlier. And a
+        // literal surrogate does not survive every editor and copy path; one
+        // already went missing from a sibling suite once, leaving a case that
+        // passed while comparing the wrong pair.
+        const surrogate = `k${String.fromCharCode(0xd800)}z`;
+        const replacement = `k${String.fromCharCode(0xfffd)}z`;
+        const map: MangleMapLike = { [surrogate]: 'a', [replacement]: 'b' };
+        expect(surrogate).not.toBe(replacement);
         expect(Object.keys(map)).toHaveLength(2);
         expect(await computeMangleChecksumAsync(map)).not.toBe(compute_mangle_checksum(map));
     });
