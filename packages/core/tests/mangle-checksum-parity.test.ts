@@ -175,7 +175,14 @@ describe('mangle checksum parity (TypeScript vs the Rust core)', () => {
         // can reconcile a map that changed size crossing the boundary. Nothing
         // reads source text can produce such a name, which is why this is a
         // note and not a defect.
-        const map = { 'k\uD800z': 'a', 'k\uFFFDz': 'b' };
+        // Built by assignment, not as a literal. The two names differ in
+        // JavaScript and the assertion below proves it, but a tool whose own
+        // strings are UTF-8 cannot tell them apart in source — CodeQL reads
+        // the literal form as one property written twice. That it cannot is
+        // the same limit this case is about.
+        const map: MangleMapLike = {};
+        map['k\uD800z'] = 'a';
+        map['k\uFFFDz'] = 'b';
         expect(Object.keys(map)).toHaveLength(2);
         expect(await computeMangleChecksumAsync(map)).not.toBe(compute_mangle_checksum(map));
     });
