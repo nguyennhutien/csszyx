@@ -1,9 +1,8 @@
 /**
  * csszyx migrate - Convert Tailwind className to sz prop.
  *
- * Runs on the native engine: the JSX/TSX files in one call, because crossing
- * the boundary costs more than a file's parse, and the HTML files one by one
- * as the text pass is. Supports --dry-run, --ignore patterns.
+ * Runs on the native engine: the JSX/TSX files in one call and the HTML files
+ * one by one, as the text pass is. Supports --dry-run, --ignore patterns.
  */
 
 import fs from 'node:fs';
@@ -14,11 +13,19 @@ import {
     type MigrateRustResult,
     migrateRustBatch,
     migrateRustHtml,
+    RustMigrateUnavailableError,
 } from '@csszyx/compiler/migrate';
 import fg from 'fast-glob';
 
 import { withPosixSeparators } from '../utils/posix-path.js';
-import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
+import {
+    printError,
+    printHeader,
+    printInfo,
+    printSuccess,
+    printWarn,
+    spinner,
+} from '../utils/terminal-ui.js';
 
 /**
  *
@@ -168,7 +175,20 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
 
     const summary = createMigrationSummary();
     const progress = spinner.start('Migrating...');
-    processMigrationBatch(files, context, summary, log);
+    try {
+        processMigrationBatch(files, context, summary, log);
+    } catch (error) {
+        // The one failure with nothing behind it: migrate has no second
+        // implementation, so an install without the engine cannot be answered
+        // by working differently. Letting it escape a command action loses the
+        // sentence naming the package under a stack trace.
+        if (!(error instanceof RustMigrateUnavailableError)) throw error;
+        progress.fail('Migration stopped');
+        printError(error.message);
+        log.flush();
+        process.exitCode = 1;
+        return;
+    }
     progress.succeed('Migration complete');
 
     reportMigrationSummary(context, summary, log);
@@ -386,8 +406,13 @@ function finishMigrationFile(
 
 /**
  * Processes every candidate file through the native engine: the JSX files in
- * one call, because the boundary crossing costs more than a file's parse,
- * and the HTML files one by one as the text pass is.
+ * one call and the HTML files one by one, as the text pass is.
+ *
+ * One call rather than one per file is a simplification, not a speed-up: the
+ * napi crossing costs well under a microsecond against a parse that costs
+ * tens, so the two are within noise of each other. What the single call does
+ * cost is peak memory — every source and every result is held at once, which
+ * is several times the size of the sources on disk.
  */
 function processMigrationBatch(
     files: string[],
@@ -395,9 +420,20 @@ function processMigrationBatch(
     summary: MigrationSummary,
     log: MigrationLog,
 ): void {
-    const inputs = files
-        .map(filePath => readMigrationInput(filePath, context))
-        .filter((input): input is MigrationInput => input !== null);
+    const inputs: MigrationInput[] = [];
+    for (const filePath of files) {
+        // Every file is read before any is migrated, so one the process cannot
+        // open would otherwise cost the whole run rather than itself. Reported
+        // as a warning and skipped, the way a scan that throws is.
+        let input: MigrationInput | null;
+        try {
+            input = readMigrationInput(filePath, context);
+        } catch (error) {
+            summary.warnings.push(`Could not read ${filePath}: ${String(error)}`);
+            continue;
+        }
+        if (input) inputs.push(input);
+    }
     const jsxInputs = inputs.filter(input => !input.isHtml);
     const jsxResults = migrateRustBatch(
         jsxInputs.map(input => ({ filename: input.filePath, source: input.source })),
