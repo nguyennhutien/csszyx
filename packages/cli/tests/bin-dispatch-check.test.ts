@@ -52,13 +52,16 @@ describe('bin check dispatch (real command)', () => {
             '**/skipme/**',
         ];
         await import('../src/bin.js?scenario=check-single-ignore');
-        // Poll rather than sleep a fixed span: the action is async and now
-        // loads its command module on demand, so any constant is a race that
-        // passes alone and fails under a loaded suite.
-        for (let waited = 0; waited < 10_000 && logs.length === 0; waited += 25) {
+        // Wait for the command to FINISH, not for it to start talking. Polling
+        // until the first line arrives and then sleeping a fixed hundred
+        // milliseconds waits for the banner, which the command prints before it
+        // scans anything; on a loaded runner the findings land after that span
+        // and the assertions below read an empty report. `process.exitCode` is
+        // reset in afterEach and set when the command completes, so it says
+        // what "done" means here rather than approximating it.
+        for (let waited = 0; waited < 10_000 && process.exitCode === undefined; waited += 25) {
             await new Promise(resolve => setTimeout(resolve, 25));
         }
-        await new Promise(resolve => setTimeout(resolve, 100));
 
         const out = logs.join('\n');
         expect(out).toContain('Bad.tsx');
