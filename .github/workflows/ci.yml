@@ -473,8 +473,9 @@ jobs:
   # because the CLI's tests run real transforms through @csszyx/compiler.
   # That makes this the first job to build @csszyx/core on Windows, which is
   # deliberate: a build that only ever ran on Linux is a build nobody has
-  # proven. The native addon is not built, so the engine degrades to the
-  # wasm lane — the same lane the Linux `test` job runs.
+  # proven. The host native addon is built as well: `csszyx migrate` runs on
+  # the native engine only, with no wasm lane to degrade to, and a developer
+  # on Windows or macOS runs it against the addon this job builds.
   cli-platform:
     name: CLI (${{ matrix.os }})
     needs: detect-changes
@@ -531,6 +532,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # The migrate suite drives the native engine directly and has no other
+      # engine to fall back to, so without the host addon every one of its
+      # test files fails with RustMigrateUnavailableError. Same step as the
+      # Linux `test` job.
+      - name: Build host native engine
+        shell: bash
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
       # Everything the CLI imports, in dependency order, through turbo so a
       # package whose inputs did not change comes from the cache.
