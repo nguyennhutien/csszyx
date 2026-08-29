@@ -207,6 +207,17 @@ describe('which modules are parsed at all', () => {
         expect(parseSync).not.toHaveBeenCalled();
     });
 
+    it('reads the clauses of a barrel that also re-exports namespaces', () => {
+        // The namespace statements pass the gate on the clause beside them
+        // and reach the module record, which spells them as namespace kinds
+        // with no single name to record.
+        expect(
+            forwards(
+                "export { cardSz } from './styles';\nexport * as tokens from './tokens';\nexport * from './all';",
+            ),
+        ).toEqual([{ exportName: 'cardSz', importedName: 'cardSz', specifier: './styles' }]);
+    });
+
     it('reads a clause that follows a type-only clause', () => {
         expect(
             forwards("export type { T } from './types';\nexport { cardSz } from './styles';"),

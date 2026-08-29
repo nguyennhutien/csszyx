@@ -636,16 +636,17 @@ function bindingKey(specifier: string, local: string): string {
  * The identifier a module-record name stands for, or null when a forward
  * cannot carry it.
  *
- * `default` is spelled as a kind, not a name; a namespace (`All`,
- * `AllButDefault`) names no single binding; and a string-literal name is legal
- * syntax that no importer of a token module writes, so recording one would
- * key the registry by a value the consumer never asks for.
+ * A namespace (`All`, `AllButDefault`) names no single binding, and a
+ * string-literal name is legal syntax that no importer of a token module
+ * writes, so recording one would key the registry by a value the consumer
+ * never asks for.
  *
  * @param name - An import or export name from the module record.
  * @returns The name a forward records, or null.
  */
 function recordedName(name: ExportExportName | ExportImportName): string | null {
-    if (name.kind === 'Default') return DEFAULT_IMPORT_NAME;
+    // `default` arrives as a `Name` entry spelled "default", so only the
+    // namespace kinds (`All`, `AllButDefault`) and `None` are refused here.
     if (name.kind !== 'Name') return null;
     const value = name.name;
     /* v8 ignore next -- narrowing only: a `Name` entry always carries its name. */
