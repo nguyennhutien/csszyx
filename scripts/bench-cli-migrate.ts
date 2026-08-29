@@ -5,15 +5,23 @@
  * Usage:
  *   pnpm bench:cli-migrate
  *   pnpm bench:cli-migrate -- --sizes 100,1000 --iterations 7 --warmups 3
+ *   pnpm bench:cli-migrate -- --repo 20000
+ *
+ * `--repo N` also runs the built command over a generated chaos repository
+ * of N components (heavy-tailed sizes, barrels, providers, legacy classes)
+ * and reports its peak memory, sampled from outside the process: the work is
+ * one synchronous native call at a time, so a timer inside it never fires.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
-import { transformSource } from '../packages/cli/src/migrate/ast-transformer.js';
-import { classNameToSzObject } from '../packages/cli/src/migrate/variant-parser.js';
+import { migrateRustBatch, migrateRustClassName } from '../packages/compiler/src/migrate-rust.js';
+import { type ChaosRepoStats, writeChaosRepo } from './chaos-repo-fixture.ts';
 
 interface CliOptions {
     /** Synthetic component counts to benchmark. */
@@ -24,6 +32,18 @@ interface CliOptions {
     warmups: number;
     /** Output directory for markdown and JSON reports. */
     outDir: string;
+    /** Components in the generated chaos repository the built command runs over, if any. */
+    repo?: number;
+}
+
+/** The built command measured over a generated repository. */
+interface RepoRun {
+    /** What was generated. */
+    stats: ChaosRepoStats;
+    /** Peak resident set of the command, in MB, sampled every 15 ms. */
+    peakRssMb: number;
+    /** Wall seconds of `csszyx migrate --dry-run`. */
+    seconds: number;
 }
 
 interface BenchRow {
@@ -58,6 +78,8 @@ interface ReportPayload {
     options: CliOptions;
     /** Benchmark rows. */
     rows: BenchRow[];
+    /** The command over a generated repository, when `--repo` was given. */
+    repo?: RepoRun;
 }
 
 interface FixtureSet {
@@ -78,12 +100,14 @@ const REPORT_NAME = 'phase-g-cli-migrate-max-speed-bench';
 
 const options = parseArgs(process.argv.slice(2));
 const rows = runBenchmarks(options);
+const repo = options.repo === undefined ? undefined : await measureRepo(options.repo);
 const payload: ReportPayload = {
     generated: new Date().toISOString(),
     node: process.version,
     platform: `${process.platform}-${process.arch}`,
     options,
     rows,
+    ...(repo === undefined ? {} : { repo }),
 };
 
 mkdirSync(resolve(REPO_ROOT, options.outDir), { recursive: true });
@@ -130,6 +154,8 @@ function parseArgs(args: string[]): CliOptions {
             parsed.warmups = Math.max(0, Number(args[++i] ?? parsed.warmups));
         } else if (arg === '--out-dir') {
             parsed.outDir = args[++i] ?? parsed.outDir;
+        } else if (arg === '--repo') {
+            parsed.repo = Math.max(1, Number(args[++i] ?? 2000));
         }
     }
 
@@ -155,7 +181,7 @@ function runBenchmarks(opts: CliOptions): BenchRow[] {
                 opts,
                 () => {
                     for (const className of fixtures.repeatedClassNames) {
-                        classNameToSzObject(className);
+                        migrateRustClassName(className);
                     }
                 },
                 'Reverse parser only. Repeated design-system class strings exercise token-cache hits.',
@@ -166,7 +192,7 @@ function runBenchmarks(opts: CliOptions): BenchRow[] {
                 opts,
                 () => {
                     for (const className of fixtures.uniqueClassNames) {
-                        classNameToSzObject(className);
+                        migrateRustClassName(className);
                     }
                 },
                 'Reverse parser only. Mostly unique arbitrary values exercise cache-miss overhead.',
@@ -176,7 +202,9 @@ function runBenchmarks(opts: CliOptions): BenchRow[] {
                 size,
                 opts,
                 () => {
-                    transformSource(fixtures.staticSource, `/bench/static-${size}.tsx`);
+                    migrateRustBatch([
+                        { filename: `/bench/static-${size}.tsx`, source: fixtures.staticSource },
+                    ]);
                 },
                 'Full JSX/TSX migration with one static className per component.',
             ),
@@ -185,7 +213,9 @@ function runBenchmarks(opts: CliOptions): BenchRow[] {
                 size,
                 opts,
                 () => {
-                    transformSource(fixtures.dynamicSource, `/bench/dynamic-${size}.tsx`);
+                    migrateRustBatch([
+                        { filename: `/bench/dynamic-${size}.tsx`, source: fixtures.dynamicSource },
+                    ]);
                 },
                 'Full JSX/TSX migration with clsx, ternary, logical, and template literal patterns.',
             ),
@@ -194,7 +224,9 @@ function runBenchmarks(opts: CliOptions): BenchRow[] {
                 size,
                 opts,
                 () => {
-                    transformSource(fixtures.skipSource, `/bench/skip-${size}.ts`);
+                    migrateRustBatch([
+                        { filename: `/bench/skip-${size}.ts`, source: fixtures.skipSource },
+                    ]);
                 },
                 'Fast-path early-exit on non-JSX TypeScript files (no className, no cva). Models real-world utility/type/helper files migrate visits but never modifies.',
             ),
@@ -282,6 +314,45 @@ function createFixtures(size: number): FixtureSet {
 }
 
 /**
+ * Run the built command over a generated chaos repository and sample its
+ * peak memory from the outside.
+ *
+ * @param files - Components to generate.
+ * @returns What was generated and what the command cost.
+ */
+async function measureRepo(files: number): Promise<RepoRun> {
+    const dir = mkdtempSync(join(tmpdir(), 'csszyx-bench-repo-'));
+    try {
+        const stats = writeChaosRepo(dir, { files });
+        const bin = resolve(REPO_ROOT, 'packages/cli/dist/bin.mjs');
+        const started = performance.now();
+        const child = spawn(process.execPath, [bin, 'migrate', '--dry-run', '.'], {
+            cwd: dir,
+            stdio: 'ignore',
+        });
+        let peakKb = 0;
+        const sampler = setInterval(() => {
+            try {
+                const kb = Number(
+                    execFileSync('ps', ['-o', 'rss=', '-p', String(child.pid)])
+                        .toString()
+                        .trim(),
+                );
+                if (kb > peakKb) peakKb = kb;
+            } catch {
+                // The process is gone; the last sample stands.
+            }
+        }, 15);
+        const code = await new Promise<number | null>(resolveExit => child.on('exit', resolveExit));
+        clearInterval(sampler);
+        if (code !== 0) throw new Error(`csszyx migrate exited with ${code}`);
+        return { stats, peakRssMb: peakKb / 1024, seconds: (performance.now() - started) / 1000 };
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}
+
+/**
  * Measure one benchmark case.
  *
  * @param name case label.
@@ -359,6 +430,22 @@ function renderReport(payload: ReportPayload): string {
         '',
     );
 
+    if (payload.repo) {
+        const { stats, peakRssMb, seconds } = payload.repo;
+        lines.push('## Built command over a chaos repository', '');
+        lines.push(
+            `${stats.files} files, ${formatNumber(stats.bytes / 1024 / 1024)} MB; median ${stats.medianBytes} B, ` +
+                `p99 ${formatNumber(stats.p99Bytes / 1024)} KB, max ${formatNumber(stats.maxBytes / 1024)} KB, ` +
+                `top 1 % of files carry ${formatNumber(stats.topOnePercentShare * 100)} % of bytes; ` +
+                `${stats.barrels} barrels, ${stats.providers} providers, ` +
+                `${stats.unrecognisedOccurrences} legacy class occurrences.`,
+            '',
+        );
+        lines.push(
+            `\`csszyx migrate --dry-run\`: peak RSS ${formatNumber(peakRssMb)} MB in ${formatNumber(seconds)} s.`,
+            '',
+        );
+    }
     lines.push('## Summary', '');
     for (const size of payload.options.sizes) {
         const repeated = findRow(payload.rows, `cli-migrate/${size}/reverse-repeated`);

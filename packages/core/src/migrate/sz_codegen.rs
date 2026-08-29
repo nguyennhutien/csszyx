@@ -200,6 +200,132 @@ mod tests {
         assert_eq!(js_string(&SzValue::Bool(false)), "false");
     }
 
+    /// Build an object from `(key, value)` pairs, in order.
+    fn object(entries: &[(&str, SzValue)]) -> SzObject {
+        let mut object = SzObject::new();
+        for (key, value) in entries {
+            object.insert((*key).to_string(), value.clone());
+        }
+        object
+    }
+
+    /// A string value.
+    fn text(value: &str) -> SzValue {
+        SzValue::String(value.to_string())
+    }
+
+    #[test]
+    fn writes_a_small_object_on_one_line() {
+        assert_eq!(
+            sz_expression(&object(&[
+                ("p", SzValue::Number(4.0)),
+                ("bg", text("blue-500"))
+            ])),
+            "{{ p: 4, bg: 'blue-500' }}"
+        );
+        assert_eq!(
+            sz_expression(&object(&[
+                ("display", text("flex")),
+                ("position", text("relative")),
+            ])),
+            "{{ display: 'flex', position: 'relative' }}"
+        );
+    }
+
+    #[test]
+    fn keeps_a_number_a_number_including_a_negative_one() {
+        let written = sz_expression(&object(&[
+            ("p", SzValue::Number(4.0)),
+            ("opacity", SzValue::Number(50.0)),
+        ]));
+        assert!(written.contains("p: 4"), "{written}");
+        assert!(written.contains("opacity: 50"), "{written}");
+        assert!(
+            sz_expression(&object(&[("mt", SzValue::Number(-4.0))])).contains("mt: -4"),
+            "a negative number keeps its sign"
+        );
+    }
+
+    #[test]
+    fn quotes_a_key_that_is_not_a_javascript_identifier() {
+        for key in ["@md", "display:grid"] {
+            let written = sz_expression(&object(&[(
+                key,
+                SzValue::Object(object(&[("display", text("flex"))])),
+            )]));
+            assert!(written.contains(&format!("'{key}'")), "{written}");
+        }
+    }
+
+    #[test]
+    fn writes_a_nested_value_object_inline() {
+        let colour = sz_expression(&object(&[(
+            "bg",
+            SzValue::Object(object(&[
+                ("color", text("blue-500")),
+                ("op", SzValue::Number(50.0)),
+            ])),
+        )]));
+        assert!(colour.contains("color: 'blue-500'"), "{colour}");
+        assert!(colour.contains("op: 50"), "{colour}");
+
+        let gradient = sz_expression(&object(&[(
+            "bgImg",
+            SzValue::Object(object(&[
+                ("gradient", text("linear")),
+                ("dir", text("to-r")),
+                ("in", text("hsl")),
+            ])),
+        )]));
+        assert!(gradient.contains("gradient: 'linear'"), "{gradient}");
+        assert!(gradient.contains("dir: 'to-r'"), "{gradient}");
+        assert!(gradient.contains("in: 'hsl'"), "{gradient}");
+
+        let numeric_dir = sz_expression(&object(&[(
+            "bgImg",
+            SzValue::Object(object(&[
+                ("gradient", text("linear")),
+                ("dir", SzValue::Number(45.0)),
+            ])),
+        )]));
+        assert!(numeric_dir.contains("dir: 45"), "{numeric_dir}");
+    }
+
+    #[test]
+    fn breaks_across_lines_once_the_object_is_no_longer_small() {
+        let written = sz_expression(&object(&[
+            ("p", SzValue::Number(4.0)),
+            ("bg", text("blue-500")),
+            (
+                "hover",
+                SzValue::Object(object(&[("bg", text("blue-600"))])),
+            ),
+        ]));
+        assert!(written.contains('\n'), "{written}");
+    }
+
+    #[test]
+    fn escapes_a_quote_a_backslash_and_a_newline_rather_than_emitting_them_raw() {
+        // The output is pasted back into a source file, so a raw line break
+        // or an unescaped quote would not parse where it lands.
+        assert_eq!(
+            sz_expression(&object(&[("custom'key", text("one\\two\nthree"))])),
+            "{{ 'custom\\'key': 'one\\\\two\\nthree' }}"
+        );
+
+        let gradient = sz_expression(&object(&[(
+            "bgImg",
+            SzValue::Object(object(&[
+                ("gradient", text("lin'ear")),
+                ("dir", text("to\\right")),
+                ("in", text("ok\nlab")),
+            ])),
+        )]));
+        assert!(gradient.contains("gradient: 'lin\\'ear'"), "{gradient}");
+        assert!(gradient.contains("dir: 'to\\\\right'"), "{gradient}");
+        assert!(gradient.contains("in: 'ok\\nlab'"), "{gradient}");
+    }
+
     #[test]
     fn wraps_the_expression_and_keeps_the_braces_when_asked() {
         let mut object = SzObject::new();
@@ -207,6 +333,18 @@ mod tests {
         assert_eq!(sz_expression(&object), "{{ p: 4 }}");
         assert_eq!(sz_html_value(&object, true), "{ p: 4 }");
         assert_eq!(sz_html_value(&object, false), "p: 4");
+
+        // An attribute with nothing in it still has to be writable.
+        let empty = SzObject::new();
+        assert_eq!(sz_expression(&empty), "{{}}");
+        assert_eq!(sz_html_value(&empty, false), "");
+
+        // `false` is a value, not an absence: dropping it would turn an
+        // explicit off into a default.
+        let mut flags = SzObject::new();
+        flags.insert("on".to_string(), SzValue::Bool(false));
+        flags.insert("off".to_string(), SzValue::Bool(true));
+        assert_eq!(sz_object_literal(&flags), "{ on: false, off: true }");
         assert_eq!(sz_html_value(&SzObject::new(), false), "");
     }
 }

@@ -1,12 +1,14 @@
 /**
  * `csszyx migrate` on the native Rust core.
  *
- * The CLI's TypeScript transformer is still the shipped implementation; this
- * module exposes its Rust port through the same binding the build-time
- * transform uses, for the CLI to opt into with `CSSZYX_MIGRATE_ENGINE=rust`.
- * The port is held to the TypeScript byte for byte by the parity corpora in
- * `packages/core/tests`; this file only carries the options across and makes
- * the result read the way the TypeScript's does.
+ * This is how `csszyx migrate` runs. It exposes the engine through the same
+ * binding the build-time transform uses; the file carries the options across
+ * and shapes the result, and holds no migration logic of its own.
+ *
+ * There is no second implementation to fall back to. On a platform with no
+ * `@csszyx/core-<platform>` package these throw, which is the honest answer:
+ * a silent second implementation is what the parity corpora existed to
+ * police.
  *
  * @module
  */
@@ -14,9 +16,25 @@
 import {
     CsszyxNativeUnavailableError,
     migrateBatch,
+    migrateClassName,
     migrateHtml,
+    migrateParseClass,
     type NativeMigrateResult,
 } from '@csszyx/core/native';
+
+/**
+ * One entry of the migration-resolution file.
+ *
+ * An object maps the class to sz directly. A string is either another class
+ * string to read instead, or one of the directives: `sz:keep` leaves the class
+ * in `className`, `sz:remove` drops it, `sz:todo` marks it still unresolved.
+ * `null` and `false` read as unresolved, which is what they meant before the
+ * directives existed.
+ */
+export type CsszyxTodoEntry = Record<string, unknown> | string | null | false;
+
+/** The migration-resolution file: class names mapped to resolution entries. */
+export type CsszyxTodoMap = Record<string, CsszyxTodoEntry>;
 
 /** One source to migrate. */
 export interface MigrateRustFile {
@@ -33,7 +51,13 @@ export interface MigrateRustOptions {
     /** Only normalize legacy sz keys; leave every className untouched. */
     keysOnly?: boolean;
     /** The parsed migration-resolution map. */
-    customMap?: Record<string, unknown>;
+    customMap?: CsszyxTodoMap;
+    /**
+     * The same map, already serialised. A caller that sends one map with many
+     * runs of files serialises it once and passes the string; when both are
+     * given this one is used as is.
+     */
+    customMapJson?: string;
 }
 
 /** Options for migrating an HTML source. */
@@ -69,18 +93,69 @@ export interface MigrateRustResult {
     potentiallyUnusedImports: string[];
 }
 
+/** What one whole `className` attribute becomes. */
+export interface MigrateRustConversion {
+    /** The merged sz object. */
+    szObject: Record<string, unknown>;
+    /** Tokens migrate could not convert, which stay in `className`. */
+    unrecognized: string[];
+    /** Tokens the resolution map said to keep in `className`. */
+    keepInClassName: string[];
+}
+
+/** One Tailwind utility read as an sz prop and value. */
+export interface MigrateRustParsedClass {
+    /** The sz key. */
+    prop: string;
+    /** The sz value. */
+    value: unknown;
+    /** The single CSS property the utility sets, when the class names one. */
+    cssProperty?: string;
+    /** A companion prop: `text-sm/6` is `text` plus `leading`. */
+    extra?: { prop: string; value: unknown };
+}
+
 /** The native migrate cannot run in this install. */
 export class RustMigrateUnavailableError extends Error {
     /**
      * @param detail - What the install is missing.
      */
     constructor(detail: string) {
-        super(`migrate: native engine unavailable - ${detail}`);
+        super(`migrate: native engine unavailable: ${detail}`);
         this.name = 'RustMigrateUnavailableError';
     }
 }
 
 let availability: boolean | undefined;
+
+/**
+ * What an install without the engine means for migrate, in migrate's terms.
+ *
+ * The loader's own message offers `build.parser: "wasm"`, and for a transform
+ * that is a real answer — the wasm build of the engine ships inside
+ * `@csszyx/core`. It is built WITHOUT the migrate feature, so for migrate the
+ * same sentence points at a bundler option that cannot help with the command
+ * the user ran. The recourse here is the platform package or nothing.
+ *
+ * @param packageName - Package the loader looked for, or null when no
+ *   prebuilt package covers this platform at all.
+ * @returns Three lines: what is missing, what to do, what did not happen.
+ */
+function unavailableDetail(packageName: string | null): string {
+    const missing =
+        packageName === null
+            ? 'no prebuilt package covers this platform'
+            : `${packageName} is not installed`;
+    const help =
+        packageName === null
+            ? 'help: prebuilt packages exist for linux, darwin and win32 on x64 and arm64'
+            : 'help: it is an optional dependency of @csszyx/core; reinstall without skipping optional packages';
+    return [
+        missing,
+        help,
+        'note: no file was changed; build and runtime do not use this engine',
+    ].join('\n');
+}
 
 /**
  * Whether the native migrate can run here: the platform package is installed
@@ -102,7 +177,7 @@ export function isRustMigrateAvailable(): boolean {
 
 /**
  * Migrate JSX/TSX sources with the native Rust core: one call for the whole
- * job, because the boundary crossing costs more than the parse.
+ * job, which keeps the results in input order without a cursor per file.
  *
  * @param files - Sources to migrate.
  * @param options - Migrate options.
@@ -119,7 +194,9 @@ export function migrateRustBatch(
             {
                 injectTodos: options.injectTodos,
                 keysOnly: options.keysOnly,
-                customMapJson: options.customMap ? JSON.stringify(options.customMap) : undefined,
+                customMapJson:
+                    options.customMapJson ??
+                    (options.customMap ? JSON.stringify(options.customMap) : undefined),
             },
         ).map(readResult),
     );
@@ -161,9 +238,7 @@ function guarded<T>(call: () => T): T {
         return call();
     } catch (error) {
         if (error instanceof CsszyxNativeUnavailableError) {
-            throw new RustMigrateUnavailableError(
-                `${error.message}; native package: ${error.packageName ?? 'unsupported platform'}`,
-            );
+            throw new RustMigrateUnavailableError(unavailableDetail(error.packageName));
         }
         throw error;
     }
@@ -188,4 +263,39 @@ function readResult(result: NativeMigrateResult): MigrateRustResult {
         stats: typeof szKeysNormalized === 'number' ? { ...counts, szKeysNormalized } : counts,
         potentiallyUnusedImports: result.potentiallyUnusedImports,
     };
+}
+
+/**
+ * Convert one whole `className` attribute to an sz object.
+ *
+ * The class-level question the file entry points cannot answer: the corpus
+ * round-trip, the per-key matrix and the sz golden all ask what a class
+ * becomes, with no source file around it.
+ *
+ * @param className - The whole class attribute value.
+ * @param customMap - The migration-resolution map.
+ * @returns The sz object plus the tokens that stay in `className`.
+ * @throws RustMigrateUnavailableError when the native engine cannot run here.
+ */
+export function migrateRustClassName(
+    className: string,
+    customMap?: Record<string, unknown>,
+): MigrateRustConversion {
+    return guarded(
+        () =>
+            JSON.parse(
+                migrateClassName(className, customMap ? JSON.stringify(customMap) : undefined),
+            ) as MigrateRustConversion,
+    );
+}
+
+/**
+ * Read one Tailwind utility as an sz prop and value.
+ *
+ * @param className - One Tailwind utility class.
+ * @returns The parsed class, or null when the parser does not know it.
+ * @throws RustMigrateUnavailableError when the native engine cannot run here.
+ */
+export function migrateRustParseClass(className: string): MigrateRustParsedClass | null {
+    return guarded(() => JSON.parse(migrateParseClass(className)) as MigrateRustParsedClass | null);
 }

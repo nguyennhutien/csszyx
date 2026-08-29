@@ -15,7 +15,14 @@
  * the lane removal existed to kill. Porting it onto the native engine would
  * let the dependency go too — a separate piece of work, not assumed here.
  */
-import { parseSync } from 'oxc-parser';
+import {
+    type EcmaScriptModule,
+    type ExportExportName,
+    type ExportImportName,
+    type ParserOptions,
+    parseSync,
+    rawTransferSupported,
+} from 'oxc-parser';
 
 import { qualifyStaticSzvConfig, SZV_RESERVED_FACTORY_NAMES } from './szv-precompile.js';
 
@@ -381,9 +388,7 @@ export function extractCrossModuleRegistryEntries(
     }
     let program: { body: OxcNode[] };
     try {
-        program = parseSync(filename, source, { lang: 'tsx' }).program as unknown as {
-            body: OxcNode[];
-        };
+        program = parseProgram(filename, source);
     } catch {
         /* v8 ignore next -- oxc reports syntax errors in-band; only native/parser failures throw. */
         return [];
@@ -462,86 +467,6 @@ function asEntries(entry: CrossModuleRegistryEntry | null): CrossModuleRegistryE
 /** The provider name standing for a module's default slot. */
 const DEFAULT_IMPORT_NAME = 'default';
 
-/** Where one imported local binding came from. */
-interface ImportedBinding {
-    /** Provider specifier as written, or undefined for a namespace binding. */
-    specifier: string | undefined;
-    /** Name in the provider; `default` for a default import. */
-    importedName: string;
-}
-
-/**
- * Index every module-scope binding introduced by an import.
- *
- * A namespace binding is indexed with no specifier rather than left out: the
- * name IS bound, so omitting it would let a later reader mistake it for a name
- * this module declares. Recorded as unforwardable, it refuses instead.
- *
- * @param body - Program body.
- * @returns Local binding name to where it came from.
- */
-function importedBindings(body: OxcNode[]): Map<string, ImportedBinding> {
-    const bindings = new Map<string, ImportedBinding>();
-    for (const statement of body) {
-        if (statement.type !== 'ImportDeclaration') continue;
-        const shaped = statement as unknown as {
-            importKind?: string;
-            source?: { value?: unknown };
-            specifiers?: OxcNode[];
-        };
-        if (shaped.importKind === 'type') continue;
-        const specifier = shaped.source?.value;
-        /* v8 ignore next -- narrowing only: an import declaration always
-           carries a string source; the guard exists so a shape change cannot
-           put a non-string into the specifier field of a forward. */
-        if (typeof specifier !== 'string') continue;
-        /* v8 ignore next -- narrowing only: oxc always supplies the array,
-           empty for a side-effect import; the fallback exists so a shape change
-           cannot throw mid-walk. */
-        for (const raw of shaped.specifiers ?? []) {
-            readImportSpecifier(raw, specifier, bindings);
-        }
-    }
-    return bindings;
-}
-
-/**
- * Record one import specifier as a local binding.
- *
- * @param raw - One specifier of an import declaration.
- * @param specifier - Provider specifier as written.
- * @param bindings - Index being built.
- */
-function readImportSpecifier(
-    raw: OxcNode,
-    specifier: string,
-    bindings: Map<string, ImportedBinding>,
-): void {
-    const shaped = raw as unknown as {
-        importKind?: string;
-        imported?: { type: string; name?: string };
-        local?: { type: string; name?: string };
-    };
-    const local = shaped.local?.name;
-    /* v8 ignore next -- narrowing only: every import specifier binds a local
-       Identifier, including the string-named and default forms. */
-    if (shaped.local?.type !== 'Identifier' || local === undefined) return;
-    if (raw.type === 'ImportNamespaceSpecifier') {
-        bindings.set(local, { specifier: undefined, importedName: local });
-        return;
-    }
-    if (raw.type === 'ImportDefaultSpecifier') {
-        bindings.set(local, { specifier, importedName: DEFAULT_IMPORT_NAME });
-        return;
-    }
-    if (raw.type !== 'ImportSpecifier' || shaped.importKind === 'type') return;
-    // A string import name is legal syntax but is not a name a token module is
-    // written with, and it cannot be spelled by the export list that would
-    // forward it either.
-    if (shaped.imported?.type !== 'Identifier' || shaped.imported.name === undefined) return;
-    bindings.set(local, { specifier, importedName: shaped.imported.name });
-}
-
 /**
  * Read the two identifier names one export clause carries.
  *
@@ -567,62 +492,58 @@ function exportClauseNames(specifier: OxcNode): { local: string; exported: strin
 }
 
 /**
- * Read the forwards one top-level statement contributes.
+ * Whether the text holds an `export {` clause - the one shape a forward can
+ * take, with or without `from`.
  *
- * Two shapes, one meaning. `export { X } from './y'` names the provider on the
- * statement itself. `import { X } from './y'; export { X }` splits the same
- * promise across two statements, and the second one alone says nothing — which
- * is why the import index is built first.
+ * The gate before the parse. Its predecessor admitted any module containing
+ * both the words `export` and `from`, which is nearly every TypeScript module
+ * (an import supplies the `from`), so a build over 18 000 files spent 8.9 s
+ * parsing modules that declared every value they exported. A clause is what
+ * the parse can find: `export function`, `export const`, `export default`
+ * declare their value here, and `export *` names nothing.
  *
- * @param statement - One statement from the program body.
- * @param declared - Names this module declares at module scope.
- * @param imports - Local bindings introduced by imports.
- * @returns The forwards this statement contributes, possibly none.
+ * Whitespace and comments may sit between the keyword and the brace, so a
+ * plain substring search is not enough; the scan skips both. A false positive
+ * (the text inside a string or comment) only costs a parse; the scan never
+ * refuses a real clause.
+ *
+ * @param source - Module source text.
+ * @returns True when an `export` keyword is followed by `{`.
  */
-function readStatementForwards(
-    statement: OxcNode,
-    declared: ReadonlySet<string>,
-    imports: ReadonlyMap<string, ImportedBinding>,
-): CrossModuleForward[] {
-    if (statement.type !== 'ExportNamedDeclaration') return [];
-    const shaped = statement as unknown as {
-        exportKind?: string;
-        source?: { value?: unknown } | null;
-        declaration?: OxcNode;
-        specifiers?: OxcNode[];
-    };
-    // A declaration form declares the value here, so the value extractor owns
-    // it; a type-only export carries nothing at runtime.
-    if (shaped.exportKind === 'type' || shaped.declaration != null) return [];
-    const from = shaped.source?.value;
-    const fromSpecifier = typeof from === 'string' ? from : undefined;
-    const forwards: CrossModuleForward[] = [];
-    /* v8 ignore next -- narrowing only: oxc always supplies the array. */
-    for (const raw of shaped.specifiers ?? []) {
-        const names = exportClauseNames(raw);
-        if (names === null) continue;
-        if (fromSpecifier !== undefined) {
-            // On a `from` clause the LOCAL name is the provider's, not this
-            // module's — there is no local binding to shadow it.
-            forwards.push({
-                exportName: names.exported,
-                importedName: names.local,
-                specifier: fromSpecifier,
-            });
+function hasExportClause(source: string): boolean {
+    let cursor = source.indexOf('export');
+    while (cursor !== -1) {
+        const position = skipTrivia(source, cursor + 'export'.length);
+        if (source[position] === '{') return true;
+        // Resume past what was scanned, so a comment is never read twice.
+        cursor = source.indexOf('export', Math.max(position, cursor + 1));
+    }
+    return false;
+}
+
+/**
+ * Skip whitespace and comments.
+ *
+ * @param source - Module source text.
+ * @param start - Where to start.
+ * @returns The first offset at or after `start` holding neither.
+ */
+function skipTrivia(source: string, start: number): number {
+    let position = start;
+    for (;;) {
+        while (position < source.length && /\s/.test(source[position] as string)) position++;
+        if (source.startsWith('/*', position)) {
+            const close = source.indexOf('*/', position + 2);
+            position = close === -1 ? source.length : close + 2;
             continue;
         }
-        // A name this module declares has a readable value, and recording a
-        // link as well would give the resolver two answers for one name.
-        if (declared.has(names.local)) continue;
-        const binding = imports.get(names.local);
-        if (binding?.specifier === undefined) continue;
-        forwards.push({
-            exportName: names.exported,
-            importedName: binding.importedName,
-            specifier: binding.specifier,
-        });
+        if (source.startsWith('//', position)) {
+            const newline = source.indexOf('\n', position + 2);
+            position = newline === -1 ? source.length : newline + 1;
+            continue;
+        }
+        return position;
     }
-    return forwards;
 }
 
 /**
@@ -643,17 +564,142 @@ function readStatementForwards(
  * @returns The forwards, declaration order preserved.
  */
 export function extractCrossModuleForwards(source: string, filename: string): CrossModuleForward[] {
-    if (!source.includes('export') || !source.includes('from')) return [];
-    let program: { body: OxcNode[] };
+    if (!hasExportClause(source)) return [];
+    let module: EcmaScriptModule;
     try {
-        program = parseSync(filename, source, { lang: 'tsx' }).program as unknown as {
-            body: OxcNode[];
-        };
+        // The module record, not the AST: oxc computes it while parsing and
+        // hands it over without materialising the tree, and it already links
+        // `import { X } from './y'; export { X }` to `./y` the way the two-
+        // statement walk here used to.
+        module = parseSync(filename, source, { lang: 'tsx' }).module;
     } catch {
         /* v8 ignore next -- oxc reports syntax errors in-band; only native/parser failures throw. */
         return [];
     }
-    const declared = new Set(moduleScopeDeclarators(program.body).keys());
-    const imports = importedBindings(program.body);
-    return program.body.flatMap(statement => readStatementForwards(statement, declared, imports));
+    const defaultImports = defaultImportBindings(module);
+    const forwards: CrossModuleForward[] = [];
+    for (const statement of module.staticExports) {
+        for (const entry of statement.entries) {
+            // A type-only export carries nothing at runtime; an entry with no
+            // module request is a value this module declares, which the value
+            // extractor owns.
+            if (entry.isType || entry.moduleRequest === null) continue;
+            const specifier = entry.moduleRequest.value;
+            const exportName = recordedName(entry.exportName);
+            const importedName = recordedName(entry.importName);
+            if (exportName === null || importedName === null) continue;
+            forwards.push({
+                exportName,
+                // The record spells a re-exported default import by its LOCAL
+                // name; the provider exports it as `default`, and that is the
+                // name a resolver must look up.
+                importedName: defaultImports.has(bindingKey(specifier, importedName))
+                    ? DEFAULT_IMPORT_NAME
+                    : importedName,
+                specifier,
+            });
+        }
+    }
+    return forwards;
+}
+
+/**
+ * The local names bound by default imports, keyed with their provider.
+ *
+ * @param module - The module record.
+ * @returns Keys for every `import X from './p'` binding.
+ */
+function defaultImportBindings(module: EcmaScriptModule): Set<string> {
+    const keys = new Set<string>();
+    for (const statement of module.staticImports) {
+        for (const entry of statement.entries) {
+            if (entry.importName.kind === 'Default' && !entry.isType) {
+                keys.add(bindingKey(statement.moduleRequest.value, entry.localName.value));
+            }
+        }
+    }
+    return keys;
+}
+
+/**
+ * One key for a binding and the module it came from.
+ *
+ * @param specifier - Provider specifier as written.
+ * @param local - Local binding name.
+ * @returns The key.
+ */
+function bindingKey(specifier: string, local: string): string {
+    return `${specifier}\0${local}`;
+}
+
+/**
+ * The identifier a module-record name stands for, or null when a forward
+ * cannot carry it.
+ *
+ * A namespace (`All`, `AllButDefault`) names no single binding, and a
+ * string-literal name is legal syntax that no importer of a token module
+ * writes, so recording one would key the registry by a value the consumer
+ * never asks for.
+ *
+ * @param name - An import or export name from the module record.
+ * @returns The name a forward records, or null.
+ */
+function recordedName(name: ExportExportName | ExportImportName): string | null {
+    // `default` arrives as a `Name` entry spelled "default", so only the
+    // namespace kinds (`All`, `AllButDefault`) and `None` are refused here.
+    if (name.kind !== 'Name') return null;
+    const value = name.name;
+    /* v8 ignore next -- narrowing only: a `Name` entry always carries its name. */
+    if (value === null) return null;
+    return IDENTIFIER_NAME.test(value) ? value : null;
+}
+
+/** An ECMAScript identifier, which is what a string-literal export name is not. */
+const IDENTIFIER_NAME = /^[\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*$/u;
+
+/**
+ * Whether the parser can hand the AST over as a buffer on this host.
+ *
+ * Decided once. The probe is read defensively because the binding that loads
+ * in a webcontainer is a different module that need not export it, and a
+ * missing probe must mean "use the JSON form", not a TypeError in the walk.
+ */
+const RAW_TRANSFER_SUPPORTED: boolean =
+    typeof rawTransferSupported === 'function' && rawTransferSupported();
+
+/**
+ * Parser options asking for the raw transfer. The flag is read by oxc-parser
+ * 0.140 at runtime but absent from its typings, hence the widened type.
+ */
+const RAW_TRANSFER_OPTIONS: ParserOptions & { experimentalRawTransfer: boolean } = {
+    lang: 'tsx',
+    experimentalRawTransfer: true,
+};
+
+/**
+ * Parse one module and return its program, through the raw transfer when the
+ * host has it and the JSON form otherwise.
+ *
+ * The raw transfer costs a quarter of the JSON form (54 against 215
+ * microseconds per file, measured on the vui corpus) and yields the same tree
+ * for every shape this extractor reads. It is still an experimental flag: a
+ * parse that throws under it is retried through the JSON form before the
+ * caller hears anything, so a host the probe misjudged costs a slow parse,
+ * not a broken build.
+ *
+ * @param filename - Module filename, for parser dialect detection.
+ * @param source - Module source text.
+ * @returns The program, whose body the extractors walk.
+ */
+function parseProgram(filename: string, source: string): { body: OxcNode[] } {
+    if (RAW_TRANSFER_SUPPORTED) {
+        try {
+            return parseSync(filename, source, RAW_TRANSFER_OPTIONS).program as unknown as {
+                body: OxcNode[];
+            };
+        } catch {
+            // Fall through to the form every host has.
+        }
+    }
+    return parseSync(filename, source, { lang: 'tsx' }).program as unknown as { body: OxcNode[] };
 }

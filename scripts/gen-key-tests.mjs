@@ -22,8 +22,10 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { parseClass } from '../packages/cli/src/migrate/class-parser.js';
-import { classNameToSzObject } from '../packages/cli/src/migrate/variant-parser.js';
+import {
+    migrateRustClassName as classNameToSzObject,
+    migrateRustParseClass as parseClass,
+} from '../packages/compiler/src/migrate-rust.js';
 import {
     BOOLEAN_SHORTHANDS,
     PROPERTY_MAP,
@@ -262,7 +264,7 @@ function roundTripsExactly(className) {
 
 function canonicalKey(className) {
     try {
-        return parseClass(className, { display: 'canonical' })?.prop;
+        return parseClass(className)?.prop;
     } catch {
         return undefined;
     }

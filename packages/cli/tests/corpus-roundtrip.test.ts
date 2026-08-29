@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { type SzObject, transform } from '../../compiler/src/transform-core.js';
-import { classNameToSzObject } from '../src/migrate/variant-parser.js';
+import { classNameToSzObject } from '../src/migrate.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CORPUS_DIR = join(__dirname, '../../../scripts/corpus');

@@ -15,6 +15,20 @@ describe('@csszyx/core/native loader', () => {
         expect(typeof transformBatch).toBe('function');
     });
 
+    it('defaults to the host platform package and the transform wording', () => {
+        // Both defaults are part of the exported shape: callers inside this
+        // module always pass them, so nothing else exercises what an omitted
+        // argument resolves to.
+        const error = new CsszyxNativeUnavailableError();
+
+        expect(error.packageName).toBe(getNativePackageName());
+        expect(error.code).toBe('CSSZYX_NATIVE_UNAVAILABLE');
+        // Absent a purpose the error speaks for the transform, which is the
+        // one that really can fall back to the wasm engine.
+        expect(error.message).toContain('csszyx native Rust transform is not available');
+        expect(error.message).toContain('build.parser');
+    });
+
     it('reports the expected optional package name for supported platforms', () => {
         const packageName = getNativePackageName();
 

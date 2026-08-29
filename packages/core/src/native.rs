@@ -389,7 +389,7 @@ impl From<migrate::TransformResult> for NativeMigrateResult {
 }
 
 /// Migrates a batch of JSX/TSX sources with the native Rust core: one call
-/// for the whole job, because a call per file costs more than the parse.
+/// for the whole job, answering in input order.
 ///
 /// # Errors
 ///
@@ -419,6 +419,40 @@ pub fn migrate_batch_native(
             migrate::transform_source(&file.source, &file.filename, &migrate_options).into()
         })
         .collect())
+}
+
+/// Converts one whole `className` attribute to an sz object, as JSON.
+///
+/// The class-level question the file entry points cannot answer. The answer
+/// crosses as JSON because an sz value is recursive and order-sensitive, and
+/// `serde_json` already writes the shape the generators compare against.
+///
+/// # Errors
+///
+/// Returns a NAPI error when `customMapJson` is not a JSON object.
+// napi hands JavaScript strings over as owned `String`s.
+#[allow(clippy::needless_pass_by_value)]
+#[napi(js_name = "migrateClassName")]
+pub fn migrate_class_name_native(
+    class_name: String,
+    custom_map_json: Option<String>,
+) -> napi::Result<String> {
+    migrate::migrate_class_name(&class_name, custom_map_json.as_deref())
+        .map_err(napi::Error::from_reason)
+}
+
+/// Reads one Tailwind utility as an sz prop and value, as JSON, answering
+/// `null` when the parser does not know the class.
+///
+/// # Errors
+///
+/// Returns a NAPI error when the answer cannot be encoded, which a parsed
+/// class cannot produce.
+// napi hands JavaScript strings over as owned `String`s.
+#[allow(clippy::needless_pass_by_value)]
+#[napi(js_name = "migrateParseClass")]
+pub fn migrate_parse_class_native(class: String) -> napi::Result<String> {
+    migrate::migrate_parse_class(&class).map_err(napi::Error::from_reason)
 }
 
 /// Migrates one HTML source with the native Rust core.

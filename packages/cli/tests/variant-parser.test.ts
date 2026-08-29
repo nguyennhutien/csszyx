@@ -1,592 +1,233 @@
+/**
+ * What a whole `className` attribute becomes, end to end.
+ *
+ * The pieces underneath — the tokenizer, the variant splitter and the
+ * variant-to-sz-key map — are unit-tested in Rust beside the code, in
+ * `packages/core/src/migrate/variant_parser.rs`. What is left here is the
+ * question only the whole pass can answer: how those pieces compose into one
+ * nested sz object.
+ */
 import { describe, expect, it } from 'vitest';
 
-import {
-    classNameToSzObject,
-    extractVariants,
-    mapVariant,
-    tokenize,
-} from '../src/migrate/variant-parser.js';
+import { classNameToSzObject } from '../src/migrate.js';
 
-describe('variant-parser', () => {
-    // ========================================================================
-    // TOKENIZE
-    // ========================================================================
-    describe('tokenize', () => {
-        it('splits by whitespace', () => {
-            expect(tokenize('p-4 bg-blue-500 flex')).toEqual(['p-4', 'bg-blue-500', 'flex']);
-        });
+describe('classNameToSzObject', () => {
+    it('simple classes', () => {
+        const { szObject } = classNameToSzObject('p-4 bg-blue-500');
+        expect(szObject).toEqual({ p: 4, bg: 'blue-500' });
+    });
 
-        it('handles multiple spaces', () => {
-            expect(tokenize('  p-4   bg-blue-500  ')).toEqual(['p-4', 'bg-blue-500']);
-        });
+    it('with variant', () => {
+        const { szObject } = classNameToSzObject('hover:bg-blue-600');
+        expect(szObject).toEqual({ hover: { bg: 'blue-600' } });
+    });
 
-        it('handles single class', () => {
-            expect(tokenize('p-4')).toEqual(['p-4']);
-        });
+    it('multiple variants', () => {
+        const { szObject } = classNameToSzObject('md:hover:bg-blue-600');
+        expect(szObject).toEqual({ md: { hover: { bg: 'blue-600' } } });
+    });
 
-        it('handles empty string', () => {
-            expect(tokenize('')).toEqual([]);
-            expect(tokenize('   ')).toEqual([]);
+    it('mixed base + variant', () => {
+        const { szObject } = classNameToSzObject('p-4 bg-blue-500 hover:bg-blue-600');
+        expect(szObject).toEqual({
+            p: 4,
+            bg: 'blue-500',
+            hover: { bg: 'blue-600' },
         });
     });
 
-    // ========================================================================
-    // EXTRACT VARIANTS
-    // ========================================================================
-    describe('extractVariants', () => {
-        it('no variants', () => {
-            expect(extractVariants('p-4')).toEqual({ variantParts: [], baseClass: 'p-4' });
-        });
+    it('group-hover', () => {
+        const { szObject } = classNameToSzObject('group-hover:text-white');
+        expect(szObject).toEqual({ group: { hover: { color: 'white' } } });
+    });
 
-        it('single variant', () => {
-            expect(extractVariants('hover:bg-blue-500')).toEqual({
-                variantParts: ['hover'],
-                baseClass: 'bg-blue-500',
-            });
-        });
+    it('group-hover/sidebar', () => {
+        const { szObject } = classNameToSzObject('group-hover/sidebar:text-white');
+        expect(szObject).toEqual({ group: { sidebar: { hover: { color: 'white' } } } });
+    });
 
-        it('multiple variants', () => {
-            expect(extractVariants('md:hover:bg-blue-500')).toEqual({
-                variantParts: ['md', 'hover'],
-                baseClass: 'bg-blue-500',
-            });
-        });
+    it('group-data-[active] (brackets)', () => {
+        const { szObject } = classNameToSzObject('group-data-[active]:border-blue-500');
+        expect(szObject).toEqual({ group: { data: { active: { borderColor: 'blue-500' } } } });
+    });
 
-        it('preserves brackets around colons', () => {
-            expect(extractVariants('supports-[display:grid]:grid')).toEqual({
-                variantParts: ['supports-[display:grid]'],
-                baseClass: 'grid',
-            });
-        });
+    it('group-data-active (bare shorthand)', () => {
+        const { szObject } = classNameToSzObject('group-data-active:border-blue-500');
+        expect(szObject).toEqual({ group: { data: { active: { borderColor: 'blue-500' } } } });
+    });
 
-        it('arbitrary variant with colons', () => {
-            expect(extractVariants('aria-[current=page]:font-bold')).toEqual({
-                variantParts: ['aria-[current=page]'],
-                baseClass: 'font-bold',
-            });
-        });
-
-        it('preserves non-BMP characters while splitting variants', () => {
-            expect(extractVariants('data-[icon=🧭:active]:content-["🚀"]')).toEqual({
-                variantParts: ['data-[icon=🧭:active]'],
-                baseClass: 'content-["🚀"]',
-            });
-        });
-
-        it('group-hover/name', () => {
-            expect(extractVariants('group-hover/sidebar:text-white')).toEqual({
-                variantParts: ['group-hover/sidebar'],
-                baseClass: 'text-white',
-            });
-        });
-
-        it('data attribute', () => {
-            expect(extractVariants('data-[active]:bg-blue-500')).toEqual({
-                variantParts: ['data-[active]'],
-                baseClass: 'bg-blue-500',
-            });
-        });
-
-        it('min breakpoint', () => {
-            expect(extractVariants('min-[320px]:text-center')).toEqual({
-                variantParts: ['min-[320px]'],
-                baseClass: 'text-center',
-            });
-        });
-
-        it('container query', () => {
-            expect(extractVariants('@md:flex')).toEqual({
-                variantParts: ['@md'],
-                baseClass: 'flex',
-            });
-        });
-
-        it('container query with name', () => {
-            expect(extractVariants('@md/sidebar:block')).toEqual({
-                variantParts: ['@md/sidebar'],
-                baseClass: 'block',
-            });
-        });
-
-        it('@min with arbitrary value', () => {
-            expect(extractVariants('@min-[475px]:flex')).toEqual({
-                variantParts: ['@min-[475px]'],
-                baseClass: 'flex',
-            });
+    it("group-data-[active='true']/card (value match + named group)", () => {
+        const { szObject } = classNameToSzObject("group-data-[active='true']/card:text-blue-600");
+        expect(szObject).toEqual({
+            group: { card: { data: { "active='true'": { color: 'blue-600' } } } },
         });
     });
 
-    // ========================================================================
-    // MAP VARIANT
-    // ========================================================================
-    describe('mapVariant', () => {
-        it('simple variants', () => {
-            expect(mapVariant('hover')).toEqual(['hover']);
-            expect(mapVariant('focus')).toEqual(['focus']);
-            expect(mapVariant('active')).toEqual(['active']);
-            expect(mapVariant('disabled')).toEqual(['disabled']);
-            expect(mapVariant('first')).toEqual(['first']);
-            expect(mapVariant('last')).toEqual(['last']);
-            expect(mapVariant('odd')).toEqual(['odd']);
-            expect(mapVariant('even')).toEqual(['even']);
-        });
-
-        it('responsive variants', () => {
-            expect(mapVariant('sm')).toEqual(['sm']);
-            expect(mapVariant('md')).toEqual(['md']);
-            expect(mapVariant('lg')).toEqual(['lg']);
-            expect(mapVariant('xl')).toEqual(['xl']);
-            expect(mapVariant('2xl')).toEqual(['2xl']);
-        });
-
-        it('multi-word variants → camelCase', () => {
-            expect(mapVariant('focus-within')).toEqual(['focusWithin']);
-            expect(mapVariant('focus-visible')).toEqual(['focusVisible']);
-            expect(mapVariant('first-of-type')).toEqual(['firstOfType']);
-            expect(mapVariant('last-of-type')).toEqual(['lastOfType']);
-            expect(mapVariant('motion-reduce')).toEqual(['motionReduce']);
-            expect(mapVariant('motion-safe')).toEqual(['motionSafe']);
-            expect(mapVariant('placeholder-shown')).toEqual(['placeholderShown']);
-            expect(mapVariant('read-only')).toEqual(['readOnly']);
-        });
-
-        it('pseudo elements', () => {
-            expect(mapVariant('before')).toEqual(['before']);
-            expect(mapVariant('after')).toEqual(['after']);
-            expect(mapVariant('placeholder')).toEqual(['placeholder']);
-        });
-
-        it('dark/light', () => {
-            expect(mapVariant('dark')).toEqual(['dark']);
-            expect(mapVariant('light')).toEqual(['light']);
-        });
-
-        // GROUP/PEER
-        it('group-hover', () => {
-            expect(mapVariant('group-hover')).toEqual(['group', 'hover']);
-        });
-
-        it('group-hover/sidebar', () => {
-            expect(mapVariant('group-hover/sidebar')).toEqual(['group', 'sidebar', 'hover']);
-        });
-
-        it('peer-checked', () => {
-            expect(mapVariant('peer-checked')).toEqual(['peer', 'checked']);
-        });
-
-        it('peer-checked/draft', () => {
-            expect(mapVariant('peer-checked/draft')).toEqual(['peer', 'draft', 'checked']);
-        });
-
-        it('group-[.is-published]', () => {
-            expect(mapVariant('group-[.is-published]')).toEqual(['group', '.is-published']);
-        });
-
-        it('group-has-[a]', () => {
-            expect(mapVariant('group-has-[a]')).toEqual(['group', 'has', 'a']);
-        });
-
-        it('group-focus-within', () => {
-            expect(mapVariant('group-focus-within')).toEqual(['group', 'focusWithin']);
-        });
-
-        // group-data-* variants
-        it('group-data-[active] (with brackets)', () => {
-            expect(mapVariant('group-data-[active]')).toEqual(['group', 'data', 'active']);
-        });
-
-        it('group-data-active (bare shorthand, no brackets)', () => {
-            // TW v4 allows omitting brackets for simple attribute names
-            expect(mapVariant('group-data-active')).toEqual(['group', 'data', 'active']);
-        });
-
-        it("group-data-[active='true'] (attribute with value)", () => {
-            expect(mapVariant("group-data-[active='true']")).toEqual([
-                'group',
-                'data',
-                "active='true'",
-            ]);
-        });
-
-        it('group-data-[state=open] (attribute with value)', () => {
-            expect(mapVariant('group-data-[state=open]')).toEqual(['group', 'data', 'state=open']);
-        });
-
-        // Common real-world data attributes (bare shorthand = no brackets, attribute presence only)
-        it('group-data-open (bare shorthand)', () => {
-            expect(mapVariant('group-data-open')).toEqual(['group', 'data', 'open']);
-        });
-
-        it('group-data-closed (bare shorthand)', () => {
-            expect(mapVariant('group-data-closed')).toEqual(['group', 'data', 'closed']);
-        });
-
-        it('group-data-disabled (bare shorthand)', () => {
-            expect(mapVariant('group-data-disabled')).toEqual(['group', 'data', 'disabled']);
-        });
-
-        it('group-data-[open] (with brackets — same result as bare shorthand)', () => {
-            expect(mapVariant('group-data-[open]')).toEqual(['group', 'data', 'open']);
-        });
-
-        it('group-data-[state=open] (value match — brackets required)', () => {
-            expect(mapVariant('group-data-[state=open]')).toEqual(['group', 'data', 'state=open']);
-        });
-
-        it('group-data-[orientation=horizontal] (Radix UI orientation)', () => {
-            expect(mapVariant('group-data-[orientation=horizontal]')).toEqual([
-                'group',
-                'data',
-                'orientation=horizontal',
-            ]);
-        });
-
-        // group-aria-* variants
-        it('group-aria-checked', () => {
-            expect(mapVariant('group-aria-checked')).toEqual(['group', 'aria', 'checked']);
-        });
-
-        it('group-aria-expanded', () => {
-            expect(mapVariant('group-aria-expanded')).toEqual(['group', 'aria', 'expanded']);
-        });
-
-        it('group-aria-[current=page]', () => {
-            expect(mapVariant('group-aria-[current=page]')).toEqual([
-                'group',
-                'aria',
-                'current=page',
-            ]);
-        });
-
-        // peer-data-* (same pattern, different type)
-        it('peer-data-[active] (with brackets)', () => {
-            expect(mapVariant('peer-data-[active]')).toEqual(['peer', 'data', 'active']);
-        });
-
-        it('peer-data-active (bare shorthand)', () => {
-            expect(mapVariant('peer-data-active')).toEqual(['peer', 'data', 'active']);
-        });
-
-        it('peer-data-[state=open] (value match)', () => {
-            expect(mapVariant('peer-data-[state=open]')).toEqual(['peer', 'data', 'state=open']);
-        });
-
-        it('peer-focus-visible/label', () => {
-            expect(mapVariant('peer-focus-visible/label')).toEqual([
-                'peer',
-                'label',
-                'focusVisible',
-            ]);
-        });
-
-        // HAS
-        it('has-[img]', () => {
-            expect(mapVariant('has-[img]')).toEqual(['has', 'img']);
-        });
-
-        it('has-[:checked]', () => {
-            expect(mapVariant('has-[:checked]')).toEqual(['has', 'checked']);
-        });
-
-        // NOT
-        it('not-hover', () => {
-            expect(mapVariant('not-hover')).toEqual(['not', 'hover']);
-        });
-
-        it('not-first', () => {
-            expect(mapVariant('not-first')).toEqual(['not', 'first']);
-        });
-
-        it('not-supports-[display:grid]', () => {
-            expect(mapVariant('not-supports-[display:grid]')).toEqual([
-                'not',
-                'supports',
-                'display:grid',
-            ]);
-        });
-
-        // DATA
-        it('data-[active]', () => {
-            expect(mapVariant('data-[active]')).toEqual(['data', 'active']);
-        });
-
-        it('data-[state=open]', () => {
-            expect(mapVariant('data-[state=open]')).toEqual(['data', 'state=open']);
-        });
-
-        // ARIA
-        it('aria-checked', () => {
-            expect(mapVariant('aria-checked')).toEqual(['aria', 'checked']);
-        });
-
-        it('aria-[current=page]', () => {
-            expect(mapVariant('aria-[current=page]')).toEqual(['aria', 'current=page']);
-        });
-
-        // SUPPORTS
-        it('supports-[display:grid]', () => {
-            expect(mapVariant('supports-[display:grid]')).toEqual(['supports', 'display:grid']);
-        });
-
-        // MIN/MAX
-        it('min-[320px]', () => {
-            expect(mapVariant('min-[320px]')).toEqual(['min', '320px']);
-        });
-
-        it('max-[600px]', () => {
-            expect(mapVariant('max-[600px]')).toEqual(['max', '600px']);
-        });
-
-        it('min-md', () => {
-            expect(mapVariant('min-md')).toEqual(['min', 'md']);
-        });
-
-        // CONTAINER QUERIES
-        it('@md', () => {
-            expect(mapVariant('@md')).toEqual(['@md']);
-        });
-
-        it('@md/sidebar', () => {
-            expect(mapVariant('@md/sidebar')).toEqual(['@md', 'sidebar']);
-        });
-
-        it('@min-[475px]', () => {
-            expect(mapVariant('@min-[475px]')).toEqual(['@min', '475px']);
-        });
-
-        it('@container', () => {
-            expect(mapVariant('@container')).toEqual(['@container']);
-        });
-
-        // ARBITRARY VARIANT
-        it('[&>span]', () => {
-            expect(mapVariant('[&>span]')).toEqual(['[&>span]']);
+    it('dark:group-data-[active]:border-blue-500 (compound)', () => {
+        const { szObject } = classNameToSzObject('dark:group-data-[active]:border-blue-500');
+        expect(szObject).toEqual({
+            dark: { group: { data: { active: { borderColor: 'blue-500' } } } },
         });
     });
 
-    // ========================================================================
-    // classNameToSzObject — INTEGRATION
-    // ========================================================================
-    describe('classNameToSzObject', () => {
-        it('simple classes', () => {
-            const { szObject } = classNameToSzObject('p-4 bg-blue-500');
-            expect(szObject).toEqual({ p: 4, bg: 'blue-500' });
-        });
+    it('has variant', () => {
+        const { szObject } = classNameToSzObject('has-[img]:bg-blue-500');
+        expect(szObject).toEqual({ has: { img: { bg: 'blue-500' } } });
+    });
 
-        it('with variant', () => {
-            const { szObject } = classNameToSzObject('hover:bg-blue-600');
-            expect(szObject).toEqual({ hover: { bg: 'blue-600' } });
-        });
+    it('data attribute', () => {
+        const { szObject } = classNameToSzObject('data-[active]:bg-blue-500');
+        expect(szObject).toEqual({ data: { active: { bg: 'blue-500' } } });
+    });
 
-        it('multiple variants', () => {
-            const { szObject } = classNameToSzObject('md:hover:bg-blue-600');
-            expect(szObject).toEqual({ md: { hover: { bg: 'blue-600' } } });
-        });
+    it('aria state', () => {
+        const { szObject } = classNameToSzObject('aria-checked:bg-blue-500');
+        expect(szObject).toEqual({ aria: { checked: { bg: 'blue-500' } } });
+    });
 
-        it('mixed base + variant', () => {
-            const { szObject } = classNameToSzObject('p-4 bg-blue-500 hover:bg-blue-600');
-            expect(szObject).toEqual({
-                p: 4,
-                bg: 'blue-500',
-                hover: { bg: 'blue-600' },
-            });
-        });
+    it('not variant', () => {
+        const { szObject } = classNameToSzObject('not-hover:opacity-75');
+        expect(szObject).toEqual({ not: { hover: { opacity: 75 } } });
+    });
 
-        it('group-hover', () => {
-            const { szObject } = classNameToSzObject('group-hover:text-white');
-            expect(szObject).toEqual({ group: { hover: { color: 'white' } } });
-        });
+    it('supports variant', () => {
+        const { szObject } = classNameToSzObject('supports-[display:grid]:grid');
+        expect(szObject).toEqual({ supports: { 'display:grid': { display: 'grid' } } });
+    });
 
-        it('group-hover/sidebar', () => {
-            const { szObject } = classNameToSzObject('group-hover/sidebar:text-white');
-            expect(szObject).toEqual({ group: { sidebar: { hover: { color: 'white' } } } });
-        });
+    it('min breakpoint', () => {
+        const { szObject } = classNameToSzObject('min-[320px]:text-center');
+        expect(szObject).toEqual({ min: { '320px': { textAlign: 'center' } } });
+    });
 
-        it('group-data-[active] (brackets)', () => {
-            const { szObject } = classNameToSzObject('group-data-[active]:border-blue-500');
-            expect(szObject).toEqual({ group: { data: { active: { borderColor: 'blue-500' } } } });
-        });
+    it('container query', () => {
+        const { szObject } = classNameToSzObject('@md:flex');
+        expect(szObject).toEqual({ '@md': { display: 'flex' } });
+    });
 
-        it('group-data-active (bare shorthand)', () => {
-            const { szObject } = classNameToSzObject('group-data-active:border-blue-500');
-            expect(szObject).toEqual({ group: { data: { active: { borderColor: 'blue-500' } } } });
-        });
+    it('container query with name', () => {
+        const { szObject } = classNameToSzObject('@md/sidebar:block');
+        expect(szObject).toEqual({ '@md': { sidebar: { display: 'block' } } });
+    });
 
-        it("group-data-[active='true']/card (value match + named group)", () => {
-            const { szObject } = classNameToSzObject(
-                "group-data-[active='true']/card:text-blue-600",
-            );
-            expect(szObject).toEqual({
-                group: { card: { data: { "active='true'": { color: 'blue-600' } } } },
-            });
-        });
+    it('@min arbitrary', () => {
+        const { szObject } = classNameToSzObject('@min-[475px]:flex');
+        expect(szObject).toEqual({ '@min': { '475px': { display: 'flex' } } });
+    });
 
-        it('dark:group-data-[active]:border-blue-500 (compound)', () => {
-            const { szObject } = classNameToSzObject('dark:group-data-[active]:border-blue-500');
-            expect(szObject).toEqual({
-                dark: { group: { data: { active: { borderColor: 'blue-500' } } } },
-            });
+    it('gradient class', () => {
+        const { szObject } = classNameToSzObject('bg-linear-to-r');
+        expect(szObject).toEqual({
+            bgImg: { gradient: 'linear', dir: 'to-r' },
         });
+    });
 
-        it('has variant', () => {
-            const { szObject } = classNameToSzObject('has-[img]:bg-blue-500');
-            expect(szObject).toEqual({ has: { img: { bg: 'blue-500' } } });
+    it('unrecognized classes tracked separately', () => {
+        const { szObject, unrecognized } = classNameToSzObject('p-4 my-custom-class flex');
+        expect(szObject).toEqual({ p: 4, display: 'flex' });
+        expect(unrecognized).toEqual(['my-custom-class']);
+    });
+
+    it('complex real-world example', () => {
+        const { szObject } = classNameToSzObject(
+            'p-4 bg-blue-500 hover:bg-blue-600 md:flex md:items-center',
+        );
+        expect(szObject).toEqual({
+            p: 4,
+            bg: 'blue-500',
+            hover: { bg: 'blue-600' },
+            md: { display: 'flex', items: 'center' },
         });
+    });
 
-        it('data attribute', () => {
-            const { szObject } = classNameToSzObject('data-[active]:bg-blue-500');
-            expect(szObject).toEqual({ data: { active: { bg: 'blue-500' } } });
+    it('color with opacity', () => {
+        const { szObject } = classNameToSzObject('bg-blue-500/50');
+        expect(szObject).toEqual({ bg: { color: 'blue-500', op: 50 } });
+    });
+
+    it('does not share cached object-valued parsed results between calls', () => {
+        const first = classNameToSzObject('bg-blue-500/50').szObject as {
+            bg: { color: string; op: number };
+        };
+        first.bg.color = 'mutated';
+
+        const second = classNameToSzObject('bg-blue-500/50').szObject;
+        expect(second).toEqual({ bg: { color: 'blue-500', op: 50 } });
+    });
+
+    it('merges same variant nesting', () => {
+        const { szObject } = classNameToSzObject('hover:bg-blue-600 hover:text-white');
+        expect(szObject).toEqual({
+            hover: { bg: 'blue-600', color: 'white' },
         });
+    });
 
-        it('aria state', () => {
-            const { szObject } = classNameToSzObject('aria-checked:bg-blue-500');
-            expect(szObject).toEqual({ aria: { checked: { bg: 'blue-500' } } });
+    it('single-property classes → canonical', () => {
+        const { szObject } = classNameToSzObject('flex relative');
+        expect(szObject).toEqual({ display: 'flex', position: 'relative' });
+    });
+
+    it('no brackets in variant keys', () => {
+        const { szObject } = classNameToSzObject('min-[320px]:flex max-[600px]:hidden');
+        // Keys should NOT have brackets
+        expect(szObject).toEqual({
+            min: { '320px': { display: 'flex' } },
+            max: { '600px': { display: 'none' } },
         });
+        // Verify no brackets
+        expect('320px' in (szObject.min as Record<string, unknown>)).toBe(true);
+        expect('[320px]' in (szObject.min as Record<string, unknown>)).toBe(false);
+    });
 
-        it('not variant', () => {
-            const { szObject } = classNameToSzObject('not-hover:opacity-75');
-            expect(szObject).toEqual({ not: { hover: { opacity: 75 } } });
+    it('fails closed on conflicting display classes in the same scope', () => {
+        const { szObject, unrecognized } = classNameToSzObject('block flex p-4');
+        expect(szObject).toEqual({ p: 4 });
+        expect(unrecognized).toEqual(['block', 'flex']);
+    });
+
+    it('keeps later display tokens unresolved after a scope conflict', () => {
+        const { szObject, unrecognized } = classNameToSzObject('block flex inline p-4');
+        expect(szObject).toEqual({ p: 4 });
+        expect(unrecognized).toEqual(['block', 'flex', 'inline']);
+    });
+
+    it('migrates every single-property group to its canonical key', () => {
+        const { szObject } = classNameToSzObject(
+            'flex absolute invisible isolate uppercase italic underline antialiased',
+        );
+        expect(szObject).toEqual({
+            display: 'flex',
+            position: 'absolute',
+            visibility: 'hidden',
+            isolation: 'isolate',
+            textTransform: 'uppercase',
+            fontStyle: 'italic',
+            decoration: 'underline',
+            fontSmoothing: 'grayscale',
         });
+    });
 
-        it('supports variant', () => {
-            const { szObject } = classNameToSzObject('supports-[display:grid]:grid');
-            expect(szObject).toEqual({ supports: { 'display:grid': { display: 'grid' } } });
-        });
+    it('fails closed on conflicting text-transform classes', () => {
+        const { szObject, unrecognized } = classNameToSzObject('uppercase lowercase p-4');
+        expect(szObject).toEqual({ p: 4 });
+        expect(unrecognized).toEqual(['uppercase', 'lowercase']);
+    });
 
-        it('min breakpoint', () => {
-            const { szObject } = classNameToSzObject('min-[320px]:text-center');
-            expect(szObject).toEqual({ min: { '320px': { textAlign: 'center' } } });
-        });
+    it('allows display classes in different variant scopes', () => {
+        const { szObject, unrecognized } = classNameToSzObject('block md:flex');
+        expect(szObject).toEqual({ display: 'block', md: { display: 'flex' } });
+        expect(unrecognized).toEqual([]);
+    });
 
-        it('container query', () => {
-            const { szObject } = classNameToSzObject('@md:flex');
-            expect(szObject).toEqual({ '@md': { display: 'flex' } });
-        });
+    it('keeps flex display distinct from flex shorthand', () => {
+        const { szObject, unrecognized } = classNameToSzObject('flex flex-1');
+        expect(szObject).toEqual({ display: 'flex', flex: '1' });
+        expect(unrecognized).toEqual([]);
+    });
 
-        it('container query with name', () => {
-            const { szObject } = classNameToSzObject('@md/sidebar:block');
-            expect(szObject).toEqual({ '@md': { sidebar: { display: 'block' } } });
-        });
-
-        it('@min arbitrary', () => {
-            const { szObject } = classNameToSzObject('@min-[475px]:flex');
-            expect(szObject).toEqual({ '@min': { '475px': { display: 'flex' } } });
-        });
-
-        it('gradient class', () => {
-            const { szObject } = classNameToSzObject('bg-linear-to-r');
-            expect(szObject).toEqual({
-                bgImg: { gradient: 'linear', dir: 'to-r' },
-            });
-        });
-
-        it('unrecognized classes tracked separately', () => {
-            const { szObject, unrecognized } = classNameToSzObject('p-4 my-custom-class flex');
-            expect(szObject).toEqual({ p: 4, display: 'flex' });
-            expect(unrecognized).toEqual(['my-custom-class']);
-        });
-
-        it('complex real-world example', () => {
-            const { szObject } = classNameToSzObject(
-                'p-4 bg-blue-500 hover:bg-blue-600 md:flex md:items-center',
-            );
-            expect(szObject).toEqual({
-                p: 4,
-                bg: 'blue-500',
-                hover: { bg: 'blue-600' },
-                md: { display: 'flex', items: 'center' },
-            });
-        });
-
-        it('color with opacity', () => {
-            const { szObject } = classNameToSzObject('bg-blue-500/50');
-            expect(szObject).toEqual({ bg: { color: 'blue-500', op: 50 } });
-        });
-
-        it('does not share cached object-valued parsed results between calls', () => {
-            const first = classNameToSzObject('bg-blue-500/50').szObject as {
-                bg: { color: string; op: number };
-            };
-            first.bg.color = 'mutated';
-
-            const second = classNameToSzObject('bg-blue-500/50').szObject;
-            expect(second).toEqual({ bg: { color: 'blue-500', op: 50 } });
-        });
-
-        it('merges same variant nesting', () => {
-            const { szObject } = classNameToSzObject('hover:bg-blue-600 hover:text-white');
-            expect(szObject).toEqual({
-                hover: { bg: 'blue-600', color: 'white' },
-            });
-        });
-
-        it('single-property classes → canonical', () => {
-            const { szObject } = classNameToSzObject('flex relative');
-            expect(szObject).toEqual({ display: 'flex', position: 'relative' });
-        });
-
-        it('no brackets in variant keys', () => {
-            const { szObject } = classNameToSzObject('min-[320px]:flex max-[600px]:hidden');
-            // Keys should NOT have brackets
-            expect(szObject).toEqual({
-                min: { '320px': { display: 'flex' } },
-                max: { '600px': { display: 'none' } },
-            });
-            // Verify no brackets
-            expect('320px' in (szObject.min as Record<string, unknown>)).toBe(true);
-            expect('[320px]' in (szObject.min as Record<string, unknown>)).toBe(false);
-        });
-
-        it('fails closed on conflicting display classes in the same scope', () => {
-            const { szObject, unrecognized } = classNameToSzObject('block flex p-4');
-            expect(szObject).toEqual({ p: 4 });
-            expect(unrecognized).toEqual(['block', 'flex']);
-        });
-
-        it('keeps later display tokens unresolved after a scope conflict', () => {
-            const { szObject, unrecognized } = classNameToSzObject('block flex inline p-4');
-            expect(szObject).toEqual({ p: 4 });
-            expect(unrecognized).toEqual(['block', 'flex', 'inline']);
-        });
-
-        it('migrates every single-property group to its canonical key', () => {
-            const { szObject } = classNameToSzObject(
-                'flex absolute invisible isolate uppercase italic underline antialiased',
-            );
-            expect(szObject).toEqual({
-                display: 'flex',
-                position: 'absolute',
-                visibility: 'hidden',
-                isolation: 'isolate',
-                textTransform: 'uppercase',
-                fontStyle: 'italic',
-                decoration: 'underline',
-                fontSmoothing: 'grayscale',
-            });
-        });
-
-        it('fails closed on conflicting text-transform classes', () => {
-            const { szObject, unrecognized } = classNameToSzObject('uppercase lowercase p-4');
-            expect(szObject).toEqual({ p: 4 });
-            expect(unrecognized).toEqual(['uppercase', 'lowercase']);
-        });
-
-        it('allows display classes in different variant scopes', () => {
-            const { szObject, unrecognized } = classNameToSzObject('block md:flex');
-            expect(szObject).toEqual({ display: 'block', md: { display: 'flex' } });
-            expect(unrecognized).toEqual([]);
-        });
-
-        it('keeps flex display distinct from flex shorthand', () => {
-            const { szObject, unrecognized } = classNameToSzObject('flex flex-1');
-            expect(szObject).toEqual({ display: 'flex', flex: '1' });
-            expect(unrecognized).toEqual([]);
-        });
-
-        it('fails closed on conflicting display classes inside the same variant scope', () => {
-            const { szObject, unrecognized } = classNameToSzObject('md:block md:flex hover:flex');
-            expect(szObject).toEqual({ hover: { display: 'flex' } });
-            expect(unrecognized).toEqual(['md:block', 'md:flex']);
-        });
+    it('fails closed on conflicting display classes inside the same variant scope', () => {
+        const { szObject, unrecognized } = classNameToSzObject('md:block md:flex hover:flex');
+        expect(szObject).toEqual({ hover: { display: 'flex' } });
+        expect(unrecognized).toEqual(['md:block', 'md:flex']);
     });
 });

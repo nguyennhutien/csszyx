@@ -17,9 +17,8 @@
  *   - Accessibility patterns (sr-only, focus-visible, etc.)
  */
 import { describe, expect, it } from 'vitest';
-
-import { transformSource } from '../src/migrate/ast-transformer.js';
-import type { CsszyxTodoMap } from '../src/migrate/variant-parser.js';
+import type { CsszyxTodoMap } from '../src/migrate.js';
+import { migrateSource as transformSource } from '../src/migrate.js';
 
 // ============================================================================
 // HELPERS

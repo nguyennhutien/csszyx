@@ -263,12 +263,12 @@ export const SORTED_PREFIXES: string[] = Object.keys(REVERSE_PROPERTY_MAP).sort(
 // ============================================================================
 // KNOWN BREAKPOINTS: Named breakpoints that don't need [] wrapping
 // ============================================================================
-export const KNOWN_BREAKPOINTS = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
+export const KNOWN_BREAKPOINTS: ReadonlySet<string> = new Set(['sm', 'md', 'lg', 'xl', '2xl']);
 
 // ============================================================================
 // NEGATIVE_ALLOWED: Properties that support negative values
 // ============================================================================
-export const NEGATIVE_ALLOWED = new Set([
+export const NEGATIVE_ALLOWED: ReadonlySet<string> = new Set([
     'm',
     'mt',
     'mr',
@@ -328,7 +328,7 @@ export const NEGATIVE_ALLOWED = new Set([
 // ============================================================================
 // FRACTION_SUPPORTED: Props that support fractions (e.g., w-1/2)
 // ============================================================================
-export const FRACTION_SUPPORTED = new Set([
+export const FRACTION_SUPPORTED: ReadonlySet<string> = new Set([
     'w',
     'min-w',
     'max-w',
@@ -361,7 +361,7 @@ export const FRACTION_SUPPORTED = new Set([
 // ============================================================================
 // SPACING_PROPS: Props that support 0.5-step decimals
 // ============================================================================
-export const SPACING_PROPS = new Set([
+export const SPACING_PROPS: ReadonlySet<string> = new Set([
     'p',
     'pt',
     'pr',
@@ -448,7 +448,7 @@ export const SPACING_PROPS = new Set([
 // DISAMBIGUATION VALUE SETS
 // ============================================================================
 
-export const TEXT_SIZE_KEYWORDS = new Set([
+export const TEXT_SIZE_KEYWORDS: ReadonlySet<string> = new Set([
     'xs',
     'sm',
     'base',
@@ -464,13 +464,25 @@ export const TEXT_SIZE_KEYWORDS = new Set([
     '9xl',
 ]);
 
-export const TEXT_ALIGN_KEYWORDS = new Set(['left', 'center', 'right', 'justify', 'start', 'end']);
+export const TEXT_ALIGN_KEYWORDS: ReadonlySet<string> = new Set([
+    'left',
+    'center',
+    'right',
+    'justify',
+    'start',
+    'end',
+]);
 
-export const TEXT_WRAP_KEYWORDS = new Set(['wrap', 'nowrap', 'balance', 'pretty']);
+export const TEXT_WRAP_KEYWORDS: ReadonlySet<string> = new Set([
+    'wrap',
+    'nowrap',
+    'balance',
+    'pretty',
+]);
 
-export const TEXT_OVERFLOW_KEYWORDS = new Set(['ellipsis', 'clip']);
+export const TEXT_OVERFLOW_KEYWORDS: ReadonlySet<string> = new Set(['ellipsis', 'clip']);
 
-export const FONT_WEIGHT_KEYWORDS = new Set([
+export const FONT_WEIGHT_KEYWORDS: ReadonlySet<string> = new Set([
     'thin',
     'extralight',
     'light',
@@ -482,11 +494,11 @@ export const FONT_WEIGHT_KEYWORDS = new Set([
     'black',
 ]);
 
-export const FONT_FAMILY_KEYWORDS = new Set(['sans', 'serif', 'mono']);
+export const FONT_FAMILY_KEYWORDS: ReadonlySet<string> = new Set(['sans', 'serif', 'mono']);
 
-export const BORDER_WIDTH_KEYWORDS = new Set(['0', '2', '4', '8']);
+export const BORDER_WIDTH_KEYWORDS: ReadonlySet<string> = new Set(['0', '2', '4', '8']);
 
-export const BORDER_STYLE_KEYWORDS = new Set([
+export const BORDER_STYLE_KEYWORDS: ReadonlySet<string> = new Set([
     'solid',
     'dashed',
     'dotted',
@@ -495,7 +507,7 @@ export const BORDER_STYLE_KEYWORDS = new Set([
     'hidden',
 ]);
 
-export const BG_POSITION_KEYWORDS = new Set([
+export const BG_POSITION_KEYWORDS: ReadonlySet<string> = new Set([
     'center',
     'top',
     'bottom',
@@ -507,9 +519,9 @@ export const BG_POSITION_KEYWORDS = new Set([
     'right-bottom',
 ]);
 
-export const BG_SIZE_KEYWORDS = new Set(['cover', 'contain', 'auto']);
+export const BG_SIZE_KEYWORDS: ReadonlySet<string> = new Set(['cover', 'contain', 'auto']);
 
-export const BG_REPEAT_KEYWORDS = new Set([
+export const BG_REPEAT_KEYWORDS: ReadonlySet<string> = new Set([
     'repeat',
     'no-repeat',
     'repeat-x',
@@ -518,11 +530,17 @@ export const BG_REPEAT_KEYWORDS = new Set([
     'space',
 ]);
 
-export const BG_ATTACHMENT_KEYWORDS = new Set(['fixed', 'local', 'scroll']);
+export const BG_ATTACHMENT_KEYWORDS: ReadonlySet<string> = new Set(['fixed', 'local', 'scroll']);
 
-export const OBJECT_FIT_KEYWORDS = new Set(['contain', 'cover', 'fill', 'none', 'scale-down']);
+export const OBJECT_FIT_KEYWORDS: ReadonlySet<string> = new Set([
+    'contain',
+    'cover',
+    'fill',
+    'none',
+    'scale-down',
+]);
 
-export const OBJECT_POSITION_KEYWORDS = new Set([
+export const OBJECT_POSITION_KEYWORDS: ReadonlySet<string> = new Set([
     'center',
     'top',
     'bottom',
@@ -534,7 +552,7 @@ export const OBJECT_POSITION_KEYWORDS = new Set([
     'right-bottom',
 ]);
 
-export const SHADOW_SIZE_KEYWORDS = new Set([
+export const SHADOW_SIZE_KEYWORDS: ReadonlySet<string> = new Set([
     '2xs',
     'xs',
     'sm',
@@ -548,7 +566,7 @@ export const SHADOW_SIZE_KEYWORDS = new Set([
 
 // align-content keywords. `content-<keyword>` is align-content (→ alignContent),
 // while quoted / none / var / arbitrary `content-*` is the `content` CSS property.
-export const ALIGN_CONTENT_KEYWORDS = new Set([
+export const ALIGN_CONTENT_KEYWORDS: ReadonlySet<string> = new Set([
     'normal',
     'center',
     'start',
@@ -560,13 +578,24 @@ export const ALIGN_CONTENT_KEYWORDS = new Set([
     'stretch',
 ]);
 
-export const OUTLINE_STYLE_KEYWORDS = new Set(['none', 'dashed', 'dotted', 'double']);
+export const OUTLINE_STYLE_KEYWORDS: ReadonlySet<string> = new Set([
+    'none',
+    'dashed',
+    'dotted',
+    'double',
+]);
 
-export const RING_WIDTH_VALUES = new Set(['0', '1', '2', '4', '8']);
+export const RING_WIDTH_VALUES: ReadonlySet<string> = new Set(['0', '1', '2', '4', '8']);
 
-export const DECORATION_STYLE_KEYWORDS = new Set(['solid', 'double', 'dotted', 'dashed', 'wavy']);
+export const DECORATION_STYLE_KEYWORDS: ReadonlySet<string> = new Set([
+    'solid',
+    'double',
+    'dotted',
+    'dashed',
+    'wavy',
+]);
 
-export const DECORATION_THICKNESS_KEYWORDS = new Set([
+export const DECORATION_THICKNESS_KEYWORDS: ReadonlySet<string> = new Set([
     'auto',
     'from-font',
     '0',
@@ -576,7 +605,7 @@ export const DECORATION_THICKNESS_KEYWORDS = new Set([
     '8',
 ]);
 
-export const TRANSITION_PROPERTY_KEYWORDS = new Set([
+export const TRANSITION_PROPERTY_KEYWORDS: ReadonlySet<string> = new Set([
     'none',
     'all',
     'colors',
@@ -585,10 +614,10 @@ export const TRANSITION_PROPERTY_KEYWORDS = new Set([
     'transform',
 ]);
 
-export const EASE_KEYWORDS = new Set(['linear', 'in', 'out', 'in-out']);
+export const EASE_KEYWORDS: ReadonlySet<string> = new Set(['linear', 'in', 'out', 'in-out']);
 
 // Color patterns
-export const COLOR_NAMES = new Set([
+export const COLOR_NAMES: ReadonlySet<string> = new Set([
     'inherit',
     'current',
     'transparent',
@@ -618,7 +647,7 @@ export const COLOR_NAMES = new Set([
     'rose',
 ]);
 
-export const COLOR_SCALE_NAMES = new Set([
+export const COLOR_SCALE_NAMES: ReadonlySet<string> = new Set([
     'slate',
     'gray',
     'zinc',
@@ -691,7 +720,7 @@ export const REVERSE_VARIANT_MAP: Record<string, string> = {
 };
 
 // Simple variants that map 1:1 (kebab = camelCase or same)
-export const KNOWN_SIMPLE_VARIANTS = new Set([
+export const KNOWN_SIMPLE_VARIANTS: ReadonlySet<string> = new Set([
     'sm',
     'md',
     'lg',
@@ -739,7 +768,7 @@ export const KNOWN_SIMPLE_VARIANTS = new Set([
     'rtl',
 ]);
 
-export const KNOWN_VARIANTS = new Set([
+export const KNOWN_VARIANTS: ReadonlySet<string> = new Set([
     ...KNOWN_SIMPLE_VARIANTS,
     'focus-within',
     'focus-visible',
@@ -764,7 +793,7 @@ export const KNOWN_VARIANTS = new Set([
     'pointer-none',
 ]);
 
-export const ARIA_STATES = new Set([
+export const ARIA_STATES: ReadonlySet<string> = new Set([
     'checked',
     'disabled',
     'expanded',

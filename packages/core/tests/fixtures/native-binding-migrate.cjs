@@ -3,3 +3,7 @@
 exports.transformBatch = files => files.map(() => ({ code: '', classes: [] }));
 exports.migrateBatch = (files, options) => ({ called: 'migrateBatch', files, options });
 exports.migrateHtml = (source, options) => ({ called: 'migrateHtml', source, options });
+exports.migrateClassName = (className, customMapJson) =>
+    JSON.stringify({ called: 'migrateClassName', className, customMapJson });
+exports.migrateParseClass = className =>
+    JSON.stringify({ called: 'migrateParseClass', className });

@@ -78,6 +78,7 @@ import {
     escapeJsonForInlineScript,
     escapeJsonForStringLiteral,
 } from './inline-script-escape.js';
+import { createLazyAggregate, type LazyAggregate } from './lazy-aggregate.js';
 import {
     needsRuntimeMangleRegistration,
     removedMangleMapDeliveryMessage,
@@ -101,6 +102,7 @@ import {
     assertNoRSCGraphViolation,
     createRSCModuleRecord,
     deleteRSCModuleRecord,
+    isRSCServerModule,
     type RSCModuleRecord,
 } from './rsc-boundary.js';
 import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
@@ -244,10 +246,15 @@ interface PluginState {
      */
     classesCapped: boolean;
     mangleMap: Record<string, string>;
-    varMangleEntriesByFile: Map<string, Array<[string, string]>>;
-    varMangleMap: Record<string, CssVariableMangleValue>;
-    cssVarMetricsByFile: Map<string, CSSVariableMetrics>;
-    cssVarMetrics: CSSVariableMetrics;
+    /** CSS variable mangle entries per file; `varMangleMap` is merged from them on read. */
+    varMangleEntriesByFile: LazyAggregate<
+        Array<[string, string]>,
+        Record<string, CssVariableMangleValue>
+    >;
+    readonly varMangleMap: Record<string, CssVariableMangleValue>;
+    /** CSS variable hoisting metrics per file; `cssVarMetrics` is totalled from them on read. */
+    cssVarMetricsByFile: LazyAggregate<CSSVariableMetrics, CSSVariableMetrics>;
+    readonly cssVarMetrics: CSSVariableMetrics;
     checksum: string;
     finalized: boolean;
     rootDir: string;
@@ -1388,7 +1395,7 @@ function cssVariableEntries(result: SourceTransformResult): Array<[string, strin
  * @param entries Complete CSS variable entries emitted by this file.
  */
 function recordFileVarMangleEntries(
-    state: Pick<PluginState, 'varMangleEntriesByFile' | 'varMangleMap'>,
+    state: Pick<PluginState, 'varMangleEntriesByFile'>,
     filename: string,
     entries: Array<[string, string]>,
 ): void {
@@ -1398,7 +1405,6 @@ function recordFileVarMangleEntries(
     } else {
         state.varMangleEntriesByFile.set(normalizedFilename, entries);
     }
-    state.varMangleMap = buildVarMangleMap(state.varMangleEntriesByFile);
 }
 
 /**
@@ -1934,7 +1940,7 @@ function emptyCSSVariableMetrics(): CSSVariableMetrics {
  * @param code Transformed source code, or null to clear this file.
  */
 function recordFileCSSVariableMetrics(
-    state: Pick<PluginState, 'cssVarMetricsByFile' | 'cssVarMetrics'>,
+    state: Pick<PluginState, 'cssVarMetricsByFile'>,
     filename: string,
     code: string | null,
 ): void {
@@ -1949,7 +1955,6 @@ function recordFileCSSVariableMetrics(
             state.cssVarMetricsByFile.delete(normalizedFilename);
         }
     }
-    state.cssVarMetrics = buildCSSVariableMetrics(state.cssVarMetricsByFile);
 }
 
 /**
@@ -2764,6 +2769,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // the lane where CSS bytes are hashed during the transform phase and so
     // have to be mangled there. See freezeMangleMap.
     let mangleMapFrozen = false;
+    // Whether the prescan walk met a module the RSC boundary check would
+    // start from: a `'use server'` directive or an App Router entry.
+    let prescanSawServerModule = false;
+    // Set for a one-shot production build whose walk saw no server module.
+    // The records exist only to walk imports from server modules at build
+    // end, so with none there is nothing to walk from; building them was a
+    // regex import scan of every module (1.7 s of an 18 000-file build). A
+    // watch build keeps them: an edit can turn a module into a server module
+    // after the walk. The lanes with no walk never set this.
+    let skipRscRecords = false;
+    // Files of the last prescan the transform cache did not answer; printed
+    // with the `prescan:batch` trace so a cache that stopped hitting is visible.
+    let lastPrescanCacheMisses = 0;
     // The census the frozen map was built from, kept to name what arrived late
     // if the `buildEnd` check finds the map would come out different now.
     let frozenOwnedClasses: ReadonlySet<string> = new Set<string>();
@@ -2934,6 +2952,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         { inputSha256: string; result: SourceTransformResult }
     >();
 
+    // Merged on read: every module records its entries during the prescan and
+    // again in the transform hook, and rebuilding the whole map on each of those
+    // writes made the cost per module grow with the modules before it.
+    const varMangleEntries = createLazyAggregate(
+        buildVarMangleMap,
+        Object.fromEntries(earlyGlobalVarAliasEntries) as Record<string, CssVariableMangleValue>,
+    );
+    const cssVarMetricTotals = createLazyAggregate(
+        buildCSSVariableMetrics,
+        emptyCSSVariableMetrics(),
+    );
     const state: PluginState = {
         classes: new Set<string>(),
         parsedTheme: null,
@@ -2953,10 +2982,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         ownedClasses: new Set<string>(),
         authoredClasses: new Set<string>(),
         mangleMap: {},
-        varMangleEntriesByFile: new Map(),
-        varMangleMap: Object.fromEntries(earlyGlobalVarAliasEntries),
-        cssVarMetricsByFile: new Map(),
-        cssVarMetrics: emptyCSSVariableMetrics(),
+        varMangleEntriesByFile: varMangleEntries,
+        get varMangleMap() {
+            return varMangleEntries.get();
+        },
+        cssVarMetricsByFile: cssVarMetricTotals,
+        get cssVarMetrics() {
+            return cssVarMetricTotals.get();
+        },
         checksum: '',
         finalized: false,
         rootDir: process.cwd(),
@@ -3289,6 +3322,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (cached) return cached;
         }
 
+        lastPrescanCacheMisses++;
         const execution = runConfiguredParser(source, effectiveFilename, compilerOptions);
         if (cacheEnabled && cacheKey && execution.cacheable) {
             writeTransformCache(cacheRoot, cacheInput, execution.result, cacheKey);
@@ -3460,6 +3494,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (cacheEnabled) evictTransformCacheOnce();
         ensureRustTransformAvailable();
         const misses = collectRustPrescanMisses(batchable, compilerOptions, cacheRoot, results);
+        lastPrescanCacheMisses += misses.length;
         if (misses.length > 0) {
             try {
                 runRustPrescanBatch(misses, compilerOptions, cacheRoot, results);
@@ -4065,6 +4100,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Cleared with the registry it describes: a provider "already examined"
         // against entries that no longer exist would never be read again.
         szObjectProvidersExamined.clear();
+        prescanSawServerModule = false;
         const prescanStarted = performance.now();
         const discoveredClasses = new Set<string>();
         // Raw className values feed both Tailwind safelisting and the authored
@@ -4098,6 +4134,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // load. Raw-only modules therefore participate even when they do not
             // need the expensive sz parser pass.
             recordAuthoredClasses(content);
+            if (!prescanSawServerModule && isRSCServerModule(content, filePath)) {
+                prescanSawServerModule = true;
+            }
             recordSzvRegistryEntries(filePath, content);
             // Recorded for every walked file, not only sz-authoring ones: a
             // barrel styles nothing itself, and it is exactly the module an
@@ -4174,6 +4213,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
         }
 
+        const walkStarted = performance.now();
         scanDir(state.rootDir);
         // Also walk opted-in compileSources directories that live OUTSIDE rootDir
         // (a sibling design-system package), so their sz/szv classes reach the
@@ -4187,9 +4227,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
             scanDir(sourceDir);
         }
+        traceBenchTiming(
+            `prescan:walk files=${seenSourcePaths.size} sz=${prescanSources.length}`,
+            state.rootDir,
+            performance.now() - walkStarted,
+        );
 
+        const demandStarted = performance.now();
         recordDemandedSzObjectProviders(seenSourcePaths, szObjectDemand);
+        traceBenchTiming(
+            `prescan:demand providers=${szObjectProvidersExamined.size}`,
+            state.rootDir,
+            performance.now() - demandStarted,
+        );
 
+        const batchStarted = performance.now();
+        lastPrescanCacheMisses = 0;
         const prescanContentByPath = new Map(
             prescanSources.map(file => [file.filePath, file.content]),
         );
@@ -4203,6 +4256,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             );
         }
 
+        traceBenchTiming(
+            `prescan:batch files=${prescanSources.length} misses=${lastPrescanCacheMisses}`,
+            state.rootDir,
+            performance.now() - batchStarted,
+        );
+
         // sz-generated classes are csszyx-owned: safe to both safelist and mangle.
         // Raw className values are added to the safelist below but never to
         // ownedClasses. Shared raw/sz names are subtracted when the map finalizes.
@@ -4214,7 +4273,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Write manifest file for Tailwind to scan — includes both sz-generated AND raw class names
         // so Tailwind JIT can detect any custom utilities that happen to shadow TW class names.
         const safelistClasses = new Set([...discoveredClasses, ...rawDiscoveredClasses]);
+        const safelistStarted = performance.now();
         writeSafelistFile(safelistClasses);
+        traceBenchTiming(
+            `prescan:safelist classes=${safelistClasses.size}`,
+            state.rootDir,
+            performance.now() - safelistStarted,
+        );
         traceBenchTiming('prescan', state.rootDir, performance.now() - prescanStarted);
     }
 
@@ -5226,8 +5291,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
                 if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
                     assertNoRSCBoundaryViolation(output.code, id);
-                    const record = createRSCModuleRecord(output.code, id);
-                    state.rscModules.set(record.id, record);
+                    if (!skipRscRecords) {
+                        const record = createRSCModuleRecord(output.code, id);
+                        state.rscModules.set(record.id, record);
+                    }
                 }
                 return collectPreTransformClasses(output);
             },
@@ -5475,6 +5542,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     evictTransformCacheOnce();
                     // Pre-scan source files so Tailwind can discover classes
                     prescanAndWriteClasses();
+                    skipRscRecords =
+                        config.command === 'build' &&
+                        !config.build?.watch &&
+                        !prescanSawServerModule;
                     // Generate theme type augmentation from @theme CSS blocks
                     state.scanCssTheme =
                         runThemeScan(root, options.build?.scanCss) ?? state.scanCssTheme;

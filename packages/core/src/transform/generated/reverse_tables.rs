@@ -2,11 +2,11 @@
 // Do not edit by hand. Run `pnpm gen:reverse-map`.
 //
 // The same inversion of the compiler's PROPERTY_MAP that
-// packages/cli/src/migrate/generated/reverse-property-map.ts holds, rendered
+// packages/compiler/src/migrate-tables/generated/reverse-property-map.ts holds, rendered
 // for the Rust side of migrate. Both files come out of one generator run, so
 // the two engines cannot disagree on which sz key a class prefix belongs to.
 // Where a prefix is shared by several sz keys the default comes from
-// AMBIGUOUS_PREFIX_CHOICE in packages/cli/src/migrate/prefix-choice.ts and the
+// AMBIGUOUS_PREFIX_CHOICE in packages/compiler/src/migrate-tables/prefix-choice.ts and the
 // alternatives are noted inline; the class parser overrides it by value.
 #![allow(dead_code, clippy::match_same_arms, clippy::too_many_lines)]
 #![allow(clippy::redundant_pub_crate)]

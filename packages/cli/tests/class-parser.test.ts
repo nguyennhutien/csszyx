@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseClass } from '../src/migrate/class-parser.js';
+import { parseClass } from '../src/migrate.js';
 
 describe('class-parser', () => {
     // ========================================================================

@@ -266,10 +266,10 @@ mod reverse_tables_tests {
     fn typescript_entries() -> Vec<(String, String)> {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../cli/src/migrate/generated/reverse-property-map.ts"
+            "/../compiler/src/migrate-tables/generated/reverse-property-map.ts"
         );
         let source = std::fs::read_to_string(path)
-            .expect("the TypeScript reverse map is generated into packages/cli");
+            .expect("the TypeScript reverse map is generated into packages/compiler");
         source
             .lines()
             .filter_map(|line| {
@@ -358,9 +358,9 @@ mod migrate_tables_tests {
     fn typescript_source() -> String {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../cli/src/migrate/reverse-map.ts"
+            "/../compiler/src/migrate-tables/reverse-map.ts"
         );
-        std::fs::read_to_string(path).expect("migrate's reverse-map.ts is in packages/cli")
+        std::fs::read_to_string(path).expect("migrate's reverse-map.ts is in packages/compiler")
     }
 
     /// The quoted strings on one line of a table body, in order.
@@ -378,7 +378,12 @@ mod migrate_tables_tests {
     /// Every `export const NAME = new Set([...])` in the module, spreads
     /// resolved against the sets declared before them.
     fn typescript_sets() -> BTreeMap<String, Vec<String>> {
-        let source = typescript_source();
+        parse_sets(&typescript_source())
+    }
+
+    /// The same, over source text handed in — so the parser's own failure
+    /// modes can be exercised without a module that has to exhibit them.
+    fn parse_sets(source: &str) -> BTreeMap<String, Vec<String>> {
         let mut sets: BTreeMap<String, Vec<String>> = BTreeMap::new();
         let mut current: Option<(String, Vec<String>)> = None;
         for line in source.lines() {
@@ -392,7 +397,15 @@ mod migrate_tables_tests {
                     current = None;
                 } else if let Some(spread) = trimmed.strip_prefix("...") {
                     let spread = spread.trim_end_matches(',');
-                    members.extend(sets[spread].iter().cloned());
+                    // Named, because indexing answers "no entry found for key"
+                    // and that says nothing about which table went missing.
+                    // A spread reads a set declared ABOVE it, so a miss means
+                    // either the order changed or the name was not parsed —
+                    // the latter is what a new type annotation once caused.
+                    let spread_members = sets
+                        .get(spread)
+                        .unwrap_or_else(|| panic!("{spread} is spread before it is declared"));
+                    members.extend(spread_members.iter().cloned());
                 } else {
                     // A Set keeps the first of two equal members.
                     for member in quoted(trimmed) {
@@ -406,9 +419,16 @@ mod migrate_tables_tests {
             let Some(declaration) = trimmed.strip_prefix("export const ") else {
                 continue;
             };
-            let Some((name, initializer)) = declaration.split_once(" = new Set([") else {
+            let Some((declared, initializer)) = declaration.split_once(" = new Set([") else {
                 continue;
             };
+            // The compiler package builds its declarations in isolation, so an
+            // exported table states its own type. The name is what precedes
+            // that annotation, and a spread below looks the name up.
+            let name = declared
+                .split_once(':')
+                .map_or(declared, |(name, _)| name)
+                .trim();
             let members = quoted(initializer);
             if initializer.contains("])") {
                 sets.insert(name.to_string(), members);
@@ -453,6 +473,16 @@ mod migrate_tables_tests {
     fn field(text: &str, field: &str) -> Option<String> {
         let (_, after) = text.split_once(&format!("{field}: '"))?;
         after.split_once('\'').map(|(value, _)| value.to_string())
+    }
+
+    #[test]
+    #[should_panic(expected = "MISSING is spread before it is declared")]
+    fn a_spread_of_an_undeclared_set_names_what_it_could_not_find() {
+        // The reader resolves a spread against the sets it has already seen,
+        // so a name it has not seen is either a reordering or a declaration it
+        // failed to parse — which is what a new type annotation once caused.
+        // Indexing answered "no entry found for key" for both.
+        parse_sets("export const A: ReadonlySet<string> = new Set([\n  ...MISSING,\n]);\n");
     }
 
     #[test]

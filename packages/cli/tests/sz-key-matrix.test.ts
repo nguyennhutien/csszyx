@@ -13,7 +13,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { type SzObject, transform } from '../../compiler/src/transform-core.js';
-import { classNameToSzObject } from '../src/migrate/variant-parser.js';
+import { classNameToSzObject } from '../src/migrate.js';
 import cases from './generated/sz-key-cases.json' with { type: 'json' };
 
 interface ForwardCase {

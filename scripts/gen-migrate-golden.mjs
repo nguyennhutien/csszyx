@@ -23,10 +23,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-
-import { REVERSE_PROPERTY_MAP } from '../packages/cli/src/migrate/generated/reverse-property-map.js';
-import { EXTRA_REVERSE_PREFIXES } from '../packages/cli/src/migrate/prefix-choice.js';
-import { classNameToSzObject } from '../packages/cli/src/migrate/variant-parser.js';
+import { migrateRustClassName as classNameToSzObject } from '../packages/compiler/src/migrate-rust.js';
+import { REVERSE_PROPERTY_MAP } from '../packages/compiler/src/migrate-tables/generated/reverse-property-map.js';
+import { EXTRA_REVERSE_PREFIXES } from '../packages/compiler/src/migrate-tables/prefix-choice.js';
 import { PROPERTY_MAP } from '../packages/compiler/src/transform-core.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');

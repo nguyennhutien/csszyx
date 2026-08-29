@@ -427,7 +427,7 @@
 ### ⚠ BREAKING CHANGES
 
 * sz array later-wins, szs slots on szsc, Tailwind 4.3.2 ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
-* **compiler,core,runtime:** components must read slot styles from the new szsc prop (type both faces with SzsProps<Slots>) instead of narrowing szs values through szsClass, which no longer exists — change `szsClass(szs?.title)` to `szsc?.title`. Consumer call sites are unaffected: they keep writing `szs={{ ... }}`. ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
+* **compiler,core,runtime:** components must read slot styles from the new szsc prop (type both faces with `SzsProps<Slots>`) instead of narrowing szs values through szsClass, which no longer exists — change `szsClass(szs?.title)` to `szsc?.title`. Consumer call sites are unaffected: they keep writing `szs={{ ... }}`. ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
 * **compiler,core,runtime:** array elements that touch the same property no longer keep both classes — the later element wins, at build time for static arrays and via szcn group merge at runtime otherwise. Code that relied on stylesheet order to resolve the old keep-both output now gets the later element deterministically. The transform cache schema version is bumped, so existing caches rebuild once. ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
 * **compiler,core,runtime,unplugin:** compiled sz arrays merge through unmemoized _szcn ([#125](https://github.com/nguyennhutien/csszyx/issues/125))
 

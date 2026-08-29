@@ -253,7 +253,7 @@ describe('generateTypes happy path', () => {
 
 describe('parseClass residual edges', () => {
     it('covers boolean prefixes, negatives, importants, and inset-ring shapes', async () => {
-        const { parseClass, disambiguateFont } = await import('../src/migrate/class-parser.js');
+        const { parseClass } = await import('../src/migrate.js');
         // Boolean-prefix exact match (e.g. ring) → boolean true with important.
         expect(parseClass('ring')).toMatchObject({ value: true });
         // A lone negative boolean-ish prefix is skipped, not parsed.
@@ -267,19 +267,7 @@ describe('parseClass residual edges', () => {
         // inset-ring: arbitrary dimension vs color.
         expect(parseClass('inset-ring-[3px]')).toMatchObject({ prop: 'insetRing' });
         expect(parseClass('inset-ring-red-500')).toMatchObject({ prop: 'insetRingColor' });
-        expect(disambiguateFont('sans')).toMatchObject({ prop: 'fontFamily' });
-    });
-});
-
-describe('sz-codegen value shapes', () => {
-    it('renders html values with and without braces, empties, and booleans', async () => {
-        const { generateSzExpression, generateSzHtmlValue, generateSzObjectLiteral } = await import(
-            '../src/migrate/sz-codegen.js'
-        );
-        expect(generateSzHtmlValue({ p: 4 }, true)).toContain('{');
-        expect(generateSzHtmlValue({ p: 4 })).toBe('p: 4');
-        expect(generateSzHtmlValue({})).toBe('');
-        expect(generateSzObjectLiteral({ on: false, off: true })).toContain('false');
-        expect(generateSzExpression({})).toBe('{{}}');
+        // A font prefix splits by value shape: a family name is fontFamily.
+        expect(parseClass('font-sans')).toMatchObject({ prop: 'fontFamily' });
     });
 });

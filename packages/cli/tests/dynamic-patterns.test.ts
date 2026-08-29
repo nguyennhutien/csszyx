@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { transformSource } from '../src/migrate/ast-transformer.js';
+import { migrateSource as transformSource } from '../src/migrate.js';
 
 // ============================================================================
 // HELPER

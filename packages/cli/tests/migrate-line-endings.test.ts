@@ -18,7 +18,10 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { migrate } from '../src/commands/migrate.js';
-import { transformHtmlSourceSimple, transformSource } from '../src/migrate/ast-transformer.js';
+import {
+    migrateHtml as transformHtmlSourceSimple,
+    migrateSource as transformSource,
+} from '../src/migrate.js';
 
 const toCRLF = (text: string): string => text.replaceAll('\n', '\r\n');
 // A `\n` not preceded by `\r` — the one thing a CRLF file must never gain.

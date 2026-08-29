@@ -20,8 +20,8 @@
 import { PROPERTY_MAP } from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
 
-import { REVERSE_PROPERTY_MAP } from '../src/migrate/generated/reverse-property-map.js';
-import { classNameToSzObject } from '../src/migrate/variant-parser.js';
+import { REVERSE_PROPERTY_MAP } from '../../compiler/src/migrate-tables/generated/reverse-property-map.js';
+import { classNameToSzObject } from '../src/migrate.js';
 import golden from './generated/migrate-sz-golden.json' with { type: 'json' };
 
 interface GoldenCase {

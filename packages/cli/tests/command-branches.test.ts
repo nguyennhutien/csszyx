@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
+import { isColorValue } from '../../compiler/src/migrate-tables/reverse-map.js';
 import { audit } from '../src/commands/audit.js';
 import { check } from '../src/commands/check.js';
 import { doctor } from '../src/commands/doctor.js';
@@ -22,8 +22,6 @@ import {
     generateAndWriteTypes,
     generateTypeDeclarations,
 } from '../src/generator/type-generator.js';
-import { isColorValue } from '../src/migrate/reverse-map.js';
-import { generateSzObjectLiteral } from '../src/migrate/sz-codegen.js';
 import { flattenColors } from '../src/scanner/tailwind-scanner.js';
 import { printBar } from '../src/utils/terminal-ui.js';
 
@@ -186,24 +184,6 @@ describe('pure helper branches', () => {
         expect(isColorValue('transparent-500')).toBe(false);
         expect(isColorValue('blue-bright')).toBe(false);
         expect(isColorValue('definitely-not-a-color')).toBe(false);
-    });
-
-    it('sz-codegen renders null and array values', () => {
-        const out = generateSzObjectLiteral({ a: null, b: [1, 2] });
-        expect(out).toContain('null');
-        expect(out).toContain('[1, 2]');
-    });
-
-    it('sz-codegen drops unsupported values without stringifying objects or functions', () => {
-        const out = generateSzObjectLiteral({
-            missing: undefined,
-            symbol: Symbol('unsafe'),
-            bigint: 1n,
-            callback: () => 'unsafe',
-        });
-        expect([...out.matchAll(/undefined/g)]).toHaveLength(4);
-        expect(out).not.toContain('Symbol(');
-        expect(out).not.toContain('unsafe');
     });
 
     it('flattenColors expands a DEFAULT shade to the bare color name', () => {

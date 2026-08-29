@@ -273,6 +273,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Build the host native addon before anything reads it. The generated
+      # fixtures below ask the engine what a class becomes, the corpus
+      # round-trip and the emitted-class oracle run through it, and the unit
+      # tests exercise the same optional package-name resolution path users
+      # get after install. The artefact is gitignored and stays available to
+      # every later step in this job. Runs even under --affected: tests of
+      # compiler/unplugin exercise the rust parser regardless of whether
+      # @csszyx/core itself changed.
+      - name: Build host native engine
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
+
       # The per-sz-key test matrix (packages/cli/tests/sz-key-matrix.test.ts) is
       # driven by a committed fixture generated from docs/specs/snippets. Fail if
       # regenerating would change it, so the snippets, generator, and fixture
@@ -347,19 +358,6 @@ jobs:
       - name: Check migrate Rust tables are current
         run: pnpm gen:migrate-tables:check
 
-      # What migrate's TypeScript answers for every class the goldens, the
-      # key matrix and the pinned corpora contain. The Rust port replays the
-      # same file and must answer identically, so the corpus is regenerated
-      # whenever the TypeScript changes. Fail if regenerating would change it.
-      - name: Check migrate parity corpus is current
-        run: pnpm gen:migrate-parity-corpus:check
-
-      # The same for whole files: what the TypeScript transformer writes for
-      # a set of JSX and HTML sources, including the markers, the warnings
-      # and the stats. Fail if regenerating would change it.
-      - name: Check migrate source parity corpus is current
-        run: pnpm gen:migrate-source-corpus:check
-
       # The golden of what migrate WRITES, one probe class per prefix the
       # compiler can emit. The reverse-map check above only proves the table is
       # freshly derived; this one makes a change to the sz output a visible diff
@@ -408,24 +406,6 @@ jobs:
       # and fails on any that produces no CSS and is not baselined.
       - name: Check emitted classes still produce CSS
         run: pnpm check:emitted-classes
-
-      # Build the host native addon before unit tests so the Rust parser
-      # option suite exercises the same optional package-name resolution path
-      # users get after install. The build artefact is gitignored and remains
-      # available to all tests in this job. Runs even under --affected: tests
-      # of compiler/unplugin exercise the rust parser regardless of whether
-      # @csszyx/core itself changed.
-      - name: Build host native engine
-        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
-
-      # Both migrate engines over a generated set, right after the addon is
-      # built. The committed corpora hold the cases someone wrote down; this
-      # walks the product that decides an sz key — every value-dependent
-      # prefix against every value shape — plus seeded random whole files.
-      # It is exhaustive where the space is finite on purpose: sampling that
-      # product at random missed a real one-unit divergence in 8000 files.
-      - name: Check both migrate engines agree
-        run: pnpm fuzz:migrate-engine-parity
 
       # Build the core WASM (pkg-node) explicitly so the WASM-dependent unit
       # tests are deterministic regardless of turbo's build ordering. The
@@ -493,8 +473,9 @@ jobs:
   # because the CLI's tests run real transforms through @csszyx/compiler.
   # That makes this the first job to build @csszyx/core on Windows, which is
   # deliberate: a build that only ever ran on Linux is a build nobody has
-  # proven. The native addon is not built, so the engine degrades to the
-  # wasm lane — the same lane the Linux `test` job runs.
+  # proven. The host native addon is built as well: `csszyx migrate` runs on
+  # the native engine only, with no wasm lane to degrade to, and a developer
+  # on Windows or macOS runs it against the addon this job builds.
   cli-platform:
     name: CLI (${{ matrix.os }})
     needs: detect-changes
@@ -551,6 +532,14 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # The migrate suite drives the native engine directly and has no other
+      # engine to fall back to, so without the host addon every one of its
+      # test files fails with RustMigrateUnavailableError. Same step as the
+      # Linux `test` job.
+      - name: Build host native engine
+        shell: bash
+        run: pnpm --filter @csszyx/core native:build -- --clean --native-engine
 
       # Everything the CLI imports, in dependency order, through turbo so a
       # package whose inputs did not change comes from the cache.

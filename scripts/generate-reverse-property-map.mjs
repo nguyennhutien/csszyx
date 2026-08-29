@@ -17,7 +17,10 @@ const check = process.argv.includes('--check');
 // table rather than two tables that happen to agree.
 const outputs = [
     {
-        outPath: path.join(repoRoot, 'packages/cli/src/migrate/generated/reverse-property-map.ts'),
+        outPath: path.join(
+            repoRoot,
+            'packages/compiler/src/migrate-tables/generated/reverse-property-map.ts',
+        ),
         render: renderTypeScript,
     },
     {
@@ -68,7 +71,7 @@ function build() {
             path.join(repoRoot, 'packages/compiler/src/transform-core.ts'),
         ).stringObject('PROPERTY_MAP');
         const choices = readTableSource(
-            path.join(repoRoot, 'packages/cli/src/migrate/prefix-choice.ts'),
+            path.join(repoRoot, 'packages/compiler/src/migrate-tables/prefix-choice.ts'),
         );
         choice = new Map(choices.stringObject('AMBIGUOUS_PREFIX_CHOICE'));
         extra = choices.stringObject('EXTRA_REVERSE_PREFIXES');
@@ -117,7 +120,7 @@ function build() {
     if (undecided.length > 0) {
         fail(
             'these prefixes are shared by several sz keys and no choice is recorded.\n' +
-                'Add each to AMBIGUOUS_PREFIX_CHOICE in packages/cli/src/migrate/prefix-choice.ts:\n  ' +
+                'Add each to AMBIGUOUS_PREFIX_CHOICE in packages/compiler/src/migrate-tables/prefix-choice.ts:\n  ' +
                 undecided.join('\n  '),
         );
     }
@@ -203,11 +206,11 @@ function renderRust({ entries, extras }) {
 // Do not edit by hand. Run \`pnpm gen:reverse-map\`.
 //
 // The same inversion of the compiler's PROPERTY_MAP that
-// packages/cli/src/migrate/generated/reverse-property-map.ts holds, rendered
+// packages/compiler/src/migrate-tables/generated/reverse-property-map.ts holds, rendered
 // for the Rust side of migrate. Both files come out of one generator run, so
 // the two engines cannot disagree on which sz key a class prefix belongs to.
 // Where a prefix is shared by several sz keys the default comes from
-// AMBIGUOUS_PREFIX_CHOICE in packages/cli/src/migrate/prefix-choice.ts and the
+// AMBIGUOUS_PREFIX_CHOICE in packages/compiler/src/migrate-tables/prefix-choice.ts and the
 // alternatives are noted inline; the class parser overrides it by value.
 #![allow(dead_code, clippy::match_same_arms, clippy::too_many_lines)]
 #![allow(clippy::redundant_pub_crate)]

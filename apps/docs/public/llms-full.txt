@@ -4279,13 +4279,14 @@ reported, and undecided classes keep their `@sz-todo` marker.
 Still-unresolved classes appear in the console and log only.
 Re-run `--audit` to get a fresh snapshot when ready.
 
-### Which engine runs
+### What migrate needs
 
-`migrate` runs on the native Rust engine, and falls back to the TypeScript one when the
-platform has no prebuilt binary — both write the same output byte for byte, so the fallback
-costs time and nothing else. `CSSZYX_MIGRATE_ENGINE=ts` forces the TypeScript engine;
-`CSSZYX_MIGRATE_ENGINE=rust` requires the native one and fails when it is absent, rather than
-quietly running the other.
+`migrate` runs on the native engine and needs the `@csszyx/core-<platform>` package for
+your platform, which npm installs automatically on Linux, macOS and Windows for x64 and
+arm64. There is no second implementation behind it, so on a platform with no prebuilt
+binary — or after an install that skipped optional packages — migrate reports that the
+platform package is missing instead of producing different output. Building and the
+runtime are unaffected: those fall back to the WASM engine that ships in the package.
 
 ### `--inject-todos` — mark unrecognized classes in code
 

@@ -16,9 +16,11 @@
  * Also tests transformSource() with customMap (the --resolve-todos flow).
  */
 import { describe, expect, it } from 'vitest';
-
-import { transformSource } from '../src/migrate/ast-transformer.js';
-import { type CsszyxTodoMap, classNameToSzObject } from '../src/migrate/variant-parser.js';
+import {
+    type CsszyxTodoMap,
+    classNameToSzObject,
+    migrateSource as transformSource,
+} from '../src/migrate.js';
 
 // ============================================================================
 // classNameToSzObject — customMap route tests

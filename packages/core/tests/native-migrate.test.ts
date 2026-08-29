@@ -31,7 +31,9 @@ describe('@csszyx/core/native migrate entry points', () => {
 
     it('forwards to the binding and returns what it answers', async () => {
         packageName.current = fixture('native-binding-migrate.cjs');
-        const { migrateBatch, migrateHtml } = await import('../native/index.js');
+        const { migrateBatch, migrateHtml, migrateClassName, migrateParseClass } = await import(
+            '../native/index.js'
+        );
 
         expect(migrateBatch([{ filename: 'App.tsx', source: '' }], { injectTodos: true })).toEqual({
             called: 'migrateBatch',
@@ -43,6 +45,17 @@ describe('@csszyx/core/native migrate entry points', () => {
             source: '<div class="p-4"></div>',
             options: { injectTodos: false },
         });
+        // The class-level entry points answer as JSON because an sz value is
+        // recursive and order-sensitive.
+        expect(JSON.parse(migrateClassName('p-4', '{"btn":{}}'))).toEqual({
+            called: 'migrateClassName',
+            className: 'p-4',
+            customMapJson: '{"btn":{}}',
+        });
+        expect(JSON.parse(migrateParseClass('p-4'))).toEqual({
+            called: 'migrateParseClass',
+            className: 'p-4',
+        });
     });
 
     it('names the package and the missing export when the binding predates migrate', async () => {
@@ -51,13 +64,19 @@ describe('@csszyx/core/native migrate entry points', () => {
         // through would fail as "binding.migrateBatch is not a function",
         // which says nothing about updating the platform package.
         packageName.current = fixture('native-binding.cjs');
-        const { migrateBatch, migrateHtml, CsszyxNativeUnavailableError } = await import(
-            '../native/index.js'
-        );
+        const {
+            migrateBatch,
+            migrateHtml,
+            migrateClassName,
+            migrateParseClass,
+            CsszyxNativeUnavailableError,
+        } = await import('../native/index.js');
 
         for (const [call, exportName] of [
             [() => migrateBatch([], {}), 'migrateBatch'],
             [() => migrateHtml('', {}), 'migrateHtml'],
+            [() => migrateClassName('p-4'), 'migrateClassName'],
+            [() => migrateParseClass('p-4'), 'migrateParseClass'],
         ] as const) {
             expect(call).toThrow(CsszyxNativeUnavailableError);
             try {
@@ -69,6 +88,23 @@ describe('@csszyx/core/native migrate entry points', () => {
                 expect(error.message).toContain('native-binding.cjs');
                 expect(error.packageName).toBe(packageName.current);
             }
+        }
+    });
+
+    it('reads the ESM resolver code as a missing package too', async () => {
+        // Node reports a missing package as MODULE_NOT_FOUND from the CJS
+        // resolver and ERR_MODULE_NOT_FOUND from the ESM one. Both mean the
+        // same thing, so both must read as "not installed" rather than
+        // surfacing as an unexpected crash.
+        packageName.current = fixture('native-binding-esm-missing.cjs');
+        const { migrateBatch, CsszyxNativeUnavailableError } = await import('../native/index.js');
+
+        expect(() => migrateBatch([], {})).toThrow(CsszyxNativeUnavailableError);
+        try {
+            migrateBatch([], {});
+        } catch (err) {
+            const error = err as Error & { packageName: string | null };
+            expect(error.packageName).toBe(packageName.current);
         }
     });
 });
