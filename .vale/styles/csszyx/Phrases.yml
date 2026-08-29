@@ -1,0 +1,27 @@
+extends: existence
+message: "AI-tell phrase: '%s'"
+level: error
+ignorecase: true
+tokens:
+  - "it's worth noting"
+  - "it is worth noting"
+  - "note that"
+  - "this matters because"
+  - "which is what"
+  - "which is why"
+  - "in summary"
+  - "in conclusion"
+  - "not only"
+  - "seamless(?:ly)?"
+  - "robust(?:ly|ness)?"
+  - "leverage[sd]?"
+  - "delve"
+  - "crucial"
+  - "streamline[sd]?"
+  - "elegant(?:ly)?"
+  - "let's"
+  - "simply"
+  - "essentially"
+  - "importantly"
+  - "at the end of the day"
+  - "the key (?:point|takeaway)"

@@ -1,0 +1,9 @@
+# Copied from errata-ai/Google (MIT), Google/Semicolons.yml, package v0.7.1.
+extends: existence
+message: "Use semicolons judiciously."
+link: 'https://developers.google.com/style/semicolons'
+nonword: true
+scope: sentence
+level: warning
+tokens:
+  - ';'

@@ -1,0 +1,6 @@
+extends: existence
+message: "sentence-final moral clause: '%s'"
+level: error
+nonword: true
+tokens:
+  - ", which is (?:exactly )?(?:what|why|where) [^.]{3,60}\\."
