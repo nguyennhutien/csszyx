@@ -179,4 +179,43 @@ describe('the safelist file must not full-reload the page', () => {
             }),
         ).resolves.toEqual([]);
     });
+
+    /**
+     * Vite hands the hook a path it has already normalized to forward
+     * slashes, on every platform. The plugin builds its side of the
+     * comparison with `path.join`, which on Windows answers with backslashes,
+     * so a byte-for-byte comparison never matches there and the reload the
+     * branch exists to prevent goes on happening.
+     *
+     * A POSIX host cannot make `path.join` produce a backslash, so the
+     * separator is injected at the one seam left: the root. The mismatch
+     * under test is the same one — a joined path carrying `\` against a
+     * Vite path carrying `/`.
+     */
+    it('matches the safelist when Vite reports it with forward slashes', async () => {
+        const { call } = await bootedPlugin();
+        const root = 'C:\\app';
+        await call('configResolved', { root, command: 'serve' });
+        const entry = 'C:/app/src/app.css';
+        await call('transform', '@import "tailwindcss";', entry);
+
+        const entryModule = { id: entry, url: '/src/app.css' };
+        const server = {
+            config: { root },
+            watcher: { emit() {} },
+            moduleGraph: {
+                getModuleById: () => null,
+                invalidateModule() {},
+                getModulesByFile: (file: string) =>
+                    file === entry ? new Set([entryModule]) : undefined,
+            },
+        };
+        await expect(
+            call('handleHotUpdate', {
+                file: 'C:/app/csszyx-classes.html',
+                server,
+                modules: [],
+            }),
+        ).resolves.toEqual([entryModule]);
+    });
 });

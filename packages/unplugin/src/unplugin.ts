@@ -5697,7 +5697,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // affects is simply true: they `@source` the safelist, so
                     // their generated CSS is what a safelist write changes.
                     // Vite then takes its ordinary CSS-update path.
-                    if (ctx.file === path.join(state.rootDir, SAFELIST_FILENAME)) {
+                    //
+                    // Compared with the separators Vite uses: it normalizes
+                    // every watcher path to forward slashes before the hook
+                    // sees it, while `path.join` answers with backslashes on
+                    // Windows, and a byte-for-byte comparison of the two
+                    // never matches there.
+                    if (
+                        normalizePathSeparators(ctx.file) ===
+                        normalizePathSeparators(path.join(state.rootDir, SAFELIST_FILENAME))
+                    ) {
                         // Answered even when the lookup finds nothing, because
                         // an EMPTY set is the safe answer here and silence is
                         // not. Two things read this set and both reload on
