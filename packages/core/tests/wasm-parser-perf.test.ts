@@ -31,19 +31,23 @@ interface NativeModule {
     ): unknown[];
 }
 
-function loadLanes(): { wasm: ParserWasm; native: NativeModule } | null {
+async function loadLanes(): Promise<{ wasm: ParserWasm; native: NativeModule } | null> {
     if (!existsSync(wasmEntry)) return null;
     try {
         return {
             wasm: requireFromHere(wasmEntry) as ParserWasm,
-            native: requireFromHere('../native/index.js') as NativeModule,
+            // Through the module runner, not `require`. A raw Node load of a
+            // source file the runner also serves puts a second, differently
+            // shaped coverage entry on it, and the merged report then shows
+            // lines every other test executes as never run.
+            native: (await import('../native/index.js')) as NativeModule,
         };
     } catch {
         return null;
     }
 }
 
-const lanes = loadLanes();
+const lanes = await loadLanes();
 
 /**
  * A component file with a realistic mix of static sz and plain JSX.
