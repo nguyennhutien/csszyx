@@ -155,6 +155,24 @@ describe('a batch, which is how the command sends a whole repository', () => {
     });
 });
 
+describe('a resolution map handed over already serialised', () => {
+    // The command serialises the map once and sends the same string with
+    // every run of files; the engine must read it exactly as it reads the
+    // object form, or the two callers would resolve the same class
+    // differently.
+    runs('resolves a class the same way as the object form', () => {
+        const source = 'export const A = () => <div className="btn">a</div>;\n';
+        const map = { btn: { p: 8 } };
+        const [fromObject] = migrateRustBatch([{ filename: 'A.tsx', source }], { customMap: map });
+        const [fromJson] = migrateRustBatch([{ filename: 'A.tsx', source }], {
+            customMapJson: JSON.stringify(map),
+        });
+
+        expect(fromObject?.code).toContain('p: 8');
+        expect(fromJson?.code).toBe(fromObject?.code);
+    });
+});
+
 describe('the resolution entries a hand-written map holds', () => {
     // Every shape `CsszyxTodoEntry` allows, asked of the bridge that returns
     // them. `keepInClassName` is how a user says "leave this one alone", and

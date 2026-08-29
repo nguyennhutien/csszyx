@@ -52,6 +52,12 @@ export interface MigrateRustOptions {
     keysOnly?: boolean;
     /** The parsed migration-resolution map. */
     customMap?: CsszyxTodoMap;
+    /**
+     * The same map, already serialised. A caller that sends one map with many
+     * runs of files serialises it once and passes the string; when both are
+     * given this one is used as is.
+     */
+    customMapJson?: string;
 }
 
 /** Options for migrating an HTML source. */
@@ -182,7 +188,9 @@ export function migrateRustBatch(
             {
                 injectTodos: options.injectTodos,
                 keysOnly: options.keysOnly,
-                customMapJson: options.customMap ? JSON.stringify(options.customMap) : undefined,
+                customMapJson:
+                    options.customMapJson ??
+                    (options.customMap ? JSON.stringify(options.customMap) : undefined),
             },
         ).map(readResult),
     );

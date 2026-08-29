@@ -192,6 +192,9 @@ export async function migrate(options: MigrateOptions = {}): Promise<void> {
     progress.succeed('Migration complete');
 
     reportMigrationSummary(context, summary, log);
+    // Every other file was migrated, but a script must not read the run as
+    // clean while some files were left as they were.
+    if (summary.failed.length > 0) process.exitCode = 1;
     if (!writeAuditMap(context, summary, log)) return;
     reportRemainingTodos(context, summary, log);
     reportUnusedImports(summary, log);
@@ -208,6 +211,8 @@ interface MigrationContext {
     resolveTodosPath?: string;
     injectTodos: boolean;
     customMap?: CsszyxTodoMap;
+    /** `customMap` serialised once, shared by every run of files. */
+    customMapJson?: string;
 }
 
 interface MigrationSummary {
@@ -216,9 +221,16 @@ interface MigrationSummary {
     skippedComponent: number;
     normalized: number;
     files: number;
-    unrecognized: string[];
+    /**
+     * Distinct unrecognized class names. A set, not a list of occurrences: a
+     * legacy repository repeats the same few thousand names a million times,
+     * and holding every occurrence cost more memory than the sources did.
+     */
+    unrecognized: Set<string>;
     warnings: string[];
     unusedImports: { file: string; imports: string[] }[];
+    /** Files the engine refused even on their own; the run exits non-zero. */
+    failed: string[];
 }
 
 /* eslint-disable jsdoc/require-param, jsdoc/require-returns -- Internal stages operate on the shared migration context. */
@@ -240,7 +252,16 @@ async function prepareMigration(options: MigrateOptions): Promise<MigrationConte
     if (resolveTodosPath && !customMap) return null;
     if (audit) reportAuditMode();
     else if (dryRun) reportDryRunMode();
-    return { options, cwd, dryRun, audit, resolveTodosPath, injectTodos, customMap };
+    return {
+        options,
+        cwd,
+        dryRun,
+        audit,
+        resolveTodosPath,
+        injectTodos,
+        customMap,
+        customMapJson: customMap ? JSON.stringify(customMap) : undefined,
+    };
 }
 
 /** Loads a user-edited migration-resolution map. */
@@ -342,9 +363,10 @@ function createMigrationSummary(): MigrationSummary {
         skippedComponent: 0,
         normalized: 0,
         files: 0,
-        unrecognized: [],
+        unrecognized: new Set(),
         warnings: [],
         unusedImports: [],
+        failed: [],
     };
 }
 
@@ -385,6 +407,7 @@ function sourceOptions(context: MigrationContext) {
     return {
         injectTodos: context.injectTodos,
         customMap: context.customMap,
+        customMapJson: context.customMapJson,
         keysOnly: context.options.keysOnly,
     };
 }
@@ -404,15 +427,26 @@ function finishMigrationFile(
     reportMigratedFile(filePath, result.stats, context, log);
 }
 
+/** Files per engine call: past this the run is sent before the next file is read. */
+const RUN_FILES = 25;
+/** Source bytes per engine call, the other trigger; whichever fills first sends. */
+const RUN_BYTES = 2 * 1024 * 1024;
+
 /**
- * Processes every candidate file through the native engine: the JSX files in
- * one call and the HTML files one by one, as the text pass is.
+ * Processes every candidate file through the native engine, in runs.
  *
- * One call rather than one per file is a simplification, not a speed-up: the
- * napi crossing costs well under a microsecond against a parse that costs
- * tens, so the two are within noise of each other. What the single call does
- * cost is peak memory — every source and every result is held at once, which
- * is several times the size of the sources on disk.
+ * A run is sent when it holds 25 files or 2 MiB of source, whichever comes
+ * first, and every run is finished - written, counted - before the next is
+ * read. Both triggers are needed: a repository nobody has refactored keeps a
+ * few files that carry half its bytes, and they sit together, so a count
+ * alone lets one run hold 30 MB while a byte budget alone lets a run of tiny
+ * files grow to thousands of results. Measured on such a tree, one call for
+ * everything peaked at 1 041 MB; either single trigger at 400-550 MB; the two
+ * together at 234 MB, with no change in time.
+ *
+ * The engine is asked once, with nothing, before the first file is read: runs
+ * are written as they finish, so an install that cannot run the engine at all
+ * has to be found out while no file has been touched.
  */
 function processMigrationBatch(
     files: string[],
@@ -420,10 +454,16 @@ function processMigrationBatch(
     summary: MigrationSummary,
     log: MigrationLog,
 ): void {
-    const inputs: MigrationInput[] = [];
+    migrateRustBatch([], sourceOptions(context));
+    const pending: MigrationInput[] = [];
+    let pendingBytes = 0;
+    const send = (): void => {
+        if (pending.length === 0) return;
+        processMigrationRun(pending.splice(0), context, summary, log);
+        pendingBytes = 0;
+    };
     for (const filePath of files) {
-        // Every file is read before any is migrated, so one the process cannot
-        // open would otherwise cost the whole run rather than itself. Reported
+        // A file the process cannot open costs itself, not the run: reported
         // as a warning and skipped, the way a scan that throws is.
         let input: MigrationInput | null;
         try {
@@ -432,20 +472,108 @@ function processMigrationBatch(
             summary.warnings.push(`Could not read ${filePath}: ${String(error)}`);
             continue;
         }
-        if (input) inputs.push(input);
+        if (!input) continue;
+        if (input.isHtml) {
+            // Sent ahead of the HTML file so the log keeps discovery order.
+            send();
+            finishMigrationFile(
+                input.filePath,
+                migrateRustHtml(input.source, htmlOptions(context)),
+                context,
+                summary,
+                log,
+            );
+            continue;
+        }
+        pending.push(input);
+        pendingBytes += input.source.length;
+        if (pending.length >= RUN_FILES || pendingBytes >= RUN_BYTES) send();
     }
-    const jsxInputs = inputs.filter(input => !input.isHtml);
-    const jsxResults = migrateRustBatch(
-        jsxInputs.map(input => ({ filename: input.filePath, source: input.source })),
-        sourceOptions(context),
-    );
-    let next = 0;
-    for (const input of inputs) {
-        const result = input.isHtml
-            ? migrateRustHtml(input.source, htmlOptions(context))
-            : (jsxResults[next++] as MigrateRustResult);
+    send();
+}
+
+/**
+ * Sends one run of JSX files to the engine and finishes each result.
+ *
+ * The engine answers a run as a whole: a source it cannot handle (a panic
+ * surfaces as a throw for the call) takes every file in the run down with it.
+ * Such a run is retried one file at a time, so the file is named and the rest
+ * still migrate. An engine that cannot run here at all is not retried - that
+ * is the one failure with nothing behind it, and it already stopped the
+ * command before any file was read.
+ */
+function processMigrationRun(
+    inputs: MigrationInput[],
+    context: MigrationContext,
+    summary: MigrationSummary,
+    log: MigrationLog,
+): void {
+    let results: MigrateRustResult[];
+    try {
+        results = migrateRustBatch(
+            inputs.map(input => ({ filename: input.filePath, source: input.source })),
+            sourceOptions(context),
+        );
+    } catch (error) {
+        if (error instanceof RustMigrateUnavailableError) throw error;
+        for (const input of inputs) processMigrationFileAlone(input, context, summary, log);
+        return;
+    }
+    for (const [index, input] of inputs.entries()) {
+        const result = results[index];
+        if (result === undefined) {
+            recordFailedMigration(
+                input.filePath,
+                'the engine returned no result',
+                context,
+                summary,
+            );
+            continue;
+        }
         finishMigrationFile(input.filePath, result, context, summary, log);
     }
+}
+
+/** Retries one file from a run the engine refused, naming it if it fails again. */
+function processMigrationFileAlone(
+    input: MigrationInput,
+    context: MigrationContext,
+    summary: MigrationSummary,
+    log: MigrationLog,
+): void {
+    let result: MigrateRustResult | undefined;
+    try {
+        [result] = migrateRustBatch(
+            [{ filename: input.filePath, source: input.source }],
+            sourceOptions(context),
+        );
+    } catch (error) {
+        if (error instanceof RustMigrateUnavailableError) throw error;
+        recordFailedMigration(
+            input.filePath,
+            error instanceof Error ? error.message : String(error),
+            context,
+            summary,
+        );
+        return;
+    }
+    if (result === undefined) {
+        recordFailedMigration(input.filePath, 'the engine returned no result', context, summary);
+        return;
+    }
+    finishMigrationFile(input.filePath, result, context, summary, log);
+}
+
+/** Records a file the engine could not migrate; the file is left as it was. */
+function recordFailedMigration(
+    filePath: string,
+    reason: string,
+    context: MigrationContext,
+    summary: MigrationSummary,
+): void {
+    const relative = path.relative(context.cwd, filePath);
+    summary.failed.push(relative);
+    summary.warnings.push(`Could not migrate ${relative}: ${reason}`);
 }
 
 /** Checks whether a source file contains attributes relevant to the selected mode. */
@@ -467,7 +595,7 @@ function aggregateMigrationResult(
     summary.skipped += result.stats.classNamesSkipped;
     summary.skippedComponent += result.stats.classNamesSkippedComponent;
     summary.normalized += result.stats.szKeysNormalized ?? 0;
-    summary.unrecognized.push(...result.stats.classesUnrecognized);
+    for (const className of result.stats.classesUnrecognized) summary.unrecognized.add(className);
     if (result.potentiallyUnusedImports.length > 0) {
         summary.unusedImports.push({
             file: path.relative(context.cwd, filePath),
@@ -545,9 +673,9 @@ function reportOptionalCounts(summary: MigrationSummary, log: MigrationLog): voi
 }
 
 /** Reports unique unrecognized classes. */
-function reportUnknownClasses(classes: string[], log: MigrationLog): void {
-    if (classes.length === 0) return;
-    const unique = [...new Set(classes)];
+function reportUnknownClasses(classes: ReadonlySet<string>, log: MigrationLog): void {
+    if (classes.size === 0) return;
+    const unique = [...classes];
     printWarn(
         `Unrecognized classes (${unique.length}): ${unique.slice(0, 10).join(', ')}${unique.length > 10 ? '...' : ''}`,
     );
@@ -573,7 +701,7 @@ function writeAuditMap(
 ): boolean {
     if (!context.audit) return true;
     const todoPath = path.join(context.cwd, '.csszyx-todo.json');
-    const unique = [...new Set(summary.unrecognized)];
+    const unique = [...summary.unrecognized];
     console.info();
     if (unique.length === 0) {
         printSuccess('Audit complete. 100% of your classes are perfectly recognized by csszyx!');
@@ -616,7 +744,7 @@ function reportRemainingTodos(
     log: MigrationLog,
 ): void {
     if (!context.resolveTodosPath) return;
-    const unique = [...new Set(summary.unrecognized)];
+    const unique = [...summary.unrecognized];
     if (unique.length === 0) return;
     console.info();
     printWarn(
