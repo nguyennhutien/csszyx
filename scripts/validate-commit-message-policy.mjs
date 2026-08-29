@@ -103,6 +103,30 @@ for (const character of message) {
     }
 }
 
+// The subject and the BREAKING CHANGE footer are copied by release-please into
+// CHANGELOG.md, which GitHub renders as Markdown. A bare `<Word>` there is an
+// HTML tag to the renderer and is stripped: `Props<T>` reads as `Props`,
+// `@scope/pkg-<platform>` as `@scope/pkg-`. Inside a code span it survives.
+const footerStart = lines.findIndex(line => /^BREAKING[ -]CHANGE:/.test(line));
+const footerLines = [];
+if (footerStart !== -1) {
+    for (const line of lines.slice(footerStart)) {
+        if (line.trim() === '') break;
+        footerLines.push(line);
+    }
+}
+for (const line of [header, ...footerLines]) {
+    const outsideCode = line.replace(/`[^`]*`/g, '');
+    const bare = outsideCode.match(/<[A-Za-z][A-Za-z0-9-]*>/);
+    if (bare) {
+        fail(
+            `"${bare[0]}" in the subject or BREAKING CHANGE footer would be stripped as an HTML ` +
+                'tag when the changelog renders. Put the identifier or placeholder in a code span: ' +
+                `\`${bare[0]}\``,
+        );
+    }
+}
+
 function fail(reason, code = 1) {
     console.error(`commit message policy failed: ${reason}`);
     process.exit(code);
