@@ -20,9 +20,11 @@ class FakeUnavailable extends Error {
      */
     constructor(packageName: string | null) {
         super(
-            'csszyx native Rust transform is not available for this install. ' +
-                'The wasm build of the engine (build.parser: "wasm") covers this ' +
-                'platform until the native package is installed.',
+            [
+                `csszyx native engine unavailable: ${packageName ?? 'no prebuilt package covers this platform'}`,
+                'help: set build.parser: "wasm"; the wasm engine ships inside @csszyx/core',
+                'note: the wasm engine ships inside @csszyx/core and produces the same output',
+            ].join('\n'),
         );
         this.name = 'CsszyxNativeUnavailableError';
         this.packageName = packageName;

@@ -7,21 +7,51 @@ const require = createRequire(import.meta.url);
 let cachedBinding;
 let cachedPackageName;
 
+const PREFIX = 'csszyx native engine unavailable: ';
+const NOTE = 'note: the wasm engine ships inside @csszyx/core and produces the same output';
+const INSTALL_HELP =
+    'it is an optional dependency of @csszyx/core; reinstall without skipping optional packages, or set build.parser: "wasm"';
+const WASM_HELP = 'set build.parser: "wasm"; the wasm engine ships inside @csszyx/core';
+
+/** @param {string | undefined} what @param {string | null} packageName @returns {string} What is missing. */
+function missingText(what, packageName) {
+    return what === undefined ? defaultMissing(packageName) : what;
+}
+
+/** @param {string | null} packageName @returns {string} What is missing, absent a more specific reason. */
+function defaultMissing(packageName) {
+    return packageName
+        ? `${packageName} is not installed`
+        : 'no prebuilt package covers this platform';
+}
+
+/** @param {string | undefined} help @param {string | null} packageName @returns {string} What to do. */
+function helpText(help, packageName) {
+    return help === undefined ? defaultHelp(packageName) : help;
+}
+
+/** @param {string | null} packageName @returns {string} What to do, absent a more specific action. */
+function defaultHelp(packageName) {
+    return packageName ? INSTALL_HELP : WASM_HELP;
+}
+
+/**
+ * One line per thing the reader needs: what is missing, what to do, what
+ * still holds. `detail` is the message without the fixed prefix, for a
+ * caller that re-prefixes it under its own name.
+ */
 export class CsszyxNativeUnavailableError extends Error {
-    constructor(message, packageName = getNativePackageName()) {
-        super(
-            message ??
-                [
-                    'csszyx native Rust transform is not available for this install.',
-                    packageName ? `Expected optional package: ${packageName}.` : null,
-                    'The wasm build of the engine (build.parser: "wasm") covers this platform until the native package is installed.',
-                ]
-                    .filter(Boolean)
-                    .join(' '),
-        );
+    constructor(what, packageName = getNativePackageName(), help) {
+        const detail = [
+            missingText(what, packageName),
+            `help: ${helpText(help, packageName)}`,
+            NOTE,
+        ].join('\n');
+        super(PREFIX + detail);
         this.name = 'CsszyxNativeUnavailableError';
         this.code = 'CSSZYX_NATIVE_UNAVAILABLE';
         this.packageName = packageName;
+        this.detail = detail;
     }
 }
 
@@ -31,10 +61,7 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
     }
 
     if (!packageName) {
-        throw new CsszyxNativeUnavailableError(
-            'csszyx native Rust transform is not available on this platform. The wasm build of the engine (build.parser: "wasm") covers it.',
-            null,
-        );
+        throw new CsszyxNativeUnavailableError(undefined, null);
     }
 
     let loaded;
@@ -50,8 +77,9 @@ export function loadNativeBinding(packageName = getNativePackageName()) {
     const binding = loaded?.default ?? loaded;
     if (typeof binding?.transformBatch !== 'function') {
         throw new CsszyxNativeUnavailableError(
-            `csszyx native package ${packageName} does not export transformBatch(). The wasm build of the engine (build.parser: "wasm") still covers this platform.`,
+            `${packageName} does not export transformBatch()`,
             packageName,
+            `reinstall ${packageName} at the version of @csszyx/core, or set build.parser: "wasm"`,
         );
     }
 

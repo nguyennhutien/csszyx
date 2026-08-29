@@ -31,7 +31,7 @@ export class OxcRustNotImplementedError extends Error {
      * @param detail Native loader or transform failure detail.
      */
     constructor(detail: string) {
-        super(`transformRust: native engine unavailable - ${detail}`);
+        super(`transformRust: native engine unavailable: ${detail}`);
         this.name = 'OxcRustNotImplementedError';
     }
 }
@@ -78,9 +78,7 @@ export function ensureRustTransformAvailable(): void {
             throw err;
         }
         if (err instanceof CsszyxNativeUnavailableError) {
-            throw new OxcRustNotImplementedError(
-                `${err.message}; native package: ${err.packageName ?? 'unsupported platform'}`,
-            );
+            throw new OxcRustNotImplementedError(err.detail);
         }
         throw err;
     }
@@ -158,9 +156,7 @@ export function transformRustBatch(
             throw err;
         }
         if (err instanceof CsszyxNativeUnavailableError) {
-            throw new OxcRustNotImplementedError(
-                `${err.message}; native package: ${err.packageName ?? 'unsupported platform'}`,
-            );
+            throw new OxcRustNotImplementedError(err.detail);
         }
         throw err;
     }
