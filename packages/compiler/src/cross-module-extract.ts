@@ -669,9 +669,12 @@ const RAW_TRANSFER_SUPPORTED: boolean =
 
 /**
  * Parser options asking for the raw transfer. The flag is read by oxc-parser
- * 0.140 at runtime but absent from its typings, hence the spread.
+ * 0.140 at runtime but absent from its typings, hence the widened type.
  */
-const RAW_TRANSFER_OPTIONS: ParserOptions = { lang: 'tsx', ...{ experimentalRawTransfer: true } };
+const RAW_TRANSFER_OPTIONS: ParserOptions & { experimentalRawTransfer: boolean } = {
+    lang: 'tsx',
+    experimentalRawTransfer: true,
+};
 
 /**
  * Parse one module and return its program, through the raw transfer when the
