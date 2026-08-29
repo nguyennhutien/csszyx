@@ -305,12 +305,13 @@ package for your platform. npm installs it for you on Linux, macOS and Windows,
 for x64 and arm64 — it is an optional dependency resolved at install time.
 
 There is no second implementation behind it. On a platform with no prebuilt
-binary, or after an install that skipped optional packages, migrate reports the
-missing package and stops rather than producing different output:
+binary, or after an install that skipped optional packages, migrate stops
+before touching any file:
 
 ```
-csszyx migrate needs the native engine, and this install has none.
-Install the optional package for this platform: @csszyx/core-linux-x64-gnu.
+✗ migrate: native engine unavailable: @csszyx/core-linux-x64-gnu is not installed
+help: it is an optional dependency of @csszyx/core; reinstall without skipping optional packages
+note: no file was changed; build and runtime do not use this engine
 ```
 
 Building and the runtime are unaffected by this — those fall back to the WASM

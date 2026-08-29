@@ -68,7 +68,13 @@ describe('the native migrate on an install without it', () => {
             // The loader's offer of the wasm engine is real for a transform
             // and a dead end for migrate, so it must not be carried through.
             expect(message).not.toContain('build.parser');
-            expect(message).toContain('no second implementation');
+            // One line per thing the reader needs: what is missing, what to
+            // do, what did not happen.
+            expect(message.split('\n')).toEqual([
+                'migrate: native engine unavailable: @csszyx/core-darwin-arm64 is not installed',
+                'help: it is an optional dependency of @csszyx/core; reinstall without skipping optional packages',
+                'note: no file was changed; build and runtime do not use this engine',
+            ]);
         }
     });
 
@@ -80,7 +86,11 @@ describe('the native migrate on an install without it', () => {
         try {
             migrateRustHtml('<div class="p-4" />');
         } catch (error) {
-            expect((error as Error).message).not.toContain('build.parser');
+            const { message } = error as Error;
+            expect(message).not.toContain('build.parser');
+            expect(message.split('\n')[1]).toBe(
+                'help: prebuilt packages exist for linux, darwin and win32 on x64 and arm64',
+            );
         }
     });
 });

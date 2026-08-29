@@ -121,7 +121,7 @@ export class RustMigrateUnavailableError extends Error {
      * @param detail - What the install is missing.
      */
     constructor(detail: string) {
-        super(`migrate: native engine unavailable - ${detail}`);
+        super(`migrate: native engine unavailable: ${detail}`);
         this.name = 'RustMigrateUnavailableError';
     }
 }
@@ -139,16 +139,22 @@ let availability: boolean | undefined;
  *
  * @param packageName - Package the loader looked for, or null when no
  *   prebuilt package covers this platform at all.
- * @returns The message, naming the package once.
+ * @returns Three lines: what is missing, what to do, what did not happen.
  */
 function unavailableDetail(packageName: string | null): string {
-    return [
+    const missing =
         packageName === null
-            ? 'no prebuilt package covers this platform.'
-            : `install the optional package for this platform: ${packageName}.`,
-        'migrate has no second implementation to fall back to, so it stops here rather than',
-        'answering differently. Building and the runtime are unaffected.',
-    ].join(' ');
+            ? 'no prebuilt package covers this platform'
+            : `${packageName} is not installed`;
+    const help =
+        packageName === null
+            ? 'help: prebuilt packages exist for linux, darwin and win32 on x64 and arm64'
+            : 'help: it is an optional dependency of @csszyx/core; reinstall without skipping optional packages';
+    return [
+        missing,
+        help,
+        'note: no file was changed; build and runtime do not use this engine',
+    ].join('\n');
 }
 
 /**
