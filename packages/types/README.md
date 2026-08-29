@@ -356,7 +356,7 @@ if (typeof window !== "undefined" && isCsszyxWindow(window)) {
 1. **Import Only What You Need**: Use specific imports to improve tree-shaking
 2. **Use Type Imports**: Use `import type` for type-only imports
 3. **Extend Interfaces**: Create custom interfaces by extending base types
-4. **Leverage Defaults**: Use default configurations as starting points
+4. **Start From Defaults**: Use default configurations as starting points
 
 ## Contributing
 

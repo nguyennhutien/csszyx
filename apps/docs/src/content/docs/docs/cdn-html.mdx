@@ -46,7 +46,7 @@ attributes in `.html` files.
 The runtime walks the DOM, compiles each `sz` attribute into Tailwind class
 names, removes the `sz` attribute, then adds the resulting classes to the
 element's `class` list. Tailwind v4's JIT must see those classes **after**
-csszyx has written them, which is why the Tailwind script comes first in the
+csszyx has written them, so the Tailwind script comes first in the
 `<head>`.
 
 | Order in `<head>` | Result |

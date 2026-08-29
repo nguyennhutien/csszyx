@@ -449,7 +449,7 @@ and is **always missing output**.
 ## szs & szsc
 
 You author `szs={{ slot: { … } }}`; the compiler rewrites the attribute to
-`szsc={{ slot: "class string" }}`, which is what the component reads. Every
+`szsc={{ slot: "class string" }}`, and the component reads that attribute. Every
 slot must resolve at build time — there is no runtime path.
 
 | Message | Class |
@@ -718,7 +718,7 @@ of them compiles cleanly on another: `color: 'balance'` emits `text-balance`,
 which sets `text-wrap` and no colour at all. The type cannot reject it — a
 colour may be any theme token — and the class is real, so the dead-class pass
 is quiet too. The command reads the CSS property the class actually sets and
-compares it with the one the key sets, which is what separates the mistake from
+compares it with the one the key sets. That comparison separates the mistake from
 `fill: 'none'`, where the keyword sets exactly the property `fill` sets.
 
 Your own stylesheet decides. A project that declares `--color-balance` has
@@ -739,7 +739,7 @@ ends up carrying `text-wrap: balance` **and** the colour — it then competes on
 both classes rather than merging, and the stylesheet's order decides the winner
 instead of the order the arguments were passed.
 
-That is wrong output rather than a missed optimisation, which is why it exits
+That is wrong output rather than a missed optimisation, so the command exits
 non-zero. `--allow-token <name>` keeps a name deliberately, so the exemption is
 a line in a diff somebody reviews.
 

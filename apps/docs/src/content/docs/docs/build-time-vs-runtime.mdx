@@ -199,9 +199,9 @@ in one channel (plain `className` literals, as above).
 A `dynamic()`-injected rule is **unlayered**; static `sz` / Tailwind utilities
 live in `@layer utilities`. Per CSS Cascade Level 5, **unlayered beats all layered
 styles** at equal specificity — so a `dynamic()` rule wins over a static `sz`
-override regardless of source order. By design they don't collide (`dynamic()`
-only injects classes not already built), but if you mix them on one element the
-dynamic rule takes precedence. Prefer all-static within a component.
+override regardless of source order. By design they don't collide: `dynamic()`
+only injects classes that are not already built. If you mix them on one element,
+the dynamic rule takes precedence. Prefer all-static within a component.
 
 ## See also
 

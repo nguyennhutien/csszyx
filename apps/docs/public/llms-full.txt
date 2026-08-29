@@ -367,7 +367,7 @@ value position — `p`, `bg`, `m`, `w`, `text`, …, not just font-size):
 
 - `{ '[ & > span ]': (etc) }` -> `[&>span]:(etc)` — whitespace in arbitrary selector keys is stripped
 - Values never need brackets: `{ w: 'calc(100% - 20px)' }` -> `w-[calc(100%_-_20px)]` — the compiler auto-wraps arbitrary values
-- This ensures robust matching regardless of user formatting.
+- Matching does not depend on user formatting.
 
 ## Complex Selectors & Modifiers
 
