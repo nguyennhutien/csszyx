@@ -2779,6 +2779,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // watch build keeps them: an edit can turn a module into a server module
     // after the walk. The lanes with no walk never set this.
     let skipRscRecords = false;
+    // Files of the last prescan the transform cache did not answer; printed
+    // with the `prescan:batch` trace so a cache that stopped hitting is visible.
+    let lastPrescanCacheMisses = 0;
     // The census the frozen map was built from, kept to name what arrived late
     // if the `buildEnd` check finds the map would come out different now.
     let frozenOwnedClasses: ReadonlySet<string> = new Set<string>();
@@ -3319,6 +3322,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (cached) return cached;
         }
 
+        lastPrescanCacheMisses++;
         const execution = runConfiguredParser(source, effectiveFilename, compilerOptions);
         if (cacheEnabled && cacheKey && execution.cacheable) {
             writeTransformCache(cacheRoot, cacheInput, execution.result, cacheKey);
@@ -3490,6 +3494,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (cacheEnabled) evictTransformCacheOnce();
         ensureRustTransformAvailable();
         const misses = collectRustPrescanMisses(batchable, compilerOptions, cacheRoot, results);
+        lastPrescanCacheMisses += misses.length;
         if (misses.length > 0) {
             try {
                 runRustPrescanBatch(misses, compilerOptions, cacheRoot, results);
@@ -4208,6 +4213,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
         }
 
+        const walkStarted = performance.now();
         scanDir(state.rootDir);
         // Also walk opted-in compileSources directories that live OUTSIDE rootDir
         // (a sibling design-system package), so their sz/szv classes reach the
@@ -4221,9 +4227,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
             scanDir(sourceDir);
         }
+        traceBenchTiming(
+            `prescan:walk files=${seenSourcePaths.size} sz=${prescanSources.length}`,
+            state.rootDir,
+            performance.now() - walkStarted,
+        );
 
+        const demandStarted = performance.now();
         recordDemandedSzObjectProviders(seenSourcePaths, szObjectDemand);
+        traceBenchTiming(
+            `prescan:demand providers=${szObjectProvidersExamined.size}`,
+            state.rootDir,
+            performance.now() - demandStarted,
+        );
 
+        const batchStarted = performance.now();
+        lastPrescanCacheMisses = 0;
         const prescanContentByPath = new Map(
             prescanSources.map(file => [file.filePath, file.content]),
         );
@@ -4237,6 +4256,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             );
         }
 
+        traceBenchTiming(
+            `prescan:batch files=${prescanSources.length} misses=${lastPrescanCacheMisses}`,
+            state.rootDir,
+            performance.now() - batchStarted,
+        );
+
         // sz-generated classes are csszyx-owned: safe to both safelist and mangle.
         // Raw className values are added to the safelist below but never to
         // ownedClasses. Shared raw/sz names are subtracted when the map finalizes.
@@ -4248,7 +4273,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Write manifest file for Tailwind to scan — includes both sz-generated AND raw class names
         // so Tailwind JIT can detect any custom utilities that happen to shadow TW class names.
         const safelistClasses = new Set([...discoveredClasses, ...rawDiscoveredClasses]);
+        const safelistStarted = performance.now();
         writeSafelistFile(safelistClasses);
+        traceBenchTiming(
+            `prescan:safelist classes=${safelistClasses.size}`,
+            state.rootDir,
+            performance.now() - safelistStarted,
+        );
         traceBenchTiming('prescan', state.rootDir, performance.now() - prescanStarted);
     }
 
