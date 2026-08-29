@@ -78,6 +78,7 @@ import {
     escapeJsonForInlineScript,
     escapeJsonForStringLiteral,
 } from './inline-script-escape.js';
+import { createLazyAggregate, type LazyAggregate } from './lazy-aggregate.js';
 import {
     needsRuntimeMangleRegistration,
     removedMangleMapDeliveryMessage,
@@ -244,10 +245,15 @@ interface PluginState {
      */
     classesCapped: boolean;
     mangleMap: Record<string, string>;
-    varMangleEntriesByFile: Map<string, Array<[string, string]>>;
-    varMangleMap: Record<string, CssVariableMangleValue>;
-    cssVarMetricsByFile: Map<string, CSSVariableMetrics>;
-    cssVarMetrics: CSSVariableMetrics;
+    /** CSS variable mangle entries per file; `varMangleMap` is merged from them on read. */
+    varMangleEntriesByFile: LazyAggregate<
+        Array<[string, string]>,
+        Record<string, CssVariableMangleValue>
+    >;
+    readonly varMangleMap: Record<string, CssVariableMangleValue>;
+    /** CSS variable hoisting metrics per file; `cssVarMetrics` is totalled from them on read. */
+    cssVarMetricsByFile: LazyAggregate<CSSVariableMetrics, CSSVariableMetrics>;
+    readonly cssVarMetrics: CSSVariableMetrics;
     checksum: string;
     finalized: boolean;
     rootDir: string;
@@ -1388,7 +1394,7 @@ function cssVariableEntries(result: SourceTransformResult): Array<[string, strin
  * @param entries Complete CSS variable entries emitted by this file.
  */
 function recordFileVarMangleEntries(
-    state: Pick<PluginState, 'varMangleEntriesByFile' | 'varMangleMap'>,
+    state: Pick<PluginState, 'varMangleEntriesByFile'>,
     filename: string,
     entries: Array<[string, string]>,
 ): void {
@@ -1398,7 +1404,6 @@ function recordFileVarMangleEntries(
     } else {
         state.varMangleEntriesByFile.set(normalizedFilename, entries);
     }
-    state.varMangleMap = buildVarMangleMap(state.varMangleEntriesByFile);
 }
 
 /**
@@ -1934,7 +1939,7 @@ function emptyCSSVariableMetrics(): CSSVariableMetrics {
  * @param code Transformed source code, or null to clear this file.
  */
 function recordFileCSSVariableMetrics(
-    state: Pick<PluginState, 'cssVarMetricsByFile' | 'cssVarMetrics'>,
+    state: Pick<PluginState, 'cssVarMetricsByFile'>,
     filename: string,
     code: string | null,
 ): void {
@@ -1949,7 +1954,6 @@ function recordFileCSSVariableMetrics(
             state.cssVarMetricsByFile.delete(normalizedFilename);
         }
     }
-    state.cssVarMetrics = buildCSSVariableMetrics(state.cssVarMetricsByFile);
 }
 
 /**
@@ -2934,6 +2938,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         { inputSha256: string; result: SourceTransformResult }
     >();
 
+    // Merged on read: every module records its entries during the prescan and
+    // again in the transform hook, and rebuilding the whole map on each of those
+    // writes made the cost per module grow with the modules before it.
+    const varMangleEntries = createLazyAggregate(
+        buildVarMangleMap,
+        Object.fromEntries(earlyGlobalVarAliasEntries) as Record<string, CssVariableMangleValue>,
+    );
+    const cssVarMetricTotals = createLazyAggregate(
+        buildCSSVariableMetrics,
+        emptyCSSVariableMetrics(),
+    );
     const state: PluginState = {
         classes: new Set<string>(),
         parsedTheme: null,
@@ -2953,10 +2968,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         ownedClasses: new Set<string>(),
         authoredClasses: new Set<string>(),
         mangleMap: {},
-        varMangleEntriesByFile: new Map(),
-        varMangleMap: Object.fromEntries(earlyGlobalVarAliasEntries),
-        cssVarMetricsByFile: new Map(),
-        cssVarMetrics: emptyCSSVariableMetrics(),
+        varMangleEntriesByFile: varMangleEntries,
+        get varMangleMap() {
+            return varMangleEntries.get();
+        },
+        cssVarMetricsByFile: cssVarMetricTotals,
+        get cssVarMetrics() {
+            return cssVarMetricTotals.get();
+        },
         checksum: '',
         finalized: false,
         rootDir: process.cwd(),
