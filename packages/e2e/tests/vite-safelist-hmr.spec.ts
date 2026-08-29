@@ -10,9 +10,9 @@
  *
  * The second identical edit was clean, because the class set only grows once
  * per server lifetime. That is why it read as "HMR is flaky" rather than as a
- * reproducible bug, and why this spec picks a padding value at random: a
- * fixed one would be in the safelist after the first run and the test would
- * pass without exercising anything.
+ * reproducible bug, and why this spec reads the safelist before choosing its
+ * padding: a value already in there would apply without a write, and the
+ * branch under test would never run while the test passed.
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -22,17 +22,36 @@ import { expect, test } from '@playwright/test';
 const fixturePath = fileURLToPath(
     new URL('../../../playground/vite-react/src/SafelistHmr.tsx', import.meta.url),
 );
+const safelistPath = fileURLToPath(
+    new URL('../../../playground/vite-react/csszyx-classes.html', import.meta.url),
+);
 
 const BASELINE_LITERAL = "sz={{ pt: 7, bg: 'slate-100' }}";
 
 /**
- * Spacing Tailwind will not already have emitted; `pt-7` is the baseline.
- *
- * @returns A padding step in the 40–79 range, well clear of anything the
- * playground uses, so the class is new to the safelist on every run.
+ * @param step - A padding step.
+ * @returns Whether the safelist csszyx has written so far names `pt-<step>`.
+ * A missing file is an empty safelist.
  */
-function unusedPadding(): number {
-    return 40 + Math.floor(Math.random() * 40);
+async function safelistHolds(step: number): Promise<boolean> {
+    const safelist = await readFile(safelistPath, 'utf8').catch(() => '');
+    return safelist.split(/[\s"]+/).includes(`pt-${step}`);
+}
+
+/**
+ * Spacing the running server has not emitted yet; `pt-7` is the baseline.
+ *
+ * The 40–79 range is clear of anything the playground uses, and a reused dev
+ * server keeps every class it has seen, so the first step absent from its
+ * safelist is the one that forces a write.
+ *
+ * @returns The padding step to edit in.
+ */
+async function unusedPadding(): Promise<number> {
+    for (let step = 40; step < 80; step += 1) {
+        if (!(await safelistHolds(step))) return step;
+    }
+    throw new Error('every step from pt-40 to pt-79 is in the safelist; restart the dev server');
 }
 
 test.describe
@@ -75,7 +94,10 @@ test.describe
                 ).__csszyxSafelistSentinel = 'baseline';
             });
 
-            const padding = unusedPadding();
+            const padding = await unusedPadding();
+            expect(await safelistHolds(padding), 'the class must be new to this server').toBe(
+                false,
+            );
             await writeFile(
                 fixturePath,
                 originalSource.replace(
@@ -91,6 +113,11 @@ test.describe
                     timeout: 30_000,
                 })
                 .toBe(`${padding * 4}px`);
+            // The style can only have come from a safelist write; this is
+            // the event the reload used to follow.
+            expect(await safelistHolds(padding), 'csszyx must have written the safelist').toBe(
+                true,
+            );
 
             const sentinel = await page.evaluate(
                 () =>

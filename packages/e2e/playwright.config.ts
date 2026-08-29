@@ -44,12 +44,18 @@ export default defineConfig({
             },
         },
         {
-            // Its own project so it can run serially: the spec edits a
-            // playground source file, and a parallel worker loading the same
-            // dev server mid-edit would race the rewrite.
+            // The spec rewrites a playground source file and watches one page
+            // for a reload, so nothing else may touch its dev server while it
+            // runs. `fullyParallel: false` only orders the tests inside this
+            // project — Playwright still runs projects side by side — and the
+            // theme-groups spec makes csszyx send an unaddressed full-reload
+            // to every client on port 5173. Running after every project that
+            // shares that server is what keeps the page alone; `--no-deps`
+            // runs it by itself.
             name: 'vite-safelist-hmr',
             testMatch: /vite-safelist-hmr\.spec/,
             fullyParallel: false,
+            dependencies: ['vite-react', 'dynamic', 'recovery-manifest'],
             use: {
                 ...devices['Desktop Chrome'],
                 baseURL: 'http://localhost:5173',
