@@ -12,10 +12,19 @@
  * A forward is deliberately not a "kind of value". It carries no object, and a
  * consumer that mistook one for a value would compile against nothing.
  */
-import { describe, expect, it } from 'vitest';
+import { parseSync } from 'oxc-parser';
+import { describe, expect, it, vi } from 'vitest';
 
 import { extractCrossModuleForwards } from '../src/cross-module-extract.js';
 import { VAR_HOSTILE_NO_VAR_FORM, VAR_HOSTILE_WRONG_PROPERTY } from '../src/var-hostile-keys.js';
+
+// The parser is wrapped, not replaced: the tests below count how often the
+// extractor reaches it, because a parse per module was 8.9 s of a build over
+// 18 000 files, and only a module with an `export {` clause can carry a forward.
+vi.mock('oxc-parser', async importOriginal => {
+    const actual = await importOriginal<typeof import('oxc-parser')>();
+    return { ...actual, parseSync: vi.fn(actual.parseSync) };
+});
 
 /**
  * Extract forwards from one module.
@@ -142,6 +151,57 @@ describe('what is not a forward', () => {
 
     it('reads nothing from a module with no export at all', () => {
         expect(forwards("import { cardSz } from './styles';\nconsole.log(cardSz);")).toEqual([]);
+    });
+});
+
+describe('which modules are parsed at all', () => {
+    // A forward is always an `export { ... }` clause - with or without `from`,
+    // since the two-statement form re-exports an imported binding by name.
+    // Every other export shape declares its value here, and `export *` names
+    // nothing. So a module with no `export {` in its text cannot carry one and
+    // is not worth a parse, whatever else it imports.
+    it('does not parse a module whose exports all declare their value', () => {
+        vi.mocked(parseSync).mockClear();
+
+        expect(
+            forwards(
+                "import { cardSz } from './styles';\nexport function Card() { return cardSz; }\nexport const x = 1;\nexport default Card;\n",
+            ),
+        ).toEqual([]);
+
+        expect(parseSync).not.toHaveBeenCalled();
+    });
+
+    it('does not parse a module that only re-exports a namespace', () => {
+        vi.mocked(parseSync).mockClear();
+
+        expect(forwards("export * from './styles';\nexport * as ns from './more';\n")).toEqual([]);
+
+        expect(parseSync).not.toHaveBeenCalled();
+    });
+
+    it('still reads a clause separated from `export` by a comment', () => {
+        expect(forwards("export /* the card */ { cardSz } from './styles';")).toEqual([
+            { exportName: 'cardSz', importedName: 'cardSz', specifier: './styles' },
+        ]);
+        expect(forwards("export // line\n{ cardSz } from './styles';")).toEqual([
+            { exportName: 'cardSz', importedName: 'cardSz', specifier: './styles' },
+        ]);
+    });
+
+    it('still reads a clause written without spaces or on the next line', () => {
+        expect(forwards("export{cardSz}from'./styles';")).toEqual([
+            { exportName: 'cardSz', importedName: 'cardSz', specifier: './styles' },
+        ]);
+        expect(forwards("export\n{\n  cardSz,\n} from './styles';")).toEqual([
+            { exportName: 'cardSz', importedName: 'cardSz', specifier: './styles' },
+        ]);
+    });
+
+    it('reads a clause that follows a type-only clause', () => {
+        expect(
+            forwards("export type { T } from './types';\nexport { cardSz } from './styles';"),
+        ).toEqual([{ exportName: 'cardSz', importedName: 'cardSz', specifier: './styles' }]);
     });
 });
 
