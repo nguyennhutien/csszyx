@@ -102,6 +102,7 @@ import {
     assertNoRSCGraphViolation,
     createRSCModuleRecord,
     deleteRSCModuleRecord,
+    isRSCServerModule,
     type RSCModuleRecord,
 } from './rsc-boundary.js';
 import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
@@ -2768,6 +2769,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // the lane where CSS bytes are hashed during the transform phase and so
     // have to be mangled there. See freezeMangleMap.
     let mangleMapFrozen = false;
+    // Whether the prescan walk met a module the RSC boundary check would
+    // start from: a `'use server'` directive or an App Router entry.
+    let prescanSawServerModule = false;
+    // Set for a one-shot production build whose walk saw no server module.
+    // The records exist only to walk imports from server modules at build
+    // end, so with none there is nothing to walk from; building them was a
+    // regex import scan of every module (1.7 s of an 18 000-file build). A
+    // watch build keeps them: an edit can turn a module into a server module
+    // after the walk. The lanes with no walk never set this.
+    let skipRscRecords = false;
     // The census the frozen map was built from, kept to name what arrived late
     // if the `buildEnd` check finds the map would come out different now.
     let frozenOwnedClasses: ReadonlySet<string> = new Set<string>();
@@ -4084,6 +4095,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Cleared with the registry it describes: a provider "already examined"
         // against entries that no longer exist would never be read again.
         szObjectProvidersExamined.clear();
+        prescanSawServerModule = false;
         const prescanStarted = performance.now();
         const discoveredClasses = new Set<string>();
         // Raw className values feed both Tailwind safelisting and the authored
@@ -4117,6 +4129,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // load. Raw-only modules therefore participate even when they do not
             // need the expensive sz parser pass.
             recordAuthoredClasses(content);
+            if (!prescanSawServerModule && isRSCServerModule(content, filePath)) {
+                prescanSawServerModule = true;
+            }
             recordSzvRegistryEntries(filePath, content);
             // Recorded for every walked file, not only sz-authoring ones: a
             // barrel styles nothing itself, and it is exactly the module an
@@ -5245,8 +5260,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
                 if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
                     assertNoRSCBoundaryViolation(output.code, id);
-                    const record = createRSCModuleRecord(output.code, id);
-                    state.rscModules.set(record.id, record);
+                    if (!skipRscRecords) {
+                        const record = createRSCModuleRecord(output.code, id);
+                        state.rscModules.set(record.id, record);
+                    }
                 }
                 return collectPreTransformClasses(output);
             },
@@ -5494,6 +5511,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     evictTransformCacheOnce();
                     // Pre-scan source files so Tailwind can discover classes
                     prescanAndWriteClasses();
+                    skipRscRecords =
+                        config.command === 'build' &&
+                        !config.build?.watch &&
+                        !prescanSawServerModule;
                     // Generate theme type augmentation from @theme CSS blocks
                     state.scanCssTheme =
                         runThemeScan(root, options.build?.scanCss) ?? state.scanCssTheme;
