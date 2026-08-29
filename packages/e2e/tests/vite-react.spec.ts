@@ -3,6 +3,10 @@ import { expect, type Locator, test } from '@playwright/test';
 test.describe('Vite-React Playground', () => {
     test.beforeEach(async ({ page }) => {
         await page.goto('/');
+        // The dev server serves modules on demand. Until it has finished, a
+        // read of the DOM races the page it is still assembling; the first
+        // test of a cold run lost that race under a full-suite load.
+        await page.waitForLoadState('networkidle');
         await page.screenshot({ path: 'test-results/debug-initial.png' });
     });
 
@@ -11,18 +15,23 @@ test.describe('Vite-React Playground', () => {
     });
 
     test('should increment and decrement counter', async ({ page }) => {
-        const counter = page.locator('span', { hasText: '0' });
-        await expect(counter).toBeVisible();
+        // Whole-text matches: `hasText: '0'` is a substring match and would
+        // also accept a span reading "10".
+        await expect(page.locator('span', { hasText: /^0$/ })).toBeVisible();
 
-        await page.click('button:has-text("Increment")');
-        await expect(page.locator('span', { hasText: '1' })).toBeVisible();
+        await page.getByRole('button', { name: 'Increment', exact: true }).click();
+        await expect(page.locator('span', { hasText: /^1$/ })).toBeVisible();
 
-        await page.click('button:has-text("Decrement")');
-        await expect(page.locator('span', { hasText: '0' })).toBeVisible();
+        await page.getByRole('button', { name: 'Decrement', exact: true }).click();
+        await expect(page.locator('span', { hasText: /^0$/ })).toBeVisible();
     });
 
     test('should toggle conditional button state', async ({ page }) => {
-        const button = page.locator('button:has-text("Inactive")');
+        // The labels are "\u25CB Inactive" and "\u2713 Active". Anchored
+        // names: a substring match on "Active" also matches "Inactive", so
+        // the old locator resolved to the same button before the click had
+        // rendered and read its class as unchanged.
+        const button = page.getByRole('button', { name: /^\u25CB Inactive$/ });
         await expect(button).toBeVisible();
 
         // Verify the button has class attributes (mangled or unmangled)
@@ -30,13 +39,13 @@ test.describe('Vite-React Playground', () => {
         expect(inactiveClass).toBeTruthy();
 
         await button.click();
-        const activeButton = page.locator('button:has-text("Active")');
+        const activeButton = page.getByRole('button', { name: /^\u2713 Active$/ });
         await expect(activeButton).toBeVisible();
 
-        // After toggle, class should change
-        const activeClass = await activeButton.getAttribute('class');
-        expect(activeClass).toBeTruthy();
-        expect(activeClass).not.toBe(inactiveClass);
+        // After toggle, the class changes; the assertion retries until the
+        // render has landed instead of reading one snapshot.
+        await expect(activeButton).toHaveAttribute('class', /./);
+        await expect(activeButton).not.toHaveClass(inactiveClass ?? '');
     });
 
     test('should have transformed sz props into class names', async ({ page }) => {

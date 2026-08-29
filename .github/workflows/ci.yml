@@ -143,6 +143,35 @@ jobs:
       - name: Run Biome
         run: pnpm lint:fast
 
+  # Prose gate on the lines a pull request adds. Vale runs the repository's
+  # own style (.vale/styles/csszyx: AI-tell phrases as errors, passive voice
+  # and semicolons as warnings) and reviewdog keeps only added lines, so text
+  # nobody touched is never re-litigated and a docs-only pull request still
+  # gets the check. The styles are vendored, so there is no `vale sync` and no
+  # network at lint time. Measured 2026-08-29: the full docs carry 711
+  # warnings and 0 errors; the ratchet is what keeps those numbers from
+  # growing. The rule set and its reasons: .agent/rules/categories/prose-style.md.
+  prose:
+    name: Prose (Vale, added lines)
+    needs: detect-changes
+    if: |
+      github.event_name == 'pull_request' &&
+      needs.detect-changes.outputs.release_please != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Run Vale on added lines
+        uses: errata-ai/vale-action@518a9136acc6e6668ce7c00d367051e0941e87ff # v3.0.0
+        with:
+          version: 3.19.0
+          sync: false
+          files: '["README.md", "docs/specs", "apps/docs/src/content/docs", "packages/cli/README.md", "packages/compiler/README.md", "packages/core/README.md", "packages/csszyx/README.md", "packages/dynamic/README.md", "packages/e2e/README.md", "packages/mcp-server/README.md", "packages/runtime/README.md", "packages/svelte-adapter/README.md", "packages/tooling-metadata/README.md", "packages/ts-plugin/README.md", "packages/types/README.md", "packages/unplugin/README.md", "packages/vars/README.md", "packages/vscode/README.md", "packages/vue-adapter/README.md"]'
+          filter_mode: added
+          fail_level: error
+          reporter: github-pr-annotations
+
   lint:
     name: Lint
     # Gated on lint-fast so Biome failures fail the gate fast and
@@ -754,6 +783,7 @@ jobs:
         validate-config,
         commit-messages,
         lint-fast,
+        prose,
         lint,
         test,
         next-state-platform,

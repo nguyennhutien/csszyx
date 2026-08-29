@@ -52,19 +52,6 @@ describe('transformRust native wrapper', () => {
         }
     });
 
-    it('includes the native loader diagnostic when the addon is unavailable', () => {
-        try {
-            const result = transformRust(
-                'const App = () => <div sz={{ p: 4 }} />;',
-                '/repo/src/App.tsx',
-            );
-            expect(result.code).toContain('className="p-4"');
-        } catch (err) {
-            expect(err).toBeInstanceOf(OxcRustNotImplementedError);
-            expect((err as Error).message).toContain('Use build.parser: "wasm" or "auto"');
-        }
-    });
-
     it('keeps batch wrapper on the same native execution path', () => {
         try {
             const [result] = transformRustBatch([

@@ -51,8 +51,9 @@ function assertUnavailableError(err, packageName) {
   if (err.packageName !== packageName) {
     fail(`Unexpected native package name: ${err.packageName}`);
   }
-  if (!err.message.includes('build.parser: "oxc" or "babel"')) {
-    fail(`Unavailable error missed parser fallback guidance: ${err.message}`);
+  const help = err.message.split("\n")[1] ?? "";
+  if (!help.startsWith("help: ") || !help.includes('build.parser: "wasm"')) {
+    fail(`Unavailable error missed the wasm engine on its help line: ${err.message}`);
   }
 }
 

@@ -44,3 +44,27 @@ test('rejects balanced nested parentheses', () => {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /nested parentheses/);
 });
+
+test('rejects a bare <placeholder> in the header', () => {
+    const result = validate('docs: require the @scope/pkg-<platform> package');
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /code span/);
+});
+
+test('rejects a bare <placeholder> in the BREAKING CHANGE footer', () => {
+    const result = validate(
+        'feat!: drop the fallback\n\nWhy.\n\nBREAKING CHANGE: migrate needs @scope/pkg-<platform>\nfor the host.',
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /code span/);
+});
+
+test('accepts <placeholder> inside a code span and in the body', () => {
+    const result = validate(
+        'docs: require the `@scope/pkg-<platform>` package\n\nThe body may say Props<T> in plain text.\n\nBREAKING CHANGE: `csszyx migrate <path>` needs it.',
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+});

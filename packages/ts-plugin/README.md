@@ -62,7 +62,7 @@ weights, radii, shadows, and breakpoints to the existing curated suggestions.
 The plugin reads the declaration already present in TypeScript's current
 Program. It does not read CSS, access the filesystem directly, create a watcher,
 or execute Tailwind/config code. Missing, malformed, oversized, or stale
-declarations simply leave the normal suggestions unchanged.
+declarations leave the normal suggestions unchanged.
 
 ## Configuration
 

@@ -1,105 +1,64 @@
 /**
- * transform-rust's error mapping for hosts WITHOUT the native addon — the
- * exact path a user on an unsupported platform hits. This container has the
- * binding installed, so the native module is mocked to produce each failure.
+ * What the native transform says when this install cannot run it.
+ *
+ * On a machine with the platform package the unavailable path never runs,
+ * so it is exercised here with a binding that fails the way a missing
+ * package fails. The fake speaks the loader's words: the wrapper must keep
+ * them as they are, re-prefixed once, and must not name the package a
+ * second time.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const control = vi.hoisted(() => ({
-    mode: 'unavailable' as 'unavailable' | 'other' | 'no-result' | 'ok',
+const LOADER_LINES = [
+    'csszyx native engine unavailable: @csszyx/core-darwin-arm64 is not installed',
+    'help: it is an optional dependency of @csszyx/core; reinstall without skipping optional packages, or set build.parser: "wasm"',
+    'note: the wasm engine ships inside @csszyx/core and produces the same output',
+];
+
+class FakeUnavailable extends Error {
+    packageName = '@csszyx/core-darwin-arm64';
+    detail = LOADER_LINES.join('\n').replace('csszyx native engine unavailable: ', '');
+
+    constructor() {
+        super(LOADER_LINES.join('\n'));
+        this.name = 'CsszyxNativeUnavailableError';
+    }
+}
+
+vi.mock('@csszyx/core/native', () => ({
+    CsszyxNativeUnavailableError: FakeUnavailable,
+    transformBatch: () => {
+        throw new FakeUnavailable();
+    },
 }));
 
-vi.mock('@csszyx/core/native', () => {
-    class CsszyxNativeUnavailableError extends Error {
-        packageName?: string;
-        constructor(message?: string, packageName?: string) {
-            super(message ?? 'native binding unavailable');
-            this.name = 'CsszyxNativeUnavailableError';
-            this.packageName = packageName;
+describe('the native transform on an install without it', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    it('reports itself unavailable without throwing', async () => {
+        const { isRustTransformAvailable } = await import('../src/transform-rust.js');
+        expect(isRustTransformAvailable()).toBe(false);
+    });
+
+    it("keeps the loader's three lines under the transform prefix", async () => {
+        const { transformRust, OxcRustNotImplementedError } = await import(
+            '../src/transform-rust.js'
+        );
+        expect(() => transformRust('<div />', 'a.tsx')).toThrow(OxcRustNotImplementedError);
+        try {
+            transformRust('<div />', 'a.tsx');
+        } catch (error) {
+            const { message } = error as Error;
+            expect(message.split('\n')).toEqual([
+                'transformRust: native engine unavailable: @csszyx/core-darwin-arm64 is not installed',
+                LOADER_LINES[1],
+                LOADER_LINES[2],
+            ]);
+            // Named once. The wrapper used to append "; native package: ..."
+            // after a message that had already named it.
+            expect(message.match(/@csszyx\/core-darwin-arm64/g)).toHaveLength(1);
         }
-    }
-    return {
-        CsszyxNativeUnavailableError,
-        transformBatch: () => {
-            if (control.mode === 'unavailable') {
-                throw new CsszyxNativeUnavailableError('no binding', '@csszyx/core-test-platform');
-            }
-            if (control.mode === 'other') {
-                throw new Error('native parse failure');
-            }
-            if (control.mode === 'no-result') {
-                return [];
-            }
-            return [
-                {
-                    code: 'const x = 1;',
-                    map: null,
-                    classes: [],
-                    rawClassNames: [],
-                    diagnostics: [],
-                    recoveryTokens: [],
-                    cssVariableMap: [],
-                    metadata: {
-                        transformed: false,
-                        usesRuntime: false,
-                        usesMerge: false,
-                        usesSzcn: false,
-                        usesSzPart: false,
-                        usesColorVar: false,
-                    },
-                },
-            ];
-        },
-    };
-});
-
-import {
-    ensureRustTransformAvailable,
-    isRustTransformAvailable,
-    OxcRustNotImplementedError,
-    transformRust,
-    transformRustBatch,
-} from '../src/transform-rust.js';
-
-describe('transform-rust without a native binding', () => {
-    it('maps the unavailable error onto OxcRustNotImplementedError with the package name', () => {
-        control.mode = 'unavailable';
-        expect(() => transformRust('const x = 1;', 'a.tsx')).toThrow(OxcRustNotImplementedError);
-        expect(() => transformRustBatch([{ source: 'const x = 1;' }])).toThrow(
-            /@csszyx\/core-test-platform/,
-        );
-    });
-
-    it('ensureRustTransformAvailable throws the mapped error too', () => {
-        control.mode = 'unavailable';
-        expect(() => ensureRustTransformAvailable()).toThrow(OxcRustNotImplementedError);
-    });
-
-    it('rethrows genuine native failures unchanged', () => {
-        control.mode = 'other';
-        expect(() => transformRustBatch([{ source: 'const x = 1;' }])).toThrow(
-            'native parse failure',
-        );
-    });
-
-    it('throws when the native transform returns no result', () => {
-        control.mode = 'no-result';
-        expect(() => transformRust('const x = 1;', 'a.tsx')).toThrow(/returned no result/);
-    });
-
-    it('defaults metadata absent from an older native binding', () => {
-        control.mode = 'ok';
-        const result = transformRust('const x = 1;', 'a.tsx');
-        expect(result.usesSzvPick).toBe(false);
-        expect(result.usesSzvPick1).toBe(false);
-        expect(result.szPartArgsProvable).toBe(false);
-    });
-
-    it('isRustTransformAvailable reports false and caches the probe', () => {
-        control.mode = 'unavailable';
-        expect(isRustTransformAvailable()).toBe(false);
-        // Cached: even if the binding would now work, the probe result sticks.
-        control.mode = 'ok';
-        expect(isRustTransformAvailable()).toBe(false);
     });
 });

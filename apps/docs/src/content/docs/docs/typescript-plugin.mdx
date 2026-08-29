@@ -69,8 +69,8 @@ pnpm add -D @csszyx/ts-plugin typescript
 ```
 
 Add the plugin under `compilerOptions` in the `tsconfig.json` that owns the files
-you edit. In a monorepo, put it in the **leaf** `tsconfig`, not only the
-repository root:
+you edit. In a monorepo, put it in the **leaf** `tsconfig`. The repository root
+alone does not reach the files you edit:
 
 ```jsonc
 {

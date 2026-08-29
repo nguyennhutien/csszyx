@@ -1,0 +1,8 @@
+extends: existence
+message: "antithesis pattern 'not X but Y': '%s'"
+level: error
+nonword: true
+tokens:
+  - "\\bnot [^.,;]{3,40}, but\\b"
+  - "\\bisn't [^.,;]{3,40}, it's\\b"
+  - "\\bis not [^.,;]{3,40}; it is\\b"
