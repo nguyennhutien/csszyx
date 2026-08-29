@@ -28,6 +28,12 @@ const control = vi.hoisted(() => ({
     refuse: new Set<string>(),
     /** Drop the last result of every call, as an engine that lost a file would. */
     truncate: false,
+    /** Throw the unavailable error from the first call that carries files (the probe passes). */
+    unavailableAfterProbe: false,
+    /** Throw the unavailable error from a one-file call, as a retry makes. */
+    unavailableOnSingle: false,
+    /** Refuse with a bare string instead of an Error. */
+    refuseWithString: false,
 }));
 
 vi.mock('@csszyx/compiler/migrate', async importOriginal => {
@@ -42,7 +48,12 @@ vi.mock('@csszyx/compiler/migrate', async importOriginal => {
                 bytes: files.reduce((sum, file) => sum + file.source.length, 0),
                 customMapJson: (options as { customMapJson?: unknown } | undefined)?.customMapJson,
             });
+            const unavailable = () =>
+                new actual.RustMigrateUnavailableError('the engine went away mid-run');
+            if (control.unavailableAfterProbe && files.length > 0) throw unavailable();
+            if (control.unavailableOnSingle && files.length === 1) throw unavailable();
             if (names.some(name => control.refuse.has(name))) {
+                if (control.refuseWithString) throw 'refused, as a string';
                 throw new Error('the engine refused this source');
             }
             const results = actual.migrateRustBatch(...args);
@@ -90,6 +101,9 @@ afterEach(() => {
     control.calls.length = 0;
     control.refuse.clear();
     control.truncate = false;
+    control.unavailableAfterProbe = false;
+    control.unavailableOnSingle = false;
+    control.refuseWithString = false;
     process.exitCode = undefined;
     vi.restoreAllMocks();
 });
@@ -189,6 +203,47 @@ describe('a file the engine refuses', () => {
             'C3.tsx',
             'C4.tsx',
         ]);
+    });
+});
+
+describe('an engine that becomes unavailable after the probe let the run start', () => {
+    // Nothing behind it either way: the message is printed, the command exits
+    // non-zero, and no file is touched, exactly as when the probe catches it.
+    it('stops the command from a run', async () => {
+        control.unavailableAfterProbe = true;
+        const logs = mute();
+        const cwd = fixture({ 'A.tsx': COMPONENT('A') });
+
+        await migrate({ cwd });
+
+        expect(readFileSync(join(cwd, 'src/A.tsx'), 'utf8')).toContain('className="p-4 btn"');
+        expect(logs.join('\n')).toContain('went away mid-run');
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('stops the command from a one-file retry', async () => {
+        control.refuse.add('Bad.tsx');
+        control.unavailableOnSingle = true;
+        const logs = mute();
+        const cwd = fixture({ 'A.tsx': COMPONENT('A'), 'Bad.tsx': COMPONENT('Bad') });
+
+        await migrate({ cwd });
+
+        expect(logs.join('\n')).toContain('went away mid-run');
+        expect(process.exitCode).toBe(1);
+    });
+});
+
+describe('an engine that refuses with something that is not an Error', () => {
+    it('still names the file and quotes what it threw', async () => {
+        control.refuse.add('Bad.tsx');
+        control.refuseWithString = true;
+        const logs = mute();
+
+        await migrate({ cwd: fixture({ 'Bad.tsx': COMPONENT('Bad') }), dryRun: true });
+
+        expect(logs.join('\n')).toMatch(/Could not migrate .*Bad\.tsx.*refused, as a string/);
+        expect(process.exitCode).toBe(1);
     });
 });
 

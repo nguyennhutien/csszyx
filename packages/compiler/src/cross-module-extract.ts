@@ -513,28 +513,37 @@ function exportClauseNames(specifier: OxcNode): { local: string; exported: strin
 function hasExportClause(source: string): boolean {
     let cursor = source.indexOf('export');
     while (cursor !== -1) {
-        let position = cursor + 'export'.length;
-        // Skip whitespace and comments after the keyword, once each pass; a
-        // comment skipped here is never re-scanned for a later keyword because
-        // the search resumes past it.
-        for (;;) {
-            while (position < source.length && /\s/.test(source[position] as string)) position++;
-            if (source.startsWith('/*', position)) {
-                const close = source.indexOf('*/', position + 2);
-                position = close === -1 ? source.length : close + 2;
-                continue;
-            }
-            if (source.startsWith('//', position)) {
-                const newline = source.indexOf('\n', position + 2);
-                position = newline === -1 ? source.length : newline + 1;
-                continue;
-            }
-            break;
-        }
+        const position = skipTrivia(source, cursor + 'export'.length);
         if (source[position] === '{') return true;
+        // Resume past what was scanned, so a comment is never read twice.
         cursor = source.indexOf('export', Math.max(position, cursor + 1));
     }
     return false;
+}
+
+/**
+ * Skip whitespace and comments.
+ *
+ * @param source - Module source text.
+ * @param start - Where to start.
+ * @returns The first offset at or after `start` holding neither.
+ */
+function skipTrivia(source: string, start: number): number {
+    let position = start;
+    for (;;) {
+        while (position < source.length && /\s/.test(source[position] as string)) position++;
+        if (source.startsWith('/*', position)) {
+            const close = source.indexOf('*/', position + 2);
+            position = close === -1 ? source.length : close + 2;
+            continue;
+        }
+        if (source.startsWith('//', position)) {
+            const newline = source.indexOf('\n', position + 2);
+            position = newline === -1 ? source.length : newline + 1;
+            continue;
+        }
+        return position;
+    }
 }
 
 /**
@@ -637,8 +646,11 @@ function bindingKey(specifier: string, local: string): string {
  */
 function recordedName(name: ExportExportName | ExportImportName): string | null {
     if (name.kind === 'Default') return DEFAULT_IMPORT_NAME;
-    if (name.kind !== 'Name' || name.name === null || !IDENTIFIER_NAME.test(name.name)) return null;
-    return name.name;
+    if (name.kind !== 'Name') return null;
+    const value = name.name;
+    /* v8 ignore next -- narrowing only: a `Name` entry always carries its name. */
+    if (value === null) return null;
+    return IDENTIFIER_NAME.test(value) ? value : null;
 }
 
 /** An ECMAScript identifier, which is what a string-literal export name is not. */

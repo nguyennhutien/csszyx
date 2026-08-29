@@ -198,6 +198,15 @@ describe('which modules are parsed at all', () => {
         ]);
     });
 
+    it('treats a comment the file never closes as reaching the end', () => {
+        vi.mocked(parseSync).mockClear();
+
+        expect(forwards('export /* never closed')).toEqual([]);
+        expect(forwards('export // trailing line comment with no newline')).toEqual([]);
+
+        expect(parseSync).not.toHaveBeenCalled();
+    });
+
     it('reads a clause that follows a type-only clause', () => {
         expect(
             forwards("export type { T } from './types';\nexport { cardSz } from './styles';"),
