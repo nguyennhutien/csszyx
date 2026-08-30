@@ -86,6 +86,33 @@ describe('Next safelist state', () => {
         expect(snapshot.sources.map(([entry]) => entry)).toContain(resolve(sourcePath));
     });
 
+    /**
+     * A project that still passes the pre-0.15.0 name through `--output-file`
+     * or the loader's `safelistOutputFile` gets today's plain-text file at
+     * that name. The legacy sweep that runs after the write must not mistake
+     * that fresh output for a leftover and delete it.
+     */
+    it('keeps an output the author still names the old way', () => {
+        const root = tempRoot();
+        const sourcePath = join(root, 'src/App.tsx');
+        mkdirSync(join(root, 'src'), { recursive: true });
+        writeFileSync(sourcePath, 'export function App() {}', { flag: 'wx' });
+        const paths = resolveNextSafelistStatePaths(
+            root,
+            '.csszyx/cache',
+            '.csszyx/next-loader-classes.html',
+        );
+        writeNextSafelistShard(
+            paths.shardsDir,
+            { sourcePath, sourceHash: 'hash-a', classes: ['p-8'], timestamp: 1 },
+            { retryDelayMs: 0 },
+        );
+
+        materializeNextSafelist(paths, { retryDelayMs: 0 });
+
+        expect(readFileSync(paths.outputPath, 'utf8')).toBe(`${SAFELIST_HEADER}p-8\n`);
+    });
+
     it('ignores corrupt shard files without dropping valid shards', () => {
         const root = tempRoot();
         const sourcePath = join(root, 'src/App.tsx');
