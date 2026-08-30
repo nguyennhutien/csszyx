@@ -60,6 +60,11 @@ describe('handleHotUpdate incremental discovery (real hook)', () => {
     });
 
     it('survives a file that fails to parse', async () => {
+        // Answers nothing either way: the engine reports a parse failure as an
+        // untransformed result rather than by throwing, so this pins that the
+        // dev server keeps going — not which of the two bail paths ran. The
+        // `catch` beside them is there for an engine that throws, and nothing
+        // in this suite can make one do that.
         const { root, hotUpdate } = await bootedPlugin();
         const file = path.join(root, 'src/Broken.tsx');
         fs.writeFileSync(file, 'export const Broken = () => <div sz={{ p: 4 } // unclosed');
@@ -100,5 +105,135 @@ describe('esbuildPlugin factory', () => {
         };
         plugin.setup(build as never);
         expect(registered.length).toBeGreaterThan(0);
+    });
+});
+
+describe('handleHotUpdate hands recovery tokens on', () => {
+    /**
+     * A `szRecover` site registers a recovery token, and the manifest that
+     * `transformIndexHtml` injects is built from the tokens the plugin
+     * holds. A token collected on a hot update must reach that manifest
+     * the same way one collected at build time does.
+     */
+    it('injects the manifest for a szRecover site that arrived by hot update', async () => {
+        const { root, call, hotUpdate } = await bootedPlugin();
+        const file = path.join(root, 'src/Recover.tsx');
+        fs.writeFileSync(file, 'export const R = () => <div szRecover="csr" sz={{ p: 4 }} />;');
+        await hotUpdate(file);
+        const html = '<html><head></head><body></body></html>';
+        const result = (await call('transformIndexHtml', html)) as string;
+        expect(result).toContain('__SZ_RECOVERY_MANIFEST__');
+    });
+});
+
+describe('the safelist file must not full-reload the page', () => {
+    /**
+     * Vite reloads the whole page for any changed `.html` that matched no
+     * module — and the generated safelist is named `.html` because Tailwind's
+     * scanner reads it as markup. Growing the class set therefore cost every
+     * consumer their React state, scroll position and open dialogs, on the
+     * first use of each new utility per server lifetime (field-reported).
+     *
+     * Naming the Tailwind entry as the module the change affects is true, not
+     * a trick: the entry `@source`s the safelist, so its generated CSS is
+     * exactly what a safelist edit changes. Vite then takes the CSS update
+     * path it takes for any other stylesheet.
+     */
+    it('answers the Tailwind entry module for a safelist change', async () => {
+        const { root, call } = await bootedPlugin();
+        const entry = path.join(root, 'src/app.css');
+        fs.writeFileSync(entry, '@import "tailwindcss";');
+        // The entry is recorded while it passes through the CSS transform,
+        // which is the only place the plugin learns its id.
+        await call('transform', '@import "tailwindcss";', entry);
+
+        const entryModule = { id: entry, url: '/src/app.css' };
+        const server = {
+            config: { root },
+            watcher: { emit() {} },
+            moduleGraph: {
+                getModuleById: () => null,
+                invalidateModule() {},
+                getModulesByFile: (file: string) =>
+                    file === entry ? new Set([entryModule]) : undefined,
+            },
+        };
+        const affected = await call('handleHotUpdate', {
+            file: path.join(root, 'csszyx-classes.html'),
+            server,
+            modules: [],
+        });
+
+        expect(affected).toEqual([entryModule]);
+    });
+
+    it('leaves the change alone when the entry is not in the graph yet', async () => {
+        const { root, call } = await bootedPlugin();
+        const entry = path.join(root, 'src/app.css');
+        fs.writeFileSync(entry, '@import "tailwindcss";');
+        await call('transform', '@import "tailwindcss";', entry);
+
+        const server = {
+            config: { root },
+            watcher: { emit() {} },
+            moduleGraph: {
+                getModuleById: () => null,
+                invalidateModule() {},
+                // The entry is known but the dev server has not loaded it —
+                // the state before the page first requests the stylesheet.
+                getModulesByFile: () => undefined,
+            },
+        };
+        // The EMPTY set, not silence. Vite answers an empty set with a reload
+        // addressed to the safelist path, which its client drops unless the
+        // browser is viewing that file, and `@tailwindcss/vite` only sends its
+        // own unaddressed reload while it still sees modules for a file it
+        // scanned. Answering nothing leaves both of those free to fire.
+        await expect(
+            call('handleHotUpdate', {
+                file: path.join(root, 'csszyx-classes.html'),
+                server,
+                modules: [],
+            }),
+        ).resolves.toEqual([]);
+    });
+
+    /**
+     * Vite hands the hook a path it has already normalized to forward
+     * slashes, on every platform. The plugin builds its side of the
+     * comparison with `path.join`, which on Windows answers with backslashes,
+     * so a byte-for-byte comparison never matches there and the reload the
+     * branch exists to prevent goes on happening.
+     *
+     * A POSIX host cannot make `path.join` produce a backslash, so the
+     * separator is injected at the one seam left: the root. The mismatch
+     * under test is the same one — a joined path carrying `\` against a
+     * Vite path carrying `/`.
+     */
+    it('matches the safelist when Vite reports it with forward slashes', async () => {
+        const { call } = await bootedPlugin();
+        const root = 'C:\\app';
+        await call('configResolved', { root, command: 'serve' });
+        const entry = 'C:/app/src/app.css';
+        await call('transform', '@import "tailwindcss";', entry);
+
+        const entryModule = { id: entry, url: '/src/app.css' };
+        const server = {
+            config: { root },
+            watcher: { emit() {} },
+            moduleGraph: {
+                getModuleById: () => null,
+                invalidateModule() {},
+                getModulesByFile: (file: string) =>
+                    file === entry ? new Set([entryModule]) : undefined,
+            },
+        };
+        await expect(
+            call('handleHotUpdate', {
+                file: 'C:/app/csszyx-classes.html',
+                server,
+                modules: [],
+            }),
+        ).resolves.toEqual([entryModule]);
     });
 });
