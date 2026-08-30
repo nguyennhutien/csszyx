@@ -35,7 +35,7 @@ import { type VueAdapterOptions, preprocess as vuePreprocess } from '@csszyx/vue
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
 import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
-import type { ModuleNode, PluginOption } from 'vite';
+import type { FSWatcher, ModuleNode, PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
 import { findClassNameAuthorConflicts } from './class-name-authors.js';
@@ -4740,13 +4740,99 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      *
      * @param file - The changed file.
      * @param content - Its current contents.
-     * @returns Nothing, so a caller can `return` it directly.
      */
-    function recordUntransformedHotFile(file: string, content: string): undefined {
+    function recordUntransformedHotFile(file: string, content: string): void {
         trackGlobalVarSourceFile(file, content);
         recordFileVarMangleEntries(state, file, []);
         recordFileCSSVariableMetrics(state, file, null);
-        return undefined;
+    }
+
+    /**
+     * Incremental `sz` class discovery for a hot-updated source file.
+     *
+     * `handleHotUpdate` fires before the module is re-transformed, so the
+     * file is read and transformed here to learn the classes it holds now.
+     * A class the safelist lacks is written to it at once, which is what
+     * lets Tailwind generate CSS for a new `sz` prop without a dev-server
+     * restart.
+     *
+     * @param file - The changed file.
+     * @param watcher - The dev server's watcher, which is told about the
+     *   safelist write so Tailwind's scanner sees it before the OS event
+     *   arrives.
+     */
+    function discoverHotFileClasses(file: string, watcher: Pick<FSWatcher, 'emit'>): void {
+        if (!shouldProcessSource(file)) {
+            return;
+        }
+
+        let fileContent: string, result: SourceTransformResult;
+        try {
+            fileContent = fs.readFileSync(file, 'utf-8');
+        } catch {
+            refreshSzvRegistryEntry(file, null);
+            return;
+        }
+
+        // Before the importers re-transform: an edited factory must
+        // not serve them the table it had at server start. Reuses
+        // the read above, and runs ahead of the `sz` marker gate
+        // below because a module of pure `szv` factories carries
+        // none of those markers.
+        //
+        // Vite also calls `watchChange` in dev, so in THIS version
+        // either path alone would do — verified by disabling each
+        // in turn. They are kept because their lane coverage
+        // differs, not for redundancy: `handleHotUpdate` never
+        // fires for `vite build --watch` or `rollup -w`, and a
+        // bundler version that stops calling one must not silently
+        // bring the staleness back.
+        refreshSzvRegistryEntry(file, fileContent);
+
+        if (
+            !fileContent.includes('sz=') &&
+            !fileContent.includes('szs=') &&
+            !/\bsz\s*:\s*["'{]/.test(fileContent)
+        ) {
+            recordUntransformedHotFile(file, fileContent);
+            return;
+        }
+
+        try {
+            const hmrTransformStarted = performance.now();
+            result = transformConfiguredSource(fileContent, file);
+            traceBenchTiming('handle-hot-update', file, performance.now() - hmrTransformStarted);
+        } catch {
+            recordUntransformedHotFile(file, fileContent);
+            return;
+        }
+
+        if (!result.transformed) {
+            recordUntransformedHotFile(file, fileContent);
+            return;
+        }
+
+        const sizeBefore = state.classes.size;
+        trackGlobalVarSourceFile(file, fileContent);
+        for (const cls of result.classes) {
+            addSafelistClass(cls);
+            state.ownedClasses.add(cls);
+        }
+        recordFileVarMangleEntries(state, file, cssVariableEntries(result));
+        recordFileCSSVariableMetrics(state, file, result.code);
+        for (const [token, data] of result.recoveryTokens) {
+            state.recoveryTokens.set(token, data);
+        }
+
+        if (state.classes.size > sizeBefore) {
+            // New classes found — update manifest so Tailwind regenerates CSS
+            writeSafelistFile(state.classes);
+            // Emit a synthetic watcher event on the manifest file so Tailwind's
+            // internal file scanner (which listens on ctx.server.watcher) picks up
+            // the change immediately, even if the OS fs event arrives with a delay.
+            const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME);
+            watcher.emit('change', safelistPath);
+        }
     }
 
     /**
@@ -5720,83 +5806,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         return tailwindEntryModules(ctx.server.moduleGraph);
                     }
 
-                    // Incremental sz class discovery: when a source file changes, scan it
-                    // immediately and update csszyx-classes.html if new classes are found.
-                    // This ensures Tailwind generates CSS for new sz props without a dev restart.
-                    // handleHotUpdate fires before the module is re-transformed, so we must
-                    // read and transform the file ourselves to discover any new classes.
-                    if (!shouldProcessSource(ctx.file)) {
-                        return undefined;
-                    }
-
-                    let fileContent: string, result: SourceTransformResult;
-                    try {
-                        fileContent = fs.readFileSync(ctx.file, 'utf-8');
-                    } catch {
-                        refreshSzvRegistryEntry(ctx.file, null);
-                        return undefined;
-                    }
-
-                    // Before the importers re-transform: an edited factory must
-                    // not serve them the table it had at server start. Reuses
-                    // the read above, and runs ahead of the `sz` marker gate
-                    // below because a module of pure `szv` factories carries
-                    // none of those markers.
-                    //
-                    // Vite also calls `watchChange` in dev, so in THIS version
-                    // either path alone would do — verified by disabling each
-                    // in turn. They are kept because their lane coverage
-                    // differs, not for redundancy: `handleHotUpdate` never
-                    // fires for `vite build --watch` or `rollup -w`, and a
-                    // bundler version that stops calling one must not silently
-                    // bring the staleness back.
-                    refreshSzvRegistryEntry(ctx.file, fileContent);
-
-                    if (
-                        !fileContent.includes('sz=') &&
-                        !fileContent.includes('szs=') &&
-                        !/\bsz\s*:\s*["'{]/.test(fileContent)
-                    ) {
-                        return recordUntransformedHotFile(ctx.file, fileContent);
-                    }
-
-                    try {
-                        const hmrTransformStarted = performance.now();
-                        result = transformConfiguredSource(fileContent, ctx.file);
-                        traceBenchTiming(
-                            'handle-hot-update',
-                            ctx.file,
-                            performance.now() - hmrTransformStarted,
-                        );
-                    } catch {
-                        return recordUntransformedHotFile(ctx.file, fileContent);
-                    }
-
-                    if (!result.transformed) {
-                        return recordUntransformedHotFile(ctx.file, fileContent);
-                    }
-
-                    const sizeBefore = state.classes.size;
-                    trackGlobalVarSourceFile(ctx.file, fileContent);
-                    for (const cls of result.classes) {
-                        addSafelistClass(cls);
-                        state.ownedClasses.add(cls);
-                    }
-                    recordFileVarMangleEntries(state, ctx.file, cssVariableEntries(result));
-                    recordFileCSSVariableMetrics(state, ctx.file, result.code);
-                    for (const [token, data] of result.recoveryTokens) {
-                        state.recoveryTokens.set(token, data);
-                    }
-
-                    if (state.classes.size > sizeBefore) {
-                        // New classes found — update manifest so Tailwind regenerates CSS
-                        writeSafelistFile(state.classes);
-                        // Emit a synthetic watcher event on the manifest file so Tailwind's
-                        // internal file scanner (which listens on ctx.server.watcher) picks up
-                        // the change immediately, even if the OS fs event arrives with a delay.
-                        const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME);
-                        ctx.server.watcher.emit('change', safelistPath);
-                    }
+                    discoverHotFileClasses(ctx.file, ctx.server.watcher);
                     return undefined;
                 },
                 transformIndexHtml: {
