@@ -4751,15 +4751,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * Incremental `sz` class discovery for a hot-updated source file.
      *
      * `handleHotUpdate` fires before the module is re-transformed, so the
-     * file is read and transformed here to learn the classes it holds now.
-     * A class the safelist lacks is written to it at once, which is what
-     * lets Tailwind generate CSS for a new `sz` prop without a dev-server
-     * restart.
+     * file is read and transformed here to learn the classes it holds now,
+     * which is what lets Tailwind generate CSS for a new `sz` prop without
+     * a dev-server restart.
      *
      * @param file - The changed file.
-     * @param watcher - The dev server's watcher, which is told about the
-     *   safelist write so Tailwind's scanner sees it before the OS event
-     *   arrives.
+     * @param watcher - The dev server's watcher, told about a safelist write.
      */
     function discoverHotFileClasses(file: string, watcher: Pick<FSWatcher, 'emit'>): void {
         if (!shouldProcessSource(file)) {
@@ -4812,6 +4809,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return;
         }
 
+        recordHotTransformResult(file, fileContent, result, watcher);
+    }
+
+    /**
+     * Write what a hot-updated file's transform found into plugin state, and
+     * grow the safelist when the file brought a class it did not hold.
+     *
+     * @param file - The changed file.
+     * @param fileContent - Its current contents.
+     * @param result - The transform of those contents.
+     * @param watcher - The dev server's watcher, told about a safelist write.
+     */
+    function recordHotTransformResult(
+        file: string,
+        fileContent: string,
+        result: SourceTransformResult,
+        watcher: Pick<FSWatcher, 'emit'>,
+    ): void {
         const sizeBefore = state.classes.size;
         trackGlobalVarSourceFile(file, fileContent);
         for (const cls of result.classes) {
