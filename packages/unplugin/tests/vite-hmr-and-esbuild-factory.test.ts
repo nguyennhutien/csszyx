@@ -108,6 +108,24 @@ describe('esbuildPlugin factory', () => {
     });
 });
 
+describe('handleHotUpdate hands recovery tokens on', () => {
+    /**
+     * A `szRecover` site registers a recovery token, and the manifest that
+     * `transformIndexHtml` injects is built from the tokens the plugin
+     * holds. A token collected on a hot update must reach that manifest
+     * the same way one collected at build time does.
+     */
+    it('injects the manifest for a szRecover site that arrived by hot update', async () => {
+        const { root, call, hotUpdate } = await bootedPlugin();
+        const file = path.join(root, 'src/Recover.tsx');
+        fs.writeFileSync(file, 'export const R = () => <div szRecover="csr" sz={{ p: 4 }} />;');
+        await hotUpdate(file);
+        const html = '<html><head></head><body></body></html>';
+        const result = (await call('transformIndexHtml', html)) as string;
+        expect(result).toContain('__SZ_RECOVERY_MANIFEST__');
+    });
+});
+
 describe('the safelist file must not full-reload the page', () => {
     /**
      * Vite reloads the whole page for any changed `.html` that matched no
