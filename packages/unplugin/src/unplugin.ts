@@ -5687,13 +5687,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         }
                     }
 
-                    // The safelist is markup Tailwind scans, so it is named
-                    // `.html` — and Vite full-reloads the page for any changed
-                    // `.html` that matched no module. Growing the class set
-                    // therefore threw away React state, scroll position and
-                    // open dialogs on the first use of each new utility per
-                    // server lifetime, while the stylesheet had already been
-                    // hot-updated correctly in the same tick (field-reported).
+                    // A safelist write is not a file the dev server can match
+                    // to a module, and `@tailwindcss/vite` answers such a
+                    // change with an unaddressed full-reload when the file is
+                    // one it scanned and its only modules are the asset nodes
+                    // `addWatchFile` made. Growing the class set therefore
+                    // threw away React state, scroll position and open dialogs
+                    // on the first use of each new utility per server
+                    // lifetime, while the stylesheet had already been
+                    // hot-updated correctly in the same tick (field-reported;
+                    // the file was `.html` then, so Vite's own `.html` reload
+                    // fired as well).
                     //
                     // Naming the Tailwind entries as the modules this change
                     // affects is simply true: they `@source` the safelist, so
@@ -5711,14 +5715,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     ) {
                         // Answered even when the lookup finds nothing, because
                         // an EMPTY set is the safe answer here and silence is
-                        // not. Two things read this set and both reload on
-                        // silence: Vite, whose empty-set branch sends a reload
-                        // addressed to the safelist path — which its client
-                        // drops unless the browser is viewing that file — and
-                        // `@tailwindcss/vite`, whose own hot update sends an
-                        // unaddressed one while it still sees modules for a
-                        // file it scanned. Emptying the set stands both down.
-                        // Measured both ways against a real dev server.
+                        // not: `@tailwindcss/vite` returns early from its hot
+                        // update on an empty module list, while silence leaves
+                        // it looking at the asset nodes for a file it scanned
+                        // and sending its unaddressed reload. Vite's own
+                        // empty-set branch only reloads for `.html`, which the
+                        // safelist no longer is.
                         return tailwindEntryModules(ctx.server.moduleGraph);
                     }
 

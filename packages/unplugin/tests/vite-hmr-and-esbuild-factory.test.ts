@@ -128,11 +128,13 @@ describe('handleHotUpdate hands recovery tokens on', () => {
 
 describe('the safelist file must not full-reload the page', () => {
     /**
-     * Vite reloads the whole page for any changed `.html` that matched no
-     * module — and the generated safelist is named `.html` because Tailwind's
-     * scanner reads it as markup. Growing the class set therefore cost every
-     * consumer their React state, scroll position and open dialogs, on the
-     * first use of each new utility per server lifetime (field-reported).
+     * A safelist write is not a file the dev server can match to a module,
+     * and `@tailwindcss/vite` sends an unaddressed full-reload for a scanned
+     * file whose only modules are the asset nodes its `addWatchFile` made.
+     * Growing the class set therefore cost every consumer their React state,
+     * scroll position and open dialogs, on the first use of each new utility
+     * per server lifetime (field-reported, when the file was still `.html`
+     * and Vite's own `.html` reload fired as well).
      *
      * Naming the Tailwind entry as the module the change affects is true, not
      * a trick: the entry `@source`s the safelist, so its generated CSS is
@@ -230,7 +232,7 @@ describe('the safelist file must not full-reload the page', () => {
         };
         await expect(
             call('handleHotUpdate', {
-                file: 'C:/app/csszyx-classes.html',
+                file: 'C:/app/.csszyx/csszyx-classes.txt',
                 server,
                 modules: [],
             }),
