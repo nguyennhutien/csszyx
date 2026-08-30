@@ -7,7 +7,7 @@ import { expect, test } from '@playwright/test';
 const loaderSafelistPath = fileURLToPath(
     new URL('../../../playground/nextjs-16/.csszyx/next-loader-classes.txt', import.meta.url),
 );
-const placeholderSource = '<!-- Next 16 csszyx Turbopack loader safelist placeholder. -->\n';
+const placeholderSource = '# Next 16 csszyx Turbopack loader safelist placeholder.\n';
 
 test.describe('Next.js 16 Turbopack csszyx Loader', () => {
     test.beforeAll(async () => {
