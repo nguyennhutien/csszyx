@@ -13,6 +13,7 @@
  * (`'@csszyx/unplugin/postcss'`), never as a function.
  */
 
+import * as path from 'node:path';
 import type { PluginCreator, Root } from 'postcss';
 import {
     computeSafelistRelPath,
@@ -85,14 +86,27 @@ const csszyxPostcss: PluginCreator<CsszyxPostcssOptions> = (options = {}) => {
     const safelistFiles = options.safelistFiles ?? DEFAULT_SAFELIST_FILES;
     return {
         postcssPlugin: 'csszyx',
-        Once(root, { AtRule }) {
+        Once(root, { AtRule, result }) {
             const file = root.source?.input.file;
             if (file === undefined || !rootImportsTailwind(root)) return;
             const present = existingSourcePaths(root, file);
             for (const safelistFile of safelistFiles) {
                 const relPath = computeSafelistRelPath(projectRoot, safelistFile, file);
-                if (present.has(relPath)) continue;
-                root.append(new AtRule({ name: 'source', params: `"${relPath}"` }));
+                if (!present.has(relPath)) {
+                    root.append(new AtRule({ name: 'source', params: `"${relPath}"` }));
+                }
+                // Tailwind registers the files its scanner found, and a file
+                // that is not there yet is not among them; nothing would tell
+                // the bundler to recompile when csszyx writes it after the
+                // first compile. Watching the directory for the name does.
+                const absolute = path.resolve(projectRoot, safelistFile);
+                result.messages.push({
+                    type: 'dir-dependency',
+                    plugin: 'csszyx',
+                    dir: path.dirname(absolute),
+                    glob: path.basename(absolute),
+                    parent: file,
+                });
             }
         },
     };

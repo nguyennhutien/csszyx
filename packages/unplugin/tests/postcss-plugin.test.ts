@@ -61,6 +61,29 @@ async function run(
 }
 
 describe('csszyx PostCSS plugin', () => {
+    /**
+     * `@source` at a file that does not exist registers nothing with
+     * Tailwind: the scanner reports no file and no glob for it, so nothing
+     * tells Next to recompile when csszyx writes the safelist later. Naming
+     * the directory is what makes a file that appears after the first
+     * compile count as a change.
+     */
+    it('tells the bundler to watch the safelist directory', async () => {
+        const root = projectRoot();
+        const result = await postcss([csszyxPostcss({ root })]).process(
+            '@import "tailwindcss" source(none);\n',
+            { from: join(root, 'app/globals.css') },
+        );
+        expect(result.messages).toContainEqual(
+            expect.objectContaining({
+                type: 'dir-dependency',
+                plugin: 'csszyx',
+                dir: join(root, '.csszyx'),
+                glob: 'csszyx-classes.txt',
+            }),
+        );
+    });
+
     it('adds an @source for the csszyx safelist, relative to the stylesheet', async () => {
         const root = projectRoot();
         const css = await run(root, '@import "tailwindcss" source(none);\n@source "../app";\n');
