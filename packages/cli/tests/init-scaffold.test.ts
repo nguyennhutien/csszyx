@@ -93,6 +93,14 @@ describe('init --yes on a Next.js App Router project', () => {
 
         await init({ yes: true, cwd });
 
+        // The configs below name `@csszyx/unplugin/...` by package, and a
+        // strict package manager (pnpm, Yarn PnP) only resolves a package
+        // the project lists itself, not one `csszyx` depends on.
+        expect(vi.mocked(execa)).toHaveBeenCalledWith(
+            'npm',
+            ['add', 'csszyx', '@csszyx/runtime', '@csszyx/unplugin'],
+            expect.anything(),
+        );
         const hasConfig =
             existsSync(join(cwd, 'csszyx.config.ts')) || existsSync(join(cwd, 'csszyx.config.js'));
         expect(hasConfig).toBe(true);

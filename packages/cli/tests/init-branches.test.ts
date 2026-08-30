@@ -125,6 +125,61 @@ describe('init Vite plugin injection', () => {
 });
 
 describe('init Next.js existing-config paths', () => {
+    /**
+     * Next reads `postcss` from package.json first, then `.postcssrc.json`,
+     * `postcss.config.json`, `.postcssrc.js` and `postcss.config.{js,mjs,cjs}`.
+     * A fresh `postcss.config.mjs` beside any of those would shadow or race
+     * the author's file.
+     */
+    it.each([
+        ['postcss.config.cjs', 'module.exports = { plugins: {} };\n'],
+        ['.postcssrc.json', '{ "plugins": {} }\n'],
+    ])(
+        'keeps %s and prints the line to add instead of writing a new config',
+        async (name, body) => {
+            const logs: string[] = [];
+            vi.spyOn(console, 'log').mockImplementation((...p: unknown[]) =>
+                logs.push(p.join(' ')),
+            );
+            const cwd = tempRoot();
+            write(
+                cwd,
+                'package.json',
+                JSON.stringify({
+                    dependencies: { next: '^16', react: '^19' },
+                    devDependencies: {},
+                }),
+            );
+            mkdirSync(join(cwd, 'app'));
+            write(cwd, 'app/globals.css', '@import "tailwindcss";\n');
+            write(cwd, name, body);
+            await init({ yes: true, cwd });
+            expect(readFileSync(join(cwd, name), 'utf8')).toBe(body);
+            expect(existsSync(join(cwd, 'postcss.config.mjs'))).toBe(false);
+            expect(logs.join('\n')).toContain("'@csszyx/unplugin/postcss': {}");
+        },
+    );
+
+    it('treats a postcss key in package.json as the config Next will read', async () => {
+        const logs: string[] = [];
+        vi.spyOn(console, 'log').mockImplementation((...p: unknown[]) => logs.push(p.join(' ')));
+        const cwd = tempRoot();
+        write(
+            cwd,
+            'package.json',
+            JSON.stringify({
+                dependencies: { next: '^16', react: '^19' },
+                devDependencies: {},
+                postcss: { plugins: {} },
+            }),
+        );
+        mkdirSync(join(cwd, 'app'));
+        write(cwd, 'app/globals.css', '@import "tailwindcss";\n');
+        await init({ yes: true, cwd });
+        expect(existsSync(join(cwd, 'postcss.config.mjs'))).toBe(false);
+        expect(logs.join('\n')).toContain("'@csszyx/unplugin/postcss': {}");
+    });
+
     it('keeps an existing postcss config and warns when next.config lacks csszyx', async () => {
         const logs: string[] = [];
         vi.spyOn(console, 'log').mockImplementation((...p: unknown[]) => logs.push(p.join(' ')));

@@ -60,6 +60,39 @@ const NEXTJS_FRAMEWORKS = new Set<Framework>(['nextjs-app', 'nextjs-pages']);
 const CSSZYX_POSTCSS_PLUGIN_LINE = "'@csszyx/unplugin/postcss': {},";
 
 /**
+ * Every file Next reads a PostCSS config from, in its own search order
+ * (`next/dist/lib/find-config`); a `postcss` key in package.json comes first
+ * and is checked separately. `postcss.config.ts` is not on Next's list but
+ * is kept so a project that has one is not handed a second config.
+ */
+const POSTCSS_CONFIG_FILES = [
+    '.postcssrc.json',
+    'postcss.config.json',
+    '.postcssrc.js',
+    'postcss.config.js',
+    'postcss.config.mjs',
+    'postcss.config.cjs',
+    'postcss.config.ts',
+];
+
+/**
+ * @param cwd - Project root directory.
+ * @returns Whether Next would already find a PostCSS config here.
+ */
+async function hasPostcssConfig(cwd: string): Promise<boolean> {
+    // Framework detection has already read and parsed this file, so it is
+    // there and it is JSON by the time init reaches the PostCSS step.
+    const packageJson = JSON.parse(
+        await fs.readFile(path.join(cwd, 'package.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    if ('postcss' in packageJson) return true;
+    for (const name of POSTCSS_CONFIG_FILES) {
+        if ((await readFileOrNull(path.join(cwd, name))) !== null) return true;
+    }
+    return false;
+}
+
+/**
  * Common locations for the main CSS entry file.
  */
 const CSS_ENTRY_CANDIDATES = [
@@ -183,7 +216,14 @@ async function installInitPackages(
 ): Promise<boolean> {
     const spin = spinner.start('Installing csszyx...');
     try {
-        await execa(projectInfo.packageManager, ['add', 'csszyx', '@csszyx/runtime'], { cwd });
+        // A Next.js project names `@csszyx/unplugin/...` in next.config and
+        // postcss.config by package, and a strict package manager (pnpm, Yarn
+        // PnP) resolves only what the project lists, not what `csszyx` depends
+        // on; the other frameworks import through `csszyx/vite` and friends.
+        const packages = NEXTJS_FRAMEWORKS.has(projectInfo.framework)
+            ? ['csszyx', '@csszyx/runtime', '@csszyx/unplugin']
+            : ['csszyx', '@csszyx/runtime'];
+        await execa(projectInfo.packageManager, ['add', ...packages], { cwd });
         if (projectInfo.hasTypeScript) {
             await execa(projectInfo.packageManager, ['add', '-D', '@csszyx/types'], { cwd });
         }
@@ -359,15 +399,8 @@ async function setupTailwindCss(cwd: string): Promise<void> {
  * @param cwd - Project root directory.
  */
 async function setupNextPostcss(cwd: string): Promise<void> {
-    const postcssMjs = path.join(cwd, 'postcss.config.mjs');
-    const postcssJs = path.join(cwd, 'postcss.config.js');
-    const postcssTs = path.join(cwd, 'postcss.config.ts');
-    const hasExisting =
-        (await readFileOrNull(postcssMjs)) !== null ||
-        (await readFileOrNull(postcssJs)) !== null ||
-        (await readFileOrNull(postcssTs)) !== null;
-    if (!hasExisting) {
-        await fs.writeFile(postcssMjs, generatePostcssConfig());
+    if (!(await hasPostcssConfig(cwd))) {
+        await fs.writeFile(path.join(cwd, 'postcss.config.mjs'), generatePostcssConfig());
         printInfo('Created postcss.config.mjs for Tailwind v4 and the csszyx safelist');
         return;
     }
