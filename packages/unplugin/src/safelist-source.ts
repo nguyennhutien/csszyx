@@ -166,8 +166,8 @@ export function legacySourceMessage(cssFile: string, target: string): string {
  * with `tailwindcss` (such as `tailwindcss-animate`) does not match. Import
  * options after the quote (`layer(…)`, `source(…)`) are outside the match.
  */
-const TAILWIND_SPECIFIER = `["']tailwindcss(?:\\/[^"']*)?["']`;
-const TAILWIND_IMPORT = new RegExp(`@import\\s+${TAILWIND_SPECIFIER}`);
+const TAILWIND_SPECIFIER = String.raw`["']tailwindcss(?:\/[^"']*)?["']`;
+const TAILWIND_IMPORT = new RegExp(String.raw`@import\s+${TAILWIND_SPECIFIER}`);
 const TAILWIND_IMPORT_PARAMS = new RegExp(`^${TAILWIND_SPECIFIER}`);
 
 /**
