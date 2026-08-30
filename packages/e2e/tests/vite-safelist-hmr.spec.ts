@@ -3,7 +3,7 @@
  *
  * Field report (csszyx 0.14.1): the first time an `sz` edit produced a class
  * the app had never used, csszyx wrote the generated safelist and Vite
- * full-reloaded — because the safelist is named `.html`, and Vite reloads for
+ * full-reloaded — the safelist was an `.html` file then, and Vite reloads for
  * any changed `.html` that matched no module. Developers lost filters, scroll
  * position, open dialogs and in-flight form input on a spacing tweak, while
  * the stylesheet had already been hot-updated correctly in the same tick.
@@ -23,7 +23,7 @@ const fixturePath = fileURLToPath(
     new URL('../../../playground/vite-react/src/SafelistHmr.tsx', import.meta.url),
 );
 const safelistPath = fileURLToPath(
-    new URL('../../../playground/vite-react/csszyx-classes.html', import.meta.url),
+    new URL('../../../playground/vite-react/.csszyx/csszyx-classes.txt', import.meta.url),
 );
 
 const BASELINE_LITERAL = "sz={{ pt: 7, bg: 'slate-100' }}";

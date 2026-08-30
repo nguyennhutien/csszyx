@@ -13,7 +13,6 @@
     starlight.utils,
     utilities;
 @import "tailwindcss";
-@source "../../csszyx-classes.html";
 /* Exclude AI reference files — they contain example class strings that produce invalid CSS */
 @source not "../../public/llms.txt";
 @source not "../../public/llms-full.txt";

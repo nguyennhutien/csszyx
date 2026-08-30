@@ -24,6 +24,7 @@ import { basename, dirname, join } from 'node:path';
 import type { PartialCsszyxConfig } from '@csszyx/types';
 import { compile } from '@tailwindcss/node';
 import { build, type Plugin } from 'vite';
+import { SAFELIST_HEADER } from '../src/safelist-format.js';
 import { vitePlugin } from '../src/unplugin.js';
 
 export { executableInlineScripts } from './executable-inline-scripts.js';
@@ -60,7 +61,7 @@ const tempDirs: string[] = [];
  * Tailwind receives candidates only through the safelist csszyx writes, which
  * is the deployment shape that had the hybrid-mangle hazards.
  *
- * @param root Fixture root containing csszyx-classes.html.
+ * @param root Fixture root containing .csszyx/csszyx-classes.txt.
  * @returns Vite transform plugin standing in for Tailwind's final CSS phase.
  */
 export function tailwindSourceNonePlugin(root: string): Plugin {
@@ -73,12 +74,8 @@ export function tailwindSourceNonePlugin(root: string): Plugin {
                 base: process.cwd(),
                 onDependency: () => undefined,
             });
-            const safelist = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
-            const candidates = (
-                safelist.split('<!-- csszyx exact scanner candidates -->\n')[1] ?? ''
-            )
-                .split(/\s+/)
-                .filter(Boolean);
+            const safelist = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
+            const candidates = safelist.slice(SAFELIST_HEADER.length).split(/\s+/).filter(Boolean);
             return { code: compiler.build(candidates), map: null };
         },
     };

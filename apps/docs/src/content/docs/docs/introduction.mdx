@@ -35,14 +35,14 @@ CSSzyx solves this with object syntax:
 
 <Steps>
 
-1. **Pre-scan** — Walk source files at startup, write `csszyx-classes.html` so
+1. **Pre-scan** — Walk source files at startup, write `.csszyx/csszyx-classes.txt` so
    Tailwind JIT can discover every sz-generated class name before compilation begins.
 
 2. **JSX Transform** — `sz={{ p: 4, hover: { bg: 'blue-500' } }}` → `className="p-4 hover:bg-blue-500"` (native engine).
    Also injects the `@source` directive into your CSS entry and auto-imports
    `csszyx/lite` runtime helpers where needed.
 
-3. **Tailwind JIT** — Reads `csszyx-classes.html`, scans transformed `className`
+3. **Tailwind JIT** — Reads `.csszyx/csszyx-classes.txt`, scans transformed `className`
    strings, generates CSS for every class in the build.
 
 4. **Mangle** — Builds the encode map `p-4 → z`, `bg-blue-500 → y` … using
@@ -53,15 +53,16 @@ CSSzyx solves this with object syntax:
 
 </Steps>
 
-Each phase is incremental. During dev, HMR updates `csszyx-classes.html` when new
+Each phase is incremental. During dev, HMR updates `.csszyx/csszyx-classes.txt` when new
 sz props are added — no server restart needed.
 
-The safelist is written as HTML because Tailwind's scanner reads markup, and Vite
-reloads the page for any changed `.html` it cannot match to a module. csszyx
-therefore tells Vite which modules a safelist write actually affects — your
-Tailwind entry stylesheets, since they `@source` the file — so a class the project
-has never used before arrives as a **CSS hot update**. Component state, scroll
-position and open dialogs survive.
+The safelist is plain text, one class per line: Tailwind's scanner reads any file
+as bytes, and parent-child CSS such as `space-y-*` or `[&>span]:*` comes from the
+class name, not from markup around it. With the Vite plugin, a safelist write is
+not a file the dev server can match to a module on its own, so csszyx tells it
+which modules the write affects — your Tailwind entry stylesheets, since they
+`@source` the file — and a class the project has never used before arrives as a
+**CSS hot update**. Component state, scroll position and open dialogs survive.
 
 ## Key Features
 

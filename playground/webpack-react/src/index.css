@@ -2,8 +2,7 @@
    content detection climbs to the workspace root and scans docs (.md/.txt that
    carry url()/{value} examples as text), generating broken url() classes the
    webpack css-loader cannot resolve. source(none) + explicit @source is the
-   only deterministic scope; csszyx also auto-injects an @source for its
-   generated classes. */
+   only deterministic scope; csszyx auto-injects an @source for its generated
+   classes. */
 @import "tailwindcss" source(none);
 @source ".";
-@source "../csszyx-classes.html";

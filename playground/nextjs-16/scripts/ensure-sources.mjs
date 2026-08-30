@@ -5,16 +5,16 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const files = [
     [
-        join(root, 'csszyx-classes.html'),
-        '<!-- Tailwind @source target used by the Next 16 Turbopack source probe. -->\n',
+        join(root, '.csszyx/csszyx-classes.txt'),
+        '# Tailwind @source target used by the Next 16 Turbopack source probe.\n',
     ],
     [
-        join(root, '.csszyx/next-loader-classes.html'),
-        '<!-- Next 16 csszyx Turbopack loader safelist placeholder. -->\n',
+        join(root, '.csszyx/next-loader-classes.txt'),
+        '# Next 16 csszyx Turbopack loader safelist placeholder.\n',
     ],
     [
-        join(root, '.csszyx/xmod/classes.html'),
-        '<!-- Isolated cross-module lane safelist placeholder. -->\n',
+        join(root, '.csszyx/xmod/classes.txt'),
+        '# Isolated cross-module lane safelist placeholder.\n',
     ],
 ];
 

@@ -20,6 +20,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { loadNativeBinding } from '../../core/native/index.js';
+import { SAFELIST_HEADER } from '../src/safelist-format.js';
 import { vitePlugin } from '../src/unplugin.js';
 
 type ViteConfigHook = {
@@ -205,13 +206,14 @@ function runPrescan(parser: 'rust' | 'wasm'): {
 
     let html = '';
     try {
-        html = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
+        html = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
     } catch {
         // Leave tokens empty — the assertions below will point straight at the
         // engine whose prescan produced nothing.
     }
-    const classList = html.match(/class="([^"]*)"/)?.[1] ?? '';
-    const tokens = [...new Set(classList.split(/\s+/).filter(Boolean))].sort();
+    const tokens = [
+        ...new Set(html.slice(SAFELIST_HEADER.length).split(/\s+/).filter(Boolean)),
+    ].sort();
     return { tokens, warnings };
 }
 

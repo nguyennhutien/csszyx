@@ -93,6 +93,14 @@ describe('init --yes on a Next.js App Router project', () => {
 
         await init({ yes: true, cwd });
 
+        // The configs below name `@csszyx/unplugin/...` by package, and a
+        // strict package manager (pnpm, Yarn PnP) only resolves a package
+        // the project lists itself, not one `csszyx` depends on.
+        expect(vi.mocked(execa)).toHaveBeenCalledWith(
+            'npm',
+            ['add', 'csszyx', '@csszyx/runtime', '@csszyx/unplugin'],
+            expect.anything(),
+        );
         const hasConfig =
             existsSync(join(cwd, 'csszyx.config.ts')) || existsSync(join(cwd, 'csszyx.config.js'));
         expect(hasConfig).toBe(true);
@@ -100,6 +108,14 @@ describe('init --yes on a Next.js App Router project', () => {
         const wroteNextWiring =
             existsSync(join(cwd, 'next.config.js')) || existsSync(join(cwd, 'postcss.config.mjs'));
         expect(wroteNextWiring).toBe(true);
+        // The PostCSS config points Tailwind at csszyx's safelist, and does so
+        // BEFORE Tailwind runs: `@tailwindcss/postcss` compiles in its own
+        // `Once`, so a plugin listed after it is too late.
+        const postcssConfig = readFileSync(join(cwd, 'postcss.config.mjs'), 'utf8');
+        const csszyxAt = postcssConfig.indexOf("'@csszyx/unplugin/postcss': {}");
+        const tailwindAt = postcssConfig.indexOf("'@tailwindcss/postcss': {}");
+        expect(csszyxAt).toBeGreaterThanOrEqual(0);
+        expect(tailwindAt).toBeGreaterThan(csszyxAt);
         // No tsconfig — the TypeScript step must not run or crash.
         expect(existsSync(join(cwd, 'tsconfig.json'))).toBe(false);
         // .gitignore is created when absent.

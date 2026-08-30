@@ -95,7 +95,7 @@ describe('transform hook branch edges', () => {
         expect(result).not.toBeNull();
         expect(result?.code).toContain('@source');
         // The injected directive points at the generated safelist file.
-        expect(result?.code).toContain('csszyx-classes.html');
+        expect(result?.code).toContain('.csszyx/csszyx-classes.txt');
     });
 
     it('injects the color-var runtime helper when a dynamic color is used', async () => {

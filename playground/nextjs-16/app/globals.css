@@ -3,11 +3,10 @@
    resolves up to the monorepo root and scans docs/snippets (which carry
    `url(...)`/`{value}` examples as text), generating broken `url()` classes the
    Next css-loader cannot resolve. source(none) + explicit @source is the only
-   deterministic scope. */
+   deterministic scope. The csszyx safelists are added by the PostCSS plugin in
+   postcss.config.mjs, not listed here. */
 @import "tailwindcss" source(none);
 @source "../app";
-@source "../csszyx-classes.html";
-@source "../.csszyx/next-loader-classes.html";
 
 @theme {
     --color-csszyx-next: #2563eb;

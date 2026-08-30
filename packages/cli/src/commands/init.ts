@@ -56,6 +56,42 @@ async function readFileOrNull(filePath: string): Promise<string | null> {
 }
 const NEXTJS_FRAMEWORKS = new Set<Framework>(['nextjs-app', 'nextjs-pages']);
 
+/** The PostCSS plugin entry a Next.js project needs, as it appears in the config. */
+const CSSZYX_POSTCSS_PLUGIN_LINE = "'@csszyx/unplugin/postcss': {},";
+
+/**
+ * Every file Next reads a PostCSS config from, in its own search order
+ * (`next/dist/lib/find-config`); a `postcss` key in package.json comes first
+ * and is checked separately. `postcss.config.ts` is not on Next's list but
+ * is kept so a project that has one is not handed a second config.
+ */
+const POSTCSS_CONFIG_FILES = [
+    '.postcssrc.json',
+    'postcss.config.json',
+    '.postcssrc.js',
+    'postcss.config.js',
+    'postcss.config.mjs',
+    'postcss.config.cjs',
+    'postcss.config.ts',
+];
+
+/**
+ * @param cwd - Project root directory.
+ * @returns Whether Next would already find a PostCSS config here.
+ */
+async function hasPostcssConfig(cwd: string): Promise<boolean> {
+    // Framework detection has already read and parsed this file, so it is
+    // there and it is JSON by the time init reaches the PostCSS step.
+    const packageJson = JSON.parse(
+        await fs.readFile(path.join(cwd, 'package.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    if ('postcss' in packageJson) return true;
+    for (const name of POSTCSS_CONFIG_FILES) {
+        if ((await readFileOrNull(path.join(cwd, name))) !== null) return true;
+    }
+    return false;
+}
+
 /**
  * Common locations for the main CSS entry file.
  */
@@ -180,7 +216,14 @@ async function installInitPackages(
 ): Promise<boolean> {
     const spin = spinner.start('Installing csszyx...');
     try {
-        await execa(projectInfo.packageManager, ['add', 'csszyx', '@csszyx/runtime'], { cwd });
+        // A Next.js project names `@csszyx/unplugin/...` in next.config and
+        // postcss.config by package, and a strict package manager (pnpm, Yarn
+        // PnP) resolves only what the project lists, not what `csszyx` depends
+        // on; the other frameworks import through `csszyx/vite` and friends.
+        const packages = NEXTJS_FRAMEWORKS.has(projectInfo.framework)
+            ? ['csszyx', '@csszyx/runtime', '@csszyx/unplugin']
+            : ['csszyx', '@csszyx/runtime'];
+        await execa(projectInfo.packageManager, ['add', ...packages], { cwd });
         if (projectInfo.hasTypeScript) {
             await execa(projectInfo.packageManager, ['add', '-D', '@csszyx/types'], { cwd });
         }
@@ -220,7 +263,8 @@ async function createInitFiles(
             projectInfo.hasTypeScript ? 'csszyx.config.ts' : 'csszyx.config.js',
         );
         await fs.writeFile(configPath, generateConfigFile(config));
-        if (config.installTailwind) await setupTailwindCss(cwd, projectInfo.framework);
+        if (config.installTailwind) await setupTailwindCss(cwd);
+        if (NEXTJS_FRAMEWORKS.has(projectInfo.framework)) await setupNextPostcss(cwd);
         await injectPlugin(cwd, projectInfo.framework);
         if (config.setupGitignore) await setupGitignore(cwd);
         if (config.setupTsconfig) await setupTsconfig(cwd);
@@ -313,9 +357,8 @@ export function tailwindImportBlock(cssDir: string, cwd: string, monorepo: boole
  * Inject Tailwind v4 @import into the main CSS entry file.
  * If no CSS entry file is found, creates src/index.css.
  * @param cwd - Project root directory.
- * @param framework - Detected or specified framework.
  */
-async function setupTailwindCss(cwd: string, framework: Framework): Promise<void> {
+async function setupTailwindCss(cwd: string): Promise<void> {
     const monorepo = await isInsideWorkspace(cwd);
     let cssPath: string | undefined;
     let content: string | null = null;
@@ -345,21 +388,26 @@ async function setupTailwindCss(cwd: string, framework: Framework): Promise<void
         );
         printInfo(`Added Tailwind v4 import to ${path.relative(cwd, cssPath)}`);
     }
+}
 
-    // Next.js also needs postcss.config.mjs
-    if (NEXTJS_FRAMEWORKS.has(framework)) {
-        const postcssMjs = path.join(cwd, 'postcss.config.mjs');
-        const postcssJs = path.join(cwd, 'postcss.config.js');
-        const postcssTs = path.join(cwd, 'postcss.config.ts');
-        const hasExisting =
-            (await readFileOrNull(postcssMjs)) !== null ||
-            (await readFileOrNull(postcssJs)) !== null ||
-            (await readFileOrNull(postcssTs)) !== null;
-        if (!hasExisting) {
-            await fs.writeFile(postcssMjs, generatePostcssConfig());
-            printInfo('Created postcss.config.mjs for Tailwind v4');
-        }
+/**
+ * Give a Next.js project the PostCSS config Tailwind v4 needs there, with
+ * csszyx's plugin in front of Tailwind so the generated safelist is read.
+ *
+ * Runs whether or not a CSS entry was found: the config is about how Next
+ * runs Tailwind, not about any one stylesheet.
+ * @param cwd - Project root directory.
+ */
+async function setupNextPostcss(cwd: string): Promise<void> {
+    if (!(await hasPostcssConfig(cwd))) {
+        await fs.writeFile(path.join(cwd, 'postcss.config.mjs'), generatePostcssConfig());
+        printInfo('Created postcss.config.mjs for Tailwind v4 and the csszyx safelist');
+        return;
     }
+    // Rewriting someone's PostCSS config is too risky; say exactly what to add.
+    printInfo('Keeping your PostCSS config. Add csszyx BEFORE Tailwind in its plugins:');
+    console.log(`    ${CSSZYX_POSTCSS_PLUGIN_LINE}`);
+    console.log("    '@tailwindcss/postcss': {},");
 }
 
 /**
@@ -608,6 +656,8 @@ export default config;
 function generatePostcssConfig(): string {
     return `export default {
   plugins: {
+    // Points Tailwind at the safelist csszyx writes; must run before Tailwind.
+    ${CSSZYX_POSTCSS_PLUGIN_LINE}
     '@tailwindcss/postcss': {},
   },
 };

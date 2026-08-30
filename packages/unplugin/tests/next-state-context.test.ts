@@ -46,7 +46,7 @@ describe('Next state context', () => {
         expect(context.rootSource).toBe('explicit');
         expect(context.cacheDir).toBe(join(appRoot, '.csszyx/cache'));
         expect(context.safelist.shardsDir).toBe(join(appRoot, '.csszyx/cache/safelist-shards'));
-        expect(context.safelist.outputPath).toBe(join(appRoot, 'csszyx-classes.html'));
+        expect(context.safelist.outputPath).toBe(join(appRoot, '.csszyx/csszyx-classes.txt'));
         expect(context.manifestPath).toBe(join(appRoot, '.csszyx/cache/generation-manifest.json'));
         expect(context.manifestExpectation).toMatchObject({
             root: appRoot,
@@ -68,7 +68,7 @@ describe('Next state context', () => {
         const context = createNextStateContext({
             loaderContext: join(appRoot, 'src/app'),
             cacheDir: '.cache/csszyx',
-            safelistOutputFile: 'src/csszyx-classes.html',
+            safelistOutputFile: 'src/.csszyx/csszyx-classes.txt',
             config: { mangleVars: true },
             nextVersion: '16.2.7',
             csszyxVersion: '0.9.0',
@@ -80,7 +80,7 @@ describe('Next state context', () => {
         expect(context.rootSource).toBe('loader-context');
         expect(context.cacheDir).toBe(join(appRoot, '.cache/csszyx'));
         expect(context.safelist.cacheDir).toBe(join(appRoot, '.cache/csszyx'));
-        expect(context.safelist.outputPath).toBe(join(appRoot, 'src/csszyx-classes.html'));
+        expect(context.safelist.outputPath).toBe(join(appRoot, 'src/.csszyx/csszyx-classes.txt'));
         expect(context.manifestPath).toBe(join(appRoot, '.cache/csszyx/generation-manifest.json'));
     });
 

@@ -112,9 +112,11 @@ supports brace expansion and ranges:
 ## How csszyx fits in
 
 csszyx compiles your `sz` props to Tailwind classes and writes them to a generated
-safelist file (`csszyx-classes.html`), then **auto-injects** an `@source` pointing at
+safelist file (`.csszyx/csszyx-classes.txt`), then **auto-injects** an `@source` pointing at
 it. That is why, even with `source(none)`, your csszyx styles still emit — the plugin
-already registered its own source. You only ever scope **your own** templates.
+already registered its own source. You only ever scope **your own** templates. On
+Next.js the same directive comes from the `@csszyx/unplugin/postcss` plugin in
+`postcss.config`, since Turbopack offers no hook into the stylesheet itself.
 
 ### Workspace packages you compile
 

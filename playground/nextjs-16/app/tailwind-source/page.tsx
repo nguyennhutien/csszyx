@@ -6,7 +6,7 @@ export default function TailwindSourceProbe() {
                 data-testid="next16-source-target"
                 className="p-4 csszyx-source-p8 csszyx-source-bg"
             >
-                Runtime classes are expected to receive CSS after csszyx-classes.html
+                Runtime classes are expected to receive CSS after the csszyx safelist
                 includes real Tailwind utilities.
             </div>
         </main>

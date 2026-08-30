@@ -65,7 +65,6 @@ import {
     rewriteGlobalVarCssAliases,
     validateGlobalVarAliasInputs,
 } from './global-var-scanner.js';
-import { escapeHtmlAttribute, renderTailwindScannerCandidates } from './html-escape.js';
 import {
     buildRecoveryManifest,
     createHydrationMangleMap,
@@ -106,6 +105,25 @@ import {
     type RSCModuleRecord,
 } from './rsc-boundary.js';
 import { findRuntimeImportClause, importsRuntimeHelper } from './runtime-import-scan.js';
+import { renderSafelistFile } from './safelist-format.js';
+import {
+    appendTailwindSourceDirective,
+    computeSafelistRelPath,
+    cssImportsTailwind,
+    findLegacySourceDirective,
+    legacySourceMessage,
+    removeLegacySafelists,
+    SAFELIST_FILE,
+    stripCssBlockComments,
+} from './safelist-source.js';
+
+export {
+    appendTailwindSourceDirective,
+    computeSafelistRelPath,
+    cssImportsTailwind,
+    SAFELIST_FILE,
+} from './safelist-source.js';
+
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { discoverProjectTheme } from './theme-discovery.js';
@@ -473,86 +491,6 @@ export function resolveNativeCacheIdentity(): string {
 }
 const BENCH_TRACE_ENABLED = process.env.CSSZYX_BENCH_TRACE === '1';
 const BENCH_TRACE_FILE = process.env.CSSZYX_BENCH_TRACE_FILE;
-
-/**
- * Appends an `@source "<relPath>";` directive to a CSS module so Tailwind v4
- * scans the csszyx-generated safelist file.
- *
- * `@source` is position-independent in Tailwind v4 — it can appear anywhere in
- * the compiled CSS — so the directive is **appended as its own statement**
- * rather than spliced next to the `@import "tailwindcss…"` line. Matching the
- * import syntax is the source of a real defect: the split / manual Tailwind v4
- * setup (`@import "tailwindcss/utilities.css" layer(…)` or `… source(…)`, or an
- * import without a trailing `;`) does not match an import-anchored regex, so the
- * injection silently no-ops and every csszyx-only class (e.g. the static
- * `bg-primary/50` produced by `sz={{ bg: { color, op } }}`) gets no CSS while a
- * raw `className` still works. Appending is correct for every import form.
- *
- * @param code - CSS module source already known to import tailwindcss.
- * @param relPath - safelist path relative to this CSS file (posix, `./`-prefixed).
- * @returns the code with the directive appended, or `null` if it is already
- *   present (idempotent — re-running the transform must not stack directives).
- */
-export function appendTailwindSourceDirective(code: string, relPath: string): string | null {
-    const directive = `@source "${relPath}";`;
-    if (code.includes(directive)) {
-        return null;
-    }
-    const separator = code.length === 0 || code.endsWith('\n') ? '' : '\n';
-    return `${code}${separator}${directive}\n`;
-}
-
-/**
- * Strip CSS block comments in a single linear pass. The regex form
- * (`/\/\*[\s\S]*?\*\//`) is polynomial-ReDoS on adversarial input such as an
- * unterminated `/*` followed by many `a/*` repetitions (CodeQL
- * js/polynomial-redos), so scan by hand: O(n), no backtracking, copying only
- * the whole non-comment spans.
- *
- * @param code - CSS source that may contain block comments.
- * @returns the source with every block comment removed.
- */
-function stripCssBlockComments(code: string): string {
-    const SLASH = 47;
-    const STAR = 42;
-    let out = '';
-    let last = 0;
-    let i = 0;
-    const n = code.length;
-    while (i < n) {
-        if (code.codePointAt(i) === SLASH && code.codePointAt(i + 1) === STAR) {
-            out += code.slice(last, i);
-            i += 2;
-            while (i < n && !(code.codePointAt(i) === STAR && code.codePointAt(i + 1) === SLASH)) {
-                i++;
-            }
-            i += 2; // skip past the closing */ (or past EOF if unterminated)
-            last = i;
-        } else {
-            i++;
-        }
-    }
-    return out + code.slice(last);
-}
-
-/**
- * Whether a CSS module actually imports the `tailwindcss` package, so the
- * `@source` directive should be appended.
- *
- * Tighter than a substring check on purpose: block comments are stripped first
- * (a commented-out `@import` must not trigger injection), and the package name
- * must end at a quote or a `/` subpath so a different package whose name merely
- * starts with `tailwindcss` (e.g. `tailwindcss-animate`) does not match. Import
- * options after the closing quote (`layer(…)`, `source(…)`) are irrelevant — the
- * match ends at the quote — so every real Tailwind v4 import form is covered.
- *
- * @param code - CSS module source.
- * @returns true if the module imports tailwindcss (exact or a subpath).
- */
-export function cssImportsTailwind(code: string): boolean {
-    const withoutBlockComments = stripCssBlockComments(code);
-    return /@import\s+["']tailwindcss(?:\/[^"']*)?["']/.test(withoutBlockComments);
-}
 
 /**
  * Whether the discovered class set contains at least one real Tailwind
@@ -1339,34 +1277,6 @@ export function realContentHashDisabledMessage(): string {
         'bytes. Without it, two builds that differ only by mangling emit the same ' +
         'filenames with different contents and caches keep serving the old file.'
     );
-}
-
-/**
- * Computes the `@source` target path for a CSS module: the location of the
- * generated safelist file relative to the CSS file, in posix form and always
- * `./`- or `../`-prefixed so Tailwind treats it as a relative path.
- *
- * This is the real-world failure surface — a wrong relative path makes Tailwind
- * silently scan nothing (no error, no CSS), the same symptom as a missing
- * directive — so it is extracted and unit-tested rather than left inline.
- *
- * @param rootDir - project root where the safelist file is written.
- * @param safelistFilename - the safelist file name (e.g. `csszyx-classes.html`).
- * @param cssId - absolute path of the CSS module receiving the directive.
- * @returns the posix relative path from the CSS file to the safelist file.
- */
-export function computeSafelistRelPath(
-    rootDir: string,
-    safelistFilename: string,
-    cssId: string,
-): string {
-    const safelistPath = normalizePathSeparators(path.join(rootDir, safelistFilename));
-    const cssDir = normalizePathSeparators(path.dirname(cssId));
-    let relPath = path.posix.relative(cssDir, safelistPath);
-    if (!relPath.startsWith('.')) {
-        relPath = `./${relPath}`;
-    }
-    return relPath;
 }
 
 /**
@@ -3010,7 +2920,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         state.varMangleEntriesByFile.set(GLOBAL_VAR_ALIAS_MAP_OWNER, earlyGlobalVarAliasEntries);
     }
 
-    const SAFELIST_FILENAME = 'csszyx-classes.html';
+    const SAFELIST_FILENAME = SAFELIST_FILE;
     // Module flavours included: the engine-parity harness caught the prescan
     // walk skipping `.mjs` entirely — every class in such a file was silently
     // dead under Tailwind `source(none)` on ALL engines.
@@ -3750,15 +3660,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Writes the safelist manifest (csszyx-classes.html) from the given class set.
+     * Writes the safelist file from the given class set.
      * No-ops if the file content is already up to date.
      *
-     * HTML format is required (not JS string) because Tailwind v4's oxide scanner
-     * only generates child-combinator CSS (used by space-y-*, divide-y-*, etc.) when
-     * it sees the class applied to an element that has children in a scanned file.
-     * A flat JS string export generates an empty .space-y-N {} rule — no margin CSS.
-     * The HTML below puts every class on both a parent div and two child divs so that
-     * all utility variants (parent-targeting and child-targeting) are correctly emitted.
+     * The file is plain text, one candidate per line; see safelist-format.ts
+     * for why no markup is involved.
      * @param classes - the full set of discovered classes to write
      */
     function writeSafelistFile(classes: Set<string>): void {
@@ -3766,22 +3672,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return;
         }
         const safelistPath = path.join(state.rootDir, SAFELIST_FILENAME);
-        // The structural copy stays fully escaped. Exact candidate bytes are
-        // appended in a scanner-only section because arbitrary variants can use
-        // every HTML-sensitive character and Tailwind does not decode entities.
-        // The three nested divs are intentional: Tailwind v4's oxide scanner only
-        // emits child-combinator CSS (space-y-*, divide-y-*) when it sees the class
-        // on an element that has children — a single div would drop that CSS.
-        const classNames = Array.from(classes);
-        const classList = escapeHtmlAttribute(classNames.join(' '));
-        const content =
-            '<!-- Auto-generated by csszyx — DO NOT EDIT -->\n' +
-            '<!-- Tailwind CSS scans this file for class name detection -->\n' +
-            `<div class="${classList}">` +
-            `<div class="${classList}">x</div>` +
-            `<div class="${classList}">x</div>` +
-            '</div>\n' +
-            renderTailwindScannerCandidates(classNames);
+        const content = renderSafelistFile(Array.from(classes));
         try {
             let existing = '';
             try {
@@ -3792,7 +3683,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
             }
             if (existing !== content) {
+                fs.mkdirSync(path.dirname(safelistPath), { recursive: true });
                 fs.writeFileSync(safelistPath, content);
+                removeLegacySafelists(state.rootDir, console.warn);
             }
         } catch {
             // Non-fatal: Tailwind just won't see prescanned classes
@@ -4892,6 +4785,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         id: string,
     ): { code: string; map: null } | null {
         state.sawAnyCss = true;
+        // A stylesheet still pointing at the pre-0.15.0 safelist would scan
+        // nothing and lose every csszyx class in silence; stop the build and
+        // say what replaced it.
+        const [cssFile] = id.split('?');
+        const legacy = findLegacySourceDirective(code, cssFile);
+        if (legacy !== null) {
+            throw new Error(legacySourceMessage(cssFile, legacy.target));
+        }
         if (!cssImportsTailwind(code)) return null;
         state.sawTailwindEntry = true;
         // Recorded before the candidate check below returns: an entry with
@@ -5478,7 +5379,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 assertNoRSCGraphViolation(state.rscModules);
                 // csszyx rewrites sz props into Tailwind class names, but Tailwind
                 // only emits CSS for classes a source/@source covers. The generated
-                // classes live in csszyx-classes.html, which nothing imports — so
+                // classes live in the safelist file, which nothing imports — so
                 // without a CSS entry importing "tailwindcss" (where csszyx injects
                 // the @source), the rewritten classes silently resolve to no styles.
                 if (
@@ -5734,7 +5635,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
                 /**
                  * Vite HMR hook: re-runs theme scan when a watched CSS file changes,
-                 * and incrementally updates csszyx-classes.html when a source file gains new sz classes.
+                 * and incrementally updates the safelist when a source file gains new sz classes.
                  * @param ctx - HMR context containing the changed file
                  * @returns The modules a safelist write affects, so Vite hot-updates
                  * the stylesheet instead of reloading the page; undefined otherwise,
@@ -5786,13 +5687,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         }
                     }
 
-                    // The safelist is markup Tailwind scans, so it is named
-                    // `.html` — and Vite full-reloads the page for any changed
-                    // `.html` that matched no module. Growing the class set
-                    // therefore threw away React state, scroll position and
-                    // open dialogs on the first use of each new utility per
-                    // server lifetime, while the stylesheet had already been
-                    // hot-updated correctly in the same tick (field-reported).
+                    // A safelist write is not a file the dev server can match
+                    // to a module, and `@tailwindcss/vite` answers such a
+                    // change with an unaddressed full-reload when the file is
+                    // one it scanned and its only modules are the asset nodes
+                    // `addWatchFile` made. Growing the class set therefore
+                    // threw away React state, scroll position and open dialogs
+                    // on the first use of each new utility per server
+                    // lifetime, while the stylesheet had already been
+                    // hot-updated correctly in the same tick (field-reported;
+                    // the file was `.html` then, so Vite's own `.html` reload
+                    // fired as well).
                     //
                     // Naming the Tailwind entries as the modules this change
                     // affects is simply true: they `@source` the safelist, so
@@ -5810,14 +5715,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     ) {
                         // Answered even when the lookup finds nothing, because
                         // an EMPTY set is the safe answer here and silence is
-                        // not. Two things read this set and both reload on
-                        // silence: Vite, whose empty-set branch sends a reload
-                        // addressed to the safelist path — which its client
-                        // drops unless the browser is viewing that file — and
-                        // `@tailwindcss/vite`, whose own hot update sends an
-                        // unaddressed one while it still sees modules for a
-                        // file it scanned. Emptying the set stands both down.
-                        // Measured both ways against a real dev server.
+                        // not: `@tailwindcss/vite` returns early from its hot
+                        // update on an empty module list, while silence leaves
+                        // it looking at the asset nodes for a file it scanned
+                        // and sending its unaddressed reload. Vite's own
+                        // empty-set branch only reloads for `.html`, which the
+                        // safelist no longer is.
                         return tailwindEntryModules(ctx.server.moduleGraph);
                     }
 

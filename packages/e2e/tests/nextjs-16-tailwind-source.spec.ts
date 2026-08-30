@@ -3,10 +3,9 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 
 const sourcePath = fileURLToPath(
-    new URL('../../../playground/nextjs-16/csszyx-classes.html', import.meta.url),
+    new URL('../../../playground/nextjs-16/.csszyx/csszyx-classes.txt', import.meta.url),
 );
-const placeholderSource =
-    '<!-- Tailwind @source target used by the Next 16 Turbopack source probe. -->\n';
+const placeholderSource = '# Tailwind @source target used by the Next 16 Turbopack source probe.\n';
 
 test.describe('Next.js 16 Turbopack Tailwind @source Probe', () => {
     test.beforeAll(async () => {
@@ -38,9 +37,7 @@ test.describe('Next.js 16 Turbopack Tailwind @source Probe', () => {
 
         await writeFile(
             sourcePath,
-            ['<!-- updated by nextjs-16-tailwind-source.spec -->', 'p-8', 'bg-red-500', ''].join(
-                '\n',
-            ),
+            ['# updated by nextjs-16-tailwind-source.spec', 'p-8', 'bg-red-500', ''].join('\n'),
         );
 
         await expect

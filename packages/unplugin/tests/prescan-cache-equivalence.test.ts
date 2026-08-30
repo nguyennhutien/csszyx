@@ -15,6 +15,7 @@ import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { loadNativeBinding } from '../../core/native/index.js';
+import { SAFELIST_HEADER } from '../src/safelist-format.js';
 import { vitePlugin } from '../src/unplugin.js';
 
 type ViteConfigHook = {
@@ -60,12 +61,11 @@ afterAll(() => {
 function runPrescan(root: string, parser: 'rust' | 'wasm', cache: boolean): string[] {
     // Each run must observe only its own scan: the safelist writer merges with
     // an existing file, which would mask a run that discovered fewer classes.
-    rmSync(join(root, 'csszyx-classes.html'), { force: true });
+    rmSync(join(root, '.csszyx/csszyx-classes.txt'), { force: true });
     const [prePlugin] = vitePlugin({ build: { parser, cache } }) as ViteConfigHook[];
     prePlugin?.configResolved?.({ root });
-    const html = readFileSync(join(root, 'csszyx-classes.html'), 'utf8');
-    const classList = html.match(/class="([^"]*)"/)?.[1] ?? '';
-    return [...new Set(classList.split(/\s+/).filter(Boolean))].sort();
+    const html = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
+    return [...new Set(html.slice(SAFELIST_HEADER.length).split(/\s+/).filter(Boolean))].sort();
 }
 
 describe('prescan cache equivalence (off == cold == warm)', () => {

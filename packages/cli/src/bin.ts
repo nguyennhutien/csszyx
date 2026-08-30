@@ -21,7 +21,7 @@
 
 import { readFileSync } from 'node:fs';
 
-import cac from 'cac';
+import cac, { type Command } from 'cac';
 
 /**
  * Normalize a repeatable CLI option to its array representation.
@@ -282,50 +282,54 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
     });
 
 // next-prebuild command
-cli.command(
-    'next-prebuild [pattern]',
-    'Seed the Next.js Turbopack csszyx safelist and generation manifest',
-)
-    .option('--root <dir>', 'Next app root (defaults to cwd)')
-    .option('--cwd <dir>', 'Current working directory')
-    .option('--mode <mode>', 'development | production (default: production)')
-    .option('--parser-mode <mode>', 'rust | wasm (default: rust)')
-    .option(
+/**
+ * Options `next-prebuild` and `next-watch` share: where the Next app is, how
+ * its sources are parsed, and where the safelist and cache go. One table,
+ * so the two commands cannot drift apart on a flag or its wording.
+ */
+const NEXT_SAFELIST_OPTIONS: ReadonlyArray<readonly [flag: string, description: string]> = [
+    ['--root <dir>', 'Next app root (defaults to cwd)'],
+    ['--cwd <dir>', 'Current working directory'],
+    ['--parser-mode <mode>', 'rust | wasm (default: rust)'],
+    [
         '--output-file <path>',
-        'Tailwind @source safelist output (default: csszyx-classes.html)',
-    )
-    .option('--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)')
-    .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
-    .option(
+        'Tailwind @source safelist output (default: .csszyx/csszyx-classes.txt)',
+    ],
+    ['--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)'],
+    ['--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)'],
+    [
         '--imported-static-sz',
         'Compile a plain exported sz object into the modules that import it (default)',
-    )
-    .option(
+    ],
+    [
         '--no-imported-static-sz',
         'Leave imported sz objects to the runtime; pass the same to the loader',
-    )
+    ],
+];
+
+/**
+ * @param command - A Next safelist command.
+ * @returns The same command with the shared options registered.
+ */
+function withNextSafelistOptions(command: Command): Command {
+    for (const [flag, description] of NEXT_SAFELIST_OPTIONS) command.option(flag, description);
+    return command;
+}
+
+withNextSafelistOptions(
+    cli.command(
+        'next-prebuild [pattern]',
+        'Seed the Next.js Turbopack csszyx safelist and generation manifest',
+    ),
+)
+    .option('--mode <mode>', 'development | production (default: production)')
     .option('--json', 'Emit a single JSON result instead of formatted text')
     .action(runNextPrebuildCommand);
 
 // next-watch command
-cli.command('next-watch [pattern]', 'Maintain the Next.js Turbopack csszyx safelist')
-    .option('--root <dir>', 'Next app root (defaults to cwd)')
-    .option('--cwd <dir>', 'Current working directory')
-    .option('--parser-mode <mode>', 'rust | wasm (default: rust)')
-    .option(
-        '--output-file <path>',
-        'Tailwind @source safelist output (default: csszyx-classes.html)',
-    )
-    .option('--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)')
-    .option('--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)')
-    .option(
-        '--imported-static-sz',
-        'Compile a plain exported sz object into the modules that import it (default)',
-    )
-    .option(
-        '--no-imported-static-sz',
-        'Leave imported sz objects to the runtime; pass the same to the loader',
-    )
+withNextSafelistOptions(
+    cli.command('next-watch [pattern]', 'Maintain the Next.js Turbopack csszyx safelist'),
+)
     .option('--debounce-ms <ms>', 'Safelist materialization debounce (default: 50)')
     .action(runNextWatchCommand);
 

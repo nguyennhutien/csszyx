@@ -76,6 +76,6 @@ describe('handleHotUpdate when the engine throws', () => {
         ).resolves.toBeUndefined();
         // No classes were discovered, so nothing was safelisted — the failure
         // degrades to "this file contributed nothing", not to a crash.
-        expect(fs.existsSync(path.join(root, 'csszyx-classes.html'))).toBe(false);
+        expect(fs.existsSync(path.join(root, '.csszyx/csszyx-classes.txt'))).toBe(false);
     });
 });

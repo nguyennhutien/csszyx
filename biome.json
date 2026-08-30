@@ -48,7 +48,6 @@
             "!**/test-results",
             "!**/playwright-report",
             "!packages/core/core",
-            "!**/csszyx-classes.html",
             "!**/next-env.d.ts",
             "!**/*.cjs",
             "!**/llms*.txt",

@@ -4,7 +4,8 @@ import * as fs from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import lockfile from 'proper-lockfile';
-import { escapeHtmlAttribute, renderTailwindScannerCandidates } from './html-escape.js';
+import { renderSafelistFile } from './safelist-format.js';
+import { removeLegacySafelists, SAFELIST_FILE } from './safelist-source.js';
 import { sortStrings } from './sort.js';
 
 const DEFAULT_RENAME_RETRIES = 5;
@@ -27,6 +28,8 @@ export interface NextSafelistShardInput {
 
 /** Files used by the Next Turbopack safelist state machine. */
 export interface NextSafelistStatePaths {
+    /** Project root the safelist and cache live under. */
+    rootDir: string;
     cacheDir: string;
     shardsDir: string;
     snapshotPath: string;
@@ -128,10 +131,11 @@ interface ShardRecord {
 export function resolveNextSafelistStatePaths(
     rootDir: string,
     cacheDir = '.csszyx/cache',
-    outputFile = 'csszyx-classes.html',
+    outputFile: string = SAFELIST_FILE,
 ): NextSafelistStatePaths {
     const resolvedCacheDir = path.resolve(rootDir, cacheDir);
     return {
+        rootDir: path.resolve(rootDir),
         cacheDir: resolvedCacheDir,
         shardsDir: path.join(resolvedCacheDir, 'safelist-shards'),
         snapshotPath: path.join(resolvedCacheDir, 'safelist.snapshot.json'),
@@ -203,7 +207,8 @@ export function materializeNextSafelist(
         sources: sortedSources.map(([sourcePath, classSet]) => [sourcePath, classSet]),
     };
 
-    atomicWriteFileSync(paths.outputPath, renderTailwindSourceHtml(classNames), options);
+    atomicWriteFileSync(paths.outputPath, renderSafelistFile(classNames), options);
+    removeLegacySafelists(paths.rootDir, console.warn);
     atomicWriteFileSync(paths.snapshotPath, `${JSON.stringify(snapshot, null, 2)}\n`, options);
 
     return {
@@ -515,21 +520,6 @@ function normalizeShardRecord(filePath: string, data: Partial<ShardFile>): Shard
             pid: data.pid,
         }),
     };
-}
-
-/**
- *
- * @param classNames
- */
-function renderTailwindSourceHtml(classNames: readonly string[]): string {
-    if (classNames.length === 0) {
-        return '<!-- csszyx Next safelist: empty -->\n';
-    }
-    const structuralHtml = classNames
-        .map(className => `<div class="${escapeHtmlAttribute(className)}"></div>`)
-        .join('\n');
-    const scannerCandidates = renderTailwindScannerCandidates(classNames);
-    return `${structuralHtml}\n${scannerCandidates}`;
 }
 
 /**
