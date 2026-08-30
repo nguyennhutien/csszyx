@@ -58,11 +58,11 @@ sz props are added — no server restart needed.
 
 The safelist is plain text, one class per line: Tailwind's scanner reads any file
 as bytes, and parent-child CSS such as `space-y-*` or `[&>span]:*` comes from the
-class name, not from markup around it. A safelist write is not a file Vite can
-match to a module on its own, so csszyx tells it which modules the write
-affects — your Tailwind entry stylesheets, since they `@source` the file — and a
-class the project has never used before arrives as a **CSS hot update**.
-Component state, scroll position and open dialogs survive.
+class name, not from markup around it. With the Vite plugin, a safelist write is
+not a file the dev server can match to a module on its own, so csszyx tells it
+which modules the write affects — your Tailwind entry stylesheets, since they
+`@source` the file — and a class the project has never used before arrives as a
+**CSS hot update**. Component state, scroll position and open dialogs survive.
 
 ## Key Features
 
