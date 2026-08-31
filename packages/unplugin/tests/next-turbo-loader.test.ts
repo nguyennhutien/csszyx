@@ -55,6 +55,27 @@ describe('Next Turbopack loader core', () => {
         } as NextTurboLoaderContext & { dependencies: string[] };
     }
 
+    it('refuses to run while a stylesheet still names the old safelist', () => {
+        const root = tempRoot();
+        const source = 'export const App = () => <div sz={{ p: 4 }} />;';
+        const filename = writeSource(root, source);
+        // A real project root: the resolver settles on the directory that
+        // holds the package manifest, and the stylesheet walk starts there.
+        writeFileSync(join(root, 'package.json'), '{ "name": "app" }\n');
+        mkdirSync(join(root, 'app'), { recursive: true });
+        writeFileSync(
+            join(root, 'app/globals.css'),
+            '@import "tailwindcss";\n@source "../csszyx-classes.html";\n',
+        );
+        expect(() =>
+            runNextTurboLoader(source, loaderContext(root, filename), {
+                parserMode: 'auto',
+                config: { mangleVars: false },
+                writeOptions: { retryDelayMs: 0 },
+            }),
+        ).toThrow(/names the old safelist/);
+    });
+
     it('transforms source, injects runtime imports, writes a shard, and materializes the safelist before returning', () => {
         const root = tempRoot();
         const source = '"use client";\nexport const App=({rest})=> <div sz={{ p: 4, ...rest }} />;';
