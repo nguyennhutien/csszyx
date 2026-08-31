@@ -1,23 +1,42 @@
 #!/usr/bin/env node
-// Cognitive complexity of changed lines, measured before the push.
+// Cognitive complexity of the code a change introduces, measured before the push.
 //
 // Sonar rejects new code above a cognitive complexity of 15 and was the only
 // thing checking it, so the first report of an over-complex function arrived
 // after a push and a review round. `pnpm lint:complexity` exists but ends in
 // `|| true`, which makes it a survey rather than a gate.
 //
-// Scoped the way Sonar scopes, for the same reason Sonar does it:
+// Two things this gate has to get right, and an earlier version got both wrong
+// (measured on pull request #257):
 //
-//   - only files Sonar analyses — `sonar.sources=packages` minus its exclusion
-//     list, so `scripts/`, `apps/` and generated output are out;
-//   - only diagnostics landing on a line the diff touched. The tree still holds
-//     functions above the limit, and a gate that failed whenever one of them
-//     sat in a file someone edited would be turned off rather than obeyed.
+//   - THE RULER. Biome's `noExcessiveCognitiveComplexity` counts differently
+//     from Sonar's S3776: the same function scored 42 under biome and 16 under
+//     Sonar, and a helper extracted to satisfy Sonar then scored 17 under biome
+//     while Sonar read 0. A gate that reports a number nobody else measures
+//     fails in both directions. `sonarjs/cognitive-complexity` is Sonar's own
+//     implementation and prints its exact sentence, so a clean run here means a
+//     clean report there.
+//
+//   - WHAT COUNTS AS NEW. The rule reports at the function HEADER, so scoping
+//     by "diagnostics on a line the diff touched" missed every function whose
+//     body grew without its header moving, which is most of them. Sonar asks a
+//     different question: is this issue present in the base? So does this gate,
+//     by linting the base revision of each changed file through stdin and
+//     keeping the head diagnostics that have no counterpart there.
+//
+// Scoped to `sonar.sources=packages` minus its exclusion list, so `scripts/`,
+// `apps/` and generated output are out.
+//
+// `pnpm lint:complexity` still surveys the whole tree with biome's ruler and
+// still ends in `|| true`. Its numbers are not Sonar's and never were; it is a
+// browsing aid, not a second opinion, and this gate is what a push is measured
+// against. Moving it over needs the file scoping above, because the `sonarjs`
+// plugin is registered for one glob and `--rule` fails on any file outside it.
 //
 // Usage: node scripts/check-changed-complexity.mjs [--base=<ref>]
 
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { changedLines } from './check-patch-coverage.mjs';
@@ -38,8 +57,14 @@ const SONAR_EXCLUDED = [
     /^packages\/e2e\//,
 ];
 
-/** Extensions biome lints. */
+/** Extensions eslint lints here. */
 const LINTABLE = /\.(?:[cm]?[jt]sx?)$/;
+
+/** The limit Sonar's quality profile enforces. */
+const LIMIT = 15;
+
+/** The one rule this gate reads. */
+const RULE = 'sonarjs/cognitive-complexity';
 
 /**
  * Whether Sonar would analyse this path, and therefore whether this gate should.
@@ -53,72 +78,151 @@ export function isSonarScoped(file) {
 }
 
 /**
- * Read biome's text report into one record per diagnostic.
+ * Read an eslint JSON report into one record per complexity diagnostic.
  *
- * The text reporter is used rather than `--reporter=json` because its header
- * line already carries the path and line, and biome writes diagnostics to
- * stderr — a shape that survives being captured whole far more predictably
- * than a JSON document split across two streams.
+ * The report is located by its opening bracket rather than parsed from the
+ * first byte: a warning about a config or an engine version is written to the
+ * same stream ahead of it, and losing every diagnostic to that would make the
+ * gate silently pass.
  *
- * @param output - Combined stdout and stderr from `biome lint`.
- * @returns One entry per diagnostic, with its file and line.
+ * @param output - Whatever eslint wrote.
+ * @param file - Repo-relative path the report is about.
+ * @returns One entry per diagnostic; empty when eslint produced no report.
  */
-export function parseBiomeDiagnostics(output) {
-    const found = [];
-    const header = /^(\S+):(\d+):\d+ (lint\/\S+)/;
-    const lines = output.split('\n');
-    for (const [index, line] of lines.entries()) {
-        const match = header.exec(line);
-        if (match === null) continue;
-        // The measured number lives a couple of lines below the header, and
-        // reporting it is the difference between "too complex" and knowing how
-        // far over the limit the function sits.
-        const detail = lines
-            .slice(index, index + 4)
-            .find(candidate => candidate.includes('complexity of'));
-        found.push({
-            file: match[1],
-            line: Number(match[2]),
-            rule: match[3],
-            detail: detail === undefined ? '' : detail.trim().replace(/^×\s*/, ''),
-        });
-    }
-    return found;
-}
-
-/**
- * Keep only the diagnostics that sit on a line the diff touched.
- *
- * @param diagnostics - Everything biome reported.
- * @param touched - Repo-relative path mapped to the lines the diff changed.
- * @returns The subset this change is responsible for.
- */
-export function onChangedLines(diagnostics, touched) {
-    return diagnostics.filter(diagnostic => touched.get(diagnostic.file)?.has(diagnostic.line));
-}
-
-/**
- * Run biome over one file and capture everything it wrote.
- *
- * @param file - Repo-relative path.
- * @returns Combined output, empty when biome could not be run.
- */
-function lintFile(file) {
+export function parseEslintDiagnostics(output, file) {
+    const start = output.indexOf('[');
+    if (start === -1) return [];
+    let report;
     try {
-        return execFileSync(
+        report = JSON.parse(output.slice(start));
+    } catch {
+        return [];
+    }
+    return report.flatMap(result =>
+        (result.messages ?? [])
+            .filter(message => message.ruleId === RULE)
+            .map(message => ({ file, line: message.line, message: message.message })),
+    );
+}
+
+/**
+ * The head diagnostics that have no counterpart in the base revision.
+ *
+ * Identity is the message plus the text of the line it points at, which is the
+ * function's own header. That survives the function moving down the file as
+ * code above it grows, and still separates two functions that happen to score
+ * the same. It deliberately does NOT survive the measured number changing: a
+ * function this change pushed from 17 to 19 is one this change made worse, and
+ * Sonar reports it too because the edit is in its new code.
+ *
+ * @param head - Diagnostics from the working tree, each carrying its line text.
+ * @param base - Diagnostics from the base revision, same shape.
+ * @returns The subset this change is answerable for.
+ */
+export function newDiagnostics(head, base) {
+    const key = diagnostic => `${diagnostic.message} ${diagnostic.text}`;
+    const known = new Set(base.map(key));
+    return head.filter(diagnostic => !known.has(key(diagnostic)));
+}
+
+/**
+ * Lint one source text as if it were the given file.
+ *
+ * Fed through stdin so the base revision never touches the working tree, and
+ * named so eslint's flat config resolves the same blocks it would for the real
+ * file: the `sonarjs` plugin is registered per path, so an out-of-tree
+ * temporary file would silently lint without it.
+ *
+ * @param file - Repo-relative path, used for config resolution.
+ * @param source - The text to lint.
+ * @returns One entry per complexity diagnostic.
+ */
+function lintSource(file, source) {
+    let output;
+    try {
+        output = execFileSync(
             'pnpm',
-            ['exec', 'biome', 'lint', '--config-path=./biome.complexity.json', file],
-            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 16 * 1024 * 1024 },
+            [
+                'exec',
+                'eslint',
+                '--stdin',
+                '--stdin-filename',
+                file,
+                '--format',
+                'json',
+                '--rule',
+                `${RULE}: ["error", ${LIMIT}]`,
+            ],
+            {
+                encoding: 'utf8',
+                input: source,
+                stdio: ['pipe', 'pipe', 'pipe'],
+                maxBuffer: 32 * 1024 * 1024,
+            },
         );
     } catch (error) {
-        // A non-zero exit IS the finding, and its report is on the streams the
+        // A non-zero exit IS the finding, and the report is on the streams the
         // failure carries. Only a missing binary leaves both empty.
-        return `${error.stdout ?? ''}${error.stderr ?? ''}`;
+        output = `${error.stdout ?? ''}${error.stderr ?? ''}`;
+    }
+    return parseEslintDiagnostics(output, file);
+}
+
+/**
+ * Attach the source text each diagnostic points at.
+ *
+ * @param diagnostics - Records carrying a 1-based line.
+ * @param source - The text they were measured on.
+ * @returns The same records with a `text` field.
+ */
+function withLineText(diagnostics, source) {
+    const lines = source.split('\n');
+    return diagnostics.map(diagnostic => ({
+        ...diagnostic,
+        text: (lines[diagnostic.line - 1] ?? '').trim(),
+    }));
+}
+
+/**
+ * The file's content at the base revision.
+ *
+ * @param base - Revision to read.
+ * @param file - Repo-relative path.
+ * @returns The text, or null when the change added the file.
+ */
+function baseSource(base, file) {
+    try {
+        return execFileSync('git', ['show', `${base}:${file}`], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+            maxBuffer: 32 * 1024 * 1024,
+        });
+    } catch {
+        return null;
     }
 }
 
 /**
- * Report every changed line that exceeds the cognitive-complexity limit.
+ * Every function one changed file puts over the limit for the first time.
+ *
+ * The base revision is linted only when the head has something to report, so an
+ * unremarkable file costs one eslint run rather than two.
+ *
+ * @param file - Repo-relative path.
+ * @param base - Revision to compare against.
+ * @returns The diagnostics this change is answerable for.
+ */
+function offendingIn(file, base) {
+    const head = readFileSync(file, 'utf8');
+    const found = withLineText(lintSource(file, head), head);
+    if (found.length === 0) return [];
+    const before = baseSource(base, file);
+    if (before === null) return found;
+    return newDiagnostics(found, withLineText(lintSource(file, before), before));
+}
+
+/**
+ * Report every function this change put over the cognitive-complexity limit.
  *
  * @param base - Revision to compare against.
  * @returns Process exit code.
@@ -138,19 +242,19 @@ function main(base) {
         return 0;
     }
 
-    console.log(`[complexity] checking ${files.length} changed file(s) against a limit of 15...`);
-    const offending = files.flatMap(file =>
-        onChangedLines(parseBiomeDiagnostics(lintFile(file)), touched),
+    console.log(
+        `[complexity] checking ${files.length} changed file(s) against a limit of ${LIMIT}...`,
     );
+    const offending = files.flatMap(file => offendingIn(file, base));
 
     if (offending.length === 0) {
-        console.log('[complexity] every changed line is within the limit.');
+        console.log('[complexity] every function this change touches is within the limit.');
         return 0;
     }
 
-    console.error('\n[complexity] changed lines above the cognitive-complexity limit:');
+    console.error('\n[complexity] functions this change put over the limit:');
     for (const diagnostic of offending) {
-        console.error(`  ${diagnostic.file}:${diagnostic.line} — ${diagnostic.detail}`);
+        console.error(`  ${diagnostic.file}:${diagnostic.line} — ${diagnostic.message}`);
     }
     console.error(
         '\nSonar rejects these on the pull request, so fixing them here costs one\n' +

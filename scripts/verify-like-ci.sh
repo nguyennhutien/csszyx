@@ -213,6 +213,7 @@ pnpm check:patch-coverage
 # Sonar scopes to new code: the existing tree has functions above the line, and
 # a repo-wide gate would fail every run until that backlog is cleared.
 echo "[verify-like-ci] Cognitive complexity of changed files (mirrors Sonar)..."
+node --test scripts/check-changed-complexity.test.mjs
 node scripts/check-changed-complexity.mjs
 
 echo "[verify-like-ci] Duplication on changed lines (mirrors Sonar)..."
