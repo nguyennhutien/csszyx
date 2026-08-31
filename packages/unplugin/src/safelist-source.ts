@@ -443,6 +443,27 @@ export function cssImportsTailwind(code: string): boolean {
 }
 
 /**
+ * Whether the params of one parsed `@import` at-rule name a file of this
+ * project rather than a package.
+ *
+ * A stylesheet can reach Tailwind through one of these — a shared entry that
+ * imports `tailwindcss` itself — and PostCSS runs before any of them are
+ * inlined, so the importer is all a plugin sees. Answering yes here is what
+ * keeps such an entry from being passed over in silence; an `@source` added
+ * to a stylesheet that never becomes a Tailwind entry is never compiled and
+ * so costs nothing.
+ *
+ * @param params - the at-rule's params, e.g. `"./theme.css" layer(base)`.
+ * @returns true if the import target is a relative or absolute path.
+ */
+export function importParamsAreLocal(params: string): boolean {
+    let target = params.trim();
+    if (target.startsWith('url(')) target = target.slice(4).trim();
+    if (target.startsWith('"') || target.startsWith("'")) target = target.slice(1);
+    return target.startsWith('./') || target.startsWith('../') || target.startsWith('/');
+}
+
+/**
  * Whether the params of one parsed `@import` at-rule name the `tailwindcss`
  * package. The same match as {@link cssImportsTailwind}, for callers that hold
  * an AST instead of source text.

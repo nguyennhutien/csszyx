@@ -7,6 +7,7 @@ import {
     DEFAULT_SAFELIST_FILES,
     findLegacySourceStylesheet,
     findPostcssConfigWithoutCsszyx,
+    importParamsAreLocal,
     LEGACY_SAFELIST_FILES,
     removeLegacySafelists,
     SAFELIST_FILE,
@@ -97,6 +98,33 @@ describe('findLegacySourceStylesheet', () => {
         mkdirSync(join(root, 'app'));
         writeFileSync(join(root, 'app/globals.css'), '@source "../csszyx-classes.html";\n');
         expect(findLegacySourceStylesheet(root)).toBeNull();
+    });
+});
+
+describe('importParamsAreLocal', () => {
+    /**
+     * A stylesheet reaching Tailwind through one of these is why the PostCSS
+     * plugin treats it as a possible entry, so every spelling CSS allows for
+     * a local target has to answer yes.
+     */
+    it.each([
+        ['a quoted relative path', '"./theme.css"'],
+        ['single quotes', "'./theme.css'"],
+        ['a parent path', '"../shared/theme.css"'],
+        ['an absolute path', '"/styles/theme.css"'],
+        ['a url() target', 'url("./theme.css")'],
+        ['a url() target without quotes', 'url(./theme.css)'],
+        ['import options after the target', '"./theme.css" layer(base)'],
+    ])('reads %s as local', (_label, params) => {
+        expect(importParamsAreLocal(params)).toBe(true);
+    });
+
+    it.each([
+        ['the tailwindcss package', '"tailwindcss"'],
+        ['another package', '"tailwindcss-animate"'],
+        ['a package subpath', '"@acme/ui/styles.css"'],
+    ])('reads %s as a package', (_label, params) => {
+        expect(importParamsAreLocal(params)).toBe(false);
     });
 });
 
