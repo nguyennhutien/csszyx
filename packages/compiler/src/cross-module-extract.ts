@@ -580,6 +580,21 @@ export function extractCrossModuleForwards(source: string, filename: string): Cr
     const forwards: CrossModuleForward[] = [];
     for (const statement of module.staticExports) {
         for (const entry of statement.entries) {
+            // The record's statement span is the IMPORT the entry was linked
+            // through, so the export clause is read around the entry itself:
+            // `export { X } from './p'` names the provider's export, while the
+            // two-statement form is spelled by a local binding.
+            // A parsed clause always opens and closes around its entries, and a
+            // clause is arbitrarily long, so the braces are found, not windowed.
+            const clauseClose = source.indexOf('}', entry.end);
+            const afterClause = source.slice(clauseClose + 1, clauseClose + 64).trimStart();
+            const throughImport = !(
+                afterClause.startsWith('from') && /^["']/.test(afterClause.slice(4).trimStart())
+            );
+            const clauseOpen = source.lastIndexOf('{', entry.start);
+            const typeStatement = /\bexport\s+type$/.test(
+                source.slice(Math.max(0, clauseOpen - 48), clauseOpen).trimEnd(),
+            );
             // A type-only export carries nothing at runtime; an entry with no
             // module request is a value this module declares, which the value
             // extractor owns.
@@ -588,14 +603,23 @@ export function extractCrossModuleForwards(source: string, filename: string): Cr
             const exportName = recordedName(entry.exportName);
             const importedName = recordedName(entry.importName);
             if (exportName === null || importedName === null) continue;
+            if (throughImport) {
+                // A type-only IMPORT re-exported by name already reaches here
+                // with `isType` set; the two marks the record does not carry
+                // are on the export clause: `export type {` and an inline
+                // `type X`, which sits inside the entry's own span.
+                if (typeStatement) continue;
+                if (/^type\s/.test(source.slice(entry.start, entry.end))) continue;
+            }
             forwards.push({
                 exportName,
                 // The record spells a re-exported default import by its LOCAL
                 // name; the provider exports it as `default`, and that is the
                 // name a resolver must look up.
-                importedName: defaultImports.has(bindingKey(specifier, importedName))
-                    ? DEFAULT_IMPORT_NAME
-                    : importedName,
+                importedName:
+                    throughImport && defaultImports.has(bindingKey(specifier, importedName))
+                        ? DEFAULT_IMPORT_NAME
+                        : importedName,
                 specifier,
             });
         }
