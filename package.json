@@ -85,6 +85,7 @@
     "security:sca": "pnpm audit --audit-level high && pnpm security:lockfile",
     "check:var-hostile-keys": "node scripts/check-var-hostile-keys.mjs",
     "check:szcn-collision-blocklist": "node scripts/check-szcn-collision-blocklist.mjs",
+    "check:sonar-drift": "node --test scripts/check-sonar-rule-drift.test.mjs && node scripts/check-sonar-rule-drift.mjs",
     "check:patch-coverage": "node --test scripts/check-patch-coverage.test.mjs && node scripts/check-patch-coverage.mjs",
     "codeql:local": "bash scripts/codeql-local.sh",
     "verify:ci": "bash scripts/verify-like-ci.sh",
