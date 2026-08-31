@@ -135,17 +135,18 @@ let availability: boolean | undefined;
  * that is a real answer — the wasm build of the engine ships inside
  * `@csszyx/core`. It is built WITHOUT the migrate feature, so for migrate the
  * same sentence points at a bundler option that cannot help with the command
- * the user ran. The recourse here is the platform package or nothing.
+ * the user ran. The recourse here is the platform package or nothing. The
+ * loader's first line is kept, though: it already says whether the package is
+ * missing, too old, or built without this export.
  *
  * @param packageName - Package the loader looked for, or null when no
  *   prebuilt package covers this platform at all.
+ * @param diagnosis - The loader's own first line: it already knows whether
+ *   the package is missing, too old, or built without this export.
  * @returns Three lines: what is missing, what to do, what did not happen.
  */
-function unavailableDetail(packageName: string | null): string {
-    const missing =
-        packageName === null
-            ? 'no prebuilt package covers this platform'
-            : `${packageName} is not installed`;
+function unavailableDetail(packageName: string | null, diagnosis: string): string {
+    const missing = diagnosis;
     const help =
         packageName === null
             ? 'help: prebuilt packages exist for linux, darwin and win32 on x64 and arm64'
@@ -238,7 +239,9 @@ function guarded<T>(call: () => T): T {
         return call();
     } catch (error) {
         if (error instanceof CsszyxNativeUnavailableError) {
-            throw new RustMigrateUnavailableError(unavailableDetail(error.packageName));
+            throw new RustMigrateUnavailableError(
+                unavailableDetail(error.packageName, error.detail.split('\n')[0]),
+            );
         }
         throw error;
     }
