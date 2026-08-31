@@ -221,9 +221,8 @@ compressed response the arithmetic usually comes out flat or slightly negative:
   short of paying for their own map entry.
 
 Measured on the `vite-react` playground (151 censused names), `mangle: true` costs
-about **+2 KB gzipped** against the same build with mangling off with the map
-shipped twice (the deprecated `'both'`); the default `'bundle'` delivery ships
-one copy. Enable mangling when you want the class
+about **+2 KB gzipped** against the same build with mangling off; the map
+ships once, inside the bundle. Enable mangling when you want the class
 names unreadable, and treat the byte delta as a rounding error in either direction.
 :::
 

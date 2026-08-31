@@ -28,7 +28,9 @@ import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 The `csszyx` umbrella package includes the compiler, runtime, types, and
 build plugin. The command-line tools (`migrate`, `next`, type generation)
 ship separately as `@csszyx/cli` — run them with `npx @csszyx/cli <command>`
-or install with `pnpm add -D @csszyx/cli`.
+or install with `pnpm add -D @csszyx/cli`. A Next.js project also adds
+`@csszyx/unplugin` directly, because its configs name that package (the
+Next.js steps below say where); `csszyx init` does this for you.
 
 For portable `sz` autocomplete through compatible TypeScript editor hosts,
 install the preview `@csszyx/ts-plugin` separately and follow the
@@ -209,8 +211,7 @@ behaviour before relying on it.
    `safelistOutputFile` somewhere else, list every file it should name:
    `'@csszyx/unplugin/postcss': { safelistFiles: ['.csszyx/my-classes.txt'] }`.
    A safelist that does not exist yet is fine: Tailwind scans nothing for it and
-   does not fail. Pass `{ safelistFiles: ['…'] }` if you moved the output with
-   `--output-file`.
+   does not fail.
 
 4. **Keep the Tailwind safelist fresh.** Run the csszyx watcher/prebuild
    around Next. Production builds fail-closed

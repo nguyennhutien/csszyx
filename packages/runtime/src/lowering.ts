@@ -30,10 +30,10 @@ type RuntimeMangleMap = Readonly<Record<string, string>>;
 /**
  * Global slots that may expose the SSR/runtime mangle map.
  *
- * `__csszyx` is the LEGACY bridge: the object the deprecated inline HTML
- * installer (`mangleMapDelivery: 'html' | 'both'`) assigns. The registry is
- * the delivery every current build uses; the bridge stays readable for one
- * migration window.
+ * `__csszyx` is the LEGACY bridge: the global the inline HTML installer of
+ * earlier releases assigned, and that `mangleDebugGlobal` still assigns on
+ * request. The registry is what every current build reads; the bridge stays
+ * readable for one migration window.
  */
 interface CsszyxMangleGlobals {
     __csszyx_ssr_mangle_map?: RuntimeMangleMap;

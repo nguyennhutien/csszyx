@@ -81,9 +81,10 @@ directly to disk; explicit `production.mangle: true` emits a warning.
 
 The default parser is `rust`, which runs through the native engine in the
 matching optional `@csszyx/core-*` platform package. When that package is
-missing, csszyx fails loudly instead of silently falling back to another
-parser; reinstall to pick up the optional dependency for your platform, or
-opt into the JavaScript engine explicitly.
+missing, the default falls back to the WASM engine and says so once; an
+explicit `build.parser: "rust"` fails instead of falling back. Reinstall to
+pick up the optional dependency for your platform, or set
+`build.parser: "wasm"` to choose the WASM engine outright.
 
 Per project:
 
