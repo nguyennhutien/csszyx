@@ -1,5 +1,59 @@
 # csszyx
 
+## [0.15.0](https://github.com/nguyennhutien/csszyx/compare/v0.14.5...v0.15.0) (2026-08-31)
+
+### ⚠ BREAKING CHANGES
+
+* `production.mangleMapDelivery` is removed. There is one delivery — a registration module inside the JS bundle — on Vite, Rollup and webpack alike, so no build emits an executable inline `<script>` for the mangle map and a strict `script-src 'self'` policy needs no exception. A config still setting the option is warned once and the value ignored; delete the line, and drop any import of the `MangleMapDelivery` type from `@csszyx/types/config`, which is gone with it. `window.__csszyx` is no longer installed by default — set `production.mangleDebugGlobal: true` to get it, or read `getMangleRegistry()` from `@csszyx/runtime`. A build with mangling off (the default) installs nothing on `window`. ([#250](https://github.com/nguyennhutien/csszyx/issues/250))
+* **core:** the mangle checksum is computed over a different canonical form, so every checksum value changes. A page keeps its build's checksum embedded in it and the runtime that verifies it ships alongside, so an upgrade needs no action; a checksum recorded outside a build — a fixture, a snapshot, a monitoring baseline — has to be re-taken. ([#250](https://github.com/nguyennhutien/csszyx/issues/250))
+* **cli:** `csszyx migrate` requires the `@csszyx/core-<platform>` package and no longer falls back to a TypeScript implementation, so it fails on a platform with no prebuilt binary or after an install that skipped optional packages. `CSSZYX_MIGRATE_ENGINE` is gone: there is one engine to select. `migrateSource` and `classNameToSzObject` keep their names and shapes but throw when that package is absent. ([#255](https://github.com/nguyennhutien/csszyx/issues/255))
+* **unplugin:** the safelist is written to `.csszyx/csszyx-classes.txt` instead of `csszyx-classes.html`. Remove any hand-written `@source "…/csszyx-classes.html"`: the bundler plugins inject the directive, and a Next.js project gets it from `@csszyx/unplugin/postcss` listed before `@tailwindcss/postcss` in `postcss.config`, with `@csszyx/unplugin` as a direct dependency. A build whose stylesheet still names the old file fails with this guidance. Ignore, lint-ignore and clean entries for `csszyx-classes.html` can go; `.csszyx/` covers the new file. A project that passes its own `--output-file` or `safelistOutputFile` keeps it, and lists that file in the PostCSS plugin's `safelistFiles`. ([#258](https://github.com/nguyennhutien/csszyx/issues/258))
+
+### Features
+
+* deliver the mangle map inside the bundle instead of an inline script ([#250](https://github.com/nguyennhutien/csszyx/issues/250))
+* register the runtime mangle map from the bundle, not an inline script ([#250](https://github.com/nguyennhutien/csszyx/issues/250))
+* drop the inline mangle installer from every lane and remove the delivery option ([#250](https://github.com/nguyennhutien/csszyx/issues/250))
+* **cli:** run migrate on the engine only, and delete the TypeScript one ([#255](https://github.com/nguyennhutien/csszyx/issues/255))
+* **core:** answer the class-level migrate question from the engine ([#255](https://github.com/nguyennhutien/csszyx/issues/255))
+* **unplugin:** move the safelist to .csszyx/csszyx-classes.txt ([#258](https://github.com/nguyennhutien/csszyx/issues/258))
+* **unplugin:** add a PostCSS plugin that points Tailwind at the safelist ([#258](https://github.com/nguyennhutien/csszyx/issues/258))
+* **cli:** wire the csszyx PostCSS plugin into Next.js projects ([#258](https://github.com/nguyennhutien/csszyx/issues/258))
+
+### Bug Fixes
+
+* **unplugin:** register the mangle map from the webpack build, not from imports ([#250](https://github.com/nguyennhutien/csszyx/issues/250))
+* **runtime:** decode an element's classes from its class attribute ([#250](https://github.com/nguyennhutien/csszyx/issues/250))
+* **runtime:** read the checksum attribute the build actually writes ([#250](https://github.com/nguyennhutien/csszyx/issues/250))
+* **runtime:** derive the checksum the way the Rust core derives it ([#250](https://github.com/nguyennhutien/csszyx/issues/250))
+* **core:** make the mangle checksum tell two different maps apart ([#250](https://github.com/nguyennhutien/csszyx/issues/250))
+* **runtime:** order names by the bytes that get hashed ([#250](https://github.com/nguyennhutien/csszyx/issues/250))
+* **unplugin:** let the Turbopack loader yield to a running watcher ([#253](https://github.com/nguyennhutien/csszyx/issues/253))
+* **core:** tell a migrate user what this install actually needs ([#255](https://github.com/nguyennhutien/csszyx/issues/255))
+* **core:** let the loader answer for what the caller needed ([#255](https://github.com/nguyennhutien/csszyx/issues/255))
+* **core:** say what a migrate user can do, in the layer that knows ([#255](https://github.com/nguyennhutien/csszyx/issues/255))
+* **cli:** keep a migrate run answering when it cannot do the job ([#255](https://github.com/nguyennhutien/csszyx/issues/255))
+* **core:** say what the native engine is missing, what to do and what still holds ([#256](https://github.com/nguyennhutien/csszyx/issues/256))
+* **unplugin:** stop a growing safelist from reloading the dev page ([#257](https://github.com/nguyennhutien/csszyx/issues/257))
+* **unplugin:** compare the safelist path the way Vite reports it ([#257](https://github.com/nguyennhutien/csszyx/issues/257))
+* **cli:** install @csszyx/unplugin for Next.js and keep every PostCSS config Next reads ([#258](https://github.com/nguyennhutien/csszyx/issues/258))
+* **unplugin:** recognise every legacy safelist csszyx wrote, and only those ([#258](https://github.com/nguyennhutien/csszyx/issues/258))
+* **unplugin:** have PostCSS watch the safelist directory ([#258](https://github.com/nguyennhutien/csszyx/issues/258))
+* **unplugin:** stop a Next.js upgrade whose stylesheet still names the old safelist ([#259](https://github.com/nguyennhutien/csszyx/issues/259))
+* **unplugin:** refuse to run the PostCSS plugin after Tailwind ([#259](https://github.com/nguyennhutien/csszyx/issues/259))
+* **compiler:** keep the loader's diagnosis when migrate cannot use the native engine ([#259](https://github.com/nguyennhutien/csszyx/issues/259))
+* **compiler:** read type-only and from-clause re-exports as the AST walker did ([#259](https://github.com/nguyennhutien/csszyx/issues/259))
+* **cli:** install the Tailwind PostCSS adapter the written config names ([#259](https://github.com/nguyennhutien/csszyx/issues/259))
+* **unplugin:** name the safelist from a stylesheet that imports Tailwind through another file ([#259](https://github.com/nguyennhutien/csszyx/issues/259))
+
+### Performance
+
+* **vscode:** share one TypeScript environment across the drift table ([#254](https://github.com/nguyennhutien/csszyx/issues/254))
+* **unplugin:** merge the CSS variable maps when read, not on every write ([#255](https://github.com/nguyennhutien/csszyx/issues/255))
+* **cli:** migrate in runs of 25 files or 2 MiB instead of one call ([#255](https://github.com/nguyennhutien/csszyx/issues/255))
+* **compiler:** parse only modules that can carry a forward, and parse cheaper ([#255](https://github.com/nguyennhutien/csszyx/issues/255))
+* **unplugin:** build RSC module records only when a server module exists ([#255](https://github.com/nguyennhutien/csszyx/issues/255))
+
 ## [0.14.5](https://github.com/nguyennhutien/csszyx/compare/v0.14.4...v0.14.5) (2026-08-25)
 
 ### Features

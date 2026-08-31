@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/mcp-server",
-  "version": "0.14.5",
+  "version": "0.15.0",
   "description": "Model Context Protocol (MCP) server for csszyx — enables AI agents to understand and generate sz props",
   "license": "MIT",
   "type": "module",
