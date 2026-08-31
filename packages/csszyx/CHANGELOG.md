@@ -1,5 +1,33 @@
 # csszyx
 
+## [0.15.0](https://github.com/nguyennhutien/csszyx/compare/v0.14.5...v0.15.0) (2026-08-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **unplugin:** the safelist is written to `.csszyx/csszyx-classes.txt` instead of `csszyx-classes.html`. Remove any hand-written `@source "…/csszyx-classes.html"`: the bundler plugins inject the directive, and a Next.js project gets it from `@csszyx/unplugin/postcss` listed before `@tailwindcss/postcss` in `postcss.config`, with `@csszyx/unplugin` as a direct dependency. A build whose stylesheet still names the old file fails with this guidance. Ignore, lint-ignore and clean entries for `csszyx-classes.html` can go; `.csszyx/` covers the new file. A project that passes its own `--output-file` or `safelistOutputFile` keeps it, and lists that file in the PostCSS plugin's `safelistFiles`.
+* **cli:** `csszyx migrate` requires the `@csszyx/core-<platform>` package and no longer falls back to a TypeScript implementation, so it fails on a platform with no prebuilt binary or after an install that skipped optional packages. `CSSZYX_MIGRATE_ENGINE` is gone: there is one engine to select. `migrateSource` and `classNameToSzObject` keep their names and shapes but throw when that package is absent.
+* `production.mangleMapDelivery` defaults to `'bundle'` on the vite/rollup lanes; `'html'` and `'both'` still work but are deprecated and warn once per build. `window.__csszyx` is no longer installed by default — set `production.mangleDebugGlobal: true` to get it, or read `getMangleRegistry()` from `@csszyx/runtime`. A build with mangling off (the default) no longer installs anything on `window`.
+
+### Features
+
+* **cli:** run migrate on the engine only, and delete the TypeScript one ([#255](https://github.com/nguyennhutien/csszyx/issues/255)) ([387c887](https://github.com/nguyennhutien/csszyx/commit/387c8873799f55c7b32c8e7167f10b0833e88ab6))
+* deliver the mangle map inside the bundle instead of an inline script ([#250](https://github.com/nguyennhutien/csszyx/issues/250)) ([4ca3577](https://github.com/nguyennhutien/csszyx/commit/4ca357714e213379d8b5084d25a1261ba08af9ba))
+* **unplugin:** move the safelist to .csszyx/csszyx-classes.txt ([#258](https://github.com/nguyennhutien/csszyx/issues/258)) ([d58e2f3](https://github.com/nguyennhutien/csszyx/commit/d58e2f3a3afdf187968f0db95c71c651e3152009))
+
+
+### Bug Fixes
+
+* **core:** say what the native engine is missing, what to do and what still holds ([#256](https://github.com/nguyennhutien/csszyx/issues/256)) ([730de8e](https://github.com/nguyennhutien/csszyx/commit/730de8edb08bc1af685b496390e85cfcbf44c23c))
+* **unplugin:** let the Turbopack loader yield to a running watcher ([#253](https://github.com/nguyennhutien/csszyx/issues/253)) ([5d4838a](https://github.com/nguyennhutien/csszyx/commit/5d4838a9aff9b556cc934bbda5064d96dd3cf8a7))
+* **unplugin:** stop a growing safelist from reloading the dev page ([#257](https://github.com/nguyennhutien/csszyx/issues/257)) ([4276963](https://github.com/nguyennhutien/csszyx/commit/427696388612586ed259ff8228c483e0e36f026e))
+* **unplugin:** stop a Next.js upgrade whose stylesheet still names the old safelist ([#259](https://github.com/nguyennhutien/csszyx/issues/259)) ([bb1caec](https://github.com/nguyennhutien/csszyx/commit/bb1caec7d7c538230395902c5e20f49db2355c81))
+
+
+### Performance
+
+* **vscode:** share one TypeScript environment across the drift table ([#254](https://github.com/nguyennhutien/csszyx/issues/254)) ([df28faa](https://github.com/nguyennhutien/csszyx/commit/df28faaf99760f2f623b19267c540a44eebb8ba2))
+
 ## [0.14.5](https://github.com/nguyennhutien/csszyx/compare/v0.14.4...v0.14.5) (2026-08-25)
 
 ### Features
