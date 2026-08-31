@@ -2144,6 +2144,26 @@ function normalizeSourceFilename(filename: string): string {
 /** TS/JS extensions accepted by the plain script-id gates. */
 const SCRIPT_ID_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'] as const;
 
+/**
+ * Extensions a FILE must carry to count as a stylesheet of its own.
+ *
+ * Read after the query is stripped from a module id, which is where a
+ * component's style block stops looking like a stylesheet: the id
+ * `App.vue?vue&type=style&index=0&lang.css` ends in `.css`, the file `App.vue`
+ * does not.
+ */
+const STYLESHEET_FILE_EXTENSIONS = [
+    '.css',
+    '.pcss',
+    '.postcss',
+    '.scss',
+    '.sass',
+    '.less',
+    '.styl',
+    '.stylus',
+    '.sss',
+] as const;
+
 /** Script extensions accepted by the transform gate, incl. module flavours. */
 const SOURCE_MODULE_EXTENSIONS = [...SCRIPT_ID_EXTENSIONS, '.cts', '.mts', '.cjs', '.mjs'] as const;
 
@@ -4807,7 +4827,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // `split` always yields a first element, so an id with no query
         // answers with the whole id.
         const [entryFile] = id.split('?');
-        state.tailwindEntryFiles.add(entryFile);
+        // A component's style block reaches this transform because its id ends
+        // in `.css` — `App.vue?vue&type=style&index=0&lang.css` — while the
+        // file behind it is the whole component. Recording that file as an
+        // entry makes every later safelist write answer with everything the
+        // SFC compiled to, template and script included, and Vite turns that
+        // into a `js-update` that re-runs the component and drops its state.
+        // The `@source` directive below still goes in, so the block's own
+        // Tailwind build sees the safelist; only the hot-update address is
+        // withheld, and a stylesheet importing Tailwind from a `.vue` file is
+        // rare enough that losing it costs a reload rather than correctness.
+        if (STYLESHEET_FILE_EXTENSIONS.some(ext => entryFile.endsWith(ext))) {
+            state.tailwindEntryFiles.add(entryFile);
+        }
         if (cssHasContentScope(code)) state.tailwindEntryScoped = true;
         if (!hasInjectableTailwindCandidate(state.classes)) return null;
 
