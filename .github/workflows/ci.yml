@@ -111,6 +111,19 @@ jobs:
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           bash scripts/verify-commit-messages-range.sh "origin/${{ github.base_ref }}" HEAD
 
+      # The squash subject is the pull request TITLE verbatim, and it is what
+      # release-please parses to decide the next version. Nothing checked it:
+      # every commit below could be clean while the title release-please reads
+      # was unparseable, mistyped, or carried a placeholder the changelog would
+      # strip. Read through the environment rather than interpolated into the
+      # script, so a title containing a quote or a backtick stays data.
+      - name: Validate the pull request title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/pr-title.txt"
+          node scripts/validate-commit-message-policy.mjs "$RUNNER_TEMP/pr-title.txt" --subject-only
+
   # Fast Biome preflight. Runs the same `pnpm lint:fast` script as
   # local dev (Biome only, no ESLint, no Rust toolchain) so most
   # formatting, import-order, and syntax lint issues surface before
