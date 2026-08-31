@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { execa } from 'execa';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('execa', () => ({ execa: vi.fn(async () => ({ stdout: '', stderr: '' })) }));
@@ -159,6 +160,29 @@ describe('init Next.js existing-config paths', () => {
             expect(logs.join('\n')).toContain("'@csszyx/unplugin/postcss': {}");
         },
     );
+
+    it('does not reinstall a Tailwind PostCSS adapter the project already has', async () => {
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.mocked(execa).mockClear();
+        const cwd = tempRoot();
+        write(
+            cwd,
+            'package.json',
+            JSON.stringify({
+                dependencies: { next: '^16', react: '^19' },
+                devDependencies: { tailwindcss: '^4', '@tailwindcss/postcss': '^4' },
+            }),
+        );
+        mkdirSync(join(cwd, 'app'));
+        write(cwd, 'app/globals.css', '@import "tailwindcss";\n');
+        await init({ yes: true, cwd });
+        expect(existsSync(join(cwd, 'postcss.config.mjs'))).toBe(true);
+        const adds = vi
+            .mocked(execa)
+            .mock.calls.map(call => (call[1] as string[]).join(' '))
+            .filter(args => args.includes('@tailwindcss/postcss'));
+        expect(adds).toEqual([]);
+    });
 
     it('treats a postcss key in package.json as the config Next will read', async () => {
         const logs: string[] = [];

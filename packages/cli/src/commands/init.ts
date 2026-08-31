@@ -77,6 +77,19 @@ const POSTCSS_CONFIG_FILES = [
 
 /**
  * @param cwd - Project root directory.
+ * @param name - Package name.
+ * @returns Whether package.json lists it as a dependency of any kind.
+ */
+async function hasDependency(cwd: string, name: string): Promise<boolean> {
+    const packageJson = JSON.parse(await fs.readFile(path.join(cwd, 'package.json'), 'utf8')) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+    };
+    return name in { ...packageJson.dependencies, ...packageJson.devDependencies };
+}
+
+/**
+ * @param cwd - Project root directory.
  * @returns Whether Next would already find a PostCSS config here.
  */
 async function hasPostcssConfig(cwd: string): Promise<boolean> {
@@ -264,7 +277,9 @@ async function createInitFiles(
         );
         await fs.writeFile(configPath, generateConfigFile(config));
         if (config.installTailwind) await setupTailwindCss(cwd);
-        if (NEXTJS_FRAMEWORKS.has(projectInfo.framework)) await setupNextPostcss(cwd);
+        if (NEXTJS_FRAMEWORKS.has(projectInfo.framework)) {
+            await setupNextPostcss(cwd, projectInfo, config.installTailwind);
+        }
         await injectPlugin(cwd, projectInfo.framework);
         if (config.setupGitignore) await setupGitignore(cwd);
         if (config.setupTsconfig) await setupTsconfig(cwd);
@@ -397,9 +412,22 @@ async function setupTailwindCss(cwd: string): Promise<void> {
  * Runs whether or not a CSS entry was found: the config is about how Next
  * runs Tailwind, not about any one stylesheet.
  * @param cwd - Project root directory.
+ * @param projectInfo - Detected project metadata, for the package manager.
+ * @param tailwindJustInstalled - Whether this run already installed Tailwind
+ *   and its PostCSS adapter.
  */
-async function setupNextPostcss(cwd: string): Promise<void> {
+async function setupNextPostcss(
+    cwd: string,
+    projectInfo: ProjectInfo,
+    tailwindJustInstalled: boolean,
+): Promise<void> {
     if (!(await hasPostcssConfig(cwd))) {
+        // The config names `@tailwindcss/postcss`; a project that already had
+        // `tailwindcss` but no PostCSS config does not have the adapter, and a
+        // config naming a package the project lacks fails the first `next dev`.
+        if (!tailwindJustInstalled && !(await hasDependency(cwd, '@tailwindcss/postcss'))) {
+            await execa(projectInfo.packageManager, ['add', '-D', '@tailwindcss/postcss'], { cwd });
+        }
         await fs.writeFile(path.join(cwd, 'postcss.config.mjs'), generatePostcssConfig());
         printInfo('Created postcss.config.mjs for Tailwind v4 and the csszyx safelist');
         return;
