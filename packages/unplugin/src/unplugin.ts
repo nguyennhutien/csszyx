@@ -35,7 +35,7 @@ import { type VueAdapterOptions, preprocess as vuePreprocess } from '@csszyx/vue
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
 import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
-import type { FSWatcher, ModuleNode, PluginOption } from 'vite';
+import type { EnvironmentModuleNode, FSWatcher, PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
 import { findClassNameAuthorConflicts } from './class-name-authors.js';
@@ -206,7 +206,7 @@ interface PluginState {
      * Absolute paths of every CSS file seen importing `tailwindcss`, without
      * their query. These are the modules whose generated CSS changes when the
      * safelist does, which is what lets a dev server hot-update instead of
-     * reloading — see the `handleHotUpdate` safelist branch.
+     * reloading — see the `hotUpdate` safelist branch.
      */
     tailwindEntryFiles: Set<string>;
     /**
@@ -4643,7 +4643,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     /**
      * Incremental `sz` class discovery for a hot-updated source file.
      *
-     * `handleHotUpdate` fires before the module is re-transformed, so the
+     * `hotUpdate` fires before the module is re-transformed, so the
      * file is read and transformed here to learn the classes it holds now,
      * which is what lets Tailwind generate CSS for a new `sz` prop without
      * a dev-server restart.
@@ -4673,7 +4673,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Vite also calls `watchChange` in dev, so in THIS version
         // either path alone would do — verified by disabling each
         // in turn. They are kept because their lane coverage
-        // differs, not for redundancy: `handleHotUpdate` never
+        // differs, not for redundancy: `hotUpdate` never
         // fires for `vite build --watch` or `rollup -w`, and a
         // bundler version that stops calling one must not silently
         // bring the staleness back.
@@ -4755,6 +4755,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * and friends depending on how the page reached it, and a reload avoided
      * for one of them is a reload taken for another.
      *
+     * Generic over the node type because the two graphs Vite exposes hold
+     * different ones: the environment graph yields `EnvironmentModuleNode`,
+     * the backward-compatible `server.moduleGraph` yields `ModuleNode`, and
+     * only the caller knows which list its answer has to join.
+     *
      * @param moduleGraph - The dev server's module graph.
      * @param moduleGraph.getModulesByFile - Lookup by file path. An entry the
      *   graph has not loaded yet contributes nothing, and an empty result is
@@ -4762,10 +4767,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      *   be worse.
      * @returns Every module the entries currently occupy, possibly empty.
      */
-    function tailwindEntryModules(moduleGraph: {
-        getModulesByFile: (file: string) => Iterable<ModuleNode> | undefined;
-    }): ModuleNode[] {
-        const modules: ModuleNode[] = [];
+    function tailwindEntryModules<TModule>(moduleGraph: {
+        getModulesByFile: (file: string) => Iterable<TModule> | undefined;
+    }): TModule[] {
+        const modules: TModule[] = [];
         for (const file of state.tailwindEntryFiles) {
             const found = moduleGraph.getModulesByFile(file);
             if (found) modules.push(...found);
@@ -5478,7 +5483,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     return;
                 }
                 // The rollup-family lanes: `vite build --watch` and `rollup -w`,
-                // where `handleHotUpdate` never fires. Runs before the rebuild,
+                // where `hotUpdate` never fires. Runs before the rebuild,
                 // so importers re-transform against the refreshed table rather
                 // than the one from startup.
                 refreshSzvRegistryEntryFromDisk(id);
@@ -5636,17 +5641,51 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 /**
                  * Vite HMR hook: re-runs theme scan when a watched CSS file changes,
                  * and incrementally updates the safelist when a source file gains new sz classes.
-                 * @param ctx - HMR context containing the changed file
+                 *
+                 * `hotUpdate` rather than `handleHotUpdate` because the safelist
+                 * can arrive as a CREATE. `writeSafelistFile` returns early on an
+                 * empty class set, so a project with no `sz` at prescan has no
+                 * safelist file, and the first `sz` edit makes one. Vite routes a
+                 * create to `hotUpdate` only — its `handleHotUpdate` branch runs
+                 * for `type === 'update'` and nothing else — so the legacy hook
+                 * left that one event to `@tailwindcss/vite`, which answers a
+                 * scanned file whose only modules are asset nodes with an
+                 * unaddressed `full-reload`.
+                 *
+                 * @param this - Vite's plugin context for the pass being run.
+                 * @param this.environment - The environment this pass belongs to,
+                 * absent when a host calls the hook without one.
+                 * @param this.environment.name - `client` for the pass that owns
+                 * the page; `ssr` and any custom environment follow it.
+                 * @param this.environment.moduleGraph - That environment's own
+                 * graph, the one Vite replaces with this hook's answer.
+                 * @param ctx - HMR context: the changed file, why it changed, and
+                 * the dev server.
                  * @returns The modules a safelist write affects, so Vite hot-updates
                  * the stylesheet instead of reloading the page; undefined otherwise,
                  * which leaves Vite's own handling in place.
                  */
-                handleHotUpdate(ctx) {
-                    // First edit = the initial module-load wave is over; any
-                    // handoff entries left belong to files the dev server
-                    // never imported, and each retains a transformed-code
-                    // string for nothing.
-                    prescanResultHandoff.clear();
+                hotUpdate(this: { environment?: { name?: string; moduleGraph?: unknown } }, ctx) {
+                    // Vite calls this hook ONCE PER ENVIRONMENT — client, then
+                    // ssr and any custom one — where the legacy hook ran once
+                    // and had its answer copied into every environment's list.
+                    // Two consequences, and they pull in opposite directions:
+                    // work that mutates plugin state or re-transforms a file
+                    // must run on the client pass alone, or every hot update
+                    // pays for it twice; the ANSWER is owed to each pass from
+                    // its own graph, because leaving one environment unanswered
+                    // is what lets `@tailwindcss/vite` reload from there.
+                    //
+                    // A host that calls the hook without an environment (a test
+                    // double) reads as the client pass.
+                    const isClientPass = (this.environment?.name ?? 'client') === 'client';
+                    if (isClientPass) {
+                        // First edit = the initial module-load wave is over; any
+                        // handoff entries left belong to files the dev server
+                        // never imported, and each retains a transformed-code
+                        // string for nothing.
+                        prescanResultHandoff.clear();
+                    }
                     // Theme scan for @theme CSS blocks
                     const scanCss = options.build?.scanCss;
                     /**
@@ -5662,7 +5701,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                             ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
                         }
                     };
-                    if (ctx.file.endsWith('.css')) {
+                    if (isClientPass && ctx.file.endsWith('.css')) {
                         // ANY css edit may add or remove @theme tokens, including
                         // in a file `scanCss` does not list and one the scan has
                         // not seen yet — so re-discover project-wide either way.
@@ -5721,10 +5760,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // and sending its unaddressed reload. Vite's own
                         // empty-set branch only reloads for `.html`, which the
                         // safelist no longer is.
-                        return tailwindEntryModules(ctx.server.moduleGraph);
+                        // This pass's own graph, because `hotUpdate`'s answer
+                        // replaces THAT environment's module list verbatim.
+                        // `server.moduleGraph` holds the backward-compatible
+                        // nodes Vite mapped back for the legacy hook only, so
+                        // they are the wrong objects to hand this one —
+                        // TypeScript says so too.
+                        return tailwindEntryModules(
+                            (this.environment?.moduleGraph ??
+                                ctx.server.environments.client.moduleGraph) as {
+                                getModulesByFile: (
+                                    file: string,
+                                ) => Iterable<EnvironmentModuleNode> | undefined;
+                            },
+                        );
                     }
 
-                    discoverHotFileClasses(ctx.file, ctx.server.watcher);
+                    if (isClientPass) discoverHotFileClasses(ctx.file, ctx.server.watcher);
                     return undefined;
                 },
                 transformIndexHtml: {

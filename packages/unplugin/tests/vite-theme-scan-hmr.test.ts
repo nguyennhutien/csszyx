@@ -1,5 +1,5 @@
 /**
- * The vite `handleHotUpdate` theme-rescan branch: when `build.scanCss` is
+ * The vite `hotUpdate` theme-rescan branch: when `build.scanCss` is
  * configured and the changed file matches, the plugin re-parses the @theme
  * blocks and refreshes the generated theme-groups module.
  */
@@ -52,7 +52,7 @@ describe('vite theme scan on hot update', () => {
         };
         // Changing the watched theme file triggers the theme rescan branch.
         await expect(
-            invokeHook(plugins, 'handleHotUpdate', { file: themeCss, server, modules: [] }),
+            invokeHook(plugins, 'hotUpdate', { file: themeCss, server, modules: [] }),
         ).resolves.not.toThrow();
 
         // The scan wrote the generated theme declaration file.
@@ -83,7 +83,7 @@ describe('vite theme scan on hot update', () => {
             watcher: { emit() {} },
             moduleGraph: { getModuleById: () => null, invalidateModule() {} },
         };
-        await invokeHook(plugins, 'handleHotUpdate', { file: themeCss, server, modules: [] });
+        await invokeHook(plugins, 'hotUpdate', { file: themeCss, server, modules: [] });
         const declared = fs.readFileSync(path.join(root, '.csszyx', 'theme.d.ts'), 'utf8');
 
         // Deleting it is still a change to a file the pattern covers, so the
@@ -92,7 +92,7 @@ describe('vite theme scan on hot update', () => {
         // rename arrives as exactly this, one delete before the file reappears.
         fs.rmSync(themeCss);
         await expect(
-            invokeHook(plugins, 'handleHotUpdate', { file: themeCss, server, modules: [] }),
+            invokeHook(plugins, 'hotUpdate', { file: themeCss, server, modules: [] }),
         ).resolves.not.toThrow();
 
         expect(fs.readFileSync(path.join(root, '.csszyx', 'theme.d.ts'), 'utf8')).toBe(declared);
@@ -121,7 +121,7 @@ describe('vite theme scan on hot update', () => {
                 },
             },
         };
-        await invokeHook(plugins, 'handleHotUpdate', { file: themeCss, server, modules: [] });
+        await invokeHook(plugins, 'hotUpdate', { file: themeCss, server, modules: [] });
         expect(invalidations).toBe(1);
     });
 });

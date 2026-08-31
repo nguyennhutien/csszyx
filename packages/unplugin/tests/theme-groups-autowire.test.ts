@@ -199,7 +199,7 @@ describe('HMR: editing @theme reloads the generated registration module', () => 
 
         type HotUpdateHook = {
             configResolved?: (config: { root: string }) => void;
-            handleHotUpdate?: (ctx: unknown) => void;
+            hotUpdate?: (ctx: unknown) => void;
         };
         const [prePlugin] = vitePlugin({
             build: { cache: false, scanCss: ['src/theme.css'] },
@@ -208,7 +208,7 @@ describe('HMR: editing @theme reloads the generated registration module', () => 
 
         const invalidated: string[] = [];
         const fakeModule = { id: '\0virtual:csszyx/theme-groups' };
-        prePlugin?.handleHotUpdate?.({
+        prePlugin?.hotUpdate?.({
             file: join(root, 'src/theme.css'),
             server: {
                 config: { root },

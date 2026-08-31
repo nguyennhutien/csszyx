@@ -1,5 +1,5 @@
 /**
- * The real vite handleHotUpdate hook's incremental discovery branches and the
+ * The real vite hotUpdate hook's incremental discovery branches and the
  * esbuild factory — driven through the actual plugin objects, not mirrored
  * logic. The HMR edges (no-sz skip, unparseable file, no-op transform, new
  * classes) only existed as a logic mirror before, which covers nothing in
@@ -46,11 +46,11 @@ async function bootedPlugin(): Promise<{
         moduleGraph: { getModuleById: () => null, invalidateModule() {} },
     };
     const hotUpdate = (file: string, extra: Record<string, unknown> = {}): Promise<unknown> =>
-        call('handleHotUpdate', { file, server, modules: [], ...extra });
+        call('hotUpdate', { file, server, modules: [], ...extra });
     return { root, call, hotUpdate };
 }
 
-describe('handleHotUpdate incremental discovery (real hook)', () => {
+describe('hotUpdate incremental discovery (real hook)', () => {
     it('skips files without sz usage after reading them', async () => {
         const { root, hotUpdate } = await bootedPlugin();
         const file = path.join(root, 'src/Plain.tsx');
@@ -131,7 +131,7 @@ describe('the Vite writer sweeps the pre-0.15.0 safelist', () => {
     });
 });
 
-describe('handleHotUpdate hands recovery tokens on', () => {
+describe('hotUpdate hands recovery tokens on', () => {
     /**
      * A `szRecover` site registers a recovery token, and the manifest that
      * `transformIndexHtml` injects is built from the tokens the plugin
@@ -173,17 +173,19 @@ describe('the safelist file must not full-reload the page', () => {
         await call('transform', '@import "tailwindcss";', entry);
 
         const entryModule = { id: entry, url: '/src/app.css' };
+        const moduleGraph = {
+            getModuleById: () => null,
+            invalidateModule() {},
+            getModulesByFile: (file: string) =>
+                file === entry ? new Set([entryModule]) : undefined,
+        };
         const server = {
             config: { root },
             watcher: { emit() {} },
-            moduleGraph: {
-                getModuleById: () => null,
-                invalidateModule() {},
-                getModulesByFile: (file: string) =>
-                    file === entry ? new Set([entryModule]) : undefined,
-            },
+            moduleGraph,
+            environments: { client: { moduleGraph } },
         };
-        const affected = await call('handleHotUpdate', {
+        const affected = await call('hotUpdate', {
             file: path.join(root, '.csszyx/csszyx-classes.txt'),
             server,
             modules: [],
@@ -198,16 +200,20 @@ describe('the safelist file must not full-reload the page', () => {
         fs.writeFileSync(entry, '@import "tailwindcss";');
         await call('transform', '@import "tailwindcss";', entry);
 
+        const moduleGraph = {
+            getModuleById: () => null,
+            invalidateModule() {},
+            // The entry is known but the dev server has not loaded it —
+            // the state before the page first requests the stylesheet.
+            getModulesByFile: () => undefined,
+        };
         const server = {
             config: { root },
             watcher: { emit() {} },
-            moduleGraph: {
-                getModuleById: () => null,
-                invalidateModule() {},
-                // The entry is known but the dev server has not loaded it —
-                // the state before the page first requests the stylesheet.
-                getModulesByFile: () => undefined,
-            },
+            moduleGraph,
+            // `hotUpdate` answers into the client environment's module list,
+            // so that is the graph the safelist branch reads.
+            environments: { client: { moduleGraph } },
         };
         // The EMPTY set, not silence. Vite answers an empty set with a reload
         // addressed to the safelist path, which its client drops unless the
@@ -215,7 +221,7 @@ describe('the safelist file must not full-reload the page', () => {
         // own unaddressed reload while it still sees modules for a file it
         // scanned. Answering nothing leaves both of those free to fire.
         await expect(
-            call('handleHotUpdate', {
+            call('hotUpdate', {
                 file: path.join(root, '.csszyx/csszyx-classes.txt'),
                 server,
                 modules: [],
@@ -243,18 +249,20 @@ describe('the safelist file must not full-reload the page', () => {
         await call('transform', '@import "tailwindcss";', entry);
 
         const entryModule = { id: entry, url: '/src/app.css' };
+        const moduleGraph = {
+            getModuleById: () => null,
+            invalidateModule() {},
+            getModulesByFile: (file: string) =>
+                file === entry ? new Set([entryModule]) : undefined,
+        };
         const server = {
             config: { root },
             watcher: { emit() {} },
-            moduleGraph: {
-                getModuleById: () => null,
-                invalidateModule() {},
-                getModulesByFile: (file: string) =>
-                    file === entry ? new Set([entryModule]) : undefined,
-            },
+            moduleGraph,
+            environments: { client: { moduleGraph } },
         };
         await expect(
-            call('handleHotUpdate', {
+            call('hotUpdate', {
                 file: 'C:/app/.csszyx/csszyx-classes.txt',
                 server,
                 modules: [],

@@ -4,7 +4,7 @@
  * `transformConfiguredSource` calls `ensureRustTransformAvailable()`, which
  * throws when the native addon cannot be loaded — a corrupt install, a
  * platform package removed while the dev server runs. Letting that escape
- * `handleHotUpdate` takes HMR down for the rest of the session, so the hook
+ * `hotUpdate` takes HMR down for the rest of the session, so the hook
  * catches it and records the file as producing no classes.
  *
  * Nothing else in the suite can reach that branch: the engine reports a parse
@@ -37,7 +37,7 @@ afterEach(() => {
     for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-describe('handleHotUpdate when the engine throws', () => {
+describe('hotUpdate when the engine throws', () => {
     it('records the file and keeps the dev server alive', async () => {
         const { vitePlugin } = await import('../src/unplugin.js');
         const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-hmr-throw-'));
@@ -71,9 +71,7 @@ describe('handleHotUpdate when the engine throws', () => {
                 getModulesByFile: () => undefined,
             },
         };
-        await expect(
-            call('handleHotUpdate', { file, server, modules: [] }),
-        ).resolves.toBeUndefined();
+        await expect(call('hotUpdate', { file, server, modules: [] })).resolves.toBeUndefined();
         // No classes were discovered, so nothing was safelisted — the failure
         // degrades to "this file contributed nothing", not to a crash.
         expect(fs.existsSync(path.join(root, '.csszyx/csszyx-classes.txt'))).toBe(false);

@@ -95,7 +95,7 @@ describe('the @utility collision warning', () => {
         const plugins = vitePlugin({ build: { scanCss: ['theme.css'] } });
 
         await invokeHook(plugins, 'configResolved', { root, command: 'serve' });
-        await invokeHook(plugins, 'handleHotUpdate', {
+        await invokeHook(plugins, 'hotUpdate', {
             file: themeCss,
             server: {
                 config: { root },
