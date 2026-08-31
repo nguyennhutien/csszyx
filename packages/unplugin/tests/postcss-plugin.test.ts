@@ -62,6 +62,24 @@ async function run(
 
 describe('csszyx PostCSS plugin', () => {
     /**
+     * `@tailwindcss/postcss` compiles the stylesheet in its own `Once` and
+     * replaces the root; a csszyx plugin listed after it sees a root with no
+     * `@import "tailwindcss"` left and used to return quietly. Appending a
+     * plugin at the end of an existing config is the natural mistake, so the
+     * order is checked.
+     */
+    it('refuses to run after @tailwindcss/postcss instead of doing nothing', async () => {
+        const root = projectRoot();
+        const tailwind = (await import('@tailwindcss/postcss')).default;
+        await expect(
+            postcss([tailwind(), csszyxPostcss({ root })]).process(
+                '@import "tailwindcss" source(none);\n',
+                { from: join(root, 'app/after.css') },
+            ),
+        ).rejects.toThrow(/before '@tailwindcss\/postcss'/);
+    });
+
+    /**
      * `@source` at a file that does not exist registers nothing with
      * Tailwind: the scanner reports no file and no glob for it, so nothing
      * tells Next to recompile when csszyx writes the safelist later. Naming

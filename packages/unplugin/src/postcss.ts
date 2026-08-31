@@ -87,6 +87,23 @@ const csszyxPostcss: PluginCreator<CsszyxPostcssOptions> = (options = {}) => {
     return {
         postcssPlugin: 'csszyx',
         Once(root, { AtRule, result }) {
+            // `@tailwindcss/postcss` replaces the root in its own `Once`; a
+            // csszyx listed after it finds no `@import "tailwindcss"` and would
+            // return quietly, which is the one order the config author never
+            // meant.
+            const names = result.processor.plugins.map(
+                plugin => (plugin as { postcssPlugin?: string }).postcssPlugin,
+            );
+            // PostCSS flattens `@tailwindcss/postcss` into the plugins it nests,
+            // so the name to look for is the inner `tailwindcss`.
+            const tailwindAt = names.indexOf('tailwindcss');
+            if (tailwindAt !== -1 && tailwindAt < names.indexOf('csszyx')) {
+                throw new Error(
+                    "[csszyx] '@csszyx/unplugin/postcss' is listed after '@tailwindcss/postcss'. " +
+                        'Tailwind has already compiled the stylesheet by then, so the safelist is ' +
+                        "never read: list '@csszyx/unplugin/postcss' before '@tailwindcss/postcss'.",
+                );
+            }
             const file = root.source?.input.file;
             if (file === undefined || !rootImportsTailwind(root)) return;
             const present = existingSourcePaths(root, file);
