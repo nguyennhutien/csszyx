@@ -142,6 +142,169 @@ export function findLegacySourceDirective(
     return null;
 }
 
+/** Directories no stylesheet of the project itself lives in. */
+const SKIPPED_DIRS = new Set([
+    'node_modules',
+    '.git',
+    '.csszyx',
+    'dist',
+    'build',
+    'out',
+    'coverage',
+    '.turbo',
+    '.vercel',
+]);
+
+const STYLESHEET_EXTENSIONS = new Set(['.css', '.pcss', '.postcss']);
+
+/** A stylesheet found still naming an old safelist, with the directive. */
+export interface LegacySourceStylesheet extends LegacySourceDirective {
+    /** Absolute path of the stylesheet. */
+    file: string;
+}
+
+/**
+ * Find a stylesheet under the project that still names an old safelist with
+ * no file behind it.
+ *
+ * The bundler plugins meet every stylesheet in their CSS transform and stop
+ * there; the Next lanes have no such hook, so the producers that always run
+ * there (prebuild, watch, the loader) look for themselves. Dependency, build
+ * and generated trees are skipped, as is any `.next*` output directory.
+ *
+ * @param rootDir - project root.
+ * @returns the first offending stylesheet, or null.
+ */
+export function findLegacySourceStylesheet(rootDir: string): LegacySourceStylesheet | null {
+    const pending = [rootDir];
+    while (pending.length > 0) {
+        const dir = pending.pop() as string;
+        for (const entry of readDirectory(dir)) {
+            if (entry.isDirectory()) {
+                if (!isSkippedDirectory(entry.name)) pending.push(path.join(dir, entry.name));
+                continue;
+            }
+            const found = readLegacySourceDirective(dir, entry);
+            if (found !== null) return found;
+        }
+    }
+    return null;
+}
+
+/**
+ * @param dir - directory to list.
+ * @returns its entries, or none when it cannot be read.
+ */
+function readDirectory(dir: string): fs.Dirent[] {
+    try {
+        return fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * @param name - directory name.
+ * @returns whether the walk stays out of it: dependency, build and generated
+ *   trees hold no stylesheet the project wrote, and `.next*` is Next's output.
+ */
+function isSkippedDirectory(name: string): boolean {
+    return SKIPPED_DIRS.has(name) || name.startsWith('.next');
+}
+
+/**
+ * @param dir - directory holding the entry.
+ * @param entry - a non-directory entry from that directory.
+ * @returns the offending directive when this entry is a stylesheet naming an
+ *   old safelist that is gone, otherwise null.
+ */
+function readLegacySourceDirective(dir: string, entry: fs.Dirent): LegacySourceStylesheet | null {
+    if (!entry.isFile() || !STYLESHEET_EXTENSIONS.has(path.extname(entry.name))) return null;
+    const file = path.join(dir, entry.name);
+    const code = fs.readFileSync(file, 'utf8');
+    if (!code.includes('@source')) return null;
+    const found = findLegacySourceDirective(code, file);
+    return found === null ? null : { file, ...found };
+}
+
+const ROOTS_WITHOUT_LEGACY_SOURCE = new Set<string>();
+
+/**
+ * Fail the way the bundler plugins do when a stylesheet still names an old
+ * safelist. A root found clean is not walked again in this process: the
+ * Turbopack loader runs once per module.
+ *
+ * @param rootDir - project root.
+ * @throws when a stylesheet under the root names an old safelist that is gone.
+ */
+export function assertNoLegacySourceStylesheet(rootDir: string): void {
+    if (ROOTS_WITHOUT_LEGACY_SOURCE.has(rootDir)) return;
+    const found = findLegacySourceStylesheet(rootDir);
+    if (found !== null) throw new Error(legacySourceMessage(found.file, found.target));
+    ROOTS_WITHOUT_LEGACY_SOURCE.add(rootDir);
+}
+
+/** The PostCSS plugin a Next.js project reads the safelist through. */
+export const CSSZYX_POSTCSS_PLUGIN = '@csszyx/unplugin/postcss';
+
+/**
+ * Every file Next reads a PostCSS config from, in Next's own search order
+ * (`next/dist/lib/find-config`); a `postcss` key in package.json wins first.
+ */
+export const POSTCSS_CONFIG_FILES: readonly string[] = [
+    '.postcssrc.json',
+    'postcss.config.json',
+    '.postcssrc.js',
+    'postcss.config.js',
+    'postcss.config.mjs',
+    'postcss.config.cjs',
+];
+
+/**
+ * The PostCSS config Next will read, when it does not list the csszyx plugin.
+ *
+ * @param rootDir - project root.
+ * @returns the config file that lacks the plugin, or null when it lists it or
+ *   there is no config for Next to read.
+ */
+export function findPostcssConfigWithoutCsszyx(rootDir: string): string | null {
+    const packageJson = path.join(rootDir, 'package.json');
+    let postcssKey: unknown;
+    try {
+        postcssKey = (JSON.parse(fs.readFileSync(packageJson, 'utf8')) as Record<string, unknown>)
+            .postcss;
+    } catch {
+        postcssKey = undefined;
+    }
+    if (postcssKey !== undefined) {
+        return JSON.stringify(postcssKey).includes(CSSZYX_POSTCSS_PLUGIN) ? null : packageJson;
+    }
+    for (const name of POSTCSS_CONFIG_FILES) {
+        const file = path.join(rootDir, name);
+        let text: string;
+        try {
+            text = fs.readFileSync(file, 'utf8');
+        } catch {
+            continue;
+        }
+        return text.includes(CSSZYX_POSTCSS_PLUGIN) ? null : file;
+    }
+    return null;
+}
+
+/**
+ * @param configFile - the PostCSS config Next reads.
+ * @returns the warning a Next producer prints when that config does not list
+ *   the csszyx plugin.
+ */
+export function missingPostcssPluginMessage(configFile: string): string {
+    return (
+        `[csszyx] ${configFile} does not list '@csszyx/unplugin/postcss'. Next.js reads the ` +
+        `safelist only through that plugin: list it before '@tailwindcss/postcss', or no sz ` +
+        `class gets CSS.`
+    );
+}
+
 /**
  * The message a build fails with when a stylesheet still points at an old
  * safelist. Names the new file and both ways of getting the directive
@@ -277,6 +440,27 @@ export function stripCssBlockComments(code: string): string {
  */
 export function cssImportsTailwind(code: string): boolean {
     return TAILWIND_IMPORT.test(stripCssBlockComments(code));
+}
+
+/**
+ * Whether the params of one parsed `@import` at-rule name a file of this
+ * project rather than a package.
+ *
+ * A stylesheet can reach Tailwind through one of these — a shared entry that
+ * imports `tailwindcss` itself — and PostCSS runs before any of them are
+ * inlined, so the importer is all a plugin sees. Answering yes here is what
+ * keeps such an entry from being passed over in silence; an `@source` added
+ * to a stylesheet that never becomes a Tailwind entry is never compiled and
+ * so costs nothing.
+ *
+ * @param params - the at-rule's params, e.g. `"./theme.css" layer(base)`.
+ * @returns true if the import target is a relative or absolute path.
+ */
+export function importParamsAreLocal(params: string): boolean {
+    let target = params.trim();
+    if (target.startsWith('url(')) target = target.slice(4).trim();
+    if (target.startsWith('"') || target.startsWith("'")) target = target.slice(1);
+    return target.startsWith('./') || target.startsWith('../') || target.startsWith('/');
 }
 
 /**

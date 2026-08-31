@@ -109,6 +109,44 @@ describe('what is not a forward', () => {
         expect(forwards("export { type Card } from './styles';")).toEqual([]);
     });
 
+    it('ignores a type imported and re-exported in two statements', () => {
+        // The module record links the export back to the import but reports
+        // it as a value; the import statement is where the type-only mark is.
+        expect(forwards("import type { Card } from './styles';\nexport { Card };")).toEqual([]);
+        expect(forwards("import { type Card } from './styles';\nexport { Card };")).toEqual([]);
+        expect(forwards("import { Card } from './styles';\nexport { type Card };")).toEqual([]);
+        expect(forwards("import { Card } from './styles';\nexport type { Card };")).toEqual([]);
+    });
+
+    it('drops an `export type {` clause that shares the file with a value clause', () => {
+        // Alone, `export type {` never reaches the parser (no `export {` in the
+        // file); next to a value clause it does, and the record reports its
+        // entry as a value.
+        expect(
+            forwards(
+                "import { Card, card } from './styles';\nexport type { Card };\nexport { card };",
+            ),
+        ).toEqual([{ exportName: 'card', importedName: 'card', specifier: './styles' }]);
+    });
+
+    it('reads a from-clause longer than any fixed window', () => {
+        const names = Array.from({ length: 40 }, (_, i) => `a${i}`);
+        const source = `import a0 from './p';\nexport { ${names.join(', ')} } from './p';`;
+        const result = forwards(source);
+        expect(result).toHaveLength(40);
+        // `a0` names the provider's export a0, not the default import bound
+        // to the same local name; the first entry is farthest from the `}`.
+        expect(result[0]).toEqual({ exportName: 'a0', importedName: 'a0', specifier: './p' });
+    });
+
+    it('keeps a from-clause name even when a default import shares it', () => {
+        // `export { B } from './b'` names the provider's NAMED export B; the
+        // default import bound to the same local name is a different binding.
+        expect(forwards("import B from './b';\nexport { B } from './b';")).toEqual([
+            { exportName: 'B', importedName: 'B', specifier: './b' },
+        ]);
+    });
+
     it('ignores a namespace import re-exported whole', () => {
         // `export { S }` where `S` is `import * as S` exports an object of many
         // names, not one style. Nothing here denotes a single value.

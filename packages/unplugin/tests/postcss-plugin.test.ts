@@ -62,6 +62,24 @@ async function run(
 
 describe('csszyx PostCSS plugin', () => {
     /**
+     * `@tailwindcss/postcss` compiles the stylesheet in its own `Once` and
+     * replaces the root; a csszyx plugin listed after it sees a root with no
+     * `@import "tailwindcss"` left and used to return quietly. Appending a
+     * plugin at the end of an existing config is the natural mistake, so the
+     * order is checked.
+     */
+    it('refuses to run after @tailwindcss/postcss instead of doing nothing', async () => {
+        const root = projectRoot();
+        const tailwind = (await import('@tailwindcss/postcss')).default;
+        await expect(
+            postcss([tailwind(), csszyxPostcss({ root })]).process(
+                '@import "tailwindcss" source(none);\n',
+                { from: join(root, 'app/after.css') },
+            ),
+        ).rejects.toThrow(/before '@tailwindcss\/postcss'/);
+    });
+
+    /**
      * `@source` at a file that does not exist registers nothing with
      * Tailwind: the scanner reports no file and no glob for it, so nothing
      * tells Next to recompile when csszyx writes the safelist later. Naming
@@ -105,6 +123,36 @@ describe('csszyx PostCSS plugin', () => {
         const twice = await run(root, once);
         expect(twice).toBe(once);
         expect(once.match(/csszyx-classes\.txt/g)).toHaveLength(1);
+    });
+
+    /**
+     * A Next entry that reaches Tailwind through a local import is the shape
+     * the release turns into silence: the author removes the hand-written
+     * `@source` the guard now rejects, the plugin sees no `@import
+     * "tailwindcss"` on the root, and nothing names the safelist.
+     */
+    it('adds the @source when the entry reaches tailwindcss through a local import', async () => {
+        const root = projectRoot();
+        const result = await postcss([csszyxPostcss({ root })]).process(
+            '@import "./theme.css";\n',
+            { from: join(root, 'app/globals.css') },
+        );
+        expect(result.css).toContain('@source "../.csszyx/csszyx-classes.txt";');
+        expect(result.messages).toContainEqual(
+            expect.objectContaining({ type: 'dir-dependency', plugin: 'csszyx' }),
+        );
+    });
+
+    it('makes Tailwind read the safelist through that local import', async () => {
+        const root = projectRoot();
+        writeFileSync(join(root, '.csszyx/csszyx-classes.txt'), renderSafelistFile(['p-4']));
+        writeFileSync(join(root, 'app/theme.css'), '@import "tailwindcss" source(none);\n');
+        const css = await run(root, '@import "./theme.css";\n');
+
+        const compiler = await compile(css, { base: join(root, 'app'), onDependency() {} });
+        const candidates = new Scanner({ sources: compiler.sources }).scan();
+        expect(candidates).toContain('p-4');
+        expect(compiler.build(candidates)).toContain('.p-4');
     });
 
     it('leaves a stylesheet alone unless it imports tailwindcss', async () => {

@@ -18,6 +18,7 @@ import type { PluginCreator, Root } from 'postcss';
 import {
     computeSafelistRelPath,
     DEFAULT_SAFELIST_FILES,
+    importParamsAreLocal,
     importParamsNameTailwind,
     isDanglingLegacySource,
     legacySourceMessage,
@@ -39,13 +40,21 @@ export interface CsszyxPostcssOptions {
 }
 
 /**
+ * Whether this stylesheet can end up compiled by Tailwind.
+ *
+ * Either it imports `tailwindcss` itself, or it imports a file of the project
+ * that may. PostCSS sees the entry before any import is inlined, so the second
+ * case cannot be told apart from an ordinary stylesheet here, and treating it
+ * as an entry is the safe direction: a stylesheet Tailwind never compiles
+ * never reads the `@source` either.
+ *
  * @param root - parsed stylesheet
- * @returns true if any `@import` at-rule names the tailwindcss package
+ * @returns true if an `@import` names tailwindcss or a local file
  */
-function rootImportsTailwind(root: Root): boolean {
+function rootMayReachTailwind(root: Root): boolean {
     let found = false;
     root.walkAtRules('import', rule => {
-        if (importParamsNameTailwind(rule.params)) {
+        if (importParamsNameTailwind(rule.params) || importParamsAreLocal(rule.params)) {
             found = true;
             return false;
         }
@@ -87,8 +96,25 @@ const csszyxPostcss: PluginCreator<CsszyxPostcssOptions> = (options = {}) => {
     return {
         postcssPlugin: 'csszyx',
         Once(root, { AtRule, result }) {
+            // `@tailwindcss/postcss` replaces the root in its own `Once`; a
+            // csszyx listed after it finds no `@import "tailwindcss"` and would
+            // return quietly, which is the one order the config author never
+            // meant.
+            const names = result.processor.plugins.map(
+                plugin => (plugin as { postcssPlugin?: string }).postcssPlugin,
+            );
+            // PostCSS flattens `@tailwindcss/postcss` into the plugins it nests,
+            // so the name to look for is the inner `tailwindcss`.
+            const tailwindAt = names.indexOf('tailwindcss');
+            if (tailwindAt !== -1 && tailwindAt < names.indexOf('csszyx')) {
+                throw new Error(
+                    "[csszyx] '@csszyx/unplugin/postcss' is listed after '@tailwindcss/postcss'. " +
+                        'Tailwind has already compiled the stylesheet by then, so the safelist is ' +
+                        "never read: list '@csszyx/unplugin/postcss' before '@tailwindcss/postcss'.",
+                );
+            }
             const file = root.source?.input.file;
-            if (file === undefined || !rootImportsTailwind(root)) return;
+            if (file === undefined || !rootMayReachTailwind(root)) return;
             const present = existingSourcePaths(root, file);
             for (const safelistFile of safelistFiles) {
                 const relPath = computeSafelistRelPath(projectRoot, safelistFile, file);

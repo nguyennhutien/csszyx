@@ -70,6 +70,8 @@ Fastest path: run \`csszyx init\` (it does everything below). Manual steps:
 \`\`\`bash
 pnpm add csszyx @csszyx/runtime
 pnpm add -D @csszyx/types @csszyx/cli tailwindcss
+# Next.js only: the configs below name @csszyx/unplugin by package
+pnpm add @csszyx/unplugin
 \`\`\`
 \`@csszyx/runtime\` and \`@csszyx/types\` MUST be DIRECT dependencies: the
 transform injects a bare \`import { _szMerge } from '@csszyx/runtime'\`, and
@@ -106,7 +108,11 @@ export default {
 - Do NOT set an \`as\` field on the loader rule — the helper omits it; an \`as\`
   makes the loader output self-match into \`./X.tsx.tsx\` (Module not found).
 - Keep the safelist fresh: \`csszyx next watch\` (dev) and \`csszyx next prebuild\`
-  before \`next build --turbopack\`. Point Tailwind \`@source\` at the safelist file.
+  before \`next build --turbopack\`.
+- List \`'@csszyx/unplugin/postcss': {}\` BEFORE \`'@tailwindcss/postcss'\` in
+  \`postcss.config.mjs\`: it points Tailwind at \`.csszyx/csszyx-classes.txt\`. Do
+  not write \`@source\` for the safelist by hand; a stylesheet still naming the
+  old \`csszyx-classes.html\` fails the build with the fix.
 
 ## 3. Tailwind v4 entry
 \`\`\`css

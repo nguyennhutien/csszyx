@@ -546,6 +546,49 @@ ignore would silence a warning about damage that lands in other files.
 Everything that decides **which files** get compiled and **whether the CSS gets
 generated**.
 
+### The safelist moved
+
+The safelist csszyx writes for Tailwind lives at `.csszyx/csszyx-classes.txt`.
+Every producer performs the move and says what it did; these messages come from
+the Vite, Rollup and webpack plugins, from `csszyx next prebuild` and
+`csszyx next watch`, from the Next Turbopack loader, and from the PostCSS plugin.
+
+```text
+[csszyx] removed {file}: the safelist now lives at {safelist}. Update any hand-written @source that named the old file, or drop it and list '@csszyx/unplugin/postcss' before '@tailwindcss/postcss' in postcss.config.
+```
+
+Printed once per removed file (`{file}` is `csszyx-classes.html` or
+`.csszyx/next-loader-classes.html`; `{safelist}` is `.csszyx/csszyx-classes.txt`).
+Only a file csszyx itself wrote is removed; a file you keep at the old name
+stays. Nothing to do unless a stylesheet still names the old file, which the
+next message catches.
+
+```text
+[csszyx] could not remove {file}: {reason}. Delete it by hand.
+```
+
+The new safelist is already written by then; delete the leftover yourself.
+
+```text
+[csszyx] {stylesheet}: @source "{target}" names the old safelist, which csszyx no longer writes. The safelist is now {safelist}, and csszyx adds the directive itself: remove this line. Vite, Rollup and webpack inject it; on Next.js list '@csszyx/unplugin/postcss' before '@tailwindcss/postcss' in postcss.config.
+```
+
+A build **error**, not a warning, and it is not gated: a stylesheet pointing at
+a file that is gone would scan nothing and lose every csszyx class in silence,
+so the build stops instead. Remove the line.
+
+```text
+[csszyx] {config} does not list '@csszyx/unplugin/postcss'. Next.js reads the safelist only through that plugin: list it before '@tailwindcss/postcss', or no sz class gets CSS.
+```
+
+Printed by `csszyx next prebuild` and `csszyx next watch`. Add the plugin line.
+
+```text
+[csszyx] '@csszyx/unplugin/postcss' is listed after '@tailwindcss/postcss'. Tailwind has already compiled the stylesheet by then, so the safelist is never read: list '@csszyx/unplugin/postcss' before '@tailwindcss/postcss'.
+```
+
+A PostCSS **error**: reorder the two plugins.
+
 ### No CSS at all
 
 ```text

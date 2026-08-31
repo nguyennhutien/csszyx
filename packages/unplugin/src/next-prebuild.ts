@@ -2,9 +2,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
-
 import type { TransformSourceCodeOptions } from '@csszyx/compiler';
-
 import type { JsonLike } from './next-cache-identity.js';
 import {
     configWithImportedStaticSz,
@@ -26,11 +24,14 @@ import {
 } from './next-transform-metadata.js';
 import { type NextWatcherCycleResult, runNextWatcherCycle } from './next-watcher-cycle.js';
 import { normalizePathSeparators } from './path-normalization.js';
+import { findPostcssConfigWithoutCsszyx, missingPostcssPluginMessage } from './safelist-source.js';
 import { resolveTransformCacheDir } from './transform-cache.js';
 
 /** Serializable options accepted by the Next Turbopack csszyx prebuild core. */
 export interface NextPrebuildOptions {
     files: readonly string[];
+    /** Receives the one-line notices a prebuild has for the maintainer; `console.warn` by default. */
+    warn?: (message: string) => void;
     explicitRoot?: string;
     loaderRootContext?: string;
     loaderContext?: string;
@@ -120,6 +121,13 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
         nativeVersion,
         mode: options.mode ?? 'production',
     });
+
+    // The safelist this run writes reaches Tailwind only through the PostCSS
+    // plugin; a config that does not list it makes every sz class silent.
+    const postcssConfig = findPostcssConfigWithoutCsszyx(context.root);
+    if (postcssConfig !== null) {
+        (options.warn ?? console.warn)(missingPostcssPluginMessage(postcssConfig));
+    }
 
     const cacheRoot = resolveTransformCacheDir(
         context.root,

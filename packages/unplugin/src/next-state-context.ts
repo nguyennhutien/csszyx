@@ -1,6 +1,5 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
 import * as path from 'node:path';
-
 import {
     createNextCacheIdentity,
     type JsonLike,
@@ -22,6 +21,7 @@ import {
     type NextSafelistStatePaths,
     resolveNextSafelistStatePaths,
 } from './next-safelist-state.js';
+import { assertNoLegacySourceStylesheet } from './safelist-source.js';
 
 /** Inputs needed to derive one Next Turbopack csszyx state context. */
 export interface NextStateContextInput extends NextAppRootInput {
@@ -55,6 +55,10 @@ export interface NextStateContext {
  */
 export function createNextStateContext(input: NextStateContextInput): NextStateContext {
     const rootResolution = resolveNextAppRoot(input);
+    // Every Next producer builds its context here, so this is where a
+    // stylesheet still naming the pre-plain-text safelist stops the run —
+    // the Next lanes have no CSS transform to do it in.
+    assertNoLegacySourceStylesheet(rootResolution.root);
     const cacheDir = resolveNextAppCacheDir(rootResolution.root, input.cacheDir);
     const identity = createNextCacheIdentity({
         root: rootResolution.root,

@@ -96,8 +96,7 @@ export interface ProductionConfig {
      * The registry (`mangleMap`, `decode`, `encode`, `decodeVar`, …) is what
      * runtime helpers read internally; nothing about correctness depends on
      * the global. It is off by default so a production page carries no
-     * inspection surface it did not ask for. Only the bundle delivery honours
-     * it; the deprecated inline installer always assigns the global.
+     * inspection surface it did not ask for; nothing else assigns the global.
      *
      * @default false
      */

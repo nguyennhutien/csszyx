@@ -19,7 +19,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "generate": "node --import tsx/esm scripts/generate.mjs",
     "generate:check": "node --import tsx/esm scripts/generate.mjs --check",
-    "build": "pnpm clean && pnpm generate && tsc -p tsconfig.build.json",
+    "build": "pnpm clean && pnpm generate:check && tsc -p tsconfig.build.json",
     "test": "pnpm generate:check && pnpm type-check",
     "type-check": "tsc -p tsconfig.build.json --noEmit"
   },

@@ -26,7 +26,7 @@ export interface CsszyxTurbopackOptions {
      * Defaults to `'rust'` (the shipped default). */
     parserMode?: 'rust' | 'wasm';
     /**
-     * Safelist HTML path Tailwind `@source` reads. Must match the
+     * Safelist path Tailwind `@source` reads. Must match the
      * `csszyx next prebuild --output-file` / `csszyx next watch` path.
      */
     safelistOutputFile?: string;

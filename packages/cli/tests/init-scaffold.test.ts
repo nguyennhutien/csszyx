@@ -101,6 +101,14 @@ describe('init --yes on a Next.js App Router project', () => {
             ['add', 'csszyx', '@csszyx/runtime', '@csszyx/unplugin'],
             expect.anything(),
         );
+        // The config written below names `@tailwindcss/postcss`; the fixture
+        // has `tailwindcss` but not the adapter, and a config that names a
+        // package the project lacks fails `next dev` on the first run.
+        expect(vi.mocked(execa)).toHaveBeenCalledWith(
+            'npm',
+            ['add', '-D', '@tailwindcss/postcss'],
+            expect.anything(),
+        );
         const hasConfig =
             existsSync(join(cwd, 'csszyx.config.ts')) || existsSync(join(cwd, 'csszyx.config.js'));
         expect(hasConfig).toBe(true);

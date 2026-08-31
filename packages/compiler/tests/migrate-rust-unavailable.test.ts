@@ -14,20 +14,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 class FakeUnavailable extends Error {
     packageName: string | null;
+    detail: string;
 
     /**
      * @param packageName - The platform package the loader looked for.
+     * @param what - The loader's first line; defaults to the not-installed case.
      */
-    constructor(packageName: string | null) {
-        super(
-            [
-                `csszyx native engine unavailable: ${packageName ?? 'no prebuilt package covers this platform'}`,
-                'help: set build.parser: "wasm"; the wasm engine ships inside @csszyx/core',
-                'note: the wasm engine ships inside @csszyx/core and produces the same output',
-            ].join('\n'),
-        );
+    constructor(packageName: string | null, what?: string) {
+        const detail = [
+            what ??
+                (packageName === null
+                    ? 'no prebuilt package covers this platform'
+                    : `${packageName} is not installed`),
+            'help: set build.parser: "wasm"; the wasm engine ships inside @csszyx/core',
+            'note: the wasm engine ships inside @csszyx/core and produces the same output',
+        ].join('\n');
+        super(`csszyx native engine unavailable: ${detail}`);
         this.name = 'CsszyxNativeUnavailableError';
         this.packageName = packageName;
+        this.detail = detail;
     }
 }
 
@@ -39,7 +44,30 @@ vi.mock('@csszyx/core/native', () => ({
     migrateHtml: () => {
         throw new FakeUnavailable(null);
     },
+    migrateClassName: () => {
+        throw new FakeUnavailable(
+            '@csszyx/core-darwin-arm64',
+            '@csszyx/core-darwin-arm64 predates migrate and does not export migrateClassName(). Update @csszyx/core and its platform package together.',
+        );
+    },
 }));
+
+describe('the native migrate on a binding older than the package', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    /**
+     * The loader already knows the package IS installed and is merely too
+     * old; regenerating the message from the package name alone told the
+     * reader it was missing, and the reinstall it prescribed changed nothing.
+     */
+    it("keeps the loader's diagnosis instead of calling the package missing", async () => {
+        const { migrateRustClassName } = await import('../src/migrate-rust.js');
+        expect(() => migrateRustClassName('p-4')).toThrow(/predates migrate/);
+        expect(() => migrateRustClassName('p-4')).not.toThrow(/is not installed/);
+    });
+});
 
 describe('the native migrate on an install without it', () => {
     beforeEach(() => {

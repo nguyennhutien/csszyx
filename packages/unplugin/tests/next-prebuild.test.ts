@@ -10,7 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readNextGenerationManifest } from '../src/next-generation-manifest.js';
 import { type NextPrebuildOptions, runNextPrebuild } from '../src/next-prebuild.js';
 import { SAFELIST_HEADER } from '../src/safelist-format.js';
@@ -21,6 +21,105 @@ afterEach(() => {
     for (const dir of tempDirs.splice(0)) {
         rmSync(dir, { recursive: true, force: true });
     }
+});
+
+describe('Next Turbopack prebuild upgrade guard', () => {
+    function tempRoot(): string {
+        const dir = mkdtempSync(join(tmpdir(), 'csszyx-next-prebuild-guard-'));
+        tempDirs.push(dir);
+        return dir;
+    }
+
+    function writeSource(root: string, relative: string, source: string): string {
+        const filename = join(root, relative);
+        mkdirSync(join(filename, '..'), { recursive: true });
+        writeFileSync(filename, source, 'utf8');
+        return filename;
+    }
+
+    it('stops before touching anything when a stylesheet still names the old safelist', () => {
+        const root = tempRoot();
+        const source = writeSource(
+            root,
+            'app/page.tsx',
+            'export default () => <div sz={{ p: 4 }} />;',
+        );
+        writeSource(
+            root,
+            'app/globals.css',
+            '@import "tailwindcss";\n@source "../csszyx-classes.html";\n',
+        );
+        expect(() =>
+            runNextPrebuild({ files: [source], explicitRoot: root, cwd: root, parserMode: 'auto' }),
+        ).toThrow(/names the old safelist/);
+        expect(existsSync(join(root, '.csszyx/csszyx-classes.txt'))).toBe(false);
+    });
+
+    it('says when no PostCSS config lists the csszyx plugin', () => {
+        const root = tempRoot();
+        const source = writeSource(
+            root,
+            'app/page.tsx',
+            'export default () => <div sz={{ p: 4 }} />;',
+        );
+        writeSource(
+            root,
+            'postcss.config.mjs',
+            "export default { plugins: { '@tailwindcss/postcss': {} } };\n",
+        );
+        const warn = vi.fn();
+        runNextPrebuild({
+            files: [source],
+            explicitRoot: root,
+            cwd: root,
+            parserMode: 'auto',
+            warn,
+        });
+        expect(warn.mock.calls.map(c => String(c[0])).join('\n')).toContain(
+            "'@csszyx/unplugin/postcss'",
+        );
+    });
+
+    it('prints through console.warn when no sink is given', () => {
+        const root = tempRoot();
+        const source = writeSource(
+            root,
+            'app/page.tsx',
+            'export default () => <div sz={{ p: 4 }} />;',
+        );
+        writeSource(
+            root,
+            'postcss.config.cjs',
+            "module.exports = { plugins: { '@tailwindcss/postcss': {} } };\n",
+        );
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        runNextPrebuild({ files: [source], explicitRoot: root, cwd: root, parserMode: 'auto' });
+        expect(warn.mock.calls.map(c => String(c[0])).join('\n')).toContain('postcss.config.cjs');
+        warn.mockRestore();
+    });
+
+    it('stays quiet when the PostCSS config lists the csszyx plugin', () => {
+        const root = tempRoot();
+        const source = writeSource(
+            root,
+            'app/page.tsx',
+            'export default () => <div sz={{ p: 4 }} />;',
+        );
+        writeSource(
+            root,
+            'postcss.config.mjs',
+            "export default { plugins: { '@csszyx/unplugin/postcss': {}, '@tailwindcss/postcss': {} } };\n",
+        );
+        const warn = vi.fn();
+        runNextPrebuild({
+            files: [source],
+            explicitRoot: root,
+            cwd: root,
+            parserMode: 'auto',
+            warn,
+        });
+        expect(warn).not.toHaveBeenCalled();
+    });
 });
 
 describe('Next Turbopack prebuild core', () => {

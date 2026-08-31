@@ -1,4 +1,9 @@
 # Generated files: collapse diffs on GitHub and exclude from language stats.
-packages/tooling-metadata/src/tooling.generated.ts linguist-generated=true
-apps/docs/public/llms.txt linguist-generated=true
-apps/docs/public/llms-full.txt linguist-generated=true
+#
+# `eol=lf` is what makes their gates work on Windows: each is compared
+# byte-for-byte against what its generator produces, and a generator writes
+# `\n`. Without the attribute a Windows checkout converts the committed file to
+# CRLF and every such check reports it as stale, whatever it contains.
+packages/tooling-metadata/src/tooling.generated.ts linguist-generated=true text eol=lf
+apps/docs/public/llms.txt linguist-generated=true text eol=lf
+apps/docs/public/llms-full.txt linguist-generated=true text eol=lf

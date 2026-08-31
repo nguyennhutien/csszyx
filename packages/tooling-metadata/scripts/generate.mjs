@@ -166,7 +166,20 @@ export { VALUE_SUGGESTIONS } from './value-suggestions';
 if (check) {
     const current = await readFile(outputPath, 'utf8').catch(() => '');
     if (current !== generated) {
-        throw new Error('tooling metadata is stale; run pnpm --filter @csszyx/tooling-metadata generate');
+        // Which line drifted, and both spellings of it. "Stale" alone leaves
+        // the reader running the generator on a machine where it may not
+        // reproduce, which is where this gate has cost the most time.
+        const currentLines = current.split('\n');
+        const generatedLines = generated.split('\n');
+        const at = currentLines.findIndex((line, index) => line !== generatedLines[index]);
+        const shown = at === -1 ? currentLines.length : at;
+        throw new Error(
+            `tooling metadata is stale; run pnpm --filter @csszyx/tooling-metadata generate\n` +
+                `first difference at line ${shown + 1} of ${outputPath}\n` +
+                `  committed:  ${JSON.stringify(currentLines[shown] ?? '<end of file>')}\n` +
+                `  generated:  ${JSON.stringify(generatedLines[shown] ?? '<end of file>')}\n` +
+                `  committed lines: ${currentLines.length}, generated lines: ${generatedLines.length}`,
+        );
     }
 } else {
     await writeFile(outputPath, generated);
