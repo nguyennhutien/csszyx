@@ -2,10 +2,14 @@
 
 ## [0.15.1](https://github.com/nguyennhutien/csszyx/compare/v0.15.0...v0.15.1) (2026-09-01)
 
-
 ### Bug Fixes
 
-* stop one failure costing more than the thing that failed ([#260](https://github.com/nguyennhutien/csszyx/issues/260)) ([d7462f0](https://github.com/nguyennhutien/csszyx/commit/d7462f0bb54718e7442d6cb3bc8b8f229c5d64bf))
+* stop one failure costing more than the thing that failed ([#260](https://github.com/nguyennhutien/csszyx/issues/260))
+* **unplugin:** keep a component out of the Tailwind entry list ([#260](https://github.com/nguyennhutien/csszyx/issues/260))
+* **unplugin:** replace the safelist file instead of writing through it ([#260](https://github.com/nguyennhutien/csszyx/issues/260))
+* **unplugin:** say when the generated safelist could not be written ([#260](https://github.com/nguyennhutien/csszyx/issues/260))
+* **cli:** charge a refused HTML file to itself, not to the whole run ([#260](https://github.com/nguyennhutien/csszyx/issues/260))
+* **core,compiler:** give the too-old binding advice that can work ([#260](https://github.com/nguyennhutien/csszyx/issues/260))
 
 ## [0.15.0](https://github.com/nguyennhutien/csszyx/compare/v0.14.5...v0.15.0) (2026-08-31)
 
