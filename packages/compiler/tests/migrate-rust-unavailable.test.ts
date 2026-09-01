@@ -15,24 +15,31 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 class FakeUnavailable extends Error {
     packageName: string | null;
     detail: string;
+    help: string;
+    helpIsExplicit: boolean;
 
     /**
      * @param packageName - The platform package the loader looked for.
      * @param what - The loader's first line; defaults to the not-installed case.
+     * @param help - Help the loader wrote for this failure, without its label.
      */
-    constructor(packageName: string | null, what?: string) {
+    constructor(packageName: string | null, what?: string, help?: string) {
+        const helpLine =
+            help ?? 'set build.parser: "wasm"; the wasm engine ships inside @csszyx/core';
         const detail = [
             what ??
                 (packageName === null
                     ? 'no prebuilt package covers this platform'
                     : `${packageName} is not installed`),
-            'help: set build.parser: "wasm"; the wasm engine ships inside @csszyx/core',
+            `help: ${helpLine}`,
             'note: the wasm engine ships inside @csszyx/core and produces the same output',
         ].join('\n');
         super(`csszyx native engine unavailable: ${detail}`);
         this.name = 'CsszyxNativeUnavailableError';
         this.packageName = packageName;
         this.detail = detail;
+        this.help = helpLine;
+        this.helpIsExplicit = help !== undefined;
     }
 }
 
@@ -47,7 +54,8 @@ vi.mock('@csszyx/core/native', () => ({
     migrateClassName: () => {
         throw new FakeUnavailable(
             '@csszyx/core-darwin-arm64',
-            '@csszyx/core-darwin-arm64 predates migrate and does not export migrateClassName(). Update @csszyx/core and its platform package together.',
+            'csszyx native package @csszyx/core-darwin-arm64 predates migrate and does not export migrateClassName()',
+            'update @csszyx/core and its platform package together, to a version that carries migrate',
         );
     },
 }));
@@ -66,6 +74,23 @@ describe('the native migrate on a binding older than the package', () => {
         const { migrateRustClassName } = await import('../src/migrate-rust.js');
         expect(() => migrateRustClassName('p-4')).toThrow(/predates migrate/);
         expect(() => migrateRustClassName('p-4')).not.toThrow(/is not installed/);
+    });
+
+    it('keeps advice written for this failure instead of the generic install line', async () => {
+        // Rewriting the help is right in general — the loader offers
+        // `build.parser: "wasm"`, which migrate does not have. Rewriting it
+        // HERE told a reader to reinstall a package that is already present,
+        // which is a loop with no way out of it.
+        const { migrateRustClassName } = await import('../src/migrate-rust.js');
+
+        expect(() => migrateRustClassName('p-4')).toThrow(
+            /update @csszyx\/core and its platform package together/,
+        );
+        expect(() => migrateRustClassName('p-4')).not.toThrow(
+            /reinstall without skipping optional packages/,
+        );
+        // The wasm offer still has to go: migrate has no such lane.
+        expect(() => migrateRustClassName('p-4')).not.toThrow(/build\.parser/);
     });
 });
 

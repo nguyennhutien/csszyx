@@ -143,17 +143,28 @@ let availability: boolean | undefined;
  *   prebuilt package covers this platform at all.
  * @param diagnosis - The loader's own first line: it already knows whether
  *   the package is missing, too old, or built without this export.
+ * @param loaderHelp - Help the loader wrote for this specific failure, kept as
+ *   it stands; absent when the loader only had its default to offer.
  * @returns Three lines: what is missing, what to do, what did not happen.
  */
-function unavailableDetail(packageName: string | null, diagnosis: string): string {
-    const missing = diagnosis;
+function unavailableDetail(
+    packageName: string | null,
+    diagnosis: string,
+    loaderHelp?: string,
+): string {
+    // The loader's DEFAULT help offers `build.parser: "wasm"`, which migrate
+    // does not have — that is why this rewrites it. Help the loader wrote for
+    // one specific failure is kept: a package that is installed but predates
+    // migrate is not fixed by reinstalling it, and telling a reader to do that
+    // sends them round a loop that cannot end.
     const help =
-        packageName === null
-            ? 'help: prebuilt packages exist for linux, darwin and win32 on x64 and arm64'
-            : 'help: it is an optional dependency of @csszyx/core; reinstall without skipping optional packages';
+        loaderHelp ??
+        (packageName === null
+            ? 'prebuilt packages exist for linux, darwin and win32 on x64 and arm64'
+            : 'it is an optional dependency of @csszyx/core; reinstall without skipping optional packages');
     return [
-        missing,
-        help,
+        diagnosis,
+        `help: ${help}`,
         'note: no file was changed; build and runtime do not use this engine',
     ].join('\n');
 }
@@ -240,7 +251,11 @@ function guarded<T>(call: () => T): T {
     } catch (error) {
         if (error instanceof CsszyxNativeUnavailableError) {
             throw new RustMigrateUnavailableError(
-                unavailableDetail(error.packageName, error.detail.split('\n')[0]),
+                unavailableDetail(
+                    error.packageName,
+                    error.detail.split('\n')[0],
+                    error.helpIsExplicit ? error.help : undefined,
+                ),
             );
         }
         throw error;

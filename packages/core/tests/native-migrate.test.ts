@@ -91,6 +91,30 @@ describe('@csszyx/core/native migrate entry points', () => {
         }
     });
 
+    it('tells a binding that predates migrate what to do, and what does not apply', async () => {
+        // The generic help sends the reader to reinstall optional packages and
+        // to `build.parser: "wasm"`. Neither applies here: the package IS
+        // installed, and migrate has no wasm lane at all — the note promising
+        // one produces the same output is simply false for this call.
+        packageName.current = fixture('native-binding.cjs');
+        const { migrateBatch } = await import('../native/index.js');
+
+        try {
+            migrateBatch([], {});
+            throw new Error('expected the call to throw');
+        } catch (err) {
+            const message = (err as Error).message;
+            expect(message).toContain('update @csszyx/core and its platform package together');
+            expect(message, 'reinstalling does not help a package that is present').not.toContain(
+                'reinstall without skipping optional packages',
+            );
+            expect(message, 'migrate has no wasm lane to fall back to').not.toContain(
+                'the wasm engine ships inside @csszyx/core and produces the same output',
+            );
+            expect(message).toContain('migrate runs on the native engine only');
+        }
+    });
+
     it('reads the ESM resolver code as a missing package too', async () => {
         // Node reports a missing package as MODULE_NOT_FOUND from the CJS
         // resolver and ERR_MODULE_NOT_FOUND from the ESM one. Both mean the
