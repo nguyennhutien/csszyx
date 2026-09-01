@@ -94,15 +94,19 @@ describe('writing the generated safelist', () => {
             fs.symlinkSync(decoy, path.join(projectRoot, '.csszyx/csszyx-classes.txt'));
         });
 
+        // Two reads that cannot both hold while the link survives: through a
+        // link, reading the safelist path WOULD return what the target holds.
+        // Asserting the same thing with `lstat` first and a read after is a
+        // check on one path followed by a use of it, which is the shape a
+        // file-system race takes and which CodeQL rejects on sight.
         expect(
             fs.readFileSync(path.join(root, 'src/keep-me.ts'), 'utf8'),
             'the file the link pointed at must be untouched',
         ).toBe('export const KEEP = 1;\n');
         expect(
-            fs.lstatSync(safelistPath).isSymbolicLink(),
-            'the link itself must have been replaced by a real file',
-        ).toBe(false);
-        expect(fs.readFileSync(safelistPath, 'utf8')).toContain('p-4');
+            fs.readFileSync(safelistPath, 'utf8'),
+            'the safelist path must hold the safelist, so the link is gone',
+        ).toContain('p-4');
         expect(decoy.endsWith('keep-me.ts')).toBe(true);
     });
 

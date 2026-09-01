@@ -47,7 +47,10 @@ function defaultHelp(packageName) {
  * caller that re-prefixes it under its own name.
  */
 export class CsszyxNativeUnavailableError extends Error {
-    constructor(what, packageName = getNativePackageName(), help, note = NOTE) {
+    // `help` carries an explicit `undefined` rather than nothing: every
+    // parameter after a defaulted one has to be defaulted too, or a reader has
+    // to count positions to know which of them may be omitted.
+    constructor(what, packageName = getNativePackageName(), help = undefined, note = NOTE) {
         const detail = [
             missingText(what, packageName),
             `help: ${helpText(help, packageName)}`,

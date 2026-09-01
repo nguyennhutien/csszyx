@@ -53,6 +53,12 @@ export default [
             '**/*.mjs',
             '**/*.js',
             '**/*.jsx',
+            // …except the hand-written JavaScript a package SHIPS. Sonar reads
+            // `packages/**` whatever the extension, so ignoring these left a
+            // directory the server checks and nothing here does — which is how
+            // a default parameter in the wrong position reached a pull request
+            // as a new issue with no local run able to have caught it.
+            '!packages/*/native/**/*.js',
         ],
     },
 
@@ -193,6 +199,19 @@ export default [
             // S2310. A counter the body rewrites is no longer a counter, and
             // where the next step lands stops being readable from the header.
             'sonarjs/updated-loop-counter': 'error',
+        },
+    },
+
+    // S1788, under the name ESLint's core gives it. `eslint-plugin-sonarjs`
+    // does not implement this one, so the drift report files it under "no
+    // local rule" while a local rule exists in the box — the report can only
+    // match what publishes an RSPEC id. Reaches the shipped JavaScript as well
+    // as TypeScript, because Sonar reads `packages/**` by extension.
+    {
+        files: ['packages/**/*.ts', 'packages/**/*.tsx', 'packages/*/native/**/*.js'],
+        ignores: ['packages/e2e/**', '**/generated/**', '**/*.d.ts', '**/*.type-test.ts'],
+        rules: {
+            'default-param-last': 'error',
         },
     },
 
