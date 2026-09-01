@@ -37,6 +37,7 @@ import type { InputPluginOption } from 'rollup';
 import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
 import type { EnvironmentModuleNode, FSWatcher, PluginOption } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
+import { atomicWriteFileSync } from './atomic-write.js';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
 import { findClassNameAuthorConflicts } from './class-name-authors.js';
 import { findUnknownConfigKeys, unknownConfigKeysMessage } from './config-keys.js';
@@ -3703,8 +3704,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
             }
             if (existing !== content) {
-                fs.mkdirSync(path.dirname(safelistPath), { recursive: true });
-                fs.writeFileSync(safelistPath, content);
+                // Written the way the Next lane writes: a temporary file in the
+                // same directory, renamed over the path. `writeFileSync` opens
+                // the path and overwrites whatever it finds, which for a
+                // symlink is the file at the far end — anything able to leave a
+                // link here redirects the next dev run into a file nobody
+                // offered. A rename replaces the link itself.
+                //
+                // The reason that matters most is not that one, though: a
+                // rename is a single step, so a dev server killed mid-write
+                // leaves the old file rather than a truncated class list that
+                // Tailwind reads as the whole set and silently generates less
+                // CSS from.
+                atomicWriteFileSync(safelistPath, content);
                 removeLegacySafelists(state.rootDir, console.warn);
             }
         } catch {
