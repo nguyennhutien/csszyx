@@ -438,6 +438,10 @@ function findOpeningTag(source: string, tag: string): OpeningTagSpan | null {
 }
 
 const _warnedClassNameAuthors = new Set<string>();
+// One unwritable directory is one problem, and a dev server retries the write
+// on every edit. Keyed by path so a project with a custom output file still
+// hears about each one.
+const _warnedSafelistWriteFailures = new Set<string>();
 let _hasWarnedTsConfig = false;
 let _hasWarnedTransformCacheVersion = false;
 let _hasWarnedNativeFallback = false;
@@ -3719,8 +3723,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 atomicWriteFileSync(safelistPath, content);
                 removeLegacySafelists(state.rootDir, console.warn);
             }
-        } catch {
-            // Non-fatal: Tailwind just won't see prescanned classes
+        } catch (error) {
+            // Not fatal — the build goes on without the classes — but silence
+            // here reads as "csszyx does not work": the page renders with `sz`
+            // props that produce no CSS, and nothing in the output says the
+            // safelist could not be written. A read-only `.csszyx`, a full
+            // disk, or a directory owned by another user all land here.
+            if (_warnedSafelistWriteFailures.has(safelistPath)) {
+                return;
+            }
+            _warnedSafelistWriteFailures.add(safelistPath);
+            const reason = error instanceof Error ? error.message : String(error);
+            console.warn(
+                `[csszyx] could not write the generated safelist to ${safelistPath}: ${reason}. ` +
+                    'Tailwind scans that file for the classes csszyx found, so the CSS it ' +
+                    'generates will be missing them. Check that the directory exists and is ' +
+                    'writable.',
+            );
         }
     }
 

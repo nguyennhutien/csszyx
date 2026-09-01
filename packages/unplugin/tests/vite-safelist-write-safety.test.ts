@@ -18,7 +18,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const tempDirs: string[] = [];
 afterEach(() => {
@@ -111,5 +111,49 @@ describe('writing the generated safelist', () => {
             .readdirSync(path.join(root, '.csszyx'))
             .filter(name => name.startsWith('.tmp-'));
         expect(leftovers).toEqual([]);
+    });
+});
+
+describe('when the safelist cannot be written', () => {
+    it('says so instead of leaving the page without CSS and no reason', async () => {
+        // `.csszyx` is a FILE here, so creating the directory fails the same
+        // way a read-only parent or a full disk does — and without depending on
+        // permissions, which behave differently for root.
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const { root } = await runHotUpdate(projectRoot => {
+                fs.writeFileSync(path.join(projectRoot, '.csszyx'), 'not a directory');
+            });
+
+            const said = warn.mock.calls.map(call => String(call[0])).join('\n');
+            expect(said).toContain('could not write the generated safelist');
+            expect(said, 'the message must name the path').toContain(root);
+            expect(said, 'and what it costs the reader').toContain('missing them');
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
+    it('says it once, not on every edit', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const { root } = await runHotUpdate(projectRoot => {
+                fs.writeFileSync(path.join(projectRoot, '.csszyx'), 'not a directory');
+            });
+            const first = warn.mock.calls.filter(call =>
+                String(call[0]).includes('could not write the generated safelist'),
+            ).length;
+
+            // A dev server retries the write on every keystroke; repeating the
+            // same failure would bury everything else in the terminal.
+            await runHotUpdate(projectRoot => {
+                fs.rmSync(path.join(projectRoot, '.csszyx'), { force: true });
+                fs.mkdirSync(path.join(projectRoot, '.csszyx'));
+            });
+            expect(root.length).toBeGreaterThan(0);
+            expect(first).toBe(1);
+        } finally {
+            warn.mockRestore();
+        }
     });
 });

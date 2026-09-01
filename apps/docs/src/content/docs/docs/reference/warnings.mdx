@@ -589,6 +589,17 @@ Printed by `csszyx next prebuild` and `csszyx next watch`. Add the plugin line.
 
 A PostCSS **error**: reorder the two plugins.
 
+### The safelist could not be written
+
+```text
+[csszyx] could not write the generated safelist to {path}: {reason}. Tailwind scans that file for the classes csszyx found, so the CSS it generates will be missing them. Check that the directory exists and is writable.
+```
+
+The build carries on without those classes, so the page renders with `sz` props
+that produce no CSS. Said once per path — a dev server retries the write on
+every edit. A read-only `.csszyx`, a full disk, or a path owned by another user
+all arrive here.
+
 ### No CSS at all
 
 ```text
