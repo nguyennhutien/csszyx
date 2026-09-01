@@ -29,10 +29,13 @@ afterEach(() => {
  * Boot the Vite plugins over a throwaway project and hot-update one source file.
  *
  * @param prepare - Runs before the edit, with the project root.
+ * @param edits - How many times to edit the file, each bringing a class the
+ *   set has not held. More than one is what makes the writer run again.
  * @returns The project root and the safelist path.
  */
 async function runHotUpdate(
     prepare: (root: string) => void,
+    edits = 1,
 ): Promise<{ root: string; safelistPath: string }> {
     const { vitePlugin } = await import('../src/unplugin.js');
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-write-safety-'));
@@ -54,24 +57,29 @@ async function runHotUpdate(
     prepare(root);
 
     const file = path.join(root, 'src/Card.tsx');
-    fs.writeFileSync(file, 'export const Card = () => <div sz={{ p: 4 }} />;');
     const moduleGraph = {
         getModuleById: () => null,
         invalidateModule() {},
         getModulesByFile: () => undefined,
     };
-    await call('hotUpdate', {
-        type: 'update',
-        file,
-        modules: [],
-        server: {
-            config: { root },
-            watcher: { emit() {} },
-            ws: { send() {} },
-            moduleGraph,
-            environments: { client: { moduleGraph } },
-        },
-    });
+    // One edit per pass, each bringing a class the set has not held: that is
+    // what makes the writer run again, which is the only way to see whether it
+    // repeats itself.
+    for (let pass = 0; pass < edits; pass++) {
+        fs.writeFileSync(file, `export const Card = () => <div sz={{ p: ${4 + pass} }} />;`);
+        await call('hotUpdate', {
+            type: 'update',
+            file,
+            modules: [],
+            server: {
+                config: { root },
+                watcher: { emit() {} },
+                ws: { send() {} },
+                moduleGraph,
+                environments: { client: { moduleGraph } },
+            },
+        });
+    }
 
     return { root, safelistPath: path.join(root, '.csszyx/csszyx-classes.txt') };
 }
@@ -137,21 +145,18 @@ describe('when the safelist cannot be written', () => {
     it('says it once, not on every edit', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         try {
-            const { root } = await runHotUpdate(projectRoot => {
-                fs.writeFileSync(path.join(projectRoot, '.csszyx'), 'not a directory');
-            });
-            const first = warn.mock.calls.filter(call =>
-                String(call[0]).includes('could not write the generated safelist'),
-            ).length;
-
-            // A dev server retries the write on every keystroke; repeating the
-            // same failure would bury everything else in the terminal.
+            // Two edits against the SAME project, both failing. An earlier
+            // version of this test used two projects, so the paths differed and
+            // the branch that suppresses the repeat never ran while the
+            // assertion still passed.
             await runHotUpdate(projectRoot => {
-                fs.rmSync(path.join(projectRoot, '.csszyx'), { force: true });
-                fs.mkdirSync(path.join(projectRoot, '.csszyx'));
-            });
-            expect(root.length).toBeGreaterThan(0);
-            expect(first).toBe(1);
+                fs.writeFileSync(path.join(projectRoot, '.csszyx'), 'not a directory');
+            }, 2);
+
+            const said = warn.mock.calls.filter(call =>
+                String(call[0]).includes('could not write the generated safelist'),
+            );
+            expect(said).toHaveLength(1);
         } finally {
             warn.mockRestore();
         }
