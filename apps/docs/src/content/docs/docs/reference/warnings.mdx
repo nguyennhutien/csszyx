@@ -589,6 +589,57 @@ Printed by `csszyx next prebuild` and `csszyx next watch`. Add the plugin line.
 
 A PostCSS **error**: reorder the two plugins.
 
+### The safelist could not be written
+
+```text
+[csszyx] could not write the generated safelist to {path}: {reason}. Tailwind scans that file for the classes csszyx found, so the CSS it generates will be missing them. Check that the directory exists and is writable.
+```
+
+The build carries on without those classes, so the page renders with `sz` props
+that produce no CSS. Said once per path — a dev server retries the write on
+every edit. A read-only `.csszyx`, a full disk, or a path owned by another user
+all arrive here.
+
+### Next.js with Turbopack
+
+Turbopack compiles each module on its own, so csszyx cannot hold the class set
+in memory the way it does on the Vite lane. Everything below is a build **stop**
+rather than a warning: carrying on would ship a page whose classes have no CSS.
+
+```text
+[csszyx] Next Turbopack production cache is not ready for {root}: {reason}. Production builds with Turbopack need the csszyx safelist seeded first: npx csszyx next prebuild 'app/**/*.tsx'. Wire it into package.json so plain builds keep working: "build": "csszyx next prebuild 'app/**/*.tsx' && next build". Docs: https://csszyx.com/docs/installation#nextjs-turbopack-setup
+```
+
+Printed across several lines in the terminal. Run the prebuild once, then keep
+the `build` script the message names so the next `next build` finds the cache
+already seeded.
+
+```text
+[csszyx] Next Turbopack does not support production CSS variable mangling for {file}. Use Next Webpack mode for full csszyx parity.
+```
+
+```text
+[csszyx] Next prebuild does not support production CSS variable mangling. Use Next Webpack mode for full csszyx parity.
+```
+
+Mangling rewrites variable names across the whole bundle, which needs a view of
+every module at once. Turbopack does not offer one; the Webpack lane does.
+
+```text
+[csszyx] Next source transform failed closed for {file}: source still contains csszyx sz syntax.
+```
+
+The transform ran and left `sz` behind, which would reach the browser as an
+unknown prop. Stopping is the safe answer, and the file is named because the
+input that produced it is worth seeing.
+
+```text
+[csszyx] Next safelist watcher failed to run its initial cycle.
+```
+
+The watcher could not complete its first pass, so nothing after it can trust the
+safelist. Usually a permissions or path problem under `.csszyx`.
+
 ### No CSS at all
 
 ```text
@@ -701,6 +752,18 @@ silently unstyle whatever else reads it. They arrive together under one error:
 | `Global variable token {name} is declared inside @theme and cannot be aliased.` | Tailwind generates utilities from `@theme` tokens, so renaming one breaks them | Move it out of `@theme`, or drop it from `tokens` |
 | `Registered custom property {name} cannot be aliased: @property gives it a type and inheritance behaviour that an alias would not carry.` | `@property` gives the name a type and inheritance behaviour an alias would not carry | Drop it from `tokens` |
 
+### Alias plan mismatch
+
+```text
+[csszyx] production.mangleGlobalVars validation failed: CSS alias plan {actual} does not match source-transform alias table {expected}.
+```
+
+The names the stylesheet was rewritten with and the names the source transform
+recorded have to be the same set. When they are not, some variable would be read
+under one name and written under another, so the build stops rather than ship a
+page whose custom properties resolve to nothing. Both tables are printed; the
+difference between them is the bug.
+
 ## SSR & hydration
 
 | Message | Notes |
@@ -790,6 +853,28 @@ The class prefixes each theme namespace feeds are derived from the project's own
 Tailwind, not listed — so a colour named `cover` is reported against `bg-cover`,
 a prefix its name gives no hint of.
 
+### What `check` reports
+
+```text
+[csszyx] ✖ {n} emitted class(es) carry an opacity modifier that does not survive compilation.
+```
+
+A theme token that resolves to a bare RGB triplet cannot be dimmed by
+`color-mix()`, so the opacity is dropped from the compiled CSS while the class
+name still carries it. The lines above this one name each class and its origin;
+wrap the variable, for example `rgb(var(--your-triplet))`.
+
+```text
+[csszyx] ✖ {n} listed file(s) could not be read, so they were not checked. A pass here would report a subset as if it were the whole list. Check the paths, and note that a separator is normalised rather than trusted, so this is a missing file rather than a Windows path.
+```
+
+The run exits non-zero rather than reporting a clean pass over the files it did
+manage to read.
+
+`csszyx next-watch` refuses to start on a bad interval rather than fall back to
+a default the command line did not ask for:
+`Invalid --debounce-ms. Expected an integer between 0 and 60000.`
+
 ### Running it as a git hook
 
 `--files` takes the paths a hook hands over, instead of a glob, and `--json`
@@ -856,6 +941,29 @@ For names in a third-party stylesheet you cannot edit, reserve them:
 `npx @csszyx/cli doctor` checks the install itself: `✨ No issues found! Your
 setup looks good.`, `Found {n} issue(s)`, `Tailwind CSS not found`, `No build
 output found - run build first`, `Checksum not found in HTML`, and similar.
+
+## Runtime helpers
+
+Errors from `@csszyx/runtime`, met while a page runs rather than while it builds.
+
+```text
+[csszyx] a string helper received an sz OBJECT but the object-lowering module is not loaded, so it cannot be turned into class names. The csszyx bundler plugin loads it automatically for files that can pass objects at runtime. Outside the plugin pipeline (unit tests, scripts), add once at startup: import '@csszyx/runtime/lowering';
+```
+
+The message names the fix. It appears in unit tests and standalone scripts,
+where nothing has run the plugin that would have injected the import.
+
+```text
+[csszyx] {helper}() received a plain object — the compiler could not resolve this sz prop at build time. Common cause: sz={{ ...(cond ? varA : varB), key: 'val' }} Fix: sz={[cond ? varA : varB, { key: 'val' }]} Received: {value}
+```
+
+A spread of a conditional hides the shape from the compiler, so the build has
+nothing to lower. Passing an array keeps both branches visible and csszyx merges
+them.
+
+Two helpers take two different inputs, and mixing them up says so:
+`splitBoxSz partitions sz objects, not raw class strings — use splitBox() for {value}.`
+`splitBox` takes a class string; `splitBoxSz` takes an `sz` object.
 
 ## Editor diagnostics
 

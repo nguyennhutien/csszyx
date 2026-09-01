@@ -29,9 +29,6 @@ export default defineConfig({
       production: {
         injectChecksum: true,
         mangle: process.env.CSSZYX_BENCH_MANGLE === '0' ? false : true,
-        ...(process.env.CSSZYX_BENCH_MAP_DELIVERY
-          ? { mangleMapDelivery: process.env.CSSZYX_BENCH_MAP_DELIVERY as 'both' | 'html' | 'bundle' }
-          : {}),
         mangleVars: process.env.CSSZYX_BENCH_MANGLE_VARS === '0' ? false : true,
       },
     }),

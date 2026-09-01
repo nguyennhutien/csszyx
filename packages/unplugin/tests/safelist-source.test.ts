@@ -13,6 +13,18 @@ import {
     SAFELIST_FILE,
 } from '../src/safelist-source.js';
 
+/**
+ * Whether this process is allowed to ignore the permission bits.
+ *
+ * Root is, which is what the devcontainer runs as: a directory chmodded to
+ * `0o555` still lets it unlink, so a test asserting that the removal FAILS
+ * fails itself there while the code under test is fine. CI runs as an
+ * unprivileged user on all three platforms, so the branch stays covered where
+ * a regression would be caught — and the skip is visible in the local run
+ * rather than being a passing test that proved nothing.
+ */
+const IGNORES_PERMISSIONS = process.getuid?.() === 0;
+
 const tempDirs: string[] = [];
 
 afterEach(() => {
@@ -214,18 +226,23 @@ describe('removeLegacySafelists', () => {
         expect(warnings).toEqual([]);
     });
 
-    it('says which old file it could not remove instead of failing the build', () => {
-        const root = tempRoot();
-        writeFileSync(join(root, 'csszyx-classes.html'), OLD_VITE_SAFELIST);
-        chmodSync(root, 0o555);
-        const warnings: string[] = [];
+    it.skipIf(IGNORES_PERMISSIONS)(
+        'says which old file it could not remove instead of failing the build',
+        () => {
+            const root = tempRoot();
+            writeFileSync(join(root, 'csszyx-classes.html'), OLD_VITE_SAFELIST);
+            chmodSync(root, 0o555);
+            const warnings: string[] = [];
 
-        expect(() => removeLegacySafelists(root, message => warnings.push(message))).not.toThrow();
+            expect(() =>
+                removeLegacySafelists(root, message => warnings.push(message)),
+            ).not.toThrow();
 
-        expect(existsSync(join(root, 'csszyx-classes.html'))).toBe(true);
-        expect(warnings).toHaveLength(1);
-        expect(warnings[0]).toContain('could not remove csszyx-classes.html');
-    });
+            expect(existsSync(join(root, 'csszyx-classes.html'))).toBe(true);
+            expect(warnings).toHaveLength(1);
+            expect(warnings[0]).toContain('could not remove csszyx-classes.html');
+        },
+    );
 
     it('leaves a file it did not write alone', () => {
         const root = tempRoot();

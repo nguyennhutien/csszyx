@@ -20,6 +20,12 @@ on:
       - ".rustfmt.toml"
       - ".mise.toml"
 
+# Nothing here writes: it checks out, installs and runs checks. Said in the file
+# rather than left to the repository setting, which is `read` today and is one
+# click away from not being.
+permissions:
+  contents: read
+
 jobs:
   check:
     name: Rust Check

@@ -59,8 +59,15 @@ const UNMEASURED = [
     // configs sit at the root for the same reason and are read the same way —
     // `vitest.config.ts` among them, which is how a run that edits the
     // coverage settings ends up reporting the settings file as untested.
-    /^packages\/[^/]+\/[^/]+\.[cm]?ts$/,
-    /^[^/]+\.[cm]?ts$/,
+    //
+    // Either language: the three at the root today are `vitest.config.ts`,
+    // `eslint.config.js` and `eslint.redos.config.mjs`. Matching TypeScript
+    // alone was harmless while `.js` was unmeasurable outright, and became a
+    // false report the moment the shipped native loader made it measurable.
+    // The depth is what keeps that loader measured — it sits under
+    // `native/`, not beside `src`.
+    /^packages\/[^/]+\/[^/]+\.[cm]?[jt]s$/,
+    /^[^/]+\.[cm]?[jt]s$/,
     // A snippet written for a reader to copy, not a code path the package
     // takes. It imports the built wasm artifact, so no unit test can drive it
     // without a build first. Sonar excludes it for the same reason, and the

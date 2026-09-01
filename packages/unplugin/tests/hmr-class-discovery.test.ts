@@ -10,7 +10,7 @@ import { renderSafelistFile, SAFELIST_HEADER } from '../src/safelist-format.js';
 /**
  * Tests for the incremental HMR class discovery logic in unplugin.ts.
  *
- * These tests verify the behaviour of the handleHotUpdate extension:
+ * These tests verify the behaviour of the hotUpdate extension:
  * - New sz classes discovered in a changed file update .csszyx/csszyx-classes.txt
  * - Files with no new classes do NOT trigger a file write
  * - Files without sz props are skipped early (perf guard)
@@ -33,7 +33,7 @@ describe('HMR incremental class discovery', () => {
     });
 
     // ---------------------------------------------------------------------------
-    // Helpers — mirrors the plugin's writeSafelistFile + handleHotUpdate logic
+    // Helpers — mirrors the plugin's writeSafelistFile + hotUpdate logic
     // ---------------------------------------------------------------------------
 
     /**
@@ -64,7 +64,7 @@ describe('HMR incremental class discovery', () => {
     }
 
     /**
-     * Simulates what handleHotUpdate does when a source file changes:
+     * Simulates what hotUpdate does when a source file changes:
      * transforms it, collects new classes, conditionally updates the manifest.
      * @param fileContent - the new content of the changed source file
      * @param existingClasses - the current class set (mutated in place)

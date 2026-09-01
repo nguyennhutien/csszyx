@@ -9,6 +9,12 @@ let cachedPackageName;
 
 const PREFIX = 'csszyx native engine unavailable: ';
 const NOTE = 'note: the wasm engine ships inside @csszyx/core and produces the same output';
+// migrate exists only on the native engine, so the note above would promise a
+// fallback that is not there and the install help would send a reader to
+// reinstall a package they already have.
+const MIGRATE_NOTE = 'note: migrate runs on the native engine only; there is no wasm lane for it';
+const MIGRATE_HELP =
+    'update @csszyx/core and its platform package together, to a version that carries migrate';
 const INSTALL_HELP =
     'it is an optional dependency of @csszyx/core; reinstall without skipping optional packages, or set build.parser: "wasm"';
 const WASM_HELP = 'set build.parser: "wasm"; the wasm engine ships inside @csszyx/core';
@@ -41,17 +47,27 @@ function defaultHelp(packageName) {
  * caller that re-prefixes it under its own name.
  */
 export class CsszyxNativeUnavailableError extends Error {
-    constructor(what, packageName = getNativePackageName(), help) {
+    // `help` carries an explicit `undefined` rather than nothing: every
+    // parameter after a defaulted one has to be defaulted too, or a reader has
+    // to count positions to know which of them may be omitted.
+    constructor(what, packageName = getNativePackageName(), help = undefined, note = NOTE) {
         const detail = [
             missingText(what, packageName),
             `help: ${helpText(help, packageName)}`,
-            NOTE,
+            note,
         ].join('\n');
         super(PREFIX + detail);
         this.name = 'CsszyxNativeUnavailableError';
         this.code = 'CSSZYX_NATIVE_UNAVAILABLE';
         this.packageName = packageName;
         this.detail = detail;
+        this.help = helpText(help, packageName);
+        // A caller that rewrites this message for its own lane still has to
+        // keep advice written for one specific failure. Without this flag the
+        // only way to tell "the generic install help" from "update both
+        // packages together" is to read the words, and the wrapper that does
+        // rewrite kept sending a reader to reinstall a package they had.
+        this.helpIsExplicit = help !== undefined;
     }
 }
 
@@ -107,8 +123,10 @@ function migrateExport(name) {
     const binding = loadNativeBinding();
     if (typeof binding[name] !== 'function') {
         throw new CsszyxNativeUnavailableError(
-            `csszyx native package ${cachedPackageName} predates migrate and does not export ${name}(). Update @csszyx/core and its platform package to a version that carries migrate.`,
+            `csszyx native package ${cachedPackageName} predates migrate and does not export ${name}()`,
             cachedPackageName,
+            MIGRATE_HELP,
+            MIGRATE_NOTE,
         );
     }
     return binding[name];

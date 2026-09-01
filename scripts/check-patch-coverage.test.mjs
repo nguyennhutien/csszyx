@@ -131,6 +131,21 @@ describe('patch coverage', () => {
         assert.ok(!isMeasurable('eslint.config.ts'));
     });
 
+    it('exempts a root config whichever language it is written in', () => {
+        // The three at the root today are one of each. `.js` became
+        // measurable for the shipped native loader, and the exemption above
+        // only knew about TypeScript — so editing the lint config reported a
+        // file no coverage report can ever mention.
+        assert.ok(!isMeasurable('eslint.config.js'));
+        assert.ok(!isMeasurable('eslint.redos.config.mjs'));
+    });
+
+    it('still measures the hand-written JavaScript a package ships', () => {
+        // The exemption is for a config beside `src`, not for anything with a
+        // `.js` extension: the native loader sits deeper and is real source.
+        assert.ok(isMeasurable('packages/core/native/index.js'));
+    });
+
     it('defaults the base to the main branch and the reports to the CI set', () => {
         const parsed = parseArgs([]);
 

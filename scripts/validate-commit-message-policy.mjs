@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 
-const file = process.argv[2];
+const args = process.argv.slice(2);
+// A pull request TITLE goes through the same rules, because the squash subject
+// release-please parses is the title verbatim. What a title cannot have is a
+// body, so the footer rule below is asked of commits only.
+const subjectOnly = args.includes('--subject-only');
+const file = args.find(argument => !argument.startsWith('--'));
 
 if (!file) {
-    fail('usage: scripts/validate-commit-message-policy.mjs <commit-msg-file>', 2);
+    fail('usage: scripts/validate-commit-message-policy.mjs <commit-msg-file> [--subject-only]', 2);
 }
 
 const raw = fs.readFileSync(file, 'utf8');
@@ -66,6 +71,19 @@ if (type === 'feat' || type === 'fix') {
 if (breaking && type !== 'feat' && type !== 'fix' && type !== 'perf') {
     fail(
         'breaking changes should use feat!, fix!, or perf! so release-please classifies them clearly',
+    );
+}
+
+// release-please copies the SUBJECT into the changelog's breaking section
+// whether or not a footer exists, so a `!` with nothing under it ships a
+// heading that describes the work and never tells a reader what to change.
+// Version 0.15.0 went out with one of those and it had to be rewritten by hand
+// before the release notes were fit to read.
+if (breaking && !subjectOnly && !lines.some(line => /^BREAKING[ -]CHANGE:/.test(line))) {
+    fail(
+        'a "!" subject must be followed by a BREAKING CHANGE: footer saying what a reader has ' +
+            'to change. release-please prints the subject in the changelog either way, so ' +
+            'without the footer the breaking section explains nothing.',
     );
 }
 

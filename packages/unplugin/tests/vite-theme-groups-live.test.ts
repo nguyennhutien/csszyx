@@ -1,7 +1,7 @@
 /**
  * The theme-group registration against a REAL Vite dev server.
  *
- * The other HMR tests here call `handleHotUpdate` with a hand-made module
+ * The other HMR tests here call `hotUpdate` with a hand-made module
  * graph, which proves the hook was written but not that a running server ever
  * reaches it. This boots an actual dev server, edits a stylesheet on disk, and
  * asks the server for the generated module again — so the watcher, the

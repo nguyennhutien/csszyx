@@ -134,14 +134,24 @@ export class CsszyxNativeUnavailableError extends Error {
     readonly packageName: NativePlatformPackage | null;
     /** The message without its `csszyx native engine unavailable: ` prefix: what is missing, a `help:` line, a `note:` line. */
     readonly detail: string;
+    /** The action to take, without its `help: ` label. */
+    readonly help: string;
+    /** Whether {@link help} was written for this failure rather than defaulted. A caller that rewrites the message for its own lane keeps an explicit one. */
+    readonly helpIsExplicit: boolean;
 
     /**
      * Creates a native-unavailable error.
      * @param what - What is missing; defaults to the platform package not being installed.
      * @param packageName - Package the loader looked for, or null when no prebuilt package covers the platform.
      * @param help - The action to take; defaults to installing the package or switching to the wasm engine.
+     * @param note - What still holds; defaults to the wasm engine producing the same output.
      */
-    constructor(what?: string, packageName?: NativePlatformPackage | null, help?: string);
+    constructor(
+        what?: string,
+        packageName?: NativePlatformPackage | null,
+        help?: string,
+        note?: string,
+    );
 }
 
 /** Native binding shape exported by optional platform packages. */

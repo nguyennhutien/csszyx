@@ -18,7 +18,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { migrate } from '../src/commands/migrate.js';
 
-const control = vi.hoisted(() => ({ unavailable: false, other: false }));
+const control = vi.hoisted(() => ({
+    unavailable: false,
+    other: false,
+    html: false,
+    htmlUnavailable: false,
+    htmlNonError: false,
+}));
 
 vi.mock('@csszyx/compiler/migrate', async importOriginal => {
     const actual = await importOriginal<typeof import('@csszyx/compiler/migrate')>();
@@ -36,6 +42,16 @@ vi.mock('@csszyx/compiler/migrate', async importOriginal => {
             }
             if (control.other) throw new Error('the engine refused the resolution map');
             return actual.migrateRustBatch(...args);
+        },
+        migrateRustHtml: (...args: Parameters<typeof actual.migrateRustHtml>) => {
+            if (control.htmlUnavailable) {
+                throw new actual.RustMigrateUnavailableError(
+                    'install the optional package for this platform: @csszyx/core-sunos-x64.',
+                );
+            }
+            if (control.htmlNonError) throw 'the engine said no';
+            if (control.html) throw new Error('the engine refused the markup');
+            return actual.migrateRustHtml(...args);
         },
     };
 });
@@ -79,6 +95,9 @@ afterEach(() => {
     for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
     control.unavailable = false;
     control.other = false;
+    control.html = false;
+    control.htmlUnavailable = false;
+    control.htmlNonError = false;
     process.exitCode = undefined;
     vi.restoreAllMocks();
 });
@@ -177,5 +196,90 @@ describe('one file the process cannot read', () => {
         const printed = logs.join('\n');
         expect(printed).toContain('Beta.tsx');
         expect(printed).toContain('EACCES');
+    });
+});
+
+describe('one HTML file the engine refuses', () => {
+    /**
+     * A project holding markup alongside components.
+     *
+     * The HTML file is migrated on its own path, outside the batching the JSX
+     * files go through, and that path had no guard: an engine that threw for
+     * markup escaped the whole command, so the files already rewritten were
+     * never summarised and the caller saw a stack trace instead of an exit
+     * code it could branch on.
+     *
+     * @returns The project directory.
+     */
+    function withMarkup(): string {
+        const cwd = fixture();
+        writeFileSync(join(cwd, 'src/page.html'), '<div class="p-4">markup</div>\n');
+        return cwd;
+    }
+
+    it('names the file and finishes the run', async () => {
+        control.html = true;
+        const logs = mute();
+        const cwd = withMarkup();
+
+        await expect(migrate({ cwd })).resolves.toBeUndefined();
+
+        const printed = logs.join('\n');
+        expect(printed).toContain('page.html');
+        expect(printed).toContain('refused the markup');
+    });
+
+    it('still migrates the files it can', async () => {
+        control.html = true;
+        mute();
+        const cwd = withMarkup();
+
+        await migrate({ cwd });
+
+        expect(readFileSync(join(cwd, 'src/Alpha.tsx'), 'utf8')).toContain('sz=');
+        expect(readFileSync(join(cwd, 'src/page.html'), 'utf8')).toContain('class="p-4"');
+    });
+
+    it('exits non-zero so a script does not read it as a clean run', async () => {
+        control.html = true;
+        mute();
+
+        await migrate({ cwd: withMarkup() });
+
+        expect(process.exitCode).toBe(1);
+    });
+});
+
+describe('markup that meets an engine which cannot run at all', () => {
+    /**
+     * @returns A project holding markup alongside components.
+     */
+    function withMarkup(): string {
+        const cwd = fixture();
+        writeFileSync(join(cwd, 'src/page.html'), '<div class="p-4">markup</div>\n');
+        return cwd;
+    }
+
+    it('stops the command rather than blaming the file', async () => {
+        // An install with no engine is not a property of one HTML file, and
+        // charging it to that file would report the rest as migrated when
+        // nothing could have been.
+        control.htmlUnavailable = true;
+        const logs = mute();
+
+        await expect(migrate({ cwd: withMarkup() })).resolves.toBeUndefined();
+
+        const printed = logs.join('\n');
+        expect(printed).toContain('native engine unavailable');
+        expect(printed).not.toContain('Could not migrate src/page.html');
+    });
+
+    it('puts a thrown value that is not an Error in the reason', async () => {
+        control.htmlNonError = true;
+        const logs = mute();
+
+        await migrate({ cwd: withMarkup() });
+
+        expect(logs.join('\n')).toContain('the engine said no');
     });
 });

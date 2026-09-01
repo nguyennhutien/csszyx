@@ -71,6 +71,12 @@ on:
         required: false
         default: 'false'
 
+# The publish job declares its own — it needs `id-token: write` to exchange a
+# GitHub OIDC token for a short-lived Entra one. This is the floor for every
+# other job here, which only reads.
+permissions:
+  contents: read
+
 concurrency:
   group: release-vscode-${{ github.ref }}
   cancel-in-progress: false

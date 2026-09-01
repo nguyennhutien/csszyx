@@ -13,6 +13,15 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Nothing here writes: it checks out, installs, lints, tests and builds. Said
+# in the file rather than left to the repository setting, which is `read` today
+# and is one click away from not being — and a workflow that silently gains a
+# writable token is exactly what a compromised dependency in a lint step would
+# use. Vale's reviewdog reporter already runs under a read-only token, so this
+# grants nothing back to it that it does not have.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -110,6 +119,19 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
           bash scripts/verify-commit-messages-range.sh "origin/${{ github.base_ref }}" HEAD
+
+      # The squash subject is the pull request TITLE verbatim, and it is what
+      # release-please parses to decide the next version. Nothing checked it:
+      # every commit below could be clean while the title release-please reads
+      # was unparseable, mistyped, or carried a placeholder the changelog would
+      # strip. Read through the environment rather than interpolated into the
+      # script, so a title containing a quote or a backtick stays data.
+      - name: Validate the pull request title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/pr-title.txt"
+          node scripts/validate-commit-message-policy.mjs "$RUNNER_TEMP/pr-title.txt" --subject-only
 
   # Fast Biome preflight. Runs the same `pnpm lint:fast` script as
   # local dev (Biome only, no ESLint, no Rust toolchain) so most
@@ -485,6 +507,15 @@ jobs:
       # other step that needs the native lane, see the wasm smoke above.
       - name: Smoke native engine package
         run: pnpm --filter @csszyx/core native:engine:smoke
+
+      # The other half of the same contract, and it had no runner at all: the
+      # error a user meets when their platform has no prebuilt addon. It asks
+      # for a package that is never installed here, so it needs no build and no
+      # ordering — but nothing was checking that the code, the error code and
+      # the help line naming the wasm engine still agree, and a message nobody
+      # runs rots quietly.
+      - name: Smoke the unavailable-native error
+        run: pnpm --filter @csszyx/core native:unavailable:smoke
 
       - name: Upload coverage
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7

@@ -476,13 +476,7 @@ function processMigrationBatch(
         if (input.isHtml) {
             // Sent ahead of the HTML file so the log keeps discovery order.
             send();
-            finishMigrationFile(
-                input.filePath,
-                migrateRustHtml(input.source, htmlOptions(context)),
-                context,
-                summary,
-                log,
-            );
+            migrateHtmlFile(input, context, summary, log);
             continue;
         }
         pending.push(input);
@@ -490,6 +484,43 @@ function processMigrationBatch(
         if (pending.length >= RUN_FILES || pendingBytes >= RUN_BYTES) send();
     }
     send();
+}
+
+/**
+ * Migrates one HTML file, charging a refusal to that file alone.
+ *
+ * Markup goes to the engine on its own rather than in a run, and this call had
+ * no guard while the JSX path had two. An engine that threw here escaped the
+ * command: the files already rewritten were never summarised, the caller got a
+ * stack trace instead of an exit code, and nothing named the file that caused
+ * it. An engine that cannot run at all is still rethrown — that failure has
+ * nothing behind it and already stopped the command before any file was read.
+ *
+ * @param input - The file and its source.
+ * @param context - Migration context.
+ * @param summary - Collected counts and warnings.
+ * @param log - Per-file migration log.
+ */
+function migrateHtmlFile(
+    input: MigrationInput,
+    context: MigrationContext,
+    summary: MigrationSummary,
+    log: MigrationLog,
+): void {
+    let result: MigrateRustResult;
+    try {
+        result = migrateRustHtml(input.source, htmlOptions(context));
+    } catch (error) {
+        if (error instanceof RustMigrateUnavailableError) throw error;
+        recordFailedMigration(
+            input.filePath,
+            error instanceof Error ? error.message : String(error),
+            context,
+            summary,
+        );
+        return;
+    }
+    finishMigrationFile(input.filePath, result, context, summary, log);
 }
 
 /**
