@@ -94,6 +94,11 @@ node packages/core/scripts/validate-native-packages.mjs
 echo "[verify-like-ci] Native engine smoke (builds, loads and removes its own addon)..."
 env -u RUSTUP_TOOLCHAIN pnpm --filter @csszyx/core native:engine:smoke
 
+# The error a user on an unsupported platform meets. Asks for a package that is
+# never installed here, so it needs no build and no ordering.
+echo "[verify-like-ci] Unavailable-native error smoke..."
+pnpm --filter @csszyx/core native:unavailable:smoke
+
 echo "[verify-like-ci] Building host native engine (matches CI step)..."
 # `--clean` resolves the current platform before deleting its output. Do not
 # pre-delete every platform package: host and devcontainer share this worktree.

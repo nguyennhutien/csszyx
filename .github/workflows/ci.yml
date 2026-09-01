@@ -499,6 +499,15 @@ jobs:
       - name: Smoke native engine package
         run: pnpm --filter @csszyx/core native:engine:smoke
 
+      # The other half of the same contract, and it had no runner at all: the
+      # error a user meets when their platform has no prebuilt addon. It asks
+      # for a package that is never installed here, so it needs no build and no
+      # ordering — but nothing was checking that the code, the error code and
+      # the help line naming the wasm engine still agree, and a message nobody
+      # runs rots quietly.
+      - name: Smoke the unavailable-native error
+        run: pnpm --filter @csszyx/core native:unavailable:smoke
+
       - name: Upload coverage
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
         if: always()
