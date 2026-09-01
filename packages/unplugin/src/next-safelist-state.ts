@@ -4,12 +4,17 @@ import * as fs from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import lockfile from 'proper-lockfile';
+import { type AtomicWriteOptions, atomicWriteFileSync } from './atomic-write.js';
 import { renderSafelistFile } from './safelist-format.js';
 import { removeLegacySafelists, SAFELIST_FILE } from './safelist-source.js';
 import { sortStrings } from './sort.js';
 
-const DEFAULT_RENAME_RETRIES = 5;
-const DEFAULT_RENAME_RETRY_DELAY_MS = 10;
+export type { AtomicWriteOptions } from './atomic-write.js';
+// Re-exported so this lane's callers keep one import while the primitive
+// itself stays clear of the lock machinery below it. Sharing how a file is
+// replaced is right; sharing who is allowed to write is not.
+export { atomicRenameWithRetry, atomicWriteFileSync } from './atomic-write.js';
+
 const DEFAULT_STALE_LOCK_MS = 30_000;
 // proper-lockfile floors `stale` to 2s and uses it to drive its (non
 // single-winner) internal recovery. A far-future value disables that recovery
@@ -48,13 +53,6 @@ export interface NextSafelistMaterializeResult {
 export interface NextSafelistShardWriteResult {
     filePath: string;
     changed: boolean;
-}
-
-/** Options for atomic file writes that need to survive Windows file scanners. */
-export interface AtomicWriteOptions {
-    maxRetries?: number;
-    retryDelayMs?: number;
-    renameSync?: (from: string, to: string) => void;
 }
 
 /** Active lock returned by `acquireNextSafelistStateLock`. */
@@ -319,67 +317,6 @@ export function readNextSafelistStateLockMetadata(
     lockPath: string,
 ): NextSafelistStateLockMetadata | null {
     return readLockMetadata(lockPath);
-}
-
-/**
- * Write a file by temp-write plus rename, retrying transient Windows locks.
- *
- * @param file Destination file.
- * @param content File content.
- * @param options Retry and rename injection options.
- */
-export function atomicWriteFileSync(
-    file: string,
-    content: string,
-    options: AtomicWriteOptions = {},
-): void {
-    const dir = path.dirname(file);
-    const tmp = path.join(
-        dir,
-        `.tmp-${path.basename(file)}-${process.pid}-${Date.now()}-${randomUUID()}`,
-    );
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(tmp, content, 'utf8');
-
-    try {
-        atomicRenameWithRetry(tmp, file, options);
-    } catch (error) {
-        try {
-            fs.rmSync(tmp, { force: true });
-        } catch {
-            // Preserve the original write failure.
-        }
-        throw error;
-    }
-}
-
-/**
- * Rename with bounded retry for transient `EBUSY`/`EPERM`/`EACCES` file locks.
- *
- * @param from Temporary path.
- * @param to Destination path.
- * @param options Retry and rename injection options.
- */
-export function atomicRenameWithRetry(
-    from: string,
-    to: string,
-    options: AtomicWriteOptions = {},
-): void {
-    const maxRetries = options.maxRetries ?? DEFAULT_RENAME_RETRIES;
-    const retryDelayMs = options.retryDelayMs ?? DEFAULT_RENAME_RETRY_DELAY_MS;
-    const renameSync = options.renameSync ?? fs.renameSync;
-
-    for (let attempt = 0; ; attempt++) {
-        try {
-            renameSync(from, to);
-            return;
-        } catch (error) {
-            if (!isRetryableRenameError(error) || attempt >= maxRetries) {
-                throw error;
-            }
-            sleepSync(retryDelayMs);
-        }
-    }
 }
 
 /**
@@ -736,28 +673,4 @@ function formatLiveLockError(metadata: NextSafelistStateLockMetadata): string {
         `host=${metadata.hostname}`,
         `updatedAt=${metadata.updatedAt}`,
     ].join(' ');
-}
-
-/**
- *
- * @param error
- */
-function isRetryableRenameError(error: unknown): boolean {
-    return (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        (error.code === 'EBUSY' || error.code === 'EPERM' || error.code === 'EACCES')
-    );
-}
-
-/**
- *
- * @param ms
- */
-function sleepSync(ms: number): void {
-    if (ms <= 0) {
-        return;
-    }
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
