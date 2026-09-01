@@ -1,5 +1,12 @@
 # csszyx
 
+## [0.15.1](https://github.com/nguyennhutien/csszyx/compare/v0.15.0...v0.15.1) (2026-09-01)
+
+
+### Bug Fixes
+
+* stop one failure costing more than the thing that failed ([#260](https://github.com/nguyennhutien/csszyx/issues/260)) ([d7462f0](https://github.com/nguyennhutien/csszyx/commit/d7462f0bb54718e7442d6cb3bc8b8f229c5d64bf))
+
 ## [0.15.0](https://github.com/nguyennhutien/csszyx/compare/v0.14.5...v0.15.0) (2026-08-31)
 
 ### ⚠ BREAKING CHANGES
