@@ -371,3 +371,13 @@ test('drops a real escape character too', () => {
         normalizeMessage('theme auto-scan is enabled'),
     );
 });
+
+test('a symbol written as a unicode escape is not a word', () => {
+    // Source writes `✖` where the reference page shows the glyph. Reading
+    // the escape as the word "u2716" made a documented message look
+    // undocumented — a gap the gate had invented.
+    const escaped = normalizeMessage('\\u2716 3 listed file(s) could not be read');
+    const glyph = normalizeMessage('✖ 3 listed file(s) could not be read');
+
+    assert.equal(escaped, glyph);
+});

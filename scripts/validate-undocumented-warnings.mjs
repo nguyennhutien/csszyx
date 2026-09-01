@@ -48,9 +48,19 @@ const EMPTY_BASELINE = { count: 0, messages: [] };
  * validation collects into an error array that the plugin throws — that last one
  * was missing at first, which hid four messages a user can only meet by hitting
  * them.
+ *
+ * Two more shapes were missing and hid fifteen between them. A helper that takes
+ * its sink as a PARAMETER — the safelist sweeper is handed `console.warn` by its
+ * caller — writes `warn(...)`, which a pattern anchored on `console.` never saw.
+ * And a message a build STOPS on is the one a user is most certain to read:
+ * every piece of the Turbopack setup guidance lived in a `throw new Error`, so
+ * the page meant to explain those messages could not be checked against them.
+ *
+ * `throw` is admitted at the same eight-word floor as the rest, which is what
+ * keeps an internal invariant like `throw new Error('unreachable')` out.
  */
 const SINK_PATTERN =
-    /\b(?:console\.(?:warn|error)|devWarn|warnOnce|reportDiagnostic|(?:diagnostics|errors)\.push|push_diagnostic)\s*\(/g;
+    /\b(?:console\.(?:warn|error)|devWarn|warnOnce|reportDiagnostic|warn|(?:diagnostics|errors)\.push|push_diagnostic|throw new (?:Error|TypeError))\s*\(/g;
 
 /** Words a sink argument needs before it counts as a message worth documenting. */
 const MIN_MESSAGE_WORDS = 8;

@@ -75,6 +75,11 @@ export function normalizeMessage(text) {
     // Colour codes and layout escapes are presentation, not words. Stripped
     // both as written in source (`\\x1b[33m`) and as the byte itself.
     s = s.replace(/\\x1b\[[0-9;]*m/g, ' ');
+    // A symbol written as a unicode escape is the same symbol: `\\u2716` and `✖`
+    // both reduce to nothing here, and treating the escape as the WORD `u2716`
+    // made a documented message look undocumented — the gate reporting a gap it
+    // had invented.
+    s = s.replace(/\\u[0-9a-fA-F]{4}/g, ' ');
     // biome-ignore lint/suspicious/noControlCharactersInRegex: matching the escape byte is the point — a message that colours itself carries a real ESC here
     s = s.replace(/\u001b\[[0-9;]*m/g, ' ');
     s = s.replace(/\\[nrt]/g, ' ');

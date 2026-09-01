@@ -61,3 +61,35 @@ test('ignores a string that never reaches a sink', () => {
         [],
     );
 });
+
+test('finds a message handed to an injected warn callback', () => {
+    // Helpers take the sink as a parameter so a caller can route it — the
+    // safelist sweeper is called with `console.warn` — and the message inside
+    // was invisible to a pattern that only knew the console.
+    const messages = extractSinkMessages(
+        'export function sweep(dir, warn) { warn("the legacy safelist was removed from this project, delete the @source line naming it"); }',
+    );
+
+    assert.equal(messages.length, 1);
+    assert.match(messages[0], /legacy safelist was removed/);
+});
+
+test('finds a message a user only meets by hitting a thrown error', () => {
+    const messages = extractSinkMessages(
+        'throw new Error("production builds with turbopack need the csszyx safelist seeded first, run the prebuild command");',
+    );
+
+    assert.equal(messages.length, 1);
+});
+
+test('finds a message thrown as a type error', () => {
+    const messages = extractSinkMessages(
+        'throw new TypeError("splitBoxSz partitions sz objects, not raw class strings; use splitBox for a class string");',
+    );
+
+    assert.equal(messages.length, 1);
+});
+
+test('still ignores a short throw that is an internal invariant', () => {
+    assert.deepEqual(extractSinkMessages('throw new Error("unreachable");'), []);
+});
