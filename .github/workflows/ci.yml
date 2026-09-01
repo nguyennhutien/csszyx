@@ -13,6 +13,15 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Nothing here writes: it checks out, installs, lints, tests and builds. Said
+# in the file rather than left to the repository setting, which is `read` today
+# and is one click away from not being — and a workflow that silently gains a
+# writable token is exactly what a compromised dependency in a lint step would
+# use. Vale's reviewdog reporter already runs under a read-only token, so this
+# grants nothing back to it that it does not have.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
