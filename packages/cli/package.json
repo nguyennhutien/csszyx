@@ -48,7 +48,7 @@
     "@csszyx/unplugin": "workspace:*",
     "cac": "^7.0.0",
     "chokidar": "^5.0.0",
-    "execa": "^10.0.0",
+    "execa": "^10.0.1",
     "fast-glob": "^3.3.3",
     "fs-extra": "^11.4.0",
     "minimatch": "^10.2.6",
