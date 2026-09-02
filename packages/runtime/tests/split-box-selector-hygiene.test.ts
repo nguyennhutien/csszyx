@@ -70,3 +70,50 @@ describe('an array passed where one selector is expected', () => {
         expect(said()).toContain('array');
     });
 });
+
+describe('selector shapes the toolkit has always accepted stay quiet', () => {
+    it('an exact class', () => {
+        expect(has('overflow-hidden p-4', 'overflow-hidden')).toBe(true);
+        expect(omit('w-full px-2', 'w-full')).toBe('px-2');
+        expect(said()).toBe('');
+    });
+
+    it('a prefix deeper than the table entry', () => {
+        expect(pick('bg-red-500 bg-blue-500', 'bg-red')).toBe('bg-red-500');
+        expect(said()).toBe('');
+    });
+
+    it('a dashed prefix and an exact token', () => {
+        expect(has('inset-x-0', 'inset-x')).toBe(true);
+        expect(has('flex', 'flex')).toBe(true);
+        expect(said()).toBe('');
+    });
+});
+
+describe('an object selector that can never match', () => {
+    it('warns when its category is not one the tables know', () => {
+        expect(has('w-full', { width: 'full' })).toBe(false);
+        expect(said()).toContain("'width'");
+        expect(said()).toContain('sizing');
+    });
+
+    it('warns when it names more than one category', () => {
+        // A token has one category, so two entries can never both agree.
+        expect(has('overflow-hidden flex', { overflow: 'hidden', display: 'flex' })).toBe(false);
+        expect(said()).toContain('one category');
+    });
+});
+
+describe('a selector nobody can act on names what to do', () => {
+    it('points at classify for a word with no hint', () => {
+        has('w-full', 'margin-ish');
+        expect(said()).toContain('classify(');
+    });
+
+    it('knows the CSS property words people reach for', () => {
+        has('text-red-500', 'color');
+        expect(said()).toContain("'text'");
+        has('bg-red-500', 'background');
+        expect(said()).toContain("'bg'");
+    });
+});

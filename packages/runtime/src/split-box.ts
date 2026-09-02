@@ -249,7 +249,41 @@ const KNOWN_PREFIXES: ReadonlySet<string> = new Set([
 const CATEGORY_HINTS: Readonly<Record<string, string>> = {
     width: 'sizing',
     height: 'sizing',
+    color: 'text',
+    colour: 'text',
+    background: 'bg',
+    cursor: 'interaction',
 };
+
+/**
+ * Which vocabulary a string selector is checked against.
+ *
+ * The class toolkit reads CLASS spellings, so a string selector is a
+ * category, a role alias, or a class prefix. The sz-object twins read sz KEYS
+ * (`minW`, `flexDir`, `gapX`), and a key is not a class prefix — the check
+ * that is right for one family silently rejects half the other's inputs.
+ */
+type SelectorFamily = 'class' | 'sz';
+
+/**
+ * Whether a string selector names something the family's tables can match.
+ *
+ * @param selector - The string the caller passed.
+ * @param family - Whose vocabulary to check it against.
+ * @returns `true` when at least one token or key could match it.
+ */
+function stringSelectorIsKnown(selector: string, family: SelectorFamily): boolean {
+    if (selector === 'outer' || selector === 'inner' || selector === 'content') return true;
+    if (KNOWN_CATEGORIES.has(selector)) return true;
+    if (family === 'sz') return BOX_ROLE_BY_KEY.has(selector);
+    // A whole class (`overflow-hidden`), a prefix deeper than the table's
+    // (`bg-red`) and the table's own prefix (`bg`) all start with a segment the
+    // tables know; a typo (`widht`) or a property name (`width`) does not.
+    return (
+        KNOWN_PREFIXES.has(selector) ||
+        BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.has(selector.split('-', 1)[0] as string)
+    );
+}
 
 /**
  * Whether a selector can match anything, warning in development when it
@@ -263,9 +297,10 @@ const CATEGORY_HINTS: Readonly<Record<string, string>> = {
  * the same way. Called once per public operation, not per token.
  *
  * @param selector - What the caller passed.
+ * @param family - Whose vocabulary a string selector is checked against.
  * @returns `true` when the selector is worth testing tokens against.
  */
-function selectorIsUsable(selector: BoxSelector): boolean {
+function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class'): boolean {
     if (Array.isArray(selector)) {
         devWarn(
             'has/pick/omit take one selector, not an array; pass the selectors one at a time, ' +
@@ -274,30 +309,48 @@ function selectorIsUsable(selector: BoxSelector): boolean {
         return false;
     }
     if (typeof selector === 'object') {
-        if (Object.keys(selector).length === 0) {
+        const categories = Object.keys(selector);
+        if (categories.length === 0) {
             devWarn(
                 'an empty selector {} matches nothing; name a category and value, ' +
                     'e.g. { overflow: "hidden" }.',
             );
             return false;
         }
+        if (categories.length > 1) {
+            // A token belongs to one category, so two entries can never both
+            // agree on it.
+            devWarn(
+                'an object selector names one category and value; ' +
+                    `{ ${categories.join(', ')} } can never match a single token.`,
+            );
+            return false;
+        }
+        const category = categories[0] as string;
+        if (!KNOWN_CATEGORIES.has(category)) {
+            warnUnknownSelector(category);
+            return false;
+        }
         return true;
     }
-    if (
-        selector === 'outer' ||
-        selector === 'inner' ||
-        selector === 'content' ||
-        KNOWN_CATEGORIES.has(selector) ||
-        KNOWN_PREFIXES.has(selector)
-    ) {
-        return true;
-    }
-    const hint = CATEGORY_HINTS[selector];
-    devWarn(
-        `'${selector}' is not a category or class prefix csszyx knows` +
-            (hint === undefined ? '.' : `; the category is '${hint}'.`),
-    );
+    if (stringSelectorIsKnown(selector, family)) return true;
+    warnUnknownSelector(selector);
     return false;
+}
+
+/**
+ * Say that a name matches nothing, and what would.
+ *
+ * @param name - The category or prefix the caller wrote.
+ */
+function warnUnknownSelector(name: string): void {
+    const hint = CATEGORY_HINTS[name];
+    devWarn(
+        `'${name}' is not a category or class prefix csszyx knows; ` +
+            (hint === undefined
+                ? "classify('<a class>') shows the category a class belongs to."
+                : `the category is '${hint}'.`),
+    );
 }
 
 /**
@@ -419,8 +472,8 @@ function splitBoxUncached(
     options: SplitBoxOptions,
     bridge: MangleBridge | undefined,
 ): SplitBoxResult {
-    const forceInner = (options.inner ?? []).filter(selectorIsUsable);
-    const forceOuter = (options.outer ?? []).filter(selectorIsUsable);
+    const forceInner = (options.inner ?? []).filter(sel => selectorIsUsable(sel, 'class'));
+    const forceOuter = (options.outer ?? []).filter(sel => selectorIsUsable(sel, 'class'));
     const fallback: BoxRole = options.fallback ?? 'outer';
     const outer: string[] = [];
     const inner: string[] = [];
@@ -648,8 +701,8 @@ function partitionSz(
     depth: number,
 ): void {
     if (depth >= MAX_SZ_DEPTH) throw new SzDepthError();
-    const forceInner = (options.inner ?? []).filter(selectorIsUsable);
-    const forceOuter = (options.outer ?? []).filter(selectorIsUsable);
+    const forceInner = (options.inner ?? []).filter(sel => selectorIsUsable(sel, 'sz'));
+    const forceOuter = (options.outer ?? []).filter(sel => selectorIsUsable(sel, 'sz'));
     const fallback: BoxRole = options.fallback ?? 'outer';
     const context: SzPartitionContext = {
         options,
@@ -767,6 +820,7 @@ function filterSz(obj: SzObject, selector: BoxSelector, keep: boolean, depth: nu
  * @returns `true` if any key matches.
  */
 export function hasSz(sz: SzInput, selector: BoxSelector): boolean {
+    if (!selectorIsUsable(selector, 'sz')) return false;
     const scan = (obj: SzObject, depth: number): boolean => {
         if (depth >= MAX_SZ_DEPTH) throw new SzDepthError();
         for (const key of Object.keys(obj)) {
@@ -790,6 +844,7 @@ export function hasSz(sz: SzInput, selector: BoxSelector): boolean {
  * @returns A new sz object with the matching keys.
  */
 export function pickSz(sz: SzInput, selector: BoxSelector): SzObject {
+    if (!selectorIsUsable(selector, 'sz')) return {};
     return filterSz(flattenSz(sz, 0), selector, true, 0);
 }
 
@@ -802,5 +857,7 @@ export function pickSz(sz: SzInput, selector: BoxSelector): SzObject {
  * @returns A new sz object with the non-matching keys.
  */
 export function omitSz(sz: SzInput, selector: BoxSelector): SzObject {
-    return filterSz(flattenSz(sz, 0), selector, false, 0);
+    const flat = flattenSz(sz, 0);
+    if (!selectorIsUsable(selector, 'sz')) return flat;
+    return filterSz(flat, selector, false, 0);
 }

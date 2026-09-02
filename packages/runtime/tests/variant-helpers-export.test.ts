@@ -48,3 +48,25 @@ describe('normalizeBase from the package entry', () => {
         expect(normalizeBase(base)).toBe(normalized);
     });
 });
+
+describe('the base-breakpoint idiom on a mangled build', () => {
+    it('decodes before it compares, or a responsive token passes as base', async () => {
+        const { clearMangleRegistry, installMangleRuntime } = await import(
+            '../src/mangle-registry.js'
+        );
+        const { szDecode } = await import('../src/index.js');
+        installMangleRuntime({ mangleMap: { 'md:w-1/2': 'f', 'w-4': 'g' }, checksum: 'idiom' });
+        try {
+            const isBase = (token: string): boolean => {
+                const original = szDecode(token);
+                return stripVariant(original) === original;
+            };
+            expect(isBase('f')).toBe(false);
+            expect(isBase('g')).toBe(true);
+            // The naive form is what a reader copies by mistake.
+            expect(stripVariant('f') === 'f').toBe(true);
+        } finally {
+            clearMangleRegistry();
+        }
+    });
+});
