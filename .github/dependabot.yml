@@ -31,6 +31,27 @@ updates:
       - dependency-name: "*"
         update-types:
           - version-update:semver-major
+      # The workspace pins `next` at two majors on purpose: `playground/nextjs-16`
+      # at an exact 16.x (its build runs `next build --webpack`, a 16-only flag)
+      # and `playground/nextjs-ssr` at ^15. Dependabot merges the two into one
+      # dependency whose version is the LOWER one, derives the semver-major
+      # ignore range from that (`>= 16`), picks the newest 15.x, and rewrites
+      # every requirement to it, so a grouped bump downgraded the 16 pin to
+      # 15.5.24 and the build failed on the flag (dependabot-core
+      # DependencySet#combined_dependency, RequirementsUpdater#updated_requirements).
+      # Ignoring the name by itself only affects version updates: security
+      # updates skip a bare dependency-name entry. Both pins move by hand.
+      - dependency-name: "next"
+      # 3.8.0 added a filesystem-transaction layer that aborts every native build
+      # on a Docker Desktop bind mount, and 3.9.0 still ships it unchanged;
+      # `scripts/napi-pin.test.mjs` fails the Validate Config job on any pin at
+      # or above 3.8, so a grouped bump that carries one can never merge. A
+      # `versions` entry applies to security updates as well, so an advisory on
+      # 3.7.4 fixed only in 3.8+ would surface through the npm audit job, not a
+      # Dependabot PR. Raise the pin by hand after re-bisecting on the bind
+      # mount, per that test.
+      - dependency-name: "@napi-rs/cli"
+        versions: [">=3.8.0"]
     groups:
       npm-development:
         dependency-type: "development"
