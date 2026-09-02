@@ -117,7 +117,11 @@ jobs:
           node-version: "24"
       - name: Validate PR commit messages
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          # No --depth here: a shallow fetch marks the base tip as a boundary,
+          # and `base..HEAD` then walks the whole history of a pull request
+          # that is behind the base branch (measured: three commits listed
+          # where one was added). The checkout above already has full history.
+          git fetch --no-tags origin "${{ github.base_ref }}"
           bash scripts/verify-commit-messages-range.sh "origin/${{ github.base_ref }}" HEAD
 
       # The squash subject is the pull request TITLE verbatim, and it is what
