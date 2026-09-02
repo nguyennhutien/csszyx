@@ -64,7 +64,7 @@ describe('the base-breakpoint idiom on a mangled build', () => {
             expect(isBase('f')).toBe(false);
             expect(isBase('g')).toBe(true);
             // The naive form is what a reader copies by mistake.
-            expect(stripVariant('f') === 'f').toBe(true);
+            expect(stripVariant('f')).toBe('f');
         } finally {
             clearMangleRegistry();
         }
