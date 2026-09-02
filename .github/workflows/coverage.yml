@@ -45,7 +45,7 @@ jobs:
         run: git fetch --no-tags origin main:main || true
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
@@ -99,7 +99,7 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@065d6a08a14e61e89fb0a4c10eecdbdef39c7d8e # v2.85.4
+        uses: taiki-e/install-action@fcf5432d9f50d67e37ee6e29bdb7a224ff67b4a7 # v2.86.8
         with:
           tool: cargo-llvm-cov
 
