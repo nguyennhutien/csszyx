@@ -63,8 +63,10 @@ auditConfig: {}
 # mise is the single toolchain manager (pnpm pinned in .mise.toml), so pnpm must
 # not self-download a packageManager-field version: that re-execs a self-fetched
 # binary the firewalled devcontainer cannot reach (blank placeholder → exit 127).
-# pnpm 11 reads this from here, not .npmrc.
-managePackageManagerVersions: false
+# `ignore` runs the pnpm that is already on PATH when the pin differs. This is
+# the setting pnpm 11.0 introduced in place of `managePackageManagerVersions`,
+# which the workspace kept naming until 11.25 started warning about it.
+pmOnFail: ignore
 
 # pnpm 11 added a deps-status precheck before every `pnpm exec`/`pnpm run`. The
 # devcontainer's node_modules is a cross-platform bind mount (darwin optional deps
