@@ -237,7 +237,7 @@ jobs:
       # cache applies to all 8 targets. Keyed per platform to avoid cross-target
       # target/ thrash.
       - name: Cache cargo (native build)
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
         with:
           key: ${{ matrix.platform }}
 
