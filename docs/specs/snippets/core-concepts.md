@@ -486,11 +486,12 @@ a template like `` `gap-${n}` ``) leaves the merge in mangled form, matching
 the mangled CSS. The lookup is single-pass and idempotent — already-mangled
 tokens, authored literals, and external (non-csszyx) class names pass through
 unchanged — and it is an identity in dev or on unmangled builds. Code that
-INSPECTS a className for a utility by its original spelling must decode first:
-`szDecode(token)` (from `@csszyx/runtime`) maps a mangled token back to its
-original name and is identity everywhere else, so
-`className.split(/\s+/).some(t => szDecode(t).startsWith('w-'))` is safe on
-every build shape.
+INSPECTS a className for a utility must not read the spelling: `has(className,
+'w')` (from `@csszyx/runtime`) decodes each token through the registry and
+strips its variant before matching, so it answers the same on every build
+shape. `szDecode(token)` maps one mangled token back to its original name — and
+returns the whole original, variant prefix included, so a hand-rolled
+`startsWith('w-')` on it is false for `md:w-full`.
 
 ## `szs` — slot map for a component's internal parts
 

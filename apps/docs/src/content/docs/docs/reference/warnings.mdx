@@ -961,6 +961,38 @@ A spread of a conditional hides the shape from the compiler, so the build has
 nothing to lower. Passing an array keeps both branches visible and csszyx merges
 them.
 
+The class toolkit refuses a selector it cannot act on, in development, and
+answers as if nothing matched:
+
+```text
+[csszyx] has/pick/omit take one selector, not an array; pass the selectors one at a time, or use splitBox whose inner/outer options take a list.
+```
+
+```text
+[csszyx] an empty selector {} matches nothing; name a category and value, e.g. { overflow: "hidden" }.
+```
+
+```text
+[csszyx] '{selector}' is not a category or class prefix csszyx knows; the category is '{hint}'.
+```
+
+```text
+[csszyx] '{selector}' is not a category or class prefix csszyx knows; classify('<a class>') shows the category a class belongs to.
+```
+
+```text
+[csszyx] an object selector names one category and value; { {categories} } can never match a single token.
+```
+
+An empty object used to match every csszyx token, and a misspelt category
+answered `false` in a way that read as "no such class". The unknown-name
+message carries the category when the word is a CSS property people reach for
+(`width` and `height` are `sizing`, `color` is `text`, `background` is `bg`,
+`cursor` is `interaction`); for any other word, `classify('p-4')` and friends
+show which category a class belongs to. The same checks run for `hasSz`,
+`pickSz`, `omitSz` and `splitBoxSz`, where an sz key such as `minW` is a valid
+selector.
+
 Two helpers take two different inputs, and mixing them up says so:
 `splitBoxSz partitions sz objects, not raw class strings — use splitBox() for {value}.`
 `splitBox` takes a class string; `splitBoxSz` takes an `sz` object.

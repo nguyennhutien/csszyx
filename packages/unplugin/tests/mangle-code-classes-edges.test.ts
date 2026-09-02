@@ -135,3 +135,32 @@ describe('mangleCodeClassesSync — Pass 4 (szsc slot maps)', () => {
         expect(result).toBe(code);
     });
 });
+
+describe('mangleCodeClassesSync — Pass 3 object-literal keys', () => {
+    it('mangles the first key of an object literal like the keys after it', () => {
+        // A `clsx` map written as `{ 'p-4': cond, flex: other }` bundles to
+        // `{"p-4":e,"flex":t}`. The keys after the first follow a `,` and were
+        // rewritten; the first follows `{` and was not — so which utility lost
+        // its CSS depended on the order the author happened to write them.
+        const code = 'const c={"p-4":e,"flex":t,"bg-red-500":u};';
+        expect(mangleCodeClassesSync(code, MAP)).toBe('const c={"c":e,"z":t,"g":u};');
+    });
+
+    it('leaves an object key that is not a class alone', () => {
+        const code = 'const o={"not-a-class":1,"p-4":2};';
+        expect(mangleCodeClassesSync(code, MAP)).toBe('const o={"not-a-class":1,"c":2};');
+    });
+});
+
+describe('mangleCodeClassesSync — Pass 3 bracket separators only claim keys and elements', () => {
+    it('leaves a braced string that is not a key alone', () => {
+        // `{"p-4"}` with no `:` after it is a block or an interpolation, never
+        // an object key; the guard is the colon, not the brace.
+        expect(mangleCodeClassesSync('if(x){"p-4"}', MAP)).toBe('if(x){"p-4"}');
+        expect(mangleCodeClassesSync('const s=`${"p-4"}`;', MAP)).toBe('const s=`${"p-4"}`;');
+    });
+
+    it('mangles the first element of an array literal like the ones after it', () => {
+        expect(mangleCodeClassesSync('clsx(["p-4","flex"])', MAP)).toBe('clsx(["c","z"])');
+    });
+});

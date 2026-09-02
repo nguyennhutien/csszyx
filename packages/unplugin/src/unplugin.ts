@@ -2522,11 +2522,27 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     // commas and operators (e.g. `_szMerge(x, "p-8 flex...")`, `pe && "text-right"`).
     // The lookbehind also covers && so that conditional array elements compiled by the
     // sz-array path (condition && "class-string") are mangled correctly.
-    // The separator (`,`/`(`/`&&`) and any whitespace are consumed and re-emitted
-    // rather than matched in a variable-length `(?<=…\s*)` lookbehind, which is
-    // quadratic (the engine retries the `\s*` length at every position). Consuming
-    // them keeps the scan linear and re-prepends them unchanged.
-    result = result.replace(/([,(]|&&)(\s*)"([^"]+)"/g, (match, sep, ws, inner) => {
+    // `{` and `[` are separators too: a class-keyed object (`clsx({ 'p-4':
+    // cond })`) bundles to `{"p-4":e,"flex":t}` and a class array to
+    // `["p-4","flex"]`, and only the entries after the first were being
+    // rewritten — the first follows the bracket, not `,` — so which utility
+    // lost its CSS depended on the order the author wrote them. A brace claims
+    // its string only when a `:` follows, the shape of an object KEY: a block
+    // `{"p-4"}` or an interpolation `${"p-4"}` is left alone.
+    // The separator (`,`/`(`/`[`/`{`/`&&`) and any whitespace are consumed and
+    // re-emitted rather than matched in a variable-length `(?<=…\s*)` lookbehind,
+    // which is quadratic (the engine retries the `\s*` length at every position).
+    // Consuming them keeps the scan linear and re-prepends them unchanged. The
+    // colon check is a sticky regex anchored at the match end, so it costs the
+    // whitespace it skips and never re-scans the string.
+    const objectKeyColon = /\s*:/y;
+    result = result.replace(/([,([{]|&&)(\s*)"([^"]+)"/g, (match, sep, ws, inner, offset) => {
+        if (sep === '{') {
+            objectKeyColon.lastIndex = offset + match.length;
+            if (!objectKeyColon.test(result)) {
+                return match;
+            }
+        }
         const tokens = inner.split(/\s+/).filter(Boolean);
         if (tokens.length === 0) {
             return match;

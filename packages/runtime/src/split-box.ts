@@ -27,7 +27,9 @@ import {
     BOX_ROLE_TOKENS,
     type BoxRole,
 } from './box-role-map.generated.js';
+import { decodeToken, type MangleBridge, mangleBridge } from './class-codec.js';
 import type { SzInput } from './concatenate.js';
+import { devWarn } from './dev-warn.js';
 
 export type { BoxRole };
 
@@ -134,28 +136,61 @@ export const BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT: ReadonlyMap<
 })();
 
 /**
- * Per-token classification memo. `inspect` is a pure function of the static
- * generated tables (custom szcn theme groups do not affect box roles), so
- * entries never invalidate; the cap only bounds adversarial dynamic classNames.
- * The cached info objects are shared across callers — every consumer
- * (`splitBox`, `matches`, `classify`) reads, never mutates.
+ * Per-token classification memo, keyed by the RAW token. `inspect` is a pure
+ * function of the static generated tables and of the installed mangle bridge:
+ * custom szcn theme groups do not affect box roles, so the only thing that can
+ * change an answer is the bridge, and {@link syncMemos} empties both memos
+ * whenever its identity changes. The cap only bounds adversarial dynamic
+ * classNames. The cached info objects are shared across callers — every
+ * consumer (`splitBox`, `matches`, `classify`) reads, never mutates.
  */
 const INSPECT_MEMO_MAX = 4096;
 const inspectMemo = new Map<string, TokenInfo | undefined>();
+/** The bridge both memos were filled under; `undefined` until the first call. */
+let memoBridgeRef: MangleBridge | undefined;
+
+/**
+ * Read the mangle bridge once for a public operation, dropping every memo
+ * entry when it is not the object the memos were filled under.
+ *
+ * A registry that arrives after a component's first render, a replaced map
+ * in a test, or a cleared registry all change what a token means. Compared
+ * by identity rather than presence, the way `szcn` does, so a swapped bridge
+ * never serves answers memoized under the previous map. In production the
+ * registry is installed once for the page lifetime, so this never clears.
+ *
+ * @returns The bridge to decode through for this operation.
+ */
+function syncMemos(): MangleBridge | undefined {
+    const bridge = mangleBridge();
+    if (bridge !== memoBridgeRef) {
+        inspectMemo.clear();
+        splitMemo.clear();
+        memoBridgeRef = bridge;
+    }
+    return bridge;
+}
 
 /**
  * Classify a single class token, or `undefined` if csszyx does not own it.
  * `splitBox` runs this per token per render at the leaf of a layered
  * design-system component, so it is memoized per token.
  *
+ * The token is decoded through the bridge BEFORE classification: on a mangled
+ * build the DOM carries `y`, not `w-full`, and the tables know only the
+ * original spelling. The memo key stays the raw token, because that is what
+ * every caller holds and what every caller must get back — see the public
+ * functions below, none of which emits a decoded name.
+ *
  * @param token - A single class token to classify.
+ * @param bridge - The bridge read once by the caller via {@link syncMemos}.
  * @returns Token info (role, category, base, value), or `undefined` if unowned.
  */
-function inspect(token: string): TokenInfo | undefined {
+function inspect(token: string, bridge: MangleBridge | undefined): TokenInfo | undefined {
     if (inspectMemo.has(token)) {
         return inspectMemo.get(token);
     }
-    const info = inspectUncached(token);
+    const info = inspectUncached(decodeToken(token, bridge));
     if (inspectMemo.size >= INSPECT_MEMO_MAX) {
         inspectMemo.clear();
     }
@@ -194,8 +229,128 @@ function inspectUncached(token: string): TokenInfo | undefined {
  * @returns The token's role and category, or `undefined` if unowned.
  */
 export function classify(token: string): Classification | undefined {
-    const info = inspect(token);
+    const info = inspect(token, syncMemos());
     return info ? { role: info.role, category: info.category } : undefined;
+}
+
+/** Every category the generated tables use, for telling a typo from a miss. */
+const KNOWN_CATEGORIES: ReadonlySet<string> = new Set([
+    ...[...BOX_ROLE_TOKENS.values()].map(entry => entry.category),
+    ...BOX_ROLE_PREFIXES.map(([, entry]) => entry.category),
+]);
+
+/** Every exact token and class prefix the generated tables know. */
+const KNOWN_PREFIXES: ReadonlySet<string> = new Set([
+    ...BOX_ROLE_TOKENS.keys(),
+    ...BOX_ROLE_PREFIXES.map(([prefix]) => prefix),
+]);
+
+/** Words a caller reaches for that name a CSS property rather than a category. */
+const CATEGORY_HINTS: Readonly<Record<string, string>> = {
+    width: 'sizing',
+    height: 'sizing',
+    color: 'text',
+    colour: 'text',
+    background: 'bg',
+    cursor: 'interaction',
+};
+
+/**
+ * Which vocabulary a string selector is checked against.
+ *
+ * The class toolkit reads CLASS spellings, so a string selector is a
+ * category, a role alias, or a class prefix. The sz-object twins read sz KEYS
+ * (`minW`, `flexDir`, `gapX`), and a key is not a class prefix — the check
+ * that is right for one family silently rejects half the other's inputs.
+ */
+type SelectorFamily = 'class' | 'sz';
+
+/**
+ * Whether a string selector names something the family's tables can match.
+ *
+ * @param selector - The string the caller passed.
+ * @param family - Whose vocabulary to check it against.
+ * @returns `true` when at least one token or key could match it.
+ */
+function stringSelectorIsKnown(selector: string, family: SelectorFamily): boolean {
+    if (selector === 'outer' || selector === 'inner' || selector === 'content') return true;
+    if (KNOWN_CATEGORIES.has(selector)) return true;
+    if (family === 'sz') return BOX_ROLE_BY_KEY.has(selector);
+    // A whole class (`overflow-hidden`), a prefix deeper than the table's
+    // (`bg-red`) and the table's own prefix (`bg`) all start with a segment the
+    // tables know; a typo (`widht`) or a property name (`width`) does not.
+    return (
+        KNOWN_PREFIXES.has(selector) ||
+        BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.has(selector.split('-', 1)[0] as string)
+    );
+}
+
+/**
+ * Whether a selector can match anything, warning in development when it
+ * cannot.
+ *
+ * Three shapes used to reach the matcher and answer without meaning to: an
+ * empty object matched every csszyx token, because "every entry agrees" is
+ * vacuously true of no entries; a misspelt category fell through to the
+ * prefix test and answered false, indistinguishable from "no such class";
+ * and an array — the shape `splitBox`'s override lists take — answered false
+ * the same way. Called once per public operation, not per token.
+ *
+ * @param selector - What the caller passed.
+ * @param family - Whose vocabulary a string selector is checked against.
+ * @returns `true` when the selector is worth testing tokens against.
+ */
+function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class'): boolean {
+    if (Array.isArray(selector)) {
+        devWarn(
+            'has/pick/omit take one selector, not an array; pass the selectors one at a time, ' +
+                'or use splitBox whose inner/outer options take a list.',
+        );
+        return false;
+    }
+    if (typeof selector === 'object') {
+        const categories = Object.keys(selector);
+        if (categories.length === 0) {
+            devWarn(
+                'an empty selector {} matches nothing; name a category and value, ' +
+                    'e.g. { overflow: "hidden" }.',
+            );
+            return false;
+        }
+        if (categories.length > 1) {
+            // A token belongs to one category, so two entries can never both
+            // agree on it.
+            devWarn(
+                'an object selector names one category and value; ' +
+                    `{ ${categories.join(', ')} } can never match a single token.`,
+            );
+            return false;
+        }
+        const category = categories[0] as string;
+        if (!KNOWN_CATEGORIES.has(category)) {
+            warnUnknownSelector(category);
+            return false;
+        }
+        return true;
+    }
+    if (stringSelectorIsKnown(selector, family)) return true;
+    warnUnknownSelector(selector);
+    return false;
+}
+
+/**
+ * Say that a name matches nothing, and what would.
+ *
+ * @param name - The category or prefix the caller wrote.
+ */
+function warnUnknownSelector(name: string): void {
+    const hint = CATEGORY_HINTS[name];
+    devWarn(
+        `'${name}' is not a category or class prefix csszyx knows; ` +
+            (hint === undefined
+                ? "classify('<a class>') shows the category a class belongs to."
+                : `the category is '${hint}'.`),
+    );
 }
 
 /**
@@ -252,10 +407,9 @@ function tokenize(className: string): string[] {
  * selectors with no cheap identity, and the components that pass one are not
  * the per-render leaf this exists to serve.
  *
- * Safe to cache indefinitely for the same reason `inspectMemo` is — the
- * partition is a pure function of the static generated tables. `splitBox` never
- * reads the mangle bridge (a mangled token simply classifies as unowned and
- * takes the fallback), so a bridge installed later cannot change a result.
+ * Safe to cache for the same reason `inspectMemo` is — the partition is a
+ * pure function of the static generated tables and the installed mangle
+ * bridge, and {@link syncMemos} empties it whenever the bridge changes.
  */
 const SPLIT_MEMO_MAX = 512;
 const splitMemo = new Map<string, { readonly outer: string; readonly inner: string }>();
@@ -284,12 +438,13 @@ function hasSplitOverrides(options: SplitBoxOptions): boolean {
  * @example splitBox('m-4 px-2 md:flex') // → { outer: 'm-4', inner: 'px-2 md:flex' }
  */
 export function splitBox(className: string, options: SplitBoxOptions = {}): SplitBoxResult {
+    const bridge = syncMemos();
     if (hasSplitOverrides(options)) {
-        return splitBoxUncached(className, options);
+        return splitBoxUncached(className, options, bridge);
     }
     let cached = splitMemo.get(className);
     if (cached === undefined) {
-        cached = splitBoxUncached(className, options);
+        cached = splitBoxUncached(className, options, bridge);
         // Admission stop at the cap, not a clear: clearing flushed every hot
         // entry whenever cold traffic crossed the cap, while overflow calls
         // pay only their own uncached split under either policy.
@@ -309,17 +464,22 @@ export function splitBox(className: string, options: SplitBoxOptions = {}): Spli
  *
  * @param className - The flat className string to partition.
  * @param options - Overrides for forcing tokens onto a node and the fallback role.
+ * @param bridge - The mangle bridge read once by the caller via {@link syncMemos}.
  * @returns The `{ outer, inner }` class buckets.
  */
-function splitBoxUncached(className: string, options: SplitBoxOptions): SplitBoxResult {
-    const forceInner = options.inner ?? [];
-    const forceOuter = options.outer ?? [];
+function splitBoxUncached(
+    className: string,
+    options: SplitBoxOptions,
+    bridge: MangleBridge | undefined,
+): SplitBoxResult {
+    const forceInner = (options.inner ?? []).filter(sel => selectorIsUsable(sel, 'class'));
+    const forceOuter = (options.outer ?? []).filter(sel => selectorIsUsable(sel, 'class'));
     const fallback: BoxRole = options.fallback ?? 'outer';
     const outer: string[] = [];
     const inner: string[] = [];
 
     for (const token of tokenize(className)) {
-        const info = inspect(token);
+        const info = inspect(token, bridge);
         let role: BoxRole;
         if (anyMatch(info, forceInner)) role = 'inner';
         else if (anyMatch(info, forceOuter)) role = 'outer';
@@ -331,14 +491,22 @@ function splitBoxUncached(className: string, options: SplitBoxOptions): SplitBox
 }
 
 /**
- * Does any token in `classes` match `selector`? Variant- and mangle-robust.
+ * Does any token in `classes` match `selector`?
+ *
+ * Variant-aware — `md:w-4` is a width — and mangle-aware: a token is decoded
+ * through the runtime registry before it is classified, so the answer is the
+ * same on a production build where the DOM carries `y` for `w-full`. The
+ * answer is lexical: it says whether a matching utility appears anywhere in
+ * the list, not under which variant, so a responsive width counts as a width.
  *
  * @param classes - A className string to scan.
  * @param selector - The selector to test tokens against.
  * @returns `true` if any token matches the selector.
  */
 export function has(classes: string, selector: BoxSelector): boolean {
-    return tokenize(classes).some(t => matches(inspect(t), selector));
+    if (!selectorIsUsable(selector)) return false;
+    const bridge = syncMemos();
+    return tokenize(classes).some(t => matches(inspect(t, bridge), selector));
 }
 
 /**
@@ -349,8 +517,10 @@ export function has(classes: string, selector: BoxSelector): boolean {
  * @returns The matching tokens joined by spaces.
  */
 export function pick(classes: string, selector: BoxSelector): string {
+    if (!selectorIsUsable(selector)) return '';
+    const bridge = syncMemos();
     return tokenize(classes)
-        .filter(t => matches(inspect(t), selector))
+        .filter(t => matches(inspect(t, bridge), selector))
         .join(' ');
 }
 
@@ -362,8 +532,10 @@ export function pick(classes: string, selector: BoxSelector): string {
  * @returns The non-matching tokens joined by spaces.
  */
 export function omit(classes: string, selector: BoxSelector): string {
+    if (!selectorIsUsable(selector)) return tokenize(classes).join(' ');
+    const bridge = syncMemos();
     return tokenize(classes)
-        .filter(t => !matches(inspect(t), selector))
+        .filter(t => !matches(inspect(t, bridge), selector))
         .join(' ');
 }
 
@@ -529,8 +701,8 @@ function partitionSz(
     depth: number,
 ): void {
     if (depth >= MAX_SZ_DEPTH) throw new SzDepthError();
-    const forceInner = options.inner ?? [];
-    const forceOuter = options.outer ?? [];
+    const forceInner = (options.inner ?? []).filter(sel => selectorIsUsable(sel, 'sz'));
+    const forceOuter = (options.outer ?? []).filter(sel => selectorIsUsable(sel, 'sz'));
     const fallback: BoxRole = options.fallback ?? 'outer';
     const context: SzPartitionContext = {
         options,
@@ -648,6 +820,7 @@ function filterSz(obj: SzObject, selector: BoxSelector, keep: boolean, depth: nu
  * @returns `true` if any key matches.
  */
 export function hasSz(sz: SzInput, selector: BoxSelector): boolean {
+    if (!selectorIsUsable(selector, 'sz')) return false;
     const scan = (obj: SzObject, depth: number): boolean => {
         if (depth >= MAX_SZ_DEPTH) throw new SzDepthError();
         for (const key of Object.keys(obj)) {
@@ -671,6 +844,7 @@ export function hasSz(sz: SzInput, selector: BoxSelector): boolean {
  * @returns A new sz object with the matching keys.
  */
 export function pickSz(sz: SzInput, selector: BoxSelector): SzObject {
+    if (!selectorIsUsable(selector, 'sz')) return {};
     return filterSz(flattenSz(sz, 0), selector, true, 0);
 }
 
@@ -683,5 +857,7 @@ export function pickSz(sz: SzInput, selector: BoxSelector): SzObject {
  * @returns A new sz object with the non-matching keys.
  */
 export function omitSz(sz: SzInput, selector: BoxSelector): SzObject {
-    return filterSz(flattenSz(sz, 0), selector, false, 0);
+    const flat = flattenSz(sz, 0);
+    if (!selectorIsUsable(selector, 'sz')) return flat;
+    return filterSz(flat, selector, false, 0);
 }

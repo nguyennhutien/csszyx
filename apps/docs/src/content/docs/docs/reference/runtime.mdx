@@ -330,15 +330,18 @@ matching on a mangled build (the DOM carries `q3`, not `w-full`); decoding
 first keeps the check correct on every build:
 
 ```ts
-import { szDecode } from '@csszyx/runtime';
+import { has, szDecode } from '@csszyx/runtime';
 
-const hasWidthClass = (className: string) =>
-  className.split(/\s+/).some(t => szDecode(t).startsWith('w-'));
+szDecode('q3'); // 'w-full' on that build; 'q3' where nothing was mangled
+
+const hasWidthClass = (className: string) => has(className, 'w');
 ```
 
-Variant prefixes decode with the token (`szDecode('x7')` can return
-`'md:hover:w-full'`), so strip the prefix before comparing the bare utility if
-your check targets the base class.
+`has` decodes every token through the registry and strips the variant before
+matching, so `md:hover:w-full` and its mangled form both count as a width. A
+hand-rolled check has to do both itself: `szDecode` returns the whole original
+token (`szDecode('x7')` can be `'md:hover:w-full'`), and `startsWith('w-')`
+on that is false.
 
 ## `szsc` — reading compiled `szs` slots
 
@@ -604,6 +607,53 @@ const dep = has(outer, { overflow: 'hidden' }) ? 'overflow-y-auto h-full' : '';
   <Scroll className={_szMerge(inner, dep)} />
 </Frame>
 ```
+
+## `stripVariant(token)` / `normalizeBase(base)` — Token Parsing
+
+The two steps the toolkit takes before it classifies a token, exported so a
+component that needs one of them does not reimplement it.
+
+```ts
+function stripVariant(token: string): string
+function normalizeBase(base: string): string
+```
+
+`stripVariant` returns the utility after its variant chain, scanning from the
+right for the last `:` at bracket depth zero, so a colon inside a value is not a
+variant boundary:
+
+```ts
+stripVariant('md:hover:w-4')          // 'w-4'
+stripVariant('[&:hover]:w-full')      // 'w-full'
+stripVariant('bg-[url(http://a/b)]')  // unchanged — no variant
+```
+
+A token is at the base breakpoint exactly when stripping leaves it unchanged —
+**after** decoding, because on a production build a mangled `md:w-1/2` is one
+opaque token with no colon in it, and `stripVariant` would call it base:
+
+```ts
+import { has, szDecode, stripVariant } from '@csszyx/runtime';
+
+const isBase = (token: string) => {
+  const original = szDecode(token);
+  return stripVariant(original) === original;
+};
+const baseTokens = className.split(/\s+/).filter(isBase).join(' ');
+const hasBaseWidth = has(baseTokens, 'w');
+```
+
+That is the question a component asks when a responsive width must not count as
+a width everywhere.
+
+`normalizeBase` removes the important marker (leading or trailing `!`) and a
+leading negative sign: `normalizeBase('!w-4')` and `normalizeBase('-mt-4')` give
+`w-4` and `mt-4`. Give it the output of `stripVariant` — on a token that still
+carries its variant it strips only what sits at the ends, so `md:!w-4` comes
+back unchanged.
+
+Neither decodes a mangled token — call `szDecode` first on a production build.
+`has`, `pick`, `omit` and `splitBox` do all three steps themselves.
 
 ## `splitBoxSz(sz, options?)` — sz-Object Routing
 

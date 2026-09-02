@@ -199,6 +199,9 @@ export default [
             // S2310. A counter the body rewrites is no longer a counter, and
             // where the next step lands stops being readable from the header.
             'sonarjs/updated-loop-counter': 'error',
+            // S5906. `expect(a === b).toBe(true)` fails as "expected false to
+            // be true"; the dedicated matcher fails with both sides named.
+            'sonarjs/prefer-specific-assertions': 'error',
         },
     },
 
