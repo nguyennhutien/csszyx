@@ -80,6 +80,9 @@ const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
  * (the same work as collapsing two `text-<size>` / two `bg-<color>`); deferred.
  */
 const SHORTHAND_COVERAGE: Record<string, readonly string[]> = {
+    // `size-*` writes width and height together. Not `min-*`/`max-*`: those
+    // are separate properties that clamp rather than set.
+    size: ['size', 'w', 'h'],
     p: ['p', 'px', 'py', 'pt', 'pr', 'pb', 'pl', 'ps', 'pe'],
     px: ['px', 'pl', 'pr', 'ps', 'pe'],
     py: ['py', 'pt', 'pb'],
