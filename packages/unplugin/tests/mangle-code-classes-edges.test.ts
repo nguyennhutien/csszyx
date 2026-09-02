@@ -151,3 +151,16 @@ describe('mangleCodeClassesSync — Pass 3 object-literal keys', () => {
         expect(mangleCodeClassesSync(code, MAP)).toBe('const o={"not-a-class":1,"c":2};');
     });
 });
+
+describe('mangleCodeClassesSync — Pass 3 bracket separators only claim keys and elements', () => {
+    it('leaves a braced string that is not a key alone', () => {
+        // `{"p-4"}` with no `:` after it is a block or an interpolation, never
+        // an object key; the guard is the colon, not the brace.
+        expect(mangleCodeClassesSync('if(x){"p-4"}', MAP)).toBe('if(x){"p-4"}');
+        expect(mangleCodeClassesSync('const s=`${"p-4"}`;', MAP)).toBe('const s=`${"p-4"}`;');
+    });
+
+    it('mangles the first element of an array literal like the ones after it', () => {
+        expect(mangleCodeClassesSync('clsx(["p-4","flex"])', MAP)).toBe('clsx(["c","z"])');
+    });
+});
