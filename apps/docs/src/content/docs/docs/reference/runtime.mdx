@@ -330,15 +330,16 @@ matching on a mangled build (the DOM carries `q3`, not `w-full`); decoding
 first keeps the check correct on every build:
 
 ```ts
-import { szDecode } from '@csszyx/runtime';
+import { has } from '@csszyx/runtime';
 
-const hasWidthClass = (className: string) =>
-  className.split(/\s+/).some(t => szDecode(t).startsWith('w-'));
+const hasWidthClass = (className: string) => has(className, 'w');
 ```
 
-Variant prefixes decode with the token (`szDecode('x7')` can return
-`'md:hover:w-full'`), so strip the prefix before comparing the bare utility if
-your check targets the base class.
+`has` decodes every token through the registry and strips the variant before
+matching, so `md:hover:w-full` and its mangled form both count as a width. A
+hand-rolled check has to do both itself: `szDecode` returns the whole original
+token (`szDecode('x7')` can be `'md:hover:w-full'`), and `startsWith('w-')`
+on that is false.
 
 ## `szsc` — reading compiled `szs` slots
 
