@@ -29,6 +29,7 @@ import {
 } from './box-role-map.generated.js';
 import { decodeToken, type MangleBridge, mangleBridge } from './class-codec.js';
 import type { SzInput } from './concatenate.js';
+import { devWarn } from './dev-warn.js';
 
 export type { BoxRole };
 
@@ -232,6 +233,73 @@ export function classify(token: string): Classification | undefined {
     return info ? { role: info.role, category: info.category } : undefined;
 }
 
+/** Every category the generated tables use, for telling a typo from a miss. */
+const KNOWN_CATEGORIES: ReadonlySet<string> = new Set([
+    ...[...BOX_ROLE_TOKENS.values()].map(entry => entry.category),
+    ...BOX_ROLE_PREFIXES.map(([, entry]) => entry.category),
+]);
+
+/** Every exact token and class prefix the generated tables know. */
+const KNOWN_PREFIXES: ReadonlySet<string> = new Set([
+    ...BOX_ROLE_TOKENS.keys(),
+    ...BOX_ROLE_PREFIXES.map(([prefix]) => prefix),
+]);
+
+/** Words a caller reaches for that name a CSS property rather than a category. */
+const CATEGORY_HINTS: Readonly<Record<string, string>> = {
+    width: 'sizing',
+    height: 'sizing',
+};
+
+/**
+ * Whether a selector can match anything, warning in development when it
+ * cannot.
+ *
+ * Three shapes used to reach the matcher and answer without meaning to: an
+ * empty object matched every csszyx token, because "every entry agrees" is
+ * vacuously true of no entries; a misspelt category fell through to the
+ * prefix test and answered false, indistinguishable from "no such class";
+ * and an array — the shape `splitBox`'s override lists take — answered false
+ * the same way. Called once per public operation, not per token.
+ *
+ * @param selector - What the caller passed.
+ * @returns `true` when the selector is worth testing tokens against.
+ */
+function selectorIsUsable(selector: BoxSelector): boolean {
+    if (Array.isArray(selector)) {
+        devWarn(
+            'has/pick/omit take one selector, not an array; pass the selectors one at a time, ' +
+                'or use splitBox whose inner/outer options take a list.',
+        );
+        return false;
+    }
+    if (typeof selector === 'object') {
+        if (Object.keys(selector).length === 0) {
+            devWarn(
+                'an empty selector {} matches nothing; name a category and value, ' +
+                    'e.g. { overflow: "hidden" }.',
+            );
+            return false;
+        }
+        return true;
+    }
+    if (
+        selector === 'outer' ||
+        selector === 'inner' ||
+        selector === 'content' ||
+        KNOWN_CATEGORIES.has(selector) ||
+        KNOWN_PREFIXES.has(selector)
+    ) {
+        return true;
+    }
+    const hint = CATEGORY_HINTS[selector];
+    devWarn(
+        `'${selector}' is not a category or class prefix csszyx knows` +
+            (hint === undefined ? '.' : `; the category is '${hint}'.`),
+    );
+    return false;
+}
+
 /**
  * Does `info` satisfy `selector`? `info === undefined` never matches.
  *
@@ -351,8 +419,8 @@ function splitBoxUncached(
     options: SplitBoxOptions,
     bridge: MangleBridge | undefined,
 ): SplitBoxResult {
-    const forceInner = options.inner ?? [];
-    const forceOuter = options.outer ?? [];
+    const forceInner = (options.inner ?? []).filter(selectorIsUsable);
+    const forceOuter = (options.outer ?? []).filter(selectorIsUsable);
     const fallback: BoxRole = options.fallback ?? 'outer';
     const outer: string[] = [];
     const inner: string[] = [];
@@ -383,6 +451,7 @@ function splitBoxUncached(
  * @returns `true` if any token matches the selector.
  */
 export function has(classes: string, selector: BoxSelector): boolean {
+    if (!selectorIsUsable(selector)) return false;
     const bridge = syncMemos();
     return tokenize(classes).some(t => matches(inspect(t, bridge), selector));
 }
@@ -395,6 +464,7 @@ export function has(classes: string, selector: BoxSelector): boolean {
  * @returns The matching tokens joined by spaces.
  */
 export function pick(classes: string, selector: BoxSelector): string {
+    if (!selectorIsUsable(selector)) return '';
     const bridge = syncMemos();
     return tokenize(classes)
         .filter(t => matches(inspect(t, bridge), selector))
@@ -409,6 +479,7 @@ export function pick(classes: string, selector: BoxSelector): string {
  * @returns The non-matching tokens joined by spaces.
  */
 export function omit(classes: string, selector: BoxSelector): string {
+    if (!selectorIsUsable(selector)) return tokenize(classes).join(' ');
     const bridge = syncMemos();
     return tokenize(classes)
         .filter(t => !matches(inspect(t, bridge), selector))
@@ -577,8 +648,8 @@ function partitionSz(
     depth: number,
 ): void {
     if (depth >= MAX_SZ_DEPTH) throw new SzDepthError();
-    const forceInner = options.inner ?? [];
-    const forceOuter = options.outer ?? [];
+    const forceInner = (options.inner ?? []).filter(selectorIsUsable);
+    const forceOuter = (options.outer ?? []).filter(selectorIsUsable);
     const fallback: BoxRole = options.fallback ?? 'outer';
     const context: SzPartitionContext = {
         options,
