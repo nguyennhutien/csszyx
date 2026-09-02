@@ -12,10 +12,12 @@
 //
 // Measured, not assumed: the same command with the same 3.8.6 succeeds when
 // `--output-dir` points at container-local overlayfs and fails when it points
-// at the mount. 3.8.6 is the latest release and is affected, so upgrading is
-// not the way out, and the CLI exposes no flag or environment variable that
-// turns the layer off. Upstream napi-rs#3444 reports the same machinery
-// misbehaving from 3.7.3 → 3.8.2 and is unanswered.
+// at the mount. Re-measured 2026-09-03 on 3.9.0, the release after 3.8.6:
+// the layer is unchanged and the build fails one step later ("recovery state
+// could not be removed"), so upgrading is still not the way out, and the CLI
+// exposes no flag or environment variable that turns the layer off. Upstream
+// napi-rs#3444 reports the same machinery misbehaving from 3.7.3 → 3.8.2 and
+// is unanswered.
 //
 // CI is unaffected — runner filesystems are ordinary — so the pin exists to
 // keep local builds and `verify:ci:fast` working. Re-test before raising it.
