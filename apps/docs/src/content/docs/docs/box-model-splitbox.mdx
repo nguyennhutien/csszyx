@@ -212,6 +212,12 @@ A token csszyx doesn't own (a third-party or arbitrary class like
 `fallback: 'inner'`.
 </Card>
 <Card title="Mangle-safe">
+Every token is decoded through the runtime mangle registry before it is
+classified, so a production build where the DOM carries `q3` for `w-full`
+routes exactly as development does. The buckets still hold the raw tokens — the
+stylesheet is mangled, so only those match a rule.
+</Card>
+<Card title="Speaks the compiler's vocabulary">
 It reads the compiler's tables, so it understands the same class vocabulary the
 compiler emits — variants, important, negative, value-keyed display/position.
 </Card>

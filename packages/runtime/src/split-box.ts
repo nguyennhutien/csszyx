@@ -27,6 +27,7 @@ import {
     BOX_ROLE_TOKENS,
     type BoxRole,
 } from './box-role-map.generated.js';
+import { decodeToken, type MangleBridge, mangleBridge } from './class-codec.js';
 import type { SzInput } from './concatenate.js';
 
 export type { BoxRole };
@@ -134,28 +135,61 @@ export const BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT: ReadonlyMap<
 })();
 
 /**
- * Per-token classification memo. `inspect` is a pure function of the static
- * generated tables (custom szcn theme groups do not affect box roles), so
- * entries never invalidate; the cap only bounds adversarial dynamic classNames.
- * The cached info objects are shared across callers — every consumer
- * (`splitBox`, `matches`, `classify`) reads, never mutates.
+ * Per-token classification memo, keyed by the RAW token. `inspect` is a pure
+ * function of the static generated tables and of the installed mangle bridge:
+ * custom szcn theme groups do not affect box roles, so the only thing that can
+ * change an answer is the bridge, and {@link syncMemos} empties both memos
+ * whenever its identity changes. The cap only bounds adversarial dynamic
+ * classNames. The cached info objects are shared across callers — every
+ * consumer (`splitBox`, `matches`, `classify`) reads, never mutates.
  */
 const INSPECT_MEMO_MAX = 4096;
 const inspectMemo = new Map<string, TokenInfo | undefined>();
+/** The bridge both memos were filled under; `undefined` until the first call. */
+let memoBridgeRef: MangleBridge | undefined;
+
+/**
+ * Read the mangle bridge once for a public operation, dropping every memo
+ * entry when it is not the object the memos were filled under.
+ *
+ * A registry that arrives after a component's first render, a replaced map
+ * in a test, or a cleared registry all change what a token means. Compared
+ * by identity rather than presence, the way `szcn` does, so a swapped bridge
+ * never serves answers memoized under the previous map. In production the
+ * registry is installed once for the page lifetime, so this never clears.
+ *
+ * @returns The bridge to decode through for this operation.
+ */
+function syncMemos(): MangleBridge | undefined {
+    const bridge = mangleBridge();
+    if (bridge !== memoBridgeRef) {
+        inspectMemo.clear();
+        splitMemo.clear();
+        memoBridgeRef = bridge;
+    }
+    return bridge;
+}
 
 /**
  * Classify a single class token, or `undefined` if csszyx does not own it.
  * `splitBox` runs this per token per render at the leaf of a layered
  * design-system component, so it is memoized per token.
  *
+ * The token is decoded through the bridge BEFORE classification: on a mangled
+ * build the DOM carries `y`, not `w-full`, and the tables know only the
+ * original spelling. The memo key stays the raw token, because that is what
+ * every caller holds and what every caller must get back — see the public
+ * functions below, none of which emits a decoded name.
+ *
  * @param token - A single class token to classify.
+ * @param bridge - The bridge read once by the caller via {@link syncMemos}.
  * @returns Token info (role, category, base, value), or `undefined` if unowned.
  */
-function inspect(token: string): TokenInfo | undefined {
+function inspect(token: string, bridge: MangleBridge | undefined): TokenInfo | undefined {
     if (inspectMemo.has(token)) {
         return inspectMemo.get(token);
     }
-    const info = inspectUncached(token);
+    const info = inspectUncached(decodeToken(token, bridge));
     if (inspectMemo.size >= INSPECT_MEMO_MAX) {
         inspectMemo.clear();
     }
@@ -194,7 +228,7 @@ function inspectUncached(token: string): TokenInfo | undefined {
  * @returns The token's role and category, or `undefined` if unowned.
  */
 export function classify(token: string): Classification | undefined {
-    const info = inspect(token);
+    const info = inspect(token, syncMemos());
     return info ? { role: info.role, category: info.category } : undefined;
 }
 
@@ -252,10 +286,9 @@ function tokenize(className: string): string[] {
  * selectors with no cheap identity, and the components that pass one are not
  * the per-render leaf this exists to serve.
  *
- * Safe to cache indefinitely for the same reason `inspectMemo` is — the
- * partition is a pure function of the static generated tables. `splitBox` never
- * reads the mangle bridge (a mangled token simply classifies as unowned and
- * takes the fallback), so a bridge installed later cannot change a result.
+ * Safe to cache for the same reason `inspectMemo` is — the partition is a
+ * pure function of the static generated tables and the installed mangle
+ * bridge, and {@link syncMemos} empties it whenever the bridge changes.
  */
 const SPLIT_MEMO_MAX = 512;
 const splitMemo = new Map<string, { readonly outer: string; readonly inner: string }>();
@@ -284,12 +317,13 @@ function hasSplitOverrides(options: SplitBoxOptions): boolean {
  * @example splitBox('m-4 px-2 md:flex') // → { outer: 'm-4', inner: 'px-2 md:flex' }
  */
 export function splitBox(className: string, options: SplitBoxOptions = {}): SplitBoxResult {
+    const bridge = syncMemos();
     if (hasSplitOverrides(options)) {
-        return splitBoxUncached(className, options);
+        return splitBoxUncached(className, options, bridge);
     }
     let cached = splitMemo.get(className);
     if (cached === undefined) {
-        cached = splitBoxUncached(className, options);
+        cached = splitBoxUncached(className, options, bridge);
         // Admission stop at the cap, not a clear: clearing flushed every hot
         // entry whenever cold traffic crossed the cap, while overflow calls
         // pay only their own uncached split under either policy.
@@ -309,9 +343,14 @@ export function splitBox(className: string, options: SplitBoxOptions = {}): Spli
  *
  * @param className - The flat className string to partition.
  * @param options - Overrides for forcing tokens onto a node and the fallback role.
+ * @param bridge - The mangle bridge read once by the caller via {@link syncMemos}.
  * @returns The `{ outer, inner }` class buckets.
  */
-function splitBoxUncached(className: string, options: SplitBoxOptions): SplitBoxResult {
+function splitBoxUncached(
+    className: string,
+    options: SplitBoxOptions,
+    bridge: MangleBridge | undefined,
+): SplitBoxResult {
     const forceInner = options.inner ?? [];
     const forceOuter = options.outer ?? [];
     const fallback: BoxRole = options.fallback ?? 'outer';
@@ -319,7 +358,7 @@ function splitBoxUncached(className: string, options: SplitBoxOptions): SplitBox
     const inner: string[] = [];
 
     for (const token of tokenize(className)) {
-        const info = inspect(token);
+        const info = inspect(token, bridge);
         let role: BoxRole;
         if (anyMatch(info, forceInner)) role = 'inner';
         else if (anyMatch(info, forceOuter)) role = 'outer';
@@ -331,14 +370,21 @@ function splitBoxUncached(className: string, options: SplitBoxOptions): SplitBox
 }
 
 /**
- * Does any token in `classes` match `selector`? Variant- and mangle-robust.
+ * Does any token in `classes` match `selector`?
+ *
+ * Variant-aware — `md:w-4` is a width — and mangle-aware: a token is decoded
+ * through the runtime registry before it is classified, so the answer is the
+ * same on a production build where the DOM carries `y` for `w-full`. The
+ * answer is lexical: it says whether a matching utility appears anywhere in
+ * the list, not under which variant, so a responsive width counts as a width.
  *
  * @param classes - A className string to scan.
  * @param selector - The selector to test tokens against.
  * @returns `true` if any token matches the selector.
  */
 export function has(classes: string, selector: BoxSelector): boolean {
-    return tokenize(classes).some(t => matches(inspect(t), selector));
+    const bridge = syncMemos();
+    return tokenize(classes).some(t => matches(inspect(t, bridge), selector));
 }
 
 /**
@@ -349,8 +395,9 @@ export function has(classes: string, selector: BoxSelector): boolean {
  * @returns The matching tokens joined by spaces.
  */
 export function pick(classes: string, selector: BoxSelector): string {
+    const bridge = syncMemos();
     return tokenize(classes)
-        .filter(t => matches(inspect(t), selector))
+        .filter(t => matches(inspect(t, bridge), selector))
         .join(' ');
 }
 
@@ -362,8 +409,9 @@ export function pick(classes: string, selector: BoxSelector): string {
  * @returns The non-matching tokens joined by spaces.
  */
 export function omit(classes: string, selector: BoxSelector): string {
+    const bridge = syncMemos();
     return tokenize(classes)
-        .filter(t => !matches(inspect(t), selector))
+        .filter(t => !matches(inspect(t, bridge), selector))
         .join(' ');
 }
 
