@@ -976,10 +976,22 @@ answers as if nothing matched:
 [csszyx] '{selector}' is not a category or class prefix csszyx knows; the category is '{hint}'.
 ```
 
+```text
+[csszyx] '{selector}' is not a category or class prefix csszyx knows; classify('<a class>') shows the category a class belongs to.
+```
+
+```text
+[csszyx] an object selector names one category and value; { {categories} } can never match a single token.
+```
+
 An empty object used to match every csszyx token, and a misspelt category
-answered `false` in a way that read as "no such class". The last message names
-the category when the word is a CSS property (`width` and `height` are both
-`sizing`).
+answered `false` in a way that read as "no such class". The unknown-name
+message carries the category when the word is a CSS property people reach for
+(`width` and `height` are `sizing`, `color` is `text`, `background` is `bg`,
+`cursor` is `interaction`); for any other word, `classify('p-4')` and friends
+show which category a class belongs to. The same checks run for `hasSz`,
+`pickSz`, `omitSz` and `splitBoxSz`, where an sz key such as `minW` is a valid
+selector.
 
 Two helpers take two different inputs, and mixing them up says so:
 `splitBoxSz partitions sz objects, not raw class strings — use splitBox() for {value}.`

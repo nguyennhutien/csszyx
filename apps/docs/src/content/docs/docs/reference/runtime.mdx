@@ -330,7 +330,9 @@ matching on a mangled build (the DOM carries `q3`, not `w-full`); decoding
 first keeps the check correct on every build:
 
 ```ts
-import { has } from '@csszyx/runtime';
+import { has, szDecode } from '@csszyx/runtime';
+
+szDecode('q3'); // 'w-full' on that build; 'q3' where nothing was mangled
 
 const hasWidthClass = (className: string) => has(className, 'w');
 ```
@@ -626,14 +628,29 @@ stripVariant('[&:hover]:w-full')      // 'w-full'
 stripVariant('bg-[url(http://a/b)]')  // unchanged — no variant
 ```
 
-A token is at the base breakpoint exactly when `stripVariant(token) === token`.
+A token is at the base breakpoint exactly when stripping leaves it unchanged —
+**after** decoding, because on a production build a mangled `md:w-1/2` is one
+opaque token with no colon in it, and `stripVariant` would call it base:
+
+```ts
+import { has, szDecode, stripVariant } from '@csszyx/runtime';
+
+const isBase = (token: string) => {
+  const original = szDecode(token);
+  return stripVariant(original) === original;
+};
+const baseTokens = className.split(/\s+/).filter(isBase).join(' ');
+const hasBaseWidth = has(baseTokens, 'w');
+```
+
 That is the question a component asks when a responsive width must not count as
-a width everywhere: "is there a plain `w-*` here?" is `has` over the tokens that
-pass that test.
+a width everywhere.
 
 `normalizeBase` removes the important marker (leading or trailing `!`) and a
 leading negative sign: `normalizeBase('!w-4')` and `normalizeBase('-mt-4')` give
-`w-4` and `mt-4`.
+`w-4` and `mt-4`. Give it the output of `stripVariant` — on a token that still
+carries its variant it strips only what sits at the ends, so `md:!w-4` comes
+back unchanged.
 
 Neither decodes a mangled token — call `szDecode` first on a production build.
 `has`, `pick`, `omit` and `splitBox` do all three steps themselves.

@@ -456,7 +456,10 @@ function mergeClassToken(
  * @param token - A single class token, possibly mangled.
  * @returns The original class name, or the token itself when not mangled.
  * @example
- * className.split(/\s+/).some(t => szDecode(t).startsWith('w-'))
+ * szDecode('q3') // 'w-full' on a build that mangled it; 'q3' otherwise
+ * // To ask "does this element carry a width?", use `has(className, 'w')`:
+ * // it decodes and strips the variant, where `szDecode(t).startsWith('w-')`
+ * // is false for `md:w-full`.
  */
 export function szDecode(token: string): string {
     return decodeToken(token, mangleBridge());

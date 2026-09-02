@@ -66,7 +66,7 @@ element's border** — outward (the box's relationship to its neighbors) or inwa
    outer  ─ margin · position · sizing · background · border · shadow · transform · visibility
    ┌──────────────────────── the border line ────────────────────────┐
    │                                                                  │
-   │   inner  ─ padding · overflow · display · gap · layout · text · interactivity
+   │   inner  ─ padding · overflow · display · flex · grid · gap · text · interaction
    │   ┌──────────────────────────────────────────────────────────┐  │
    │   │                                                          │  │
    │   │                     your content                         │  │
@@ -161,8 +161,8 @@ These are the defaults. Every one of them is overridable (next section).
 
 | Bucket | Categories | Examples |
 | --- | --- | --- |
-| **outer** | margin · position · sizing · background · border · shadow · transform · visibility | `m-4` `-mt-2` `absolute` `inset-0` `w-full` `bg-white` `rounded-xl` `border` `shadow-lg` `rotate-3` `invisible` `z-10` |
-| **inner** | padding · overflow · display · layout · gap · text · paint-inside · interactivity | `p-6` `overflow-hidden` `flex` `grid` `gap-2` `text-sm` `underline` `ring-2` `cursor-pointer` |
+| **outer** | margin · position · sizing · bg · border · ring · shadow · transform · visibility | `m-4` `-mt-2` `absolute` `inset-0` `w-full` `bg-white` `rounded-xl` `border` `shadow-lg` `rotate-3` `invisible` `z-10` |
+| **inner** | padding · overflow · display · flex · grid · gap · text · interaction | `p-6` `overflow-hidden` `flex` `grid` `gap-2` `text-sm` `underline` `cursor-pointer` |
 
 A mixed string sorts itself in one pass:
 

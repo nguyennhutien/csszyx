@@ -560,8 +560,8 @@ import {
   stripSzProps,
 } from "@csszyx/runtime";
 
-// Partition: outer = border-outward (margin/position/border/sizing/bg/shadow/transform/visibility),
-//            inner = border-inward (padding/overflow/display/layout/gap/text/paint-inside/interactivity)
+// Partition: outer = border-outward (margin/position/border/ring/sizing/bg/shadow/transform/visibility),
+//            inner = border-inward (padding/overflow/display/flex/grid/gap/text/interaction)
 const { outer, inner } = splitBox("m-4 px-2 md:flex");
 // outer: "m-4"   inner: "px-2 md:flex"
 
