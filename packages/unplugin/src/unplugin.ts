@@ -2522,11 +2522,15 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     // commas and operators (e.g. `_szMerge(x, "p-8 flex...")`, `pe && "text-right"`).
     // The lookbehind also covers && so that conditional array elements compiled by the
     // sz-array path (condition && "class-string") are mangled correctly.
-    // The separator (`,`/`(`/`&&`) and any whitespace are consumed and re-emitted
+    // `{` is a separator too: a class-keyed object (`clsx({ 'p-4': cond })`)
+    // bundles to `{"p-4":e,"flex":t}`, and only the keys after the first were
+    // being rewritten — the first follows `{`, not `,` — so which utility lost
+    // its CSS depended on the order the author wrote them.
+    // The separator (`,`/`(`/`{`/`&&`) and any whitespace are consumed and re-emitted
     // rather than matched in a variable-length `(?<=…\s*)` lookbehind, which is
     // quadratic (the engine retries the `\s*` length at every position). Consuming
     // them keeps the scan linear and re-prepends them unchanged.
-    result = result.replace(/([,(]|&&)(\s*)"([^"]+)"/g, (match, sep, ws, inner) => {
+    result = result.replace(/([,({]|&&)(\s*)"([^"]+)"/g, (match, sep, ws, inner) => {
         const tokens = inner.split(/\s+/).filter(Boolean);
         if (tokens.length === 0) {
             return match;
