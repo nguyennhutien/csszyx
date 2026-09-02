@@ -134,8 +134,8 @@
     "@csszyx/svelte-adapter": "workspace:*",
     "@csszyx/types": "workspace:*",
     "@csszyx/vue-adapter": "workspace:*",
-    "postcss": "^8.5.23",
-    "postcss-selector-parser": "^7.1.4",
+    "postcss": "^8.5.26",
+    "postcss-selector-parser": "^7.1.5",
     "postcss-value-parser": "^4.2.0",
     "proper-lockfile": "^4.1.2",
     "unplugin": "^3.3.0"
