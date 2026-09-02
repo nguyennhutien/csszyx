@@ -76,6 +76,10 @@ export {
     classifySzKey,
     has,
     hasSz,
+    // The token scanner the toolkit classifies with. Public so a component
+    // asking "is this a base-breakpoint token?" does not copy the
+    // bracket-depth walk — copies cut `[&:hover]:w-4` at the inner colon.
+    normalizeBase,
     omit,
     omitSz,
     pick,
@@ -86,6 +90,7 @@ export {
     type SplitBoxSzResult,
     splitBox,
     splitBoxSz,
+    stripVariant,
 } from './split-box.js';
 // Strip the sz prop before forwarding props to a host element
 export { stripSzProps } from './strip-sz-props.js';

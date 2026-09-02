@@ -606,6 +606,38 @@ const dep = has(outer, { overflow: 'hidden' }) ? 'overflow-y-auto h-full' : '';
 </Frame>
 ```
 
+## `stripVariant(token)` / `normalizeBase(base)` — Token Parsing
+
+The two steps the toolkit takes before it classifies a token, exported so a
+component that needs one of them does not reimplement it.
+
+```ts
+function stripVariant(token: string): string
+function normalizeBase(base: string): string
+```
+
+`stripVariant` returns the utility after its variant chain, scanning from the
+right for the last `:` at bracket depth zero, so a colon inside a value is not a
+variant boundary:
+
+```ts
+stripVariant('md:hover:w-4')          // 'w-4'
+stripVariant('[&:hover]:w-full')      // 'w-full'
+stripVariant('bg-[url(http://a/b)]')  // unchanged — no variant
+```
+
+A token is at the base breakpoint exactly when `stripVariant(token) === token`.
+That is the question a component asks when a responsive width must not count as
+a width everywhere: "is there a plain `w-*` here?" is `has` over the tokens that
+pass that test.
+
+`normalizeBase` removes the important marker (leading or trailing `!`) and a
+leading negative sign: `normalizeBase('!w-4')` and `normalizeBase('-mt-4')` give
+`w-4` and `mt-4`.
+
+Neither decodes a mangled token — call `szDecode` first on a production build.
+`has`, `pick`, `omit` and `splitBox` do all three steps themselves.
+
 ## `splitBoxSz(sz, options?)` — sz-Object Routing
 
 The sz-object twin of `splitBox`: partitions an **sz object** (not a className)
