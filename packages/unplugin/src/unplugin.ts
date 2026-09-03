@@ -813,6 +813,12 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
     if (collisions.length === 0 && orphans.length === 0 && selectorMatches.length === 0) {
         return null;
     }
+    const broken = selectorMatches.filter(hazard => hazard.renamed.length > 0);
+    const newlyMatched = selectorMatches.filter(hazard => hazard.matchedTokens.length > 0);
+    // One paragraph per hazard kind, each closing with the fix for that kind.
+    // Listing every finding and then every fix let a reader attach the wrong
+    // one: with an orphan and a selector both reported, the orphan's remedy
+    // landed after the selector list and read as a claim about its classes.
     const parts: string[] = ['[csszyx] production mangle found hybrid hazards:'];
     if (collisions.length > 0) {
         const sample = collisions.slice(0, 8).join(', ');
@@ -821,37 +827,6 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
                 `(e.g. ${sample}) — those tokens will cross-contaminate external ".${collisions[0]}" ` +
                 'elements.',
         );
-    }
-    if (orphans.length > 0) {
-        const sample = orphans.slice(0, 8).join(', ');
-        parts.push(
-            ` ${orphans.length} mangled class(es) have no emitted CSS rule (e.g. ${sample}) — ` +
-                'those elements lose styling.',
-        );
-    }
-    const broken = selectorMatches.filter(hazard => hazard.renamed.length > 0);
-    const newlyMatched = selectorMatches.filter(hazard => hazard.matchedTokens.length > 0);
-    if (broken.length > 0) {
-        const sample = broken
-            .slice(0, 3)
-            .map(hazard => `${hazard.selector} → ${hazard.renamed.slice(0, 4).join(', ')}`)
-            .join('; ');
-        parts.push(
-            ` ${broken.length} attribute selector(s) match class names by text (e.g. ${sample}) — ` +
-                'those rules stop matching once the classes are renamed, so the elements lose those styles.',
-        );
-    }
-    if (newlyMatched.length > 0) {
-        const sample = newlyMatched
-            .slice(0, 3)
-            .map(hazard => `${hazard.selector} → ${hazard.matchedTokens.slice(0, 4).join(', ')}`)
-            .join('; ');
-        parts.push(
-            ` ${newlyMatched.length} attribute selector(s) would start matching mangled tokens ` +
-                `instead (e.g. ${sample}).`,
-        );
-    }
-    if (collisions.length > 0) {
         // Guide the prod hotfix first, then the two real fixes. Renaming is
         // preferred because single-letter / common class names collide with
         // mangle tokens AND risk specificity clashes with other libraries; an
@@ -865,7 +840,13 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
                 ' `production.mangleExclude` instead. Run `npx @csszyx/cli scan-collisions`' +
                 ' to find every offending name.',
         );
-    } else if (orphans.length > 0) {
+    }
+    if (orphans.length > 0) {
+        const sample = orphans.slice(0, 8).join(', ');
+        parts.push(
+            ` ${orphans.length} mangled class(es) have no emitted CSS rule (e.g. ${sample}) — ` +
+                'those elements lose styling.',
+        );
         parts.push(
             ' Those classes are csszyx-owned but no CSS was emitted for them' +
                 ' (e.g. a separate Tailwind plugin owns the utility CSS, or the class is not' +
@@ -875,12 +856,30 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
         );
     }
     if (broken.length > 0) {
+        const sample = broken
+            .slice(0, 3)
+            .map(hazard => `${hazard.selector} → ${hazard.renamed.slice(0, 4).join(', ')}`)
+            .join('; ');
+        parts.push(
+            ` ${broken.length} attribute selector(s) match class names by text (e.g. ${sample}) — ` +
+                'those rules stop matching once the classes are renamed, so the elements lose those styles.',
+        );
         const entries = [...new Set(broken.flatMap(preserveEntriesFor))].join(', ');
         parts.push(
             ` Keep those classes readable with production.manglePreserve: [${entries}] ` +
                 '(paste-ready), or key the rule off a data attribute, which mangling never touches. ' +
                 'production.mangleExclude cannot help here: it reserves token names and does not ' +
                 'keep a class from being renamed.',
+        );
+    }
+    if (newlyMatched.length > 0) {
+        const sample = newlyMatched
+            .slice(0, 3)
+            .map(hazard => `${hazard.selector} → ${hazard.matchedTokens.slice(0, 4).join(', ')}`)
+            .join('; ');
+        parts.push(
+            ` ${newlyMatched.length} attribute selector(s) would start matching mangled tokens ` +
+                `instead (e.g. ${sample}).`,
         );
     }
     return parts.join('');
