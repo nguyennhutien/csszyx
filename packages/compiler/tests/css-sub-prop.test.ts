@@ -45,6 +45,33 @@ describe('css: {} — arbitrary CSS sub-prop', () => {
             expect(result).toContain('[--brand:#3b82f6]');
             expect(result).toContain('[writing-mode:vertical-lr]');
         });
+
+        // A custom property may also be written as a KEY on the sz object
+        // itself, which is the form a design system reaches for when it sets a
+        // token beside the utilities that read it. It lowers to the same
+        // arbitrary-property class as the `css:` spelling, so both engines and
+        // both spellings answer one object the same way.
+        it('lowers a custom property written as a top-level key', () => {
+            expect(t({ '--my-color': 'red' })).toBe('[--my-color:red]');
+        });
+
+        it('lowers a custom property key under a variant', () => {
+            expect(t({ bg: 'blue-500', dark: { '--my-alpha': '0.18' } })).toBe(
+                'bg-blue-500 dark:[--my-alpha:0.18]',
+            );
+        });
+
+        it('lowers a numeric custom property key', () => {
+            expect(t({ '--my-gap': 4 })).toBe('[--my-gap:4]');
+        });
+
+        // A class may not contain a space: unescaped, `1px solid red` splits
+        // the attribute into three classes and Tailwind generates none of them.
+        // The `css:` spelling already underscores it; the key spelling has to
+        // agree or the same declaration works one way and not the other.
+        it('underscores a space-bearing custom property value', () => {
+            expect(t({ '--my-border': '1px solid red' })).toBe('[--my-border:1px_solid_red]');
+        });
     });
 
     describe('combined with regular sz props', () => {

@@ -3941,7 +3941,10 @@ function collectUnresolvedDirectProperty(
     classes: string[],
 ): boolean {
     if (rawKey.startsWith('--')) {
-        classes.push(`${prefix}[${rawKey}:${value}]`);
+        // Same normalisation the `css:` spelling applies. A class cannot carry
+        // a space: raw, `1px solid red` would split the class attribute into
+        // three names Tailwind generates nothing for.
+        classes.push(`${prefix}[${rawKey}:${normalizeArbitraryValue(String(value))}]`);
         return true;
     }
     if (rawKey !== 'container') return false;

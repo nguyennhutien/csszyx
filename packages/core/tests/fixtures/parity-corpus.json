@@ -5003,6 +5003,184 @@
     "oxc": "[--brand:navy]"
   },
   {
+    "sz": "{\"--v-bg-alpha\":\"0.18\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "--v-bg-alpha",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "0.18"
+          }
+        }
+      ]
+    },
+    "oxc": "[--v-bg-alpha:0.18]"
+  },
+  {
+    "sz": "{\"--v-gap\":4}",
+    "ir": {
+      "properties": [
+        {
+          "key": "--v-gap",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 4
+          }
+        }
+      ]
+    },
+    "oxc": "[--v-gap:4]"
+  },
+  {
+    "sz": "{\"bg\":\"blue-500\",\"dark\":{\"--v-bg-alpha\":\"0.18\"}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "bg",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "blue-500"
+          }
+        },
+        {
+          "key": "dark",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "--v-bg-alpha",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "0.18"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "bg-blue-500 dark:[--v-bg-alpha:0.18]"
+  },
+  {
+    "sz": "{\"hover\":{\"--v-x\":\"1\"}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "hover",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "--v-x",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "1"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "hover:[--v-x:1]"
+  },
+  {
+    "sz": "{\"--v-border\":\"1px solid red\"}",
+    "ir": {
+      "properties": [
+        {
+          "key": "--v-border",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "1px solid red"
+          }
+        }
+      ]
+    },
+    "oxc": "[--v-border:1px_solid_red]"
+  },
+  {
+    "sz": "{\"css\":{\"--v-neg\":-4,\"zIndex\":-1}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "css",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "--v-neg",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": -4
+                  }
+                },
+                {
+                  "key": "zIndex",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": -1
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "[--v-neg:-4] [z-index:-1]"
+  },
+  {
     "sz": "{\"p\":4,\"m\":2,\"bg\":\"red-500\",\"display\":\"flex\",\"items\":\"center\"}",
     "ir": {
       "properties": [

@@ -766,7 +766,12 @@ fn lower_css_properties(object: &StaticSzObject, prefix: &str, classes: &mut Vec
     for property in &object.properties {
         let value = match &property.value {
             StaticSzValue::String(value) => value.clone(),
-            StaticSzValue::Number(value) => format_abs_number(*value),
+            // Signed, unlike a utility class: a utility carries its minus in
+            // the class prefix (`-mt-4`), but a declaration inside brackets has
+            // no prefix to carry it, so dropping the sign here emitted
+            // `[z-index:1]` for `{ css: { zIndex: -1 } }` — the opposite rule,
+            // silently.
+            StaticSzValue::Number(value) => format_number_literal(*value),
             StaticSzValue::Boolean(value) => value.to_string(),
             StaticSzValue::Object(_) => continue,
         };
@@ -1042,6 +1047,25 @@ fn object_children(object: &StaticSzObject) -> impl Iterator<Item = (&str, &Stat
 }
 
 fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
+    // A custom property written as a KEY is a declaration, not a utility:
+    // `{ '--brand': 'navy' }` lowers to the arbitrary-property class
+    // `[--brand:navy]`, the same class the `css:` spelling produces. Without
+    // this the generic fallback concatenated `--brand-navy`, which Tailwind
+    // generates no CSS for and which shipped with no diagnostic. It sits ahead
+    // of the important split because a trailing bang belongs to the declaration
+    // value here, which is where the TypeScript lowering leaves it.
+    if key.starts_with("--") {
+        let text = match value {
+            StaticSzValue::String(text) => text.clone(),
+            StaticSzValue::Number(number) => format_number_literal(*number),
+            StaticSzValue::Boolean(flag) => flag.to_string(),
+            StaticSzValue::Object(_) => return None,
+        };
+        return Some(format!(
+            "{prefix}[{key}:{}]",
+            normalize_arbitrary_value(&text)
+        ));
+    }
     // The important modifier belongs to the CLASS, not to the value. Every
     // decision below reads the value itself — whether it needs brackets,
     // whether it is a fraction, where a leading minus goes — and a trailing
@@ -2524,6 +2548,53 @@ mod tests {
         assert!(!needs_brackets("full"));
         // The discriminator is the dash-then-double-dash pair around the paren.
         assert!(needs_brackets("var(--x)"));
+    }
+
+    #[test]
+    fn lowers_a_custom_property_key_as_an_arbitrary_declaration() {
+        // Both spellings of one declaration produce one class.
+        assert_eq!(
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![property("--brand", StaticSzValue::String("navy".into()))],
+            }),
+            vec!["[--brand:navy]"]
+        );
+        assert_eq!(
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![property(
+                    "css",
+                    object(vec![property(
+                        "--brand",
+                        StaticSzValue::String("navy".into())
+                    )]),
+                )],
+            }),
+            vec!["[--brand:navy]"]
+        );
+        // A space would split the class attribute, so the value underscores.
+        assert_eq!(
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![property(
+                    "--edge",
+                    StaticSzValue::String("1px solid red".into()),
+                )],
+            }),
+            vec!["[--edge:1px_solid_red]"]
+        );
+        // A bracketed declaration has no class prefix to carry a minus, so the
+        // sign stays in the value on both the key and the `css:` spelling.
+        assert_eq!(
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![
+                    property("--depth", StaticSzValue::Number(-4.0)),
+                    property(
+                        "css",
+                        object(vec![property("zIndex", StaticSzValue::Number(-1.0))]),
+                    ),
+                ],
+            }),
+            vec!["[--depth:-4]", "[z-index:-1]"]
+        );
     }
 
     #[test]

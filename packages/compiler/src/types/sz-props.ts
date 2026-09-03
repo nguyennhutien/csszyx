@@ -2017,6 +2017,18 @@ export type SzPropsBase = LayoutProps &
          * // → [--my-color:red]
          */
         css?: CSS.Properties & { [cssVar: `--${string}`]: string | number };
+
+        /**
+         * A CSS custom property written as a KEY, which both engines lower to
+         * the same arbitrary-property class the `css:` spelling produces. It is
+         * the shorter form for a design system that sets a token beside the
+         * utilities reading it, and it nests under a variant like any other key.
+         *
+         * @example
+         * { '--brand': 'navy', dark: { '--brand': 'white' } }
+         * // → [--brand:navy] dark:[--brand:white]
+         */
+        [cssVar: `--${string}`]: string | number;
     };
 
 /**

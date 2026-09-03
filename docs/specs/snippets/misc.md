@@ -81,3 +81,16 @@ CSS custom properties (`--*`) are passed through unchanged.
 - `css: {}` is intentional bypass — no sz-layer mapping applied. `{ css: { backgroundColor: 'red' } }` outputs `[background-color:red]`, not `bg-red`.
 - Spaces in values are normalised to underscores: `repeat(3, 1fr)` → `repeat(3,_1fr)`.
 - Works inside `dynamic()` at runtime — the same compiler logic handles the `css` key.
+
+### Custom property as a key
+
+A CSS custom property may also be written as a key on the `sz` object itself, which is the shorter form when a token sits beside the utilities that read it. It produces the same class as the `css: {}` spelling and nests under a variant like any other key.
+
+| Concept            | Example `sz` Prop                     | Output Class                | Note                      |
+| :----------------- | :------------------------------------ | :-------------------------- | :------------------------ |
+| **Key spelling**   | `{ '--my-color': 'red' }`             | `[--my-color:red]`          | same class as `css: {}`   |
+| **Inside variant** | `{ dark: { '--my-color': 'white' } }` | `dark:[--my-color:white]`   | works in all variants     |
+| **Numeric value**  | `{ '--my-alpha': 0.18 }`              | `[--my-alpha:0.18]`         | numbers coerced to string |
+| **Spaced value**   | `{ '--my-edge': '1px solid red' }`    | `[--my-edge:1px_solid_red]` | spaces → underscores      |
+
+The value is a declaration value, so it is a string or a number. An object body has no declaration to lower and the type rejects it; nest a variant instead.
