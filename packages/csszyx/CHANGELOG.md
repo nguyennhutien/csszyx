@@ -1,5 +1,17 @@
 # csszyx
 
+## [0.15.3](https://github.com/nguyennhutien/csszyx/compare/v0.15.2...v0.15.3) (2026-09-03)
+
+### Features
+
+* **unplugin:** keep named classes out of mangling and warn on attribute selectors ([#274](https://github.com/nguyennhutien/csszyx/issues/274))
+
+### Bug Fixes
+
+* **unplugin:** keep named classes out of mangling and give Vite 5 its HMR hook back ([#274](https://github.com/nguyennhutien/csszyx/issues/274))
+* **unplugin:** keep the legacy HMR hook so Vite 5 dev servers learn new sz classes ([#274](https://github.com/nguyennhutien/csszyx/issues/274))
+* **compiler:** drop a per-side border style on the TypeScript lane too ([#276](https://github.com/nguyennhutien/csszyx/issues/276))
+
 ## [0.15.2](https://github.com/nguyennhutien/csszyx/compare/v0.15.1...v0.15.2) (2026-09-03)
 
 ### Features
