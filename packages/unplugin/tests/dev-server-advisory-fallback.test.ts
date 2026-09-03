@@ -26,9 +26,10 @@ afterEach(async () => {
 /**
  * Transform one module through a dev server and collect what it logged.
  *
+ * @param quiet - The plugin's `quiet` option, when the case is about it.
  * @returns Every warning the server's logger received.
  */
-async function warningsFromDevServer(): Promise<string[]> {
+async function warningsFromDevServer(quiet?: 'nudges' | 'all'): Promise<string[]> {
     const root = mkdtempSync(join(tmpdir(), 'csszyx-dev-advisory-'));
     mkdirSync(join(root, 'src'), { recursive: true });
     writeFileSync(join(root, 'src/App.tsx'), 'export const App = ({ box }) => <div sz={box} />;\n');
@@ -48,7 +49,7 @@ async function warningsFromDevServer(): Promise<string[]> {
             hasErrorLogged: () => false,
             hasWarned: false,
         } as never,
-        plugins: [vitePlugin({}) as never],
+        plugins: [vitePlugin(quiet === undefined ? {} : { quiet }) as never],
     });
     servers.push(server);
     // The import rewrite points at a package this fixture does not install, so
@@ -77,5 +78,12 @@ describe('advisory fallbacks in a dev server', () => {
     it('lists a fallback in an ordinary dev server', async () => {
         const warnings = await warningsFromDevServer();
         expect(warnings.join('\n')).toContain('sz fallback');
+    }, 60_000);
+
+    // Asking for a calmer log is a decision about this list, and it holds in a
+    // dev server exactly as it does in a build.
+    it('holds the list back when a quiet mode asked for it', async () => {
+        const warnings = await warningsFromDevServer('nudges');
+        expect(warnings.join('\n')).not.toContain('sz fallback');
     }, 60_000);
 });
