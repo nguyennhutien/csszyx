@@ -761,6 +761,29 @@ export function collectMangleHybridHazards(
     return { collisions, orphans, selectorMatches };
 }
 
+/** The two characters a single-quoted config entry has to escape. */
+const BACKSLASH = String.fromCodePoint(92);
+const SINGLE_QUOTE = String.fromCodePoint(39);
+
+/**
+ * Quote a class name as a single-quoted JavaScript string for a config file.
+ *
+ * Built from character constants rather than escape sequences on purpose.
+ * The repository's warning-docs scanner pairs quote characters across a
+ * source file and cannot tell that a quote inside a regex or a template
+ * expression is data; one literal quote here desynchronised every message
+ * after it and the reference page lost five anchors at once.
+ *
+ * @param entry - A class name or prefix.
+ * @returns The entry between single quotes, backslashes and quotes escaped.
+ */
+function quoteForConfig(entry: string): string {
+    const escaped = entry
+        .replaceAll(BACKSLASH, BACKSLASH + BACKSLASH)
+        .replaceAll(SINGLE_QUOTE, BACKSLASH + SINGLE_QUOTE);
+    return SINGLE_QUOTE + escaped + SINGLE_QUOTE;
+}
+
 /**
  * The `manglePreserve` entry that keeps every class one selector renamed.
  *
@@ -772,8 +795,7 @@ export function collectMangleHybridHazards(
  * @returns The entries, quoted.
  */
 function preserveEntriesFor(hazard: MangleSelectorHazard): string[] {
-    const quote = (entry: string): string =>
-        `'${entry.replace(/\\/g, String.raw`\\`).replace(/'/g, String.raw`\'`)}'`;
+    const quote = quoteForConfig;
     const { value } = hazard;
     if (hazard.renamed.every(name => name === value)) return [quote(value)];
     if (hazard.renamed.every(name => name.startsWith(value))) return [quote(`${value}*`)];
