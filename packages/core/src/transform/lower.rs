@@ -762,18 +762,30 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
     }
 }
 
+/// The value of a CSS declaration, as an arbitrary-value class carries it.
+///
+/// Read by the two spellings that lower to `[property:value]` — the `css:`
+/// sub-prop and a custom property written as a key — so one object answers the
+/// same whichever the author chose.
+///
+/// Numbers keep their sign, unlike the ones in a utility class: a utility
+/// carries its minus in the class prefix (`-mt-4`), and a declaration inside
+/// brackets has no prefix to carry it, so an absolute value turned
+/// `{ css: { zIndex: -1 } }` into `[z-index:1]` — the opposite rule, with
+/// nothing said. An object is not a declaration value and has no class.
+fn declaration_value(value: &StaticSzValue) -> Option<String> {
+    match value {
+        StaticSzValue::String(text) => Some(text.clone()),
+        StaticSzValue::Number(number) => Some(format_number_literal(*number)),
+        StaticSzValue::Boolean(flag) => Some(flag.to_string()),
+        StaticSzValue::Object(_) => None,
+    }
+}
+
 fn lower_css_properties(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
     for property in &object.properties {
-        let value = match &property.value {
-            StaticSzValue::String(value) => value.clone(),
-            // Signed, unlike a utility class: a utility carries its minus in
-            // the class prefix (`-mt-4`), but a declaration inside brackets has
-            // no prefix to carry it, so dropping the sign here emitted
-            // `[z-index:1]` for `{ css: { zIndex: -1 } }` — the opposite rule,
-            // silently.
-            StaticSzValue::Number(value) => format_number_literal(*value),
-            StaticSzValue::Boolean(value) => value.to_string(),
-            StaticSzValue::Object(_) => continue,
+        let Some(value) = declaration_value(&property.value) else {
+            continue;
         };
         classes.push(format!(
             "{prefix}[{}:{}]",
@@ -1055,12 +1067,7 @@ fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option
     // of the important split because a trailing bang belongs to the declaration
     // value here, which is where the TypeScript lowering leaves it.
     if key.starts_with("--") {
-        let text = match value {
-            StaticSzValue::String(text) => text.clone(),
-            StaticSzValue::Number(number) => format_number_literal(*number),
-            StaticSzValue::Boolean(flag) => flag.to_string(),
-            StaticSzValue::Object(_) => return None,
-        };
+        let text = declaration_value(value)?;
         return Some(format!(
             "{prefix}[{key}:{}]",
             normalize_arbitrary_value(&text)

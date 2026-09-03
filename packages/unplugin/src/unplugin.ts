@@ -1147,6 +1147,29 @@ export function shouldEmitMissingCssFallback(quiet: QuietMode, message: string):
 }
 
 /**
+ * Whether this run holds the advisory fallback list back and counts it instead.
+ *
+ * A build prints the count once the bundle closes, so holding the list back
+ * still leaves a reader a number to act on. A dev server never closes a bundle:
+ * anything held back there is held back for good, which is why serving lists
+ * its fallbacks whatever the environment says. `NODE_ENV` alone was the whole
+ * test, and a monorepo script that exports it while running a dev server turned
+ * every advisory into a number nothing would print.
+ *
+ * @param quiet - Resolved quiet mode.
+ * @param serving - Whether this is a dev server rather than a build.
+ * @param nodeEnv - `process.env.NODE_ENV` as the process sees it.
+ * @returns True when the list is withheld in favour of a count.
+ */
+export function shouldHoldAdvisories(
+    quiet: QuietMode,
+    serving: boolean,
+    nodeEnv: string | undefined,
+): boolean {
+    return quiet !== 'off' || (!serving && nodeEnv === 'production');
+}
+
+/**
  * Emit one missing-CSS fallback through the caller's output channel.
  *
  * @param quiet - Resolved quiet mode.
@@ -5322,10 +5345,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         const advisories = result.diagnostics.filter(isAdvisoryDiagnostic);
         if (advisories.length === 0) return;
-        // `NODE_ENV` alone is the wrong production signal for this gate: a
-        // monorepo script that exports it while running `vite dev` turned every
-        // advisory into a number nothing would ever print.
-        if (quiet !== 'off' || (!serving && process.env.NODE_ENV === 'production')) {
+        if (shouldHoldAdvisories(quiet, serving, process.env.NODE_ENV)) {
             // Held back, but counted. These are advisory by design — the
             // runtime path works and the classes are collected — so a
             // production build is right not to list them. It is not right to
