@@ -202,6 +202,10 @@ export default [
             // S5906. `expect(a === b).toBe(true)` fails as "expected false to
             // be true"; the dedicated matcher fails with both sides named.
             'sonarjs/prefer-specific-assertions': 'error',
+            // S4624. A template inside a template reads as two strings at once;
+            // SonarCloud flagged one on a pull request that the local lint let
+            // through, and the whole tree has no other instance.
+            'sonarjs/no-nested-template-literals': 'error',
         },
     },
 
