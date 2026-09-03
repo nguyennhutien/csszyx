@@ -16,9 +16,10 @@
 *  @nguyennhutien
 
 # ----- CI / Workflows -----
-# Workflow files run with repo secrets (NPM_TOKEN, VSCE_PAT, etc.). A
-# malicious or careless change can exfiltrate credentials or skip required
-# checks. Always require maintainer review.
+# Workflow files run with repo secrets (CODECOV_TOKEN, SNYK_TOKEN,
+# SONAR_TOKEN, the Pages deploy hook; npm and the Marketplace publish over
+# OIDC). A malicious or careless change can exfiltrate credentials or skip
+# required checks. Always require maintainer review.
 /.github/workflows/**  @nguyennhutien
 /.github/actions/**    @nguyennhutien
 /.github/scripts/**    @nguyennhutien
@@ -63,7 +64,6 @@
 # every downstream user. Maintainer review for the API surface; tests can
 # be written by any contributor.
 /packages/compiler/src/index.ts        @nguyennhutien
-/packages/compiler/src/transform.ts    @nguyennhutien
 /packages/compiler/src/transform-core.ts  @nguyennhutien
 /packages/compiler/src/types/**        @nguyennhutien
 

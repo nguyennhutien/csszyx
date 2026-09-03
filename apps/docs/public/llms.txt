@@ -1016,9 +1016,13 @@ the built HTML carries no executable inline script and a strict CSP
 If an `sz`-generated utility also appears as a static string or template quasi in a
 source-level `class` or `className` attribute/property (including a `clsx(...)`
 expression), csszyx keeps that class unmangled. This ensures raw and `sz` consumers
-continue to reference the same emitted rule. Use `mangleExclude` when the class is
-only visible through an imported constant, DOM selector/class API, ignored
-dependency, downstream macro, or another value unavailable to the source scan.
+continue to reference the same emitted rule. When something else depends on the
+class NAME — a stylesheet matching by attribute (`[class*="bg-tag"]`), a DOM
+query, a class assembled outside any visible `className` — list it in
+`production.manglePreserve` (exact name, or a prefix ending in `*`); the
+hybrid-hazard warning prints a paste-ready value. `production.mangleExclude` is
+the other switch: it keeps the allocator from producing a token equal to a short
+class in third-party CSS, and never keeps a csszyx class from being renamed.
 
 Final-output class mangling is available in Vite, Webpack, and Rollup. The esbuild
 adapter keeps class names readable (and warns when `production.mangle: true` is

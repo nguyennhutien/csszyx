@@ -85,7 +85,7 @@ Find app-owned class names that could collide with a production mangle token
 Feed the results to `production.mangleExclude`.
 
 ```bash
-npx csszyx scan-collisions --pattern "src/**/*.css"
+npx @csszyx/cli scan-collisions --pattern "src/**/*.css"
 ```
 
 ### `next-prebuild` / `next-watch`

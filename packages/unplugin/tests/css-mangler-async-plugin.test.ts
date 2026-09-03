@@ -82,4 +82,16 @@ describe('debug and selector-error paths', () => {
         );
         expect(pluginResult.css).toContain('.a]');
     });
+
+    it('recovers from the same selector in silence when debug is off', async () => {
+        const { mangleCSSSync } = await import('../src/css-mangler');
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const result = mangleCSSSync('.a] { color: red } .p-4 { padding: 1rem }', map);
+
+        expect(warn).not.toHaveBeenCalled();
+        expect(result.css).toContain('.a]');
+        // The rule csszyx can read is still mangled, so one unreadable
+        // selector costs that rule and nothing else.
+        expect(result.css).toContain('.a {');
+    });
 });

@@ -35,7 +35,7 @@ import { type VueAdapterOptions, preprocess as vuePreprocess } from '@csszyx/vue
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
 import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
-import type { EnvironmentModuleNode, FSWatcher, PluginOption } from 'vite';
+import type { EnvironmentModuleNode, FSWatcher, PluginOption, ViteDevServer } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { atomicWriteFileSync } from './atomic-write.js';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
@@ -54,7 +54,11 @@ import {
     type SzvCrossModuleRegistry,
     specifierBases,
 } from './cross-module-registry.js';
-import { mangleCSSSync } from './css-mangler.js';
+import {
+    type ClassAttributeSelector,
+    classAttributeSelectorKey,
+    mangleCSSSync,
+} from './css-mangler.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
 import {
@@ -83,6 +87,12 @@ import {
     needsRuntimeMangleRegistration,
     removedMangleMapDeliveryMessage,
 } from './mangle-delivery.js';
+import {
+    compileManglePreserve,
+    mangleExcludeNeverTokenEntries,
+    mangleExcludeNeverTokenMessage,
+    manglePreserveNoMatchMessage,
+} from './mangle-preserve.js';
 import { applyMangleRuntimeEntry, ensureMangleRuntimeFile } from './mangle-runtime-file.js';
 import {
     computeMangleSizeVerdict,
@@ -569,6 +579,154 @@ export interface MangleHybridHazards {
      * DOM class is rewritten to a token with no rule → the element loses styling.
      */
     orphans: string[];
+    /**
+     * Attribute selectors on `class` whose match depends on a name the map
+     * renamed. `[class*="bg-tag"]` matched `bg-tag-blue-bg` by text; after
+     * the rename the element carries `y4`, the rule stops applying, and
+     * nothing in the build says so — the CSS is intact and the page renders.
+     * Absent when the caller has no selector census.
+     */
+    selectorMatches?: MangleSelectorHazard[];
+}
+
+/** One attribute selector the mangle map breaks or newly satisfies. */
+export interface MangleSelectorHazard {
+    /** The selector as written: `[class*="bg-tag"]`, with ` i` when case-insensitive. */
+    selector: string;
+    /** The attribute value the selector compares against, unescaped. */
+    value: string;
+    /** Map keys the selector was matching by name, sorted; renamed, so it no longer does. */
+    renamed: string[];
+    /** Tokens the selector would start matching that no class name did before, sorted. */
+    matchedTokens: string[];
+}
+
+/** A test one class name either passes or fails. */
+type NamePredicate = (name: string) => boolean;
+
+/**
+ * Lower-case the ASCII letters only, as the `i` flag on an attribute
+ * selector is defined to.
+ *
+ * @param text - Any string.
+ * @returns The string with `A`–`Z` folded.
+ */
+function asciiLower(text: string): string {
+    return text.replace(/[A-Z]/g, letter => letter.toLowerCase());
+}
+
+/**
+ * The per-class tests an attribute selector implies, per Selectors Level 4.
+ *
+ * The class attribute is a space-separated list, so a value with spaces
+ * spans several classes: for `*=` the first segment must END some class and
+ * the last must START the next, with any middle segment a whole class. `~=`
+ * is word equality and can match nothing when the value has a space; `|=`
+ * is `v` or `v-…`. A selector passes when ANY class satisfies ANY test — an
+ * over-approximation, because the build cannot know which class an element
+ * carries first, and the answer is a warning rather than a rewrite.
+ *
+ * @param operator - The attribute operator.
+ * @param value - The attribute value, unescaped.
+ * @returns The tests; empty when the selector cannot match a class name.
+ */
+function attributeSelectorPredicates(operator: string, value: string): NamePredicate[] {
+    const eq =
+        (v: string): NamePredicate =>
+        name =>
+            name === v;
+    const startsWith =
+        (v: string): NamePredicate =>
+        name =>
+            name.startsWith(v);
+    const endsWith =
+        (v: string): NamePredicate =>
+        name =>
+            name.endsWith(v);
+    const includes =
+        (v: string): NamePredicate =>
+        name =>
+            name.includes(v);
+    const dashPrefix =
+        (v: string): NamePredicate =>
+        name =>
+            name === v || name.startsWith(`${v}-`);
+    const segments = value.split(/[\t\n\f\r ]+/);
+    if (segments.length === 1) {
+        switch (operator) {
+            case '=':
+            case '~=':
+                return [eq(value)];
+            case '|=':
+                return [dashPrefix(value)];
+            case '^=':
+                return [startsWith(value)];
+            case '$=':
+                return [endsWith(value)];
+            case '*=':
+                return [includes(value)];
+            default:
+                return [];
+        }
+    }
+    if (operator === '~=') return [];
+    const first = segments[0] as string;
+    const last = segments[segments.length - 1] as string;
+    const predicates: NamePredicate[] = [];
+    // An empty first or last segment means the value began or ended with a
+    // space; that edge constrains nothing about a class name.
+    if (first.length > 0) {
+        predicates.push(operator === '$=' || operator === '*=' ? endsWith(first) : eq(first));
+    }
+    // A middle segment is never empty: the split collapses runs of spaces.
+    for (const middle of segments.slice(1, -1)) predicates.push(eq(middle));
+    if (last.length > 0) {
+        if (operator === '^=' || operator === '*=') predicates.push(startsWith(last));
+        else if (operator === '|=') predicates.push(dashPrefix(last));
+        else predicates.push(eq(last));
+    }
+    return predicates;
+}
+
+/**
+ * Render an attribute selector back to its source form for a message.
+ *
+ * @param selector - The collected selector.
+ * @returns `[class<op>"<value>"]`, with ` i` when case-insensitive.
+ */
+function renderClassAttributeSelector(selector: ClassAttributeSelector): string {
+    const flag = selector.insensitive ? ' i' : '';
+    return `[class${selector.operator}"${selector.value}"${flag}]`;
+}
+
+/**
+ * Which map keys and which tokens an attribute selector's match depends on.
+ *
+ * @param mangleMap - The original→token map.
+ * @param selector - One collected selector.
+ * @returns The hazard, or null when neither a key nor a token is affected.
+ */
+function selectorHazardFor(
+    mangleMap: Record<string, string>,
+    selector: ClassAttributeSelector,
+): MangleSelectorHazard | null {
+    const value = selector.insensitive ? asciiLower(selector.value) : selector.value;
+    const predicates = attributeSelectorPredicates(selector.operator, value);
+    if (predicates.length === 0) return null;
+    const fold = selector.insensitive ? asciiLower : (name: string): string => name;
+    const matches = (name: string): boolean => {
+        const folded = fold(name);
+        return predicates.some(predicate => predicate(folded));
+    };
+    const renamed = sortStrings(Object.keys(mangleMap).filter(matches));
+    const matchedTokens = sortStrings(Object.values(mangleMap).filter(matches));
+    if (renamed.length === 0 && matchedTokens.length === 0) return null;
+    return {
+        selector: renderClassAttributeSelector(selector),
+        value: selector.value,
+        renamed,
+        matchedTokens,
+    };
 }
 
 /**
@@ -577,19 +735,71 @@ export interface MangleHybridHazards {
  * @param mangleMap - the full original→token map injected into the runtime.
  * @param mangledSources - map keys that were actually found and renamed in some CSS asset.
  * @param externalClasses - class names found in CSS that are NOT in the mangle map (non-csszyx).
- * @returns the colliding tokens and orphan sources (each sorted, deduped).
+ * @param attributeSelectors - every `[class …]` selector the emitted CSS contains.
+ * @returns the colliding tokens, orphan sources and selector hazards (each sorted, deduped).
  */
 export function collectMangleHybridHazards(
     mangleMap: Record<string, string>,
     mangledSources: ReadonlySet<string>,
     externalClasses: ReadonlySet<string>,
+    attributeSelectors: readonly ClassAttributeSelector[] = [],
 ): MangleHybridHazards {
     const tokenValues = new Set(Object.values(mangleMap));
     const collisions = sortStrings([...tokenValues].filter(token => externalClasses.has(token)));
     const orphans = sortStrings(
         Object.keys(mangleMap).filter(source => !mangledSources.has(source)),
     );
-    return { collisions, orphans };
+    const hazards = new Map<string, MangleSelectorHazard>();
+    for (const selector of attributeSelectors) {
+        const hazard = selectorHazardFor(mangleMap, selector);
+        if (hazard !== null) hazards.set(hazard.selector, hazard);
+    }
+    // Byte order, so the message reads the same on every machine.
+    const selectorMatches = sortStrings([...hazards.keys()]).map(
+        key => hazards.get(key) as MangleSelectorHazard,
+    );
+    return { collisions, orphans, selectorMatches };
+}
+
+/** The two characters a single-quoted config entry has to escape. */
+const BACKSLASH = String.fromCodePoint(92);
+const SINGLE_QUOTE = String.fromCodePoint(39);
+
+/**
+ * Quote a class name as a single-quoted JavaScript string for a config file.
+ *
+ * Built from character constants rather than escape sequences on purpose.
+ * The repository's warning-docs scanner pairs quote characters across a
+ * source file and cannot tell that a quote inside a regex or a template
+ * expression is data; one literal quote here desynchronised every message
+ * after it and the reference page lost five anchors at once.
+ *
+ * @param entry - A class name or prefix.
+ * @returns The entry between single quotes, backslashes and quotes escaped.
+ */
+function quoteForConfig(entry: string): string {
+    const escaped = entry
+        .replaceAll(BACKSLASH, BACKSLASH + BACKSLASH)
+        .replaceAll(SINGLE_QUOTE, BACKSLASH + SINGLE_QUOTE);
+    return SINGLE_QUOTE + escaped + SINGLE_QUOTE;
+}
+
+/**
+ * The `manglePreserve` entry that keeps every class one selector renamed.
+ *
+ * A prefix entry when every class starts with the selector's value (the
+ * substring case, which is what field reports look like); the exact names
+ * otherwise. Quoted for pasting into a config file.
+ *
+ * @param hazard - One selector hazard with at least one renamed class.
+ * @returns The entries, quoted.
+ */
+function preserveEntriesFor(hazard: MangleSelectorHazard): string[] {
+    const quote = quoteForConfig;
+    const { value } = hazard;
+    if (hazard.renamed.every(name => name === value)) return [quote(value)];
+    if (hazard.renamed.every(name => name.startsWith(value))) return [quote(`${value}*`)];
+    return hazard.renamed.map(quote);
 }
 
 /**
@@ -599,8 +809,8 @@ export function collectMangleHybridHazards(
  * @returns a warning string, or null when both lists are empty.
  */
 export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string | null {
-    const { collisions, orphans } = hazards;
-    if (collisions.length === 0 && orphans.length === 0) {
+    const { collisions, orphans, selectorMatches = [] } = hazards;
+    if (collisions.length === 0 && orphans.length === 0 && selectorMatches.length === 0) {
         return null;
     }
     const parts: string[] = ['[csszyx] production mangle found hybrid hazards:'];
@@ -619,6 +829,28 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
                 'those elements lose styling.',
         );
     }
+    const broken = selectorMatches.filter(hazard => hazard.renamed.length > 0);
+    const newlyMatched = selectorMatches.filter(hazard => hazard.matchedTokens.length > 0);
+    if (broken.length > 0) {
+        const sample = broken
+            .slice(0, 3)
+            .map(hazard => `${hazard.selector} → ${hazard.renamed.slice(0, 4).join(', ')}`)
+            .join('; ');
+        parts.push(
+            ` ${broken.length} attribute selector(s) match class names by text (e.g. ${sample}) — ` +
+                'those rules stop matching once the classes are renamed, so the elements lose those styles.',
+        );
+    }
+    if (newlyMatched.length > 0) {
+        const sample = newlyMatched
+            .slice(0, 3)
+            .map(hazard => `${hazard.selector} → ${hazard.matchedTokens.slice(0, 4).join(', ')}`)
+            .join('; ');
+        parts.push(
+            ` ${newlyMatched.length} attribute selector(s) would start matching mangled tokens ` +
+                `instead (e.g. ${sample}).`,
+        );
+    }
     if (collisions.length > 0) {
         // Guide the prod hotfix first, then the two real fixes. Renaming is
         // preferred because single-letter / common class names collide with
@@ -633,13 +865,22 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
                 ' `production.mangleExclude` instead. Run `npx @csszyx/cli scan-collisions`' +
                 ' to find every offending name.',
         );
-    } else {
+    } else if (orphans.length > 0) {
         parts.push(
             ' Those classes are csszyx-owned but no CSS was emitted for them' +
                 ' (e.g. a separate Tailwind plugin owns the utility CSS, or the class is not' +
                 ' a real utility). Ensure that CSS is generated, or pass' +
                 ' `production: { mangle: false }` to the csszyx plugin until the pipelines' +
                 ' are reconciled.',
+        );
+    }
+    if (broken.length > 0) {
+        const entries = [...new Set(broken.flatMap(preserveEntriesFor))].join(', ');
+        parts.push(
+            ` Keep those classes readable with production.manglePreserve: [${entries}] ` +
+                '(paste-ready), or key the rule off a data attribute, which mangling never touches. ' +
+                'production.mangleExclude cannot help here: it reserves token names and does not ' +
+                'keep a class from being renamed.',
         );
     }
     return parts.join('');
@@ -2722,6 +2963,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // site (buildEnd / transformIndexHtml / generateBundle / processAssets) — the
     // reason a config exclude-list is consistent where a bundle-CSS scan would not.
     const mangleReserved = new Set(options.production?.mangleExclude ?? []);
+    // Classes that keep their name. Compiled here so a bad entry fails when
+    // the plugin is created, not on the first production build that reads it.
+    const manglePreserve = compileManglePreserve(options.production?.manglePreserve);
+    // The no-match report fires once per build: the map is computed several
+    // times (freeze, census check, finalize) from the same census.
+    let manglePreserveNoMatchWarned = false;
     // True once the class map is settled and every later consumer must read it
     // rather than rebuild it. Set on the Vite build lane only, because that is
     // the lane where CSS bytes are hashed during the transform phase and so
@@ -2756,6 +3003,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // once from the output hook where the whole picture exists.
     const transformMangledSources = new Set<string>();
     const transformExternalClasses = new Set<string>();
+    const transformAttributeSelectors = new Map<string, ClassAttributeSelector>();
     // The runtime mangle map has ONE delivery: a registration module inside
     // the JS bundle. It needs no CSP exception, and it reaches pages the build
     // does not own — which the inline installer it replaced could not. A
@@ -2823,6 +3071,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const unknownConfigKeys = findUnknownConfigKeys(options);
     if (unknownConfigKeys.length > 0) {
         emitWarning(unknownConfigKeysMessage(unknownConfigKeys));
+    }
+    // A `mangleExclude` name with a `-` in it was meant as "keep this class"
+    // by everyone who ever wrote one; it reserves a token that is never
+    // allocated and does nothing. Say so, and name the option that does it.
+    const excludeNeverTokens = mangleExcludeNeverTokenEntries(mangleReserved);
+    if (excludeNeverTokens.length > 0) {
+        emitWarning(mangleExcludeNeverTokenMessage(excludeNeverTokens));
     }
     /**
      * Emit a csszyx build warning, unless `quiet` mutes all of them. `devOnly`
@@ -4476,10 +4731,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             ...state.authoredClasses,
             ...state.ownedClasses,
         ]);
-        return allocateMangleTokens(
-            mangleEligibleClasses(state.ownedClasses, state.authoredClasses),
-            forbiddenTokens,
+        // A preserved class leaves the eligible list but stays in the census,
+        // so it remains forbidden as a token: the key and token spaces stay
+        // disjoint, and the runtime's one-lookup contract holds.
+        const eligible = mangleEligibleClasses(state.ownedClasses, state.authoredClasses).filter(
+            className => !manglePreserve.test(className),
         );
+        if (!manglePreserveNoMatchWarned && manglingEnabled && state.ownedClasses.size > 0) {
+            manglePreserveNoMatchWarned = true;
+            const unmatched = manglePreserve.unmatched(state.ownedClasses);
+            if (unmatched.length > 0) emitWarning(manglePreserveNoMatchMessage(unmatched));
+        }
+        return allocateMangleTokens(eligible, forbiddenTokens);
     }
 
     /**
@@ -4843,6 +5106,136 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (found) modules.push(...found);
         }
         return modules;
+    }
+
+    /**
+     * The one HMR handler behind both Vite hooks: re-runs the theme scan when
+     * a CSS file changes, and updates the safelist when a source file gains
+     * new `sz` classes.
+     *
+     * Two hooks share it because Vite generations differ in which one they
+     * call. Vite 6 and later run `hotUpdate` once per environment and ignore
+     * a `handleHotUpdate` declared beside it; Vite 5 knows only
+     * `handleHotUpdate`. A plugin that declared the new hook alone was never
+     * told about a file change on Vite 5, so an `sz` edit that introduced a
+     * class the prescan had not seen produced no CSS — the page stayed open,
+     * the element lost its padding, and nothing said why.
+     *
+     * @param pass - Which pass this is and the graph its answer belongs to.
+     * @param pass.isClientPass - True for the pass that owns the page. State
+     * mutation and re-transforming the file happen there alone, so a server
+     * with several environments pays for them once.
+     * @param pass.moduleGraph - Returns the graph Vite replaces with this
+     * hook's answer; read only when the changed file is the safelist.
+     * @param ctx - The changed file and the dev server.
+     * @param ctx.file - Absolute path of the file the watcher reported.
+     * @param ctx.server - The dev server: its graph, config, watcher and socket.
+     * @returns The modules a safelist write affects, so Vite hot-updates the
+     * stylesheet instead of reloading the page; undefined otherwise, which
+     * leaves Vite's own handling in place.
+     */
+    function handleHotFile<TModule>(
+        pass: {
+            isClientPass: boolean;
+            moduleGraph: () => {
+                getModulesByFile: (file: string) => Iterable<TModule> | undefined;
+            };
+        },
+        ctx: { file: string; server: ViteDevServer },
+    ): TModule[] | undefined {
+        const { isClientPass } = pass;
+        if (isClientPass) {
+            // First edit = the initial module-load wave is over; any
+            // handoff entries left belong to files the dev server
+            // never imported, and each retains a transformed-code
+            // string for nothing.
+            prescanResultHandoff.clear();
+        }
+        // Theme scan for @theme CSS blocks
+        const scanCss = options.build?.scanCss;
+        /**
+         * Reloads the generated registration module: adding or
+         * removing theme tokens changes the szcn merge groups, so
+         * a dev server must pick them up without a restart.
+         */
+        const reloadThemeGroupsModule = (): void => {
+            const themeGroupsModule = ctx.server.moduleGraph.getModuleById(
+                RESOLVED_THEME_GROUPS_VIRTUAL_ID,
+            );
+            if (themeGroupsModule) {
+                ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
+            }
+        };
+        if (isClientPass && ctx.file.endsWith('.css')) {
+            // ANY css edit may add or remove @theme tokens, including
+            // in a file `scanCss` does not list and one the scan has
+            // not seen yet — so re-discover project-wide either way.
+            // A file that IS listed additionally refreshes the typing
+            // scan, which is what rewrites `.csszyx/theme.d.ts`.
+            // The root `configResolved` settled; the dev server's is the
+            // same value, resolved once.
+            const root = state.rootDir;
+            const before = createThemeGroupsModule(themeGroupTokens());
+            if (scanCss && matchesAnyPattern(ctx.file, scanCss, root)) {
+                state.scanCssTheme = runThemeScan(root, scanCss) ?? state.scanCssTheme;
+            }
+            runAutoThemeScan(root);
+            reloadThemeGroupsModule();
+            // Invalidating is not enough. A stylesheet edit is a CSS
+            // hot update: Vite swaps the styles and never re-executes
+            // a JS module, so the registration the page booted with
+            // stays in memory and a DELETED token keeps grouping
+            // classes the stylesheet no longer defines. Only a reload
+            // re-runs it — and only when the tokens actually changed,
+            // so ordinary CSS edits keep the hot update they should.
+            if (createThemeGroupsModule(themeGroupTokens()) !== before) {
+                ctx.server.ws.send({ type: 'full-reload' });
+            }
+        }
+
+        // A safelist write is not a file the dev server can match
+        // to a module, and `@tailwindcss/vite` answers such a
+        // change with an unaddressed full-reload when the file is
+        // one it scanned and its only modules are the asset nodes
+        // `addWatchFile` made. Growing the class set therefore
+        // threw away React state, scroll position and open dialogs
+        // on the first use of each new utility per server
+        // lifetime, while the stylesheet had already been
+        // hot-updated correctly in the same tick (field-reported;
+        // the file was `.html` then, so Vite's own `.html` reload
+        // fired as well).
+        //
+        // Naming the Tailwind entries as the modules this change
+        // affects is simply true: they `@source` the safelist, so
+        // their generated CSS is what a safelist write changes.
+        // Vite then takes its ordinary CSS-update path.
+        //
+        // Compared with the separators Vite uses: it normalizes
+        // every watcher path to forward slashes before the hook
+        // sees it, while `path.join` answers with backslashes on
+        // Windows, and a byte-for-byte comparison of the two
+        // never matches there.
+        if (
+            normalizePathSeparators(ctx.file) ===
+            normalizePathSeparators(path.join(state.rootDir, SAFELIST_FILENAME))
+        ) {
+            // Answered even when the lookup finds nothing, because
+            // an EMPTY set is the safe answer here and silence is
+            // not: `@tailwindcss/vite` returns early from its hot
+            // update on an empty module list, while silence leaves
+            // it looking at the asset nodes for a file it scanned
+            // and sending its unaddressed reload. Vite's own
+            // empty-set branch only reloads for `.html`, which the
+            // safelist no longer is.
+            // From the graph the calling hook owns: `hotUpdate`'s
+            // answer replaces THAT environment's module list
+            // verbatim, and `handleHotUpdate`'s the server-wide one.
+            // Mixing them hands Vite foreign node objects.
+            return tailwindEntryModules(pass.moduleGraph());
+        }
+
+        if (isClientPass) discoverHotFileClasses(ctx.file, ctx.server.watcher);
+        return undefined;
     }
 
     /**
@@ -5757,106 +6150,46 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     //
                     // A host that calls the hook without an environment (a test
                     // double) reads as the client pass.
-                    const isClientPass = (this.environment?.name ?? 'client') === 'client';
-                    if (isClientPass) {
-                        // First edit = the initial module-load wave is over; any
-                        // handoff entries left belong to files the dev server
-                        // never imported, and each retains a transformed-code
-                        // string for nothing.
-                        prescanResultHandoff.clear();
-                    }
-                    // Theme scan for @theme CSS blocks
-                    const scanCss = options.build?.scanCss;
-                    /**
-                     * Reloads the generated registration module: adding or
-                     * removing theme tokens changes the szcn merge groups, so
-                     * a dev server must pick them up without a restart.
-                     */
-                    const reloadThemeGroupsModule = (): void => {
-                        const themeGroupsModule = ctx.server.moduleGraph.getModuleById(
-                            RESOLVED_THEME_GROUPS_VIRTUAL_ID,
-                        );
-                        if (themeGroupsModule) {
-                            ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
-                        }
-                    };
-                    if (isClientPass && ctx.file.endsWith('.css')) {
-                        // ANY css edit may add or remove @theme tokens, including
-                        // in a file `scanCss` does not list and one the scan has
-                        // not seen yet — so re-discover project-wide either way.
-                        // A file that IS listed additionally refreshes the typing
-                        // scan, which is what rewrites `.csszyx/theme.d.ts`.
-                        const root = ctx.server.config.root || process.cwd();
-                        const before = createThemeGroupsModule(themeGroupTokens());
-                        if (scanCss && matchesAnyPattern(ctx.file, scanCss, root)) {
-                            state.scanCssTheme = runThemeScan(root, scanCss) ?? state.scanCssTheme;
-                        }
-                        runAutoThemeScan(root);
-                        reloadThemeGroupsModule();
-                        // Invalidating is not enough. A stylesheet edit is a CSS
-                        // hot update: Vite swaps the styles and never re-executes
-                        // a JS module, so the registration the page booted with
-                        // stays in memory and a DELETED token keeps grouping
-                        // classes the stylesheet no longer defines. Only a reload
-                        // re-runs it — and only when the tokens actually changed,
-                        // so ordinary CSS edits keep the hot update they should.
-                        if (createThemeGroupsModule(themeGroupTokens()) !== before) {
-                            ctx.server.ws.send({ type: 'full-reload' });
-                        }
-                    }
+                    return handleHotFile(
+                        {
+                            isClientPass: (this.environment?.name ?? 'client') === 'client',
+                            // `server.moduleGraph` holds the backward-compatible
+                            // nodes Vite mapped back for the legacy hook only,
+                            // so they are the wrong objects to hand this one —
+                            // TypeScript says so too.
+                            moduleGraph: () =>
+                                (this.environment?.moduleGraph ??
+                                    ctx.server.environments.client.moduleGraph) as {
+                                    getModulesByFile: (
+                                        file: string,
+                                    ) => Iterable<EnvironmentModuleNode> | undefined;
+                                },
+                        },
+                        ctx,
+                    );
+                },
 
-                    // A safelist write is not a file the dev server can match
-                    // to a module, and `@tailwindcss/vite` answers such a
-                    // change with an unaddressed full-reload when the file is
-                    // one it scanned and its only modules are the asset nodes
-                    // `addWatchFile` made. Growing the class set therefore
-                    // threw away React state, scroll position and open dialogs
-                    // on the first use of each new utility per server
-                    // lifetime, while the stylesheet had already been
-                    // hot-updated correctly in the same tick (field-reported;
-                    // the file was `.html` then, so Vite's own `.html` reload
-                    // fired as well).
-                    //
-                    // Naming the Tailwind entries as the modules this change
-                    // affects is simply true: they `@source` the safelist, so
-                    // their generated CSS is what a safelist write changes.
-                    // Vite then takes its ordinary CSS-update path.
-                    //
-                    // Compared with the separators Vite uses: it normalizes
-                    // every watcher path to forward slashes before the hook
-                    // sees it, while `path.join` answers with backslashes on
-                    // Windows, and a byte-for-byte comparison of the two
-                    // never matches there.
-                    if (
-                        normalizePathSeparators(ctx.file) ===
-                        normalizePathSeparators(path.join(state.rootDir, SAFELIST_FILENAME))
-                    ) {
-                        // Answered even when the lookup finds nothing, because
-                        // an EMPTY set is the safe answer here and silence is
-                        // not: `@tailwindcss/vite` returns early from its hot
-                        // update on an empty module list, while silence leaves
-                        // it looking at the asset nodes for a file it scanned
-                        // and sending its unaddressed reload. Vite's own
-                        // empty-set branch only reloads for `.html`, which the
-                        // safelist no longer is.
-                        // This pass's own graph, because `hotUpdate`'s answer
-                        // replaces THAT environment's module list verbatim.
-                        // `server.moduleGraph` holds the backward-compatible
-                        // nodes Vite mapped back for the legacy hook only, so
-                        // they are the wrong objects to hand this one —
-                        // TypeScript says so too.
-                        return tailwindEntryModules(
-                            (this.environment?.moduleGraph ??
-                                ctx.server.environments.client.moduleGraph) as {
-                                getModulesByFile: (
-                                    file: string,
-                                ) => Iterable<EnvironmentModuleNode> | undefined;
-                            },
-                        );
-                    }
-
-                    if (isClientPass) discoverHotFileClasses(ctx.file, ctx.server.watcher);
-                    return undefined;
+                /**
+                 * The hook Vite 5 calls. Vite 6 and later never run it while
+                 * `hotUpdate` is declared, so declaring both costs nothing
+                 * there and keeps a Vite 5 dev server compiling `sz` live.
+                 *
+                 * Vite 5 routes only a file CHANGE here, never a create, so a
+                 * project with no `sz` at prescan still sees its first `sz`
+                 * edit answered by `@tailwindcss/vite`'s full reload on that
+                 * generation — the behaviour it always had there. The hook
+                 * runs once, with no environment, so it is the client pass
+                 * and answers from the server-wide graph.
+                 *
+                 * @param ctx - HMR context: the changed file and the dev server.
+                 * @returns The modules a safelist write affects; undefined
+                 * otherwise.
+                 */
+                handleHotUpdate(ctx) {
+                    return handleHotFile(
+                        { isClientPass: true, moduleGraph: () => ctx.server.moduleGraph },
+                        ctx,
+                    );
                 },
                 transformIndexHtml: {
                     order: 'pre',
@@ -6008,6 +6341,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param shouldMangle Whether class mangling applies to this output.
      * @param mangledSources Classes rewritten by csszyx.
      * @param externalClasses Classes left under external ownership.
+     * @param attributeSelectors `[class …]` selectors seen, keyed for dedup.
      * @returns Rewritten CSS, or the original source after an ignorable syntax error.
      */
     function rewriteOutputCss(
@@ -6016,6 +6350,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         shouldMangle: boolean,
         mangledSources: Set<string>,
         externalClasses: Set<string>,
+        attributeSelectors: Map<string, ClassAttributeSelector>,
     ): string {
         const css = rewriteCssWithValidatedGlobalVarPlan(
             source,
@@ -6030,6 +6365,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             });
             for (const className of result.mangledClasses) mangledSources.add(className);
             for (const className of result.unmangledClasses) externalClasses.add(className);
+            for (const selector of result.classAttributeSelectors) {
+                attributeSelectors.set(classAttributeSelectorKey(selector), selector);
+            }
             const mangled = result.transformedCount > 0 ? result.css : css;
             recordCssPair(sizeAccount, css, mangled);
             return mangled;
@@ -6045,15 +6383,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param shouldMangle Whether class mangling applies to this output.
      * @param mangledSources Classes rewritten by csszyx.
      * @param externalClasses Classes left under external ownership.
+     * @param attributeSelectors `[class …]` selectors seen across the assets.
      */
     function reportOutputMangleHazards(
         shouldMangle: boolean,
         mangledSources: Set<string>,
         externalClasses: Set<string>,
+        attributeSelectors: Map<string, ClassAttributeSelector>,
     ): void {
         if (!shouldMangle) return;
         const message = mangleHybridHazardMessage(
-            collectMangleHybridHazards(state.mangleMap, mangledSources, externalClasses),
+            collectMangleHybridHazards(state.mangleMap, mangledSources, externalClasses, [
+                ...attributeSelectors.values(),
+            ]),
         );
         if (message) console.warn(message);
     }
@@ -6172,6 +6514,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
         const mangledSources = new Set<string>();
         const externalClasses = new Set<string>();
+        const attributeSelectors = new Map<string, ClassAttributeSelector>();
         for (const file in assets) {
             const source = assets[file].source().toString();
             if (file.endsWith('.css')) {
@@ -6181,6 +6524,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     shouldMangle,
                     mangledSources,
                     externalClasses,
+                    attributeSelectors,
                 );
                 if (css !== source) {
                     compilation.updateAsset(file, new compiler.webpack.sources.RawSource(css));
@@ -6189,7 +6533,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 rewriteWebpackCodeAsset(file, source, shouldMangle, compilation, compiler);
             }
         }
-        reportOutputMangleHazards(shouldMangle, mangledSources, externalClasses);
+        reportOutputMangleHazards(
+            shouldMangle,
+            mangledSources,
+            externalClasses,
+            attributeSelectors,
+        );
         // Webpack has no post-write hook in this plugin and prints no asset
         // table of its own, so the reason the Vite lane defers does not apply:
         // here the end of asset processing IS the end of the build's output.
@@ -6209,6 +6558,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param shouldMangle Whether class mangling applies to this output.
      * @param mangledSources Classes rewritten by csszyx.
      * @param externalClasses Classes left under external ownership.
+     * @param attributeSelectors `[class …]` selectors seen, keyed for dedup.
      */
     function rewriteViteBundleEntry(
         chunk: ViteBundleEntryLike,
@@ -6216,6 +6566,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         shouldMangle: boolean,
         mangledSources: Set<string>,
         externalClasses: Set<string>,
+        attributeSelectors: Map<string, ClassAttributeSelector>,
     ): void {
         if (
             chunk.type !== 'asset' ||
@@ -6231,6 +6582,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             shouldMangle,
             mangledSources,
             externalClasses,
+            attributeSelectors,
         );
         if (css !== originalCss) chunk.source = css;
     }
@@ -6258,6 +6610,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             shouldMangle,
             transformMangledSources,
             transformExternalClasses,
+            transformAttributeSelectors,
         );
         return css === code ? null : { code: css, map: null };
     }
@@ -6304,6 +6657,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // that rewrote it; the bundle carries the same, already-renamed assets.
         const mangledSources = new Set(transformMangledSources);
         const externalClasses = new Set(transformExternalClasses);
+        const attributeSelectors = new Map(transformAttributeSelectors);
         if (!cssRewrittenInTransform) {
             for (const file in bundle) {
                 rewriteViteBundleEntry(
@@ -6312,10 +6666,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     shouldMangle,
                     mangledSources,
                     externalClasses,
+                    attributeSelectors,
                 );
             }
         }
-        reportOutputMangleHazards(shouldMangle, mangledSources, externalClasses);
+        reportOutputMangleHazards(
+            shouldMangle,
+            mangledSources,
+            externalClasses,
+            attributeSelectors,
+        );
     }
 
     const postPlugin = createUnplugin<PartialCsszyxConfig, boolean>(() => ({

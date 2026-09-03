@@ -248,7 +248,7 @@ gap: every surviving token is looked up in the runtime mangle map and leaves
 the merge in mangled form.
 
 The lookup is single-pass and idempotent. Already-mangled tokens, authored
-literals reserved via `production.mangleExclude`, and external (non-csszyx)
+literals, classes kept by `production.manglePreserve`, and external (non-csszyx)
 class names pass through unchanged — token allocation guarantees a mangled
 token can never spell a censused class name, so one map lookup is unambiguous.
 In dev, or on a build without mangling, the encode step is an identity.

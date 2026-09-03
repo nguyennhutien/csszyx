@@ -127,9 +127,9 @@ mangling. This is a Turbopack limitation, not a csszyx design choice: mangling
 rewrites the final CSS and JS bundle, and Turbopack does not yet expose a
 deep-enough build hook to do that. Use webpack mode when you need mangling.
 
-Because Turbopack never mangles, the hybrid-mangle collision warning and
-`production.mangleExclude` are Vite/Webpack concerns only — there is nothing to
-disable or reserve on Turbopack.
+Because Turbopack never mangles, the hybrid-mangle warnings,
+`production.mangleExclude` and `production.manglePreserve` are Vite/Webpack
+concerns only — there is nothing to disable, reserve or keep on Turbopack.
 :::
 
 #### What the Turbopack lane can and cannot use
