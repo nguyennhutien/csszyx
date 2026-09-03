@@ -109,6 +109,7 @@ function measure(source, themeValues = false) {
     return {
         szP50: sz.wallValues[Math.floor(sz.wallValues.length * 0.5)],
         szP95: sz.wallValues[Math.floor(sz.wallValues.length * 0.95)],
+        szCpuP95: sz.cpuValues[Math.floor(sz.cpuValues.length * 0.95)],
         szCpuP99: sz.cpuValues[Math.floor(sz.cpuValues.length * 0.99)],
         nonSzP50: nonSz.wallValues[Math.floor(nonSz.wallValues.length * 0.5)],
         retainedHeap,
@@ -137,9 +138,14 @@ test('completion latency remains bounded and cancellation-aware', () => {
         themed.szCpuP99 <= 8,
         `theme completion CPU p99 ${themed.szCpuP99.toFixed(3)}ms exceeds 8ms`,
     );
+    // CPU time here too. The wall-clock p95 of the themed run ranged from 0.27
+    // to 3.2 ms across six consecutive green runs on the same runner pool, and
+    // went red at 3.1 ms against a 0.49 ms plain run — one descheduling pause
+    // inside the 2 000-sample window, not more work. CPU time still says
+    // whether theme values multiply the per-request cost.
     assert.ok(
-        themed.szP95 <= small.szP95 * 4 + 0.5,
-        `theme completion p95 ${themed.szP95.toFixed(3)}ms regressed from ${small.szP95.toFixed(3)}ms`,
+        themed.szCpuP95 <= small.szCpuP95 * 4 + 0.5,
+        `theme completion CPU p95 ${themed.szCpuP95.toFixed(3)}ms regressed from ${small.szCpuP95.toFixed(3)}ms`,
     );
     assert.ok(
         themed.retainedHeap <= 4 * 1024 * 1024,
@@ -216,6 +222,6 @@ test('completion latency remains bounded and cancellation-aware', () => {
         'value entry construction must read shared value suggestions',
     );
     console.log(
-        `performance checks passed (sz p50 1k=${small.szP50.toFixed(3)}ms 10k=${large.szP50.toFixed(3)}ms, theme p95=${themed.szP95.toFixed(3)}ms CPU p99=${themed.szCpuP99.toFixed(3)}ms retained=${(themed.retainedHeap / 1024 / 1024).toFixed(2)}MiB)`,
+        `performance checks passed (sz p50 1k=${small.szP50.toFixed(3)}ms 10k=${large.szP50.toFixed(3)}ms, theme p95=${themed.szP95.toFixed(3)}ms CPU p95=${themed.szCpuP95.toFixed(3)}ms/${small.szCpuP95.toFixed(3)}ms CPU p99=${themed.szCpuP99.toFixed(3)}ms retained=${(themed.retainedHeap / 1024 / 1024).toFixed(2)}MiB)`,
     );
 });
