@@ -1,5 +1,21 @@
 # csszyx
 
+## [0.15.2](https://github.com/nguyennhutien/csszyx/compare/v0.15.1...v0.15.2) (2026-09-03)
+
+### Features
+
+* **runtime:** export the token scanner the class toolkit classifies with ([#263](https://github.com/nguyennhutien/csszyx/issues/263))
+
+### Bug Fixes
+
+* keep the class toolkit truthful on a mangled build ([#263](https://github.com/nguyennhutien/csszyx/issues/263))
+* **runtime:** decode mangled tokens before the class toolkit classifies them ([#263](https://github.com/nguyennhutien/csszyx/issues/263))
+* **runtime:** let a later size-* replace an earlier width or height ([#263](https://github.com/nguyennhutien/csszyx/issues/263))
+* **runtime:** refuse a selector the class toolkit cannot act on ([#263](https://github.com/nguyennhutien/csszyx/issues/263))
+* **unplugin:** mangle the first key of a class-keyed object literal ([#263](https://github.com/nguyennhutien/csszyx/issues/263))
+* **runtime:** keep every selector the toolkit ever matched, in both families ([#263](https://github.com/nguyennhutien/csszyx/issues/263))
+* **unplugin:** claim a braced string only where it is an object key ([#263](https://github.com/nguyennhutien/csszyx/issues/263))
+
 ## [0.15.1](https://github.com/nguyennhutien/csszyx/compare/v0.15.0...v0.15.1) (2026-09-01)
 
 ### Bug Fixes
