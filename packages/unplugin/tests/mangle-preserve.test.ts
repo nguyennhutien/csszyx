@@ -34,6 +34,48 @@ describe('compileManglePreserve', () => {
         expect(keep.test('[&>*]:gap-1')).toBe(true);
     });
 
+    // A stylesheet matching `bg-tag` by text matches it under every variant, so
+    // an entry naming the utility has to keep the variant forms too. Matching
+    // the written name alone kept `bg-tag-blue-bg` and renamed
+    // `dark:bg-tag-blue-bg`, leaving the rule half-broken and saying nothing:
+    // the entry counts as used, so the no-match warning stays quiet.
+    it('keeps a class under a variant, by prefix and by exact name', () => {
+        const prefix = compileManglePreserve(['bg-tag-*']);
+        expect(prefix.test('bg-tag-blue-bg')).toBe(true);
+        expect(prefix.test('dark:bg-tag-blue-bg')).toBe(true);
+        expect(prefix.test('md:hover:bg-tag-red-bg/30')).toBe(true);
+        expect(prefix.test('dark:text-tag-blue-fg')).toBe(false);
+
+        const exact = compileManglePreserve(['bg-tag-blue-bg']);
+        expect(exact.test('dark:bg-tag-blue-bg')).toBe(true);
+        expect(exact.test('dark:bg-tag-blue-bg-2')).toBe(false);
+    });
+
+    // A colon inside brackets belongs to the variant's parameter, not to the
+    // boundary between variants and the utility.
+    it('reads the utility past a bracketed variant parameter', () => {
+        const keep = compileManglePreserve(['bg-tag-*']);
+        expect(keep.test('supports-[display:grid]:bg-tag-blue-bg')).toBe(true);
+        expect(keep.test('[&>*]:bg-tag-blue-bg')).toBe(true);
+        expect(keep.test('supports-[display:grid]:text-tag-blue-fg')).toBe(false);
+    });
+
+    // An entry may still name one variant form and only that one.
+    it('keeps a variant-qualified entry to its own variant', () => {
+        const keep = compileManglePreserve(['dark:bg-tag-blue-bg']);
+        expect(keep.test('dark:bg-tag-blue-bg')).toBe(true);
+        expect(keep.test('bg-tag-blue-bg')).toBe(false);
+        expect(keep.test('hover:bg-tag-blue-bg')).toBe(false);
+    });
+
+    // `unmatched` answers the same question as `test`, so a build whose only
+    // form of a utility carries a variant must not be told its entry is a typo.
+    it('does not call an entry unmatched when only a variant form exists', () => {
+        const keep = compileManglePreserve(['bg-tag-*', 'text-tag-blue-fg']);
+        expect(keep.unmatched(['dark:bg-tag-blue-bg', 'hover:text-tag-blue-fg'])).toEqual([]);
+        expect(keep.unmatched(['p-4'])).toEqual(['bg-tag-*', 'text-tag-blue-fg']);
+    });
+
     it('refuses a lone *, which would switch mangling off silently', () => {
         expect(() => compileManglePreserve(['*'])).toThrow(/manglePreserve/);
     });

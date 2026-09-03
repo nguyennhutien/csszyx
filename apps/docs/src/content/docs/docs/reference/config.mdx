@@ -219,6 +219,11 @@ in order:
    production: { mangle: true, manglePreserve: ['bg-tag-*', 'text-tag-*', 'p-4'] }
    ```
 
+   An entry reads a class under its variants too, because a stylesheet that
+   matches a name by text matches it wherever the name appears: `'bg-tag-*'`
+   keeps `dark:bg-tag-blue-bg` as well as `bg-tag-blue-bg`. Name a variant form
+   (`'dark:bg-tag-blue-bg'`) to keep that one and let the rest be renamed.
+
    A preserved class keeps its rule and costs only the bytes of its name. A `*`
    anywhere but last is literal (`'*:p-4'` is one class); a lone `'*'` is
    rejected; an entry no class matches is reported. Changing the list changes the
