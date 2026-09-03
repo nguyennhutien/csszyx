@@ -1312,6 +1312,74 @@ function warnDeadSpacingStep(key: string, value: number): void {
     );
 }
 
+/** Per-side border keys: the sides Tailwind can size and colour one at a time. */
+const BORDER_SIDE_KEYS: ReadonlySet<string> = new Set([
+    'borderT',
+    'borderR',
+    'borderB',
+    'borderL',
+    'borderX',
+    'borderY',
+    'borderS',
+    'borderE',
+    'borderBs',
+    'borderBe',
+]);
+
+/** The style keywords Tailwind spells at the root (`border-none`) and nowhere else. */
+const BORDER_STYLE_VALUES: ReadonlySet<string> = new Set([
+    'solid',
+    'dashed',
+    'dotted',
+    'double',
+    'hidden',
+    'none',
+]);
+
+/** Side-key/style pairs already reported (once each). */
+const _warnedBorderSideStyles = new Set<string>();
+
+/**
+ * Whether a value on a per-side border key names a style Tailwind cannot
+ * spell per side.
+ *
+ * `borderB: 'none'` concatenates to `border-b-none`, which Tailwind serves no
+ * rule for; the element keeps whatever border it had and nothing says so. The
+ * native engine drops the class and reports it (`is_border_side_style_value`
+ * in `lower.rs`); this is the same test for the TypeScript lowering, which
+ * the runtime `_sz` path also runs through, so a page and a compiled prop
+ * answer the same object the same way.
+ *
+ * @param key - The sz property key as written.
+ * @param value - Its string value.
+ * @returns True when the pair would emit a class nothing generates.
+ */
+function isBorderSideStyleValue(key: string, value: string): boolean {
+    return BORDER_SIDE_KEYS.has(key) && BORDER_STYLE_VALUES.has(value);
+}
+
+/**
+ * Report a dropped per-side border style, once per key/value pair.
+ *
+ * Same wording as the native engine's diagnostic, so the documentation
+ * anchors one message for both lanes.
+ *
+ * @param key - The sz property key.
+ * @param value - The style keyword that was dropped.
+ */
+function warnBorderSideStyle(key: string, value: string): void {
+    if (!szDevWarningsEnabled()) return;
+    const token = `${key}:${value}`;
+    if (_warnedBorderSideStyles.has(token)) return;
+    _warnedBorderSideStyles.add(token);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] "${key}: '${value}'"${at}: Tailwind has no per-side border style, so this ` +
+            `generated no CSS and the class is dropped. Use borderStyle: '${value}' for every ` +
+            `side, or a number on "${key}" for the width.`,
+    );
+}
+
 /** Weight values already nudged about the bare numeric class (once each). */
 const _warnedWeightValues = new Set<string>();
 
@@ -3637,11 +3705,32 @@ function collectFallbackProperty(
         classes.push(`${prefix}${formatNumericUtility(key, value)}`);
         return;
     }
-    if (typeof value === 'string') {
-        if (/^-?\d+(?:\.\d+)?$/.test(value)) warnDeadSpacingStep(rawKey, Number(value));
-        warnDeadWeightValue(rawKey, value);
-        classes.push(buildGenericStringClass(rawKey, key, value, prefix));
+    if (typeof value === 'string') collectStringProperty(rawKey, key, value, prefix, classes);
+}
+
+/**
+ * The string arm of the fallback: a class only when the pair can have CSS.
+ *
+ * @param rawKey - The sz key as written.
+ * @param key - The mapped Tailwind prefix.
+ * @param value - The string value.
+ * @param prefix - The variant prefix in effect.
+ * @param classes - Where the class goes.
+ */
+function collectStringProperty(
+    rawKey: string,
+    key: string,
+    value: string,
+    prefix: string,
+    classes: string[],
+): void {
+    if (isBorderSideStyleValue(rawKey, value)) {
+        warnBorderSideStyle(rawKey, value);
+        return;
     }
+    if (/^-?\d+(?:\.\d+)?$/.test(value)) warnDeadSpacingStep(rawKey, Number(value));
+    warnDeadWeightValue(rawKey, value);
+    classes.push(buildGenericStringClass(rawKey, key, value, prefix));
 }
 
 /** Routes object-valued properties to CSS, color, gradient, or variant handling. */
@@ -3696,6 +3785,7 @@ export function __resetSzWarnDedupForTests(): void {
     warnedMaskLayerValues.clear();
     warnedMaskSlotMembers.clear();
     _warnedSpacingSteps.clear();
+    _warnedBorderSideStyles.clear();
     _warnedOpacityTokens.clear();
     _warnedPropertyObjects.clear();
     warnedRemovedSugar.clear();
