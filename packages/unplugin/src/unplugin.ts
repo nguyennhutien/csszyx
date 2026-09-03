@@ -2928,6 +2928,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // (configResolved), so dev always uses readable class names that match the
     // dev CSS. `let` because the command is only known at configResolved.
     let manglingEnabled = options.production?.mangle === true;
+    // A dev server has no end, so anything it holds back is held back for
+    // good: `closeBundle` is where the count of unlisted advisories prints,
+    // and a server never reaches it. Knowing we are serving is what keeps the
+    // advisory list from being suppressed with nothing said in its place.
+    let serving = false;
     // Cross-module szv registry: filled by the prescan, refreshed per edit by
     // `refreshSzvRegistryEntry`, resolved per file. Watch lanes used to switch
     // this off because a one-shot prescan left an edited factory serving its
@@ -5317,7 +5322,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         const advisories = result.diagnostics.filter(isAdvisoryDiagnostic);
         if (advisories.length === 0) return;
-        if (quiet !== 'off' || process.env.NODE_ENV === 'production') {
+        // `NODE_ENV` alone is the wrong production signal for this gate: a
+        // monorepo script that exports it while running `vite dev` turned every
+        // advisory into a number nothing would ever print.
+        if (quiet !== 'off' || (!serving && process.env.NODE_ENV === 'production')) {
             // Held back, but counted. These are advisory by design — the
             // runtime path works and the classes are collected — so a
             // production build is right not to list them. It is not right to
@@ -6073,6 +6081,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // not match the un-mangled dev CSS. See `manglingEnabled` above.
                     if (config.command === 'serve') {
                         manglingEnabled = false;
+                        serving = true;
                     }
                     // `vite build --watch` is out of scope for mangling: the map
                     // is settled from a prescan that runs once per process, and a
