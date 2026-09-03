@@ -773,7 +773,7 @@ export function collectMangleHybridHazards(
  */
 function preserveEntriesFor(hazard: MangleSelectorHazard): string[] {
     const quote = (entry: string): string =>
-        `'${entry.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+        `'${entry.replace(/\\/g, String.raw`\\`).replace(/'/g, String.raw`\'`)}'`;
     const { value } = hazard;
     if (hazard.renamed.every(name => name === value)) return [quote(value)];
     if (hazard.renamed.every(name => name.startsWith(value))) return [quote(`${value}*`)];
