@@ -35,7 +35,7 @@ import { type VueAdapterOptions, preprocess as vuePreprocess } from '@csszyx/vue
 import type { Plugin as EsbuildPlugin, PluginBuild } from 'esbuild';
 import type { InputPluginOption } from 'rollup';
 import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } from 'unplugin';
-import type { EnvironmentModuleNode, FSWatcher, PluginOption } from 'vite';
+import type { EnvironmentModuleNode, FSWatcher, PluginOption, ViteDevServer } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { atomicWriteFileSync } from './atomic-write.js';
 import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
@@ -4846,6 +4846,136 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * The one HMR handler behind both Vite hooks: re-runs the theme scan when
+     * a CSS file changes, and updates the safelist when a source file gains
+     * new `sz` classes.
+     *
+     * Two hooks share it because Vite generations differ in which one they
+     * call. Vite 6 and later run `hotUpdate` once per environment and ignore
+     * a `handleHotUpdate` declared beside it; Vite 5 knows only
+     * `handleHotUpdate`. A plugin that declared the new hook alone was never
+     * told about a file change on Vite 5, so an `sz` edit that introduced a
+     * class the prescan had not seen produced no CSS — the page stayed open,
+     * the element lost its padding, and nothing said why.
+     *
+     * @param pass - Which pass this is and the graph its answer belongs to.
+     * @param pass.isClientPass - True for the pass that owns the page. State
+     * mutation and re-transforming the file happen there alone, so a server
+     * with several environments pays for them once.
+     * @param pass.moduleGraph - Returns the graph Vite replaces with this
+     * hook's answer; read only when the changed file is the safelist.
+     * @param ctx - The changed file and the dev server.
+     * @param ctx.file - Absolute path of the file the watcher reported.
+     * @param ctx.server - The dev server: its graph, config, watcher and socket.
+     * @returns The modules a safelist write affects, so Vite hot-updates the
+     * stylesheet instead of reloading the page; undefined otherwise, which
+     * leaves Vite's own handling in place.
+     */
+    function handleHotFile<TModule>(
+        pass: {
+            isClientPass: boolean;
+            moduleGraph: () => {
+                getModulesByFile: (file: string) => Iterable<TModule> | undefined;
+            };
+        },
+        ctx: { file: string; server: ViteDevServer },
+    ): TModule[] | undefined {
+        const { isClientPass } = pass;
+        if (isClientPass) {
+            // First edit = the initial module-load wave is over; any
+            // handoff entries left belong to files the dev server
+            // never imported, and each retains a transformed-code
+            // string for nothing.
+            prescanResultHandoff.clear();
+        }
+        // Theme scan for @theme CSS blocks
+        const scanCss = options.build?.scanCss;
+        /**
+         * Reloads the generated registration module: adding or
+         * removing theme tokens changes the szcn merge groups, so
+         * a dev server must pick them up without a restart.
+         */
+        const reloadThemeGroupsModule = (): void => {
+            const themeGroupsModule = ctx.server.moduleGraph.getModuleById(
+                RESOLVED_THEME_GROUPS_VIRTUAL_ID,
+            );
+            if (themeGroupsModule) {
+                ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
+            }
+        };
+        if (isClientPass && ctx.file.endsWith('.css')) {
+            // ANY css edit may add or remove @theme tokens, including
+            // in a file `scanCss` does not list and one the scan has
+            // not seen yet — so re-discover project-wide either way.
+            // A file that IS listed additionally refreshes the typing
+            // scan, which is what rewrites `.csszyx/theme.d.ts`.
+            // The root `configResolved` settled; the dev server's is the
+            // same value, resolved once.
+            const root = state.rootDir;
+            const before = createThemeGroupsModule(themeGroupTokens());
+            if (scanCss && matchesAnyPattern(ctx.file, scanCss, root)) {
+                state.scanCssTheme = runThemeScan(root, scanCss) ?? state.scanCssTheme;
+            }
+            runAutoThemeScan(root);
+            reloadThemeGroupsModule();
+            // Invalidating is not enough. A stylesheet edit is a CSS
+            // hot update: Vite swaps the styles and never re-executes
+            // a JS module, so the registration the page booted with
+            // stays in memory and a DELETED token keeps grouping
+            // classes the stylesheet no longer defines. Only a reload
+            // re-runs it — and only when the tokens actually changed,
+            // so ordinary CSS edits keep the hot update they should.
+            if (createThemeGroupsModule(themeGroupTokens()) !== before) {
+                ctx.server.ws.send({ type: 'full-reload' });
+            }
+        }
+
+        // A safelist write is not a file the dev server can match
+        // to a module, and `@tailwindcss/vite` answers such a
+        // change with an unaddressed full-reload when the file is
+        // one it scanned and its only modules are the asset nodes
+        // `addWatchFile` made. Growing the class set therefore
+        // threw away React state, scroll position and open dialogs
+        // on the first use of each new utility per server
+        // lifetime, while the stylesheet had already been
+        // hot-updated correctly in the same tick (field-reported;
+        // the file was `.html` then, so Vite's own `.html` reload
+        // fired as well).
+        //
+        // Naming the Tailwind entries as the modules this change
+        // affects is simply true: they `@source` the safelist, so
+        // their generated CSS is what a safelist write changes.
+        // Vite then takes its ordinary CSS-update path.
+        //
+        // Compared with the separators Vite uses: it normalizes
+        // every watcher path to forward slashes before the hook
+        // sees it, while `path.join` answers with backslashes on
+        // Windows, and a byte-for-byte comparison of the two
+        // never matches there.
+        if (
+            normalizePathSeparators(ctx.file) ===
+            normalizePathSeparators(path.join(state.rootDir, SAFELIST_FILENAME))
+        ) {
+            // Answered even when the lookup finds nothing, because
+            // an EMPTY set is the safe answer here and silence is
+            // not: `@tailwindcss/vite` returns early from its hot
+            // update on an empty module list, while silence leaves
+            // it looking at the asset nodes for a file it scanned
+            // and sending its unaddressed reload. Vite's own
+            // empty-set branch only reloads for `.html`, which the
+            // safelist no longer is.
+            // From the graph the calling hook owns: `hotUpdate`'s
+            // answer replaces THAT environment's module list
+            // verbatim, and `handleHotUpdate`'s the server-wide one.
+            // Mixing them hands Vite foreign node objects.
+            return tailwindEntryModules(pass.moduleGraph());
+        }
+
+        if (isClientPass) discoverHotFileClasses(ctx.file, ctx.server.watcher);
+        return undefined;
+    }
+
+    /**
      * Process a Tailwind CSS entry and inject the generated-class source.
      *
      * @param code CSS source.
@@ -5757,106 +5887,46 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     //
                     // A host that calls the hook without an environment (a test
                     // double) reads as the client pass.
-                    const isClientPass = (this.environment?.name ?? 'client') === 'client';
-                    if (isClientPass) {
-                        // First edit = the initial module-load wave is over; any
-                        // handoff entries left belong to files the dev server
-                        // never imported, and each retains a transformed-code
-                        // string for nothing.
-                        prescanResultHandoff.clear();
-                    }
-                    // Theme scan for @theme CSS blocks
-                    const scanCss = options.build?.scanCss;
-                    /**
-                     * Reloads the generated registration module: adding or
-                     * removing theme tokens changes the szcn merge groups, so
-                     * a dev server must pick them up without a restart.
-                     */
-                    const reloadThemeGroupsModule = (): void => {
-                        const themeGroupsModule = ctx.server.moduleGraph.getModuleById(
-                            RESOLVED_THEME_GROUPS_VIRTUAL_ID,
-                        );
-                        if (themeGroupsModule) {
-                            ctx.server.moduleGraph.invalidateModule(themeGroupsModule);
-                        }
-                    };
-                    if (isClientPass && ctx.file.endsWith('.css')) {
-                        // ANY css edit may add or remove @theme tokens, including
-                        // in a file `scanCss` does not list and one the scan has
-                        // not seen yet — so re-discover project-wide either way.
-                        // A file that IS listed additionally refreshes the typing
-                        // scan, which is what rewrites `.csszyx/theme.d.ts`.
-                        const root = ctx.server.config.root || process.cwd();
-                        const before = createThemeGroupsModule(themeGroupTokens());
-                        if (scanCss && matchesAnyPattern(ctx.file, scanCss, root)) {
-                            state.scanCssTheme = runThemeScan(root, scanCss) ?? state.scanCssTheme;
-                        }
-                        runAutoThemeScan(root);
-                        reloadThemeGroupsModule();
-                        // Invalidating is not enough. A stylesheet edit is a CSS
-                        // hot update: Vite swaps the styles and never re-executes
-                        // a JS module, so the registration the page booted with
-                        // stays in memory and a DELETED token keeps grouping
-                        // classes the stylesheet no longer defines. Only a reload
-                        // re-runs it — and only when the tokens actually changed,
-                        // so ordinary CSS edits keep the hot update they should.
-                        if (createThemeGroupsModule(themeGroupTokens()) !== before) {
-                            ctx.server.ws.send({ type: 'full-reload' });
-                        }
-                    }
+                    return handleHotFile(
+                        {
+                            isClientPass: (this.environment?.name ?? 'client') === 'client',
+                            // `server.moduleGraph` holds the backward-compatible
+                            // nodes Vite mapped back for the legacy hook only,
+                            // so they are the wrong objects to hand this one —
+                            // TypeScript says so too.
+                            moduleGraph: () =>
+                                (this.environment?.moduleGraph ??
+                                    ctx.server.environments.client.moduleGraph) as {
+                                    getModulesByFile: (
+                                        file: string,
+                                    ) => Iterable<EnvironmentModuleNode> | undefined;
+                                },
+                        },
+                        ctx,
+                    );
+                },
 
-                    // A safelist write is not a file the dev server can match
-                    // to a module, and `@tailwindcss/vite` answers such a
-                    // change with an unaddressed full-reload when the file is
-                    // one it scanned and its only modules are the asset nodes
-                    // `addWatchFile` made. Growing the class set therefore
-                    // threw away React state, scroll position and open dialogs
-                    // on the first use of each new utility per server
-                    // lifetime, while the stylesheet had already been
-                    // hot-updated correctly in the same tick (field-reported;
-                    // the file was `.html` then, so Vite's own `.html` reload
-                    // fired as well).
-                    //
-                    // Naming the Tailwind entries as the modules this change
-                    // affects is simply true: they `@source` the safelist, so
-                    // their generated CSS is what a safelist write changes.
-                    // Vite then takes its ordinary CSS-update path.
-                    //
-                    // Compared with the separators Vite uses: it normalizes
-                    // every watcher path to forward slashes before the hook
-                    // sees it, while `path.join` answers with backslashes on
-                    // Windows, and a byte-for-byte comparison of the two
-                    // never matches there.
-                    if (
-                        normalizePathSeparators(ctx.file) ===
-                        normalizePathSeparators(path.join(state.rootDir, SAFELIST_FILENAME))
-                    ) {
-                        // Answered even when the lookup finds nothing, because
-                        // an EMPTY set is the safe answer here and silence is
-                        // not: `@tailwindcss/vite` returns early from its hot
-                        // update on an empty module list, while silence leaves
-                        // it looking at the asset nodes for a file it scanned
-                        // and sending its unaddressed reload. Vite's own
-                        // empty-set branch only reloads for `.html`, which the
-                        // safelist no longer is.
-                        // This pass's own graph, because `hotUpdate`'s answer
-                        // replaces THAT environment's module list verbatim.
-                        // `server.moduleGraph` holds the backward-compatible
-                        // nodes Vite mapped back for the legacy hook only, so
-                        // they are the wrong objects to hand this one —
-                        // TypeScript says so too.
-                        return tailwindEntryModules(
-                            (this.environment?.moduleGraph ??
-                                ctx.server.environments.client.moduleGraph) as {
-                                getModulesByFile: (
-                                    file: string,
-                                ) => Iterable<EnvironmentModuleNode> | undefined;
-                            },
-                        );
-                    }
-
-                    if (isClientPass) discoverHotFileClasses(ctx.file, ctx.server.watcher);
-                    return undefined;
+                /**
+                 * The hook Vite 5 calls. Vite 6 and later never run it while
+                 * `hotUpdate` is declared, so declaring both costs nothing
+                 * there and keeps a Vite 5 dev server compiling `sz` live.
+                 *
+                 * Vite 5 routes only a file CHANGE here, never a create, so a
+                 * project with no `sz` at prescan still sees its first `sz`
+                 * edit answered by `@tailwindcss/vite`'s full reload on that
+                 * generation — the behaviour it always had there. The hook
+                 * runs once, with no environment, so it is the client pass
+                 * and answers from the server-wide graph.
+                 *
+                 * @param ctx - HMR context: the changed file and the dev server.
+                 * @returns The modules a safelist write affects; undefined
+                 * otherwise.
+                 */
+                handleHotUpdate(ctx) {
+                    return handleHotFile(
+                        { isClientPass: true, moduleGraph: () => ctx.server.moduleGraph },
+                        ctx,
+                    );
                 },
                 transformIndexHtml: {
                     order: 'pre',

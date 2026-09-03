@@ -141,7 +141,13 @@
     "unplugin": "^3.3.0"
   },
   "peerDependencies": {
-    "@csszyx/runtime": "workspace:^"
+    "@csszyx/runtime": "workspace:^",
+    "vite": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@csszyx/runtime": "workspace:*",
