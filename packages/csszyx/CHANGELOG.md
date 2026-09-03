@@ -1,5 +1,13 @@
 # csszyx
 
+## [0.15.3](https://github.com/nguyennhutien/csszyx/compare/v0.15.2...v0.15.3) (2026-09-03)
+
+
+### Bug Fixes
+
+* **compiler:** drop a per-side border style on the TypeScript lane too ([#276](https://github.com/nguyennhutien/csszyx/issues/276)) ([92398d7](https://github.com/nguyennhutien/csszyx/commit/92398d758358b9681976e77e22223aab793bf614))
+* **unplugin:** keep named classes out of mangling and give Vite 5 its HMR hook back ([#274](https://github.com/nguyennhutien/csszyx/issues/274)) ([3f36854](https://github.com/nguyennhutien/csszyx/commit/3f36854a2f98442ec979a855089d7358e8bd4f1e))
+
 ## [0.15.2](https://github.com/nguyennhutien/csszyx/compare/v0.15.1...v0.15.2) (2026-09-03)
 
 ### Features
