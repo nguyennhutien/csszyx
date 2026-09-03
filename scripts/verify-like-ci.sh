@@ -80,6 +80,9 @@ pnpm test:scripts
 node .github/scripts/validate-release-please-config.mjs
 node --test scripts/validate-commit-message-policy.test.mjs
 node --test scripts/napi-pin.test.mjs
+
+echo "[verify-like-ci] CLI must reach tailwindcss only through a dynamic import (optional peer)..."
+node --test scripts/cli-tailwind-import.test.mjs
 node --test .github/scripts/publish-workspace.test.mjs
 node --test .github/scripts/detect-pkg-code-changes.test.mjs
 node --test .github/scripts/detect-lock-code-changes.test.mjs

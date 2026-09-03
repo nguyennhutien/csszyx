@@ -109,22 +109,29 @@ npx csszyx audit
 
 ### `generate-types`
 
-> **Not applicable for Tailwind v4 projects.**
+> **Needs Tailwind CSS v3, and only v3 projects need it.**
 >
-> CSSzyx requires Tailwind v4, which replaces `tailwind.config.js` with `@theme {}` blocks
-> in CSS. This command uses Tailwind v3's `resolveConfig()` API to parse JS config files —
-> that API does not exist in v4.
+> This command reads a v3 `tailwind.config.js` through Tailwind's own `resolveConfig()`
+> and writes TypeScript declarations for its theme. Tailwind v4 replaced that config with
+> `@theme {}` blocks in CSS and removed `resolveConfig()`, so on v4 there is nothing to
+> read and nothing to generate: use the plugin's `build.scanCss` option instead
+> ([Plugin Config docs](/docs/reference/config)).
 >
-> For v4 projects, use the plugin's `build.scanCss` option instead. See
-> [Plugin Config docs](/docs/reference/config).
+> `tailwindcss@3` is an **optional peer** of `@csszyx/cli` rather than a dependency: it is
+> 12 MB across 44 packages for this one command, and `csszyx check` in a CI runner should
+> not pay for it. Install it next to the config when you need the command:
 >
-> This command is kept for potential future Tailwind v3 compatibility support.
-> If your project needs it, open an issue.
+> ```bash
+> npm install -D tailwindcss@3
+> ```
+>
+> Without it the command stops before reading anything and says which of three states the
+> install is in (absent, v4, or a v3 whose entry does not load), each with its own fix.
 
 ```bash
-npx csszyx generate-types
-npx csszyx generate-types --config ./path/to/tailwind.config.js
-npx csszyx generate-types --output ./src/csszyx.d.ts
+npx @csszyx/cli generate-types
+npx @csszyx/cli generate-types --config ./path/to/tailwind.config.js
+npx @csszyx/cli generate-types --output ./src/csszyx.d.ts
 ```
 
 ### `migrate`

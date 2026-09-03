@@ -10,6 +10,7 @@ import { getProjectInfo } from '../utils/framework-detector.js';
 import {
     printError,
     printHeader,
+    printInfo,
     printSection,
     printSuccess,
     printWarn,
@@ -37,6 +38,7 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
     let issueCount = checkTailwind(projectInfo.hasTailwind, options.verbose);
     issueCount += checkPackageInstallation(cwd);
     checkBuildOutput(cwd, options.verbose);
+    await reportOptionalTooling(options.verbose);
 
     // Summary
     console.log();
@@ -74,6 +76,44 @@ function checkTailwind(hasTailwind: boolean, verbose = false): number {
     printError('Tailwind CSS not found');
     if (verbose) console.log('  → Run: npm install -D tailwindcss');
     return 1;
+}
+
+/**
+ * Say whether `generate-types` can run here, without counting it as an issue.
+ *
+ * Tailwind v3 is an optional peer that only that command needs, so its
+ * absence is the designed state for most projects — a `doctor` run in CI
+ * must not go red over it. `checkTailwind` above asks a different question
+ * (does this project have a Tailwind to serve csszyx's classes) and keeps its
+ * own answer.
+ * @param verbose - Whether to print the install hint.
+ */
+async function reportOptionalTooling(verbose = false): Promise<void> {
+    printSection('🧰 Optional tooling');
+    const { resolveTailwindV3 } = await import('../scanner/tailwind-availability.js');
+    try {
+        const { version } = await resolveTailwindV3();
+        printSuccess(`generate-types available (tailwindcss ${version})`);
+    } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        if (message.includes('none installed')) {
+            printInfo(
+                'generate-types unavailable — tailwindcss v3 is an optional peer and is not ' +
+                    'installed. Only needed to read a v3 tailwind.config.js.',
+            );
+            if (verbose) {
+                console.log(
+                    '  → npm install -D tailwindcss@3 (only if you need csszyx generate-types)',
+                );
+            }
+        } else {
+            const version = message.match(/this project has ([^.\s]+(?:\.[^.\s]+)*)/)?.[1];
+            printInfo(
+                `generate-types unavailable — tailwindcss ${version ?? '(unknown version)'} has no ` +
+                    'JavaScript config to read. Not needed on v4.',
+            );
+        }
+    }
 }
 
 /**

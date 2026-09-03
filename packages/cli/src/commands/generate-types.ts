@@ -10,6 +10,7 @@
 import { resolve } from 'node:path';
 
 import { type GeneratorOptions, generateAndWriteTypes } from '../generator/type-generator.js';
+import { resolveTailwindV3 } from '../scanner/tailwind-availability.js';
 import { findConfigFile, scanTailwindConfig } from '../scanner/tailwind-scanner.js';
 
 /**
@@ -48,6 +49,11 @@ interface CommandOutput {
 export async function generateTypes(options: GenerateTypesOptions = {}): Promise<void> {
     const cwd = options.cwd || process.cwd();
     const { log, error } = commandOutput(options.silent);
+    // First, before a line of progress: Tailwind v3 is an optional peer, and
+    // no package manager warns when one is missing, so this is where a user
+    // learns which of the three install states they are in. Half a progress
+    // log followed by a resolver error is the thing this ordering prevents.
+    await requireTailwindV3(error);
     const configPath = resolveConfigPath(options.config, cwd, log, error);
 
     log(`📖 Reading config from: ${configPath}`);
@@ -106,6 +112,19 @@ function resolveConfigPath(
     error('❌ Could not find tailwind.config.js in current directory');
     error('   Please specify the path with --config flag');
     process.exit(1);
+}
+
+/**
+ * Stop with the availability message when Tailwind v3 is not there to call.
+ * @param error - The error-output logger.
+ */
+async function requireTailwindV3(error: CommandLogger): Promise<void> {
+    try {
+        await resolveTailwindV3();
+    } catch (cause) {
+        error(`❌ ${errorMessage(cause)}`);
+        process.exit(1);
+    }
 }
 
 /**
