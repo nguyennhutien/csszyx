@@ -551,11 +551,12 @@ jobs:
       matrix:
         os: [windows-latest, macos-14]
     runs-on: ${{ matrix.os }}
-    # macOS is on trial: its only unique signal is the file watcher, whose
-    # failures show up as timing flakes rather than stable reds. It reports
-    # but does not block until its pass rate over the first weeks is read
-    # and a decision is made. Windows blocks from day one.
-    continue-on-error: ${{ matrix.os == 'macos-14' }}
+    # Both legs block. macOS ran on trial from 2026-08-22 to 2026-09-03: 74
+    # jobs, 70 green, and every one of the 4 reds failed on Windows in the
+    # same run for the same reason (a pnpm self-installer outage, one
+    # mid-PR commit without the native addon). It never produced a signal
+    # of its own, so it runs only the watcher suites below — the one surface
+    # where APFS differs from NTFS and ext4 — at a tenth of the full cost.
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -612,8 +613,23 @@ jobs:
         run: pnpm exec turbo run build --filter=@csszyx/cli...
 
       - name: Run the CLI suite
+        if: matrix.os != 'macos-14'
         shell: bash
         run: pnpm --filter @csszyx/cli exec vitest run
+
+      # The file watcher is the only surface where macOS can disagree with
+      # Linux and Windows, so that is all macOS runs.
+      - name: Run the watcher suites
+        if: matrix.os == 'macos-14'
+        shell: bash
+        run: |
+          pnpm --filter @csszyx/cli exec vitest run \
+            tests/next-watch-branches.test.ts \
+            tests/next-watch-command.test.ts \
+            tests/next-watch-lifecycle.test.ts \
+            tests/next-watch-new-directory.test.ts \
+            tests/next-watch-readiness.test.ts \
+            tests/bin-dispatch-next-watch.test.ts
 
   # The Next Turbopack state layer relies on advisory locks, atomic rename,
   # path normalization, and child-process contention. Unit mocks on Ubuntu
