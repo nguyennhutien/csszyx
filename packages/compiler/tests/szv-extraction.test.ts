@@ -157,6 +157,15 @@ describe('szv extraction — "dị" value cases lower to the right TW class', ()
             ['md:p-8'],
         ],
         [
+            // A design system keeps the token beside the colour that reads it,
+            // so a variant value is where a custom property is written. The
+            // catalogue used to concatenate the key and lower `--a-0.18`, a
+            // class no CSS is generated for, and no lane said anything.
+            'custom property inside a variant value',
+            "const b = szv({ variants: { t: { blue: { bg: 'tag-blue-bg', dark: { '--v-bg-alpha': '0.18' } } } } });",
+            ['bg-tag-blue-bg', 'dark:[--v-bg-alpha:0.18]'],
+        ],
+        [
             'group-hover nested variant',
             'const b = szv({ variants: { s: { x: { group: { hover: { gap: 8 } } } } } });',
             ['group-hover:gap-8'],
