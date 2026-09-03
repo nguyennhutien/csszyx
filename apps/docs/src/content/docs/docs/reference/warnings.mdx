@@ -719,6 +719,55 @@ The orphan clause reads `{n} mangled class(es) have no emitted CSS rule (e.g.
 …) — those elements lose styling.` and, when there are no collisions, closes
 with a different remedy pointing at the CSS pipeline instead.
 
+A stylesheet that matches classes by their text is the third hazard. The clause
+names the selector and the classes it was matching, and the remedy is a
+paste-ready `production.manglePreserve`:
+
+```text
+[csszyx] production mangle found hybrid hazards: {n} attribute selector(s) match class names by text (e.g. …) — those rules stop matching once the classes are renamed, so the elements lose those styles. Keep those classes readable with production.manglePreserve: [{entries}] (paste-ready), or key the rule off a data attribute, which mangling never touches. production.mangleExclude cannot help here: it reserves token names and does not keep a class from being renamed.
+```
+
+The sample after `e.g.` is each selector followed by the classes it was
+matching, and the paste-ready value is a prefix (`'bg-tag*'`) when every renamed
+class starts with the selector's value, the exact names otherwise. When a selector
+such as `[class^="y"]` in external CSS would begin matching the tokens
+themselves, the clause reads `{n} attribute selector(s) would start matching
+mangled tokens instead (e.g. …).`
+
+### A `manglePreserve` entry matched nothing
+
+```text
+[csszyx] production.manglePreserve: {n} {entries} matched no csszyx class in this build ({list}) — nothing was preserved for them. Check the spelling against the class census; an entry keeps a class only when its name is exact, or when it ends in `*` and the class starts with the rest.
+```
+
+Printed once per build. A silent no-op here is the defect the option exists to
+fix, so the build says which entries did nothing.
+
+### `manglePreserve` rejects an entry
+
+Both **fail** when the plugin is created, before any build runs:
+
+```text
+[csszyx] production.manglePreserve[{index}] must be a non-empty string (an exact class name, or a prefix ending in `*`); got {value}.
+```
+
+```text
+[csszyx] production.manglePreserve must not contain a lone `*`: it would keep every class and silently turn `production.mangle` into a no-op. Name a prefix (`bg-tag-*`) or set `production.mangle: false`.
+```
+
+A RegExp is rejected on purpose: a stateful flag makes a match alternate across
+the census, a RegExp serialises to `{}` in the config hash, and a pathological
+pattern can stall the build for seconds per class.
+
+### A `mangleExclude` name that can never be a token
+
+```text
+[csszyx] production.mangleExclude: {n} {names} can never be a mangle token ({list}) — tokens are short base62 strings, so those entries do nothing. To keep a class from being renamed, list it in `production.manglePreserve` instead.
+```
+
+Tokens never contain `-`, `_` or `:`, so a class name listed under
+`mangleExclude` was almost certainly meant for `manglePreserve`.
+
 ### Mangling made the build bigger
 
 ```text

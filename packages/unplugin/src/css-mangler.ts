@@ -37,6 +37,34 @@ export interface CSSManglerOptions {
 }
 
 /**
+ * One `[class …]` attribute selector found while walking a stylesheet.
+ *
+ * Reported, never rewritten: such a selector matches the class attribute's
+ * text, and a mangled token carries no trace of the name it replaced, so no
+ * rewrite is correct. The build compares these against the mangle map to say
+ * which renamed classes the selector was matching by name.
+ */
+export interface ClassAttributeSelector {
+    /** The attribute operator: `=`, `~=`, `|=`, `^=`, `$=` or `*=`. */
+    operator: string;
+    /** The value as written, unescaped and unquoted. */
+    value: string;
+    /** True when the selector carries the `i` flag. */
+    insensitive: boolean;
+}
+
+/**
+ * The identity of an attribute selector, for de-duplication across rules,
+ * media queries and assets.
+ *
+ * @param selector - One collected selector.
+ * @returns A key equal for two selectors that compare the same way.
+ */
+export function classAttributeSelectorKey(selector: ClassAttributeSelector): string {
+    return `${selector.operator}\u0000${selector.value}\u0000${selector.insensitive ? 'i' : ''}`;
+}
+
+/**
  * CSS Mangler result.
  */
 export interface CSSManglerResult {
@@ -44,6 +72,12 @@ export interface CSSManglerResult {
      * The transformed CSS.
      */
     css: string;
+
+    /**
+     * Every distinct `[class …]` attribute selector the stylesheet contains,
+     * in first-seen order. See {@link ClassAttributeSelector}.
+     */
+    classAttributeSelectors: ClassAttributeSelector[];
 
     /**
      * Number of selectors transformed.
@@ -189,14 +223,29 @@ export function escapeCSSClassName(className: string): string {
  * @param {MangleMap} mangleMap - The mangle map
  * @param {Set<string>} mangledClasses - Set to track which classes were mangled
  * @param {Set<string>} unmangledClasses - Set to track classes not in the map
+ * @param {Map<string, ClassAttributeSelector>} attributeSelectors - Collects every
+ *   `[class …]` attribute selector walked, keyed by operator, value and flag
  * @returns {selectorParser.SyncProcessor<string>} PostCSS selector processor
  */
 function createSelectorProcessor(
     mangleMap: MangleMap,
     mangledClasses: Set<string>,
     unmangledClasses: Set<string>,
+    attributeSelectors: Map<string, ClassAttributeSelector> = new Map(),
 ): selectorParser.Processor<void> {
     return selectorParser(selectors => {
+        selectors.walkAttributes(attribute => {
+            // A namespaced attribute is not the HTML `class`; a presence check
+            // (`[class]`) and an empty value (`[class*=""]`, which the spec
+            // says represents nothing) do not depend on any name.
+            if (attribute.namespace !== undefined) return;
+            if (attribute.attribute.toLowerCase() !== 'class') return;
+            const { operator, value } = attribute;
+            if (operator === undefined || value === undefined || value.length === 0) return;
+            const selector = { operator, value, insensitive: attribute.insensitive === true };
+            const key = classAttributeSelectorKey(selector);
+            if (!attributeSelectors.has(key)) attributeSelectors.set(key, selector);
+        });
         selectors.walkClasses(classNode => {
             // Get the class value (already unescaped by postcss-selector-parser)
             const originalValue = classNode.value;
@@ -228,6 +277,79 @@ function createSelectorProcessor(
 }
 
 /**
+ * The state one mangling pass carries: the selector processor and what it
+ * recorded. Shared by every entry point so the rule-rewrite step, the debug
+ * logging and the result shape live in one place.
+ */
+interface ManglerSession {
+    /**
+     * Rewrite one rule's selector in place.
+     *
+     * @param rule - A PostCSS rule.
+     * @returns Whether the selector changed.
+     */
+    mangleRule(rule: Rule): boolean;
+    /**
+     * Assemble the result once the stylesheet has been walked.
+     *
+     * @param css - The stylesheet as it now reads.
+     * @param transformedCount - How many selectors changed.
+     * @returns The transformation result.
+     */
+    result(css: string, transformedCount: number): CSSManglerResult;
+}
+
+/**
+ * Start a mangling pass over one stylesheet.
+ *
+ * @param mangleMap - The mangle map (original -> mangled).
+ * @param options - Options.
+ * @returns The session the entry point drives.
+ */
+function createManglerSession(mangleMap: MangleMap, options: CSSManglerOptions): ManglerSession {
+    const mangledClasses = new Set<string>();
+    const unmangledClasses = new Set<string>();
+    const attributeSelectors = new Map<string, ClassAttributeSelector>();
+    const selectorProcessor = createSelectorProcessor(
+        mangleMap,
+        mangledClasses,
+        unmangledClasses,
+        attributeSelectors,
+    );
+    return {
+        mangleRule(rule) {
+            try {
+                const originalSelector = rule.selector;
+                const newSelector = selectorProcessor.processSync(originalSelector);
+                if (newSelector === originalSelector) return false;
+                rule.selector = newSelector;
+                return true;
+            } catch (error) {
+                // Log but don't fail on selector parsing errors
+                if (options.debug) {
+                    console.warn(`[csszyx] Failed to process selector: ${rule.selector}`, error);
+                }
+                return false;
+            }
+        },
+        result(css, transformedCount) {
+            if (options.debug) {
+                console.log(`[csszyx] CSS Mangler: ${transformedCount} selectors transformed`);
+                console.log(`[csszyx] Mangled classes: ${mangledClasses.size}`);
+                console.log(`[csszyx] Unmangled classes: ${unmangledClasses.size}`);
+            }
+            return {
+                css,
+                transformedCount,
+                mangledClasses: Array.from(mangledClasses),
+                unmangledClasses: Array.from(unmangledClasses),
+                classAttributeSelectors: Array.from(attributeSelectors.values()),
+            };
+        },
+    };
+}
+
+/**
  * Mangle CSS selectors using the provided mangle map.
  *
  * This function uses PostCSS AST to safely transform only class selectors,
@@ -243,53 +365,18 @@ export async function mangleCSS(
     mangleMap: MangleMap,
     options: CSSManglerOptions = {},
 ): Promise<CSSManglerResult> {
-    const mangledClasses = new Set<string>();
-    const unmangledClasses = new Set<string>();
+    const session = createManglerSession(mangleMap, options);
     let transformedCount = 0;
-
-    // Create the selector processor
-    const selectorProcessor = createSelectorProcessor(mangleMap, mangledClasses, unmangledClasses);
-
-    // Create PostCSS plugin
     const csszyxManglerPlugin = {
         postcssPlugin: 'csszyx-css-mangler',
         Rule(rule: Rule) {
-            try {
-                const originalSelector = rule.selector;
-                const newSelector = selectorProcessor.processSync(originalSelector);
-
-                if (newSelector !== originalSelector) {
-                    rule.selector = newSelector;
-                    transformedCount++;
-                }
-            } catch (error) {
-                // Log but don't fail on selector parsing errors
-                if (options.debug) {
-                    console.warn(`[csszyx] Failed to process selector: ${rule.selector}`, error);
-                }
-            }
+            if (session.mangleRule(rule)) transformedCount++;
         },
     };
-
-    // Process the CSS
     const result = await postcss([csszyxManglerPlugin]).process(css, {
         from: options.from,
     });
-
-    if (options.debug) {
-        console.log(`[csszyx] CSS Mangler: ${transformedCount} selectors transformed`);
-
-        console.log(`[csszyx] Mangled classes: ${mangledClasses.size}`);
-
-        console.log(`[csszyx] Unmangled classes: ${unmangledClasses.size}`);
-    }
-
-    return {
-        css: result.css,
-        transformedCount,
-        mangledClasses: Array.from(mangledClasses),
-        unmangledClasses: Array.from(unmangledClasses),
-    };
+    return session.result(result.css, transformedCount);
 }
 
 /**
@@ -305,47 +392,13 @@ export function mangleCSSSync(
     mangleMap: MangleMap,
     options: CSSManglerOptions = {},
 ): CSSManglerResult {
-    const mangledClasses = new Set<string>();
-    const unmangledClasses = new Set<string>();
+    const session = createManglerSession(mangleMap, options);
     let transformedCount = 0;
-
-    // Create the selector processor
-    const selectorProcessor = createSelectorProcessor(mangleMap, mangledClasses, unmangledClasses);
-
-    // Parse CSS
     const root: Root = postcss.parse(css, { from: options.from });
-
-    // Walk all rules
     root.walkRules(rule => {
-        try {
-            const originalSelector = rule.selector;
-            const newSelector = selectorProcessor.processSync(originalSelector);
-
-            if (newSelector !== originalSelector) {
-                rule.selector = newSelector;
-                transformedCount++;
-            }
-        } catch (error) {
-            if (options.debug) {
-                console.warn(`[csszyx] Failed to process selector: ${rule.selector}`, error);
-            }
-        }
+        if (session.mangleRule(rule)) transformedCount++;
     });
-
-    if (options.debug) {
-        console.log(`[csszyx] CSS Mangler: ${transformedCount} selectors transformed`);
-
-        console.log(`[csszyx] Mangled classes: ${mangledClasses.size}`);
-
-        console.log(`[csszyx] Unmangled classes: ${unmangledClasses.size}`);
-    }
-
-    return {
-        css: root.toString(),
-        transformedCount,
-        mangledClasses: Array.from(mangledClasses),
-        unmangledClasses: Array.from(unmangledClasses),
-    };
+    return session.result(root.toString(), transformedCount);
 }
 
 /**
@@ -371,30 +424,19 @@ export function createPostCSSPlugin(
     mangleMap: MangleMap,
     options: CSSManglerOptions = {},
 ): postcss.Plugin {
-    const mangledClasses = new Set<string>();
-    const unmangledClasses = new Set<string>();
-
-    const selectorProcessor = createSelectorProcessor(mangleMap, mangledClasses, unmangledClasses);
-
+    const session = createManglerSession(mangleMap, options);
+    let transformedCount = 0;
     return {
         postcssPlugin: 'csszyx-css-mangler',
         Rule(rule) {
-            try {
-                const originalSelector = rule.selector;
-                const newSelector = selectorProcessor.processSync(originalSelector);
-
-                if (newSelector !== originalSelector) {
-                    rule.selector = newSelector;
-                }
-            } catch (error) {
-                if (options.debug) {
-                    console.warn(`[csszyx] Failed to process selector: ${rule.selector}`, error);
-                }
-            }
+            if (session.mangleRule(rule)) transformedCount++;
         },
         OnceExit() {
+            // The plugin has no result object to hand back, so under debug
+            // the count is the log — one line, as this entry point always did.
             if (options.debug) {
-                console.log(`[csszyx] Mangled ${mangledClasses.size} unique classes`);
+                const { mangledClasses } = session.result('', transformedCount);
+                console.log(`[csszyx] Mangled ${mangledClasses.length} unique classes`);
             }
         },
     };

@@ -76,19 +76,46 @@ export interface ProductionConfig {
     /**
      * Class names the mangler must never assign as a short token.
      *
-     * Mangling allocates short aliases (`z`, `y`, `x`, …) over the classes csszyx
-     * generates, blind to class names that already exist in non-csszyx CSS. In a
-     * hybrid build — a separate Tailwind plugin owns the utility CSS, or
-     * hand-written CSS uses literal short class names (e.g. `.x`/`.y`) — a token
-     * can collide with one of those names and contaminate it. List those external
-     * names here and the allocator skips them, so no mangled token equals one.
+     * This does NOT keep a csszyx class from being renamed — for that, use
+     * `manglePreserve`. Mangling allocates short aliases (`z`, `y`, `x`, …) over
+     * the classes csszyx generates, blind to class names that already exist in
+     * non-csszyx CSS. In a hybrid build — a separate Tailwind plugin owns the
+     * utility CSS, or hand-written CSS uses literal short class names (e.g.
+     * `.x`/`.y`) — a token can collide with one of those names and contaminate
+     * it. List those external names here and the allocator skips them, so no
+     * mangled token equals one.
      *
-     * Run `csszyx scan-collisions` to discover which names to list. Exact names
-     * only (no globs).
+     * Run `npx @csszyx/cli scan-collisions` to discover which names to list.
+     * Exact names only (no globs). Tokens are short base62 strings, so a name
+     * with a `-` or `_` can never be one; listing it does nothing and the build
+     * says so.
      *
      * @default [] (nothing reserved)
      */
     mangleExclude?: string[];
+
+    /**
+     * csszyx-generated classes that keep their name when `mangle` is on.
+     *
+     * Use it when something outside csszyx depends on the class NAME: a
+     * stylesheet that matches by attribute (`[class*="bg-tag"]`), a DOM query,
+     * an analytics selector. A renamed class no longer satisfies any of those,
+     * and the stylesheet case is silent — the rule simply stops applying.
+     *
+     * Each entry is an exact class name, or a name whose last character is `*`,
+     * which keeps every class starting with the rest: `['bg-tag-*', 'p-4']`. A
+     * `*` anywhere else is literal (`'*:p-4'` names that one class). A lone `*`
+     * is rejected. An entry no class matches is reported at build time.
+     *
+     * A preserved class keeps its rule and costs only the bytes of its name;
+     * changing this list changes the token of every class allocated after the
+     * preserved ones, and with it the mangle checksum, exactly as adding a class
+     * would. The production hybrid-hazard warning prints a paste-ready value
+     * for every attribute selector it finds.
+     *
+     * @default [] (every csszyx-owned class is mangled)
+     */
+    manglePreserve?: string[];
 
     /**
      * Expose the runtime mangle registry as `window.__csszyx` for debugging.

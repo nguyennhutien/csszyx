@@ -54,7 +54,11 @@ import {
     type SzvCrossModuleRegistry,
     specifierBases,
 } from './cross-module-registry.js';
-import { mangleCSSSync } from './css-mangler.js';
+import {
+    type ClassAttributeSelector,
+    classAttributeSelectorKey,
+    mangleCSSSync,
+} from './css-mangler.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import { expandFilePatterns, matchesAnyPattern } from './file-patterns.js';
 import {
@@ -83,6 +87,12 @@ import {
     needsRuntimeMangleRegistration,
     removedMangleMapDeliveryMessage,
 } from './mangle-delivery.js';
+import {
+    compileManglePreserve,
+    mangleExcludeNeverTokenEntries,
+    mangleExcludeNeverTokenMessage,
+    manglePreserveNoMatchMessage,
+} from './mangle-preserve.js';
 import { applyMangleRuntimeEntry, ensureMangleRuntimeFile } from './mangle-runtime-file.js';
 import {
     computeMangleSizeVerdict,
@@ -569,6 +579,154 @@ export interface MangleHybridHazards {
      * DOM class is rewritten to a token with no rule → the element loses styling.
      */
     orphans: string[];
+    /**
+     * Attribute selectors on `class` whose match depends on a name the map
+     * renamed. `[class*="bg-tag"]` matched `bg-tag-blue-bg` by text; after
+     * the rename the element carries `y4`, the rule stops applying, and
+     * nothing in the build says so — the CSS is intact and the page renders.
+     * Absent when the caller has no selector census.
+     */
+    selectorMatches?: MangleSelectorHazard[];
+}
+
+/** One attribute selector the mangle map breaks or newly satisfies. */
+export interface MangleSelectorHazard {
+    /** The selector as written: `[class*="bg-tag"]`, with ` i` when case-insensitive. */
+    selector: string;
+    /** The attribute value the selector compares against, unescaped. */
+    value: string;
+    /** Map keys the selector was matching by name, sorted; renamed, so it no longer does. */
+    renamed: string[];
+    /** Tokens the selector would start matching that no class name did before, sorted. */
+    matchedTokens: string[];
+}
+
+/** A test one class name either passes or fails. */
+type NamePredicate = (name: string) => boolean;
+
+/**
+ * Lower-case the ASCII letters only, as the `i` flag on an attribute
+ * selector is defined to.
+ *
+ * @param text - Any string.
+ * @returns The string with `A`–`Z` folded.
+ */
+function asciiLower(text: string): string {
+    return text.replace(/[A-Z]/g, letter => letter.toLowerCase());
+}
+
+/**
+ * The per-class tests an attribute selector implies, per Selectors Level 4.
+ *
+ * The class attribute is a space-separated list, so a value with spaces
+ * spans several classes: for `*=` the first segment must END some class and
+ * the last must START the next, with any middle segment a whole class. `~=`
+ * is word equality and can match nothing when the value has a space; `|=`
+ * is `v` or `v-…`. A selector passes when ANY class satisfies ANY test — an
+ * over-approximation, because the build cannot know which class an element
+ * carries first, and the answer is a warning rather than a rewrite.
+ *
+ * @param operator - The attribute operator.
+ * @param value - The attribute value, unescaped.
+ * @returns The tests; empty when the selector cannot match a class name.
+ */
+function attributeSelectorPredicates(operator: string, value: string): NamePredicate[] {
+    const eq =
+        (v: string): NamePredicate =>
+        name =>
+            name === v;
+    const startsWith =
+        (v: string): NamePredicate =>
+        name =>
+            name.startsWith(v);
+    const endsWith =
+        (v: string): NamePredicate =>
+        name =>
+            name.endsWith(v);
+    const includes =
+        (v: string): NamePredicate =>
+        name =>
+            name.includes(v);
+    const dashPrefix =
+        (v: string): NamePredicate =>
+        name =>
+            name === v || name.startsWith(`${v}-`);
+    const segments = value.split(/[\t\n\f\r ]+/);
+    if (segments.length === 1) {
+        switch (operator) {
+            case '=':
+            case '~=':
+                return [eq(value)];
+            case '|=':
+                return [dashPrefix(value)];
+            case '^=':
+                return [startsWith(value)];
+            case '$=':
+                return [endsWith(value)];
+            case '*=':
+                return [includes(value)];
+            default:
+                return [];
+        }
+    }
+    if (operator === '~=') return [];
+    const first = segments[0] as string;
+    const last = segments[segments.length - 1] as string;
+    const predicates: NamePredicate[] = [];
+    // An empty first or last segment means the value began or ended with a
+    // space; that edge constrains nothing about a class name.
+    if (first.length > 0) {
+        predicates.push(operator === '$=' || operator === '*=' ? endsWith(first) : eq(first));
+    }
+    // A middle segment is never empty: the split collapses runs of spaces.
+    for (const middle of segments.slice(1, -1)) predicates.push(eq(middle));
+    if (last.length > 0) {
+        if (operator === '^=' || operator === '*=') predicates.push(startsWith(last));
+        else if (operator === '|=') predicates.push(dashPrefix(last));
+        else predicates.push(eq(last));
+    }
+    return predicates;
+}
+
+/**
+ * Render an attribute selector back to its source form for a message.
+ *
+ * @param selector - The collected selector.
+ * @returns `[class<op>"<value>"]`, with ` i` when case-insensitive.
+ */
+function renderClassAttributeSelector(selector: ClassAttributeSelector): string {
+    const flag = selector.insensitive ? ' i' : '';
+    return `[class${selector.operator}"${selector.value}"${flag}]`;
+}
+
+/**
+ * Which map keys and which tokens an attribute selector's match depends on.
+ *
+ * @param mangleMap - The original→token map.
+ * @param selector - One collected selector.
+ * @returns The hazard, or null when neither a key nor a token is affected.
+ */
+function selectorHazardFor(
+    mangleMap: Record<string, string>,
+    selector: ClassAttributeSelector,
+): MangleSelectorHazard | null {
+    const value = selector.insensitive ? asciiLower(selector.value) : selector.value;
+    const predicates = attributeSelectorPredicates(selector.operator, value);
+    if (predicates.length === 0) return null;
+    const fold = selector.insensitive ? asciiLower : (name: string): string => name;
+    const matches = (name: string): boolean => {
+        const folded = fold(name);
+        return predicates.some(predicate => predicate(folded));
+    };
+    const renamed = sortStrings(Object.keys(mangleMap).filter(matches));
+    const matchedTokens = sortStrings(Object.values(mangleMap).filter(matches));
+    if (renamed.length === 0 && matchedTokens.length === 0) return null;
+    return {
+        selector: renderClassAttributeSelector(selector),
+        value: selector.value,
+        renamed,
+        matchedTokens,
+    };
 }
 
 /**
@@ -577,19 +735,49 @@ export interface MangleHybridHazards {
  * @param mangleMap - the full original→token map injected into the runtime.
  * @param mangledSources - map keys that were actually found and renamed in some CSS asset.
  * @param externalClasses - class names found in CSS that are NOT in the mangle map (non-csszyx).
- * @returns the colliding tokens and orphan sources (each sorted, deduped).
+ * @param attributeSelectors - every `[class …]` selector the emitted CSS contains.
+ * @returns the colliding tokens, orphan sources and selector hazards (each sorted, deduped).
  */
 export function collectMangleHybridHazards(
     mangleMap: Record<string, string>,
     mangledSources: ReadonlySet<string>,
     externalClasses: ReadonlySet<string>,
+    attributeSelectors: readonly ClassAttributeSelector[] = [],
 ): MangleHybridHazards {
     const tokenValues = new Set(Object.values(mangleMap));
     const collisions = sortStrings([...tokenValues].filter(token => externalClasses.has(token)));
     const orphans = sortStrings(
         Object.keys(mangleMap).filter(source => !mangledSources.has(source)),
     );
-    return { collisions, orphans };
+    const hazards = new Map<string, MangleSelectorHazard>();
+    for (const selector of attributeSelectors) {
+        const hazard = selectorHazardFor(mangleMap, selector);
+        if (hazard !== null) hazards.set(hazard.selector, hazard);
+    }
+    // Byte order, so the message reads the same on every machine.
+    const selectorMatches = sortStrings([...hazards.keys()]).map(
+        key => hazards.get(key) as MangleSelectorHazard,
+    );
+    return { collisions, orphans, selectorMatches };
+}
+
+/**
+ * The `manglePreserve` entry that keeps every class one selector renamed.
+ *
+ * A prefix entry when every class starts with the selector's value (the
+ * substring case, which is what field reports look like); the exact names
+ * otherwise. Quoted for pasting into a config file.
+ *
+ * @param hazard - One selector hazard with at least one renamed class.
+ * @returns The entries, quoted.
+ */
+function preserveEntriesFor(hazard: MangleSelectorHazard): string[] {
+    const quote = (entry: string): string =>
+        `'${entry.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+    const { value } = hazard;
+    if (hazard.renamed.every(name => name === value)) return [quote(value)];
+    if (hazard.renamed.every(name => name.startsWith(value))) return [quote(`${value}*`)];
+    return hazard.renamed.map(quote);
 }
 
 /**
@@ -599,8 +787,8 @@ export function collectMangleHybridHazards(
  * @returns a warning string, or null when both lists are empty.
  */
 export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string | null {
-    const { collisions, orphans } = hazards;
-    if (collisions.length === 0 && orphans.length === 0) {
+    const { collisions, orphans, selectorMatches = [] } = hazards;
+    if (collisions.length === 0 && orphans.length === 0 && selectorMatches.length === 0) {
         return null;
     }
     const parts: string[] = ['[csszyx] production mangle found hybrid hazards:'];
@@ -619,6 +807,28 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
                 'those elements lose styling.',
         );
     }
+    const broken = selectorMatches.filter(hazard => hazard.renamed.length > 0);
+    const newlyMatched = selectorMatches.filter(hazard => hazard.matchedTokens.length > 0);
+    if (broken.length > 0) {
+        const sample = broken
+            .slice(0, 3)
+            .map(hazard => `${hazard.selector} → ${hazard.renamed.slice(0, 4).join(', ')}`)
+            .join('; ');
+        parts.push(
+            ` ${broken.length} attribute selector(s) match class names by text (e.g. ${sample}) — ` +
+                'those rules stop matching once the classes are renamed, so the elements lose those styles.',
+        );
+    }
+    if (newlyMatched.length > 0) {
+        const sample = newlyMatched
+            .slice(0, 3)
+            .map(hazard => `${hazard.selector} → ${hazard.matchedTokens.slice(0, 4).join(', ')}`)
+            .join('; ');
+        parts.push(
+            ` ${newlyMatched.length} attribute selector(s) would start matching mangled tokens ` +
+                `instead (e.g. ${sample}).`,
+        );
+    }
     if (collisions.length > 0) {
         // Guide the prod hotfix first, then the two real fixes. Renaming is
         // preferred because single-letter / common class names collide with
@@ -633,13 +843,22 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
                 ' `production.mangleExclude` instead. Run `npx @csszyx/cli scan-collisions`' +
                 ' to find every offending name.',
         );
-    } else {
+    } else if (orphans.length > 0) {
         parts.push(
             ' Those classes are csszyx-owned but no CSS was emitted for them' +
                 ' (e.g. a separate Tailwind plugin owns the utility CSS, or the class is not' +
                 ' a real utility). Ensure that CSS is generated, or pass' +
                 ' `production: { mangle: false }` to the csszyx plugin until the pipelines' +
                 ' are reconciled.',
+        );
+    }
+    if (broken.length > 0) {
+        const entries = [...new Set(broken.flatMap(preserveEntriesFor))].join(', ');
+        parts.push(
+            ` Keep those classes readable with production.manglePreserve: [${entries}] ` +
+                '(paste-ready), or key the rule off a data attribute, which mangling never touches. ' +
+                'production.mangleExclude cannot help here: it reserves token names and does not ' +
+                'keep a class from being renamed.',
         );
     }
     return parts.join('');
@@ -2722,6 +2941,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // site (buildEnd / transformIndexHtml / generateBundle / processAssets) — the
     // reason a config exclude-list is consistent where a bundle-CSS scan would not.
     const mangleReserved = new Set(options.production?.mangleExclude ?? []);
+    // Classes that keep their name. Compiled here so a bad entry fails when
+    // the plugin is created, not on the first production build that reads it.
+    const manglePreserve = compileManglePreserve(options.production?.manglePreserve);
+    // The no-match report fires once per build: the map is computed several
+    // times (freeze, census check, finalize) from the same census.
+    let manglePreserveNoMatchWarned = false;
     // True once the class map is settled and every later consumer must read it
     // rather than rebuild it. Set on the Vite build lane only, because that is
     // the lane where CSS bytes are hashed during the transform phase and so
@@ -2756,6 +2981,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // once from the output hook where the whole picture exists.
     const transformMangledSources = new Set<string>();
     const transformExternalClasses = new Set<string>();
+    const transformAttributeSelectors = new Map<string, ClassAttributeSelector>();
     // The runtime mangle map has ONE delivery: a registration module inside
     // the JS bundle. It needs no CSP exception, and it reaches pages the build
     // does not own — which the inline installer it replaced could not. A
@@ -2823,6 +3049,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const unknownConfigKeys = findUnknownConfigKeys(options);
     if (unknownConfigKeys.length > 0) {
         emitWarning(unknownConfigKeysMessage(unknownConfigKeys));
+    }
+    // A `mangleExclude` name with a `-` in it was meant as "keep this class"
+    // by everyone who ever wrote one; it reserves a token that is never
+    // allocated and does nothing. Say so, and name the option that does it.
+    const excludeNeverTokens = mangleExcludeNeverTokenEntries(mangleReserved);
+    if (excludeNeverTokens.length > 0) {
+        emitWarning(mangleExcludeNeverTokenMessage(excludeNeverTokens));
     }
     /**
      * Emit a csszyx build warning, unless `quiet` mutes all of them. `devOnly`
@@ -4476,10 +4709,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             ...state.authoredClasses,
             ...state.ownedClasses,
         ]);
-        return allocateMangleTokens(
-            mangleEligibleClasses(state.ownedClasses, state.authoredClasses),
-            forbiddenTokens,
+        // A preserved class leaves the eligible list but stays in the census,
+        // so it remains forbidden as a token: the key and token spaces stay
+        // disjoint, and the runtime's one-lookup contract holds.
+        const eligible = mangleEligibleClasses(state.ownedClasses, state.authoredClasses).filter(
+            className => !manglePreserve.test(className),
         );
+        if (!manglePreserveNoMatchWarned && manglingEnabled && state.ownedClasses.size > 0) {
+            manglePreserveNoMatchWarned = true;
+            const unmatched = manglePreserve.unmatched(state.ownedClasses);
+            if (unmatched.length > 0) emitWarning(manglePreserveNoMatchMessage(unmatched));
+        }
+        return allocateMangleTokens(eligible, forbiddenTokens);
     }
 
     /**
@@ -6078,6 +6319,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param shouldMangle Whether class mangling applies to this output.
      * @param mangledSources Classes rewritten by csszyx.
      * @param externalClasses Classes left under external ownership.
+     * @param attributeSelectors `[class …]` selectors seen, keyed for dedup.
      * @returns Rewritten CSS, or the original source after an ignorable syntax error.
      */
     function rewriteOutputCss(
@@ -6086,6 +6328,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         shouldMangle: boolean,
         mangledSources: Set<string>,
         externalClasses: Set<string>,
+        attributeSelectors: Map<string, ClassAttributeSelector>,
     ): string {
         const css = rewriteCssWithValidatedGlobalVarPlan(
             source,
@@ -6100,6 +6343,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             });
             for (const className of result.mangledClasses) mangledSources.add(className);
             for (const className of result.unmangledClasses) externalClasses.add(className);
+            for (const selector of result.classAttributeSelectors) {
+                attributeSelectors.set(classAttributeSelectorKey(selector), selector);
+            }
             const mangled = result.transformedCount > 0 ? result.css : css;
             recordCssPair(sizeAccount, css, mangled);
             return mangled;
@@ -6115,15 +6361,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param shouldMangle Whether class mangling applies to this output.
      * @param mangledSources Classes rewritten by csszyx.
      * @param externalClasses Classes left under external ownership.
+     * @param attributeSelectors `[class …]` selectors seen across the assets.
      */
     function reportOutputMangleHazards(
         shouldMangle: boolean,
         mangledSources: Set<string>,
         externalClasses: Set<string>,
+        attributeSelectors: Map<string, ClassAttributeSelector>,
     ): void {
         if (!shouldMangle) return;
         const message = mangleHybridHazardMessage(
-            collectMangleHybridHazards(state.mangleMap, mangledSources, externalClasses),
+            collectMangleHybridHazards(state.mangleMap, mangledSources, externalClasses, [
+                ...attributeSelectors.values(),
+            ]),
         );
         if (message) console.warn(message);
     }
@@ -6242,6 +6492,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
         const mangledSources = new Set<string>();
         const externalClasses = new Set<string>();
+        const attributeSelectors = new Map<string, ClassAttributeSelector>();
         for (const file in assets) {
             const source = assets[file].source().toString();
             if (file.endsWith('.css')) {
@@ -6251,6 +6502,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     shouldMangle,
                     mangledSources,
                     externalClasses,
+                    attributeSelectors,
                 );
                 if (css !== source) {
                     compilation.updateAsset(file, new compiler.webpack.sources.RawSource(css));
@@ -6259,7 +6511,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 rewriteWebpackCodeAsset(file, source, shouldMangle, compilation, compiler);
             }
         }
-        reportOutputMangleHazards(shouldMangle, mangledSources, externalClasses);
+        reportOutputMangleHazards(
+            shouldMangle,
+            mangledSources,
+            externalClasses,
+            attributeSelectors,
+        );
         // Webpack has no post-write hook in this plugin and prints no asset
         // table of its own, so the reason the Vite lane defers does not apply:
         // here the end of asset processing IS the end of the build's output.
@@ -6279,6 +6536,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param shouldMangle Whether class mangling applies to this output.
      * @param mangledSources Classes rewritten by csszyx.
      * @param externalClasses Classes left under external ownership.
+     * @param attributeSelectors `[class …]` selectors seen, keyed for dedup.
      */
     function rewriteViteBundleEntry(
         chunk: ViteBundleEntryLike,
@@ -6286,6 +6544,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         shouldMangle: boolean,
         mangledSources: Set<string>,
         externalClasses: Set<string>,
+        attributeSelectors: Map<string, ClassAttributeSelector>,
     ): void {
         if (
             chunk.type !== 'asset' ||
@@ -6301,6 +6560,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             shouldMangle,
             mangledSources,
             externalClasses,
+            attributeSelectors,
         );
         if (css !== originalCss) chunk.source = css;
     }
@@ -6328,6 +6588,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             shouldMangle,
             transformMangledSources,
             transformExternalClasses,
+            transformAttributeSelectors,
         );
         return css === code ? null : { code: css, map: null };
     }
@@ -6374,6 +6635,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // that rewrote it; the bundle carries the same, already-renamed assets.
         const mangledSources = new Set(transformMangledSources);
         const externalClasses = new Set(transformExternalClasses);
+        const attributeSelectors = new Map(transformAttributeSelectors);
         if (!cssRewrittenInTransform) {
             for (const file in bundle) {
                 rewriteViteBundleEntry(
@@ -6382,10 +6644,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     shouldMangle,
                     mangledSources,
                     externalClasses,
+                    attributeSelectors,
                 );
             }
         }
-        reportOutputMangleHazards(shouldMangle, mangledSources, externalClasses);
+        reportOutputMangleHazards(
+            shouldMangle,
+            mangledSources,
+            externalClasses,
+            attributeSelectors,
+        );
     }
 
     const postPlugin = createUnplugin<PartialCsszyxConfig, boolean>(() => ({

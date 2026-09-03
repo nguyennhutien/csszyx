@@ -182,8 +182,12 @@ two ways:
   carries `!important`.
 - **Orphan tokens.** A class csszyx mangles but whose CSS another pipeline never
   emitted is rewritten to an alias with no rule, so the element loses styling.
+- **Name-matching selectors.** A stylesheet that matches classes by their
+  text — `[class*="bg-tag"]`, `[class^="text-tag"]` — stops matching once the
+  class is renamed, so its rule silently stops applying. Only a class name has
+  the substring; a token never does.
 
-A production build **warns** at build time when it detects either hazard. Fix it
+A production build **warns** at build time when it detects any of the three. Fix it
 in order:
 
 1. **Hotfix (unblock the broken prod build):** set `production: { mangle: false }`
@@ -194,18 +198,35 @@ in order:
    collide with mangle tokens *and* invite specificity clashes with other
    libraries or teammates, so a specific name is the safer fix regardless of
    mangling.
-3. **Exclude — escape hatch for code you can't change.** Only when a name lives in
-   a **third-party stylesheet** you cannot rename, or is assembled outside a
-   statically visible class expression (for example an imported constant,
-   `classList.add`, `setAttribute`, `querySelector`, an ignored dependency, or a
-   downstream macro), reserve it so no token equals it:
+3. **Exclude — escape hatch for code you can't change.** Only when a short name
+   lives in a **third-party stylesheet** you cannot rename, reserve it so no token
+   equals it:
 
    ```ts
    production: { mangle: true, mangleExclude: ['x', 'y'] }
    ```
 
+   `mangleExclude` keeps the allocator from *producing* a token; it never keeps a
+   csszyx class from being renamed, and a name with a `-` in it can never be a
+   token, so listing one does nothing (the build says so).
+4. **Preserve — when something depends on the class name.** A stylesheet
+   matching by attribute (`[class*="bg-tag"]`), a `querySelector`, an analytics
+   selector, a class assembled outside any statically visible `className`: keep
+   those classes under their own names. Each entry is an exact name, or a prefix
+   ending in `*`; the hazard warning prints a paste-ready value:
+
+   ```ts
+   production: { mangle: true, manglePreserve: ['bg-tag-*', 'text-tag-*', 'p-4'] }
+   ```
+
+   A preserved class keeps its rule and costs only the bytes of its name. A `*`
+   anywhere but last is literal (`'*:p-4'` is one class); a lone `'*'` is
+   rejected; an entry no class matches is reported. Changing the list changes the
+   token of every class allocated after the preserved ones, and the checksum with
+   it, exactly as adding a class would.
+
 `scan-collisions` reports the candidates and prints a paste-ready `mangleExclude`;
-it does not edit your files — apply the rename or the exclude yourself.
+it does not edit your files — apply the rename, the exclude or the preserve yourself.
 :::
 
 :::caution[Mangling is not a compression win on a gzip-served app]
