@@ -80,7 +80,15 @@ jobs:
   npm-audit:
     name: npm audit
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 15, the budget CodeQL and semgrep already have, because the steps before
+    # the audit are the ones that run long. `pnpm/action-setup` fetches pnpm
+    # over the network and stalls intermittently on the runners: measured in
+    # one CI run, "Setup pnpm" took 10-14s in four jobs and 424s and 438s in
+    # two others, which passed only because their budget is 30 and 45 minutes.
+    # At 5 this job was the only one in the repository a stall could kill, and
+    # it died before reaching the command it exists to run. A real advisory
+    # still fails it in seconds.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -95,17 +103,48 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # --audit-level high catches actionable advisories in our dep tree.
-      # --ignore-unfixable skips transitive advisories where the direct
-      # dependency hasn't released a patch yet (upstream outside our
-      # control). CI still fails on any high advisory we CAN fix.
+      # The gate runs `pnpm audit --audit-level high --ignore-unfixable` and
+      # tells its two failures apart: an advisory in the tree, and an advisory
+      # service that could not be reached. Both exit non-zero, and read from
+      # the Checks tab they were the same red tick.
       - name: Audit JS dependencies
-        run: pnpm audit --audit-level high --ignore-unfixable
+        run: |
+          node --test scripts/npm-audit-gate.test.mjs
+          node scripts/npm-audit-gate.mjs
+
+  # A second, independent answer to "does this pull request add a dependency
+  # with a known advisory", read from GitHub's own dependency graph and
+  # advisory database rather than from `registry.npmjs.org`. It survives an
+  # npm outage, which the job above does not: on 2026-09-04 the advisory
+  # endpoint answered a GET in 0.4s and hung on every POST for hours
+  # (npm/cli#9950), and `pnpm audit` had nothing to report from.
+  #
+  # It does not replace that job, and the difference is the reason both are
+  # here. This one reviews what a pull request CHANGES: measured against this
+  # repository, a range that touches no dependency returns zero entries. An
+  # advisory published today against a dependency nobody touched is invisible
+  # to it, and catching those is what the weekly `npm audit` run exists for.
+  #
+  # Pull requests only, because a diff of dependencies needs two sides.
+  dependency-review:
+    name: dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
 
   cargo-audit:
     name: cargo audit
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Same budget for the same reason, and this one builds `cargo-audit` from
+    # source first: 3m11s on a good day, against a 5-minute cap.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
