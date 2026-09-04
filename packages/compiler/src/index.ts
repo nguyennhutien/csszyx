@@ -8,6 +8,8 @@
  * @module @csszyx/compiler
  */
 
+import { version as packageVersion } from '../package.json';
+
 // Export transform functionality
 export { AST_BUDGET, ASTBudgetExceededError } from './ast-budget.js';
 export { CsszyxCompiler } from './compiler.js';
@@ -144,7 +146,7 @@ export type {
 /**
  * Compiler version.
  */
-export const VERSION = '0.0.0';
+export const VERSION: string = packageVersion;
 
 /**
  * Compiler configuration options.

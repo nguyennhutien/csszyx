@@ -2,6 +2,9 @@
  * Tests for main index exports.
  */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -16,8 +19,15 @@ import {
 } from '../src/index.js';
 
 describe('index exports', () => {
-    it('should export VERSION', () => {
-        expect(VERSION).toBe('0.0.0');
+    it('exports the version this package was published as', () => {
+        // It read the literal `0.0.0` in every release up to 0.16.0 — three
+        // packages each declared the constant by hand and nothing kept it in
+        // step with the manifest, so anything branching on it read a version
+        // csszyx has never shipped.
+        const manifest = JSON.parse(
+            readFileSync(join(import.meta.dirname, '../package.json'), 'utf8'),
+        ) as { version: string };
+        expect(VERSION).toBe(manifest.version);
     });
 
     it('should export _sz function', () => {
