@@ -81,8 +81,6 @@ node .github/scripts/validate-release-please-config.mjs
 node --test scripts/validate-commit-message-policy.test.mjs
 node --test scripts/napi-pin.test.mjs
 
-echo "[verify-like-ci] CLI must reach tailwindcss only through a dynamic import (optional peer)..."
-node --test scripts/cli-tailwind-import.test.mjs
 node --test .github/scripts/publish-workspace.test.mjs
 node --test .github/scripts/detect-pkg-code-changes.test.mjs
 node --test .github/scripts/detect-lock-code-changes.test.mjs
@@ -185,6 +183,11 @@ pnpm check:emitted-classes
 
 echo "[verify-like-ci] Workspace build (every playground, every package)..."
 pnpm build
+
+# Reads packages/cli/dist, which the wipe above removed and the build just
+# wrote; placed before the build it skipped on the missing input and passed.
+echo "[verify-like-ci] CLI must reach tailwindcss only through a dynamic import (optional peer)..."
+node --test scripts/cli-tailwind-import.test.mjs
 
 # After the build for the same reason the size gate is: several suites spawn
 # the CLI from `dist`, and without it they fail to import and the run reports
