@@ -37,12 +37,18 @@ function chunks(dir) {
 }
 
 /**
- * A static import of the package or anything under it: with an import clause
- * (`import x from "…"`, `import{x}from"…"`), or a bare side-effect import
- * (`import "tailwindcss"`). Whitespace is optional throughout, so a
- * minified spelling matches the same as a spaced one.
+ * A static import or re-export of the package or anything under it: with an
+ * import clause (`import x from "…"`, `import{x}from"…"`), a bare side-effect
+ * import (`import "tailwindcss"`), or an export-from clause. Whitespace is
+ * optional throughout, so a minified spelling matches the same as a spaced one.
+ *
+ * The run before `from` excludes the line break as well as the semicolon: a
+ * clause never spans one in this output, and allowing it let a semicolon-free
+ * `export` swallow the lines after it and accuse a comment that merely names
+ * the package.
  */
-const STATIC_IMPORT = /^\s*import\b(?:[^;]*?\bfrom)?\s*['"]tailwindcss(?:\/[^'"]*)?['"]/m;
+const STATIC_LOAD =
+    /^[^\S\n]*(?:import\b(?:[^;\n]*?\bfrom)?|export\b[^;\n]*?\bfrom)[^\S\n]*['"]tailwindcss(?:\/[^'"\n]*)?['"]/m;
 
 test('the import pattern reads every static spelling and no dynamic one', () => {
     const statics = [
@@ -52,18 +58,32 @@ test('the import pattern reads every static spelling and no dynamic one', () => 
         "import * as tw from 'tailwindcss';",
         "import 'tailwindcss';",
         'import"tailwindcss/index.css";',
+        "export { default } from 'tailwindcss/resolveConfig.js';",
+        "export * from 'tailwindcss';",
     ];
+    // A clause never spans a line break in real output, and letting the run
+    // cross one lets a semicolon-free `export` swallow the lines after it and
+    // accuse a comment that merely mentions the package.
+    const acrossLines = [
+        "export function note() {}\n// this used to be import { Config } from 'tailwindcss'",
+        'export const NOTE = [\n    "load it dynamically, never from \'tailwindcss\'"',
+        "import x from './a'\n// once read from 'tailwindcss'",
+    ];
+    assert.deepEqual(
+        acrossLines.filter(source => STATIC_LOAD.test(source)),
+        [],
+    );
     const dynamics = [
         "const m = await import('tailwindcss/resolveConfig.js');",
         "createRequire(import.meta.url).resolve('tailwindcss/resolveConfig.js');",
         "import type { Config } from 'tailwindcss';".replace('import type', '// import type'),
     ];
     assert.deepEqual(
-        statics.filter(line => !STATIC_IMPORT.test(line)),
+        statics.filter(line => !STATIC_LOAD.test(line)),
         [],
     );
     assert.deepEqual(
-        dynamics.filter(line => STATIC_IMPORT.test(line)),
+        dynamics.filter(line => STATIC_LOAD.test(line)),
         [],
     );
 });
@@ -73,7 +93,7 @@ test('packages/cli is built, so the chunks below are the ones being shipped', ()
 });
 
 test('no built CLI chunk imports tailwindcss statically', () => {
-    const offenders = chunks(DIST).filter(file => STATIC_IMPORT.test(readFileSync(file, 'utf8')));
+    const offenders = chunks(DIST).filter(file => STATIC_LOAD.test(readFileSync(file, 'utf8')));
     assert.deepEqual(
         offenders.map(file => path.relative(DIST, file)),
         [],
