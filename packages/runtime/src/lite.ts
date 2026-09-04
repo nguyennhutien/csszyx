@@ -27,13 +27,6 @@ export { __szSpacingVar, __szUnitVar } from '@csszyx/compiler/spacing-var';
 export type SzStringInput = string | null | undefined | false;
 
 /**
- * @deprecated Renamed to {@link SzStringInput} — the lite helpers accept only
- * pre-compiled class strings, and the bare name collided with the object-accepting
- * `SzInput` from `@csszyx/runtime`. This alias is kept for back-compat.
- */
-export type SzInput = string | null | undefined | false; // NOSONAR: public compatibility alias
-
-/**
  * Dev-only guard: throw when a plain object reaches a string-only helper.
  * Compiled sz props are always strings; an object here means the compiler
  * hit an unhandled pattern and fell back to _sz(objectExpr).

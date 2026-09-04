@@ -15,8 +15,7 @@
 import type { SzArrayElement, SzObject, SzProps, SzPropValue } from '@csszyx/compiler';
 
 import type { SzInput } from './concatenate.js';
-// NOSONAR: this contract intentionally verifies the deprecated public alias.
-import type { SzInput as LiteSzInput, SzStringInput } from './lite.js'; // NOSONAR
+import type { SzStringInput } from './lite.js';
 
 /** Resolves to `T` only when `T` is exactly `true`, else fails the build. */
 type Assert<T extends true> = T;
@@ -54,11 +53,5 @@ export type _ContractReadonlyArrayToInput = Assert<
 export type _ContractNumberRejected = Assert<NotAssignableTo<number, SzInput>>;
 export type _ContractBooleanTrueRejected = Assert<NotAssignableTo<true, SzInput>>;
 
-// ── The lite alias is exactly its renamed type (back-compat) ──
-export type _ContractLiteAlias = Assert<
-    AssignableTo<LiteSzInput, SzStringInput> extends true // NOSONAR
-        ? AssignableTo<SzStringInput, LiteSzInput> // NOSONAR
-        : false
->;
 // ── The lite (string-only) input must NOT accept objects ──
 export type _ContractLiteRejectsObject = Assert<NotAssignableTo<SzProps, SzStringInput>>;

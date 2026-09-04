@@ -185,7 +185,9 @@ two ways:
 - **Name-matching selectors.** A stylesheet that matches classes by their
   text — `[class*="bg-tag"]`, `[class^="text-tag"]` — stops matching once the
   class is renamed, so its rule silently stops applying. Only a class name has
-  the substring; a token never does.
+  the substring; a token never does. Run `scan-collisions` when you hit this
+  one: a rule written this way usually also names a short class of its own
+  (`.btn`, `.tag`), which is the first hazard above in the same rule.
 
 A production build **warns** at build time when it detects any of the three. Fix it
 in order:
@@ -219,6 +221,11 @@ in order:
    production: { mangle: true, manglePreserve: ['bg-tag-*', 'text-tag-*', 'p-4'] }
    ```
 
+   An entry reads a class under its variants too, because a stylesheet that
+   matches a name by text matches it wherever the name appears: `'bg-tag-*'`
+   keeps `dark:bg-tag-blue-bg` as well as `bg-tag-blue-bg`. Name a variant form
+   (`'dark:bg-tag-blue-bg'`) to keep that one and let the rest be renamed.
+
    A preserved class keeps its rule and costs only the bytes of its name. A `*`
    anywhere but last is literal (`'*:p-4'` is one class); a lone `'*'` is
    rejected; an entry no class matches is reported. Changing the list changes the
@@ -227,6 +234,15 @@ in order:
 
 `scan-collisions` reports the candidates and prints a paste-ready `mangleExclude`;
 it does not edit your files — apply the rename, the exclude or the preserve yourself.
+
+One more trap, with no warning attached: keep build output outside the roots
+the prescan walks. The prescan reads any source under the root as authored
+code, so a kept `dist-previous/` of an earlier mangled build hands back `y4`
+and `n4` as class names, and the next build declines to mangle anything that
+might collide with them. The map shrinks, the emitted CSS changes and the
+build stays green. A `dist` entry in `.gitignore` does not cover
+`dist-mangle-on`: list such directories in the top-level `exclude` option
+(see [File Filters](#file-filters)), or keep them outside the project.
 :::
 
 :::caution[Mangling is not a compression win on a gzip-served app]

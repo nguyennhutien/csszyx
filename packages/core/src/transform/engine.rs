@@ -1978,6 +1978,39 @@ mod tests {
     }
 
     #[test]
+    fn a_custom_property_key_with_a_runtime_value_is_a_bracketed_declaration() {
+        // The static form `{ '--ring': '4px' }` is `[--ring:4px]`; the runtime
+        // form has to be the same declaration reading the hoisted variable,
+        // `[--ring:var(--_sz---ring)]`. The generic `prefix-(var)` shape gave
+        // `--ring-(--_sz---ring)`, which is not a Tailwind utility at all.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = ({ x }) => <div sz={{ '--ring': x, hover: { '--ring': x } }} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(
+            result.code.contains("\"--_sz---ring\": x"),
+            "{}",
+            result.code
+        );
+        assert!(
+            result.code.contains("\"--_sz-hover---ring\": x"),
+            "{}",
+            result.code
+        );
+        assert_eq!(
+            result.classes,
+            vec![
+                "[--ring:var(--_sz---ring)]".to_string(),
+                "hover:[--ring:var(--_sz-hover---ring)]".to_string(),
+            ]
+        );
+    }
+
+    #[test]
     fn static_engine_will_not_read_a_map_declared_after_its_use() {
         // Reading it would answer with a value the reference cannot see. The
         // bare-identifier walk already refuses this, and the read inherits the

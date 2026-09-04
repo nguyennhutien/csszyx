@@ -45,6 +45,22 @@ const GATED_RULES = new Map([
 ]);
 
 /**
+ * Sonar rules a local rule from another plugin covers, by RSPEC id.
+ *
+ * `eslint-plugin-sonarjs` does not implement every rule the profile runs, and
+ * the plugin that does implement one publishes no RSPEC id, so nothing can
+ * derive these. Each entry is a claim someone verified by hand: the local rule
+ * reports the same defect, on a deliberate violation.
+ *
+ * Both entries below were added after SonarCloud found the defect on a pull
+ * request whose local run was green.
+ */
+const FOREIGN_RULES = new Map([
+    ['S7778', 'unicorn/prefer-single-call'],
+    ['S7780', 'unicorn/prefer-string-raw'],
+]);
+
+/**
  * Read `sonar-project.properties` into a plain map.
  *
  * @param file - Path to the properties file.
@@ -93,18 +109,24 @@ export function isEnabled(setting) {
  * @param sonarRules - Active rules, each with a `key` like `typescript:S3776`.
  * @param localByRspec - RSPEC id mapped to the local rule name implementing it.
  * @param enabled - Names of the local rules that are switched on.
- * @returns The three buckets, each sorted by rule key.
+ * @param foreignByRspec - Rules another plugin covers, by RSPEC id, already
+ * carrying their plugin prefix.
+ * @returns The three buckets, each sorted by rule key. A rule the sonarjs
+ * plugin implements is named without its prefix, as that plugin's rules
+ * always carry it; one from the map is named as written.
  */
-export function bucketRules(sonarRules, localByRspec, enabled) {
+export function bucketRules(sonarRules, localByRspec, enabled, foreignByRspec = new Map()) {
     const covered = [];
     const availableOff = [];
     const noLocal = [];
     for (const rule of sonarRules) {
         const id = rule.key.split(':')[1];
-        const local = localByRspec.get(id);
+        const sonarjsRule = localByRspec.get(id);
+        const local = sonarjsRule ?? foreignByRspec.get(id);
         if (local === undefined) noLocal.push({ ...rule, local: null });
-        else if (enabled.has(`sonarjs/${local}`)) covered.push({ ...rule, local });
-        else availableOff.push({ ...rule, local });
+        else if (enabled.has(sonarjsRule === undefined ? local : `sonarjs/${local}`)) {
+            covered.push({ ...rule, local });
+        } else availableOff.push({ ...rule, local });
     }
     const byKey = (left, right) => left.key.localeCompare(right.key);
     return {
@@ -193,7 +215,7 @@ async function main({ language, json }) {
         localSonarRules(),
         enabledLocalRules('packages/unplugin/src/unplugin.ts'),
     ]);
-    const buckets = bucketRules(rules, localByRspec, enabled);
+    const buckets = bucketRules(rules, localByRspec, enabled, FOREIGN_RULES);
 
     if (json) {
         console.log(JSON.stringify({ profile: profile.name, total, ...buckets }, null, 2));
@@ -203,21 +225,29 @@ async function main({ language, json }) {
     console.log(`Sonar profile '${profile.name}' (${language}) has ${total} rules active.`);
     console.log(`  ${buckets.covered.length} covered by a local rule that is on`);
     for (const rule of buckets.covered) {
-        const gate = GATED_RULES.get(`sonarjs/${rule.local}`);
-        console.log(
-            `      ${rule.key} sonarjs/${rule.local}${gate === undefined ? '' : ` (via ${gate})`}`,
-        );
+        const name = rule.local.includes('/') ? rule.local : `sonarjs/${rule.local}`;
+        const gate = GATED_RULES.get(name);
+        console.log(`      ${rule.key} ${name}${gate === undefined ? '' : ` (via ${gate})`}`);
     }
     console.log(`  ${buckets.availableOff.length} have a local rule that is off — candidates`);
     console.log(`  ${buckets.noLocal.length} have no local implementation at all\n`);
     console.log('Candidates (a local rule exists and is not on):');
     for (const rule of buckets.availableOff) {
-        console.log(`  ${rule.key.padEnd(20)} sonarjs/${rule.local.padEnd(34)} ${rule.name}`);
+        const name = rule.local.includes('/') ? rule.local : `sonarjs/${rule.local}`;
+        console.log(`  ${rule.key.padEnd(20)} ${name.padEnd(43)} ${rule.name}`);
+    }
+    console.log('\nNo local implementation at all (nothing here can report these):');
+    for (const rule of buckets.noLocal) {
+        console.log(`  ${rule.key.padEnd(20)} ${rule.name}`);
     }
     console.log(
-        '\nBefore switching any of these on, check whether biome or typescript-eslint\n' +
+        '\nBefore switching a candidate on, check whether biome or typescript-eslint\n' +
             'already covers it under another name — this script cannot see that, because\n' +
-            'those rules publish no RSPEC id.',
+            'those rules publish no RSPEC id.\n' +
+            'The last list is where a finding arrives with no warning: a rule there is\n' +
+            'reported by SonarCloud and by nothing that runs before the push. When one of\n' +
+            'them fires, find the plugin that implements it, verify the local rule reports\n' +
+            'the same defect on a deliberate violation, and add the pair to FOREIGN_RULES.',
     );
     return 0;
 }

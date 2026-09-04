@@ -278,6 +278,24 @@ const corpus = [
     // variant; the runtime path historically lowered it as a `css:` variant.
     { css: { color: 'red', backgroundColor: 'blue' } },
     { css: { '--brand': 'navy' } },
+    // A custom property written as a KEY (not inside `css`) is its own
+    // declaration form: the TypeScript lowering emits the Tailwind
+    // arbitrary-property class `[--name:value]`, under any variant. Covered
+    // here because the corpus only ever exercised the `css:` spelling, which
+    // let the native lowering concatenate `--name-value` instead — a class
+    // Tailwind generates no CSS for, emitted without a diagnostic.
+    { '--v-bg-alpha': '0.18' },
+    { '--v-gap': 4 },
+    { bg: 'blue-500', dark: { '--v-bg-alpha': '0.18' } },
+    { hover: { '--v-x': '1' } },
+    { '--v-border': '1px solid red' },
+    { css: { '--v-neg': -4, zIndex: -1 } },
+    // The boolean rule, the case rule and the bracket rule of a declaration
+    // value, each of which the native lowering once answered differently.
+    { '--v-off': false, bg: 'red-500', hover: { '--v-off': false } },
+    { '--v-on': true, css: { '--v-on': true, '--v-off': false } },
+    { '--MyToken': 1, css: { '--MyToken': 1, fontSize: '1rem' } },
+    { '--v-cols': '[a]', css: { '--v-rows': '[a] 1fr [b]' } },
     // order-locking multi-prop + nested handlers combined with sibling props
     { p: 4, m: 2, bg: 'red-500', display: 'flex', items: 'center' },
     { bg: { color: 'blue-500', op: 30 }, p: 4 },

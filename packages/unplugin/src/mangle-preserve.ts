@@ -8,7 +8,10 @@
  * a class from being renamed. `manglePreserve` is that other switch.
  *
  * Entries are strings. An exact name keeps one class; a name whose LAST
- * character is `*` keeps every class that starts with the rest. A `*` anywhere
+ * character is `*` keeps every class that starts with the rest. Either form
+ * reads a class under its variants too — `bg-tag-*` keeps `dark:bg-tag-blue`,
+ * because the stylesheet that matches the name by text matches it under every
+ * variant. Naming a variant form (`dark:bg-tag-blue`) keeps that form alone. A `*` anywhere
  * else is an ordinary character, because csszyx itself emits `*:p-4`,
  * `**:m-2` and `[&>*]:gap-1` — and no class it emits ends in `*`, so the
  * trailing position is the one place the wildcard is unambiguous. Regular
@@ -40,6 +43,30 @@ export interface ManglePreserveMatcher {
 }
 
 /**
+ * Where the utility part of a class starts after its variant prefixes.
+ *
+ * An entry names a utility, and a stylesheet that matches that name by text
+ * matches it under every variant, so `bg-tag-*` has to keep `dark:bg-tag-blue`
+ * as well as `bg-tag-blue`. The split is the last `:` outside brackets: a
+ * variant may carry a parameter that contains one of its own
+ * (`supports-[display:grid]:`), and that colon is part of the parameter.
+ *
+ * @param className - A csszyx-owned class.
+ * @returns The index after its last variant separator.
+ */
+function utilityStart(className: string): number {
+    let depth = 0;
+    let start = 0;
+    for (let index = 0; index < className.length; index += 1) {
+        const char = className[index];
+        if (char === '[') depth += 1;
+        else if (char === ']') depth = Math.max(0, depth - 1);
+        else if (char === ':' && depth === 0) start = index + 1;
+    }
+    return start;
+}
+
+/**
  * Compile the configured list into a matcher, refusing what would misbehave
  * silently.
  *
@@ -51,8 +78,6 @@ export interface ManglePreserveMatcher {
 export function compileManglePreserve(
     entries: readonly string[] | undefined,
 ): ManglePreserveMatcher {
-    const exact = new Set<string>();
-    const prefixes: string[] = [];
     const list = entries ?? [];
     list.forEach((entry, index) => {
         if (typeof entry !== 'string' || entry.length === 0) {
@@ -68,23 +93,54 @@ export function compileManglePreserve(
                     '(`bg-tag-*`) or set `production.mangle: false`.',
             );
         }
-        if (entry.endsWith('*')) prefixes.push(entry.slice(0, -1));
-        else exact.add(entry);
     });
-    const test = (className: string): boolean =>
-        exact.has(className) || prefixes.some(prefix => className.startsWith(prefix));
+    const compiled = list.map(value => ({
+        value,
+        prefix: value.endsWith('*') ? value.slice(0, -1) : undefined,
+    }));
+    /**
+     * Whether one entry keeps a class — the single rule both members ask.
+     *
+     * @param entry - One compiled configured entry.
+     * @param className - The complete class name.
+     * @param utilityStartIndex - Where the utility starts after variant prefixes.
+     * @returns True when the entry names or prefixes the class.
+     */
+    const keeps = (
+        entry: (typeof compiled)[number],
+        className: string,
+        utilityStartIndex: number,
+    ): boolean =>
+        entry.prefix === undefined
+            ? className === entry.value ||
+              (className.length - utilityStartIndex === entry.value.length &&
+                  className.startsWith(entry.value, utilityStartIndex))
+            : className.startsWith(entry.prefix) ||
+              className.startsWith(entry.prefix, utilityStartIndex);
+    const test = (className: string): boolean => {
+        if (list.length === 0) return false;
+        const start = utilityStart(className);
+        return compiled.some(entry => keeps(entry, className, start));
+    };
     return {
         entries: list,
         test,
         unmatched(census) {
-            const names = [...census];
-            return list.filter(entry => {
-                if (entry.endsWith('*')) {
-                    const prefix = entry.slice(0, -1);
-                    return !names.some(name => name.startsWith(prefix));
+            if (list.length === 0) return [];
+            const matched = list.map(() => false);
+            let remaining = list.length;
+            for (const className of census) {
+                const start = utilityStart(className);
+                for (let index = 0; index < list.length; index += 1) {
+                    if (matched[index] || !keeps(compiled[index], className, start)) continue;
+                    matched[index] = true;
+                    remaining -= 1;
                 }
-                return !names.includes(entry);
-            });
+                if (remaining === 0) break;
+            }
+            // Asked of the same rule as `test`, or an entry whose only form in
+            // this build carries a variant reads as a typo.
+            return list.filter((_, index) => !matched[index]);
         },
     };
 }

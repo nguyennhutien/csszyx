@@ -118,6 +118,13 @@ pub(super) fn dynamic_css_var_class(prop: &super::DynamicCssVarIr) -> String {
         .variant_prefix
         .as_ref()
         .map_or_else(String::new, |prefix| format!("{prefix}:"));
+    // A custom property written as a key is a declaration, not a utility, so
+    // its runtime form is the same `[--name:value]` class as its static form
+    // with the hoisted variable as the value. The generic shape below gave
+    // `--ring-(--_sz---ring)`, which names no Tailwind utility.
+    if prop.key.starts_with("--") {
+        return format!("{variant}[{}:var({})]", prop.key, prop.var_name);
+    }
     format!("{variant}{}-({})", prop.class_prefix, prop.var_name)
 }
 
@@ -762,18 +769,48 @@ fn lower_object_into(object: &StaticSzObject, prefix: &str, classes: &mut Vec<St
     }
 }
 
+/// The value of a CSS declaration, as an arbitrary-value class carries it.
+///
+/// Read by the two spellings that lower to `[property:value]` — the `css:`
+/// sub-prop and a custom property written as a key — so one object answers the
+/// same whichever the author chose.
+///
+/// Numbers keep their sign, unlike the ones in a utility class: a utility
+/// carries its minus in the class prefix (`-mt-4`), and a declaration inside
+/// brackets has no prefix to carry it, so an absolute value turned
+/// `{ css: { zIndex: -1 } }` into `[z-index:1]` — the opposite rule, with
+/// nothing said. A boolean or an object is not a declaration value and has
+/// no class, which is the TypeScript rule for the `css:` spelling.
+fn declaration_value(value: &StaticSzValue) -> Option<String> {
+    match value {
+        StaticSzValue::String(text) => Some(text.clone()),
+        StaticSzValue::Number(number) => Some(format_number_literal(*number)),
+        StaticSzValue::Boolean(_) | StaticSzValue::Object(_) => None,
+    }
+}
+
+/// The right-hand side of `[prop:value]`, with the spaces a class cannot carry
+/// turned into underscores. Unlike a utility value it keeps its outer
+/// brackets: nobody pre-wraps a declaration value, and `[a] 1fr [b]` is a grid
+/// line name Tailwind reads as written.
+fn normalize_declaration_value(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join("_")
+}
+
 fn lower_css_properties(object: &StaticSzObject, prefix: &str, classes: &mut Vec<String>) {
     for property in &object.properties {
-        let value = match &property.value {
-            StaticSzValue::String(value) => value.clone(),
-            StaticSzValue::Number(value) => format_abs_number(*value),
-            StaticSzValue::Boolean(value) => value.to_string(),
-            StaticSzValue::Object(_) => continue,
+        let Some(value) = declaration_value(&property.value) else {
+            continue;
+        };
+        // A custom property is case-sensitive; a CSS property name is not.
+        let key = if property.key.starts_with("--") {
+            property.key.clone()
+        } else {
+            kebab_case(&property.key)
         };
         classes.push(format!(
-            "{prefix}[{}:{}]",
-            kebab_case(&property.key),
-            normalize_arbitrary_value(&value)
+            "{prefix}[{key}:{}]",
+            normalize_declaration_value(&value)
         ));
     }
 }
@@ -1042,6 +1079,26 @@ fn object_children(object: &StaticSzObject) -> impl Iterator<Item = (&str, &Stat
 }
 
 fn format_static_class(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
+    // A custom property written as a KEY is a declaration, not a utility:
+    // `{ '--brand': 'navy' }` lowers to the arbitrary-property class
+    // `[--brand:navy]`, the same class the `css:` spelling produces. Without
+    // this the generic fallback concatenated `--brand-navy`, which Tailwind
+    // generates no CSS for and which shipped with no diagnostic. It sits ahead
+    // of the important split because a trailing bang belongs to the declaration
+    // value here, which is where the TypeScript lowering leaves it.
+    if key.starts_with("--") {
+        // Booleans follow the rule of every key: `false` switches the
+        // property off, `true` coerces like any scalar.
+        let text = match value {
+            StaticSzValue::Boolean(true) => "true".to_string(),
+            StaticSzValue::Boolean(false) => return None,
+            other => declaration_value(other)?,
+        };
+        return Some(format!(
+            "{prefix}[{key}:{}]",
+            normalize_declaration_value(&text)
+        ));
+    }
     // The important modifier belongs to the CLASS, not to the value. Every
     // decision below reads the value itself — whether it needs brackets,
     // whether it is a fraction, where a leading minus goes — and a trailing
@@ -2527,6 +2584,111 @@ mod tests {
     }
 
     #[test]
+    fn lowers_a_custom_property_key_as_an_arbitrary_declaration() {
+        // Both spellings of one declaration produce one class.
+        assert_eq!(
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![property("--brand", StaticSzValue::String("navy".into()))],
+            }),
+            vec!["[--brand:navy]"]
+        );
+        assert_eq!(
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![property(
+                    "css",
+                    object(vec![property(
+                        "--brand",
+                        StaticSzValue::String("navy".into())
+                    )]),
+                )],
+            }),
+            vec!["[--brand:navy]"]
+        );
+        // A space would split the class attribute, so the value underscores.
+        assert_eq!(
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![property(
+                    "--edge",
+                    StaticSzValue::String("1px solid red".into()),
+                )],
+            }),
+            vec!["[--edge:1px_solid_red]"]
+        );
+        // A bracketed declaration has no class prefix to carry a minus, so the
+        // sign stays in the value on both the key and the `css:` spelling.
+        assert_eq!(
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![
+                    property("--depth", StaticSzValue::Number(-4.0)),
+                    property(
+                        "css",
+                        object(vec![property("zIndex", StaticSzValue::Number(-1.0))]),
+                    ),
+                ],
+            }),
+            vec!["[--depth:-4]", "[z-index:-1]"]
+        );
+    }
+
+    #[test]
+    fn a_custom_property_follows_the_boolean_rule_of_every_key() {
+        // `false` switches a property off and `true` coerces like any scalar
+        // on the key spelling; the `css:` spelling takes strings and numbers
+        // only. Both are what the TypeScript lowering does, and the native
+        // branch once emitted `[--x:false]` for the first case.
+        assert_eq!(
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![
+                    property("--off", StaticSzValue::Boolean(false)),
+                    property("bg", StaticSzValue::String("red".into())),
+                    property(
+                        "hover",
+                        object(vec![property("--off", StaticSzValue::Boolean(false))]),
+                    ),
+                    property("--on", StaticSzValue::Boolean(true)),
+                    property(
+                        "css",
+                        object(vec![
+                            property("--on", StaticSzValue::Boolean(true)),
+                            property("--off", StaticSzValue::Boolean(false)),
+                        ]),
+                    ),
+                ],
+            }),
+            vec!["bg-red", "[--on:true]"]
+        );
+    }
+
+    #[test]
+    fn a_custom_property_keeps_its_case_and_its_brackets() {
+        // Custom properties are case-sensitive, unlike CSS property names,
+        // and `[a]` in a declaration value is a grid line name rather than a
+        // user pre-wrapping an arbitrary value.
+        assert_eq!(
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![
+                    property("--MyToken", StaticSzValue::Number(1.0)),
+                    property(
+                        "css",
+                        object(vec![
+                            property("--MyToken", StaticSzValue::Number(1.0)),
+                            property("fontSize", StaticSzValue::String("1rem".into())),
+                            property("--rows", StaticSzValue::String("[a] 1fr [b]".into())),
+                        ]),
+                    ),
+                    property("--cols", StaticSzValue::String("[a]".into())),
+                ],
+            }),
+            vec![
+                "[--MyToken:1]",
+                "[--MyToken:1]",
+                "[font-size:1rem]",
+                "[--rows:[a]_1fr_[b]]",
+                "[--cols:[a]]",
+            ]
+        );
+    }
+    #[test]
     fn tailwind_build_function_scanner_handles_nested_and_malformed_input() {
         assert!(is_tailwind_build_function("--spacing(4)"));
         assert!(is_tailwind_build_function("--spacing(var(--step, \"(\"))"));
@@ -3134,6 +3296,8 @@ mod tests {
                     "css",
                     object(vec![
                         property("zIndex", StaticSzValue::Number(2.0)),
+                        // A boolean is not a declaration value under `css:`,
+                        // the same as the TypeScript lowering.
                         property("inert", StaticSzValue::Boolean(true)),
                         property("nested", object(vec![])),
                     ]),
@@ -3168,7 +3332,6 @@ mod tests {
             lower_static_sz_object(&object),
             [
                 "[z-index:2]",
-                "[inert:true]",
                 "has-[:focus]:p-1",
                 "has-[:hover]:p-2",
                 "perspective-origin-top-right",

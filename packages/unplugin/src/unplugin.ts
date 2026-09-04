@@ -813,50 +813,23 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
     if (collisions.length === 0 && orphans.length === 0 && selectorMatches.length === 0) {
         return null;
     }
+    const broken = selectorMatches.filter(hazard => hazard.renamed.length > 0);
+    const newlyMatched = selectorMatches.filter(hazard => hazard.matchedTokens.length > 0);
+    // One paragraph per hazard kind, each closing with the fix for that kind.
+    // Listing every finding and then every fix let a reader attach the wrong
+    // one: with an orphan and a selector both reported, the orphan's remedy
+    // landed after the selector list and read as a claim about its classes.
     const parts: string[] = ['[csszyx] production mangle found hybrid hazards:'];
     if (collisions.length > 0) {
         const sample = collisions.slice(0, 8).join(', ');
-        parts.push(
-            ` ${collisions.length} mangled token(s) collide with class names in non-csszyx CSS ` +
-                `(e.g. ${sample}) — those tokens will cross-contaminate external ".${collisions[0]}" ` +
-                'elements.',
-        );
-    }
-    if (orphans.length > 0) {
-        const sample = orphans.slice(0, 8).join(', ');
-        parts.push(
-            ` ${orphans.length} mangled class(es) have no emitted CSS rule (e.g. ${sample}) — ` +
-                'those elements lose styling.',
-        );
-    }
-    const broken = selectorMatches.filter(hazard => hazard.renamed.length > 0);
-    const newlyMatched = selectorMatches.filter(hazard => hazard.matchedTokens.length > 0);
-    if (broken.length > 0) {
-        const sample = broken
-            .slice(0, 3)
-            .map(hazard => `${hazard.selector} → ${hazard.renamed.slice(0, 4).join(', ')}`)
-            .join('; ');
-        parts.push(
-            ` ${broken.length} attribute selector(s) match class names by text (e.g. ${sample}) — ` +
-                'those rules stop matching once the classes are renamed, so the elements lose those styles.',
-        );
-    }
-    if (newlyMatched.length > 0) {
-        const sample = newlyMatched
-            .slice(0, 3)
-            .map(hazard => `${hazard.selector} → ${hazard.matchedTokens.slice(0, 4).join(', ')}`)
-            .join('; ');
-        parts.push(
-            ` ${newlyMatched.length} attribute selector(s) would start matching mangled tokens ` +
-                `instead (e.g. ${sample}).`,
-        );
-    }
-    if (collisions.length > 0) {
         // Guide the prod hotfix first, then the two real fixes. Renaming is
         // preferred because single-letter / common class names collide with
         // mangle tokens AND risk specificity clashes with other libraries; an
         // exclude is the escape hatch only for names in code you cannot change.
         parts.push(
+            ` ${collisions.length} mangled token(s) collide with class names in non-csszyx CSS ` +
+                `(e.g. ${sample}) — those tokens will cross-contaminate external ".${collisions[0]}" ` +
+                'elements.',
             ' HOTFIX: pass `production: { mangle: false }` to the csszyx plugin to ship now.' +
                 ' THEN fix it: if these short names are in your OWN CSS, rename them to' +
                 ' something specific (e.g. `.x` → `.resize-handle-x`) — short/common names' +
@@ -865,8 +838,12 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
                 ' `production.mangleExclude` instead. Run `npx @csszyx/cli scan-collisions`' +
                 ' to find every offending name.',
         );
-    } else if (orphans.length > 0) {
+    }
+    if (orphans.length > 0) {
+        const sample = orphans.slice(0, 8).join(', ');
         parts.push(
+            ` ${orphans.length} mangled class(es) have no emitted CSS rule (e.g. ${sample}) — ` +
+                'those elements lose styling.',
             ' Those classes are csszyx-owned but no CSS was emitted for them' +
                 ' (e.g. a separate Tailwind plugin owns the utility CSS, or the class is not' +
                 ' a real utility). Ensure that CSS is generated, or pass' +
@@ -875,12 +852,35 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
         );
     }
     if (broken.length > 0) {
+        const sample = broken
+            .slice(0, 3)
+            .map(hazard => `${hazard.selector} → ${hazard.renamed.slice(0, 4).join(', ')}`)
+            .join('; ');
         const entries = [...new Set(broken.flatMap(preserveEntriesFor))].join(', ');
         parts.push(
+            ` ${broken.length} attribute selector(s) match class names by text (e.g. ${sample}) — ` +
+                'those rules stop matching once the classes are renamed, so the elements lose those styles.',
             ` Keep those classes readable with production.manglePreserve: [${entries}] ` +
                 '(paste-ready), or key the rule off a data attribute, which mangling never touches. ' +
                 'production.mangleExclude cannot help here: it reserves token names and does not ' +
                 'keep a class from being renamed.',
+        );
+    }
+    if (newlyMatched.length > 0) {
+        const sample = newlyMatched
+            .slice(0, 3)
+            .map(hazard => `${hazard.selector} → ${hazard.matchedTokens.slice(0, 4).join(', ')}`)
+            .join('; ');
+        const tokens = [...new Set(newlyMatched.flatMap(hazard => hazard.matchedTokens))]
+            .map(quoteForConfig)
+            .join(', ');
+        parts.push(
+            ` ${newlyMatched.length} attribute selector(s) would start matching mangled tokens ` +
+                `instead (e.g. ${sample}).`,
+            ` Reserve those token names with production.mangleExclude: [${tokens}] (paste-ready) ` +
+                'so no class is renamed to one of them, or key the rule off a data attribute, ' +
+                'which mangling never touches; a prefix or substring selector goes on matching ' +
+                'other tokens, so the data attribute is the durable fix.',
         );
     }
     return parts.join('');
@@ -1145,6 +1145,29 @@ export function shouldEmitWarning(
  */
 export function shouldEmitMissingCssFallback(quiet: QuietMode, message: string): boolean {
     return resolveQuietMode(quiet) !== 'all' && szFallbackConsequenceOf(message) === 'missing-css';
+}
+
+/**
+ * Whether this run holds the advisory fallback list back and counts it instead.
+ *
+ * A build prints the count once the bundle closes, so holding the list back
+ * still leaves a reader a number to act on. A dev server never closes a bundle:
+ * anything held back there is held back for good, which is why serving lists
+ * its fallbacks whatever the environment says. `NODE_ENV` alone was the whole
+ * test, and a monorepo script that exports it while running a dev server turned
+ * every advisory into a number nothing would print.
+ *
+ * @param quiet - Resolved quiet mode.
+ * @param serving - Whether this is a dev server rather than a build.
+ * @param nodeEnv - `process.env.NODE_ENV` as the process sees it.
+ * @returns True when the list is withheld in favour of a count.
+ */
+export function shouldHoldAdvisories(
+    quiet: QuietMode,
+    serving: boolean,
+    nodeEnv: string | undefined,
+): boolean {
+    return quiet !== 'off' || (!serving && nodeEnv === 'production');
 }
 
 /**
@@ -2929,6 +2952,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // (configResolved), so dev always uses readable class names that match the
     // dev CSS. `let` because the command is only known at configResolved.
     let manglingEnabled = options.production?.mangle === true;
+    // A dev server has no end, so anything it holds back is held back for
+    // good: `closeBundle` is where the count of unlisted advisories prints,
+    // and a server never reaches it. Knowing we are serving is what keeps the
+    // advisory list from being suppressed with nothing said in its place.
+    let serving = false;
     // Cross-module szv registry: filled by the prescan, refreshed per edit by
     // `refreshSzvRegistryEntry`, resolved per file. Watch lanes used to switch
     // this off because a one-shot prescan left an edited factory serving its
@@ -5318,7 +5346,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         const advisories = result.diagnostics.filter(isAdvisoryDiagnostic);
         if (advisories.length === 0) return;
-        if (quiet !== 'off' || process.env.NODE_ENV === 'production') {
+        if (shouldHoldAdvisories(quiet, serving, process.env.NODE_ENV)) {
             // Held back, but counted. These are advisory by design — the
             // runtime path works and the classes are collected — so a
             // production build is right not to list them. It is not right to
@@ -6074,6 +6102,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // not match the un-mangled dev CSS. See `manglingEnabled` above.
                     if (config.command === 'serve') {
                         manglingEnabled = false;
+                        serving = true;
                     }
                     // `vite build --watch` is out of scope for mangling: the map
                     // is settled from a prescan that runs once per process, and a

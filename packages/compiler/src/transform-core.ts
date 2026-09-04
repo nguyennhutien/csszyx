@@ -1469,7 +1469,20 @@ export function normalizeArbitraryValue(value: string): string {
     // Strip user-provided outer brackets — sz auto-wraps arbitrary values;
     // users must never pre-wrap (e.g. '[100px]' → '100px', then re-wrapped as needed).
     const stripped = value.startsWith('[') && value.endsWith(']') ? value.slice(1, -1) : value;
-    return stripped.trim().replace(/\s+/g, '_');
+    return normalizeDeclarationValue(stripped);
+}
+
+/**
+ * Normalizes a declaration value — the right-hand side of `[prop:value]`.
+ *
+ * Only the space is rewritten, because a class cannot carry one. The outer
+ * brackets a utility value sheds are kept: nobody pre-wraps a declaration
+ * value, and `[a] 1fr [b]` is a grid line name Tailwind reads as written.
+ * @param value - the declaration value as authored
+ * @returns the value with whitespace runs replaced by underscores
+ */
+function normalizeDeclarationValue(value: string): string {
+    return value.trim().replace(/\s+/g, '_');
 }
 
 // Properties that support native fraction values (e.g. w-1/2) without brackets
@@ -3836,7 +3849,7 @@ function appendArbitraryCss(
     for (const [property, value] of Object.entries(declarations)) {
         if (typeof value !== 'string' && typeof value !== 'number') continue;
         classes.push(
-            `${prefix}[${camelToKebab(property)}:${normalizeArbitraryValue(String(value))}]`,
+            `${prefix}[${camelToKebab(property)}:${normalizeDeclarationValue(String(value))}]`,
         );
     }
 }
@@ -3941,7 +3954,10 @@ function collectUnresolvedDirectProperty(
     classes: string[],
 ): boolean {
     if (rawKey.startsWith('--')) {
-        classes.push(`${prefix}[${rawKey}:${value}]`);
+        // Same normalisation the `css:` spelling applies. A class cannot carry
+        // a space: raw, `1px solid red` would split the class attribute into
+        // three names Tailwind generates nothing for.
+        classes.push(`${prefix}[${rawKey}:${normalizeDeclarationValue(String(value))}]`);
         return true;
     }
     if (rawKey !== 'container') return false;

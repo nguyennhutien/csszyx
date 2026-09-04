@@ -8,23 +8,31 @@
  */
 
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// `tailwindcss` is pinned to v3 in this package's package.json (`^3.4.1`)
-// on purpose — these two imports are v3-only API:
-//   - `Config` type
-//   - `tailwindcss/resolveConfig.js` entry
+// `tailwindcss` v3 is an OPTIONAL PEER of this package, and only this
+// scanner reads it — through `resolveTailwindV3`, never a static import.
+// The two things it needs are v3-only API:
+//   - `Config` type (type-only, erased at build time)
+//   - `tailwindcss/resolveConfig.js` entry (loaded when the scan runs)
 // Tailwind v4 dropped JS config (`tailwind.config.{ts,js,cjs,mjs}`) in
 // favour of CSS-first `@theme {…}` blocks, and the `resolveConfig` helper
 // no longer exists. This scanner exists specifically to read v3-style
-// configs from existing user projects during `csszyx migrate`, so the v3
-// dep is the contract — do NOT bump to v4 without rewriting the scanner.
-// New v4 projects bootstrap through `csszyx init`, which writes
-// `@import "tailwindcss"` and never touches this scanner.
+// configs from existing user projects, so v3 is what the scanner can read.
+// The peer RANGE admits v4 on purpose: npm refuses to install a package
+// whose peer range excludes what the project already has, even an optional
+// peer (`ERESOLVE`, measured on npm 11 with a v4 project), and every csszyx
+// project has v4. The v4 answer therefore lives in `resolveTailwindV3`, not
+// in the range. New v4 projects bootstrap through `csszyx init`, which
+// writes `@import "tailwindcss"` and never touches this scanner.
+//
+// A static import here would load Tailwind when the chunk loads, before any
+// guard could run, and the 12 MB it pulls in would land in every install of
+// the CLI for the one command that uses it.
 import { sortStrings } from '@csszyx/compiler';
 import type { Config } from 'tailwindcss';
-import resolveConfig from 'tailwindcss/resolveConfig.js';
+import { resolveTailwindV3, tailwindLoaderFor } from './tailwind-availability.js';
 
 /**
  * Resolved Tailwind theme structure.
@@ -115,8 +123,14 @@ export async function scanTailwindConfig(configPath: string): Promise<ScanResult
         );
     }
 
-    // Resolve the full config with Tailwind's defaults
-    const resolvedConfig = resolveConfig(userConfig);
+    // Resolve the full config with Tailwind's defaults. Loaded here, not at
+    // module top: the command has already said which of the three install
+    // states it is in before this runs, and a library caller gets the same
+    // sentence thrown rather than a bare resolver error.
+    // The config's own directory is the project, and its Tailwind is the one
+    // that resolves this config.
+    const { resolveConfig } = await resolveTailwindV3(tailwindLoaderFor(dirname(absolutePath)));
+    const resolvedConfig = resolveConfig(userConfig) as Config;
     const theme = resolvedConfig.theme as unknown as ResolvedTheme;
 
     // Check for customizations

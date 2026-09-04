@@ -155,6 +155,13 @@ describe('the hazard message', () => {
         );
         expect(message).toContain('would start matching mangled tokens');
         expect(message).toContain('[class^="y"] → y4, y5');
+        // The remedy for a token the selector would catch is to keep the
+        // allocator from producing it — the option the paragraph above
+        // says cannot help with a renamed class is exactly the one here.
+        expect(message.indexOf("mangleExclude: ['y4', 'y5']")).toBeGreaterThan(
+            message.indexOf('would start matching mangled tokens'),
+        );
+        expect(message).toContain('data attribute');
         expect(message).not.toContain('manglePreserve');
     });
 
@@ -165,5 +172,36 @@ describe('the hazard message', () => {
         expect(message).toContain('collide');
         expect(message).toContain('no emitted CSS rule');
         expect(message).not.toContain('manglePreserve');
+    });
+
+    // Every hazard kind carries its own fix. Listing all the findings and then
+    // all the fixes let a reader attach the wrong one: the orphan remedy
+    // ("those classes are csszyx-owned") landed straight after the selector
+    // list, where it reads as a claim about the selector's classes.
+    it('keeps each remedy with the finding it answers', () => {
+        const message =
+            mangleHybridHazardMessage(
+                collectMangleHybridHazards(MAP, NONE, new Set(['y4']), [
+                    { operator: '*=', value: 'bg-tag', insensitive: false },
+                ]),
+            ) ?? '';
+        const orphanFinding = message.indexOf('no emitted CSS rule');
+        const orphanRemedy = message.indexOf('csszyx-owned');
+        const selectorFinding = message.indexOf('attribute selector(s) match class names');
+        const selectorRemedy = message.indexOf('manglePreserve');
+        expect(orphanFinding).toBeGreaterThanOrEqual(0);
+        expect(orphanRemedy).toBeGreaterThan(orphanFinding);
+        expect(selectorFinding).toBeGreaterThan(orphanRemedy);
+        expect(selectorRemedy).toBeGreaterThan(selectorFinding);
+    });
+
+    // An orphan reported next to a collision used to lose its fix entirely:
+    // the collision branch answered both, and only the collision was addressed.
+    it('answers an orphan even when a collision is reported too', () => {
+        const message =
+            mangleHybridHazardMessage(
+                collectMangleHybridHazards(MAP, new Set(['p-4']), new Set(['y4'])),
+            ) ?? '';
+        expect(message).toContain('csszyx-owned');
     });
 });

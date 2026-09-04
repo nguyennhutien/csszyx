@@ -8,7 +8,11 @@
  * from such a log counted half the real number.
  */
 import { describe, expect, it } from 'vitest';
-import { isAdvisoryDiagnostic, suppressedAdvisoryMessage } from '../src/unplugin.js';
+import {
+    isAdvisoryDiagnostic,
+    shouldHoldAdvisories,
+    suppressedAdvisoryMessage,
+} from '../src/unplugin.js';
 
 describe('isAdvisoryDiagnostic', () => {
     it('holds back an sz-site call fallback', () => {
@@ -48,5 +52,28 @@ describe('suppressedAdvisoryMessage', () => {
         const message = suppressedAdvisoryMessage(3);
         expect(message).toContain('development build');
         expect(message).toContain('the runtime path works');
+    });
+});
+
+describe('shouldHoldAdvisories', () => {
+    it('holds the list in a production build, where a count still prints', () => {
+        expect(shouldHoldAdvisories('off', false, 'production')).toBe(true);
+    });
+
+    it('lists them in a development build', () => {
+        expect(shouldHoldAdvisories('off', false, 'development')).toBe(false);
+        expect(shouldHoldAdvisories('off', false, undefined)).toBe(false);
+    });
+
+    // A dev server has no bundle close, so a held-back list is never counted
+    // anywhere the reader can see it.
+    it('lists them in a dev server whatever the environment says', () => {
+        expect(shouldHoldAdvisories('off', true, 'production')).toBe(false);
+        expect(shouldHoldAdvisories('off', true, 'development')).toBe(false);
+    });
+
+    it('holds them whenever a quiet mode was asked for', () => {
+        expect(shouldHoldAdvisories('all', true, 'development')).toBe(true);
+        expect(shouldHoldAdvisories('nudges', true, 'development')).toBe(true);
     });
 });

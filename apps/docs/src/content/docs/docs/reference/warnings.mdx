@@ -732,7 +732,7 @@ matching, and the paste-ready value is a prefix (`'bg-tag*'`) when every renamed
 class starts with the selector's value, the exact names otherwise. When a selector
 such as `[class^="y"]` in external CSS would begin matching the tokens
 themselves, the clause reads `{n} attribute selector(s) would start matching
-mangled tokens instead (e.g. …).`
+mangled tokens instead (e.g. …).` followed by its own remedy: `Reserve those token names with production.mangleExclude: [{tokens}] (paste-ready) so no class is renamed to one of them, or key the rule off a data attribute, which mangling never touches; a prefix or substring selector goes on matching other tokens, so the data attribute is the durable fix.`
 
 ### A `manglePreserve` entry matched nothing
 
@@ -901,6 +901,30 @@ a line in a diff somebody reviews.
 The class prefixes each theme namespace feeds are derived from the project's own
 Tailwind, not listed — so a colour named `cover` is reported against `bg-cover`,
 a prefix its name gives no hint of.
+
+### `generate-types` and Tailwind v3
+
+`generate-types` reads a v3 `tailwind.config.js` through Tailwind's own `resolveConfig`. Tailwind v3 is an optional peer of `@csszyx/cli` — 12 MB across 37 packages that only this command touches — and no package manager warns when an optional peer is missing, so the command checks before it reads a config — and before it reports that it found none, since a v4 project has none by design — and stops with one of three messages. Each is the whole explanation, printed under a `❌` prefix.
+
+No Tailwind at all:
+
+```text
+generate-types needs Tailwind CSS v3, and this project has none installed. This command turns a v3 JavaScript config into TypeScript declarations, and reading that config is Tailwind's own job — the command calls Tailwind's resolveConfig to do it. With no Tailwind installed there is nothing to call, so it stops here rather than guessing at your theme. Install it next to the config: npm install -D tailwindcss@3 / pnpm add -D tailwindcss@3 / yarn add -D tailwindcss@3. Why it was not installed for you: Tailwind v3 pulls in 12 MB across 37 packages, and generate-types is the only csszyx command that touches it. Shipping it as a hard dependency would put those 12 MB into every install of @csszyx/cli — including a CI runner that only ever runs csszyx check. It is declared as an optional peer instead, so it arrives when you ask for this command and not before. If your project is on Tailwind v4 there is no tailwind.config.js for this command to read: v4 moved the theme into CSS (@theme { … }). Do not install v3 to get past this message — you do not need generate-types at all.
+```
+
+Tailwind is installed, but it is v4 (or any major other than 3):
+
+```text
+generate-types needs Tailwind CSS v3, and this project has {version}. Nothing is broken. This command exists to read a v3 JavaScript config (tailwind.config.js) out of an older project, and Tailwind v4 removed both that config format and the resolveConfig helper the command calls. There is no version of generate-types that works against a v4 install. On v4 the theme lives in CSS and needs no generated declarations: @import "tailwindcss"; @theme { --color-brand: oklch(0.7 0.15 250); }. If you are part-way through migrating and still have a v3 tailwind.config.js you want typed, run the command in an environment that has v3 rather than downgrading this project: npx -p tailwindcss@3 -p @csszyx/cli csszyx generate-types --config ./tailwind.config.js. Why csszyx did not install v3 for you: it is 12 MB across 37 packages for one command, so it is an optional peer rather than a dependency.
+```
+
+v3 is installed and its entry did not load — a patched copy, a blocked `exports` map, a damaged file:
+
+```text
+generate-types found Tailwind CSS {version} but could not load its resolveConfig entry: {reason}. The version is right, so this is not a missing install — the package is there and the entry point it advertises did not load. A reinstall usually clears it: npm install --force tailwindcss@3 / pnpm add -D tailwindcss@3. If it persists, the config cannot be read and generate-types has nothing to generate from. Open an issue with the version above and this line.
+```
+
+The same three sentences are thrown as an `Error` from `scanTailwindConfig` when it is called as a library, so a host such as the MCP server shows the explanation rather than a bare resolver error. `csszyx doctor` reports the state under `🧰 Optional tooling` as a line that never counts as an issue: `generate-types available (tailwindcss {version})`, `generate-types unavailable — tailwindcss v3 is an optional peer and is not installed. Only needed to read a v3 tailwind.config.js.`, `generate-types unavailable — tailwindcss {version} has no JavaScript config to read. Not needed on v4.`, or — as a warning, since a reinstall is due — `generate-types unavailable — tailwindcss {version} is installed but its resolveConfig entry did not load: {reason}. Reinstall it: npm install --force tailwindcss@3`.
 
 ### What `check` reports
 
