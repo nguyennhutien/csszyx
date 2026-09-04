@@ -155,6 +155,13 @@ describe('the hazard message', () => {
         );
         expect(message).toContain('would start matching mangled tokens');
         expect(message).toContain('[class^="y"] → y4, y5');
+        // The remedy for a token the selector would catch is to keep the
+        // allocator from producing it — the option the paragraph above
+        // says cannot help with a renamed class is exactly the one here.
+        expect(message.indexOf("mangleExclude: ['y4', 'y5']")).toBeGreaterThan(
+            message.indexOf('would start matching mangled tokens'),
+        );
+        expect(message).toContain('data attribute');
         expect(message).not.toContain('manglePreserve');
     });
 

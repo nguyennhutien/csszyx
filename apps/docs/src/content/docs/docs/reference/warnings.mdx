@@ -732,7 +732,7 @@ matching, and the paste-ready value is a prefix (`'bg-tag*'`) when every renamed
 class starts with the selector's value, the exact names otherwise. When a selector
 such as `[class^="y"]` in external CSS would begin matching the tokens
 themselves, the clause reads `{n} attribute selector(s) would start matching
-mangled tokens instead (e.g. …).`
+mangled tokens instead (e.g. …).` followed by its own remedy: `Reserve those token names with production.mangleExclude: [{tokens}] (paste-ready) so no class is renamed to one of them, or key the rule off a data attribute, which mangling never touches; a prefix or substring selector goes on matching other tokens, so the data attribute is the durable fix.`
 
 ### A `manglePreserve` entry matched nothing
 

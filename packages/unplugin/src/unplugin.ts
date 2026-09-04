@@ -881,6 +881,15 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
             ` ${newlyMatched.length} attribute selector(s) would start matching mangled tokens ` +
                 `instead (e.g. ${sample}).`,
         );
+        const tokens = [...new Set(newlyMatched.flatMap(hazard => hazard.matchedTokens))]
+            .map(quoteForConfig)
+            .join(', ');
+        parts.push(
+            ` Reserve those token names with production.mangleExclude: [${tokens}] (paste-ready) ` +
+                'so no class is renamed to one of them, or key the rule off a data attribute, ' +
+                'which mangling never touches; a prefix or substring selector goes on matching ' +
+                'other tokens, so the data attribute is the durable fix.',
+        );
     }
     return parts.join('');
 }
