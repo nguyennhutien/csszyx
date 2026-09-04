@@ -85,6 +85,48 @@ describe('bucketing', () => {
         assert.equal(noLocal[0].local, null);
     });
 
+    // `eslint-plugin-sonarjs` does not implement every rule the profile runs,
+    // and the plugin that does implement one publishes no RSPEC id. Without a
+    // hand-kept map those rules sit in the bucket the report only counts, so
+    // the check that exists reads as a check that is missing.
+    it('counts a rule another plugin covers as covered, and names that rule', () => {
+        const { covered, noLocal } = bucketRules(
+            sonar,
+            local,
+            new Set(['unicorn/prefer-single-call']),
+            new Map([['S9999', 'unicorn/prefer-single-call']]),
+        );
+
+        assert.deepEqual(
+            covered.map(rule => rule.key),
+            ['typescript:S9999'],
+        );
+        assert.equal(
+            covered.find(rule => rule.key === 'typescript:S9999').local,
+            'unicorn/prefer-single-call',
+        );
+        assert.deepEqual(
+            noLocal.map(rule => rule.key),
+            [],
+        );
+    });
+
+    // A mapped rule that is switched off is a candidate like any other, not a
+    // claim that the ground is covered.
+    it('files a mapped rule that is off under candidates', () => {
+        const { availableOff } = bucketRules(
+            sonar,
+            local,
+            new Set(),
+            new Map([['S9999', 'unicorn/prefer-single-call']]),
+        );
+
+        assert.equal(
+            availableOff.find(rule => rule.key === 'typescript:S9999').local,
+            'unicorn/prefer-single-call',
+        );
+    });
+
     it('sorts each bucket so two runs can be compared', () => {
         const shuffled = [sonar[2], sonar[0], sonar[1]];
 

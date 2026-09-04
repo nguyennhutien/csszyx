@@ -14,6 +14,7 @@ import jsdoc from 'eslint-plugin-jsdoc';
 import regexp from 'eslint-plugin-regexp';
 import security from 'eslint-plugin-security';
 import sonarjs from 'eslint-plugin-sonarjs';
+import unicorn from 'eslint-plugin-unicorn';
 
 const repoRoot = import.meta.dirname;
 
@@ -191,7 +192,7 @@ export default [
     {
         files: ['packages/**/*.ts', 'packages/**/*.tsx'],
         ignores: ['packages/e2e/**', '**/generated/**', '**/*.d.ts', '**/*.type-test.ts'],
-        plugins: { sonarjs },
+        plugins: { sonarjs, unicorn },
         rules: {
             // S5843. A pattern past this size stops being checkable against the
             // grammar it encodes, one rule at a time.
@@ -206,7 +207,37 @@ export default [
             // SonarCloud flagged one on a pull request that the local lint let
             // through, and the whole tree has no other instance.
             'sonarjs/no-nested-template-literals': 'error',
+            // S7778, which `eslint-plugin-sonarjs` does not implement at all:
+            // nothing local could report it, and the drift report filed it in
+            // the bucket it used to count without naming. SonarCloud found it
+            // on a pull request whose local run was green.
+            //
+            // Two pushes in a row are one append written twice, and the pair
+            // reads as two separate decisions about the array. The rule named
+            // after the Sonar one, `no-array-push-push`, is a deprecated stub
+            // in this version of the plugin and reports nothing; this is the
+            // one that still runs, with the same message.
+            'unicorn/prefer-single-call': 'error',
         },
+    },
+
+    // S7780, the other Sonar rule with no `eslint-plugin-sonarjs` rule behind
+    // it. `String.raw` says a backslash is a backslash; the escaped spelling
+    // has to be decoded by the reader to see the same thing.
+    //
+    // Production code only, unlike the block above. The two rules are not the
+    // same width: SonarCloud reports no S7780 anywhere in this repository,
+    // while `unicorn/prefer-string-raw` reports 105 — every one of them in a
+    // test file, where Sonar treats the code as test code and does not run the
+    // rule. Widening this to tests would not close a gap, it would adopt a
+    // stricter rule than the server runs and rewrite 105 string literals
+    // nobody was asked to touch. Production code has none today, and is where
+    // the finding that put this rule here arrived.
+    {
+        files: ['packages/*/src/**/*.ts', 'packages/*/src/**/*.tsx'],
+        ignores: ['**/generated/**', '**/*.d.ts', '**/*.type-test.ts'],
+        plugins: { unicorn },
+        rules: { 'unicorn/prefer-string-raw': 'error' },
     },
 
     // S1788, under the name ESLint's core gives it. `eslint-plugin-sonarjs`
