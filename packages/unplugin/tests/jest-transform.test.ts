@@ -84,6 +84,9 @@ describe('reading the build cache', () => {
         // Named to be read BEFORE the good entry: directory order is what
         // decides whether the torn file is reached at all.
         writeFileSync(join(root, '9c', '0torn.json'), '{"filename": "/repo/src/');
+        // And a neighbour that is not an entry at all — the plugin's cache
+        // directory holds more than these files.
+        writeFileSync(join(root, '9c', '0notes.txt'), 'not an entry');
         expect(findCachedTransform(root, FILE, SOURCE)).toBe(CODE);
     });
 

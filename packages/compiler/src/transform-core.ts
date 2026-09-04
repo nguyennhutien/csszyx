@@ -2684,9 +2684,10 @@ function collectBasicSpecialProperty(
         classes.push(`${prefix}${formatWillChange(value)}`);
         return true;
     }
-    if (typeof value === 'string' && isDirectKeywordProperty(key)) {
-        const utility = formatDirectKeywordProperty(key, value);
-        if (utility === null) warnClosedEnumValue(key, value);
+    const legal = typeof value === 'string' ? CLOSED_ENUM_CLASSES[key] : undefined;
+    if (legal !== undefined && typeof value === 'string') {
+        const utility = legal[value];
+        if (utility === undefined) warnClosedEnumValue(key, value, legal);
         else classes.push(`${prefix}${utility}`);
         return true;
     }
@@ -2776,32 +2777,17 @@ const _warnedClosedEnumValues = new Set<string>();
  * becoming a second silent failure.
  * @param key - The closed-enum key.
  * @param value - The value that is not in its set.
+ * @param legal - Its value table, whose keys the message lists.
  */
-function warnClosedEnumValue(key: string, value: string): void {
+function warnClosedEnumValue(key: string, value: string, legal: Record<string, string>): void {
     const token = `${key}:${value}`;
     if (!szDevWarningsEnabled() || _warnedClosedEnumValues.has(token)) return;
     _warnedClosedEnumValues.add(token);
     const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
-    const allowed = Object.keys(CLOSED_ENUM_CLASSES[key] ?? {}).join(', ');
     console.warn(
         `[csszyx] "${key}: ${value}"${at} is not a ${key} value — nothing is ` +
-            `emitted for it. ${key} takes one of: ${allowed}.`,
+            `emitted for it. ${key} takes one of: ${Object.keys(legal).join(', ')}.`,
     );
-}
-
-/** Returns whether a property maps its string value directly to a utility. */
-function isDirectKeywordProperty(key: string): boolean {
-    return key in CLOSED_ENUM_CLASSES;
-}
-
-/**
- * Formats display, position, visibility, and isolation values.
- * @param key - The closed-enum key.
- * @param value - The authored value.
- * @returns The utility to emit, or null when the value is not in the set.
- */
-function formatDirectKeywordProperty(key: string, value: string): string | null {
-    return CLOSED_ENUM_CLASSES[key]?.[value] ?? null;
 }
 
 /** Returns whether a key controls a gradient stop position. */

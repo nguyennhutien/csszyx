@@ -9,7 +9,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { __resetSzWarnDedupForTests, type SzObject, transform } from '../src/transform-core.js';
+import {
+    __resetSzWarnDedupForTests,
+    type SzObject,
+    setSzWarnLocation,
+    transform,
+} from '../src/transform-core.js';
 
 beforeEach(() => {
     // The warn sets are process-wide by design, so an earlier suite probing the
@@ -18,6 +23,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    setSzWarnLocation(undefined);
     vi.restoreAllMocks();
 });
 
@@ -69,6 +75,20 @@ describe('closed-enum values on the runtime lane', () => {
             hover: { display: 'bogus' },
         } as SzObject);
         expect(warnings).toHaveLength(1);
+    });
+});
+
+describe('the location a build engine knew', () => {
+    // A runtime `sz` object has no position to report, so the suffix is absent
+    // there; a build lane that resolved one passes it in, and both messages
+    // have to carry it or `csszyx check` and the browser disagree about where
+    // the mistake is.
+    it.each([
+        ['a closed-enum value', { display: 'bogus' }],
+        ['a csszyx-owned key holding an object', { '--v-x': { p: 4 } }],
+    ])('names the file and line for %s', (_what, sz) => {
+        setSzWarnLocation('src/Card.tsx:12');
+        expect(lower(sz as SzObject).warnings[0]).toContain(' at src/Card.tsx:12');
     });
 });
 
