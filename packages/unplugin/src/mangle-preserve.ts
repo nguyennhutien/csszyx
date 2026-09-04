@@ -95,7 +95,9 @@ export function compileManglePreserve(
         }
     });
     /**
-     * The names an entry may be compared against.
+     * The names an entry may be compared against. Computed once per class:
+     * the split is a scan of the name, and a census runs to tens of
+     * thousands of classes.
      *
      * @param className - A csszyx-owned class.
      * @returns The class as written, plus its utility name when they differ.
@@ -105,25 +107,30 @@ export function compileManglePreserve(
         return base === className ? [className] : [className, base];
     };
     /**
-     * Whether one entry keeps one class — the single rule both members ask.
+     * Whether one entry keeps a class — the single rule both members ask.
      *
      * @param entry - One configured entry.
-     * @param className - A csszyx-owned class.
+     * @param names - The class's candidate names.
      * @returns True when the entry names or prefixes the class.
      */
-    const keeps = (entry: string, className: string): boolean =>
+    const keeps = (entry: string, names: readonly string[]): boolean =>
         entry.endsWith('*')
-            ? candidates(className).some(name => name.startsWith(entry.slice(0, -1)))
-            : candidates(className).includes(entry);
-    const test = (className: string): boolean => list.some(entry => keeps(entry, className));
+            ? names.some(name => name.startsWith(entry.slice(0, -1)))
+            : names.includes(entry);
+    const test = (className: string): boolean => {
+        if (list.length === 0) return false;
+        const names = candidates(className);
+        return list.some(entry => keeps(entry, names));
+    };
     return {
         entries: list,
         test,
         unmatched(census) {
-            const classes = [...census];
+            if (list.length === 0) return [];
+            const forms = [...census].map(candidates);
             // Asked of the same rule as `test`, or an entry whose only form in
             // this build carries a variant reads as a typo.
-            return list.filter(entry => !classes.some(name => keeps(entry, name)));
+            return list.filter(entry => !forms.some(names => keeps(entry, names)));
         },
     };
 }
