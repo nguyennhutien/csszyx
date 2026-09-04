@@ -80,6 +80,10 @@ pnpm test:scripts
 node .github/scripts/validate-release-please-config.mjs
 node --test scripts/validate-commit-message-policy.test.mjs
 node --test scripts/napi-pin.test.mjs
+# The gate itself needs the network and lives in the Security workflow; its
+# classification rule is pure and is checked here, where a wrong one would
+# otherwise only show up during an outage.
+node --test scripts/npm-audit-gate.test.mjs
 
 node --test .github/scripts/publish-workspace.test.mjs
 node --test .github/scripts/detect-pkg-code-changes.test.mjs
