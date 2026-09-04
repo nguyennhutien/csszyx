@@ -118,15 +118,16 @@ npx csszyx audit
 > ([Plugin Config docs](/docs/reference/config)).
 >
 > `tailwindcss@3` is an **optional peer** of `@csszyx/cli` rather than a dependency: it is
-> 12 MB across 44 packages for this one command, and `csszyx check` in a CI runner should
+> 12 MB across 37 packages for this one command, and `csszyx check` in a CI runner should
 > not pay for it. Install it next to the config when you need the command:
 >
 > ```bash
 > npm install -D tailwindcss@3
 > ```
 >
-> Without it the command stops before reading anything and says which of three states the
-> install is in (absent, v4, or a v3 whose entry does not load), each with its own fix.
+> Without it the command stops before reading the config — and before reporting that it
+> found none — and says which of three states the install is in (absent, v4, or a v3 whose
+> entry does not load), each with its own fix.
 
 ```bash
 npx @csszyx/cli generate-types

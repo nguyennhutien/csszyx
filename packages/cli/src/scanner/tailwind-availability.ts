@@ -3,7 +3,7 @@
  *
  * The command turns a v3 JavaScript config into TypeScript declarations by
  * handing the config to Tailwind's own `resolveConfig`. Tailwind v3 is 12 MB
- * across 44 packages and `generate-types` is the only command that touches
+ * across 37 packages and `generate-types` is the only command that touches
  * it, so it is an optional peer of this package rather than a dependency:
  * it arrives when a project asks for this command and not before. No package
  * manager warns about a missing optional peer at install time, so the
@@ -15,15 +15,21 @@
  * install v3 would be telling it to downgrade. A v3 whose entry does not
  * load is a broken install, not a missing one, and a reinstall is the fix.
  *
- * The probe resolves from THIS module, not from the working directory,
- * because peer resolution is what the package manager guarantees for this
- * package. A probe from the working directory would say "present" in a pnpm
- * strict layout where this package still cannot see it.
+ * The probe reads the PROJECT's Tailwind first and the one next to this
+ * module second. `npx @csszyx/cli generate-types` runs the CLI from a tree
+ * that has no Tailwind in it, and the project's own install is the one the
+ * command is asked about; the module-local copy answers when the CLI is
+ * installed in the project and hoisted beside its peer. Both are located
+ * through the resolver and loaded by absolute path, so a pnpm strict layout
+ * — where this module cannot see the project's copy by name — still loads
+ * the right file.
  *
  * @module scanner/tailwind-availability
  */
 
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 /** Tailwind v3's `resolveConfig`: fills a user config with the defaults. */
@@ -63,25 +69,127 @@ export function isModuleNotFound(error: unknown): boolean {
     return code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND';
 }
 
-const require = createRequire(import.meta.url);
+/** One located Tailwind installation. */
+export interface LocatedTailwind {
+    /** Absolute path of the install's `package.json`. */
+    manifest: string;
+    /** The version that manifest declares. */
+    version: string;
+}
 
-/** The loader the command uses: bare specifiers, resolved from this module. */
-const realLoader: TailwindLoader = {
-    async version() {
-        const manifest = require('tailwindcss/package.json') as { version: string };
-        return manifest.version;
-    },
-    async resolveConfig() {
-        // Resolve first, then import by file URL, so both steps answer for
-        // the same package this module can see.
-        // `resolveConfig.js` is CommonJS, so the ESM view always carries the
-        // function as `default`; a shape that does not is reported by the
-        // caller as an entry that did not export a function.
-        const entry = require.resolve('tailwindcss/resolveConfig.js');
-        const module = (await import(pathToFileURL(entry).href)) as { default?: unknown };
-        return module.default;
-    },
-};
+/**
+ * The one install to answer for, from anchors in preference order.
+ *
+ * A v3 anywhere in the list wins, because v3 is the only major the command
+ * can use: a workspace root on v4 must not hide the v3 that the documented
+ * `npx -p tailwindcss@3` invocation puts beside the CLI. With no v3 the first
+ * anchor's install answers, so the diagnostic names the version the project
+ * itself has rather than one it never installed.
+ *
+ * @param anchors - Module or file URLs to resolve `tailwindcss` from, project first.
+ * @returns The chosen install, with its manifest and version kept together so
+ * an entry-load failure is never reported against another install's version.
+ * @throws The first anchor's failure when it is not an absence — that anchor is
+ * the project being asked about, and a hidden manifest is a fact about it. When
+ * no anchor yielded an install, the first failure seen, so an absence reads as
+ * one.
+ */
+export function locateTailwind(anchors: readonly string[]): LocatedTailwind {
+    const seen = new Set<string>();
+    const candidates: LocatedTailwind[] = [];
+    let failure: unknown;
+    for (const [index, anchor] of anchors.entries()) {
+        try {
+            const manifest = createRequire(anchor).resolve('tailwindcss/package.json');
+            if (seen.has(manifest)) continue;
+            seen.add(manifest);
+            const { version } = JSON.parse(readFileSync(manifest, 'utf8')) as { version: string };
+            candidates.push({ manifest, version });
+        } catch (error) {
+            // A later anchor is a fallback: it may improve on the project's
+            // answer and never replaces it with a failure of its own.
+            if (index === 0 && !isModuleNotFound(error)) throw error;
+            failure ??= error;
+        }
+    }
+    const chosen =
+        candidates.find(candidate => Number.parseInt(candidate.version, 10) === 3) ?? candidates[0];
+    if (chosen) return chosen;
+    throw failure;
+}
+
+/**
+ * The loader the command uses for one project.
+ *
+ * @param projectRoot - The project the command runs against.
+ * @param alsoNextToCli - Whether to fall back to the Tailwind next to this
+ * module; off only in tests, which have one beside them.
+ * @returns A loader whose two answers come from the same install.
+ */
+export function tailwindLoaderFor(projectRoot: string, alsoNextToCli = true): TailwindLoader {
+    const anchors = [pathToFileURL(join(projectRoot, 'package.json')).href];
+    if (alsoNextToCli) anchors.push(import.meta.url);
+    let selected: LocatedTailwind | undefined;
+    const install = (): LocatedTailwind => {
+        selected ??= locateTailwind(anchors);
+        return selected;
+    };
+    return {
+        async version() {
+            return install().version;
+        },
+        async resolveConfig() {
+            // Beside the manifest, so both steps answer for one package. The
+            // file is CommonJS, so the ESM view always carries the function
+            // as `default`; a shape that does not is reported by the caller
+            // as an entry that did not export a function.
+            const entry = join(dirname(install().manifest), 'resolveConfig.js');
+            if (!existsSync(entry)) {
+                throw Object.assign(new Error(`Cannot find module '${entry}'`), {
+                    code: 'MODULE_NOT_FOUND',
+                });
+            }
+            const module = (await import(pathToFileURL(entry).href)) as { default?: unknown };
+            return module.default;
+        },
+    };
+}
+
+/** Which of the install states the probe found. */
+export type TailwindState = 'absent' | 'wrong-major' | 'broken';
+
+/**
+ * Thrown by `resolveTailwindV3`: the message is the complete explanation for
+ * the user, and the fields let a caller that prints its own line — `doctor` —
+ * read the state instead of the prose.
+ */
+export class TailwindUnavailableError extends Error {
+    /** The install state. */
+    readonly state: TailwindState;
+    /** The installed version, when one was found. */
+    readonly version?: string;
+    /** What loading the entry threw, for a broken install. */
+    readonly reason?: string;
+
+    /**
+     * @param state - The install state.
+     * @param message - The complete explanation.
+     * @param fields - What the state carries.
+     * @param fields.version - The installed version, when one was found.
+     * @param fields.reason - What loading the entry threw, for a broken install.
+     */
+    constructor(
+        state: TailwindState,
+        message: string,
+        fields: { version?: string; reason?: string } = {},
+    ) {
+        super(message);
+        this.name = 'TailwindUnavailableError';
+        this.state = state;
+        this.version = fields.version;
+        this.reason = fields.reason;
+    }
+}
 
 /** What a successful probe hands back. */
 export interface TailwindV3 {
@@ -95,35 +203,53 @@ export interface TailwindV3 {
  * Load Tailwind v3's `resolveConfig`, or throw the message for the state
  * the install is in.
  *
- * @param loader - How to reach Tailwind; the real one unless a test injects another.
+ * @param loader - How to reach Tailwind; the working directory's unless a
+ * caller or a test passes another.
  * @returns The version and the `resolveConfig` function.
- * @throws An `Error` whose message is the complete explanation for one of
- * the three states; anything that is not a resolution failure is rethrown.
+ * @throws A `TailwindUnavailableError` for one of the three states. A
+ * version probe that fails for a reason other than resolution is rethrown:
+ * nothing has been located yet, so there is no install to say anything about.
  */
-export async function resolveTailwindV3(loader: TailwindLoader = realLoader): Promise<TailwindV3> {
+export async function resolveTailwindV3(
+    loader: TailwindLoader = tailwindLoaderFor(process.cwd()),
+): Promise<TailwindV3> {
     let version: string;
     try {
         version = await loader.version();
     } catch (error) {
-        if (isModuleNotFound(error)) throw new Error(absentMessage());
+        if (isModuleNotFound(error)) throw new TailwindUnavailableError('absent', absentMessage());
         throw error;
     }
     const major = Number.parseInt(version, 10);
-    if (major !== 3) throw new Error(wrongMajorMessage(version));
+    if (major !== 3) {
+        throw new TailwindUnavailableError('wrong-major', wrongMajorMessage(version), { version });
+    }
     let entry: unknown;
     try {
         entry = await loader.resolveConfig();
     } catch (error) {
-        if (isModuleNotFound(error)) throw new Error(absentMessage());
-        if (error instanceof Error && 'code' in error) {
-            throw new Error(brokenEntryMessage(version, error.message));
-        }
-        throw error;
+        // A v3 has been located, so whatever its entry throws — a code-less
+        // SyntaxError from a damaged file included — is a fact about that
+        // install, and the reinstall is its remedy.
+        throw brokenEntry(version, error instanceof Error ? error.message : String(error));
     }
-    if (typeof entry !== 'function') {
-        throw new Error(brokenEntryMessage(version, 'the entry did not export a function'));
-    }
+    if (typeof entry !== 'function')
+        throw brokenEntry(version, 'the entry did not export a function');
     return { version, resolveConfig: entry as ResolveConfig };
+}
+
+/**
+ * The error for state (c′).
+ *
+ * @param version - The installed version.
+ * @param reason - What loading the entry threw.
+ * @returns The error, carrying both.
+ */
+function brokenEntry(version: string, reason: string): TailwindUnavailableError {
+    return new TailwindUnavailableError('broken', brokenEntryMessage(version, reason), {
+        version,
+        reason,
+    });
 }
 
 /**
@@ -146,7 +272,7 @@ function absentMessage(): string {
         '    pnpm add     -D tailwindcss@3',
         '    yarn add     -D tailwindcss@3',
         '',
-        '  Why it was not installed for you: Tailwind v3 pulls in 12 MB across 44',
+        '  Why it was not installed for you: Tailwind v3 pulls in 12 MB across 37',
         '  packages, and generate-types is the only csszyx command that touches it.',
         '  Shipping it as a hard dependency would put those 12 MB into every install of',
         '  @csszyx/cli — including a CI runner that only ever runs csszyx check. It is',
@@ -185,7 +311,7 @@ function wrongMajorMessage(version: string): string {
         '',
         '    npx -p tailwindcss@3 -p @csszyx/cli csszyx generate-types --config ./tailwind.config.js',
         '',
-        '  Why csszyx did not install v3 for you: it is 12 MB across 44 packages for one',
+        '  Why csszyx did not install v3 for you: it is 12 MB across 37 packages for one',
         '  command, so it is an optional peer rather than a dependency.',
     ].join('\n');
 }

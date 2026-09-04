@@ -38,7 +38,7 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
     let issueCount = checkTailwind(projectInfo.hasTailwind, options.verbose);
     issueCount += checkPackageInstallation(cwd);
     checkBuildOutput(cwd, options.verbose);
-    await reportOptionalTooling(options.verbose);
+    await reportOptionalTooling(cwd, options.verbose);
 
     // Summary
     console.log();
@@ -86,33 +86,73 @@ function checkTailwind(hasTailwind: boolean, verbose = false): number {
  * must not go red over it. `checkTailwind` above asks a different question
  * (does this project have a Tailwind to serve csszyx's classes) and keeps its
  * own answer.
+ * @param cwd - Project directory, whose own Tailwind is the one asked about.
  * @param verbose - Whether to print the install hint.
  */
-async function reportOptionalTooling(verbose = false): Promise<void> {
+async function reportOptionalTooling(cwd: string, verbose = false): Promise<void> {
     printSection('🧰 Optional tooling');
-    const { resolveTailwindV3 } = await import('../scanner/tailwind-availability.js');
+    const { resolveTailwindV3, tailwindLoaderFor } = await import(
+        '../scanner/tailwind-availability.js'
+    );
     try {
-        const { version } = await resolveTailwindV3();
+        const { version } = await resolveTailwindV3(tailwindLoaderFor(cwd, false));
         printSuccess(`generate-types available (tailwindcss ${version})`);
     } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        if (message.includes('none installed')) {
-            printInfo(
-                'generate-types unavailable — tailwindcss v3 is an optional peer and is not ' +
-                    'installed. Only needed to read a v3 tailwind.config.js.',
-            );
-            if (verbose) {
-                console.log(
-                    '  → npm install -D tailwindcss@3 (only if you need csszyx generate-types)',
-                );
-            }
+        const state = unavailableState(cause);
+        if (state.state === 'broken') {
+            printWarn(`generate-types unavailable — ${unavailableLine(cause)}`);
         } else {
-            const version = message.match(/this project has ([^.\s]+(?:\.[^.\s]+)*)/)?.[1];
-            printInfo(
-                `generate-types unavailable — tailwindcss ${version ?? '(unknown version)'} has no ` +
-                    'JavaScript config to read. Not needed on v4.',
+            printInfo(`generate-types unavailable — ${unavailableLine(cause)}`);
+        }
+        if (verbose && state.state === 'absent') {
+            console.log(
+                '  → npm install -D tailwindcss@3 (only if you need csszyx generate-types)',
             );
         }
+    }
+}
+
+/** The fields `resolveTailwindV3` puts on what it throws. */
+interface UnavailableState {
+    state?: 'absent' | 'wrong-major' | 'broken';
+    version?: string;
+    reason?: string;
+}
+
+/**
+ * Read the install state off a rejection, structurally: the availability
+ * module is loaded lazily above, so its class is not in scope to test against.
+ * @param cause - What `resolveTailwindV3` threw.
+ * @returns The state fields, empty for a rejection the helper did not classify.
+ */
+function unavailableState(cause: unknown): UnavailableState {
+    return cause !== null && typeof cause === 'object' ? (cause as UnavailableState) : {};
+}
+
+/**
+ * One line per install state, keeping the diagnosis the helper made. A
+ * rejection it did not classify carries no diagnosis, so none is invented:
+ * the line repeats what was thrown.
+ * @param cause - What `resolveTailwindV3` threw.
+ * @returns The rest of the `generate-types unavailable — …` line.
+ */
+function unavailableLine(cause: unknown): string {
+    const { state, version, reason } = unavailableState(cause);
+    switch (state) {
+        case 'absent':
+            return (
+                'tailwindcss v3 is an optional peer and is not installed. ' +
+                'Only needed to read a v3 tailwind.config.js.'
+            );
+        case 'wrong-major':
+            return `tailwindcss ${version} has no JavaScript config to read. Not needed on v4.`;
+        case 'broken':
+            return (
+                `tailwindcss ${version} is installed but its resolveConfig entry did not load: ` +
+                `${reason}. Reinstall it: npm install --force tailwindcss@3`
+            );
+        default:
+            return cause instanceof Error ? cause.message : String(cause);
     }
 }
 

@@ -7,10 +7,10 @@
  * @module commands/generate-types
  */
 
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 import { type GeneratorOptions, generateAndWriteTypes } from '../generator/type-generator.js';
-import { resolveTailwindV3 } from '../scanner/tailwind-availability.js';
+import { resolveTailwindV3, tailwindLoaderFor } from '../scanner/tailwind-availability.js';
 import { findConfigFile, scanTailwindConfig } from '../scanner/tailwind-scanner.js';
 
 /**
@@ -49,12 +49,19 @@ interface CommandOutput {
 export async function generateTypes(options: GenerateTypesOptions = {}): Promise<void> {
     const cwd = options.cwd || process.cwd();
     const { log, error } = commandOutput(options.silent);
-    // First, before a line of progress: Tailwind v3 is an optional peer, and
-    // no package manager warns when one is missing, so this is where a user
-    // learns which of the three install states they are in. Half a progress
-    // log followed by a resolver error is the thing this ordering prevents.
-    await requireTailwindV3(error);
-    const configPath = resolveConfigPath(options.config, cwd, log, error);
+    const configPath = resolveConfigPath(options.config, cwd, log);
+    // Before reading the config, and before saying none was found: Tailwind v3
+    // is an optional peer, and no package manager warns when one is missing, so
+    // this is where a user learns which install state the project is in. A v4
+    // project has no `tailwind.config.js` by design, and "could not find" sends
+    // its author hunting for a file that cannot exist — the availability
+    // message says the command has no job there at all.
+    await requireTailwindV3(configPath ? dirname(configPath) : cwd, error);
+    if (!configPath) {
+        error('❌ Could not find tailwind.config.js in current directory');
+        error('   Please specify the path with --config flag');
+        process.exit(1);
+    }
 
     log(`📖 Reading config from: ${configPath}`);
     const scanResult = await loadTailwindConfig(configPath, error);
@@ -90,37 +97,31 @@ function commandOutput(silent = false): CommandOutput {
  * @param config - The optional config path supplied by the user.
  * @param cwd - The command working directory.
  * @param log - The normal-output logger.
- * @param error - The error-output logger.
- * @returns The absolute Tailwind config path.
+ * @returns The absolute Tailwind config path, or undefined when discovery
+ * found none — reporting that is the caller's, so the install state is
+ * answered first.
  */
 function resolveConfigPath(
     config: string | undefined,
     cwd: string,
     log: CommandLogger,
-    error: CommandLogger,
-): string {
+): string | undefined {
     if (config) {
         return resolve(cwd, config);
     }
 
     log('🔍 Searching for tailwind.config...');
-    const foundConfig = findConfigFile(cwd);
-    if (foundConfig) {
-        return foundConfig;
-    }
-
-    error('❌ Could not find tailwind.config.js in current directory');
-    error('   Please specify the path with --config flag');
-    process.exit(1);
+    return findConfigFile(cwd) ?? undefined;
 }
 
 /**
  * Stop with the availability message when Tailwind v3 is not there to call.
+ * @param cwd - Project directory, whose own Tailwind is the one asked about.
  * @param error - The error-output logger.
  */
-async function requireTailwindV3(error: CommandLogger): Promise<void> {
+async function requireTailwindV3(cwd: string, error: CommandLogger): Promise<void> {
     try {
-        await resolveTailwindV3();
+        await resolveTailwindV3(tailwindLoaderFor(cwd));
     } catch (cause) {
         error(`❌ ${errorMessage(cause)}`);
         process.exit(1);

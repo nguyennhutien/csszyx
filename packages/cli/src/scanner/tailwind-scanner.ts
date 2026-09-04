@@ -8,7 +8,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 // `tailwindcss` v3 is an OPTIONAL PEER of this package, and only this
@@ -32,7 +32,7 @@ import { pathToFileURL } from 'node:url';
 // the CLI for the one command that uses it.
 import { sortStrings } from '@csszyx/compiler';
 import type { Config } from 'tailwindcss';
-import { resolveTailwindV3 } from './tailwind-availability.js';
+import { resolveTailwindV3, tailwindLoaderFor } from './tailwind-availability.js';
 
 /**
  * Resolved Tailwind theme structure.
@@ -127,7 +127,9 @@ export async function scanTailwindConfig(configPath: string): Promise<ScanResult
     // module top: the command has already said which of the three install
     // states it is in before this runs, and a library caller gets the same
     // sentence thrown rather than a bare resolver error.
-    const { resolveConfig } = await resolveTailwindV3();
+    // The config's own directory is the project, and its Tailwind is the one
+    // that resolves this config.
+    const { resolveConfig } = await resolveTailwindV3(tailwindLoaderFor(dirname(absolutePath)));
     const resolvedConfig = resolveConfig(userConfig) as Config;
     const theme = resolvedConfig.theme as unknown as ResolvedTheme;
 
