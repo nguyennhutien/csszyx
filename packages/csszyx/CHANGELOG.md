@@ -1,5 +1,35 @@
 # csszyx
 
+## [0.16.0](https://github.com/nguyennhutien/csszyx/compare/v0.15.3...v0.16.0) (2026-09-04)
+
+### ⚠ BREAKING CHANGES
+
+* make Tailwind v3 an optional peer and drop the lite `SzInput` alias ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+* **cli:** `@csszyx/cli` no longer installs `tailwindcss`. A project that runs `csszyx generate-types` must add `tailwindcss@3` itself (`npm install -D tailwindcss@3`); the command explains this when it is missing. Every other command runs without Tailwind. ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+* **runtime:** `SzInput` is no longer exported from `csszyx/lite` or `@csszyx/runtime/lite`. Import `SzStringInput` instead; it is the same type. The `SzInput` exported from `csszyx` and `@csszyx/runtime` is unchanged. ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+
+### Features
+
+* make Tailwind v3 an optional peer and drop the lite `SzInput` alias ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+* **cli:** make Tailwind v3 an optional peer instead of a dependency ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+* **runtime:** drop the deprecated `SzInput` alias from the lite entry ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+
+### Bug Fixes
+
+* **compiler:** lower a custom property written as an `sz` key ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+* **unplugin:** keep each mangle hazard's remedy with its own finding ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+* **unplugin:** read a `manglePreserve` entry under the class variants ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+* **unplugin:** list advisory sz fallbacks in a dev server ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+* **compiler:** match the TypeScript rules for booleans, case and brackets in a declaration ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+* **core:** lower a runtime custom-property value as a bracketed declaration ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+* **unplugin:** give a newly-matched selector hazard its remedy ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+* **cli:** find the Tailwind the project asked about ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+
+### Performance
+
+* **unplugin:** split a class into its candidate names once, not once per entry ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+* **unplugin:** stream unmatched preserve checks ([#280](https://github.com/nguyennhutien/csszyx/issues/280))
+
 ## [0.15.3](https://github.com/nguyennhutien/csszyx/compare/v0.15.2...v0.15.3) (2026-09-03)
 
 ### Features

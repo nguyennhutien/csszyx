@@ -1,6 +1,6 @@
 {
   "name": "@csszyx/ts-plugin",
-  "version": "0.15.3",
+  "version": "0.16.0",
   "description": "Bounded sz/szv/szs completions for compatible TypeScript language-service hosts",
   "type": "commonjs",
   "main": "dist/plugin.js",
