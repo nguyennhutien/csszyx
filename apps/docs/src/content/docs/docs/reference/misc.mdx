@@ -80,6 +80,9 @@ import { RuntimeValueNote } from '../../../../components/RuntimeValueNote.tsx';
 
 <PropTable rows={[
   { sz: "{ '--my-var': '10px' }", tw: "[--my-var:10px]" },
+  { sz: "{ dark: { '--my-var': '1rem' } }", tw: "dark:[--my-var:1rem]" },
+  { sz: "{ '--my-cols': '[a] 1fr [b]' }", tw: "[--my-cols:[a]_1fr_[b]]" },
+  { sz: "{ '--MyToken': 1 }", tw: "[--MyToken:1]" },
   { sz: "{ color: '--text-primary' }", tw: "text-(--text-primary)" },
   { sz: "{ bg: '--brand-color' }", tw: "bg-(--brand-color)" },
 ]} />

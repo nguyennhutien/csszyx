@@ -234,6 +234,15 @@ in order:
 
 `scan-collisions` reports the candidates and prints a paste-ready `mangleExclude`;
 it does not edit your files — apply the rename, the exclude or the preserve yourself.
+
+One more trap, with no warning attached: keep build output outside the roots
+the prescan walks. The prescan reads any source under the root as authored
+code, so a kept `dist-previous/` of an earlier mangled build hands back `y4`
+and `n4` as class names, and the next build declines to mangle anything that
+might collide with them. The map shrinks, the emitted CSS changes and the
+build stays green. A `dist` entry in `.gitignore` does not cover
+`dist-mangle-on`: list such directories in the top-level `exclude` option
+(see [File Filters](#file-filters)), or keep them outside the project.
 :::
 
 :::caution[Mangling is not a compression win on a gzip-served app]
@@ -413,14 +422,6 @@ the object where it is **declared**, and a property write on a local `const` is
 already uncompensated — see the
 [shared-style-object contract](/docs/reusing-styles/). Treat a shared sz object
 as declared once and never written to, whichever way this setting is set.
-
-Keep build output outside the roots the prescan walks. It reads any source
-under the root as authored code, so a kept `dist-previous/` of an earlier
-mangled build hands back `y4` and `n4` as class names, and the next build
-declines to mangle anything that might collide with them. The map shrinks,
-the emitted CSS changes and the build stays green. A `dist` entry in
-`.gitignore` does not cover `dist-mangle-on`; name the directories, or keep
-them outside the project.
 
 **What it covers:** a direct `sz={binding}` from a named import, including a
 renamed one (`import { cardSz as card }`), a namespace member (`import * as S`,
