@@ -1,5 +1,16 @@
 # csszyx
 
+## [0.16.0](https://github.com/nguyennhutien/csszyx/compare/v0.15.3...v0.16.0) (2026-09-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* `@csszyx/cli` no longer installs `tailwindcss`. A project that runs `csszyx generate-types` must add `tailwindcss@3` itself (`npm install -D tailwindcss@3`); the command explains this when it is missing. Every other command runs without Tailwind.
+
+### Features
+
+* make Tailwind v3 an optional peer and drop the lite `SzInput` alias ([#280](https://github.com/nguyennhutien/csszyx/issues/280)) ([48e9123](https://github.com/nguyennhutien/csszyx/commit/48e9123d5bb594e0991cccfc53bfb4a8b1fd59e9))
+
 ## [0.15.3](https://github.com/nguyennhutien/csszyx/compare/v0.15.2...v0.15.3) (2026-09-03)
 
 ### Features
