@@ -1656,6 +1656,127 @@ mod tests {
     }
 
     #[test]
+    fn static_engine_names_a_value_outside_a_closed_enum() {
+        // The four keys that spell their value as the class itself. An
+        // unrecognised one used to ship verbatim as a bare class name, which
+        // in a hybrid app can MATCH a rule the author never meant.
+        for (key, value, legal) in [
+            ("display", "bogus", "inline-block"),
+            ("position", "bogus", "sticky"),
+            ("visibility", "bogus", "collapse"),
+            ("isolation", "bogus", "isolate, auto"),
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: format!("export const A = () => <div sz={{{{ {key}: '{value}' }}}} />;"),
+            };
+            let result = transform_static_classes(&file, 0, std::time::Instant::now());
+            let hit = result
+                .diagnostics
+                .iter()
+                .find(|diagnostic| diagnostic.contains(&format!("\"{key}: {value}\"")))
+                .unwrap_or_else(|| panic!("{key}: {:?}", result.diagnostics));
+            assert!(hit.contains("nothing is emitted for it"), "{hit}");
+            assert!(hit.contains(legal), "{hit}");
+            assert!(!result.code.contains("className"), "{}", result.code);
+        }
+    }
+
+    #[test]
+    fn the_closed_enum_tables_agree_on_which_keys_are_closed() {
+        // The diagnostic reads the legal set with `unwrap_or_default`, on the
+        // grounds that the collector has already proved the key is a closed
+        // enum. If the two generated tables ever disagreed, that would print an
+        // empty list instead of failing — so the agreement is the assertion.
+        for key in [
+            "display",
+            "position",
+            "visibility",
+            "isolation",
+            "p",
+            "bg",
+            "hover",
+        ] {
+            assert_eq!(
+                super::super::generated::tables::is_closed_enum_key(key),
+                super::super::generated::tables::closed_enum_values(key).is_some(),
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
+    fn static_engine_keeps_quiet_for_a_value_inside_a_closed_enum() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = () => <div sz={{ display: 'none', position: 'sticky' }} />;"
+                .to_string(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert!(result.code.contains("hidden sticky"), "{}", result.code);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    }
+
+    #[test]
+    fn static_engine_names_a_csszyx_owned_key_holding_an_object() {
+        for (key, source) in [
+            (
+                "--v-x",
+                "export const A = () => <div sz={{ '--v-x': { p: 4 } }} />;",
+            ),
+            (
+                "container",
+                "export const A = () => <div sz={{ container: { sm: { p: 4 } } }} />;",
+            ),
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            };
+            let result = transform_static_classes(&file, 0, std::time::Instant::now());
+            let hit = result
+                .diagnostics
+                .iter()
+                .find(|diagnostic| diagnostic.contains(&format!("\"{key}\"")))
+                .unwrap_or_else(|| panic!("{key}: {:?}", result.diagnostics));
+            assert!(hit.contains("it holds an object"), "{hit}");
+            // Still emitted: dropping it would be a second behaviour change on
+            // a shape the diagnostic already covers.
+            assert!(result.code.contains(&format!("{key}:")), "{}", result.code);
+        }
+    }
+
+    #[test]
+    fn static_engine_leaves_the_open_variant_namespace_alone() {
+        // A project declares its own breakpoints in `@theme` and its own
+        // variants with `@custom-variant`, neither of which this engine reads,
+        // so a name it does not know is not evidence of a typo. Warning on
+        // these was measured in the field as worse than silence.
+        for source in [
+            "export const A = () => <div sz={{ tablet: { p: 4 } }} />;",
+            "export const A = () => <div sz={{ 'desktop-sm': { p: 4 } }} />;",
+            "export const A = () => <div sz={{ has: { img: { p: 4 } } }} />;",
+            "export const A = () => <div sz={{ supports: { 'display:grid': { p: 4 } } }} />;",
+            "export const A = () => <div sz={{ '--v-x': '0.18' }} />;",
+            "export const A = () => <div sz={{ container: true }} />;",
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            };
+            let result = transform_static_classes(&file, 0, std::time::Instant::now());
+            assert!(
+                !result
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.contains("it holds an object")),
+                "{source}: {:?}",
+                result.diagnostics
+            );
+        }
+    }
+
+    #[test]
     fn static_engine_reports_only_unsafe_style_spread_collisions() {
         for source in [
             "const A=({width,props})=><div sz={{w:width}} {...props}/>;",

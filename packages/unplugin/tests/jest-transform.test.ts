@@ -76,6 +76,17 @@ describe('reading the build cache', () => {
         ).toBeNull();
     });
 
+    it('skips an entry a half-written build left unparseable', () => {
+        // The cache is written during a build that can be interrupted, and a
+        // truncated file must not take the whole lookup down with it — the
+        // entry beside it may be the one that answers.
+        const root = cacheWith(FILE, SOURCE, CODE);
+        // Named to be read BEFORE the good entry: directory order is what
+        // decides whether the torn file is reached at all.
+        writeFileSync(join(root, '9c', '0torn.json'), '{"filename": "/repo/src/');
+        expect(findCachedTransform(root, FILE, SOURCE)).toBe(CODE);
+    });
+
     it('answers null when there is no cache at all', () => {
         expect(findCachedTransform(join(tmpdir(), 'csszyx-absent-cache'), FILE, SOURCE)).toBeNull();
     });
@@ -125,6 +136,14 @@ describe('the transformer jest calls', () => {
     // A file the compiler leaves alone is returned unchanged rather than
     // dropped: the suite still runs, and the diagnostic channel is what
     // reports the reason.
+    it('leaves a file whose extension it was not given alone', () => {
+        // jest hands the transformer every file matching its own pattern, so
+        // the extension list is what keeps csszyx off a `.css` or a `.json`.
+        const transformer = createTransformer({ extensions: ['.tsx'] });
+        const source = 'export const A = () => <div sz={{ p: 4 }} />;';
+        expect(transformer.process(source, '/repo/src/App.jsx').code).toBe(source);
+    });
+
     it('returns a file it cannot compile unchanged', () => {
         const source = 'export const A = 1;';
         expect(run(source, '/repo/a.ts')).toBe(source);
