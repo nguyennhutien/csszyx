@@ -286,8 +286,44 @@ export function spliceSection(changelog, version, newSection) {
  * @param {string[]} args - Arguments to `gh`.
  * @returns {string} stdout.
  */
-function gh(args) {
-    return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+function gh(args, input) {
+    return execFileSync('gh', args, {
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+        ...(input === undefined ? {} : { input }),
+    });
+}
+
+/**
+ * The `gh` invocation that writes a file through the contents API.
+ *
+ * The body goes in on **stdin**, not in an argument. Linux caps a single
+ * argument at `MAX_ARG_STRLEN` — 32 pages, 131_072 bytes — and the base64 of
+ * this repository's CHANGELOG crossed it during the v0.16.0 release at 131_672
+ * bytes, 608 over. `gh` was never executed; the release job reported success,
+ * because this script is best-effort and swallows what it catches, and the
+ * notes came out thin with no line saying why. Nothing about the payload is
+ * bounded, so the only fix that stays fixed is not putting it in argv.
+ *
+ * @param {object} request - What to write.
+ * @param {string} request.repo - `owner/name`.
+ * @param {string} request.path - Repository-relative file path.
+ * @param {string} request.message - Commit message for the write.
+ * @param {string} request.content - File content, before base64.
+ * @param {string} request.sha - Blob sha the write replaces.
+ * @param {string} request.branch - Branch to commit on.
+ * @returns {{args: string[], input: string}} Arguments and the stdin payload.
+ */
+export function contentsPutRequest({ repo, path: filePath, message, content, sha, branch }) {
+    return {
+        args: ['api', '-X', 'PUT', `repos/${repo}/contents/${filePath}`, '--input', '-'],
+        input: JSON.stringify({
+            message,
+            content: Buffer.from(content).toString('base64'),
+            sha,
+            branch,
+        }),
+    };
 }
 
 /** Commits GitHub will list for one pull request, however many it really has. */
@@ -429,20 +465,15 @@ async function main() {
             return;
         }
 
-        gh([
-            'api',
-            '-X',
-            'PUT',
-            `repos/${repo}/contents/packages/csszyx/CHANGELOG.md`,
-            '-f',
-            `message=docs: enrich ${version} release notes from squash commits`,
-            '-f',
-            `content=${Buffer.from(updated).toString('base64')}`,
-            '-f',
-            `sha=${changelogMeta.sha}`,
-            '-f',
-            `branch=${branch}`,
-        ]);
+        const write = contentsPutRequest({
+            repo,
+            path: 'packages/csszyx/CHANGELOG.md',
+            message: `docs: enrich ${version} release notes from squash commits`,
+            content: updated,
+            sha: changelogMeta.sha,
+            branch,
+        });
+        gh(write.args, write.input);
         console.log(`[enrich] CHANGELOG ${version} enriched`);
 
         // Mirror into the release PR body so reviewers see the rich notes too.
@@ -452,7 +483,12 @@ async function main() {
         const pr = prs[0];
         if (pr) {
             const body = `:robot: I have created a release *beep* *boop*\n---\n\n\n<details><summary>${version}</summary>\n\n${newSection}\n</details>\n\n---\nThis PR was generated with [Release Please](https://github.com/googleapis/release-please).`;
-            gh(['api', '-X', 'PATCH', `repos/${repo}/pulls/${pr.number}`, '-f', `body=${body}`]);
+            // Same reason as the write above: the body carries the whole
+            // rendered section, so it goes in on stdin rather than in argv.
+            gh(
+                ['api', '-X', 'PATCH', `repos/${repo}/pulls/${pr.number}`, '--input', '-'],
+                JSON.stringify({ body }),
+            );
             console.log(`[enrich] PR #${pr.number} body updated`);
         }
     } catch (err) {

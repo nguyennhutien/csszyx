@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
     buildSection,
     buildSquashBody,
+    contentsPutRequest,
     parseConventional,
     spliceSection,
 } from './enrich-release-changelog.mjs';
@@ -162,5 +163,63 @@ describe('release changelog enrichment', () => {
         assert.match(updated, /\[#7\]\(https:\/\/github\.com\/example\/repo\/issues\/7\)/);
         assert.match(updated, /## \[1\.1\.0\] \(old\)\n\nkeep\n$/);
         assert.equal(updated.endsWith('\n\n'), false);
+    });
+});
+
+// The write that ships the enriched file. It used to pass the base64 of the
+// whole CHANGELOG as a command-line argument, and Linux caps a SINGLE argument
+// at MAX_ARG_STRLEN — 32 pages, 131_072 bytes. Measured on the v0.16.0 release
+// PR: the payload reached 131_672 bytes, 608 over, and `gh` never ran. The
+// release job reported success, because the enricher is best-effort and swallows
+// what it catches, so the notes simply came out thin: one breaking change of
+// two, and not one of the eight fixes.
+describe('the request that writes the changelog back', () => {
+    /** Linux `MAX_ARG_STRLEN`: the cap on one argument, not on the whole list. */
+    const SINGLE_ARGUMENT_CAP = 32 * 4096;
+
+    it('keeps a changelog far past the argument cap out of argv', () => {
+        const content = 'x'.repeat(400_000);
+        const { args, input } = contentsPutRequest({
+            repo: 'owner/repo',
+            path: 'packages/csszyx/CHANGELOG.md',
+            message: 'docs: enrich 1.2.3 release notes from squash commits',
+            content,
+            sha: 'abc123',
+            branch: 'release-please--branches--main--components--csszyx',
+        });
+
+        const longest = Math.max(...args.map(argument => argument.length));
+        assert.ok(
+            longest < SINGLE_ARGUMENT_CAP,
+            `longest argument is ${longest} bytes, at or past the ${SINGLE_ARGUMENT_CAP} cap`,
+        );
+        assert.ok(args.every(argument => !argument.includes(content)));
+        assert.equal(JSON.parse(input).content, Buffer.from(content).toString('base64'));
+    });
+
+    it('carries every field the contents API needs', () => {
+        const { args, input } = contentsPutRequest({
+            repo: 'owner/repo',
+            path: 'CHANGELOG.md',
+            message: 'msg',
+            content: 'hello',
+            sha: 'sha1',
+            branch: 'br',
+        });
+
+        assert.deepEqual(args, [
+            'api',
+            '-X',
+            'PUT',
+            'repos/owner/repo/contents/CHANGELOG.md',
+            '--input',
+            '-',
+        ]);
+        assert.deepEqual(JSON.parse(input), {
+            message: 'msg',
+            content: Buffer.from('hello').toString('base64'),
+            sha: 'sha1',
+            branch: 'br',
+        });
     });
 });
