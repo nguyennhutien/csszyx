@@ -292,7 +292,7 @@ const corpus = [
     { css: { '--v-neg': -4, zIndex: -1 } },
     // The boolean rule, the case rule and the bracket rule of a declaration
     // value, each of which the native lowering once answered differently.
-    { '--v-off': false, bg: 'red', hover: { '--v-off': false } },
+    { '--v-off': false, bg: 'red-500', hover: { '--v-off': false } },
     { '--v-on': true, css: { '--v-on': true, '--v-off': false } },
     { '--MyToken': 1, css: { '--MyToken': 1, fontSize: '1rem' } },
     { '--v-cols': '[a]', css: { '--v-rows': '[a] 1fr [b]' } },

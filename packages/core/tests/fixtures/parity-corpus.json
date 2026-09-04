@@ -5181,7 +5181,7 @@
     "oxc": "[--v-neg:-4] [z-index:-1]"
   },
   {
-    "sz": "{\"--v-off\":false,\"bg\":\"red\",\"hover\":{\"--v-off\":false}}",
+    "sz": "{\"--v-off\":false,\"bg\":\"red-500\",\"hover\":{\"--v-off\":false}}",
     "ir": {
       "properties": [
         {
@@ -5203,7 +5203,7 @@
           },
           "value": {
             "kind": "string",
-            "value": "red"
+            "value": "red-500"
           }
         },
         {
@@ -5233,7 +5233,7 @@
         }
       ]
     },
-    "oxc": "bg-red"
+    "oxc": "bg-red-500"
   },
   {
     "sz": "{\"--v-on\":true,\"css\":{\"--v-on\":true,\"--v-off\":false}}",
