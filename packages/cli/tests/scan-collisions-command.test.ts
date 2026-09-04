@@ -50,6 +50,22 @@ describe('csszyx scan-collisions', () => {
         expect(process.exitCode).toBe(1);
     });
 
+    it('ignores stylesheets a tool generated into a conventional output directory', async () => {
+        // Field report: run in a package that had once run `vitest --coverage`,
+        // the command reported 32 names, 30 of them from istanbul's own HTML
+        // report (`.L0`…`.L9`, `.kwd`, `.pun`, `.typ`), and the paste-ready
+        // list reserved 34 token names on behalf of a gitignored artefact.
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = projectWith({
+            'coverage/lcov-report/prettify.css': '.kwd { color: #008 }\n.pun { color: #660 }',
+            'src/app.css': '.main-body { display: flex }',
+        });
+
+        await scanCollisions({ cwd });
+
+        expect(process.exitCode).toBeUndefined();
+    });
+
     it('passes cleanly when no class name can collide with a token', async () => {
         vi.spyOn(console, 'log').mockImplementation(() => {});
         const cwd = projectWith({

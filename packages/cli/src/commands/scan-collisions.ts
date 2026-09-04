@@ -29,13 +29,32 @@ export interface ScanCollisionsOptions {
     ignore?: string[];
 }
 
+/**
+ * Directories a tool writes into, never a project's own stylesheets.
+ *
+ * Reported from the field: run in a package that had once collected coverage,
+ * the command found 32 names and 30 of them were istanbul's HTML report —
+ * `.L0` through `.L9`, `.kwd`, `.pun`, `.typ`, the syntax highlighter it ships.
+ * The two real findings sat in the middle of that list and the paste-ready
+ * `mangleExclude` reserved 34 token names on behalf of a gitignored artefact.
+ * Generated CSS cannot collide with a mangled token, because nothing renders
+ * it into the app.
+ */
 const DEFAULT_IGNORE = [
     '**/node_modules/**',
     '**/dist/**',
     '**/build/**',
+    '**/out/**',
+    '**/coverage/**',
     '**/.next/**',
     '**/.nuxt/**',
     '**/.astro/**',
+    '**/.output/**',
+    '**/.svelte-kit/**',
+    '**/.vercel/**',
+    '**/.turbo/**',
+    '**/storybook-static/**',
+    '**/playwright-report/**',
 ];
 
 // A class selector: `.name`. Captures the name; a following `-`/`_`/word char keeps
