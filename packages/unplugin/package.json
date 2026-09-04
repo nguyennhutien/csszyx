@@ -104,6 +104,16 @@
         "default": "./dist/next-watcher.cjs"
       }
     },
+    "./jest": {
+      "import": {
+        "types": "./dist/jest-transform.d.mts",
+        "default": "./dist/jest-transform.mjs"
+      },
+      "require": {
+        "types": "./dist/jest-transform.d.cts",
+        "default": "./dist/jest-transform.cjs"
+      }
+    },
     "./postcss": {
       "import": {
         "types": "./dist/postcss.d.mts",

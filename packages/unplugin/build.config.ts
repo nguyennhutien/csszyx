@@ -13,6 +13,7 @@ export default defineBuildConfig([
             './src/next-prebuild',
             './src/next-watcher',
             './src/next-config',
+            './src/jest-transform',
         ],
         declaration: 'node16',
         rollup: {
