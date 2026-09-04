@@ -822,16 +822,14 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
     const parts: string[] = ['[csszyx] production mangle found hybrid hazards:'];
     if (collisions.length > 0) {
         const sample = collisions.slice(0, 8).join(', ');
-        parts.push(
-            ` ${collisions.length} mangled token(s) collide with class names in non-csszyx CSS ` +
-                `(e.g. ${sample}) — those tokens will cross-contaminate external ".${collisions[0]}" ` +
-                'elements.',
-        );
         // Guide the prod hotfix first, then the two real fixes. Renaming is
         // preferred because single-letter / common class names collide with
         // mangle tokens AND risk specificity clashes with other libraries; an
         // exclude is the escape hatch only for names in code you cannot change.
         parts.push(
+            ` ${collisions.length} mangled token(s) collide with class names in non-csszyx CSS ` +
+                `(e.g. ${sample}) — those tokens will cross-contaminate external ".${collisions[0]}" ` +
+                'elements.',
             ' HOTFIX: pass `production: { mangle: false }` to the csszyx plugin to ship now.' +
                 ' THEN fix it: if these short names are in your OWN CSS, rename them to' +
                 ' something specific (e.g. `.x` → `.resize-handle-x`) — short/common names' +
@@ -846,8 +844,6 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
         parts.push(
             ` ${orphans.length} mangled class(es) have no emitted CSS rule (e.g. ${sample}) — ` +
                 'those elements lose styling.',
-        );
-        parts.push(
             ' Those classes are csszyx-owned but no CSS was emitted for them' +
                 ' (e.g. a separate Tailwind plugin owns the utility CSS, or the class is not' +
                 ' a real utility). Ensure that CSS is generated, or pass' +
@@ -860,12 +856,10 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
             .slice(0, 3)
             .map(hazard => `${hazard.selector} → ${hazard.renamed.slice(0, 4).join(', ')}`)
             .join('; ');
+        const entries = [...new Set(broken.flatMap(preserveEntriesFor))].join(', ');
         parts.push(
             ` ${broken.length} attribute selector(s) match class names by text (e.g. ${sample}) — ` +
                 'those rules stop matching once the classes are renamed, so the elements lose those styles.',
-        );
-        const entries = [...new Set(broken.flatMap(preserveEntriesFor))].join(', ');
-        parts.push(
             ` Keep those classes readable with production.manglePreserve: [${entries}] ` +
                 '(paste-ready), or key the rule off a data attribute, which mangling never touches. ' +
                 'production.mangleExclude cannot help here: it reserves token names and does not ' +
@@ -877,14 +871,12 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
             .slice(0, 3)
             .map(hazard => `${hazard.selector} → ${hazard.matchedTokens.slice(0, 4).join(', ')}`)
             .join('; ');
-        parts.push(
-            ` ${newlyMatched.length} attribute selector(s) would start matching mangled tokens ` +
-                `instead (e.g. ${sample}).`,
-        );
         const tokens = [...new Set(newlyMatched.flatMap(hazard => hazard.matchedTokens))]
             .map(quoteForConfig)
             .join(', ');
         parts.push(
+            ` ${newlyMatched.length} attribute selector(s) would start matching mangled tokens ` +
+                `instead (e.g. ${sample}).`,
             ` Reserve those token names with production.mangleExclude: [${tokens}] (paste-ready) ` +
                 'so no class is renamed to one of them, or key the rule off a data attribute, ' +
                 'which mangling never touches; a prefix or substring selector goes on matching ' +
