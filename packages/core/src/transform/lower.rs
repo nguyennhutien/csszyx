@@ -118,6 +118,13 @@ pub(super) fn dynamic_css_var_class(prop: &super::DynamicCssVarIr) -> String {
         .variant_prefix
         .as_ref()
         .map_or_else(String::new, |prefix| format!("{prefix}:"));
+    // A custom property written as a key is a declaration, not a utility, so
+    // its runtime form is the same `[--name:value]` class as its static form
+    // with the hoisted variable as the value. The generic shape below gave
+    // `--ring-(--_sz---ring)`, which names no Tailwind utility.
+    if prop.key.starts_with("--") {
+        return format!("{variant}[{}:var({})]", prop.key, prop.var_name);
+    }
     format!("{variant}{}-({})", prop.class_prefix, prop.var_name)
 }
 
