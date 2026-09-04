@@ -60,6 +60,7 @@ function readTables() {
             specialVariants: core.stringSet('SPECIAL_VARIANTS'),
             suggestionMap: core.stringObject('SUGGESTION_MAP'),
             migrationNotes: core.stringObject('MIGRATION_NOTES'),
+            closedEnumClasses: core.objectOfStringObjects('CLOSED_ENUM_CLASSES'),
             varHostileWrongProperty: varHostile.stringSet('VAR_HOSTILE_WRONG_PROPERTY'),
             varHostileNoVarForm: varHostile.stringSet('VAR_HOSTILE_NO_VAR_FORM'),
         };
@@ -82,6 +83,7 @@ function renderRust({
     specialVariants,
     suggestionMap,
     migrationNotes,
+    closedEnumClasses,
     varHostileWrongProperty,
     varHostileNoVarForm,
 }) {
@@ -204,6 +206,35 @@ ${renderMatchPatterns(specialVariants)}
     )
 }
 
+/// The utility a closed-enum key emits for one value, if the value is in its set.
+///
+/// These keys spell their value as the BARE Tailwind utility, so a value
+/// outside the set used to ship as an unprefixed class name of exactly the
+/// shape a project's own component CSS is made of. Returning \`None\` is what
+/// lets the lowering drop it and the diagnostic name it.
+pub(crate) fn closed_enum_class(key: &str, value: &str) -> Option<&'static str> {
+    match (key, value) {
+${renderClosedEnumArms(closedEnumClasses)}
+        _ => None,
+    }
+}
+
+/// Whether a key's value set is closed. Mirrors \`CLOSED_ENUM_CLASSES\`'s keys.
+pub(crate) fn is_closed_enum_key(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(closedEnumClasses.map(([key]) => key))}
+    )
+}
+
+/// The legal values of a closed-enum key, in table order, for the diagnostic.
+pub(crate) fn closed_enum_values(key: &str) -> Option<&'static str> {
+    match key {
+${renderClosedEnumLists(closedEnumClasses)}
+        _ => None,
+    }
+}
+
 /// Returns true when a key's \`-(--var)\` form resolves to a DIFFERENT CSS
 /// property than the literal form — Tailwind styles the element, just not the
 /// way the author asked. See transform::var_hostile.
@@ -224,6 +255,26 @@ ${renderMatchPatterns(varHostileNoVarForm)}
     )
 }
 `;
+}
+
+function renderClosedEnumArms(entries) {
+    return entries
+        .flatMap(([key, values]) =>
+            values.map(
+                ([value, className]) =>
+                    `        (${rustString(key)}, ${rustString(value)}) => Some(${rustString(className)}),`,
+            ),
+        )
+        .join('\n');
+}
+
+function renderClosedEnumLists(entries) {
+    return entries
+        .map(
+            ([key, values]) =>
+                `        ${rustString(key)} => Some(${rustString(values.map(([value]) => value).join(', '))}),`,
+        )
+        .join('\n');
 }
 
 function renderMatchArms(entries) {

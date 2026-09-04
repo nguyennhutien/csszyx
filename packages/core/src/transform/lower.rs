@@ -381,6 +381,119 @@ pub(crate) fn collect_dead_spacing_steps(
     }
 }
 
+/// Keys csszyx OWNS that cannot mean a variant, reported when they carry an
+/// object.
+///
+/// The variant namespace is open — a project declares its own with
+/// `@custom-variant` and its own breakpoints with `--breakpoint-*` in `@theme`
+/// — so `{ tablet: { p: 4 } }` and `{ 'tablt': { p: 4 } }` are the same shape
+/// to a compiler that cannot read the project's CSS. Warning on both was
+/// measured as worse than silence in the field and is locked out by
+/// `custom-theme-variant-keys.test.ts`.
+///
+/// These two are different: csszyx defines what they mean, and neither meaning
+/// is a variant. A `--*` key is a custom-property declaration whose value is a
+/// declaration value; `container` is the boolean/`@container/name` utility. An
+/// object under either lowers to a class prefix Tailwind serves nothing for.
+#[cfg(feature = "native-engine")]
+fn is_owned_non_variant_key(key: &str) -> bool {
+    key.starts_with("--") || key == "container"
+}
+
+/// Collect csszyx-owned keys used in variant position, for the diagnostic.
+///
+/// `{ '--v-x': { p: 4 } }` emits `--v-x:p-4` and `{ container: { sm: { … } } }`
+/// emits `container:sm:p-4`. Both are dead classes on a green build. Descends
+/// like the lowering does, minus the parametric stems whose nested keys are
+/// selector text rather than key names.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_owned_key_variant_objects(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, u32)>,
+) {
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            continue;
+        };
+        let key = property.key.as_str();
+        if is_owned_non_variant_key(key) {
+            out.push((property.key.clone(), property.span.start));
+            continue;
+        }
+        // Object-shaped VALUE keys, and the parametric stems whose nested keys
+        // are SELECTOR text (`has: { img: … }`, `supports: { 'display:grid': … }`).
+        // Same boundary `collect_property_object_values` draws.
+        if matches!(
+            key,
+            "css"
+                | "bgImg"
+                | "supports"
+                | "data"
+                | "not"
+                | "aria"
+                | "has"
+                | "group"
+                | "peer"
+                | "min"
+                | "max"
+        ) || mask_slot_members(key).is_some()
+        {
+            continue;
+        }
+        collect_owned_key_variant_objects(nested, out);
+    }
+}
+
+/// Collect closed-enum keys whose value is not in their set, for the diagnostic.
+///
+/// `display`, `position`, `visibility` and `isolation` spell their value as the
+/// bare Tailwind utility, so an unrecognised one used to be emitted verbatim as
+/// an unprefixed class name — the shape a project's own component CSS is made
+/// of, which makes the typo a possible collision rather than a plain dead
+/// class. The lowering now drops it; this is what keeps the drop from being a
+/// second silent failure. Descends like the lowering does, so a value nested
+/// under a variant is reported too.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_dead_enum_values(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, u32)>,
+) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::String(value) => {
+                if super::generated::tables::is_closed_enum_key(&property.key)
+                    && super::generated::tables::closed_enum_class(&property.key, value).is_none()
+                {
+                    out.push((property.key.clone(), value.clone(), property.span.start));
+                }
+            }
+            StaticSzValue::Object(nested) => {
+                if matches!(
+                    property.key.as_str(),
+                    "css"
+                        | "bgImg"
+                        | "supports"
+                        | "data"
+                        | "not"
+                        | "aria"
+                        | "has"
+                        | "group"
+                        | "peer"
+                ) {
+                    continue;
+                }
+                if property_prefix(&property.key).is_some()
+                    && object_string_property(nested, "color").is_some()
+                {
+                    continue;
+                }
+                collect_dead_enum_values(nested, out);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Legal members of one mask slot, minus the linear sides.
 ///
 /// `maskLinear` also accepts every entry in `MASK_SIDES`, reported by the
@@ -1214,34 +1327,16 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             if key == "content" {
                 return Some(format_content(value, prefix));
             }
-            // display / position / visibility carry their value as the bare
-            // Tailwind utility (`flex`, `grid`, `absolute`, `visible`), not a
-            // `display-flex` style prefix-value pair. This mirrors the removed JavaScript lanes
-            // transform so both parser paths emit classes Tailwind actually
-            // generates.
-            if key == "display" {
-                return Some(if value == "none" {
-                    format!("{prefix}hidden")
-                } else {
-                    format!("{prefix}{value}")
-                });
-            }
-            if key == "position" {
-                return Some(format!("{prefix}{value}"));
-            }
-            if key == "visibility" {
-                return Some(if value == "hidden" {
-                    format!("{prefix}invisible")
-                } else {
-                    format!("{prefix}{value}")
-                });
-            }
-            if key == "isolation" {
-                return Some(if value == "isolate" {
-                    format!("{prefix}isolate")
-                } else {
-                    format!("{prefix}isolation-{value}")
-                });
+            // display / position / visibility / isolation carry their value as
+            // the bare Tailwind utility (`flex`, `grid`, `absolute`, `visible`),
+            // not a `display-flex` style prefix-value pair. CSS closes all four
+            // value sets, so a value outside the table is a typo the build can
+            // decide: it emits nothing rather than shipping an unprefixed class
+            // name that could match the project's own component CSS.
+            // `collect_dead_enum_values` reports it.
+            if super::generated::tables::is_closed_enum_key(key) {
+                return super::generated::tables::closed_enum_class(key, value)
+                    .map(|utility| format!("{prefix}{utility}"));
             }
             // Single-property typography utilities carry their value as a bare
             // Tailwind class (`uppercase`, `italic`, `underline`, `antialiased`),
