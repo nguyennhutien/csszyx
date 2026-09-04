@@ -4,12 +4,14 @@
  * class `[--name:value]` on both engines. The type used to reject the form its
  * own compiler supported, so the only way to write it was a cast.
  *
- * This file is NOT a vitest test (no `.test.ts`); `tsc` checks it as part of the
- * package, so dropping the index signature breaks the build. The
- * `@ts-expect-error` below is the over-loosening guard: a key that is not a
- * custom property must STILL be rejected, or this file fails to compile.
+ * Compiled (not run) by `tsc -b`, like `sz-props.type-test.ts` beside it: the
+ * package's tsconfig includes `src/**` and excludes `tests/`, so a lock has to
+ * live here to be in the program at all. Dropping the index signature breaks
+ * the build. The `@ts-expect-error` below is the over-loosening guard: a key
+ * that is not a custom property must STILL be rejected, or this file fails to
+ * compile.
  */
-import type { SzProps } from '../src/types/sz-props';
+import type { SzProps } from './sz-props.js';
 
 const customProperties: SzProps = {
     bg: 'blue-500',

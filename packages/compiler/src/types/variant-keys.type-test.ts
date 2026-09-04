@@ -1,12 +1,14 @@
 /**
  * Type-level regression lock for the flat-string variant keys the closed sz type
- * must accept (the compiler supports each — see advanced-variants tests). This
- * file is NOT a vitest test (no `.test.ts`); it is type-checked by `tsc` as part
- * of the package, so removing an index signature in `VariantModifiers` breaks the
- * build. The `@ts-expect-error` below is the over-loosening guard: a scalar typo
- * key must STILL be rejected, or this file fails to compile.
+ * must accept (the compiler supports each — see advanced-variants tests).
+ * Compiled (not run) by `tsc -b`, like `sz-props.type-test.ts` beside it: the
+ * package's tsconfig includes `src/**` and excludes `tests/`, so a lock has to
+ * live here to be in the program at all. Removing an index signature in
+ * `VariantModifiers` breaks the build. The `@ts-expect-error` below is the
+ * over-loosening guard: a scalar typo key must STILL be rejected, or this file
+ * fails to compile.
  */
-import type { SzProps } from '../src/types/sz-props';
+import type { SzProps } from './sz-props.js';
 
 // Valid flat-variant keys (object body) — the patterns real projects + the
 // e2e playgrounds use.
