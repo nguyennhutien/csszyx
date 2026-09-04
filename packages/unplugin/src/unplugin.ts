@@ -92,6 +92,7 @@ import {
     mangleExcludeNeverTokenEntries,
     mangleExcludeNeverTokenMessage,
     manglePreserveNoMatchMessage,
+    utilityStart,
 } from './mangle-preserve.js';
 import { applyMangleRuntimeEntry, ensureMangleRuntimeFile } from './mangle-runtime-file.js';
 import {
@@ -797,8 +798,14 @@ function quoteForConfig(entry: string): string {
 function preserveEntriesFor(hazard: MangleSelectorHazard): string[] {
     const quote = quoteForConfig;
     const { value } = hazard;
-    if (hazard.renamed.every(name => name === value)) return [quote(value)];
-    if (hazard.renamed.every(name => name.startsWith(value))) return [quote(`${value}*`)];
+    // A variant prefix is not part of the answer: `manglePreserve` matches a
+    // pattern against the class AND against its utility, so `bg-tag*` already
+    // keeps `dark:bg-tag-blue-bg`. Comparing whole names instead enumerated
+    // every class in the group the moment one of them carried a variant, and
+    // recommended work the prefix form had already done.
+    const utilities = hazard.renamed.map(name => name.slice(utilityStart(name)));
+    if (utilities.every(name => name === value)) return [quote(value)];
+    if (utilities.every(name => name.startsWith(value))) return [quote(`${value}*`)];
     return hazard.renamed.map(quote);
 }
 
@@ -883,7 +890,7 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
                 'other tokens, so the data attribute is the durable fix.',
         );
     }
-    return parts.join('');
+    return parts.join('\n');
 }
 
 /**

@@ -147,6 +147,36 @@ describe('the hazard message', () => {
         expect(message).toContain("manglePreserve: ['text-tag-blue-fg', 'it\\'*']");
     });
 
+    it('collapses to one prefix when the only outliers carry a variant', () => {
+        // Field report: a preserve list of three prefixes dropped 60 names and
+        // left none behind, yet the message still enumerated every `bg-tag-*`
+        // class individually — because four of them were `dark:bg-tag-*`, which
+        // does not START with the value even though its utility does. The
+        // preserve matcher has looked past a variant prefix since the bracket
+        // scan landed, so the suggestion was recommending work already covered.
+        const map = { ...MAP, 'dark:bg-tag-blue-bg': 'z1' };
+        const message = mangleHybridHazardMessage(
+            collectMangleHybridHazards(map, new Set(Object.keys(map)), NONE, [
+                { operator: '*=', value: 'bg-tag', insensitive: false },
+            ]),
+        );
+        expect(message).toContain("manglePreserve: ['bg-tag*']");
+        expect(message).not.toContain("'dark:bg-tag-blue-bg'");
+    });
+
+    it('puts each hazard paragraph on its own line', () => {
+        // One console line held the finding and its remedy for every kind at
+        // once, so a narrow terminal wrapped the lot into a single block.
+        const message = mangleHybridHazardMessage(
+            collectMangleHybridHazards(MAP, new Set(['p-4']), new Set(['a']), [
+                { operator: '*=', value: 'bg-tag', insensitive: false },
+            ]),
+        );
+        const lines = (message ?? '').split('\n');
+        expect(lines.length).toBeGreaterThan(2);
+        expect(lines.every(line => line.trim().length > 0)).toBe(true);
+    });
+
     it('says when a selector would start matching tokens instead', () => {
         const message = mangleHybridHazardMessage(
             collectMangleHybridHazards(MAP, ALL, NONE, [
