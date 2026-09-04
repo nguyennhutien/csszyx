@@ -5181,6 +5181,215 @@
     "oxc": "[--v-neg:-4] [z-index:-1]"
   },
   {
+    "sz": "{\"--v-off\":false,\"bg\":\"red\",\"hover\":{\"--v-off\":false}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "--v-off",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": false
+          }
+        },
+        {
+          "key": "bg",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "red"
+          }
+        },
+        {
+          "key": "hover",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "--v-off",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "boolean",
+                    "value": false
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "bg-red"
+  },
+  {
+    "sz": "{\"--v-on\":true,\"css\":{\"--v-on\":true,\"--v-off\":false}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "--v-on",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        },
+        {
+          "key": "css",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "--v-on",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "boolean",
+                    "value": true
+                  }
+                },
+                {
+                  "key": "--v-off",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "boolean",
+                    "value": false
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "[--v-on:true]"
+  },
+  {
+    "sz": "{\"--MyToken\":1,\"css\":{\"--MyToken\":1,\"fontSize\":\"1rem\"}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "--MyToken",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 1
+          }
+        },
+        {
+          "key": "css",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "--MyToken",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 1
+                  }
+                },
+                {
+                  "key": "fontSize",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "1rem"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "[--MyToken:1] [--MyToken:1] [font-size:1rem]"
+  },
+  {
+    "sz": "{\"--v-cols\":\"[a]\",\"css\":{\"--v-rows\":\"[a] 1fr [b]\"}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "--v-cols",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "string",
+            "value": "[a]"
+          }
+        },
+        {
+          "key": "css",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "--v-rows",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "[a] 1fr [b]"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "oxc": "[--v-cols:[a]] [--v-rows:[a]_1fr_[b]]"
+  },
+  {
     "sz": "{\"p\":4,\"m\":2,\"bg\":\"red-500\",\"display\":\"flex\",\"items\":\"center\"}",
     "ir": {
       "properties": [

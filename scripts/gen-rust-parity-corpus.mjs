@@ -290,6 +290,12 @@ const corpus = [
     { hover: { '--v-x': '1' } },
     { '--v-border': '1px solid red' },
     { css: { '--v-neg': -4, zIndex: -1 } },
+    // The boolean rule, the case rule and the bracket rule of a declaration
+    // value, each of which the native lowering once answered differently.
+    { '--v-off': false, bg: 'red', hover: { '--v-off': false } },
+    { '--v-on': true, css: { '--v-on': true, '--v-off': false } },
+    { '--MyToken': 1, css: { '--MyToken': 1, fontSize: '1rem' } },
+    { '--v-cols': '[a]', css: { '--v-rows': '[a] 1fr [b]' } },
     // order-locking multi-prop + nested handlers combined with sibling props
     { p: 4, m: 2, bg: 'red-500', display: 'flex', items: 'center' },
     { bg: { color: 'blue-500', op: 30 }, p: 4 },

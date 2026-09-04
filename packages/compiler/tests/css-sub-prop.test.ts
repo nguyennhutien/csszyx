@@ -72,6 +72,36 @@ describe('css: {} — arbitrary CSS sub-prop', () => {
         it('underscores a space-bearing custom property value', () => {
             expect(t({ '--my-border': '1px solid red' })).toBe('[--my-border:1px_solid_red]');
         });
+
+        // A declaration value is not a utility value: `[a]` here is a grid
+        // line name, not a user pre-wrapping an arbitrary value, and Tailwind
+        // reads the nested brackets. Stripping them turns a working class
+        // into one that names no line.
+        it('keeps brackets that are part of the declaration value', () => {
+            expect(t({ '--my-cols': '[a]' })).toBe('[--my-cols:[a]]');
+            expect(t({ '--my-rows': '[a] 1fr [b]' })).toBe('[--my-rows:[a]_1fr_[b]]');
+            expect(t({ css: { '--my-cols': '[a]' } })).toBe('[--my-cols:[a]]');
+            expect(t({ css: { gridTemplateColumns: '[a] 1fr [b]' } })).toBe(
+                '[grid-template-columns:[a]_1fr_[b]]',
+            );
+        });
+
+        // The boolean rule every key follows: `false` switches the property
+        // off, `true` is coerced like any scalar. Locked here because the
+        // native lowering once emitted `[--x:false]` for the first case.
+        it('drops a false custom property and coerces a true one', () => {
+            expect(t({ '--my-flag': false as unknown as string, bg: 'red' })).toBe('bg-red');
+            expect(t({ hover: { '--my-flag': false as unknown as string } })).toBe('');
+            expect(t({ '--my-flag': true as unknown as string })).toBe('[--my-flag:true]');
+        });
+
+        // Custom properties are case-sensitive, unlike CSS property names.
+        it('keeps the case of a custom property in either spelling', () => {
+            expect(t({ '--MyToken': 1 })).toBe('[--MyToken:1]');
+            expect(t({ css: { '--MyToken': 1, fontSize: '1rem' } })).toBe(
+                '[--MyToken:1] [font-size:1rem]',
+            );
+        });
     });
 
     describe('combined with regular sz props', () => {
