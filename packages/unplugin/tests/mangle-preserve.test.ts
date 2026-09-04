@@ -98,6 +98,34 @@ describe('compileManglePreserve', () => {
         expect(manglePreserveNoMatchMessage(['bg-tags-*', 'p-5'])).toContain('2 entries matched');
     });
 
+    it('stops reading a census once every entry matched its first class', () => {
+        const keep = compileManglePreserve(['bg-tag-*', 'bg-tag-*']);
+        let visited = 0;
+        function* census(): Generator<string> {
+            for (let index = 0; index < 100; index += 1) {
+                visited += 1;
+                yield `supports-[display:grid]:bg-tag-${index}`;
+            }
+        }
+
+        expect(keep.unmatched(census())).toEqual([]);
+        expect(visited).toBe(1);
+    });
+
+    it('reads an all-missing one-shot census once and keeps configured order', () => {
+        const keep = compileManglePreserve(['z-*', 'a', 'z-*']);
+        let visited = 0;
+        function* census(): Generator<string> {
+            for (const className of ['p-1', 'm-2', 'gap-3']) {
+                visited += 1;
+                yield className;
+            }
+        }
+
+        expect(keep.unmatched(census())).toEqual(['z-*', 'a', 'z-*']);
+        expect(visited).toBe(3);
+    });
+
     it('is a no-op when unset', () => {
         expect(compileManglePreserve(undefined).test('p-4')).toBe(false);
         expect(compileManglePreserve(undefined).unmatched(['p-4'])).toEqual([]);

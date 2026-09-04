@@ -43,7 +43,7 @@ export interface ManglePreserveMatcher {
 }
 
 /**
- * The utility part of a class, with any variant prefixes removed.
+ * Where the utility part of a class starts after its variant prefixes.
  *
  * An entry names a utility, and a stylesheet that matches that name by text
  * matches it under every variant, so `bg-tag-*` has to keep `dark:bg-tag-blue`
@@ -52,9 +52,9 @@ export interface ManglePreserveMatcher {
  * (`supports-[display:grid]:`), and that colon is part of the parameter.
  *
  * @param className - A csszyx-owned class.
- * @returns The class from after its last variant separator.
+ * @returns The index after its last variant separator.
  */
-function utilityOf(className: string): string {
+function utilityStart(className: string): number {
     let depth = 0;
     let start = 0;
     for (let index = 0; index < className.length; index += 1) {
@@ -63,7 +63,7 @@ function utilityOf(className: string): string {
         else if (char === ']') depth = Math.max(0, depth - 1);
         else if (char === ':' && depth === 0) start = index + 1;
     }
-    return className.slice(start);
+    return start;
 }
 
 /**
@@ -94,43 +94,53 @@ export function compileManglePreserve(
             );
         }
     });
-    /**
-     * The names an entry may be compared against. Computed once per class:
-     * the split is a scan of the name, and a census runs to tens of
-     * thousands of classes.
-     *
-     * @param className - A csszyx-owned class.
-     * @returns The class as written, plus its utility name when they differ.
-     */
-    const candidates = (className: string): readonly string[] => {
-        const base = utilityOf(className);
-        return base === className ? [className] : [className, base];
-    };
+    const compiled = list.map(value => ({
+        value,
+        prefix: value.endsWith('*') ? value.slice(0, -1) : undefined,
+    }));
     /**
      * Whether one entry keeps a class — the single rule both members ask.
      *
-     * @param entry - One configured entry.
-     * @param names - The class's candidate names.
+     * @param entry - One compiled configured entry.
+     * @param className - The complete class name.
+     * @param utilityStartIndex - Where the utility starts after variant prefixes.
      * @returns True when the entry names or prefixes the class.
      */
-    const keeps = (entry: string, names: readonly string[]): boolean =>
-        entry.endsWith('*')
-            ? names.some(name => name.startsWith(entry.slice(0, -1)))
-            : names.includes(entry);
+    const keeps = (
+        entry: (typeof compiled)[number],
+        className: string,
+        utilityStartIndex: number,
+    ): boolean =>
+        entry.prefix === undefined
+            ? className === entry.value ||
+              (className.length - utilityStartIndex === entry.value.length &&
+                  className.startsWith(entry.value, utilityStartIndex))
+            : className.startsWith(entry.prefix) ||
+              className.startsWith(entry.prefix, utilityStartIndex);
     const test = (className: string): boolean => {
         if (list.length === 0) return false;
-        const names = candidates(className);
-        return list.some(entry => keeps(entry, names));
+        const start = utilityStart(className);
+        return compiled.some(entry => keeps(entry, className, start));
     };
     return {
         entries: list,
         test,
         unmatched(census) {
             if (list.length === 0) return [];
-            const forms = [...census].map(candidates);
+            const matched = list.map(() => false);
+            let remaining = list.length;
+            for (const className of census) {
+                const start = utilityStart(className);
+                for (let index = 0; index < list.length; index += 1) {
+                    if (matched[index] || !keeps(compiled[index], className, start)) continue;
+                    matched[index] = true;
+                    remaining -= 1;
+                }
+                if (remaining === 0) break;
+            }
             // Asked of the same rule as `test`, or an entry whose only form in
             // this build carries a variant reads as a typo.
-            return list.filter(entry => !forms.some(names => keeps(entry, names)));
+            return list.filter((_, index) => !matched[index]);
         },
     };
 }
