@@ -1030,20 +1030,37 @@ export function unscopedMonorepoMessage(): string {
 }
 
 /**
+ * The marker of the one advisory that is not a fallback.
+ *
+ * `sz` beating a runtime `className` is a precedence surprise, not absent
+ * output: both sources compiled, one of them wins. Named here because the
+ * predicate below is otherwise a question about fallbacks only.
+ */
+const CLASS_NAME_PRECEDENCE_MARKER = 'takes precedence over the runtime "className"';
+
+/**
  * Whether a diagnostic is an advisory one — the class a build may hold back.
  *
- * Spread warnings, budget bails and `missing-css` fallbacks all describe absent
- * output and print regardless. What is left says the runtime path was taken
- * where a compiled one was possible: real, worth acting on, and not a failure.
+ * Advisory means one thing: the styles are THERE, and the note is about how
+ * they got there. An `sz`-site nudge fallback took the runtime path where a
+ * compiled one was possible; the precedence advisory says which of two sources
+ * won. Everything else describes output that is absent or dead, and a
+ * production build has to print it.
+ *
+ * Asked positively on purpose. The predicate used to be "not one of three known
+ * kinds", which quietly made every key and value diagnostic advisory: a
+ * production build of a file with five typo'd keys printed nothing but a census
+ * calling them fallbacks, while `csszyx check` on the same tree named all six.
+ * A classifier written by exclusion cannot stay right as diagnostics are added,
+ * because a new one joins the silent side by default.
  *
  * @param message - One raw diagnostic line as an engine emitted it.
  * @returns True when the diagnostic is advisory rather than a build result.
  */
 export function isAdvisoryDiagnostic(message: string): boolean {
-    return !(
-        message.includes('unresolvable sz spread') ||
-        message.includes('AST budget exceeded') ||
-        szFallbackConsequenceOf(message) === 'missing-css'
+    return (
+        szFallbackConsequenceOf(message) === 'nudge' ||
+        message.includes(CLASS_NAME_PRECEDENCE_MARKER)
     );
 }
 
@@ -1129,6 +1146,37 @@ export function shouldEmitWarning(
         return false;
     }
     return true;
+}
+
+/**
+ * Emit one key or value diagnostic — the family that says a class is dead.
+ *
+ * Its own channel because the two that existed both answer a different
+ * question: `emitMissingCssFallback` handles fallback sites, and the advisory
+ * channel handles notes about styles that ARE present. A typo'd key matched
+ * neither, so a production build dropped it on the floor while `csszyx check`
+ * on the same tree exited 1 and named it. Muted only by `quiet: true`, on the
+ * same reasoning as the missing-css channel: wrong output is not a usage nudge.
+ *
+ * @param quiet - Resolved quiet mode.
+ * @param message - Compiler diagnostic to classify and emit.
+ * @param id - Bundler module identifier included in the warning.
+ * @param emit - Warning output channel.
+ */
+export function emitKeyValueDiagnostic(
+    quiet: QuietMode,
+    message: string,
+    id: string,
+    emit: (message: string) => void,
+): void {
+    if (
+        resolveQuietMode(quiet) === 'all' ||
+        szFallbackConsequenceOf(message) !== undefined ||
+        isAdvisoryDiagnostic(message)
+    ) {
+        return;
+    }
+    emit(`[csszyx] ${id}\n  ${message}`);
 }
 
 /**
@@ -5343,6 +5391,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // warning above). Only `quiet: true` silences it; `'nudges'` exists
             // precisely so a calmer log does not have to cost this report.
             emitMissingCssFallback(quiet, message, id, console.warn);
+            // A dead key or value is the same tier and had no channel at all:
+            // it is not a fallback, so the line above skips it, and it is not
+            // advice, so the advisory list below skips it too.
+            emitKeyValueDiagnostic(quiet, message, id, console.warn);
         }
         const advisories = result.diagnostics.filter(isAdvisoryDiagnostic);
         if (advisories.length === 0) return;
