@@ -225,6 +225,21 @@ describe('the hazard message', () => {
         expect(selectorRemedy).toBeGreaterThan(selectorFinding);
     });
 
+    // The paragraphs were once joined with nothing between them, so each began
+    // with a space to keep the words apart. Joined by newlines, that space
+    // became a one-column indent on every line but the first.
+    it('starts no line with a space', () => {
+        const message =
+            mangleHybridHazardMessage(
+                collectMangleHybridHazards(MAP, new Set(['p-4']), new Set(['y4']), [
+                    { operator: '*=', value: 'bg-tag', insensitive: false },
+                ]),
+            ) ?? '';
+        const lines = message.split('\n');
+        expect(lines.length).toBeGreaterThan(4);
+        expect(lines.filter(line => line.startsWith(' '))).toEqual([]);
+    });
+
     // An orphan reported next to a collision used to lose its fix entirely:
     // the collision branch answered both, and only the collision was addressed.
     it('answers an orphan even when a collision is reported too', () => {

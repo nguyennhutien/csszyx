@@ -24,6 +24,18 @@ describe('isAdvisoryDiagnostic', () => {
         ).toBe(true);
     });
 
+    // The variable-hoist planner declining an optimisation: every class and
+    // variable is still emitted, so this is advice. It was held back before
+    // the key/value channel existed, and the positive classifier that channel
+    // needed sent it to production logs as if a class were dead.
+    it('holds back the mangleVars hoist note', () => {
+        expect(
+            isAdvisoryDiagnostic(
+                '[csszyx] mangleVars skipped component CSS variable hoist for --v-x across 3 usages: no-lca',
+            ),
+        ).toBe(true);
+    });
+
     it.each([
         ['an szr-site fallback', 'szr fallback at 4:43: function call `t()` result is unknown'],
         ['an unresolvable spread', 'unresolvable sz spread at 2:10'],
@@ -49,11 +61,11 @@ describe('key and value diagnostics are not advisory fallbacks', () => {
         ],
         [
             'a closed-enum value',
-            '[csszyx] "display: bogus" at src/A.tsx:1 is not a display value — nothing is emitted for it. display takes one of: block, flex.',
+            '[csszyx] "display: bogus" at src/A.tsx:1 is not a display value. The class "bogus" is still emitted and styles nothing, unless a rule of your own happens to match it. display takes one of: block, flex.',
         ],
         [
             'an object under a csszyx-owned key',
-            '[csszyx] "--v-x" at src/A.tsx:1 is not a variant, but it holds an object, so it lowers to the class prefix "--v-x:" and Tailwind generates no CSS for it. A "--*" key takes a declaration value; "container" takes true or a name.',
+            '[csszyx] "--v-x" at src/A.tsx:1 is not a variant, but it holds an object, so it lowers to the class prefix "--v-x:" and Tailwind generates no CSS for it. A "--*" key takes a declaration value; "container" takes true.',
         ],
         [
             'a dead spacing step',

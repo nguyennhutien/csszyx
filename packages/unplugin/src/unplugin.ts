@@ -834,10 +834,10 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
         // mangle tokens AND risk specificity clashes with other libraries; an
         // exclude is the escape hatch only for names in code you cannot change.
         parts.push(
-            ` ${collisions.length} mangled token(s) collide with class names in non-csszyx CSS ` +
+            `${collisions.length} mangled token(s) collide with class names in non-csszyx CSS ` +
                 `(e.g. ${sample}) — those tokens will cross-contaminate external ".${collisions[0]}" ` +
                 'elements.',
-            ' HOTFIX: pass `production: { mangle: false }` to the csszyx plugin to ship now.' +
+            'HOTFIX: pass `production: { mangle: false }` to the csszyx plugin to ship now.' +
                 ' THEN fix it: if these short names are in your OWN CSS, rename them to' +
                 ' something specific (e.g. `.x` → `.resize-handle-x`) — short/common names' +
                 ' also clash on specificity with other libraries. Only for names in a' +
@@ -849,9 +849,9 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
     if (orphans.length > 0) {
         const sample = orphans.slice(0, 8).join(', ');
         parts.push(
-            ` ${orphans.length} mangled class(es) have no emitted CSS rule (e.g. ${sample}) — ` +
+            `${orphans.length} mangled class(es) have no emitted CSS rule (e.g. ${sample}) — ` +
                 'those elements lose styling.',
-            ' Those classes are csszyx-owned but no CSS was emitted for them' +
+            'Those classes are csszyx-owned but no CSS was emitted for them' +
                 ' (e.g. a separate Tailwind plugin owns the utility CSS, or the class is not' +
                 ' a real utility). Ensure that CSS is generated, or pass' +
                 ' `production: { mangle: false }` to the csszyx plugin until the pipelines' +
@@ -865,9 +865,9 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
             .join('; ');
         const entries = [...new Set(broken.flatMap(preserveEntriesFor))].join(', ');
         parts.push(
-            ` ${broken.length} attribute selector(s) match class names by text (e.g. ${sample}) — ` +
+            `${broken.length} attribute selector(s) match class names by text (e.g. ${sample}) — ` +
                 'those rules stop matching once the classes are renamed, so the elements lose those styles.',
-            ` Keep those classes readable with production.manglePreserve: [${entries}] ` +
+            `Keep those classes readable with production.manglePreserve: [${entries}] ` +
                 '(paste-ready), or key the rule off a data attribute, which mangling never touches. ' +
                 'production.mangleExclude cannot help here: it reserves token names and does not ' +
                 'keep a class from being renamed.',
@@ -882,9 +882,9 @@ export function mangleHybridHazardMessage(hazards: MangleHybridHazards): string 
             .map(quoteForConfig)
             .join(', ');
         parts.push(
-            ` ${newlyMatched.length} attribute selector(s) would start matching mangled tokens ` +
+            `${newlyMatched.length} attribute selector(s) would start matching mangled tokens ` +
                 `instead (e.g. ${sample}).`,
-            ` Reserve those token names with production.mangleExclude: [${tokens}] (paste-ready) ` +
+            `Reserve those token names with production.mangleExclude: [${tokens}] (paste-ready) ` +
                 'so no class is renamed to one of them, or key the rule off a data attribute, ' +
                 'which mangling never touches; a prefix or substring selector goes on matching ' +
                 'other tokens, so the data attribute is the durable fix.',
@@ -1044,6 +1044,13 @@ export function unscopedMonorepoMessage(): string {
  * predicate below is otherwise a question about fallbacks only.
  */
 const CLASS_NAME_PRECEDENCE_MARKER = 'takes precedence over the runtime "className"';
+/**
+ * The variable-hoist planner's note that it left a variable per element.
+ *
+ * An optimisation it declined, not a style it lost: every class and variable
+ * is still emitted. Advice, on the same footing as the precedence note.
+ */
+const MANGLE_VARS_HOIST_SKIP_MARKER = 'mangleVars skipped component CSS variable hoist';
 
 /**
  * Whether a diagnostic is an advisory one — the class a build may hold back.
@@ -1067,7 +1074,8 @@ const CLASS_NAME_PRECEDENCE_MARKER = 'takes precedence over the runtime "classNa
 export function isAdvisoryDiagnostic(message: string): boolean {
     return (
         szFallbackConsequenceOf(message) === 'nudge' ||
-        message.includes(CLASS_NAME_PRECEDENCE_MARKER)
+        message.includes(CLASS_NAME_PRECEDENCE_MARKER) ||
+        message.includes(MANGLE_VARS_HOIST_SKIP_MARKER)
     );
 }
 
