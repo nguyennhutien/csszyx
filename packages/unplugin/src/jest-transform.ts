@@ -73,6 +73,20 @@ interface CacheEntry {
 const SETTLE_MS = 2000;
 
 /**
+ * A directory's modification time, or the never-read marker when it is gone.
+ *
+ * @param dir - The directory.
+ * @returns Its modification time in milliseconds, or -1.
+ */
+function mtimeOf(dir: string): number {
+    try {
+        return fs.statSync(dir).mtimeMs;
+    } catch {
+        return -1;
+    }
+}
+
+/**
  * The modification time to remember for a directory just read.
  *
  * @param mtime - The time the directory reported.
@@ -112,12 +126,7 @@ class TransformCacheIndex {
         // A directory whose modification time moved has a new name in it — a
         // file or a subdirectory. One whose time held has nothing new.
         for (const [dir, readAt] of [...this.dirs]) {
-            let mtime: number;
-            try {
-                mtime = fs.statSync(dir).mtimeMs;
-            } catch {
-                continue;
-            }
+            const mtime = mtimeOf(dir);
             if (mtime === readAt) continue;
             this.dirs.set(dir, settled(mtime));
             this.readDir(dir);
@@ -140,8 +149,8 @@ class TransformCacheIndex {
             const full = path.join(dir, entry.name);
             if (entry.isDirectory()) {
                 if (!this.dirs.has(full)) {
-                    this.dirs.set(full, -1);
-                    this.refreshOne(full);
+                    this.dirs.set(full, settled(mtimeOf(full)));
+                    this.readDir(full);
                 }
                 continue;
             }
@@ -149,20 +158,6 @@ class TransformCacheIndex {
             this.seen.add(full);
             this.add(full);
         }
-    }
-
-    /**
-     * Read one directory discovered during a refresh.
-     *
-     * @param dir - The directory.
-     */
-    private refreshOne(dir: string): void {
-        try {
-            this.dirs.set(dir, settled(fs.statSync(dir).mtimeMs));
-        } catch {
-            return;
-        }
-        this.readDir(dir);
     }
 
     /**

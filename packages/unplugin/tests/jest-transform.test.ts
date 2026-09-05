@@ -62,12 +62,12 @@ function writeEntry(root: string, entry: EntryShape): void {
             inputSha256: createHash('sha256').update(entry.source).digest('hex'),
             compilerVersion: entry.compilerVersion ?? compilerVersion,
             mangleVars: entry.mangleVars ?? false,
-            timestamp: entry.timestamp ?? '2026-01-01T00:00:00.000Z',
+            timestamp: entry.timestamp,
             result: {
                 code: entry.code,
                 transformed: true,
                 usesRuntime: entry.usesRuntime ?? false,
-                diagnostics: entry.diagnostics ?? [],
+                diagnostics: entry.diagnostics,
             },
         }),
     );
@@ -137,10 +137,34 @@ describe('reading the build cache', () => {
         // entry beside it may be the one that answers.
         const root = cacheWith(FILE, SOURCE, CODE);
         writeFileSync(join(root, '9c', '0torn.json'), '{"filename": "/repo/src/');
-        // And a neighbour that is not an entry at all — the plugin's cache
-        // directory holds more than these files.
+        // A JSON file that is not an entry, and a neighbour that is not JSON
+        // at all — the plugin's cache directory holds more than these files.
+        writeFileSync(join(root, '9c', '0other.json'), '{"result": {}}');
         writeFileSync(join(root, '9c', '0notes.txt'), 'not an entry');
         expect(findCachedTransform(root, FILE, SOURCE)).toBe(CODE);
+    });
+
+    it('refuses an entry that recorded no code', () => {
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-jest-cache-'));
+        roots.push(root);
+        mkdirSync(join(root, '9c'));
+        writeFileSync(
+            join(root, '9c', 'entry.json'),
+            JSON.stringify({
+                filename: FILE,
+                inputSha256: createHash('sha256').update(SOURCE).digest('hex'),
+                compilerVersion,
+                result: { transformed: false },
+            }),
+        );
+        expect(findCachedTransform(root, FILE, SOURCE)).toBeNull();
+    });
+
+    it('answers null when the cache root is a file', () => {
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-jest-cache-'));
+        roots.push(root);
+        writeFileSync(join(root, 'transform'), 'not a directory');
+        expect(findCachedTransform(join(root, 'transform'), FILE, SOURCE)).toBeNull();
     });
 
     it('answers null when there is no cache at all', () => {
@@ -173,7 +197,20 @@ describe('reading the build cache', () => {
             name: 'b.json',
             timestamp: '2026-02-01T00:00:00.000Z',
         });
+        writeEntry(root, {
+            filename: FILE,
+            source: SOURCE,
+            code: 'oldest',
+            name: 'c.json',
+            timestamp: '2025-12-01T00:00:00.000Z',
+        });
         expect(findCachedTransform(root, FILE, SOURCE)).toBe('newer');
+    });
+
+    it('keeps the first of two entries no build stamped', () => {
+        const root = cacheWith(FILE, SOURCE, 'first', { name: 'a.json' });
+        writeEntry(root, { filename: FILE, source: SOURCE, code: 'second', name: 'b.json' });
+        expect(findCachedTransform(root, FILE, SOURCE)).toBe('first');
     });
 
     // The plugin records the path with forward slashes; jest hands the
@@ -319,6 +356,24 @@ describe('the key jest caches the output under', () => {
     it('is stable for the same file and the same build', () => {
         const root = cacheWith('/repo/a.tsx', SOURCE, 'built');
         expect(key(root)).toBe(key(root));
+    });
+
+    it('accepts a call without jest options', () => {
+        const transformer = createTransformer({ cacheRoot: '/nonexistent' });
+        expect(transformer.getCacheKey(SOURCE, '/repo/a.tsx')).toBe(
+            transformer.getCacheKey(SOURCE, '/repo/a.tsx'),
+        );
+    });
+
+    it('does not consult the cache for a file it would not compile', () => {
+        const root = cacheWith('/repo/a.css', SOURCE, 'built');
+        const transformer = createTransformer({ cacheRoot: root });
+        const key = transformer.getCacheKey(SOURCE, '/repo/a.css', { configString: '{}' });
+        expect(key).toBe(
+            createTransformer({ cacheRoot: '/nonexistent' }).getCacheKey(SOURCE, '/repo/a.css', {
+                configString: '{}',
+            }),
+        );
     });
 
     // jest's own key covers the file and its config. A rebuild after a change
