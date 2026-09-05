@@ -43,13 +43,34 @@ function lower(sz: SzObject): { className: string; warnings: string[] } {
 }
 
 describe('closed-enum values on the runtime lane', () => {
-    it('emits nothing for a value outside the set and names the legal ones', () => {
+    it('still emits a value outside the set, and names it with the legal ones', () => {
         const { className, warnings } = lower({ display: 'bogus' } as SzObject);
-        expect(className).toBe('');
+        expect(className).toBe('bogus');
         expect(warnings).toHaveLength(1);
         expect(warnings[0]).toContain('"display: bogus"');
-        expect(warnings[0]).toContain('nothing is emitted for it');
+        expect(warnings[0]).toContain('The class "bogus" is still emitted');
         expect(warnings[0]).toContain('inline-block');
+    });
+
+    it('names the prefixed class isolation emits for a value outside its set', () => {
+        const { className, warnings } = lower({ isolation: 'bogus' } as SzObject);
+        expect(className).toBe('isolation-bogus');
+        expect(warnings[0]).toContain('The class "isolation-bogus" is still emitted');
+    });
+
+    // The important modifier is a class suffix, not part of the value.
+    it('reads the important modifier before looking the value up', () => {
+        const { className, warnings } = lower({ display: 'flex!' } as SzObject);
+        expect(className).toBe('flex!');
+        expect(warnings).toEqual([]);
+    });
+
+    // A plain object table answers for `constructor` and `__proto__` through
+    // the prototype chain; those are not display values.
+    it('does not read a prototype member as a legal value', () => {
+        const { className, warnings } = lower({ display: 'constructor' } as SzObject);
+        expect(className).toBe('constructor');
+        expect(warnings[0]).toContain('"display: constructor"');
     });
 
     it.each([

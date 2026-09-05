@@ -420,22 +420,23 @@ pub(crate) fn collect_owned_key_variant_objects(
             out.push((property.key.clone(), property.span.start));
             continue;
         }
+        // `min` / `max` hold breakpoint NAMES, each holding a variant object:
+        // the names are the project's own and are not judged, but what they
+        // hold is walked, as the runtime lane walks it.
+        if matches!(key, "min" | "max") {
+            for breakpoint in &nested.properties {
+                if let StaticSzValue::Object(scoped) = &breakpoint.value {
+                    collect_owned_key_variant_objects(scoped, out);
+                }
+            }
+            continue;
+        }
         // Object-shaped VALUE keys, and the parametric stems whose nested keys
         // are SELECTOR text (`has: { img: … }`, `supports: { 'display:grid': … }`).
         // Same boundary `collect_property_object_values` draws.
         if matches!(
             key,
-            "css"
-                | "bgImg"
-                | "supports"
-                | "data"
-                | "not"
-                | "aria"
-                | "has"
-                | "group"
-                | "peer"
-                | "min"
-                | "max"
+            "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
         ) || mask_slot_members(key).is_some()
         {
             continue;
@@ -444,15 +445,28 @@ pub(crate) fn collect_owned_key_variant_objects(
     }
 }
 
+/// The class a closed-enum key emits for a value outside its table.
+///
+/// On these keys the value IS the class, so it goes out verbatim — except
+/// `isolation`, whose utilities are prefixed. Mirrors `bareClosedEnumClass` in
+/// the TypeScript core, so the diagnostic names the class both engines emit.
+pub(crate) fn bare_closed_enum_class(key: &str, value: &str) -> String {
+    if key == "isolation" {
+        format!("isolation-{value}")
+    } else {
+        value.to_string()
+    }
+}
+
 /// Collect closed-enum keys whose value is not in their set, for the diagnostic.
 ///
 /// `display`, `position`, `visibility` and `isolation` spell their value as the
-/// bare Tailwind utility, so an unrecognised one used to be emitted verbatim as
-/// an unprefixed class name — the shape a project's own component CSS is made
+/// bare Tailwind utility, so an unrecognised one is emitted verbatim as an
+/// unprefixed class name — the shape a project's own component CSS is made
 /// of, which makes the typo a possible collision rather than a plain dead
-/// class. The lowering now drops it; this is what keeps the drop from being a
-/// second silent failure. Descends like the lowering does, so a value nested
-/// under a variant is reported too.
+/// class. Descends like the lowering does, so a value nested under a variant
+/// is reported too. The important modifier is split off first, as
+/// `format_static_class` does: `flex!` is a legal value with a legal suffix.
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_dead_enum_values(
     object: &StaticSzObject,
@@ -461,10 +475,11 @@ pub(crate) fn collect_dead_enum_values(
     for property in &object.properties {
         match &property.value {
             StaticSzValue::String(value) => {
+                let base = value.strip_suffix('!').unwrap_or(value);
                 if super::generated::tables::is_closed_enum_key(&property.key)
-                    && super::generated::tables::closed_enum_class(&property.key, value).is_none()
+                    && super::generated::tables::closed_enum_class(&property.key, base).is_none()
                 {
-                    out.push((property.key.clone(), value.clone(), property.span.start));
+                    out.push((property.key.clone(), base.to_string(), property.span.start));
                 }
             }
             StaticSzValue::Object(nested) => {
@@ -1331,12 +1346,15 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // the bare Tailwind utility (`flex`, `grid`, `absolute`, `visible`),
             // not a `display-flex` style prefix-value pair. CSS closes all four
             // value sets, so a value outside the table is a typo the build can
-            // decide: it emits nothing rather than shipping an unprefixed class
-            // name that could match the project's own component CSS.
-            // `collect_dead_enum_values` reports it.
+            // decide — and `collect_dead_enum_values` reports it. The class is
+            // still emitted: the collectors do not reach a conditional branch
+            // or a parametric variant, and a drop there would be a silent loss
+            // where the pre-diagnostic behaviour at least left the typo in the
+            // DOM to find.
             if super::generated::tables::is_closed_enum_key(key) {
-                return super::generated::tables::closed_enum_class(key, value)
-                    .map(|utility| format!("{prefix}{utility}"));
+                let utility = super::generated::tables::closed_enum_class(key, value)
+                    .map_or_else(|| bare_closed_enum_class(key, value), str::to_string);
+                return Some(format!("{prefix}{utility}"));
             }
             // Single-property typography utilities carry their value as a bare
             // Tailwind class (`uppercase`, `italic`, `underline`, `antialiased`),

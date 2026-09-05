@@ -25,6 +25,9 @@ import { ENGINES, type ParityEngine } from './engine-parity-harness.js';
 const REPORTED: ReadonlyArray<readonly [string, string]> = [
     ['--v-x', "{ '--v-x': { p: 4 } }"],
     ['container', '{ container: { sm: { p: 4 } } }'],
+    // Under a `min` / `max` breakpoint, whose name is the project's own: the
+    // name is not judged, but what it holds is.
+    ['--v-y', "{ min: { md: { '--v-y': { p: 2 } } } }"],
 ];
 
 /** sz shapes that must stay silent, including keys only the project's CSS knows. */

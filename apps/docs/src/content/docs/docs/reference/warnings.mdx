@@ -257,27 +257,36 @@ silently preserving obsolete API spellings or leaving dead classes in the DOM.
 | `[csszyx] "weight: '{value}'"{ at LOC}: Tailwind spells a numeric font weight through --font-weight-*, so "font-{value}" generates no CSS. Write weight: {value} as a number, which brackets to "font-[{value}]".` | A weight written as a string. The NUMBER form brackets for this reason. |
 | `[csszyx] fontSmoothing: '{value}' is not supported — use 'grayscale' or 'subpixel'.` | |
 | `[csszyx] fontStyle: '{value}' is not supported — Tailwind only models 'italic' and 'normal'. For oblique, use css: { fontStyle: '{value}' }.` | |
-| `[csszyx] "{key}: {value}"{ at LOC} is not a {key} value — nothing is emitted for it. {key} takes one of: {values}.` | `display`, `position`, `visibility` and `isolation` only. See below. |
-| `[csszyx] "{key}"{ at LOC} is not a variant, but it holds an object, so it lowers to the class prefix "{key}:" and Tailwind generates no CSS for it. A "--*" key takes a declaration value; "container" takes true or a name.` | The class *is* emitted. Only `--*` and `container` are reported — see below. |
+| `[csszyx] "{key}: {value}"{ at LOC} is not a {key} value. The class "{class}" is still emitted and styles nothing, unless a rule of your own happens to match it. {key} takes one of: {values}.` | `display`, `position`, `visibility` and `isolation` only. **Production builds too.** See below. |
+| `[csszyx] "{key}"{ at LOC} is not a variant, but it holds an object, so it lowers to the class prefix "{key}:" and Tailwind generates no CSS for it. A "--*" key takes a declaration value; "container" takes true.` | The class *is* emitted. Only `--*` and `container` are reported — see below. **Production builds too.** |
 | `[csszyx] "{key}" cannot take a runtime value at {LOC}: Tailwind has no utility for this key that reads a CSS variable, so the class and the variable were dropped instead of styling a different property. Name the values with szv(), or use dynamic() for open-ended data.` | Build only — a *literal* on the same key is unaffected. See below. |
 | `[csszyx] "{key}: '{value}'"{ at LOC}: Tailwind has no per-side border style, so this generated no CSS and the class is dropped. Use borderStyle: '{value}' for every side, or a number on "{key}" for the width.` | A style keyword on a side key. See below. |
 
-#### Four keys spell their value as the class, so a typo is refused
+#### Four keys spell their value as the class, so a typo is named
 
 `display`, `position`, `visibility` and `isolation` carry their value as the
 bare Tailwind utility — `{ display: 'flex' }` is `flex`, not `display-flex`.
-That made an unrecognised value worse than a dead class: it shipped verbatim as
+That makes an unrecognised value worse than a dead class: it ships verbatim as
 a single unprefixed class name, which is the shape a project's own component
-CSS is made of, so `{ display: 'bogus' }` could match a `.bogus` rule that was
+CSS is made of, so `{ display: 'bogus' }` can match a `.bogus` rule that was
 never meant for it.
 
-CSS closes all four value sets, so csszyx refuses a value outside them:
+CSS closes all four value sets, so csszyx names a value outside them, with the
+class it emitted and the legal set:
 
 ```tsx
 <div sz={{ display: 'flex' }} />   // ✅ flex
 <div sz={{ display: 'none' }} />   // ✅ hidden
-<div sz={{ display: 'bogus' }} />  // ❌ nothing emitted, warned with the legal set
+<div sz={{ display: 'flex!' }} />  // ✅ flex! — the important modifier is a class suffix
+<div sz={{ display: 'bogus' }} />  // ⚠️ bogus, warned with the legal set
 ```
+
+The class is still emitted, on purpose. The diagnostic comes from a static
+pass that does not look inside a conditional branch or a parametric variant
+such as `data: { open: … }`; had the build dropped the class instead, a typo
+there would vanish with no line to find it by. Emitting keeps the worst case
+where it always was — a bare class in the DOM — and the diagnostic covers the
+rest.
 
 Anything CSS spells but Tailwind does not is still reachable through the escape
 hatch: `css: { display: 'ruby' }`.

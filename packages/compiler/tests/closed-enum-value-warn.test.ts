@@ -1,34 +1,41 @@
 /**
- * A value outside a closed enum is refused, on every engine artifact.
+ * A value outside a closed enum is reported, on every engine artifact — and
+ * the class it always produced is still emitted.
  *
  * `display`, `position`, `visibility` and `isolation` carry their value as the
- * bare Tailwind utility, so an unrecognised one used to be emitted verbatim:
- * `{ display: 'bogus' }` shipped the class `bogus`. That is worse than a dead
+ * bare Tailwind utility, so an unrecognised one is emitted verbatim:
+ * `{ display: 'bogus' }` ships the class `bogus`. That is worse than a dead
  * class — a single unprefixed word is what a project's own component CSS is
  * made of, so the typo can MATCH a rule, just not the intended one. Field
  * report: a hybrid Tailwind + SCSS app whose stylesheets define `.card`,
- * `.active` and friends.
+ * `.active` and friends. CSS closes all four value sets, so the typo is
+ * decidable at compile time and the diagnostic names the legal values.
  *
- * These four keys have closed value sets, so the typo is decidable at compile
- * time. The class is dropped and a diagnostic names the legal values.
+ * The class is emitted on purpose. The static collectors that produce the
+ * diagnostic do not descend into a conditional branch or a parametric variant
+ * (`data: { open: … }`), so a lowering that dropped the class would lose it
+ * silently exactly where the diagnostic cannot reach — the one failure shape
+ * a diagnostic exists to prevent. Emitting keeps every case at worst where
+ * it was before the diagnostic existed.
  */
 import { describe, expect, it } from 'vitest';
 
 import { ENGINES, type ParityEngine } from './engine-parity-harness.js';
 
-/** One key under test: a value outside its enum, and one inside with its class. */
+/** One key under test: a value outside its enum, the class it still emits, and one inside. */
 interface EnumCase {
     key: string;
     bad: string;
+    bare: string;
     good: string;
     emits: string;
 }
 
 const CLOSED_ENUM_KEYS: readonly EnumCase[] = [
-    { key: 'display', bad: 'bogus', good: 'flex', emits: 'flex' },
-    { key: 'position', bad: 'bogus', good: 'absolute', emits: 'absolute' },
-    { key: 'visibility', bad: 'bogus', good: 'hidden', emits: 'invisible' },
-    { key: 'isolation', bad: 'bogus', good: 'isolate', emits: 'isolate' },
+    { key: 'display', bad: 'bogus', bare: 'bogus', good: 'flex', emits: 'flex' },
+    { key: 'position', bad: 'bogus', bare: 'bogus', good: 'absolute', emits: 'absolute' },
+    { key: 'visibility', bad: 'bogus', bare: 'bogus', good: 'hidden', emits: 'invisible' },
+    { key: 'isolation', bad: 'bogus', bare: 'isolation-bogus', good: 'isolate', emits: 'isolate' },
 ];
 
 /** Every (artifact, key) pair, named so a failure says which lane and which key. */
@@ -53,19 +60,20 @@ function run(engine: ParityEngine, sz: string): { emitted: string; diagnostics: 
 
 describe('closed-enum values', () => {
     it.each(CASES)(
-        '$lane drops an unrecognised $key value instead of emitting it bare',
-        ({ engine, key, bad }) => {
-            expect(run(engine, `{ ${key}: '${bad}' }`).emitted).toBe('');
+        '$lane still emits an unrecognised $key value the way it always did',
+        ({ engine, key, bad, bare }) => {
+            expect(run(engine, `{ ${key}: '${bad}' }`).emitted).toBe(bare);
         },
     );
 
     it.each(CASES)(
-        '$lane names the offending $key value in a diagnostic',
-        ({ engine, key, bad }) => {
+        '$lane names the offending $key value and the class it emitted',
+        ({ engine, key, bad, bare }) => {
             const { diagnostics } = run(engine, `{ ${key}: '${bad}' }`);
             const hit = diagnostics.find(message => message.includes(`"${key}: ${bad}"`));
             expect(hit, diagnostics.join('\n')).toBeDefined();
-            expect(hit).toContain('nothing is emitted for it');
+            expect(hit).toContain(`The class "${bare}" is still emitted`);
+            expect(hit).toContain(`${key} takes one of:`);
         },
     );
 
@@ -74,4 +82,23 @@ describe('closed-enum values', () => {
         expect(emitted).toBe(emits);
         expect(diagnostics).toEqual([]);
     });
+
+    // The important modifier belongs to the class, not to the value: `flex!`
+    // is a legal display value with a legal suffix, and a table lookup on the
+    // raw string would refuse it — and, on the engine lane, refuse a class it
+    // had just emitted correctly.
+    it.each(CASES)('$lane reads the important modifier on $key', ({ engine, key, good, emits }) => {
+        const { emitted, diagnostics } = run(engine, `{ ${key}: '${good}!' }`);
+        expect(emitted).toBe(`${emits}!`);
+        expect(diagnostics).toEqual([]);
+    });
+
+    it.each(CASES)(
+        '$lane reports an unrecognised $key value under a variant, and emits it',
+        ({ engine, key, bad, bare }) => {
+            const { emitted, diagnostics } = run(engine, `{ hover: { ${key}: '${bad}' } }`);
+            expect(emitted).toBe(`hover:${bare}`);
+            expect(diagnostics.some(message => message.includes(`"${key}: ${bad}"`))).toBe(true);
+        },
+    );
 });

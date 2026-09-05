@@ -929,7 +929,7 @@ fn push_owned_key_variant_diagnostics(
             .get_or_insert_with(|| LineIndex::new(&file.source))
             .line_column(&file.source, *offset);
         out.push(format!(
-            "[csszyx] \"{key}\" at {location}:{line} is not a variant, but it holds an object, so it lowers to the class prefix \"{key}:\" and Tailwind generates no CSS for it. A \"--*\" key takes a declaration value; \"container\" takes true or a name."
+            "[csszyx] \"{key}\" at {location}:{line} is not a variant, but it holds an object, so it lowers to the class prefix \"{key}:\" and Tailwind generates no CSS for it. A \"--*\" key takes a declaration value; \"container\" takes true."
         ));
     }
 }
@@ -953,8 +953,9 @@ fn push_dead_enum_diagnostics(
         // The collector proved the key is a closed enum by finding it, so the
         // lookup below cannot miss.
         let allowed = super::generated::tables::closed_enum_values(key).unwrap_or_default();
+        let bare = super::lower::bare_closed_enum_class(key, value);
         out.push(format!(
-            "[csszyx] \"{key}: {value}\" at {location}:{line} is not a {key} value — nothing is emitted for it. {key} takes one of: {allowed}."
+            "[csszyx] \"{key}: {value}\" at {location}:{line} is not a {key} value. The class \"{bare}\" is still emitted and styles nothing, unless a rule of your own happens to match it. {key} takes one of: {allowed}."
         ));
     }
 }
@@ -1660,11 +1661,11 @@ mod tests {
         // The four keys that spell their value as the class itself. An
         // unrecognised one used to ship verbatim as a bare class name, which
         // in a hybrid app can MATCH a rule the author never meant.
-        for (key, value, legal) in [
-            ("display", "bogus", "inline-block"),
-            ("position", "bogus", "sticky"),
-            ("visibility", "bogus", "collapse"),
-            ("isolation", "bogus", "isolate, auto"),
+        for (key, value, bare, legal) in [
+            ("display", "bogus", "bogus", "inline-block"),
+            ("position", "bogus", "bogus", "sticky"),
+            ("visibility", "bogus", "bogus", "collapse"),
+            ("isolation", "bogus", "isolation-bogus", "isolate, auto"),
         ] {
             let file = TransformFile {
                 filename: "/repo/src/App.tsx".to_string(),
@@ -1676,10 +1677,59 @@ mod tests {
                 .iter()
                 .find(|diagnostic| diagnostic.contains(&format!("\"{key}: {value}\"")))
                 .unwrap_or_else(|| panic!("{key}: {:?}", result.diagnostics));
-            assert!(hit.contains("nothing is emitted for it"), "{hit}");
+            assert!(
+                hit.contains(&format!("The class \"{bare}\" is still emitted")),
+                "{hit}"
+            );
             assert!(hit.contains(legal), "{hit}");
-            assert!(!result.code.contains("className"), "{}", result.code);
+            // Still emitted, as before the diagnostic existed: the collectors
+            // do not reach every site the lowering does, and a drop where the
+            // diagnostic cannot follow would be a silent loss.
+            assert!(
+                result.code.contains(&format!("className=\"{bare}\"")),
+                "{}",
+                result.code
+            );
         }
+    }
+
+    #[test]
+    fn static_engine_reads_the_important_modifier_on_a_closed_enum() {
+        // `flex!` is a legal value with a legal class suffix. The lowering
+        // splits the bang off before its lookup; the collector must too, or
+        // it reports a class the build just emitted correctly.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source:
+                "export const A = () => <div sz={{ display: 'flex!', position: 'absolute!' }} />;"
+                    .to_string(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert!(result.code.contains("flex! absolute!"), "{}", result.code);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    }
+
+    #[test]
+    fn static_engine_names_an_owned_key_under_a_min_or_max_breakpoint() {
+        // `min` / `max` hold breakpoint names the project defines, which are
+        // not judged — but the object each one holds is walked, as the runtime
+        // lane walks it, so the two lanes report the same site.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = () => <div sz={{ min: { md: { '--v-y': { p: 2 } } } }} />;"
+                .to_string(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert!(result.code.contains("min-md:--v-y:p-2"), "{}", result.code);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.contains("\"--v-y\"")
+                    && diagnostic.contains("it holds an object")),
+            "{:?}",
+            result.diagnostics
+        );
     }
 
     #[test]

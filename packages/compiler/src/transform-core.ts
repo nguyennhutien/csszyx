@@ -2684,11 +2684,20 @@ function collectBasicSpecialProperty(
         classes.push(`${prefix}${formatWillChange(value)}`);
         return true;
     }
-    const legal = typeof value === 'string' ? CLOSED_ENUM_CLASSES[key] : undefined;
+    const legal = typeof value === 'string' ? CLOSED_ENUM_LOOKUP.get(key) : undefined;
     if (legal !== undefined && typeof value === 'string') {
-        const utility = legal[value];
-        if (utility === undefined) warnClosedEnumValue(key, value, legal);
-        else classes.push(`${prefix}${utility}`);
+        // The important modifier is a class suffix, never part of the value:
+        // `flex!` is a legal display value that a raw lookup would refuse.
+        const { value: base, important } = handleImportant(value);
+        const bang = important ? '!' : '';
+        const utility = legal.get(base);
+        if (utility !== undefined) {
+            classes.push(`${prefix}${utility}${bang}`);
+            return true;
+        }
+        const bare = bareClosedEnumClass(key, base);
+        warnClosedEnumValue(key, base, bare, legal);
+        classes.push(`${prefix}${bare}${bang}`);
         return true;
     }
     if (isGradientPositionKey(rawKey) && typeof value === 'number') {
@@ -2764,29 +2773,66 @@ const CLOSED_ENUM_CLASSES: Record<string, Record<string, string>> = {
     },
 };
 
+/**
+ * The same tables as maps, for the lookup.
+ *
+ * A bracket read on the object literal answers for `constructor` and
+ * `__proto__` through the prototype chain; a map answers only for its own
+ * entries. The literal stays because the Rust table is generated from it.
+ */
+const CLOSED_ENUM_LOOKUP: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map(
+    Object.entries(CLOSED_ENUM_CLASSES).map(([key, table]) => [
+        key,
+        new Map(Object.entries(table)),
+    ]),
+);
+
 /** Closed-enum key/value pairs already warned about, so a re-render cannot spam. */
 const _warnedClosedEnumValues = new Set<string>();
 
 /**
+ * The class a closed-enum key emits for a value outside its table.
+ *
+ * On these keys the value IS the class, so it goes out verbatim — except
+ * `isolation`, whose utilities are prefixed. This is the pre-diagnostic
+ * behaviour, kept on purpose: the class is what makes the typo findable in
+ * the DOM when no diagnostic reaches it.
+ * @param key - The closed-enum key.
+ * @param value - The value outside its set, without the important modifier.
+ * @returns The bare utility, before any variant prefix.
+ */
+function bareClosedEnumClass(key: string, value: string): string {
+    return key === 'isolation' ? `isolation-${value}` : value;
+}
+
+/**
  * Warns when a closed-enum key carries a value CSS does not define for it.
  *
- * Nothing is emitted, which is the part worth saying out loud: on these four
- * keys the value IS the class, so the old behaviour shipped the typo as a bare
- * unprefixed class name that could collide with a project's own component CSS.
- * Dropping it removes the collision, and this line is what keeps the drop from
- * becoming a second silent failure.
+ * On these four keys the value IS the class, so the typo ships as a bare
+ * unprefixed class name — the shape a project's own component CSS is made of,
+ * which makes it a possible collision rather than a plain dead class. The
+ * class is still emitted: the lowering cannot see whether a diagnostic will
+ * reach this site, and a drop where none does is a silent loss. Naming the
+ * emitted class is what makes it findable either way.
  * @param key - The closed-enum key.
  * @param value - The value that is not in its set.
+ * @param bare - The class emitted for it.
  * @param legal - Its value table, whose keys the message lists.
  */
-function warnClosedEnumValue(key: string, value: string, legal: Record<string, string>): void {
+function warnClosedEnumValue(
+    key: string,
+    value: string,
+    bare: string,
+    legal: ReadonlyMap<string, string>,
+): void {
     const token = `${key}:${value}`;
     if (!szDevWarningsEnabled() || _warnedClosedEnumValues.has(token)) return;
     _warnedClosedEnumValues.add(token);
     const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
     console.warn(
-        `[csszyx] "${key}: ${value}"${at} is not a ${key} value — nothing is ` +
-            `emitted for it. ${key} takes one of: ${Object.keys(legal).join(', ')}.`,
+        `[csszyx] "${key}: ${value}"${at} is not a ${key} value. The class "${bare}" is ` +
+            'still emitted and styles nothing, unless a rule of your own happens to match ' +
+            `it. ${key} takes one of: ${[...legal.keys()].join(', ')}.`,
     );
 }
 
@@ -3875,7 +3921,10 @@ const _warnedOwnedKeyVariants = new Set<string>();
  * @param key - The sz key holding the object.
  */
 function warnOwnedKeyVariantObject(key: string): void {
-    if (!szDevWarningsEnabled() || !isOwnedNonVariantKey(key) || _warnedOwnedKeyVariants.has(key)) {
+    // The key test first: every nested variant reaches this line, and the
+    // environment read behind `szDevWarningsEnabled` is the expensive half
+    // (+13% on a six-variant object when it ran first).
+    if (!isOwnedNonVariantKey(key) || !szDevWarningsEnabled() || _warnedOwnedKeyVariants.has(key)) {
         return;
     }
     _warnedOwnedKeyVariants.add(key);
@@ -3883,8 +3932,7 @@ function warnOwnedKeyVariantObject(key: string): void {
     console.warn(
         `[csszyx] "${key}"${at} is not a variant, but it holds an object, so it ` +
             `lowers to the class prefix "${key}:" and Tailwind generates no CSS ` +
-            'for it. A "--*" key takes a declaration value; "container" takes ' +
-            'true or a name.',
+            'for it. A "--*" key takes a declaration value; "container" takes true.',
     );
 }
 
