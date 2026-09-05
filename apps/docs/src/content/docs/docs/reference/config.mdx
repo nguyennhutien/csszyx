@@ -46,7 +46,6 @@ behave exactly as before, because these never reached the build.
           },
           production: {
             mangle: true,
-            injectChecksum: true,
           },
           build: {
             astBudgetLimit: 50_000, // optional, default 50k
@@ -77,7 +76,7 @@ scans them to generate CSS.
       webpack(config) {
         config.plugins.push(
           csszyxWebpack({
-            production: { mangle: true, injectChecksum: true },
+            production: { mangle: true },
           }),
         );
         return config;
@@ -97,7 +96,7 @@ scans them to generate CSS.
     module.exports = {
       plugins: [
         csszyxWebpack({
-          production: { mangle: true, injectChecksum: true },
+          production: { mangle: true },
         }),
       ],
     };
@@ -151,7 +150,6 @@ interface ProductionConfig {
   mangleVarHoistMaxDepth: number; // Max cascade depth for mangleVars hoisting
   mangleGlobalVars?: GlobalVarMangleConfig; // Explicit global token alias tier
   mangleDebugGlobal?: boolean; // Expose the registry as window.__csszyx (default false)
-  injectChecksum: boolean; // Add hydration checksum to HTML
   minify: boolean; // Minify output
 }
 ```
@@ -376,7 +374,6 @@ interface GlobalVarMangleConfig {
 | `mangleVars`             | `false` | Opt into shorter names and bounded hoisting for dynamic CSS variables generated from runtime `sz` values. Disabled builds keep existing `--_sz-*` output. |
 | `mangleVarHoistMaxDepth` | `5`     | Maximum DOM ancestor distance for component-tier CSS variable hoisting when `mangleVars` is enabled.                                                      |
 | `mangleGlobalVars`       | `undefined` | Opt-in alias gate for explicit app-owned global CSS custom properties. Aliasing is the only mode and keeps original public variables defined.          |
-| `injectChecksum`         | `true`  | Embed SHA-256 checksum in HTML                                                                                                                            |
 | `minify`                 | `true`  | Minify emitted CSS and JS                                                                                                                                 |
 
 `mangleVars` does not define global theme-token aliases. It only rewrites the

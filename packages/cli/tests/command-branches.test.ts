@@ -82,7 +82,10 @@ describe('doctor checksum-missing branch', () => {
         await doctor({ cwd, verbose: true });
         const out = logs.join('\n');
         expect(out).toContain('Checksum not found');
-        expect(out).toContain('injectChecksum');
+        // The remedy has to be one the reader can act on. It used to name a
+        // config option nothing read, so following it changed nothing.
+        expect(out).not.toContain('injectChecksum');
+        expect(out).toContain('NODE_ENV=production');
     });
 });
 

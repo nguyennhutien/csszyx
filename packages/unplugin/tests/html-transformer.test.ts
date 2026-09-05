@@ -3,7 +3,6 @@ import {
     createHydrationMangleMap,
     injectChecksum,
     injectHydrationData,
-    injectMangleMapAttribute,
     injectMangleMapScript,
     transformIndexHtml,
 } from '../src/html-transformer.js';
@@ -99,33 +98,6 @@ describe('html-transformer', () => {
         });
     });
 
-    describe('injectMangleMapAttribute', () => {
-        it('should inject data-sz-map attribute on <html>', () => {
-            const result = injectMangleMapAttribute(sampleHtml, sampleMap);
-            expect(result).toContain("data-sz-map='");
-            expect(result).toContain(JSON.stringify(sampleMap));
-        });
-
-        it('should use minified attribute name', () => {
-            const result = injectMangleMapAttribute(sampleHtml, sampleMap, true);
-            expect(result).toContain("data-sz-m='");
-            expect(result).not.toContain('data-sz-map');
-        });
-
-        it('should return unchanged HTML if no <html> tag', () => {
-            const noHtml = '<div>content</div>';
-            const result = injectMangleMapAttribute(noHtml, sampleMap);
-            expect(result).toBe(noHtml);
-        });
-
-        it('should include CSS variable map in inline checksum payload', () => {
-            const result = injectMangleMapAttribute(sampleHtml, sampleMap, false, sampleVarMap);
-            expect(result).toContain(
-                JSON.stringify(createHydrationMangleMap(sampleMap, sampleVarMap)),
-            );
-        });
-    });
-
     describe('injectHydrationData', () => {
         it('should inject checksum and the inert census by default (script mode)', () => {
             const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum);
@@ -134,31 +106,24 @@ describe('html-transformer', () => {
             expect(result).not.toContain('window.__csszyx=');
         });
 
-        it('should inject inline mode (attribute only)', () => {
-            const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum, {
-                mode: 'inline',
-            });
+        // There is one carrier, because there was only ever one reader. The
+        // `data-sz-map` attribute form was written and tested and read by
+        // nothing — no runtime path, no test outside its own — so it went,
+        // and with it the `mode` option that selected between them.
+        it('writes the checksum attribute and the census script, and no other carrier', () => {
+            const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum);
             expect(result).toContain('data-sz-checksum');
-            expect(result).toContain('data-sz-map');
-            expect(result).not.toContain('window.__csszyx=');
-        });
-
-        it('should inject both modes', () => {
-            const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum, {
-                mode: 'both',
-            });
-            expect(result).toContain('data-sz-checksum');
-            expect(result).toContain('data-sz-map');
             expect(result).toContain('__CSSZYX_MANGLE_MAP__');
+            expect(result).not.toContain('data-sz-map');
+            expect(result).not.toContain('window.__csszyx=');
         });
 
         it('should support minify option', () => {
             const result = injectHydrationData(sampleHtml, sampleMap, sampleChecksum, {
-                mode: 'both',
                 minify: true,
             });
             expect(result).toContain('data-sz-cs=');
-            expect(result).toContain('data-sz-m=');
+            expect(result).toContain('__CSSZYX_MANGLE_MAP__');
         });
     });
 

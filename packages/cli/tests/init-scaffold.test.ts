@@ -148,9 +148,13 @@ describe('init interactive path with mocked prompts', () => {
         const cwd = viteReactFixture();
         await interactiveInit({ cwd });
 
-        // Config written with the answered (disabled) flags.
+        // Config written with the answered (disabled) flags. It no longer
+        // scaffolds a `production` block: the one key it used to write was
+        // `injectChecksum`, which nothing read — so a project started here
+        // carried a switch that never moved anything.
         const config = (readFileSync(join(cwd, 'csszyx.config.ts'), 'utf8') as string) ?? '';
-        expect(config).toContain('injectChecksum: false');
+        expect(config).not.toContain('injectChecksum');
+        expect(config).toContain('debug: true');
         // gitignore was declined — .csszyx not appended.
         expect(readFileSync(join(cwd, '.gitignore'), 'utf8')).not.toContain('.csszyx');
         vi.doUnmock('prompts');

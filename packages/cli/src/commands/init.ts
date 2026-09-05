@@ -275,7 +275,7 @@ async function createInitFiles(
             cwd,
             projectInfo.hasTypeScript ? 'csszyx.config.ts' : 'csszyx.config.js',
         );
-        await fs.writeFile(configPath, generateConfigFile(config));
+        await fs.writeFile(configPath, generateConfigFile());
         if (config.installTailwind) await setupTailwindCss(cwd);
         if (NEXTJS_FRAMEWORKS.has(projectInfo.framework)) {
             await setupNextPostcss(cwd, projectInfo, config.installTailwind);
@@ -656,20 +656,19 @@ async function ensureTsconfigInclude(cwd: string, entry: string): Promise<void> 
 
 /**
  * Generate csszyx.config.ts content for a new project.
- * @param config - Configuration flags selected during init.
- * @param config.enableSSR - Whether to enable SSR checksum injection.
- * @param config.enableRecovery - Whether to enable CSS recovery mode.
+ *
+ * It takes no answers any more. The one key the interactive flow used to write
+ * here was `production.injectChecksum`, and nothing read it — so the questions
+ * it was gathered from decided nothing about the file.
+ *
  * @returns The config file content as a string.
  */
-function generateConfigFile(config: { enableSSR: boolean; enableRecovery: boolean }): string {
+function generateConfigFile(): string {
     return `import type { CsszyxConfig } from 'csszyx';
 
 const config: CsszyxConfig = {
   development: {
     debug: true,
-  },
-  production: {
-    injectChecksum: ${config.enableSSR},
   },
 };
 

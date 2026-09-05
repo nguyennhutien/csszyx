@@ -32,23 +32,16 @@ describe('injectMangleMapScript placement', () => {
 });
 
 describe('injectHydrationData modes', () => {
-    it('script mode injects the checksum attribute plus the script tag', () => {
-        const result = injectHydrationData(page, map, 'sum', { mode: 'script' });
+    it('injects the checksum attribute plus the script tag', () => {
+        const result = injectHydrationData(page, map, 'sum');
         expect(result).toContain('data-sz-checksum="sum"');
         expect(result).toContain('__CSSZYX_MANGLE_MAP__');
         expect(result).not.toContain('data-sz-map=');
     });
 
-    it('inline mode uses the attribute, minify shortens the names', () => {
-        const result = injectHydrationData(page, map, 'sum', { mode: 'inline', minify: true });
+    it('minify shortens the checksum attribute and keeps the script', () => {
+        const result = injectHydrationData(page, map, 'sum', { minify: true });
         expect(result).toContain('data-sz-cs="sum"');
-        expect(result).toContain("data-sz-m='");
-        expect(result).not.toContain('__CSSZYX_MANGLE_MAP__');
-    });
-
-    it('both mode emits attribute and script', () => {
-        const result = injectHydrationData(page, map, 'sum', { mode: 'both' });
-        expect(result).toContain("data-sz-map='");
         expect(result).toContain('__CSSZYX_MANGLE_MAP__');
     });
 

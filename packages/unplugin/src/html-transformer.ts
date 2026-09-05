@@ -47,22 +47,10 @@ export function safeJsonForScriptTag(value: unknown, prettyPrint = false): strin
  * csszyx emits no executable inline script at all; this is the whole of what
  * it puts in the document besides the checksum attribute.
  */
-export type InjectionMode = 'inline' | 'script' | 'both';
-
 /**
  * HTML injection options.
  */
 export interface HtmlInjectionOptions {
-    /**
-     * Where the inert census goes.
-     * - 'inline': As data-sz-map attribute on <html>
-     * - 'script': As <script id="__CSSZYX_MANGLE_MAP__" type="application/json"> in <head>
-     * - 'both': Both carriers
-     *
-     * @default 'script'
-     */
-    mode?: InjectionMode;
-
     /**
      * Whether to pretty-print JSON in script tag.
      *
@@ -200,35 +188,6 @@ export function injectMangleMapScript(
 }
 
 /**
- * Injects mangle map as data attribute on <html> tag.
- *
- * @param {string} html - HTML content
- * @param {Record<string, string>} mangleMap - Mangle map
- * @param {boolean} minify - Use short attribute names
- * @param varMangleMap CSS variable mangle map. Values can be arrays when one
- * original dynamic variable is emitted with both scoped and hoisted names.
- * @returns {string} Modified HTML
- *
- * @example
- * ```typescript
- * const html = '<html><head></head></html>';
- * const map = { 'p-4': 'z' };
- * const result = injectMangleMapAttribute(html, map);
- * // <html data-sz-map='{"p-4":"z"}'><head></head></html>
- * ```
- */
-export function injectMangleMapAttribute(
-    html: string,
-    mangleMap: Record<string, string>,
-    minify = false,
-    varMangleMap: Record<string, CssVariableMangleValue> = {},
-): string {
-    const attrName = minify ? 'data-sz-m' : 'data-sz-map';
-    const jsonContent = JSON.stringify(createHydrationMangleMap(mangleMap, varMangleMap));
-    return injectHtmlOpeningAttr(html, ` ${attrName}='${jsonContent}'`);
-}
-
-/**
  * Injects both checksum and mangle map into HTML.
  *
  * @param {string} html - HTML content
@@ -251,22 +210,10 @@ export function injectHydrationData(
     checksum: string,
     options: HtmlInjectionOptions = {},
 ): string {
-    const { mode = 'script', minify = false } = options;
+    const { minify = false } = options;
 
-    let result = html;
-
-    // Always inject checksum
-    result = injectChecksum(result, checksum, minify);
-
-    // Inject mangle map based on mode
-    if (mode === 'inline') {
-        result = injectMangleMapAttribute(result, mangleMap, minify, options.varMangleMap);
-    } else if (mode === 'script') {
-        result = injectMangleMapScript(result, mangleMap, options);
-    } else if (mode === 'both') {
-        result = injectMangleMapAttribute(result, mangleMap, minify, options.varMangleMap);
-        result = injectMangleMapScript(result, mangleMap, options);
-    }
+    let result = injectChecksum(html, checksum, minify);
+    result = injectMangleMapScript(result, mangleMap, options);
 
     return result;
 }

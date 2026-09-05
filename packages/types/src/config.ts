@@ -150,13 +150,6 @@ export interface ProductionConfig {
     mangleGlobalVars?: GlobalVarMangleConfig;
 
     /**
-     * Inject checksum for SSR hydration validation.
-     *
-     * @default true
-     */
-    injectChecksum: boolean;
-
-    /**
      * Minify output (class names and attributes).
      *
      * @default true in production
@@ -690,7 +683,6 @@ export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
     mangle: false,
     mangleVars: false,
     mangleVarHoistMaxDepth: 5,
-    injectChecksum: true,
     minify: true,
 };
 

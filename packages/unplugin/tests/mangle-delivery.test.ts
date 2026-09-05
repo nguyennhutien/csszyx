@@ -107,3 +107,36 @@ describe('census placeholder substitution', () => {
         }
     });
 });
+
+/**
+ * `production.injectChecksum` was documented, scaffolded into every project by
+ * `csszyx init`, and recommended by `csszyx doctor` — and read by nothing. A
+ * team asked to remove the data block from their HTML found the option, set it
+ * to `false`, shipped, and the checksum attribute and the census were both
+ * still there. An unread option is worse than a missing one: it answers a
+ * question it cannot act on.
+ */
+describe('the removed injectChecksum option', () => {
+    const removedWarnings = (warn: ReturnType<typeof vi.spyOn>): number =>
+        warn.mock.calls.filter(call => String(call[0]).includes('injectChecksum')).length;
+
+    it.each([true, false])('warns that the option no longer exists, for %s', value => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            vitePlugin({ production: { injectChecksum: value } } as never);
+            expect(removedWarnings(warn)).toBe(1);
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
+    it('says nothing when the option is absent', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            vitePlugin({ production: { mangle: false } });
+            expect(removedWarnings(warn)).toBe(0);
+        } finally {
+            warn.mockRestore();
+        }
+    });
+});

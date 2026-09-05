@@ -51,6 +51,37 @@ export function needsRuntimeMangleRegistration(
  *
  * @returns The warning text.
  */
+/**
+ * The once-per-build notice for a config that still sets the removed
+ * `production.injectChecksum` option.
+ *
+ * The option was never read: the checksum attribute and the census both shipped
+ * whatever it said. `csszyx init` scaffolded it into every project, so most
+ * configs that set it never chose to — but a team that set it to `false` to
+ * take the data block out of their HTML deserves to hear that it did nothing.
+ *
+ * @returns The warning text.
+ */
+export function removedInjectChecksumMessage(): string {
+    return (
+        '[csszyx] production.injectChecksum has been removed and was never read. The hydration ' +
+        'checksum and the inert census ship on every production build, and no option turned ' +
+        'them off — a build that set this to false still carried both. Delete the option. The ' +
+        'census carries no class entries when production.mangle is off, and both tags are data, ' +
+        'not script: see https://csszyx.com/docs/security/'
+    );
+}
+
+/**
+ * The once-per-build notice for a config that still sets the removed
+ * `production.mangleMapDelivery` option.
+ *
+ * An unread option is silent, so an author who set `'html'` to get the inline
+ * installer would otherwise never learn that the installer is gone — and one
+ * who set `'bundle'` for CSP would not learn that they can drop the line.
+ *
+ * @returns The warning text.
+ */
 export function removedMangleMapDeliveryMessage(): string {
     return (
         '[csszyx] production.mangleMapDelivery has been removed and is ignored. The runtime ' +

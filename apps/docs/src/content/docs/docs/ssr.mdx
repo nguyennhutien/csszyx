@@ -92,10 +92,13 @@ if (!verifyMangleChecksum(expectedChecksum)) {
    ...csszyx({
      production: {
        mangle: true,
-       injectChecksum: true, // ← enables the checksum in HTML
      },
    })
    ```
+
+   The checksum needs no option. Every production build writes it, and every
+   production build writes the census beside it — there has never been a switch
+   for either, whatever `production.injectChecksum` looked like it was for.
 
 2. **Initialize the runtime at app startup**
 

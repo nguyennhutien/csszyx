@@ -202,5 +202,8 @@ function checkBuildOutput(cwd: string, verbose = false): void {
         return;
     }
     printWarn('Checksum not found in HTML');
-    if (verbose) console.log('  → Enable injectChecksum in production config');
+    if (verbose) {
+        console.log('  → Every production build writes it, so this HTML is not one:');
+        console.log('    check that the build ran with NODE_ENV=production.');
+    }
 }

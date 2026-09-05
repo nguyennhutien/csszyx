@@ -85,6 +85,7 @@ import {
 import { createLazyAggregate, type LazyAggregate } from './lazy-aggregate.js';
 import {
     needsRuntimeMangleRegistration,
+    removedInjectChecksumMessage,
     removedMangleMapDeliveryMessage,
 } from './mangle-delivery.js';
 import {
@@ -3121,6 +3122,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         (options.production as Record<string, unknown> | undefined)?.mangleMapDelivery !== undefined
     ) {
         console.warn(removedMangleMapDeliveryMessage());
+    }
+    // Same shape, same reason: the key is gone from `ProductionConfig`, but
+    // `csszyx init` wrote it into configs for four releases, so the ones still
+    // carrying it are exactly the ones that never hear anything.
+    if ((options.production as Record<string, unknown> | undefined)?.injectChecksum !== undefined) {
+        console.warn(removedInjectChecksumMessage());
     }
     // Weighs the map against the CSS it bought. Counts channels that actually
     // shipped rather than the ones a build could have used: a library build
@@ -6325,9 +6332,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // needs no fallback.
                         const injectedMangleMap = manglingEnabled ? state.mangleMap : {};
                         let result = injectHydrationData(html, injectedMangleMap, state.checksum, {
-                            // Always 'script' — the inert JSON census; the
-                            // checksum attribute is injected regardless.
-                            mode: 'script',
                             minify: process.env.NODE_ENV === 'production',
                             varMangleMap: state.varMangleMap,
                         });
