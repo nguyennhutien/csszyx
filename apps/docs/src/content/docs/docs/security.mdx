@@ -122,16 +122,27 @@ via the CSSOM (still no inline content). Under a strict CSP that blocks
 `<style>` element creation, ensure `adoptedStyleSheets` is available (the primary
 path), or supply a nonce for the fallback element.
 
-### JavaScript: csszyx emits no inline script
+### JavaScript: the inline `<script>` tags csszyx emits carry data
 
-A production build puts **no executable inline JavaScript** into your HTML.
-Everything csszyx adds to the document is inert data:
+A build puts **no executable inline JavaScript** into your HTML on any lane.
+What it does add is inert — `type="application/json"` data blocks the browser
+parses and never runs, plus one attribute:
 
-- the hydration checksum on `<html>` — written as `data-sz-checksum`, or as
-  `data-sz-cs` when `production.minify` is on, which is the default;
 - `<script id="__CSSZYX_MANGLE_MAP__" type="application/json">` — the hydration
-  census. A `type="application/json"` block is data, not a script: the browser
-  never evaluates it and `script-src` does not apply to it.
+  census, the original-name-to-token map. A `type="application/json"` block is
+  data, not a script: the browser never evaluates it, and under an enforced
+  `script-src 'self'` it produces no violation. `verifyMangleChecksum` reads it
+  back from the DOM, and it is what lets devtools name a mangled class on a
+  build you cannot rebuild. It ships on every build; without
+  `production.mangle` it carries no class entries.
+- `<script id="__SZ_RECOVERY_MANIFEST__" type="application/json">` — only in a
+  build that emits [`szRecover`](/docs/ssr/#recovery-tokens-via-szrecover) tokens, and omitted
+  entirely when it emits none. It maps each token to the recovery mode and the
+  component name the runtime checks a recovery against; a production build
+  strips the source path from every entry, so `src/Button.tsx:5:8` does not
+  ship, while the name `Button` does.
+- the hydration checksum on `<html>` — written as `data-sz-checksum`, or as
+  `data-sz-cs` when `production.minify` is on, which is the default.
 
 The runtime mangle map — what `szr`, `szv`, `szcn` and `dynamic()` need when
 `production.mangle` is on — is registered from a module **inside your own JS
@@ -141,10 +152,43 @@ entrypoint. It is covered by whatever
 already allows your bundle: `script-src 'self'`, or your nonce or hash. csszyx
 never needs `'unsafe-inline'`; **do not add it for csszyx.**
 
-There is no option to change this and nothing to configure. The
-`production.mangleMapDelivery` option that used to choose between an inline
-script and the bundle has been removed — a build that still sets it is warned
-once and the value ignored.
+Neither carrier is configurable. The `production.mangleMapDelivery` option that
+used to choose between an inline installer script and the bundle has been
+removed — a build that still sets it is warned once and the value ignored. The
+census has no switch: hydration verification reads it from the DOM, so a build
+that omitted it would ship a checksum with nothing to check it against.
+
+#### When a review flags the census tag
+
+A reviewer grepping your `dist/` finds `<script id="__CSSZYX_MANGLE_MAP__">` and
+asks three things.
+
+**Does it execute?** No. It is a JSON data block, and the browser exposes it
+only as the text content of an element. csszyx's own end-to-end suite serves a
+real production build through `vite preview` with `script-src 'self'` in the
+response header and fails on any `securitypolicyviolation` the browser reports;
+the census raises none.
+
+**Does it disclose anything?** It lists csszyx's own utility class names against
+their tokens — `{"p-4":"z","bg-red-500":"y"}`. The stylesheet beside it already
+says the same thing in readable form (`.z{padding:1rem}`), so the census adds no
+information that the page was keeping. It contains no application data, no
+route, no source path and no identifier of yours. Mangling is name
+obfuscation, and it is not a confidentiality control — do not present it as one
+to a reviewer. The recovery manifest is the tag with something of yours in it:
+it names components. Drop `szRecover` from a component and its name leaves the
+manifest with it.
+
+**Can we remove it?** No, and no CSP asks you to. Be careful with this answer
+if the standard being applied is "no inline `<script>` elements", because that
+is not a CSP rule and cannot be written as one: `script-src` governs what
+executes, and a data block never reaches the check, so a policy has no way to
+express it. A rule like that comes from a scanner or a review checklist, and it
+is answered by inventory, not by policy — the tag is inert JSON, it is listed
+above with what it holds, and its content changes on every build because it is
+derived from that build's class set. A build that must not carry the map at all
+is a build without `production.mangle`: the census then carries no class
+entries and the class names in the HTML are the readable ones.
 
 ### Enforce your CSP locally
 

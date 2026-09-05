@@ -264,6 +264,29 @@ ships once, inside the bundle. Enable mangling when you want the class
 names unreadable, and treat the byte delta as a rounding error in either direction.
 :::
 
+#### What mangling buys
+
+Two things, both about names rather than bytes.
+
+**Nothing outside your build can bind to a class name.** A token is allocated
+from the set of classes the build found, so it moves whenever that set changes.
+A browser extension, a host page your app is embedded in, another team's E2E
+selectors, a scraper: none of them can hold onto `bg-red-500` across two
+deploys. Mangling is how a build enforces "do not depend on my class names".
+It is not confidentiality — the stylesheet ships, so `.z{padding:1rem}` reads
+plainly, and the census in the page maps every token back to the name it came
+from.
+
+**The DOM tree is readable in devtools.** Atomic utilities plus transition,
+animation and variant states give one element a `className` of dozens of names,
+and in the Elements panel that line wraps over several rows and buries the
+structure — the cost lands on whoever is debugging something that is not
+styling. Mangled, each element carries a handful of short tokens and the tree
+fits the panel again. When the question does turn out to be styling, `szDecode`
+and the
+[census](/docs/reference/hydration/#reading-the-map-on-a-page-you-cannot-rebuild)
+name the class the token came from.
+
 #### Where the runtime mangle map ships
 
 The runtime mangle map is what lets `szr`, `szv`, `szcn`, and `szDecode` speak
@@ -300,10 +323,16 @@ production: { mangle: true, mangleDebugGlobal: true }
 
 Also assigns the runtime registry to `window.__csszyx` (`mangleMap`,
 `varMangleMap`, `checksum`, `encode`, `decode`, `encodeVar`, `decodeVar`,
-`decodeGlobalVar`, `decodeAll`) for inspection in devtools. Off by default: the
-helpers read the registry internally, so nothing about correctness depends on
-the global, and a production page should carry no inspection surface it did not
-ask for. Nothing else assigns the global.
+`decodeGlobalVar`, `decodeAll`) for inspection in devtools. The helpers read
+the registry internally, so nothing about correctness depends on the global.
+
+Off by default because the global is a named handle any script on the page can
+bind to — an extension, a host shell, a third-party embed — and a stable
+surface to bind to is what mangling takes away. It keeps nothing secret: the
+same map ships in the page as the inert `__CSSZYX_MANGLE_MAP__` census and
+inside your JS bundle, and
+[devtools reads the census](/docs/reference/hydration/#reading-the-map-on-a-page-you-cannot-rebuild)
+on a build you cannot rebuild. Nothing else assigns the global.
 
 :::note[Mangling follows your bundler, not your framework]
 Class mangling (and the collision warning above) run wherever csszyx builds your

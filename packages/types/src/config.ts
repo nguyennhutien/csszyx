@@ -122,8 +122,15 @@ export interface ProductionConfig {
      *
      * The registry (`mangleMap`, `decode`, `encode`, `decodeVar`, …) is what
      * runtime helpers read internally; nothing about correctness depends on
-     * the global. It is off by default so a production page carries no
-     * inspection surface it did not ask for; nothing else assigns the global.
+     * the global. Off by default because it is a named handle on `window`:
+     * any script sharing the page — an extension, a host shell, a third-party
+     * embed — can bind to it and keep working against it, and a stable
+     * surface to bind to is what mangling takes away.
+     *
+     * It hides nothing when off. The same map already ships in the page as
+     * the inert `__CSSZYX_MANGLE_MAP__` census and inside the JS bundle, and
+     * devtools reads the census with one `JSON.parse`. Nothing else assigns
+     * the global.
      *
      * @default false
      */
