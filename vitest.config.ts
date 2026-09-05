@@ -43,7 +43,6 @@ export default defineConfig({
                 '**/*.type-test.ts', // type-only assertions, no runtime to cover
                 '**/scripts/**',
                 'packages/e2e/**',
-                'packages/types/**', // type declarations only — erased at runtime
                 // packages/ts-plugin ships its own c8 run over the built dist,
                 // and that report is uploaded alongside this one. Measuring it
                 // here as well describes one source file twice, from two

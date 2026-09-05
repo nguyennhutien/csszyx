@@ -56,8 +56,18 @@ describe('csszyx scan-collisions', () => {
         // report (`.L0`…`.L9`, `.kwd`, `.pun`, `.typ`), and the paste-ready
         // list reserved 34 token names on behalf of a gitignored artefact.
         vi.spyOn(console, 'log').mockImplementation(() => {});
+        // Every directory on the default list carries one token-shaped name, so
+        // dropping any single entry fails this test rather than a user's run.
+        const generated = '.kwd { color: #008 }\n.pun { color: #660 }';
         const cwd = projectWith({
-            'coverage/lcov-report/prettify.css': '.kwd { color: #008 }\n.pun { color: #660 }',
+            'coverage/lcov-report/prettify.css': generated,
+            'playwright-report/index.css': generated,
+            'storybook-static/sb.css': generated,
+            'out/_next/static/a.css': generated,
+            '.output/public/a.css': generated,
+            '.svelte-kit/output/a.css': generated,
+            '.vercel/output/a.css': generated,
+            '.turbo/cache/a.css': generated,
             'src/app.css': '.main-body { display: flex }',
         });
 

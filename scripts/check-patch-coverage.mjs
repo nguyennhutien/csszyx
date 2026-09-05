@@ -39,7 +39,6 @@ const UNMEASURED = [
     /\.d\.ts$/,
     /(^|\/)scripts\//,
     /^packages\/e2e\//,
-    /^packages\/types\//,
     /^packages\/vscode\/src\/extension\.ts$/,
     // Nothing instruments the docs site, so calling its changed lines
     // uncovered reports a missing test that could not be written: the
