@@ -28,7 +28,7 @@ directory instead of the shell's.
 | `generate-types` | Turns a Tailwind v3 `tailwind.config.js` into TypeScript declarations. Only v3 projects have a config to read. | [`generate-types` and Tailwind v3](/docs/reference/warnings/#generate-types-and-tailwind-v3) |
 | `next-prebuild [pattern]` | Seeds the Next.js Turbopack safelist and generation manifest before `next build`. Also spelled `csszyx next prebuild`. | [Installation](/docs/installation/#nextjs-turbopack-setup) |
 | `next-watch [pattern]` | Keeps that safelist current beside `next dev`. Also spelled `csszyx next watch`. | [Installation](/docs/installation/#nextjs-turbopack-setup) |
-| `audit` | Reports the tier distribution and the built asset sizes of a `dist/` directory. | [Below](#audit) |
+| `audit` | Reports the built asset sizes of a `dist/` directory. | [Below](#audit) |
 | `scan-collisions` | Finds class names in the project's own CSS that a mangled token could collide with. | [Below](#scan-collisions) |
 
 ## `audit`
@@ -40,17 +40,10 @@ reports what the build left there.
 npx csszyx audit
 ```
 
-Two sections print. **📊 Mangle Statistics** carries the tier distribution of
-mangled class names. The mangle map reaches the bundle through a virtual module
-and is substituted into the assets as they are emitted, so no build leaves a map
-in `dist/` for the report to read: the section prints `Tier distribution not yet
-available.` and `The build leaves no mangle map on disk for this report to read.`
-after a production build as well as before one.
-
-**📦 Build Output** lists the first HTML file and the first CSS file found under
-`dist/`, each at its size on disk. No figure here is scaled, compared or
-derived: `statSync` answers and the report prints what it said. A project that
-builds somewhere else — a Next.js app, for one — gets
+One section prints. **📦 Build Output** lists the first HTML file and the first
+CSS file found under `dist/`, each at its size on disk. No figure here is
+scaled, compared or derived: `statSync` answers and the report prints what it
+said. A project that builds somewhere else — a Next.js app, for one — gets
 `No built HTML or CSS found under dist/.`
 
 The report closes with two notes. Mangling hides class names and does not shrink
@@ -67,7 +60,7 @@ the build itself, which weighs the CSS and the map before and after: see
 
 | Option | Effect |
 | --- | --- |
-| `--json` | Prints `{ totalClasses, tierDistribution, output }` and nothing else. `output.html` and `output.css` are `null` when `dist/` holds no asset of that kind. |
+| `--json` | Prints `{ output }` and nothing else. `output.html` and `output.css` are `null` when `dist/` holds no asset of that kind. |
 | `--cwd <dir>` | The directory holding `dist/`. |
 
 ## `scan-collisions`

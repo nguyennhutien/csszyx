@@ -116,16 +116,16 @@ describe('audit', () => {
         const cwd = tempRoot();
         await audit({ cwd, json: true });
         const stats = JSON.parse(logs.join('\n'));
-        expect(stats).toHaveProperty('totalClasses');
+        expect(stats).toHaveProperty('output');
+        expect(stats).not.toHaveProperty('totalClasses');
+        expect(stats).not.toHaveProperty('tierDistribution');
     });
 
-    it('prints the human report and says why the tier section is empty', async () => {
+    it('prints the human report and says when dist holds nothing to weigh', async () => {
         const { logs } = captureLogs();
         const cwd = tempRoot();
         await audit({ cwd });
-        expect(logs.join('\n')).toContain(
-            'The build leaves no mangle map on disk for this report to read.',
-        );
+        expect(logs.join('\n')).toContain('No built HTML or CSS found under dist/.');
     });
 
     it('reports the built asset sizes as measured, never an estimated original', async () => {

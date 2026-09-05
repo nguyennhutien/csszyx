@@ -1,12 +1,19 @@
 /**
- * csszyx audit - Performance analysis and statistics.
+ * csszyx audit - reports what a build left in dist/.
+ *
+ * The report carries no mangle tier distribution. A token cannot be read back
+ * for the tier that produced it: tiers 2 and 3 are both two characters, tiers
+ * 4 and 5 both three (packages/core/src/encoder.rs), so counting lengths would
+ * report every tier-3 class as tier 2 on any build past 52 classes. The counts
+ * would have to come from the allocator that assigned the tokens, which means
+ * the build emitting them rather than this command deriving them.
  */
 
 import path from 'node:path';
 
 import fs from 'fs-extra';
 
-import { colors, printBar, printHeader, printInfo, printSection } from '../utils/terminal-ui.js';
+import { printHeader, printInfo, printSection } from '../utils/terminal-ui.js';
 
 /**
  *
@@ -20,8 +27,6 @@ export interface AuditOptions {
  *
  */
 interface AuditStats {
-    totalClasses: number;
-    tierDistribution: Record<number, number>;
     /** Byte sizes of the first HTML and CSS asset in the build output, as built. */
     output: {
         html: { file: string; bytes: number } | null;
@@ -44,35 +49,6 @@ export async function audit(options: AuditOptions = {}): Promise<void> {
     }
 
     printHeader('csszyx Audit Report');
-
-    // Mangle Statistics
-    printSection('📊 Mangle Statistics');
-    if (stats.totalClasses === 0) {
-        console.log('  Tier distribution not yet available.');
-        console.log('  The build leaves no mangle map on disk for this report to read.');
-    } else {
-        console.log(`  Total Classes:       ${stats.totalClasses}`);
-        console.log();
-        console.log('  Tier Distribution:');
-
-        const tierNames = [
-            'Tier 1 (a-Z)',
-            'Tier 2 (a0-Z9)',
-            'Tier 3 (aa-ZZ)',
-            'Tier 4 (a00-Z99)',
-            'Tier 5 (aaa+)',
-        ];
-
-        for (let i = 1; i <= 5; i++) {
-            const count = stats.tierDistribution[i] || 0;
-            const percent = stats.totalClasses ? Math.round((count / stats.totalClasses) * 100) : 0;
-            const bar = printBar([count], stats.totalClasses, 20);
-
-            console.log(
-                `  • ${tierNames[i - 1].padEnd(18)} ${String(count).padStart(3)} (${String(percent).padStart(2)}%)  ${colors.dim(bar)}`,
-            );
-        }
-    }
 
     // Build output, as built. What mangling did to the payload is not
     // something a dist directory can answer after the fact: the build weighs
@@ -103,8 +79,6 @@ export async function audit(options: AuditOptions = {}): Promise<void> {
 async function collectStats(cwd: string): Promise<AuditStats> {
     // Initialize default stats
     const stats: AuditStats = {
-        totalClasses: 0,
-        tierDistribution: {},
         output: { html: null, css: null },
     };
 
@@ -131,10 +105,6 @@ async function collectStats(cwd: string): Promise<AuditStats> {
         const file = String(cssFiles[0]);
         stats.output.css = { file, bytes: fs.statSync(path.join(distDir, file)).size };
     }
-
-    // Tier distribution stays empty: the mangle map reaches the bundle through a
-    // virtual module and is substituted into the assets while they are emitted, so
-    // no build writes a map the CLI could read back out of dist/.
 
     return stats;
 }
