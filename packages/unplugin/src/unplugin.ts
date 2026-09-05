@@ -3029,10 +3029,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // (configResolved), so dev always uses readable class names that match the
     // dev CSS. `let` because the command is only known at configResolved.
     let manglingEnabled = options.production?.mangle === true;
-    // The census maps original names to tokens, so a build that renames
-    // nothing has nothing to map: it follows mangling, and the option only
-    // takes it away from a build that does mangle.
+    // The census maps original names to tokens, so a build that renames nothing
+    // has nothing to map. It follows the RENAMING, not one feature: class
+    // mangling and variable mangling are separate switches, and a dev server
+    // keeps the second while turning the first off — a page whose variables
+    // were renamed still needs the map that decodes them.
     const censusRequested = options.production?.hydrationCensus !== false;
+    /**
+     * Whether this build renamed anything the census would carry.
+     *
+     * Both renamings count, and they are separate switches: a dev server turns
+     * class mangling off — dev CSS keeps readable class names, so a class map
+     * would encode to tokens no dev rule matches — while it still rewrites CSS
+     * variables. A page whose variables were renamed needs the map that
+     * decodes them, whatever happened to its class names.
+     *
+     * @returns `true` when a class or a variable map has entries.
+     */
+    const censusHasContent = (): boolean =>
+        (manglingEnabled && Object.keys(state.mangleMap).length > 0) ||
+        Object.keys(state.varMangleMap).length > 0;
     // A dev server has no end, so anything it holds back is held back for
     // good: `closeBundle` is where the count of unlisted advisories prints,
     // and a server never reaches it. Knowing we are serving is what keeps the
@@ -5547,7 +5563,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // name in devtools without rebuilding.
         const censusTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json" dangerouslySetInnerHTML={{__html: \`${CENSUS_PLACEHOLDER}\`}} />`;
         const bodyTag =
-            manglingEnabled && censusRequested ? findOpeningTag(transformedCode, 'body') : null;
+            censusRequested && censusHasContent() ? findOpeningTag(transformedCode, 'body') : null;
         if (bodyTag) {
             transformedCode = `${transformedCode.slice(0, bodyTag.close + 1)}${censusTag}${transformedCode.slice(bodyTag.close + 1)}`;
         }
@@ -6337,7 +6353,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // needs no fallback.
                         const injectedMangleMap = manglingEnabled ? state.mangleMap : {};
                         let result = injectHydrationData(html, injectedMangleMap, state.checksum, {
-                            census: manglingEnabled && censusRequested,
+                            census: censusRequested && censusHasContent(),
                             minify: process.env.NODE_ENV === 'production',
                             varMangleMap: state.varMangleMap,
                         });
