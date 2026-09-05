@@ -738,8 +738,10 @@ export interface SplitBoxSzResult {
 export function classifySzKey(key: string, value?: SzValue): Classification | undefined {
     const entry = BOX_ROLE_BY_KEY.get(key);
     if (entry === undefined) return undefined;
-    const role = roleForValue(entry, value);
-    return role === entry.role ? entry : { role, category: entry.category };
+    // A fresh pair, never the generated entry: that entry also carries the
+    // routing detail behind the answer — a per-value role map, a both-node flag
+    // — and this reads as `{ role, category }` everywhere it is documented.
+    return { role: roleForValue(entry, value), category: entry.category };
 }
 
 /**

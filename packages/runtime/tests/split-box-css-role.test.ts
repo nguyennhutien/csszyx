@@ -86,6 +86,15 @@ describe('keys routed by their CSS formatting context', () => {
         expect(classify(token)?.role).toBe(role);
     });
 
+    // The generated entries carry routing detail the callers do not need — a
+    // per-value role map, a both-node flag — and returning them raw would put a
+    // Map in a public answer that reads as `{ role, category }` everywhere else.
+    it('answers with the role and the category, and nothing else', () => {
+        expect(Object.keys(classifySzKey('overflow') ?? {}).sort()).toEqual(['category', 'role']);
+        expect(Object.keys(classifySzKey('transition') ?? {}).sort()).toEqual(['category', 'role']);
+        expect(classifySzKey('transition')).toEqual({ role: 'outer', category: 'transition' });
+    });
+
     it('keeps the category, so a category selector still reaches both sides', () => {
         expect(classifySzKey('divideX')?.category).toBe('divide');
         expect(classify('inset-ring-2')).toEqual({ role: 'outer', category: 'ring' });
