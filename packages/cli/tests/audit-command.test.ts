@@ -30,7 +30,8 @@ describe('audit', () => {
         const printed = logSpy.mock.calls.map(c => String(c[0])).join('\n');
         const stats = JSON.parse(printed);
         expect(stats).toHaveProperty('totalClasses', 0);
-        expect(stats).toHaveProperty('bundleSavings');
+        expect(stats).toHaveProperty('output');
+        expect(stats).not.toHaveProperty('bundleSavings');
     });
 
     it('prints the human report and notes when no build output exists', async () => {

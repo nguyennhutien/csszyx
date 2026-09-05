@@ -54,7 +54,7 @@ describe('audit byte formatting', () => {
         await audit({ cwd });
         const out = logs.join('\n');
         expect(out).toContain('KB');
-        expect(out).toContain('Original HTML');
+        expect(out).toContain('index.html');
     });
 });
 
