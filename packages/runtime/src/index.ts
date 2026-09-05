@@ -43,6 +43,7 @@ export {
     type SSRContext,
     startHydration,
     validateHydrationClass,
+    verifyBundleMatchesDocument,
     verifyMangleChecksum,
     verifyMangleChecksumAsync,
     verifyMangleMapIntegrity,
