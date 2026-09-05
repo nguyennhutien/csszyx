@@ -149,6 +149,7 @@ interface ProductionConfig {
   mangleVars: boolean; // Opt into dynamic sz CSS variable mangling and hoisting
   mangleVarHoistMaxDepth: number; // Max cascade depth for mangleVars hoisting
   mangleGlobalVars?: GlobalVarMangleConfig; // Explicit global token alias tier
+  hydrationCensus?: boolean;   // Ship the class census in the HTML (default true, mangling only)
   mangleDebugGlobal?: boolean; // Expose the registry as window.__csszyx (default false)
   minify: boolean; // Minify output
 }
@@ -312,6 +313,31 @@ It used to choose between an inline installer script and the bundle module. The
 inline lane is gone, so the option has nothing left to select; a build that
 still passes it warns once and ignores the value. Delete the line.
 :::
+
+#### `hydrationCensus`
+
+```ts
+production: { mangle: true, hydrationCensus: false }
+```
+
+Every mangled build writes the class census into the built HTML, as an inert
+`<script type="application/json">` listing each original class name against the
+token that replaced it. It is what lets someone read a deployed page in
+devtools — see [Reading the map on a page you cannot
+rebuild](/docs/reference/hydration/#reading-the-map-on-a-page-you-cannot-rebuild)
+— and it is what `loadMangleMapFromDOM` and `verifyMangleMapIntegrity` read.
+
+It follows `mangle`. A build that renames nothing has nothing to map, so no
+census is written whatever this option says, and a page that carries the
+readable names carries no tag either.
+
+Set it `false` on a build that DOES mangle and the tag is gone. That is for one
+reader: an organisation that inventories every `<script>` element in its pages
+and will not carry this one — the browser never objects to it, but a review
+process can. What it costs is the ability to decode a page you have already
+deployed, and the two functions above answer "nothing to read" instead. The
+hydration checksum is unaffected: that is an attribute, and the guard that
+reads it weighs the document against the bundle, never against the census.
 
 #### `mangleDebugGlobal`
 

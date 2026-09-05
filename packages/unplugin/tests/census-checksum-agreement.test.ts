@@ -61,7 +61,8 @@ describe('a build with mangling off', () => {
             plugin: { production: { mangle: true } },
         });
 
-        expect(readMangleMapFromHtml(off.html)).toEqual({});
+        // No mangling, so no census at all — not an empty one.
+        expect(readMangleMapFromHtml(off.html)).toBeNull();
         expect(Object.keys(readMangleMapFromHtml(on.html) ?? {}).length).toBeGreaterThan(0);
 
         // The two builds carry different censuses, so they must not carry the

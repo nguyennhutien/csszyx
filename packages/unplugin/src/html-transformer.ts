@@ -52,6 +52,16 @@ export function safeJsonForScriptTag(value: unknown, prettyPrint = false): strin
  */
 export interface HtmlInjectionOptions {
     /**
+     * Whether the census `<script>` goes into the document at all.
+     *
+     * The checksum attribute is written either way: it is what the bundle's
+     * registry is compared against, and that comparison never reads the census.
+     *
+     * @default true
+     */
+    census?: boolean;
+
+    /**
      * Whether to pretty-print JSON in script tag.
      *
      * @default false
@@ -210,12 +220,10 @@ export function injectHydrationData(
     checksum: string,
     options: HtmlInjectionOptions = {},
 ): string {
-    const { minify = false } = options;
+    const { minify = false, census = true } = options;
 
-    let result = injectChecksum(html, checksum, minify);
-    result = injectMangleMapScript(result, mangleMap, options);
-
-    return result;
+    const result = injectChecksum(html, checksum, minify);
+    return census ? injectMangleMapScript(result, mangleMap, options) : result;
 }
 
 /**

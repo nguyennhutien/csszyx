@@ -53,12 +53,16 @@ describe('verifyMangleMapIntegrity', () => {
         delete (window as unknown as Record<string, unknown>).verify_mangle_checksum;
     });
 
-    it('fails without the checksum attribute or without the map script', () => {
+    // A missing checksum attribute is still a failure: the page claims nothing
+    // about which build it came from. A missing census is not — the census
+    // follows mangling, and a build that renames nothing writes none, so there
+    // is no map in the document to weigh and nothing has gone wrong.
+    it('fails without the checksum attribute, and passes without the map script', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         expect(verifyMangleMapIntegrity()).toBe(false);
-        document.documentElement.setAttribute('data-sz-checksum', 'sum');
-        expect(verifyMangleMapIntegrity()).toBe(false);
         expect(warn).toHaveBeenCalled();
+        document.documentElement.setAttribute('data-sz-checksum', 'sum');
+        expect(verifyMangleMapIntegrity()).toBe(true);
     });
 
     it('accepts a schema-valid map without the WASM verifier — detection, fail-open', () => {

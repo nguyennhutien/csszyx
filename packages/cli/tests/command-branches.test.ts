@@ -87,6 +87,21 @@ describe('doctor checksum-missing branch', () => {
         expect(out).not.toContain('injectChecksum');
         expect(out).toContain('NODE_ENV=production');
     });
+
+    it('keeps the checksum remedy behind verbose', async () => {
+        const logs = captureLogs();
+        const cwd = tempRoot();
+        writeFileSync(
+            join(cwd, 'package.json'),
+            JSON.stringify({ devDependencies: { csszyx: '^0.11', tailwindcss: '^4' } }),
+        );
+        mkdirSync(join(cwd, 'dist'));
+        writeFileSync(join(cwd, 'dist/index.html'), '<html><body>no checksum here</body></html>');
+        await doctor({ cwd });
+        const out = logs.join('\n');
+        expect(out).toContain('Checksum not found');
+        expect(out).not.toContain('NODE_ENV=production');
+    });
 });
 
 describe('check pattern and no-sz skip', () => {

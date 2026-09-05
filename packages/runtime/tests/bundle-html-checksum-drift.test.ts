@@ -14,8 +14,12 @@
  * wrong. The bundle carries the build's checksum too, in the registry
  * `installMangleRuntime` fills, and nothing compared the two.
  */
-import { afterEach, describe, expect, it } from 'vitest';
-import { guardHydration, verifyBundleMatchesDocument } from '../src/hydration.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+    guardHydration,
+    verifyBundleMatchesDocument,
+    verifyMangleMapIntegrity,
+} from '../src/hydration.js';
 import { clearMangleRegistry, installMangleRuntime } from '../src/mangle-registry.js';
 
 afterEach(() => {
@@ -100,5 +104,24 @@ describe('guardHydration', () => {
         document.documentElement.setAttribute('data-sz-checksum', 'build-one');
         installMangleRuntime({ mangleMap: { 'p-4': 'z' }, checksum: 'build-one' });
         expect(guardHydration(manifestFor('build-one') as never)).toBe(true);
+    });
+});
+
+describe('verifyMangleMapIntegrity with no census in the page', () => {
+    // The census follows mangling, and a build can also drop it deliberately.
+    // Either way there is no map in the document to check against the
+    // checksum, and "nothing to check" is not "the check failed" — reporting a
+    // failure here sent readers looking for corruption on a healthy page.
+    it('reports nothing to verify rather than a failure', () => {
+        document.documentElement.setAttribute('data-sz-checksum', 'build-one');
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            expect(verifyMangleMapIntegrity()).toBe(true);
+            expect(warn.mock.calls.map(c => String(c[0])).join('\n')).not.toContain(
+                'Mangle map script not found',
+            );
+        } finally {
+            warn.mockRestore();
+        }
     });
 });

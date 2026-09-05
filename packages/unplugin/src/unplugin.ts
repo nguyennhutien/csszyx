@@ -3029,6 +3029,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // (configResolved), so dev always uses readable class names that match the
     // dev CSS. `let` because the command is only known at configResolved.
     let manglingEnabled = options.production?.mangle === true;
+    // The census maps original names to tokens, so a build that renames
+    // nothing has nothing to map: it follows mangling, and the option only
+    // takes it away from a build that does mangle.
+    const censusRequested = options.production?.hydrationCensus !== false;
     // A dev server has no end, so anything it holds back is held back for
     // good: `closeBundle` is where the count of unlisted advisories prints,
     // and a server never reaches it. Knowing we are serving is what keeps the
@@ -5542,7 +5546,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // and it is what makes a mangled class traceable back to its original
         // name in devtools without rebuilding.
         const censusTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json" dangerouslySetInnerHTML={{__html: \`${CENSUS_PLACEHOLDER}\`}} />`;
-        const bodyTag = findOpeningTag(transformedCode, 'body');
+        const bodyTag =
+            manglingEnabled && censusRequested ? findOpeningTag(transformedCode, 'body') : null;
         if (bodyTag) {
             transformedCode = `${transformedCode.slice(0, bodyTag.close + 1)}${censusTag}${transformedCode.slice(bodyTag.close + 1)}`;
         }
@@ -6332,6 +6337,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // needs no fallback.
                         const injectedMangleMap = manglingEnabled ? state.mangleMap : {};
                         let result = injectHydrationData(html, injectedMangleMap, state.checksum, {
+                            census: manglingEnabled && censusRequested,
                             minify: process.env.NODE_ENV === 'production',
                             varMangleMap: state.varMangleMap,
                         });

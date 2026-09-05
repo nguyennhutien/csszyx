@@ -66,13 +66,17 @@ describe('built HTML never carries executable inline csszyx script', () => {
         cleanupViteAppBuilds();
     });
 
-    it('default options (no mangling): only the inert census and the module entry', async () => {
+    it('default options (no mangling): no csszyx script tag at all', async () => {
         const built = await buildViteApp({ name: 'csp-default', files: FIXTURE_FILES });
         expect(executableInlineScripts(built.html)).toEqual([]);
-        // The checksum attribute and the census stay: they are inert data, and
-        // hydration verification reads them from the DOM.
+        // The checksum attribute stays — it is what the bundle is compared
+        // against. The census does not: it maps original names to tokens, and a
+        // build that renames nothing has nothing to map, so the page carried an
+        // inline `<script>` element holding `{}` for every reader that
+        // inventories one.
         expect(built.html).toContain('data-sz-checksum="');
-        expect(built.map).toEqual({});
+        expect(built.html).not.toContain('__CSSZYX_MANGLE_MAP__');
+        expect(built.map).toBeNull();
     }, 60_000);
 
     it('mangling on, delivery unset: the map reaches the bundle, not an inline script', async () => {

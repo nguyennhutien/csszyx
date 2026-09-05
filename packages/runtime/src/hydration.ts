@@ -436,12 +436,16 @@ export function verifyMangleMapIntegrity(): boolean {
         return false;
     }
 
-    // Load mangle map from script tag
+    // Load mangle map from script tag. Its absence is not a failed check: the
+    // census follows mangling, and a build that mangles can still be told not
+    // to ship it. There is no map in this document to weigh against the
+    // checksum, and saying so as a failure sent readers hunting corruption on a
+    // page with nothing wrong with it. What the checksum can still be weighed
+    // against is the bundle — see `verifyBundleMatchesDocument`.
     const scriptElement = document.getElementById('__CSSZYX_MANGLE_MAP__');
 
     if (!scriptElement) {
-        console.warn('[csszyx] Mangle map script not found');
-        return false;
+        return true;
     }
 
     try {

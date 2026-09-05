@@ -118,6 +118,28 @@ export interface ProductionConfig {
     manglePreserve?: string[];
 
     /**
+     * Ship the inert class census in the built HTML.
+     *
+     * The census is a `<script type="application/json">` block listing every
+     * original class name against the token that replaced it. It is what lets
+     * someone read a deployed page in devtools — `.z` was `p-4` — on a build
+     * they cannot rebuild, and it is read by `loadMangleMapFromDOM` and
+     * `verifyMangleMapIntegrity`.
+     *
+     * It follows `mangle`: a build that renames nothing has nothing to map, so
+     * no census is written whatever this says. Setting it `false` drops the tag
+     * from a build that DOES mangle — for an organisation that inventories every
+     * `<script>` element in its pages and will not carry this one. The cost is
+     * that a deployed page can no longer be decoded, and those two functions
+     * answer "nothing to read" instead. The hydration checksum is unaffected:
+     * it is an attribute, and the guard that reads it compares the document
+     * against the bundle, never against the census.
+     *
+     * @default true
+     */
+    hydrationCensus?: boolean;
+
+    /**
      * Expose the runtime mangle registry as `window.__csszyx` for debugging.
      *
      * The registry (`mangleMap`, `decode`, `encode`, `decodeVar`, …) is what
