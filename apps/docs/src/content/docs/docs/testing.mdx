@@ -1,0 +1,151 @@
+---
+title: Testing Components
+description: Give a test suite the classes the browser gets, under Vitest and under Jest.
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+A component's `sz` prop is compiled by the bundler plugin. A test runner that
+does not run the plugin renders the component with `sz` still on it as a live
+prop and no `className`, so an assertion like
+`expect(el).toHaveClass('p-4')` reads nothing the browser would see — and a
+value that compiles to nothing is invisible to the suite.
+
+## Vitest
+
+Nothing to set up. Vitest resolves modules through Vite, so the plugin in
+`vite.config.ts` transforms every component a test imports, exactly as it does
+for the app. The rendered element carries the same `className` the browser
+gets, and the same diagnostics reach the terminal.
+
+## Jest
+
+Jest cannot host a bundler plugin, so `@csszyx/unplugin/jest` compiles `sz`
+in a transformer. It does one thing — replaces `sz` with the `className` the
+build would emit — and hands back TSX. Jest applies **one** transformer per
+file, so chain it in front of the one that compiles TSX:
+
+<Tabs>
+  <TabItem label="babel-jest">
+
+```js
+// csszyx-jest-transformer.cjs
+const csszyx = require('@csszyx/unplugin/jest').createTransformer();
+const babel = require('babel-jest').default.createTransformer();
+
+module.exports = {
+    process(sourceText, sourcePath, options) {
+        const { code } = csszyx.process(sourceText, sourcePath);
+        return babel.process(code, sourcePath, options);
+    },
+    getCacheKey(sourceText, sourcePath, options) {
+        return (
+            csszyx.getCacheKey(sourceText, sourcePath, options) +
+            babel.getCacheKey(sourceText, sourcePath, options)
+        );
+    },
+};
+```
+
+  </TabItem>
+  <TabItem label="ts-jest">
+
+```js
+// csszyx-jest-transformer.cjs
+const csszyx = require('@csszyx/unplugin/jest').createTransformer();
+const ts = require('ts-jest').default.createTransformer();
+
+module.exports = {
+    process(sourceText, sourcePath, options) {
+        const { code } = csszyx.process(sourceText, sourcePath);
+        return ts.process(code, sourcePath, options);
+    },
+    getCacheKey(sourceText, sourcePath, options) {
+        return (
+            csszyx.getCacheKey(sourceText, sourcePath, options) +
+            ts.getCacheKey(sourceText, sourcePath, options)
+        );
+    },
+};
+```
+
+  </TabItem>
+  <TabItem label="@swc/jest">
+
+```js
+// csszyx-jest-transformer.cjs
+const csszyx = require('@csszyx/unplugin/jest').createTransformer();
+const swc = require('@swc/jest').createTransformer();
+
+module.exports = {
+    process(sourceText, sourcePath, options) {
+        const { code } = csszyx.process(sourceText, sourcePath);
+        return swc.process(code, sourcePath, options);
+    },
+    getCacheKey(sourceText, sourcePath, options) {
+        return (
+            csszyx.getCacheKey(sourceText, sourcePath, options) +
+            swc.getCacheKey(sourceText, sourcePath, options)
+        );
+    },
+};
+```
+
+  </TabItem>
+</Tabs>
+
+Then point Jest at it:
+
+```js
+// jest.config.js
+module.exports = {
+    transform: {
+        '\\.[jt]sx?$': '<rootDir>/csszyx-jest-transformer.cjs',
+    },
+};
+```
+
+Both cache keys are combined on purpose: Jest caches transformer output under
+that key, and csszyx's half changes when the build's answer for a file changes
+— which a change in *another* module can do without touching the file itself.
+
+### Where the classes come from
+
+Two sources answer, in order.
+
+1. **The build's transform cache**, `.csszyx/cache/transform`. It holds the
+   output the bundler produced, which is the only output that resolves an `sz`
+   object or an `szv` factory imported from another module — those come from
+   the plugin's project-wide scan, and a compiler handed one file cannot see
+   them. An entry is used only when the file's contents match what the build
+   saw, and only when this csszyx version wrote it without variable mangling.
+   Run your build (or dev server) before the suite when a component's styles
+   live in another module.
+2. **A per-file compile**, for everything else. This is the complete answer
+   for an inline `sz` and for one built from a `const` in the same file. A
+   shape it cannot resolve keeps the runtime path, exactly as the plugin
+   would: the `@csszyx/runtime` helper is imported and the classes are
+   computed when the component renders.
+
+Either way, a dead key or value is printed to the console with the file it was
+found in — the same lines the build prints, minus the usage nudges that only
+matter to a bundler.
+
+### Options
+
+```js
+require('@csszyx/unplugin/jest').createTransformer({
+    // Where the plugin wrote its transform cache. Default: `.csszyx/cache/transform`
+    // under the directory Jest runs from; set it when `build.cacheDir` is configured.
+    cacheRoot: '.csszyx/cache/transform',
+    // Which files carry `sz`. Anything else is handed back untouched.
+    extensions: ['.tsx', '.jsx', '.ts', '.js', '.mts', '.mjs'],
+});
+```
+
+<Aside type="tip" title="A whole-project pass, without a test runner">
+`npx @csszyx/cli check` runs the same lowering over every source file and
+exits non-zero on a dead key or value. It is the right gate for CI whether or
+not a suite renders the component — the transformer above is for reading the
+compiled `className` inside a test.
+</Aside>

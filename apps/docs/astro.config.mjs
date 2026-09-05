@@ -219,6 +219,7 @@ export default defineConfig({
                         { label: 'MCP Server', slug: 'docs/mcp-server' },
                         { label: 'TypeScript Autocomplete', slug: 'docs/typescript-plugin' },
                         { label: 'VS Code Extension', slug: 'docs/vscode' },
+                        { label: 'Testing Components', slug: 'docs/testing' },
                     ],
                 },
                 {

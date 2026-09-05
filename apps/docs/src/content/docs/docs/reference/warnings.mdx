@@ -211,7 +211,9 @@ The main gate is: development **and** not a browser. That means they appear in
 your dev-server terminal (build and SSR), not in the browser console. Set
 `CSSZYX_QUIET_SZ_WARNINGS=1` to mute them, or run `npx @csszyx/cli check` for a
 whole-project pass. The rows marked **browser too** use only the `NODE_ENV`
-half of that gate and do reach the console.
+half of that gate and do reach the console. The rows marked **production
+builds too** say a class is dead, and the bundler plugin prints them in a
+production build as well — only `quiet: true` silences them.
 </Aside>
 
 ### Keys
