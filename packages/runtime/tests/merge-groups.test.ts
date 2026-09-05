@@ -5,6 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { BOX_ROLE_TOKENS } from '../src/box-role-map.generated.js';
 import { _szcn, szcn } from '../src/merge-classes.js';
 import {
     _resetSzcnGroups,
@@ -428,17 +429,30 @@ describe('cross-category ambiguity memory', () => {
  * the answers `szcn` gives today, and every one of them has to survive.
  */
 describe('closed-value tokens keep merging as their prefix does', () => {
+    // The first four are the pairs this block exists for: each token IS in
+    // `BOX_ROLE_TOKENS`, so each one reaches the guard. Reverting the guard to
+    // the old blanket `return null` turns exactly these four red.
     it.each([
         ['overflow-hidden', 'overflow-auto', 'overflow-auto'],
         ['overflow-x-hidden', 'overflow-x-auto', 'overflow-x-auto'],
         ['snap-start', 'snap-center', 'snap-center'],
         ['transform-3d', 'transform-flat', 'transform-flat'],
+    ])('szcn(%s, %s) → %s', (a, b, expected) => {
+        expect(szcn(a, b)).toBe(expected);
+    });
+
+    // These three never reach the guard and are here as the control group: they
+    // are the neighbouring shapes a reader would expect to behave the same, and
+    // they must keep doing so for a different reason. `align-*` and `cursor-*`
+    // are not exact tokens at all — they classify through the prefix table —
+    // and `flex` is an ambiguous prefix, resolved by the value classifier
+    // before the exact-token guard is reached.
+    it.each([
         ['align-top', 'align-middle', 'align-middle'],
         ['cursor-pointer', 'cursor-default', 'cursor-default'],
-        // `flex` is an ambiguous prefix, so `flex-row`/`flex-col` merge through
-        // the value classifier BEFORE the exact-token guard is ever reached.
         ['flex-row', 'flex-col', 'flex-col'],
-    ])('szcn(%s, %s) → %s', (a, b, expected) => {
+    ])('szcn(%s, %s) → %s, without reaching the guard', (a, b, expected) => {
+        expect(BOX_ROLE_TOKENS.has(a)).toBe(a === 'flex-row');
         expect(szcn(a, b)).toBe(expected);
     });
 
