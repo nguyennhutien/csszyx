@@ -6,8 +6,10 @@ description: What is CSSzyx and how does it work?
 import { FileTree, Steps, Card, CardGrid } from '@astrojs/starlight/components';
 
 CSSzyx is a CSS-in-JS framework that compiles object-syntax Tailwind props to
-plain `className` strings at build time, then mangles those strings in
-production for maximum compression.
+plain `className` strings at build time. An opt-in production step can then
+mangle those strings to hide the utility vocabulary — an obfuscation feature,
+not a size one: over a gzip-served app the arithmetic comes out flat or slightly
+negative, and the build reports the measured delta.
 
 ## The Problem with String Literals
 
@@ -45,8 +47,9 @@ CSSzyx solves this with object syntax:
 3. **Tailwind JIT** — Reads `.csszyx/csszyx-classes.txt`, scans transformed `className`
    strings, generates CSS for every class in the build.
 
-4. **Mangle** — Builds the encode map `p-4 → z`, `bg-blue-500 → y` … using
-   reversed tier-based encoding, then computes a SHA-256 checksum of the full map.
+4. **Mangle** (opt-in, `production.mangle`) — Builds the encode map `p-4 → z`,
+   `bg-blue-500 → y` … using reversed tier-based encoding, then computes a
+   SHA-256 checksum of the full map.
 
 5. **Emit** — Mangles CSS selectors and JS class strings in all output assets,
    then injects the checksum and mangle map into the HTML document.
@@ -83,8 +86,11 @@ which modules the write affects — your Tailwind entry stylesheets, since they
 
 ## What Gets Mangled
 
-In production builds, every Tailwind class is replaced by a short encoded
-symbol using reversed tier-based encoding (`z → y → x → ...`):
+With `production.mangle` on (it is off by default), every Tailwind class is
+replaced by a short encoded symbol using reversed tier-based encoding
+(`z → y → x → ...`). The point is that the utility vocabulary is not readable
+in the shipped markup; it is not a smaller payload — see
+[the caution in the config reference](/docs/reference/config/#production).
 
 ```html
 <!-- Development build -->

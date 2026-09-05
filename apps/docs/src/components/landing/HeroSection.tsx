@@ -6,7 +6,7 @@ import { highlightSzTokens } from '../../utils/highlight-sz-tokens.js';
 // Object form is intentional: property values sit after `:` in the bundle, which is
 // outside the lookbehind of the mangler's Pass 3 regex (?<=(?:[,(]|&&)\s*).
 // Array tuple form `[sz, tw]` would place the `tw` string after `,` → Pass 3 would
-// mangle it, replacing e.g. "flex" with the minified token "z".
+// mangle it, replacing e.g. "flex" with the mangled token "z".
 interface CompileEntry { sz: string; tw: string; }
 const compileData: CompileEntry[] = [
     // Common
