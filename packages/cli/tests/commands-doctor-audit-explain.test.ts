@@ -119,11 +119,13 @@ describe('audit', () => {
         expect(stats).toHaveProperty('totalClasses');
     });
 
-    it('prints the human report with the not-built-yet guidance', async () => {
+    it('prints the human report and says why the tier section is empty', async () => {
         const { logs } = captureLogs();
         const cwd = tempRoot();
         await audit({ cwd });
-        expect(logs.join('\n')).toContain('Run a production build first');
+        expect(logs.join('\n')).toContain(
+            'The build leaves no mangle map on disk for this report to read.',
+        );
     });
 
     it('reports the built asset sizes as measured, never an estimated original', async () => {

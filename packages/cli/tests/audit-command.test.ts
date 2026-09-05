@@ -37,6 +37,8 @@ describe('audit', () => {
     it('prints the human report and notes when no build output exists', async () => {
         await expect(audit({ cwd: dir })).resolves.toBeUndefined();
         const printed = logSpy.mock.calls.map(c => String(c[0])).join('\n');
-        expect(printed).toContain('Run a production build first');
+        expect(printed).toContain(
+            'The build leaves no mangle map on disk for this report to read.',
+        );
     });
 });

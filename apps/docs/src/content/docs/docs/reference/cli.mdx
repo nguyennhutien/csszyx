@@ -41,9 +41,11 @@ npx csszyx audit
 ```
 
 Two sections print. **📊 Mangle Statistics** carries the tier distribution of
-mangled class names. Nothing reads a build's mangle map back off disk yet, so
-this section prints `Tier distribution not yet available.` after a production
-build as well as before one.
+mangled class names. The mangle map reaches the bundle through a virtual module
+and is substituted into the assets as they are emitted, so no build leaves a map
+in `dist/` for the report to read: the section prints `Tier distribution not yet
+available.` and `The build leaves no mangle map on disk for this report to read.`
+after a production build as well as before one.
 
 **📦 Build Output** lists the first HTML file and the first CSS file found under
 `dist/`, each at its size on disk. No figure here is scaled, compared or
@@ -67,9 +69,6 @@ the build itself, which weighs the CSS and the map before and after: see
 | --- | --- |
 | `--json` | Prints `{ totalClasses, tierDistribution, output }` and nothing else. `output.html` and `output.css` are `null` when `dist/` holds no asset of that kind. |
 | `--cwd <dir>` | The directory holding `dist/`. |
-
-`csszyx audit --help` also lists `--watch` and `--compare <dir>`. The command
-reads neither.
 
 ## `scan-collisions`
 

@@ -13,8 +13,6 @@ import { colors, printBar, printHeader, printInfo, printSection } from '../utils
  */
 export interface AuditOptions {
     json?: boolean;
-    watch?: boolean;
-    compare?: string;
     cwd?: string;
 }
 
@@ -51,7 +49,7 @@ export async function audit(options: AuditOptions = {}): Promise<void> {
     printSection('📊 Mangle Statistics');
     if (stats.totalClasses === 0) {
         console.log('  Tier distribution not yet available.');
-        console.log('  Run a production build first, then re-run csszyx audit.');
+        console.log('  The build leaves no mangle map on disk for this report to read.');
     } else {
         console.log(`  Total Classes:       ${stats.totalClasses}`);
         console.log();
@@ -134,9 +132,9 @@ async function collectStats(cwd: string): Promise<AuditStats> {
         stats.output.css = { file, bytes: fs.statSync(path.join(distDir, file)).size };
     }
 
-    // Tier distribution requires the csszyx mangle map (injected by the build plugin
-    // into the HTML as data-sz-manifest). Not available from dist files alone — this
-    // will be implemented when the manifest reader is added in a future release.
+    // Tier distribution stays empty: the mangle map reaches the bundle through a
+    // virtual module and is substituted into the assets while they are emitted, so
+    // no build writes a map the CLI could read back out of dist/.
 
     return stats;
 }
