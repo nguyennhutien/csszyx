@@ -755,6 +755,12 @@ lanes it described.
 
 ## Mangling
 
+{/* The hazard messages below are quoted as ONE line each, though the build
+prints them as paragraphs. That is deliberate: scripts/validate-warning-docs.mjs
+only checks the line carrying the `[csszyx]` prefix, so breaking a message
+across lines silently drops its finding and its remedy out of the anti-drift
+gate. Keep them on one line. */}
+
 Mangling replaces class names with short tokens. It is an **obfuscation**
 feature — see [Plugin Config](/docs/reference/config/#production). Two
 reports exist, both ungated.

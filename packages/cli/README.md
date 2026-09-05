@@ -101,11 +101,18 @@ npx csszyx next-watch
 
 ### `audit`
 
-View build statistics for a mangled build.
+Lists what the build left in `dist/`: the first HTML and CSS file, each at its
+size on disk.
 
 ```bash
 npx csszyx audit
 ```
+
+No figure is scaled or compared — `statSync` answers and the report prints what
+it said. The tier-distribution section has no source to read yet and says so.
+Mangling hides class names; it does not shrink a gzip-served payload, and the
+production build prints its own verdict on that trade. Full reference:
+[CLI Commands](https://csszyx.com/docs/reference/cli/#audit).
 
 ### `generate-types`
 
