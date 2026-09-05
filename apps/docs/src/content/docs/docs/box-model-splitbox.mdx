@@ -63,10 +63,10 @@ element's border** — outward (the box's relationship to its neighbors) or inwa
 (the box's relationship to its contents).
 
 ```
-   outer  ─ margin · position · sizing · background · border · shadow · transform · visibility · flex/grid item
+   outer  ─ margin · position · sizing · background · border · shadow · overflow-hidden · cursor · flex/grid item
    ┌──────────────────────── the border line ────────────────────────┐
    │                                                                  │
-   │   inner  ─ padding · overflow · display · flex/grid container · gap · text · interaction
+   │   inner  ─ padding · overflow-auto · display · flex/grid container · gap · text · divide
    │   ┌──────────────────────────────────────────────────────────┐  │
    │   │                                                          │  │
    │   │                     your content                         │  │
@@ -76,12 +76,20 @@ element's border** — outward (the box's relationship to its neighbors) or inwa
    └──────────────────────────────────────────────────────────────────┘
 ```
 
-- **outer** = *border-outward*. How the box sits in the world: `m-4`, `absolute`,
-  `w-full`, `bg-white`, `rounded-xl`, `shadow-lg`, `rotate-3`, `invisible` — and
-  how it sits among its siblings: `grow`, `order-2`, `self-center`, `col-span-2`.
+- **outer** = *border-outward*. How the box sits in the world and how it paints
+  itself: `m-4`, `absolute`, `w-full`, `bg-white`, `rounded-xl`, `shadow-lg`,
+  `rotate-3`, `invisible`, `overflow-hidden`, `cursor-pointer` — and how it sits
+  among its siblings: `grow`, `order-2`, `self-center`, `col-span-2`,
+  `snap-start`.
 - **inner** = *border-inward*. How the box treats its contents: `p-6`,
-  `overflow-hidden`, `flex`, `flex-col`, `items-center`, `gap-2`, `text-sm`,
-  `cursor-pointer`.
+  `overflow-y-auto`, `flex`, `flex-col`, `items-center`, `gap-2`, `text-sm`,
+  `divide-y`.
+
+`overflow` is the one property that lands on both sides, because it is two
+properties wearing one name: `overflow-hidden` and `overflow-clip` describe how
+the box is clipped by its own frame, so they go **outer**, while `overflow-auto`
+and `overflow-scroll` ask the box to scroll its children, so they go **inner**.
+That is what lets a scroll frame work with no override at all.
 
 `splitBox` walks the className token by token, asks the generated map “which side
 of the border does this act on?”, and drops each token in the matching bucket.
@@ -113,8 +121,8 @@ function Panel({ className = '', children }) {
 }
 
 <Panel className="m-4 rounded-xl shadow-lg overflow-hidden p-6" />;
-// frame   → "m-4 rounded-xl shadow-lg"
-// content → "overflow-hidden p-6"
+// frame   → "m-4 rounded-xl shadow-lg overflow-hidden"
+// content → "p-6"
 ```
 </TabItem>
 <TabItem label="Vue">
@@ -151,8 +159,8 @@ const box = computed(() => splitBox(props.class));
 import { splitBox } from '@csszyx/runtime';
 
 const { outer, inner } = splitBox('m-4 rounded-xl overflow-hidden p-6');
-frame.className = outer;     // "m-4 rounded-xl"
-content.className = inner;   // "overflow-hidden p-6"
+frame.className = outer;     // "m-4 rounded-xl overflow-hidden"
+content.className = inner;   // "p-6"
 ```
 </TabItem>
 </Tabs>
@@ -163,15 +171,16 @@ These are the defaults. Every one of them is overridable (next section).
 
 | Bucket | Categories | Examples |
 | --- | --- | --- |
-| **outer** | margin · position · sizing · bg · border · ring · shadow · transform · visibility · flex/grid **item** (`grow` `shrink` `basis` `order` `self` `col-span` `row-span`) | `m-4` `-mt-2` `absolute` `inset-0` `w-full` `bg-white` `rounded-xl` `border` `shadow-lg` `rotate-3` `invisible` `z-10` |
-| **inner** | padding · overflow · display · flex/grid **container** (`flex-col` `flex-wrap` `items-*` `justify-*` `grid-cols-*`) · gap · text · interaction | `p-6` `overflow-hidden` `flex` `grid` `gap-2` `text-sm` `underline` `cursor-pointer` |
+| **outer** | margin · position · sizing · bg · border · ring (`inset-ring` too) · shadow · transform · visibility · clipping (`overflow-hidden` `overflow-clip`) · pointer (`cursor-*` `select-*` `pointer-events-*` `will-change-*`) · scroll margin (`scroll-m-*`) · snap position (`snap-start` `snap-center` `snap-always`) · `align-*` · flex/grid **item** (`grow` `shrink` `basis` `order` `self` `col-span` `row-span`) | `m-4` `-mt-2` `absolute` `inset-0` `w-full` `bg-white` `rounded-xl` `border` `shadow-lg` `rotate-3` `invisible` `z-10` `overflow-hidden` `cursor-pointer` |
+| **inner** | padding · scrolling (`overflow-auto` `overflow-scroll`) · display · flex/grid **container** (`flex-col` `flex-wrap` `items-*` `justify-*` `grid-cols-*`) · gap · text · `divide-*` · `perspective-*` · `transform-3d` · form affordance (`resize-*` `appearance-*` `field-sizing-*`) | `p-6` `overflow-y-auto` `flex` `grid` `gap-2` `text-sm` `underline` `divide-y` |
+| **both** | `transition-*` `duration-*` `ease-*` `delay-*` | `transition-colors` `duration-300` |
 
 A mixed string sorts itself in one pass:
 
 ```ts
-splitBox('w-full flex bg-white overflow-hidden invisible p-2 m-2');
-// outer → "w-full bg-white invisible m-2"
-// inner → "flex overflow-hidden p-2"
+splitBox('w-full flex bg-white overflow-hidden overflow-y-auto invisible p-2 m-2');
+// outer → "w-full bg-white overflow-hidden invisible m-2"
+// inner → "flex overflow-y-auto p-2"
 ```
 
 <Aside type="caution" title="Sizing is outer, padding is inner">
@@ -204,9 +213,12 @@ splitBox('-mt-4 px-2! !flex');
 Three guarantees make it safe to drop into a forwarding component:
 
 <CardGrid>
-<Card title="Lossless">
-Every token lands in **exactly one** bucket. Concatenate `outer` + `inner` back
-together and you get your input — no token dropped, none duplicated.
+<Card title="No loss">
+Every token you pass comes back. Each lands in exactly one bucket, except the
+timing group — `transition-*`, `duration-*`, `ease-*`, `delay-*` — which is
+declared on **both**, because a transition only runs on the element whose
+property changes and the state that changes it (`hover:bg-*` on the frame,
+`hover:text-*` on the content) can sit on either side.
 </Card>
 <Card title="Predictable fallback">
 A token csszyx doesn't own (a third-party or arbitrary class like
@@ -236,9 +248,13 @@ The defaults follow the box model, but **your** design owns the final call. Pass
 splitBox('bg-white m-2', { inner: ['bg'] });
 // outer → "m-2"   inner → "bg-white"
 
-// Keep the clip on the frame.
-splitBox('overflow-hidden p-4', { outer: ['overflow'] });
-// outer → "overflow-hidden"   inner → "p-4"
+// Send the clip to the content instead — the frame keeps its corners square.
+splitBox('overflow-hidden p-4', { inner: ['overflow'] });
+// outer → ""   inner → "overflow-hidden p-4"
+
+// Pin the transition to one node, instead of declaring it on both.
+splitBox('transition-colors', { outer: ['transition'] });
+// outer → "transition-colors"   inner → ""
 ```
 
 A `BoxSelector` is whatever is most convenient:
@@ -281,30 +297,32 @@ They see through variants and markers too: `classify('md:px-2')` and
 
 ### Worked example: a scroll frame
 
-The clip stays on the frame; the scroller is **derived** from it — no string
-matching, no `className.includes('overflow-hidden')`:
+The frame takes the height bound and the rounded clip; the content scrolls
+inside it. Both clips land where they belong on their own, so the split needs no
+override — what the component adds is the plumbing that makes a child inherit
+its parent's height:
 
 ```tsx
-import { splitBox, has } from '@csszyx/runtime';
+import { splitBox } from '@csszyx/runtime';
 
 function ScrollArea({ className = '', children }) {
-  // Keep overflow on the frame so the rounded clip is correct.
-  const { outer, inner } = splitBox(className, { outer: ['overflow'] });
-
-  // YOUR rule: a clipping frame implies a scrolling child.
-  const scroll = has(outer, { overflow: 'hidden' }) ? 'overflow-y-auto' : '';
-
+  const { outer, inner } = splitBox(className);
   return (
-    <div className={outer}>
-      <div className={`${inner} ${scroll}`.trim()}>{children}</div>
+    <div className={`${outer} flex flex-col min-h-0 overflow-hidden`}>
+      <div className={`${inner} flex-1 min-h-0 overflow-y-auto`}>{children}</div>
     </div>
   );
 }
 
-<ScrollArea className="overflow-hidden rounded-xl p-4 h-64" />;
-// frame   → "overflow-hidden rounded-xl h-64"
-// content → "p-4 overflow-y-auto"
+<ScrollArea className="rounded-xl p-4 h-64 border" />;
+// frame   → "rounded-xl h-64 border flex flex-col min-h-0 overflow-hidden"
+// content → "p-4 flex-1 min-h-0 overflow-y-auto"
 ```
+
+`min-h-0` on both nodes is the part that is easy to miss: a flex item's default
+`min-height: auto` refuses to shrink below its content, so without it the
+content grows past the frame and nothing scrolls. Swapping `h-64` for `max-h-64`
+makes the same component shrink to fit a short child.
 
 `pick` and `omit` round out the kit when you need to move or strip a category:
 
@@ -365,9 +383,21 @@ splitBoxSz(
 // → { outer: {}, inner: { grow: 2, self: 'center', order: 'first' } }
 ```
 
-The toolkit has sz-object twins as well — `classifySzKey(key)`, `hasSz`,
+- **`overflow` routes by its value**, the way it does on the class side:
+  `{ overflow: 'hidden' }` clips the frame and goes outer, `{ overflow: 'auto' }`
+  scrolls the content and stays inner. The **timing group** (`transition`,
+  `duration`, `ease`, `delay`) is written to **both** objects.
+
+```ts
+splitBoxSz({ overflow: 'hidden', p: 4, transition: 'colors' });
+// → { outer: { overflow: 'hidden', transition: 'colors' },
+//     inner: { p: 4, transition: 'colors' } }
+```
+
+The toolkit has sz-object twins as well — `classifySzKey(key, value?)`, `hasSz`,
 `pickSz`, `omitSz` — reading the same generated truth keyed by sz prop instead of
-class token. The whole component stays sz-native end to end:
+class token. Pass the value to `classifySzKey` for a key whose side depends on it
+(`classifySzKey('overflow', 'hidden')` → outer). The whole component stays sz-native end to end:
 
 ```tsx
 import { splitBoxSz } from '@csszyx/runtime';
@@ -393,9 +423,9 @@ vanilla JS.
 The box-role map is generated from the compiler's property tables and gated by a
 test — it always matches what csszyx emits.
 </Card>
-<Card title="Lossless & predictable">
-Every token routed exactly once, variants preserved, unknown tokens to a
-configurable fallback. Safe in a forwarding component.
+<Card title="Nothing lost, nothing guessed">
+Every token comes back, variants preserved, unknown tokens to a configurable
+fallback. Safe in a forwarding component.
 </Card>
 </CardGrid>
 

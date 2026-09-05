@@ -264,8 +264,16 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
     }
     // Exact value-keyed tokens (flex/block/italic/underline …) span several CSS
     // properties under one category, so under-merge to avoid dropping a sibling.
-    if (BOX_ROLE_TOKENS.has(norm)) {
-        return null;
+    //
+    // A token that is one CLOSED VALUE of a prefixed key is a different animal:
+    // it sits in the same map only so the box-role split can read its value, and
+    // it is a single mutually-exclusive property (`overflow-hidden` against
+    // `overflow-auto`). Those keep merging by their prefix, exactly as they did
+    // before the map learned them.
+    const exact = BOX_ROLE_TOKENS.get(norm);
+    if (exact !== undefined) {
+        if (exact.prefix === undefined) return null;
+        return classifyMatchedPrefix(norm, variant, exact.prefix);
     }
     const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(firstSegment) ?? [];
     for (const [prefix] of bucket) {

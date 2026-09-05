@@ -26,6 +26,7 @@ import {
     BOX_ROLE_PREFIXES,
     BOX_ROLE_TOKENS,
     type BoxRole,
+    type BoxRoleEntry,
 } from './box-role-map.generated.js';
 import { decodeToken, type MangleBridge, mangleBridge } from './class-codec.js';
 import type { SzInput } from './concatenate.js';
@@ -76,6 +77,8 @@ interface TokenInfo extends Classification {
     readonly base: string;
     /** Value segment after the matched prefix (`''` for value-keyed tokens). */
     readonly value: string;
+    /** Declared on both nodes rather than routed to one (`transition-*`). */
+    readonly both?: boolean;
 }
 
 /**
@@ -208,8 +211,12 @@ function inspectUncached(token: string): TokenInfo | undefined {
     const base = normalizeBase(stripVariant(token));
     if (!base) return undefined;
 
+    // A token built from one closed value of a prefixed key carries that value
+    // (`overflow-hidden` → `hidden`), so an object selector reads it the way it
+    // reads a prefixed token. Value-keyed sugar has no prefix and its class name
+    // IS the value (`block`, `italic`), so it answers with the whole base.
     const exact = BOX_ROLE_TOKENS.get(base);
-    if (exact) return { ...exact, base, value: base };
+    if (exact) return { ...exact, base, value: exact.value ?? base };
 
     const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(base.split('-', 1)[0] as string) ?? [];
     for (const [prefix, entry] of bucket) {
@@ -428,9 +435,12 @@ function hasSplitOverrides(options: SplitBoxOptions): boolean {
 
 /**
  * Partition a className string into `{ outer, inner }` at the CSS box-model
- * border line. Every token lands in exactly one bucket (no loss, no duplication)
- * and keeps its variant prefix. Overrides in `options.inner` / `options.outer`
- * win over the default map; `inner` is checked first when a token matches both.
+ * border line. Nothing is lost and every token keeps its variant prefix: each
+ * lands in exactly one bucket, except the timing group (`transition-*`,
+ * `duration-*`, `ease-*`, `delay-*`), which is declared on both because the
+ * state that fires a transition can sit on either node. Overrides in
+ * `options.inner` / `options.outer` win over the default map and over the
+ * both-node rule; `inner` is checked first when a token matches both.
  *
  * @param className - The flat className string to partition.
  * @param options - Overrides for forcing tokens onto a node and the fallback role.
@@ -480,11 +490,24 @@ function splitBoxUncached(
 
     for (const token of tokenize(className)) {
         const info = inspect(token, bridge);
-        let role: BoxRole;
-        if (anyMatch(info, forceInner)) role = 'inner';
-        else if (anyMatch(info, forceOuter)) role = 'outer';
-        else role = info ? info.role : fallback;
-        (role === 'outer' ? outer : inner).push(token);
+        if (anyMatch(info, forceInner)) {
+            inner.push(token);
+            continue;
+        }
+        if (anyMatch(info, forceOuter)) {
+            outer.push(token);
+            continue;
+        }
+        // A transition is declared on both nodes unless the caller pinned it:
+        // it does nothing on its own, and the state that fires it can sit on
+        // either side. An override still wins, which is why this runs after the
+        // two checks above.
+        if (info?.both) {
+            outer.push(token);
+            inner.push(token);
+            continue;
+        }
+        ((info ? info.role : fallback) === 'outer' ? outer : inner).push(token);
     }
 
     return { outer: outer.join(' '), inner: inner.join(' ') };
@@ -571,11 +594,32 @@ export interface SplitBoxSzResult {
  * takes an emitted class token) — both read the same generated map, so
  * `classifySzKey('m')` and `classify('m-4')` agree.
  *
+ * A few keys mean different things per value — `overflow: 'hidden'` clips the
+ * frame while `overflow: 'auto'` scrolls the content — so pass the value to get
+ * the role the emitted class would have. Without it the key's own role is
+ * returned, which is what the class for any other value has.
+ *
  * @param key - An sz prop key (e.g. `'m'`, `'px'`, `'grow'`).
+ * @param value - The value the key holds, when it is known.
  * @returns The key's role and category, or `undefined` if unowned.
  */
-export function classifySzKey(key: string): Classification | undefined {
-    return BOX_ROLE_BY_KEY.get(key);
+export function classifySzKey(key: string, value?: SzValue): Classification | undefined {
+    const entry = BOX_ROLE_BY_KEY.get(key);
+    if (entry === undefined) return undefined;
+    const role = roleForValue(entry, value);
+    return role === entry.role ? entry : { role, category: entry.category };
+}
+
+/**
+ * The role an sz entry takes for the value it holds.
+ *
+ * @param entry - The key's classification.
+ * @param value - The value the key holds.
+ * @returns The value's role, or the key's own when the value does not change it.
+ */
+function roleForValue(entry: BoxRoleEntry, value: SzValue | undefined): BoxRole {
+    if (entry.byValue === undefined || typeof value !== 'string') return entry.role;
+    return entry.byValue.get(value) ?? entry.role;
 }
 
 /**
@@ -749,7 +793,15 @@ function partitionSzEntry(key: string, value: SzValue, context: SzPartitionConte
         return;
     }
     if (entry) {
-        (entry.role === 'inner' ? context.inner : context.outer)[key] = value;
+        // Declared on both nodes, for the reason `splitBoxUncached` gives: the
+        // transition is inert until something changes, and the change can sit
+        // on either side.
+        if (entry.both) {
+            context.outer[key] = value;
+            context.inner[key] = value;
+            return;
+        }
+        (roleForValue(entry, value) === 'inner' ? context.inner : context.outer)[key] = value;
         return;
     }
     if (!isPlainObject(value)) {

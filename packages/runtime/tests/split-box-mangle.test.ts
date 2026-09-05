@@ -67,14 +67,16 @@ describe('with a mangle registry installed', () => {
         expect(pick('a', 'w')).toBe('a');
     });
 
+    // `e` is `overflow-hidden`, which clips the frame, so it lands outer with
+    // the margin and the width; only the padding (`c`) is inner.
     it('splitBox routes mangled tokens to the right bucket and emits them raw', () => {
-        expect(splitBox('d c a e')).toEqual({ outer: 'd a', inner: 'c e' });
+        expect(splitBox('d c a e')).toEqual({ outer: 'd a e', inner: 'c' });
     });
 
     it('handles a list mixing raw and mangled tokens', () => {
         // An authored literal survives mangling as itself; both spellings are
         // one class to the toolkit.
-        expect(splitBox('mt-4 c w-full e')).toEqual({ outer: 'mt-4 w-full', inner: 'c e' });
+        expect(splitBox('mt-4 c w-full e')).toEqual({ outer: 'mt-4 w-full e', inner: 'c' });
         expect(has('mt-4 c', 'padding')).toBe(true);
     });
 

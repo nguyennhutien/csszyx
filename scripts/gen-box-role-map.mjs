@@ -127,20 +127,23 @@ const BOX_ROLE_RULES = [
     },
     {
         role: 'outer',
-        category: 'divide',
-        keys: ['divideX', 'divideY', 'divideColor', 'divideStyle'],
-    },
-    {
-        role: 'outer',
         category: 'outline',
         keys: ['outline', 'outlineColor', 'outlineOffset', 'outlineStyle'],
     },
+    // inset-ring / inset-shadow are painted inside the border, but on the border
+    // box of the ELEMENT THAT DECLARES THEM — they are that element's own
+    // painting, not something its children lay out inside. Same side as the ring
+    // and shadow they mirror.
     {
         role: 'outer',
         category: 'ring',
-        keys: ['ring', 'ringColor', 'ringOffset', 'ringOffsetColor'],
+        keys: ['ring', 'ringColor', 'ringOffset', 'ringOffsetColor', 'insetRing', 'insetRingColor'],
     },
-    { role: 'outer', category: 'shadow', keys: ['shadow', 'shadowColor'] },
+    {
+        role: 'outer',
+        category: 'shadow',
+        keys: ['shadow', 'shadowColor', 'insetShadow', 'insetShadowColor'],
+    },
     // sizing → OUTER (contested): width/height constrain the frame the parent gives.
     {
         role: 'outer',
@@ -242,9 +245,6 @@ const BOX_ROLE_RULES = [
             'skewY',
             'origin',
             'backface',
-            'perspective',
-            'perspectiveOrigin',
-            'transformStyle',
             'transform',
             'zoom',
         ],
@@ -286,9 +286,21 @@ const BOX_ROLE_RULES = [
         keys: ['p', 'pt', 'pr', 'pb', 'pl', 'px', 'py', 'ps', 'pe', 'pbs', 'pbe'],
     },
     { role: 'inner', category: 'space', keys: ['spaceX', 'spaceY'] },
-    // inset-ring / inset-shadow are painted INSIDE the border, unlike ring/shadow.
-    { role: 'inner', category: 'ring', keys: ['insetRing', 'insetRingColor'] },
-    { role: 'inner', category: 'shadow', keys: ['insetShadow', 'insetShadowColor'] },
+    // `divide-*` draws a border BETWEEN a container's children — on a frame with
+    // one child it paints nothing at all (measured: 0 px). It is a container
+    // property, like `space-*` beside it.
+    {
+        role: 'inner',
+        category: 'divide',
+        keys: ['divideX', 'divideY', 'divideColor', 'divideStyle'],
+    },
+    // These three establish the 3D rendering context the CHILDREN are laid out
+    // in; the rest of `transform` moves the box itself and stays outer.
+    {
+        role: 'inner',
+        category: 'transform',
+        keys: ['perspective', 'perspectiveOrigin', 'transformStyle'],
+    },
     { role: 'inner', category: 'columns', keys: ['columns'] },
     { role: 'inner', category: 'object', keys: ['objectFit', 'objectPos'] },
     // overflow → INNER (contested): clips the content the element lays out.
@@ -319,7 +331,6 @@ const BOX_ROLE_RULES = [
             'textWrap',
             'wrap',
             'indent',
-            'align',
             'whitespace',
             'break',
             'hyphens',
@@ -363,35 +374,25 @@ const BOX_ROLE_RULES = [
     { role: 'inner', category: 'svg', keys: ['fill', 'stroke', 'strokeWidth'] },
     { role: 'inner', category: 'table', keys: ['tableLayout', 'caption'] },
     { role: 'inner', category: 'accent', keys: ['caret', 'accent'] },
+    // What the box lets the user DO with it — the pointer meets the frame
+    // first, and a selection or a will-change hint applies to the whole
+    // element, not to the content it lays out.
+    {
+        role: 'outer',
+        category: 'interaction',
+        keys: ['cursor', 'pointerEvents', 'select', 'willChange'],
+    },
+    // These three change how the box renders its own control affordance.
     {
         role: 'inner',
         category: 'interaction',
-        keys: [
-            'cursor',
-            'pointerEvents',
-            'fieldSizing',
-            'resize',
-            'select',
-            'willChange',
-            'appearance',
-        ],
+        keys: ['fieldSizing', 'resize', 'appearance'],
     },
     {
         role: 'inner',
         category: 'scroll',
         keys: [
             'scroll',
-            'scrollM',
-            'scrollMt',
-            'scrollMr',
-            'scrollMb',
-            'scrollMl',
-            'scrollMs',
-            'scrollMe',
-            'scrollMx',
-            'scrollMy',
-            'scrollMbs',
-            'scrollMbe',
             'scrollP',
             'scrollPt',
             'scrollPr',
@@ -409,7 +410,32 @@ const BOX_ROLE_RULES = [
             'scrollbarGutter',
         ],
     },
-    { role: 'inner', category: 'snap', keys: ['snapAlign', 'snapStop', 'snapType'] },
+    // `snap-type` makes THIS box a snap container for its children; `snap-align`
+    // and `snap-stop` say how this box snaps inside its ANCESTOR's container,
+    // the way `m-*` is measured against the parent.
+    { role: 'inner', category: 'snap', keys: ['snapType'] },
+    { role: 'outer', category: 'snap', keys: ['snapAlign', 'snapStop'] },
+    // Scroll margin is the box's own outset in its ancestor's scrollport;
+    // scroll padding insets the scrollport this box establishes.
+    {
+        role: 'outer',
+        category: 'scroll',
+        keys: [
+            'scrollM',
+            'scrollMt',
+            'scrollMr',
+            'scrollMb',
+            'scrollMl',
+            'scrollMs',
+            'scrollMe',
+            'scrollMx',
+            'scrollMy',
+            'scrollMbs',
+            'scrollMbe',
+        ],
+    },
+    // vertical-align positions this box within its parent's line box.
+    { role: 'outer', category: 'text', keys: ['align'] },
     { role: 'inner', category: 'touch', keys: ['touch'] },
 ];
 
@@ -436,8 +462,8 @@ const BOOLEAN_ROLE = {
     tabularNums: { role: 'inner', category: 'text' },
     diagonalFractions: { role: 'inner', category: 'text' },
     stackedFractions: { role: 'inner', category: 'text' },
-    divideXReverse: { role: 'outer', category: 'divide' },
-    divideYReverse: { role: 'outer', category: 'divide' },
+    divideXReverse: { role: 'inner', category: 'divide' },
+    divideYReverse: { role: 'inner', category: 'divide' },
     spaceXReverse: { role: 'inner', category: 'space' },
     spaceYReverse: { role: 'inner', category: 'space' },
 };
@@ -484,23 +510,95 @@ function buildPropertyKeyRoles() {
     return { keyRole, propertyKeys };
 }
 
+/** The five `overflow` values, spelled the same for all three axes. */
+const OVERFLOW_VALUES = ['auto', 'hidden', 'clip', 'visible', 'scroll'];
+
 /**
- * Keys that share a class prefix with a key on the OTHER side of the border,
- * resolved by their closed value set instead: each listed value emits an exact
- * token (`flex-col`), matched before any prefix, so the prefix itself can
- * carry the role of the remaining key (`flex-1`, `flex-auto`, `flex-[2]`).
- * A value outside the list falls through to the prefix, which is where a
- * class the compiler does not know belongs anyway.
+ * `hidden` and `clip` describe how the box is painted and clipped by its OWN
+ * frame; `auto`, `scroll` and `visible` ask the box to become a scroll
+ * container for its children. One property name, two sides of the border.
+ */
+const OVERFLOW_ROLES = { hidden: 'outer', clip: 'outer' };
+
+/**
+ * Keys whose closed value set is resolved into exact tokens rather than left to
+ * a prefix. Two reasons a key is listed here, and a key can have both:
+ *
+ * 1. It shares a class prefix with a key on the OTHER side of the border
+ *    (`flex-col` is inner, `flex-1` is outer). Each listed value emits an exact
+ *    token, matched before any prefix, so the prefix can carry the other key's
+ *    role. A value outside the list falls through to the prefix, which is where
+ *    a class the compiler does not know belongs anyway.
+ * 2. `roles` gives some values a different role from the key's own — the role
+ *    depends on the VALUE, not just the property (`overflow`).
  */
 const TOKEN_RESOLVED_VALUES = {
-    flexDir: ['row', 'row-reverse', 'col', 'col-reverse'],
-    flexWrap: ['wrap', 'wrap-reverse', 'nowrap'],
+    flexDir: { values: ['row', 'row-reverse', 'col', 'col-reverse'] },
+    flexWrap: { values: ['wrap', 'wrap-reverse', 'nowrap'] },
+    snapAlign: { values: ['start', 'end', 'center', 'align-none'] },
+    snapStop: { values: ['normal', 'always'] },
+    transformStyle: { values: ['3d', 'flat'] },
+    overflow: { values: OVERFLOW_VALUES, roles: OVERFLOW_ROLES },
+    overflowX: { values: OVERFLOW_VALUES, roles: OVERFLOW_ROLES },
+    overflowY: { values: OVERFLOW_VALUES, roles: OVERFLOW_ROLES },
 };
+
+/**
+ * Properties that are declared on BOTH nodes rather than routed to one.
+ *
+ * A transition is inert on its own: it says how a property animates WHEN it
+ * changes, and the state that changes it (`hover:`, a data attribute) can sit
+ * on either node. Routing the transition to one node and the change to the
+ * other leaves the change instant — the token is present, the animation never
+ * runs, and nothing says why.
+ *
+ * `animate-*` is deliberately NOT here: an animation runs the moment it lands,
+ * so declaring it twice would run it twice, once per node.
+ */
+const DECLARED_ON_BOTH = new Set(['transition', 'transitionBehavior', 'duration', 'ease', 'delay']);
+
+/**
+ * Mark the both-node properties on the prefix and key tables.
+ *
+ * @param prefixes Prefix → role, mutated in place.
+ * @param keyRoles sz key → role, mutated in place.
+ */
+function markDeclaredOnBoth(prefixes, keyRoles) {
+    const marked = new Set();
+    for (const key of DECLARED_ON_BOTH) {
+        const entry = keyRoles.get(key);
+        if (entry === undefined) {
+            throw new Error(
+                `[gen-box-role-map] "${key}" is in DECLARED_ON_BOTH but is not an sz key`,
+            );
+        }
+        keyRoles.set(key, { ...entry, both: true });
+        const prefix = PROPERTY_MAP[key];
+        const prior = prefixes.get(prefix);
+        if (prior !== undefined) {
+            prefixes.set(prefix, { ...prior, both: true });
+            marked.add(prefix);
+        }
+    }
+    // A key that merely SHARES one of those prefixes would be cloned too, which
+    // for an animation would run it on both nodes. Fail instead.
+    for (const [key, prefix] of Object.entries(PROPERTY_MAP)) {
+        if (marked.has(prefix) && !DECLARED_ON_BOTH.has(key)) {
+            throw new Error(
+                `[gen-box-role-map] "${key}" shares the both-node prefix "${prefix}" but is not in DECLARED_ON_BOTH`,
+            );
+        }
+    }
+}
 
 function buildPrefixes(keyRole, propertyKeys) {
     const prefixes = new Map();
+    const resolvedByValue = [];
     for (const key of propertyKeys) {
-        if (key in TOKEN_RESOLVED_VALUES) continue;
+        if (key in TOKEN_RESOLVED_VALUES) {
+            resolvedByValue.push(key);
+            continue;
+        }
         const prefix = PROPERTY_MAP[key];
         const role = keyRole.get(key);
         const prior = prefixes.get(prefix);
@@ -510,6 +608,28 @@ function buildPrefixes(keyRole, propertyKeys) {
             );
         }
         if (!prior) prefixes.set(prefix, role);
+    }
+    // A value-resolved key still needs its prefix whenever nothing else claims
+    // it: an arbitrary value (`overflow-[overlay]`) has no exact token, and
+    // dropping the prefix would leave it — and the string selector `'overflow'`
+    // — unclassified. Only a CONTESTED prefix is left to the other key, which is
+    // the reason the key is resolved by value in the first place.
+    const claimedHere = new Map();
+    for (const key of resolvedByValue) {
+        const prefix = PROPERTY_MAP[key];
+        const role = keyRole.get(key);
+        const mine = claimedHere.get(prefix);
+        if (mine !== undefined) {
+            if (mine !== role.role) {
+                throw new Error(
+                    `[gen-box-role-map] value-resolved prefix "${prefix}" gets conflicting roles (${mine} vs ${role.role}); reconcile the rules`,
+                );
+            }
+            continue;
+        }
+        if (prefixes.has(prefix)) continue;
+        prefixes.set(prefix, role);
+        claimedHere.set(prefix, role.role);
     }
     return prefixes;
 }
@@ -526,8 +646,9 @@ function addToken(tokens, token, role) {
 
 function buildExactTokens(keyRole) {
     const tokens = new Map();
-    for (const [key, values] of Object.entries(TOKEN_RESOLVED_VALUES)) {
-        const role = keyRole.get(key);
+    for (const [key, { values, roles }] of Object.entries(TOKEN_RESOLVED_VALUES)) {
+        const base = keyRole.get(key);
+        const prefix = PROPERTY_MAP[key];
         for (const value of values) {
             const token = transform({ [key]: value }).className.trim();
             if (!token || token.includes(' ')) {
@@ -535,7 +656,19 @@ function buildExactTokens(keyRole) {
                     `[gen-box-role-map] "${key}: '${value}'" did not emit one token (got "${token}")`,
                 );
             }
-            addToken(tokens, token, role);
+            if (token !== prefix && !token.startsWith(`${prefix}-`)) {
+                throw new Error(
+                    `[gen-box-role-map] "${key}: '${value}'" emitted "${token}", which is not under its prefix "${prefix}"`,
+                );
+            }
+            // The suffix, not the whole class: an object selector asks
+            // `{ overflow: 'hidden' }`, the same shape a prefixed token answers.
+            addToken(tokens, token, {
+                role: roles?.[value] ?? base.role,
+                category: base.category,
+                prefix,
+                value: token === prefix ? '' : token.slice(prefix.length + 1),
+            });
         }
     }
     for (const { key, value } of Object.values(REMOVED_BOOLEAN_SUGAR)) {
@@ -569,14 +702,47 @@ function buildCompleteKeyRoles(keyRole) {
         if (shorthand in PROPERTY_MAP) continue;
         keyRoles.set(shorthand, BOOLEAN_ROLE[shorthand]);
     }
+    // An sz key whose role depends on its value carries the exceptions, so
+    // `splitBoxSz` routes `{ overflow: 'hidden' }` the way `splitBox` routes the
+    // class it compiles to. Only the values that DIFFER from the key's own role
+    // are listed; everything else takes `role` above.
+    for (const [key, { roles }] of Object.entries(TOKEN_RESOLVED_VALUES)) {
+        if (!roles) continue;
+        const base = keyRoles.get(key);
+        const byValue = Object.entries(roles).filter(([, role]) => role !== base.role);
+        if (byValue.length > 0) keyRoles.set(key, { ...base, byValue });
+    }
     return keyRoles;
+}
+
+/**
+ * A boolean shorthand that is the reverse/variant flag of a property key must
+ * sit on the same side as the property it modifies — `divide-x-reverse` only
+ * means anything next to `divide-x`. Nothing enforced that before, so moving
+ * `divideX` inner would have left its reverse flag on the frame.
+ *
+ * @param keyRole Property-key roles, before the shorthands are folded in.
+ */
+function assertBooleanFlagsFollowTheirProperty(keyRole) {
+    for (const [shorthand, role] of Object.entries(BOOLEAN_ROLE)) {
+        const owner = /^(?<base>[a-z]+[A-Za-z]*?)(?:Reverse)$/.exec(shorthand)?.groups?.base;
+        const ownerRole = owner === undefined ? undefined : keyRole.get(owner);
+        if (ownerRole === undefined) continue;
+        if (ownerRole.role !== role.role || ownerRole.category !== role.category) {
+            throw new Error(
+                `[gen-box-role-map] boolean flag "${shorthand}" is ${role.role}/${role.category} but its property "${owner}" is ${ownerRole.role}/${ownerRole.category}; they must match`,
+            );
+        }
+    }
 }
 
 export function buildRoleMaps() {
     const { keyRole, propertyKeys } = buildPropertyKeyRoles();
+    assertBooleanFlagsFollowTheirProperty(keyRole);
     const prefixes = buildPrefixes(keyRole, propertyKeys);
     const tokens = buildExactTokens(keyRole);
     const keyRoles = buildCompleteKeyRoles(keyRole);
+    markDeclaredOnBoth(prefixes, keyRoles);
     return { prefixes, tokens, keyRoles };
 }
 
@@ -588,8 +754,22 @@ function render({ prefixes, tokens, keyRoles }) {
     );
     const tokenEntries = [...tokens.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     const keyEntries = [...keyRoles.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    const entry = ([k, v]) =>
-        `    [${JSON.stringify(k)}, { role: ${JSON.stringify(v.role)}, category: ${JSON.stringify(v.category)} }],`;
+    const entry = ([k, v]) => {
+        const fields = [
+            `role: ${JSON.stringify(v.role)}`,
+            `category: ${JSON.stringify(v.category)}`,
+        ];
+        if (v.prefix !== undefined) fields.push(`prefix: ${JSON.stringify(v.prefix)}`);
+        if (v.value !== undefined) fields.push(`value: ${JSON.stringify(v.value)}`);
+        if (v.both !== undefined) fields.push(`both: ${JSON.stringify(v.both)}`);
+        if (v.byValue !== undefined) {
+            const pairs = v.byValue.map(
+                ([value, role]) => `[${JSON.stringify(value)}, ${JSON.stringify(role)}]`,
+            );
+            fields.push(`byValue: new Map([${pairs.join(', ')}])`);
+        }
+        return `    [${JSON.stringify(k)}, { ${fields.join(', ')} }],`;
+    };
     return `// GENERATED by scripts/gen-box-role-map.mjs — DO NOT EDIT.
 // Run \`pnpm gen:box-role\` to regenerate from the compiler's PROPERTY_MAP /
 // REMOVED_BOOLEAN_SUGAR / BOOLEAN_SHORTHANDS. The box-model role of each prop is
@@ -604,6 +784,26 @@ export interface BoxRoleEntry {
     readonly role: BoxRole;
     /** Semantic group (margin, padding, border, overflow, text, …). */
     readonly category: string;
+    /**
+     * The class prefix this exact token is one closed value of, when it has one
+     * (\`overflow-hidden\` → \`overflow\`). Absent on value-keyed sugar, whose
+     * class name IS the value (\`block\`, \`italic\`).
+     */
+    readonly prefix?: string;
+    /** The value after \`prefix\`, for matching \`{ category: value }\` selectors. */
+    readonly value?: string;
+    /**
+     * sz keys only: values whose role differs from \`role\` above, because the
+     * property means different things per value (\`overflow: 'hidden'\` clips the
+     * frame; \`overflow: 'auto'\` scrolls the content).
+     */
+    readonly byValue?: ReadonlyMap<string, BoxRole>;
+    /**
+     * Declared on BOTH nodes instead of routed to one. A transition is inert
+     * until a property changes, and the state that changes it can sit on either
+     * node, so splitting it apart would leave the change instant.
+     */
+    readonly both?: boolean;
 }
 
 /**

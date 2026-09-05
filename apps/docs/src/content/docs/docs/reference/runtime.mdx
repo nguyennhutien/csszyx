@@ -551,8 +551,11 @@ paths use `_szMerge` at runtime.
 When a caller passes one flat `className` to a component that renders nested
 elements, the styles often belong on different elements — the margin on the
 outer frame, the padding on the inner content. `splitBox` partitions a className
-at the CSS box-model border line into `{ outer, inner }`. Every token lands in
-exactly one bucket (no loss, no duplication) and keeps its variant prefix.
+at the CSS box-model border line into `{ outer, inner }`. Nothing is lost and
+every token keeps its variant prefix: each lands in exactly one bucket, except
+the timing group (`transition-*`, `duration-*`, `ease-*`, `delay-*`), which is
+declared on both because the state that fires a transition can sit on either
+node.
 
 ```ts
 function splitBox(className: string, options?: {
@@ -566,10 +569,13 @@ type BoxSelector = string | Readonly<Record<string, string>>
 ```
 
 The split follows the box model: **outer** = border-outward (margin, position,
-border, sizing, background, shadow, transform, visibility); **inner** =
-border-inward (padding, overflow, display, layout, gap, text, paint-inside,
-interactivity). The class-token → box-role map is **generated from the
-compiler's property tables**, so it never drifts. Every default is overridable.
+border, sizing, background, shadow, transform, visibility, the clip the box
+applies to itself — `overflow-hidden`/`overflow-clip` — and the pointer:
+`cursor-*`, `select-*`, `pointer-events-*`); **inner** = border-inward (padding,
+scrolling — `overflow-auto`/`overflow-scroll` — display, layout, gap, text,
+paint-inside, `divide-*`). The class-token → box-role map is **generated from
+the compiler's property tables**, so it never drifts. Every default is
+overridable.
 
 ```tsx
 import { splitBox } from '@csszyx/runtime';
@@ -599,11 +605,12 @@ function omit(classes: string, selector: BoxSelector): string
 ```tsx
 import { splitBox, has, _szMerge } from '@csszyx/runtime';
 
-// A scroller should scroll only when the outer frame clips:
+// A frame that clips needs its content to scroll, and a flex child needs
+// `min-h-0` before it will shrink below its own content.
 const { outer, inner } = splitBox(className);
-const dep = has(outer, { overflow: 'hidden' }) ? 'overflow-y-auto h-full' : '';
+const dep = has(outer, { overflow: 'hidden' }) ? 'flex-1 min-h-0 overflow-y-auto' : '';
 
-<Frame className={outer}>
+<Frame className={`${outer} flex flex-col min-h-0`}>
   <Scroll className={_szMerge(inner, dep)} />
 </Frame>
 ```

@@ -415,3 +415,37 @@ describe('cross-category ambiguity memory', () => {
         warn.mockRestore();
     });
 });
+
+/**
+ * `szcn` under-merges any token it finds in `BOX_ROLE_TOKENS`, because the
+ * exact-token map was built for value-keyed SUGAR (`block`, `italic`), where
+ * one category spans several CSS properties and merging by category would drop
+ * a sibling. A closed-value key routed by value (`overflow-hidden` vs
+ * `overflow-auto`) lands in the same map but is a single mutually-exclusive
+ * property, so it must keep merging exactly as its prefix always did.
+ *
+ * These pairs are pinned BEFORE the box-role map grows those tokens: they are
+ * the answers `szcn` gives today, and every one of them has to survive.
+ */
+describe('closed-value tokens keep merging as their prefix does', () => {
+    it.each([
+        ['overflow-hidden', 'overflow-auto', 'overflow-auto'],
+        ['overflow-x-hidden', 'overflow-x-auto', 'overflow-x-auto'],
+        ['snap-start', 'snap-center', 'snap-center'],
+        ['transform-3d', 'transform-flat', 'transform-flat'],
+        ['align-top', 'align-middle', 'align-middle'],
+        ['cursor-pointer', 'cursor-default', 'cursor-default'],
+        // `flex` is an ambiguous prefix, so `flex-row`/`flex-col` merge through
+        // the value classifier BEFORE the exact-token guard is ever reached.
+        ['flex-row', 'flex-col', 'flex-col'],
+    ])('szcn(%s, %s) → %s', (a, b, expected) => {
+        expect(szcn(a, b)).toBe(expected);
+    });
+
+    // Value-keyed sugar stays under-merged: `block` and `flex` are both
+    // `display`, but the map holds tokens from several properties under that
+    // one category, so collapsing them would drop a legitimate class.
+    it('still under-merges display sugar', () => {
+        expect(szcn('block', 'flex')).toBe('block flex');
+    });
+});

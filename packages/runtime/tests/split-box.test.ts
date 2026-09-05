@@ -22,12 +22,16 @@ describe('splitBox', () => {
     });
 
     it('routes the contested defaults', () => {
-        // sizing → outer, display → inner, bg → outer, overflow → inner, visibility → outer
-        const r = splitBox('w-full flex bg-white overflow-hidden invisible p-2 m-2');
-        expect(r.outer.split(' ').sort()).toEqual(
-            ['bg-white', 'invisible', 'm-2', 'w-full'].sort(),
+        // sizing → outer, display → inner, bg → outer, visibility → outer;
+        // `overflow-hidden` clips the frame, so it goes outer while a scroller
+        // (`overflow-auto`) stays inner.
+        const r = splitBox(
+            'w-full flex bg-white overflow-hidden overflow-y-auto invisible p-2 m-2',
         );
-        expect(r.inner.split(' ').sort()).toEqual(['flex', 'overflow-hidden', 'p-2'].sort());
+        expect(r.outer.split(' ').sort()).toEqual(
+            ['bg-white', 'invisible', 'm-2', 'overflow-hidden', 'w-full'].sort(),
+        );
+        expect(r.inner.split(' ').sort()).toEqual(['flex', 'overflow-y-auto', 'p-2'].sort());
     });
 
     it('routes value-keyed tokens (display/position/decoration)', () => {
@@ -73,14 +77,25 @@ describe('splitBox', () => {
         const back = `${outer} ${inner}`.split(/\s+/).filter(Boolean).sort();
         expect(back).toEqual(input.split(/\s+/).filter(Boolean).sort());
     });
+
+    it('loses nothing when the timing group is declared on both nodes', () => {
+        const input = 'm-4 px-2 transition-colors duration-300 hover:bg-red-500';
+        const { outer, inner } = splitBox(input);
+        const back = new Set(`${outer} ${inner}`.split(/\s+/).filter(Boolean));
+        expect([...back].sort()).toEqual(input.split(/\s+/).filter(Boolean).sort());
+        expect(outer).toBe('m-4 transition-colors duration-300 hover:bg-red-500');
+        expect(inner).toBe('px-2 transition-colors duration-300');
+    });
 });
 
 describe('classify', () => {
     it('returns role + category for owned tokens', () => {
         expect(classify('px-2')).toEqual({ role: 'inner', category: 'padding' });
         expect(classify('m-4')).toEqual({ role: 'outer', category: 'margin' });
+        // Painted inside the border, but on the border box of the element that
+        // declares it — the frame's own painting, like `ring-2`.
         expect(classify('inset-ring-2')).toEqual({
-            role: 'inner',
+            role: 'outer',
             category: 'ring',
         });
         expect(classify('hover:bg-red-500')).toEqual({
