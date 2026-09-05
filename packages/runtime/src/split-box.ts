@@ -510,7 +510,139 @@ function splitBoxUncached(
         ((info ? info.role : fallback) === 'outer' ? outer : inner).push(token);
     }
 
+    if (process.env.NODE_ENV !== 'production') {
+        warnUnusableSplit(outer, inner, bridge);
+    }
+
     return { outer: outer.join(' '), inner: inner.join(' ') };
+}
+
+/**
+ * Whether any token in `tokens` satisfies `predicate` once classified.
+ *
+ * @param tokens - Raw tokens from one bucket.
+ * @param bridge - The mangle bridge for this operation.
+ * @param predicate - Test run against each token's info and its stripped base.
+ * @returns `true` when at least one token satisfies it.
+ */
+function someToken(
+    tokens: readonly string[],
+    bridge: MangleBridge | undefined,
+    predicate: (info: TokenInfo | undefined, base: string) => boolean,
+): boolean {
+    // A token csszyx does not own has no base to test: every utility these
+    // predicates name is one csszyx emits, so it can never be a match.
+    return tokens.some(token => {
+        const info = inspect(token, bridge);
+        return predicate(info, info?.base ?? '');
+    });
+}
+
+/**
+ * A token that asks its element to scroll, rather than to clip.
+ *
+ * @param info - The classified token info, or `undefined` if unowned.
+ * @returns `true` for `overflow-auto` / `overflow-scroll` on any axis.
+ */
+function isScroller(info: TokenInfo | undefined): boolean {
+    return info?.category === 'overflow' && (info.value === 'auto' || info.value === 'scroll');
+}
+
+/**
+ * A token that clips the element it is on.
+ *
+ * @param info - The classified token info, or `undefined` if unowned.
+ * @returns `true` for `overflow-hidden` / `overflow-clip` on any axis.
+ */
+function isClip(info: TokenInfo | undefined): boolean {
+    return info?.category === 'overflow' && (info.value === 'hidden' || info.value === 'clip');
+}
+
+/** Height bounds a scroll container can inherit or be given directly. */
+const HEIGHT_BOUND_PREFIXES = ['h-', 'max-h-', 'min-h-', 'size-'];
+
+/** Utilities that let a parent decide the height instead of a class here. */
+const STRETCHED_BASES: ReadonlySet<string> = new Set(['flex-1', 'grow']);
+
+/** Prefixes of the same, for the sized forms (`grow-0`, `basis-1/2`). */
+const STRETCHED_PREFIXES = ['grow-', 'basis-'];
+
+/**
+ * Say when a partition produced a shape that cannot do what the className asked
+ * for. Development only — the caller guards on `NODE_ENV`, so nothing here is
+ * reachable in a production bundle, and every lookup goes through the same
+ * memoized `inspect` the partition already filled.
+ *
+ * @param outer - Raw tokens routed to the frame.
+ * @param inner - Raw tokens routed to the content.
+ * @param bridge - The mangle bridge for this operation.
+ */
+function warnUnusableSplit(
+    outer: readonly string[],
+    inner: readonly string[],
+    bridge: MangleBridge | undefined,
+): void {
+    const scroller = inner.find(token => isScroller(inspect(token, bridge)));
+
+    if (scroller !== undefined) {
+        // A scroll container with no height grows to fit its content, so it
+        // never scrolls. The bound can be a class on either node, or it can
+        // come from the parent, which is what the position and flex cases are.
+        const bounded =
+            someToken(
+                [...outer, ...inner],
+                bridge,
+                (info, base) =>
+                    info?.category === 'sizing' &&
+                    HEIGHT_BOUND_PREFIXES.some(prefix => base.startsWith(prefix)),
+            ) ||
+            someToken(
+                outer,
+                bridge,
+                (_info, base) =>
+                    STRETCHED_BASES.has(base) ||
+                    STRETCHED_PREFIXES.some(prefix => base.startsWith(prefix)),
+            ) ||
+            (someToken(outer, bridge, (_info, base) => base === 'absolute' || base === 'fixed') &&
+                someToken(
+                    outer,
+                    bridge,
+                    (info, base) =>
+                        info?.category === 'position' && base !== 'absolute' && base !== 'fixed',
+                ));
+        if (!bounded) {
+            devWarn(
+                `splitBox: '${scroller}' went to the content node, but nothing bounds the height of either node, so the content will grow instead of scrolling. ` +
+                    "help: give the className a height bound such as h-64, max-h-96 or h-full, or put 'flex flex-col min-h-0' on the frame and 'flex-1 min-h-0' on the content.",
+            );
+        }
+
+        // Scrolled content paints to the padding box, so it runs over a corner
+        // the frame rounded but did not clip.
+        if (
+            someToken(outer, bridge, info => info?.category === 'rounded') &&
+            !someToken(outer, bridge, isClip)
+        ) {
+            devWarn(
+                'splitBox: the frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners. ' +
+                    "help: add 'overflow-hidden' to the frame.",
+            );
+        }
+    }
+
+    // `hidden` is display:none, which is inner: it stops the CONTENT node from
+    // rendering while the frame keeps its own background, border and size. Under
+    // a variant the pair is usually deliberate, so only the bare form is named.
+    const hidden = inner.find(
+        token =>
+            token === stripVariant(token) && normalizeBase(decodeToken(token, bridge)) === 'hidden',
+    );
+    if (hidden !== undefined) {
+        devWarn(
+            `splitBox: '${hidden}' went to the content node, so the frame keeps its background, border and size and stays visible. ` +
+                "help: pass { outer: ['hidden'] } if the whole box should disappear.",
+        );
+    }
 }
 
 /**

@@ -1123,6 +1123,41 @@ Two helpers take two different inputs, and mixing them up says so:
 `splitBoxSz partitions sz objects, not raw class strings — use splitBox() for {value}.`
 `splitBox` takes a class string; `splitBoxSz` takes an `sz` object.
 
+### A split that cannot do what the className asked for
+
+`splitBox` routes every token correctly and the result still cannot work, in
+three shapes. Each is silent in the DOM — the classes are all present — so the
+warning is the only place it is said. Development only, once per message, and
+none of them changes the output.
+
+```text
+[csszyx] splitBox: '{token}' went to the content node, but nothing bounds the height of either node, so the content will grow instead of scrolling. help: give the className a height bound such as h-64, max-h-96 or h-full, or put 'flex flex-col min-h-0' on the frame and 'flex-1 min-h-0' on the content.
+```
+
+A scroll container with no height grows to fit its content, so it never
+scrolls. The bound can be a class on either node (`h-*`, `max-h-*`, `min-h-*`,
+`size-*`) or it can come from the parent, which is why an absolutely positioned
+frame and a flex child (`flex-1`, `grow`, `basis-*`) are accepted as bounded.
+
+```text
+[csszyx] splitBox: the frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners. help: add 'overflow-hidden' to the frame.
+```
+
+Scrolled content paints out to the padding box, so it runs over a corner the
+frame rounded but never clipped.
+
+```text
+[csszyx] splitBox: '{token}' went to the content node, so the frame keeps its background, border and size and stays visible. help: pass { outer: ['hidden'] } if the whole box should disappear.
+```
+
+`hidden` is `display: none`, which acts on the contents, so it stops the content
+node from rendering while the frame keeps painting. Under a variant the pair is
+usually deliberate — `hidden md:block` toggles the content on purpose — so only
+the bare form is named.
+
+These three read the class buckets, so they do not fire for `splitBoxSz`, which
+partitions an sz object.
+
 ## Editor diagnostics
 
 The VS Code extension reports key problems as squiggles, with its own shorter
