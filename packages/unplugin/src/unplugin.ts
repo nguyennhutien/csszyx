@@ -244,6 +244,14 @@ interface PluginState {
      */
     ownedClasses: Set<string>;
     /**
+     * Owned classes that a mangle map WOULD carry: `ownedClasses` minus the
+     * authored ones and minus `manglePreserve`. Recorded whether or not
+     * mangling runs, because the bundle manifest lists them either way and used
+     * to read them off the map's keys — which is why the map had to be
+     * allocated on a build that never mangles.
+     */
+    mangleEligible: string[];
+    /**
      * Classes written through author-facing class/className attributes. Any
      * overlap with ownedClasses must keep its original name because bundled
      * helper calls may not preserve enough context for safe string rewriting.
@@ -3290,6 +3298,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         skipWarningEmitted: false,
         classesCapped: false,
         ownedClasses: new Set<string>(),
+        mangleEligible: [],
         authoredClasses: new Set<string>(),
         mangleMap: {},
         varMangleEntriesByFile: varMangleEntries,
@@ -4838,6 +4847,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             const unmatched = manglePreserve.unmatched(state.ownedClasses);
             if (unmatched.length > 0) emitWarning(manglePreserveNoMatchMessage(unmatched));
         }
+        state.mangleEligible = eligible;
+        // Nothing reads a map the build does not apply, and the checksum is a
+        // hash of this map: allocating one with mangling off spent an encoder
+        // call per class to attest a census the page never carried.
+        if (!manglingEnabled) return {};
         return allocateMangleTokens(eligible, forbiddenTokens);
     }
 
@@ -6387,7 +6401,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const manifest: CSSzyxBundleManifest = {
             version: '0.4.0',
             buildId: state.checksum,
-            classes: Object.keys(state.mangleMap),
+            classes: [...state.mangleEligible],
         };
         if (includeMangleMap && Object.keys(state.mangleMap).length > 0) {
             manifest.mangleMap = state.mangleMap;

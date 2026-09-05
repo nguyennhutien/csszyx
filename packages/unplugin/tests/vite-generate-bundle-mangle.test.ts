@@ -181,9 +181,12 @@ describe('vite output mangle passes', () => {
         expect(jsChunk.code).toContain('var m={');
     });
 
+    // Mangling ON: escaping is only exercised by a map that has quotes in it.
+    // With mangling off the build allocates nothing, so the placeholder
+    // resolves to `{}` and there is no quote for the eval branch to escape.
     it('double-escapes the placeholder maps inside an eval-wrapped chunk', async () => {
         const h = await boot({
-            production: { mangle: false },
+            production: { mangle: true },
             build: { emitManifest: true, cache: false },
         });
 
