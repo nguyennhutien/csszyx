@@ -333,44 +333,32 @@ const BOX_ROLE_RULES = [
         ],
     },
     { role: 'inner', category: 'list', keys: ['list', 'listPos', 'listImg'] },
-    {
-        role: 'inner',
-        category: 'flex',
-        keys: ['basis', 'flex', 'flexDir', 'flexWrap', 'grow', 'shrink', 'order'],
-    },
+    // Flex and grid split at the border line like everything else: the
+    // CONTAINER properties (direction, wrap, item alignment, gap, the grid
+    // template) act on the contents and are inner; the ITEM properties
+    // (grow, order, self, span, …) describe how this box sits among its
+    // siblings in the parent's container — its relationship to its
+    // neighbours — and are outer. Same category on both sides, so a
+    // category selector (`{ inner: ['flex'] }`) still reaches all of them.
+    { role: 'inner', category: 'flex', keys: ['flexDir', 'flexWrap'] },
     {
         role: 'inner',
         category: 'alignment',
-        keys: [
-            'items',
-            'self',
-            'justify',
-            'justifyItems',
-            'justifySelf',
-            'placeContent',
-            'placeItems',
-            'placeSelf',
-        ],
+        keys: ['items', 'justify', 'justifyItems', 'placeContent', 'placeItems'],
     },
     { role: 'inner', category: 'gap', keys: ['gap', 'gapX', 'gapY'] },
     {
         role: 'inner',
         category: 'grid',
-        keys: [
-            'gridCols',
-            'gridRows',
-            'col',
-            'colSpan',
-            'colStart',
-            'colEnd',
-            'row',
-            'rowSpan',
-            'rowStart',
-            'rowEnd',
-            'gridFlow',
-            'autoCols',
-            'autoRows',
-        ],
+        keys: ['gridCols', 'gridRows', 'gridFlow', 'autoCols', 'autoRows'],
+    },
+    // ── OUTER (item side of flex and grid) ────────────────────────────────
+    { role: 'outer', category: 'flex', keys: ['basis', 'flex', 'grow', 'shrink', 'order'] },
+    { role: 'outer', category: 'alignment', keys: ['self', 'justifySelf', 'placeSelf'] },
+    {
+        role: 'outer',
+        category: 'grid',
+        keys: ['col', 'colSpan', 'colStart', 'colEnd', 'row', 'rowSpan', 'rowStart', 'rowEnd'],
     },
     { role: 'inner', category: 'svg', keys: ['fill', 'stroke', 'strokeWidth'] },
     { role: 'inner', category: 'table', keys: ['tableLayout', 'caption'] },
@@ -496,9 +484,23 @@ function buildPropertyKeyRoles() {
     return { keyRole, propertyKeys };
 }
 
+/**
+ * Keys that share a class prefix with a key on the OTHER side of the border,
+ * resolved by their closed value set instead: each listed value emits an exact
+ * token (`flex-col`), matched before any prefix, so the prefix itself can
+ * carry the role of the remaining key (`flex-1`, `flex-auto`, `flex-[2]`).
+ * A value outside the list falls through to the prefix, which is where a
+ * class the compiler does not know belongs anyway.
+ */
+const TOKEN_RESOLVED_VALUES = {
+    flexDir: ['row', 'row-reverse', 'col', 'col-reverse'],
+    flexWrap: ['wrap', 'wrap-reverse', 'nowrap'],
+};
+
 function buildPrefixes(keyRole, propertyKeys) {
     const prefixes = new Map();
     for (const key of propertyKeys) {
+        if (key in TOKEN_RESOLVED_VALUES) continue;
         const prefix = PROPERTY_MAP[key];
         const role = keyRole.get(key);
         const prior = prefixes.get(prefix);
@@ -522,8 +524,20 @@ function addToken(tokens, token, role) {
     tokens.set(token, role);
 }
 
-function buildExactTokens() {
+function buildExactTokens(keyRole) {
     const tokens = new Map();
+    for (const [key, values] of Object.entries(TOKEN_RESOLVED_VALUES)) {
+        const role = keyRole.get(key);
+        for (const value of values) {
+            const token = transform({ [key]: value }).className.trim();
+            if (!token || token.includes(' ')) {
+                throw new Error(
+                    `[gen-box-role-map] "${key}: '${value}'" did not emit one token (got "${token}")`,
+                );
+            }
+            addToken(tokens, token, role);
+        }
+    }
     for (const { key, value } of Object.values(REMOVED_BOOLEAN_SUGAR)) {
         const role = VALUE_KEYED_ROLE[key];
         if (!role) {
@@ -561,7 +575,7 @@ function buildCompleteKeyRoles(keyRole) {
 export function buildRoleMaps() {
     const { keyRole, propertyKeys } = buildPropertyKeyRoles();
     const prefixes = buildPrefixes(keyRole, propertyKeys);
-    const tokens = buildExactTokens();
+    const tokens = buildExactTokens(keyRole);
     const keyRoles = buildCompleteKeyRoles(keyRole);
     return { prefixes, tokens, keyRoles };
 }

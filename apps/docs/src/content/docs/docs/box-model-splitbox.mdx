@@ -63,10 +63,10 @@ element's border** — outward (the box's relationship to its neighbors) or inwa
 (the box's relationship to its contents).
 
 ```
-   outer  ─ margin · position · sizing · background · border · shadow · transform · visibility
+   outer  ─ margin · position · sizing · background · border · shadow · transform · visibility · flex/grid item
    ┌──────────────────────── the border line ────────────────────────┐
    │                                                                  │
-   │   inner  ─ padding · overflow · display · flex · grid · gap · text · interaction
+   │   inner  ─ padding · overflow · display · flex/grid container · gap · text · interaction
    │   ┌──────────────────────────────────────────────────────────┐  │
    │   │                                                          │  │
    │   │                     your content                         │  │
@@ -77,9 +77,11 @@ element's border** — outward (the box's relationship to its neighbors) or inwa
 ```
 
 - **outer** = *border-outward*. How the box sits in the world: `m-4`, `absolute`,
-  `w-full`, `bg-white`, `rounded-xl`, `shadow-lg`, `rotate-3`, `invisible`.
+  `w-full`, `bg-white`, `rounded-xl`, `shadow-lg`, `rotate-3`, `invisible` — and
+  how it sits among its siblings: `grow`, `order-2`, `self-center`, `col-span-2`.
 - **inner** = *border-inward*. How the box treats its contents: `p-6`,
-  `overflow-hidden`, `flex`, `gap-2`, `text-sm`, `cursor-pointer`.
+  `overflow-hidden`, `flex`, `flex-col`, `items-center`, `gap-2`, `text-sm`,
+  `cursor-pointer`.
 
 `splitBox` walks the className token by token, asks the generated map “which side
 of the border does this act on?”, and drops each token in the matching bucket.
@@ -161,8 +163,8 @@ These are the defaults. Every one of them is overridable (next section).
 
 | Bucket | Categories | Examples |
 | --- | --- | --- |
-| **outer** | margin · position · sizing · bg · border · ring · shadow · transform · visibility | `m-4` `-mt-2` `absolute` `inset-0` `w-full` `bg-white` `rounded-xl` `border` `shadow-lg` `rotate-3` `invisible` `z-10` |
-| **inner** | padding · overflow · display · flex · grid · gap · text · interaction | `p-6` `overflow-hidden` `flex` `grid` `gap-2` `text-sm` `underline` `cursor-pointer` |
+| **outer** | margin · position · sizing · bg · border · ring · shadow · transform · visibility · flex/grid **item** (`grow` `shrink` `basis` `order` `self` `col-span` `row-span`) | `m-4` `-mt-2` `absolute` `inset-0` `w-full` `bg-white` `rounded-xl` `border` `shadow-lg` `rotate-3` `invisible` `z-10` |
+| **inner** | padding · overflow · display · flex/grid **container** (`flex-col` `flex-wrap` `items-*` `justify-*` `grid-cols-*`) · gap · text · interaction | `p-6` `overflow-hidden` `flex` `grid` `gap-2` `text-sm` `underline` `cursor-pointer` |
 
 A mixed string sorts itself in one pass:
 
@@ -348,16 +350,19 @@ splitBoxSz({ gap: 2, hover: { px: 1 }, md: { m: 4 } });
 splitBoxSz([base, isLoading && { opacity: 50 }]);
 ```
 
-- **Overrides** behave exactly like `SplitBoxOptions`. Flex-item utilities
-  (`grow`/`shrink`/`self`/`order`) default to the inner content; force them onto
-  the frame when the frame *is* the flex item:
+- **Overrides** behave exactly like `SplitBoxOptions`. Flex and grid *item*
+  utilities (`grow`/`shrink`/`basis`/`order`/`self`/`col-span`…) describe how the
+  box sits among its siblings, so they go to the frame; the *container*
+  utilities (`flex-col`, `items-*`, `gap-*`, `grid-cols-*`) describe its contents
+  and stay inner. Force an item utility back onto the content when the frame is
+  itself the flex container laying out that one child:
 
 ```ts
 splitBoxSz(
   { grow: 2, self: 'center', order: 'first' },
-  { outer: ['grow', 'self', 'order'] },
+  { inner: ['grow', 'self', 'order'] },
 );
-// → { outer: { grow: 2, self: 'center', order: 'first' }, inner: {} }
+// → { outer: {}, inner: { grow: 2, self: 'center', order: 'first' } }
 ```
 
 The toolkit has sz-object twins as well — `classifySzKey(key)`, `hasSz`,

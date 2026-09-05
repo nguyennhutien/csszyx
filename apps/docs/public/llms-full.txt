@@ -3941,7 +3941,7 @@ const dep = has(outer, { overflow: "hidden" }) ? "overflow-y-auto h-full" : "";
 // each key to the same side its class would (splitBoxSz(x) ≡ splitBox(compile(x))).
 splitBoxSz({ m: 4, px: 2 }); // { outer: { m: 4 }, inner: { px: 2 } }
 splitBoxSz({ gap: 2, hover: { px: 1 }, md: { m: 4 } }); // variants route by inner prop; split when they disagree
-splitBoxSz({ grow: 2, self: "center" }, { outer: ["grow", "self"] }); // force flex-item utils to the frame
+splitBoxSz({ grow: 2, self: "center" }, { inner: ["grow", "self"] }); // item utils (grow/order/self/col-span) are OUTER by default; this forces them back to the content
 // classifySzKey(key) / hasSz / pickSz / omitSz — the sz-object toolkit twins
 
 // stripSzProps: drop sz before forwarding ...rest to the DOM (guards uncompiled files

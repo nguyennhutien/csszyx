@@ -680,9 +680,9 @@ splitBoxSz({ m: 4, px: 2 });
 splitBoxSz({ gap: 2, hover: { px: 1 }, md: { m: 4 } });
 // → { outer: { md: { m: 4 } }, inner: { gap: 2, hover: { px: 1 } } }
 
-// Force flex-item utilities onto the frame:
-splitBoxSz({ grow: 2, self: 'center' }, { outer: ['grow', 'self'] });
-// → { outer: { grow: 2, self: 'center' }, inner: {} }
+// Item utilities are outer by default; force them back onto the content:
+splitBoxSz({ grow: 2, self: 'center' }, { inner: ['grow', 'self'] });
+// → { outer: {}, inner: { grow: 2, self: 'center' } }
 ```
 
 Arrays are deep-merged (last-write-wins); `null` / `false` / `undefined` and

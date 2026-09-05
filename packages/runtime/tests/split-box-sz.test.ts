@@ -8,13 +8,15 @@ describe('splitBoxSz', () => {
         expect(splitBoxSz({ m: 4, px: 2 })).toEqual({ outer: { m: 4 }, inner: { px: 2 } });
     });
 
-    it('forces flex-item keys to outer via options.outer', () => {
+    it('forces flex-item keys back to inner via options.inner', () => {
+        // Item keys are outer by default; the override answers for a frame
+        // that is itself the flex container laying out its one content node.
         expect(
             splitBoxSz(
                 { grow: 2, self: 'center', order: 'first' },
-                { outer: ['grow', 'self', 'order'] },
+                { inner: ['grow', 'self', 'order'] },
             ),
-        ).toEqual({ outer: { grow: 2, self: 'center', order: 'first' }, inner: {} });
+        ).toEqual({ outer: {}, inner: { grow: 2, self: 'center', order: 'first' } });
     });
 
     it('routes a variant by the role of the property inside it', () => {
