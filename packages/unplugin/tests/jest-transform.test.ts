@@ -11,8 +11,10 @@
  * `szv` factories a per-file compile cannot resolve — so it is read first,
  * keyed by the file's path and the hash of its current contents. When the file
  * has changed since that build, or was never built, the per-file compiler
- * answers instead, which is right for the inline and file-local shapes and
- * says so when it has to fall back.
+ * answers instead, which is right for the inline and file-local shapes.
+ *
+ * Either answer is finished the way the plugin finishes it: the runtime
+ * helpers the code calls are imported, and a dead key or value is printed.
  */
 
 import { createHash } from 'node:crypto';
@@ -20,37 +22,90 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { VERSION as compilerVersion } from '@csszyx/compiler';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createTransformer, findCachedTransform } from '../src/jest-transform.js';
 
 const roots: string[] = [];
 afterEach(() => {
     for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true });
+    vi.restoreAllMocks();
 });
 
+/** The fields of one entry a test may vary; the rest is what the plugin writes. */
+interface EntryShape {
+    filename: string;
+    source: string;
+    code: string;
+    name?: string;
+    compilerVersion?: string;
+    mangleVars?: boolean;
+    timestamp?: string;
+    usesRuntime?: boolean;
+    diagnostics?: string[];
+}
+
 /**
- * A transform cache directory holding one entry, shaped as the plugin writes it.
+ * Write one entry into a cache directory, shaped as the plugin writes it.
+ *
+ * @param root - The cache root.
+ * @param entry - What the entry records.
+ */
+function writeEntry(root: string, entry: EntryShape): void {
+    const dir = join(root, '9c');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+        join(dir, entry.name ?? 'entry.json'),
+        JSON.stringify({
+            filename: entry.filename,
+            inputSha256: createHash('sha256').update(entry.source).digest('hex'),
+            compilerVersion: entry.compilerVersion ?? compilerVersion,
+            mangleVars: entry.mangleVars ?? false,
+            timestamp: entry.timestamp ?? '2026-01-01T00:00:00.000Z',
+            result: {
+                code: entry.code,
+                transformed: true,
+                usesRuntime: entry.usesRuntime ?? false,
+                diagnostics: entry.diagnostics ?? [],
+            },
+        }),
+    );
+}
+
+/**
+ * A transform cache directory holding one entry.
  *
  * @param filename - Absolute path the entry was produced for.
  * @param source - Source the entry was produced from.
  * @param code - Compiled output to store.
+ * @param extra - Further fields of the entry.
  * @returns The cache root.
  */
-function cacheWith(filename: string, source: string, code: string): string {
+function cacheWith(
+    filename: string,
+    source: string,
+    code: string,
+    extra: Partial<EntryShape> = {},
+): string {
     const root = mkdtempSync(join(tmpdir(), 'csszyx-jest-cache-'));
     roots.push(root);
-    const dir = join(root, '9c');
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(
-        join(dir, 'entry.json'),
-        JSON.stringify({
-            filename,
-            inputSha256: createHash('sha256').update(source).digest('hex'),
-            result: { code, transformed: true },
-        }),
-    );
+    writeEntry(root, { filename, source, code, ...extra });
     return root;
+}
+
+/**
+ * Capture every `console.warn` line while running one function.
+ *
+ * @param run - The function to observe.
+ * @returns What it returned, and what it warned.
+ */
+function warned<T>(run: () => T): { value: T; lines: string[] } {
+    const lines: string[] = [];
+    vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+        lines.push(args.map(String).join(' '));
+    });
+    return { value: run(), lines };
 }
 
 describe('reading the build cache', () => {
@@ -81,8 +136,6 @@ describe('reading the build cache', () => {
         // truncated file must not take the whole lookup down with it — the
         // entry beside it may be the one that answers.
         const root = cacheWith(FILE, SOURCE, CODE);
-        // Named to be read BEFORE the good entry: directory order is what
-        // decides whether the torn file is reached at all.
         writeFileSync(join(root, '9c', '0torn.json'), '{"filename": "/repo/src/');
         // And a neighbour that is not an entry at all — the plugin's cache
         // directory holds more than these files.
@@ -92,6 +145,43 @@ describe('reading the build cache', () => {
 
     it('answers null when there is no cache at all', () => {
         expect(findCachedTransform(join(tmpdir(), 'csszyx-absent-cache'), FILE, SOURCE)).toBeNull();
+    });
+
+    // The plugin keys its cache on more than the source, so one file and
+    // hash can carry several entries: a dev build and a production one with
+    // mangled variables, or one from the compiler before an upgrade. Directory
+    // order must not decide which a test sees.
+    it('refuses an entry another compiler version wrote', () => {
+        const root = cacheWith(FILE, SOURCE, CODE, { compilerVersion: '0.0.1' });
+        expect(findCachedTransform(root, FILE, SOURCE)).toBeNull();
+    });
+
+    it('refuses an entry written with mangled variables', () => {
+        const root = cacheWith(FILE, SOURCE, CODE, { mangleVars: true });
+        expect(findCachedTransform(root, FILE, SOURCE)).toBeNull();
+    });
+
+    it('takes the newest of several qualifying entries', () => {
+        const root = cacheWith(FILE, SOURCE, 'older', {
+            name: 'a.json',
+            timestamp: '2026-01-01T00:00:00.000Z',
+        });
+        writeEntry(root, {
+            filename: FILE,
+            source: SOURCE,
+            code: 'newer',
+            name: 'b.json',
+            timestamp: '2026-02-01T00:00:00.000Z',
+        });
+        expect(findCachedTransform(root, FILE, SOURCE)).toBe('newer');
+    });
+
+    // The plugin records the path with forward slashes; jest hands the
+    // native one. On Windows they differ, and a miss there is silent — the
+    // per-file compile answers, without the cross-module output.
+    it('matches a path jest spells with backslashes', () => {
+        const root = cacheWith(FILE, SOURCE, CODE);
+        expect(findCachedTransform(root, String.raw`\repo\src\Card.tsx`, SOURCE)).toBe(CODE);
     });
 });
 
@@ -136,6 +226,24 @@ describe('the transformer jest calls', () => {
         expect(run(source, '/repo/a.tsx', cacheWith('/repo/a.tsx', source, built))).toBe(built);
     });
 
+    // A shape the per-file compile cannot resolve keeps the runtime path,
+    // which calls a helper the plugin would have imported. Without the import
+    // the module throws at render, on a name that says nothing about csszyx.
+    it('imports the runtime helper a forwarded sz needs', () => {
+        const code = run('export const A = props => <div sz={props.sz} />;', '/repo/a.tsx');
+        expect(code).toContain('className={_sz(props.sz)}');
+        expect(code).toContain("import { _sz } from '@csszyx/runtime';");
+    });
+
+    it('imports the runtime helper a cached entry says it needs', () => {
+        const source = 'export const A = props => <div sz={props.sz} />;';
+        const built = 'export const A = props => <div className={_sz(props.sz)} />;';
+        const root = cacheWith('/repo/a.tsx', source, built, { usesRuntime: true });
+        expect(run(source, '/repo/a.tsx', root)).toContain(
+            "import { _sz } from '@csszyx/runtime';",
+        );
+    });
+
     // A file the compiler leaves alone is returned unchanged rather than
     // dropped: the suite still runs, and the diagnostic channel is what
     // reports the reason.
@@ -150,5 +258,101 @@ describe('the transformer jest calls', () => {
     it('returns a file it cannot compile unchanged', () => {
         const source = 'export const A = 1;';
         expect(run(source, '/repo/a.ts')).toBe(source);
+    });
+});
+
+describe('what the transformer reports', () => {
+    // The finding this lane exists to surface. The class is in the output,
+    // as it is in the browser; the line is what tells the suite's author.
+    it('prints a dead value', () => {
+        const { lines } = warned(() =>
+            createTransformer({ cacheRoot: '/nonexistent' }).process(
+                "export const A = () => <div sz={{ display: 'bogus' }} />;",
+                '/repo/a.tsx',
+            ),
+        );
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toContain('/repo/a.tsx');
+        expect(lines[0]).toContain('"display: bogus"');
+    });
+
+    it('prints a dead value a cached entry recorded', () => {
+        const source = 'export const A = () => <div sz={{ p: 4 }} />;';
+        const root = cacheWith('/repo/a.tsx', source, 'built', {
+            diagnostics: ['[csszyx] Unknown property "zzz" in sz prop at src/a.tsx:1.'],
+        });
+        const { lines } = warned(() =>
+            createTransformer({ cacheRoot: root }).process(source, '/repo/a.tsx'),
+        );
+        expect(lines.join('\n')).toContain('Unknown property "zzz"');
+    });
+
+    // A usage nudge says the runtime path was taken where a compiled one was
+    // possible. Under jest the runtime path renders the same classes, so the
+    // nudge is the plugin's business, not the suite's.
+    it('keeps a usage nudge out of the test log', () => {
+        const { lines } = warned(() =>
+            createTransformer({ cacheRoot: '/nonexistent' }).process(
+                'export const A = props => <div sz={props.sz} />;',
+                '/repo/a.tsx',
+            ),
+        );
+        expect(lines).toEqual([]);
+    });
+});
+
+describe('the key jest caches the output under', () => {
+    const SOURCE = 'export const A = () => <div sz={cardSz} />;';
+
+    /**
+     * The cache key for one file against one transform cache.
+     *
+     * @param cacheRoot - Transform cache directory to consult.
+     * @returns The key.
+     */
+    function key(cacheRoot: string): string {
+        return createTransformer({ cacheRoot }).getCacheKey(SOURCE, '/repo/a.tsx', {
+            configString: '{}',
+        });
+    }
+
+    it('is stable for the same file and the same build', () => {
+        const root = cacheWith('/repo/a.tsx', SOURCE, 'built');
+        expect(key(root)).toBe(key(root));
+    });
+
+    // jest's own key covers the file and its config. A rebuild after a change
+    // in another module changes this file's output without changing this
+    // file, and without this jest served the previous output — silently, on
+    // the very shape the cache is read for.
+    it('changes when the build output for an unchanged file changes', () => {
+        const before = key(cacheWith('/repo/a.tsx', SOURCE, 'built-a'));
+        const after = key(cacheWith('/repo/a.tsx', SOURCE, 'built-b'));
+        expect(after).not.toBe(before);
+    });
+
+    it('changes when the build has no answer any more', () => {
+        const built = key(cacheWith('/repo/a.tsx', SOURCE, 'built'));
+        expect(key(join(tmpdir(), 'csszyx-absent-cache'))).not.toBe(built);
+    });
+});
+
+describe('the cache index', () => {
+    const SOURCE = 'export const A = () => <div sz={cardSz} />;';
+
+    // Reading every entry once per file made a suite read the cache N times
+    // over. The index reads each entry once — and still finds an entry a
+    // rebuild wrote after the transformer was created, as in a watch run.
+    it('finds an entry written after the first lookup', () => {
+        const root = cacheWith('/repo/a.tsx', SOURCE, 'first');
+        const transformer = createTransformer({ cacheRoot: root });
+        expect(transformer.process(SOURCE, '/repo/a.tsx').code).toBe('first');
+        writeEntry(root, {
+            filename: '/repo/b.tsx',
+            source: SOURCE,
+            code: 'second',
+            name: 'b.json',
+        });
+        expect(transformer.process(SOURCE, '/repo/b.tsx').code).toBe('second');
     });
 });
