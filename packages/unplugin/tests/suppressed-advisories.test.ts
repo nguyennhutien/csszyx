@@ -156,14 +156,27 @@ describe('suppressedAdvisoryMessage', () => {
     });
 
     it('agrees with itself on number', () => {
-        expect(suppressedAdvisoryMessage(1)).toContain('1 advisory sz fallback not listed');
-        expect(suppressedAdvisoryMessage(3)).toContain('3 advisory sz fallbacks not listed');
+        expect(suppressedAdvisoryMessage(1)).toContain('1 advisory note not listed');
+        expect(suppressedAdvisoryMessage(3)).toContain('3 advisory notes not listed');
+    });
+
+    // The count is everything `isAdvisoryDiagnostic` holds back, and two of the
+    // three kinds are not sz fallbacks at all: a className whose precedence over
+    // `sz` is unstated, and a CSS-variable hoist the planner declined. Naming
+    // the count after one of its three members told a reader a project with no
+    // fallback at all that it had some.
+    it('names every kind it counts, not only the fallback', () => {
+        const message = suppressedAdvisoryMessage(3) ?? '';
+        expect(message).toContain('fallback at an sz prop');
+        expect(message).toContain('precedence over sz is unstated');
+        expect(message).toContain('hoist the planner declined');
+        expect(message).not.toContain('advisory sz fallback');
     });
 
     it('says how to see the ones it withheld', () => {
         const message = suppressedAdvisoryMessage(3);
         expect(message).toContain('development build');
-        expect(message).toContain('the runtime path works');
+        expect(message).toContain('the styles are there');
     });
 });
 

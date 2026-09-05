@@ -1092,7 +1092,7 @@ export function isAdvisoryDiagnostic(message: string): boolean {
  * Suppression is the right default; implying zero is not. One line costs
  * nothing and keeps the difference visible.
  *
- * @param count - Advisory fallbacks the build declined to list.
+ * @param count - Advisory notes the build declined to list.
  * @returns The disclosure, or null when nothing was held back.
  */
 export function suppressedAdvisoryMessage(count: number): string | null {
@@ -1100,10 +1100,15 @@ export function suppressedAdvisoryMessage(count: number): string | null {
     // Count and noun interpolate together so the sentence after them is one
     // unbroken literal: the docs-sync gate matches verbatim runs, and a
     // placeholder in the middle splits the run it is trying to match.
-    const held = count === 1 ? '1 advisory sz fallback' : `${count} advisory sz fallbacks`;
+    //
+    // The noun is "note", not "sz fallback": the count is everything
+    // `isAdvisoryDiagnostic` holds back, and two of its three kinds never touch
+    // an sz prop. A build with no fallback at all was being told it had some.
+    const held = count === 1 ? '1 advisory note' : `${count} advisory notes`;
     return (
-        `[csszyx] ${held} not listed above. At an sz prop a fallback is advisory — the ` +
-        'runtime path works and the classes are collected — so a production build keeps the ' +
+        `[csszyx] ${held} not listed above. An advisory reports something csszyx handled — a ` +
+        'fallback at an sz prop, a className whose precedence over sz is unstated, or a variable ' +
+        'hoist the planner declined — so the styles are there and a production build keeps the ' +
         'list short. A development build prints each one with its file and position.'
     );
 }
