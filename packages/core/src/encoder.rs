@@ -1,7 +1,7 @@
 /// Reversed tier-based encoder for class name IDs.
 ///
 /// Encodes indices to Base62 strings with reversed sequence (z→y→x→...→a→Z→...→A)
-/// following tier-based rules for optimal compression.
+/// following tier-based rules, so the commonest classes get the shortest names.
 ///
 /// # Tier System
 ///
