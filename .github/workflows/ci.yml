@@ -472,7 +472,14 @@ jobs:
       # table is projected from PROPERTY_MAP, which describes what csszyx emits —
       # so the two vocabularies drift apart in silence unless something measures.
       - name: Check the box-role table covers what Tailwind serves
-        run: pnpm check:classify-coverage
+        # Unlike its neighbours, this gate reads the RUNTIME source, and that
+        # imports `@csszyx/compiler/browser`, which is a built artefact. The
+        # gates above read compiler and CLI source and need no build, so the
+        # step has to declare the one it does need — the same shape the package
+        # size gate uses. Turbo serves an already-built compiler from cache.
+        run: |
+          pnpm exec turbo run build --filter=@csszyx/compiler
+          pnpm check:classify-coverage
 
       # Build the core WASM (pkg-node) explicitly so the WASM-dependent unit
       # tests are deterministic regardless of turbo's build ordering. The
