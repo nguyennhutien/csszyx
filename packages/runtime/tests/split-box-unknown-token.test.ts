@@ -163,6 +163,31 @@ describe('warning that a token was placed by the fallback', () => {
         expect(messages()).toEqual([]);
     });
 
+    it.each(['md:hidden', 'hover:hidden', '[&:hover]:hidden', '!hidden', 'hidden!'])(
+        'explains why the variant-qualified placement %s cannot match',
+        selector => {
+            expect(splitBox(`${selector} p-4`, { outer: [selector] })).toEqual({
+                outer: '',
+                inner: `${selector} p-4`,
+            });
+            expect(messages().join('\n')).toContain(`'${selector}'`);
+            expect(messages().join('\n')).toContain("outer: ['hidden']");
+        },
+    );
+
+    it('names the base for a negative placement too', () => {
+        // `-mt-4` is margin and routes outer on its own; the point is the
+        // message, which must name `mt-4` — the form that would have matched.
+        splitBox('-mt-4 p-4', { inner: ['-mt-4'] });
+        expect(messages().join('\n')).toContain("'-mt-4'");
+        expect(messages().join('\n')).toContain("inner: ['mt-4']");
+    });
+
+    it('does not mistake a colon in an arbitrary value for a variant', () => {
+        splitBox('[color:red] p-4', { inner: ['[color:red]'] });
+        expect(messages()).toEqual([]);
+    });
+
     it('names every unrecognised token, not just the first', () => {
         splitBox('card widget p-4');
         const all = messages().join('\n');

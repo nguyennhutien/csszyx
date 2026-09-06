@@ -538,15 +538,18 @@ function placementFor(
  *
  * A placement list may address an unrecognised token by its literal name —
  * that is the escape hatch the atomic-only scope owes the author, since a
- * custom `@utility` declaring several properties has no correct side. A name
- * that is neither a known selector nor actually present in this className is
- * still reported as the typo it probably is, which is why presence, not mere
- * unknownness, is what opens the hatch.
+ * custom `@utility` declaring several properties has no correct side.
  *
  * @param selectors - The caller's `outer` or `inner` list, possibly absent.
+ * @param side - The placement option to name in the correction.
+ * @param family - Class names strip variants; sz placements name literal keys.
  * @returns The selectors worth testing tokens against.
  */
-function usablePlacements(selectors: BoxSelector[] | undefined): BoxSelector[] {
+function usablePlacements(
+    selectors: BoxSelector[] | undefined,
+    side: BoxRole,
+    family: SelectorFamily = 'class',
+): BoxSelector[] {
     if (selectors === undefined || selectors.length === 0) return [];
     // A string here names a class the author wrote, not a category they are
     // querying, so an unrecognised one is accepted rather than reported. That
@@ -561,7 +564,24 @@ function usablePlacements(selectors: BoxSelector[] | undefined): BoxSelector[] {
     // against a className with no ring classes has never said anything. Only
     // `has`/`pick`/`omit` promise that warning, because there the string IS the
     // query and matching nothing is the whole answer.
-    return selectors.filter(sel => (typeof sel === 'string' ? sel !== '' : selectorIsUsable(sel)));
+    return selectors.filter(sel => {
+        if (typeof sel !== 'string') return selectorIsUsable(sel, family);
+        // The same normalisation `tokenBase` applies to the token, so a
+        // placement written as `md:hidden`, `!hidden` or `-mt-4` can never equal
+        // a base. Say so rather than let it match nothing.
+        const base = family === 'class' ? normalizeBase(stripVariant(sel)) : sel;
+        if (base !== sel && base !== '') {
+            if (process.env.NODE_ENV !== 'production') {
+                devWarn(
+                    `splitBox: a placement list names a class by its base, so '${sel}' never matches; ` +
+                        'the variant prefix and the ! or - marker are stripped before the comparison. ' +
+                        `help: write { ${side}: ['${base}'] }; it places every variant of '${base}'.`,
+                );
+            }
+            return false;
+        }
+        return sel !== '';
+    });
 }
 
 /**
@@ -578,8 +598,8 @@ function splitBoxUncached(
     bridge: MangleBridge | undefined,
 ): SplitBoxResult {
     const tokens = tokenize(className);
-    const forceInner = usablePlacements(options.inner);
-    const forceOuter = usablePlacements(options.outer);
+    const forceInner = usablePlacements(options.inner, 'inner');
+    const forceOuter = usablePlacements(options.outer, 'outer');
     const fallback: BoxRole = options.fallback ?? 'outer';
     const outer: string[] = [];
     const inner: string[] = [];
@@ -993,8 +1013,8 @@ function partitionSz(
     depth: number,
 ): void {
     if (depth >= MAX_SZ_DEPTH) throw new SzDepthError();
-    const forceInner = (options.inner ?? []).filter(sel => selectorIsUsable(sel, 'sz'));
-    const forceOuter = (options.outer ?? []).filter(sel => selectorIsUsable(sel, 'sz'));
+    const forceInner = usablePlacements(options.inner, 'inner', 'sz');
+    const forceOuter = usablePlacements(options.outer, 'outer', 'sz');
     const fallback: BoxRole = options.fallback ?? 'outer';
     const context: SzPartitionContext = {
         options,
