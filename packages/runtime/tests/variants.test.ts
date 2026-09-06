@@ -141,6 +141,10 @@ describe('szv output string-coercion guard (dev)', () => {
         });
         try {
             const boxSz = szv({ variants: { v: { x: { p: 2 } } } });
+            // Stringifying the object IS the case under test: a caller who
+            // forgets to spread the factory's result gets `[object Object]` in
+            // their className, and the warning below is what tells them.
+            // eslint-disable-next-line @typescript-eslint/no-base-to-string
             const coerced = String(boxSz({ v: 'x' }));
             expect(coerced).toBe('');
             expect(warnings.some(w => w.includes('[object Object]'))).toBe(true);

@@ -2431,6 +2431,8 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     #[cfg(feature = "native-engine")]
+    use super::collect_dead_enum_values;
+    #[cfg(feature = "native-engine")]
     use super::collect_dead_weight_values;
     #[cfg(feature = "native-engine")]
     use super::collect_owned_key_variant_objects;
@@ -2655,6 +2657,71 @@ mod tests {
     /// same guard — it is recognised by its own lookup — so a build that walked
     /// only that list descended into it and reported its members as classes
     /// that style nothing. Both halves of the guard have to hold on their own.
+    /// A dead enum value is reported wherever it sits, not only at the top.
+    ///
+    /// `display` and its three siblings emit the value as a bare class, so a
+    /// typo collides with a project's own CSS rather than doing nothing. Under
+    /// a variant it is the same class and the same collision, and the walk has
+    /// to descend to find it.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collect_dead_enum_values_descends_into_a_variant() {
+        let object = StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: "hover".to_string(),
+                span: TextSpan { start: 0, end: 0 },
+                value: StaticSzValue::Object(StaticSzObject {
+                    properties: vec![property(
+                        "display",
+                        StaticSzValue::String("bogus".to_string()),
+                    )],
+                }),
+            }],
+        };
+        let mut out = Vec::new();
+        collect_dead_enum_values(&object, &mut out);
+        assert_eq!(
+            out.iter()
+                .map(|(k, v, _)| (k.as_str(), v.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("display", "bogus")],
+            "a variant hides nothing: {out:?}"
+        );
+    }
+
+    /// The colour-opacity shape is skipped for BOTH of its reasons at once.
+    ///
+    /// `{ bg: { color: 'red-500', opacity: 50 } }` is one declaration written as
+    /// an object, so its members are not sz keys and must not be walked. A
+    /// prefixed key whose object is NOT that shape is an ordinary nesting, and a
+    /// dead value inside it still has to be reported — which is what fails if
+    /// the two halves of the guard are joined with `or`.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collect_dead_enum_values_walks_a_prefixed_key_that_is_not_a_colour_object() {
+        let object = StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: "bg".to_string(),
+                span: TextSpan { start: 0, end: 0 },
+                value: StaticSzValue::Object(StaticSzObject {
+                    properties: vec![property(
+                        "position",
+                        StaticSzValue::String("bogus".to_string()),
+                    )],
+                }),
+            }],
+        };
+        let mut out = Vec::new();
+        collect_dead_enum_values(&object, &mut out);
+        assert_eq!(
+            out.iter()
+                .map(|(k, v, _)| (k.as_str(), v.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("position", "bogus")],
+            "only the colour-opacity object is skipped: {out:?}"
+        );
+    }
+
     #[cfg(feature = "native-engine")]
     #[test]
     fn collect_owned_key_variants_does_not_descend_a_mask_slot() {

@@ -97,6 +97,22 @@ function settled(mtime: number): number {
 }
 
 /**
+ * When an entry says it was written, for choosing between two of them.
+ *
+ * The field arrives as `unknown`: the cache is a directory of JSON files a
+ * previous build wrote, and a hand-edited or half-written one can carry
+ * anything there. Stringifying an object gives `[object Object]`, which sorts
+ * above every ISO date — so a damaged entry would win and the transform served
+ * would be the stale one. Anything that is not a string has no claim to a time.
+ *
+ * @param entry - The cache entry.
+ * @returns Its timestamp, or the empty string when it does not have one.
+ */
+function writtenAt(entry: CacheEntry): string {
+    return typeof entry.timestamp === 'string' ? entry.timestamp : '';
+}
+
+/**
  * The build's entries, indexed by the file they were produced for.
  *
  * Reading every entry once per lookup made a suite of N files read the cache
@@ -125,10 +141,16 @@ class TransformCacheIndex {
     refresh(): void {
         // A directory whose modification time moved has a new name in it — a
         // file or a subdirectory. One whose time held has nothing new.
-        for (const [dir, readAt] of [...this.dirs]) {
+        // Two passes, because `readDir` adds the subdirectories it finds to the
+        // same map: deciding first and reading second keeps the walk off a map
+        // that is still growing under it.
+        const moved: string[] = [];
+        for (const [dir, readAt] of this.dirs) {
             const mtime = mtimeOf(dir);
-            if (mtime === readAt) continue;
-            this.dirs.set(dir, settled(mtime));
+            if (mtime !== readAt) moved.push(dir);
+        }
+        for (const dir of moved) {
+            this.dirs.set(dir, settled(mtimeOf(dir)));
             this.readDir(dir);
         }
     }
@@ -214,7 +236,7 @@ class TransformCacheIndex {
             if (entry.inputSha256 !== sha256) continue;
             if (entry.compilerVersion !== compilerVersion || entry.mangleVars === true) continue;
             if (typeof entry.result?.code !== 'string') continue;
-            if (best === null || String(entry.timestamp ?? '') > String(best.timestamp ?? '')) {
+            if (best === null || writtenAt(entry) > writtenAt(best)) {
                 best = entry;
             }
         }

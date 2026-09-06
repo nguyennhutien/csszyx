@@ -58,6 +58,10 @@ const GATED_RULES = new Map([
 const FOREIGN_RULES = new Map([
     ['S7778', 'unicorn/prefer-single-call'],
     ['S7780', 'unicorn/prefer-string-raw'],
+    // Reported on a pull request before anything local had a word to say. The
+    // typescript-eslint rule prints the same sentence SonarCloud does, verified
+    // on a deliberate violation before this pair went in.
+    ['S6551', '@typescript-eslint/no-base-to-string'],
 ]);
 
 /**

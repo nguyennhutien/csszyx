@@ -432,14 +432,21 @@ describe('the cache index and a directory whose time is still moving', () => {
     const OTHER_CODE = 'export const B = () => <div className="m-2" />;';
 
     /**
-     * Move a directory's modification time into the past.
+     * One fixed instant, far enough back to be past the settle window.
+     *
+     * Fixed, not computed per call: two calls a millisecond apart leave two
+     * different times, and a different time is exactly what tells the index the
+     * directory changed. The point here is a time that does NOT change.
+     */
+    const SETTLED_AT = new Date(Date.now() - 60_000);
+
+    /**
+     * Put a directory's modification time at that instant.
      *
      * @param dir - The directory to age.
-     * @param seconds - How far back to set it.
      */
-    function age(dir: string, seconds: number): void {
-        const when = new Date(Date.now() - seconds * 1000);
-        utimesSync(dir, when, when);
+    function age(dir: string): void {
+        utimesSync(dir, SETTLED_AT, SETTLED_AT);
     }
 
     // The transformer holds ONE index across every file Jest hands it, which is
@@ -463,8 +470,8 @@ describe('the cache index and a directory whose time is still moving', () => {
 
     it('trusts a directory whose time has settled', () => {
         const root = cacheWith(FILE, SOURCE, CODE);
-        age(join(root, '9c'), 60);
-        age(root, 60);
+        age(join(root, '9c'));
+        age(root);
         const transformer = createTransformer({ cacheRoot: root });
         expect(transformer.process(SOURCE, FILE).code).toBe(CODE);
 
@@ -477,8 +484,39 @@ describe('the cache index and a directory whose time is still moving', () => {
             code: OTHER_CODE,
             name: 'second.json',
         });
-        age(join(root, '9c'), 60);
-        age(root, 60);
+        age(join(root, '9c'));
+        age(root);
         expect(transformer.process(SOURCE, OTHER).code).not.toBe(OTHER_CODE);
+    });
+});
+
+/**
+ * A timestamp the plugin did not write is not a timestamp to compare.
+ *
+ * The field is `unknown` on the way in — the cache is a directory of JSON files
+ * a previous build wrote, and nothing stops a hand-edited or half-written one
+ * from carrying an object there. Stringifying that gives `[object Object]`,
+ * which sorts above every real ISO date, so the newest entry loses to the
+ * broken one and the transform served is the stale one.
+ */
+describe('picking between entries with a damaged timestamp', () => {
+    const FILE = '/repo/src/Card.tsx';
+    const SOURCE = 'export const A = () => <div sz={cardSz} />;';
+    const OLD = 'export const A = () => <div className="p-2" />;';
+    const NEW = 'export const A = () => <div className="p-4" />;';
+
+    it('prefers a real timestamp over one that is not a string', () => {
+        const root = cacheWith(FILE, SOURCE, OLD, {
+            timestamp: { broken: true } as unknown as string,
+            name: 'damaged.json',
+        });
+        writeEntry(root, {
+            filename: FILE,
+            source: SOURCE,
+            code: NEW,
+            timestamp: '2026-01-01T00:00:00.000Z',
+            name: 'good.json',
+        });
+        expect(findCachedTransform(root, FILE, SOURCE)).toBe(NEW);
     });
 });

@@ -132,6 +132,13 @@ export default [
             ],
             '@typescript-eslint/explicit-module-boundary-types': 'error',
 
+            // SonarCloud reports this as S6551, and nothing here reported it:
+            // a value read off a JSON file on disk is `unknown`, and putting it
+            // through `String()` turns an object into `[object Object]` — which
+            // sorted above every real timestamp and made a damaged cache entry
+            // win. Type-aware, so only this block can run it.
+            '@typescript-eslint/no-base-to-string': 'error',
+
             // JSDoc enforcement (csszyx convention)
             'jsdoc/require-jsdoc': [
                 'error',
