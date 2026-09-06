@@ -6,6 +6,7 @@
  * the abort protocol when necessary to preserve SSR invariants.
  */
 
+import { getMangleRegistry } from './mangle-registry.js';
 import { sortStrings } from './sort.js';
 import type { RecoveryManifest } from './verify.js';
 import { getRecoveryMode, hasRecoveryToken } from './verify.js';
@@ -223,6 +224,37 @@ export function readChecksumAttribute(element: HTMLElement): string | undefined 
 }
 
 /**
+ * Does the bundle that is running match the document it is running in?
+ *
+ * This is the one comparison the hydration checksum exists to make, and the
+ * only one that spans the two artefacts a deploy can separate. Every other
+ * verifier here takes both of its values out of the same HTML — the attribute
+ * against the census beside it, or against a manifest tag beside that — so it
+ * answers "consistent" for a document that is internally consistent and stale.
+ *
+ * The build stamps one checksum into both halves: the attribute on `<html>`,
+ * and the registry the generated module installs from inside the JS bundle.
+ * When a page serves yesterday's HTML to today's bundle, those two disagree,
+ * and the classes in the markup no longer mean what the bundle's map says they
+ * mean — the failure renders as an unstyled page with nothing in the console.
+ *
+ * Absence is not disagreement. A build without mangling installs no registry,
+ * and a document that carries no checksum was not built by a lane that writes
+ * one; neither is a mismatch, and neither should abort a hydration.
+ *
+ * @returns `false` only when both values are present and differ.
+ */
+export function verifyBundleMatchesDocument(): boolean {
+    if (typeof document === 'undefined') return true;
+    const registry = getMangleRegistry();
+    const shipped = registry?.checksum;
+    if (!shipped) return true;
+    const rendered = readChecksumAttribute(document.documentElement);
+    if (rendered === undefined) return true;
+    return rendered === shipped;
+}
+
+/**
  * Verifies mangle map checksum from HTML tag.
  *
  * Compares the checksum in the data-sz-checksum attribute with the
@@ -404,12 +436,16 @@ export function verifyMangleMapIntegrity(): boolean {
         return false;
     }
 
-    // Load mangle map from script tag
+    // Load mangle map from script tag. Its absence is not a failed check: the
+    // census follows mangling, and a build that mangles can still be told not
+    // to ship it. There is no map in this document to weigh against the
+    // checksum, and saying so as a failure sent readers hunting corruption on a
+    // page with nothing wrong with it. What the checksum can still be weighed
+    // against is the bundle — see `verifyBundleMatchesDocument`.
     const scriptElement = document.getElementById('__CSSZYX_MANGLE_MAP__');
 
     if (!scriptElement) {
-        console.warn('[csszyx] Mangle map script not found');
-        return false;
+        return true;
     }
 
     try {
@@ -538,12 +574,17 @@ export function guardHydration(manifest: RecoveryManifest): boolean {
         return true;
     }
 
-    // Verify mangle map checksum. Recovery manifest `checksum` protects the
-    // token set; `mangleChecksum` is the value that must match HTML.
-    if (!verifyMangleChecksum(manifest.mangleChecksum)) {
+    // Two comparisons, and only the second spans the deploy. The manifest's
+    // `mangleChecksum` is read from a tag in this document, so matching it
+    // against the attribute proves the document agrees with itself — worth
+    // keeping, because a partial cache write breaks exactly that. What it
+    // cannot see is a stale document under a fresh bundle, which is the case
+    // this guard was written for: for that, the bundle has to be asked.
+    if (!verifyMangleChecksum(manifest.mangleChecksum) || !verifyBundleMatchesDocument()) {
         const error: HydrationError = {
             type: 'checksum_mismatch',
-            message: 'Mangle map checksum mismatch detected',
+            message:
+                'Mangle map checksum mismatch: the HTML, the bundle and the manifest do not all come from one build',
             timestamp: Date.now(),
         };
 

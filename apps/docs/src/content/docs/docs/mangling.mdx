@@ -1,0 +1,173 @@
+---
+title: Mangling
+description: Why a production build renames p-4 to z — a DOM tree that fits the Elements panel, and class names that carry no promise of staying put.
+---
+
+A component renders twice and you open the Elements panel to find out which
+node it hangs off. The panel shows you this:
+
+```html
+<button class="inline-flex items-center gap-2 px-4 py-2 rounded-md font-medium bg-blue-500 text-white shadow-sm transition-colors duration-150 hover:bg-blue-600 focus-visible:ring-2 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-blue-400 dark:hover:bg-blue-300">
+```
+
+Eighteen classes, 254 characters, from an `sz` object nobody would call
+excessive:
+
+```tsx
+<button sz={{
+  display: 'inline-flex', items: 'center', gap: 2,
+  px: 4, py: 2, rounded: 'md', weight: 'medium',
+  bg: 'blue-500', color: 'white', shadow: 'sm',
+  transition: 'colors', duration: 150,
+  hover: { bg: 'blue-600' },
+  focusVisible: { ring: 2 },
+  disabled: { opacity: 50, cursor: 'not-allowed' },
+  dark: { bg: 'blue-400', hover: { bg: 'blue-300' } },
+}} />
+```
+
+That attribute wraps over several rows in the panel and pushes the element's
+children off the screen. You came for the tree and the styling vocabulary is
+what you scroll past to reach it. Every element on the page costs you the same
+scroll, on a question that has nothing to do with styling.
+
+Mangling replaces each of those class names with a short token. The same
+element, from a build with `production.mangle` on:
+
+```html
+<!-- Which token a class gets is decided per build. The shape is the point. -->
+<button class="z8 y v9 q z2 x4 w o5 t z z3 y7 m k7 j9 h2 g4 f">
+```
+
+Eighteen classes, eighteen tokens, one row. The tree fits the panel again.
+
+## How a token is chosen
+
+The build takes every class its own `sz`, `szv` and `szs` output produced,
+drops the ones you also write as literal strings in `class` or `className`
+(those keep their names so raw and `sz` consumers match the same rule), sorts
+what is left, and hands out tokens in that order:
+
+```text
+z  y  x  …  a  Z  Y  …  A  z9  z8  …  A0  zz  zy  …
+```
+
+The first 52 tokens are one character, the next 3,224 are two, the 5,200 after
+that are three. A build with a few hundred classes never gets past two.
+
+The rename reaches the CSS rules, the `class` attributes in the HTML, and the
+class strings inside your JS bundle, so all three still agree. When the
+question does turn out to be styling, `szDecode` gives you the name back at
+runtime, and on a build you can no longer rebuild the census in the page
+answers the same question from the console.
+
+## A class name stops looking like an API
+
+Tokens are handed out over the census of classes this build found, in sorted
+order. Add a class that sorts before an existing one, and every token after
+that point shifts: `z9` names one class in today's build and a different class
+in tomorrow's. Add one that sorts after, and nothing before it moves. So there
+is no rule for when a token changes, only that nothing promises it will not.
+
+That is the point, and it is narrower than "nothing can bind to it". A browser
+extension, a host page your app is embedded in, another team's end-to-end
+selectors, an analytics rule keyed on `bg-red-500`: any of them CAN latch onto
+a token, and it may hold for many deploys. What they cannot have is a contract.
+The selector may keep matching, stop matching, or — the case to fear — go on
+matching a different element, with no error to say so. A readable name invites
+that dependency by looking stable; an opaque one does not.
+
+None of this rests on the map being secret. The map ships in the page, anyone
+can read it, and reading it changes nothing above: a token found today is still
+a token with no promise attached. What mangling gives a maintainer is a class
+surface that visibly is not an interface, so the integration hooks that ARE one
+— a data attribute, a role, a name you list in `manglePreserve` — are what a
+consumer reaches for first.
+
+Two kinds of class keep their readable names on purpose: one you also write as
+a literal string anywhere in your source, and anything you list in
+[`manglePreserve`](/docs/reference/config/#production). Reach for the second
+when a stylesheet matches a class by its text (`[class*="bg-tag"]`), or when a
+`querySelector` needs the name. The build reports both cases before they cost
+you a rule.
+
+## It is not a size optimisation
+
+Over a gzip-served response, renaming class names does not reduce the payload
+and often grows it:
+
+- gzip already collapses a repeated class name into a short backreference, so
+  shortening `flex-col` to `o7` saves a byte or two per occurrence rather than
+  the six the name lengths suggest. Short tokens also compress worse than the
+  repetitive utility vocabulary they replace.
+- The map is a fixed cost that grows with the census, and most class names
+  appear once or twice — far short of paying for their own map entry.
+
+The build weighs its own trade. It gzips the CSS and the code assets before
+and after the rename, charges the map against them, and prints a line **only
+when the net comes out positive**, naming the byte count and where the map
+shipped. A build that broke even or came out ahead says nothing. The
+[measured delta on a real app](/docs/reference/config/#production) and the
+[exact wording of that line](/docs/reference/warnings/#mangling-made-the-build-bigger)
+are in the reference.
+
+If you turned mangling on for bytes, turn it off. If you turned it on for the
+two reasons above, the line is the price and you can ignore it.
+
+## It is not a confidentiality control
+
+The stylesheet ships beside the markup, so `.z{padding:1rem}` reads plainly to
+anyone who opens it. csszyx renames its own utility classes and nothing else —
+your component names, routes, data attributes and copy are untouched. Most of
+that vocabulary is Tailwind's and says nothing about your product; a theme
+token such as `bg-brand-500` or an arbitrary value does say something, and the
+build does not tell the two apart when it picks what to rename. The census in
+the page maps every token back to the name it came from either way.
+
+Do not present mangling to a security reviewer as a confidentiality measure.
+When a reviewer finds the census tag in your `dist/`,
+[Security](/docs/security/#when-a-review-flags-the-census-tag) answers the
+three questions they ask.
+
+## Turn it on
+
+```ts
+// vite.config.ts
+csszyx({
+  production: { mangle: true },
+})
+```
+
+It is off by default, and a production build is the only place it runs. Both
+dev lanes force it off: a dev server serves un-mangled CSS, so a map applied
+there would name tokens no dev rule matches. Run `vite build` (or
+`next build --webpack`) to see tokens.
+
+Vite, Rollup and webpack rename. Next.js on Turbopack and the standalone
+esbuild adapter do not, because neither exposes a hook deep enough to rewrite
+the final bundle — see
+[the lane table](/docs/reference/config/#production) before you plan around it.
+
+An app that also has hand-written CSS or a second Tailwind pipeline can hit a
+name that mangling breaks, and the build says so before you ship: it names the
+short class names a token would collide with, the mangled classes no rule was
+emitted for, and the attribute selectors that stop matching once a name
+changes. Each clause carries its own fix and a paste-ready config value. Read
+[Hybrid hazards](/docs/reference/warnings/#hybrid-hazards), then run
+[`scan-collisions`](/docs/reference/cli/#scan-collisions) to list every
+offending name at once. Until they are fixed, ship with
+`production: { mangle: false }`.
+
+## Where the rest lives
+
+- [Plugin Config → `production`](/docs/reference/config/#production) — `mangle`,
+  `manglePreserve`, `mangleExclude`, `hydrationCensus`, `mangleDebugGlobal`,
+  and which bundler renames what.
+- [Warnings → Mangling](/docs/reference/warnings/#mangling) — every line a
+  mangled build can print, quoted verbatim.
+- [SSR Hydration API](/docs/reference/hydration/#reading-the-map-on-a-page-you-cannot-rebuild)
+  — read the census on a deployed page from the console.
+- [`szDecode`](/docs/reference/runtime/#szdecodetoken) — a token back to its
+  class name at runtime.
+- [Global Variable Mangling](/docs/reference/global-var-mangling/) — the
+  separate, opt-in tier for CSS custom properties.

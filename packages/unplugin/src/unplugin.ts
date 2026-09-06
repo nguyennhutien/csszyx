@@ -85,6 +85,7 @@ import {
 import { createLazyAggregate, type LazyAggregate } from './lazy-aggregate.js';
 import {
     needsRuntimeMangleRegistration,
+    removedInjectChecksumMessage,
     removedMangleMapDeliveryMessage,
 } from './mangle-delivery.js';
 import {
@@ -243,6 +244,14 @@ interface PluginState {
      * by a raw selector consumer.
      */
     ownedClasses: Set<string>;
+    /**
+     * Owned classes that a mangle map WOULD carry: `ownedClasses` minus the
+     * authored ones and minus `manglePreserve`. Recorded whether or not
+     * mangling runs, because the bundle manifest lists them either way and used
+     * to read them off the map's keys — which is why the map had to be
+     * allocated on a build that never mangles.
+     */
+    mangleEligible: string[];
     /**
      * Classes written through author-facing class/className attributes. Any
      * overlap with ownedClasses must keep its original name because bundled
@@ -1092,7 +1101,7 @@ export function isAdvisoryDiagnostic(message: string): boolean {
  * Suppression is the right default; implying zero is not. One line costs
  * nothing and keeps the difference visible.
  *
- * @param count - Advisory fallbacks the build declined to list.
+ * @param count - Advisory notes the build declined to list.
  * @returns The disclosure, or null when nothing was held back.
  */
 export function suppressedAdvisoryMessage(count: number): string | null {
@@ -1100,10 +1109,15 @@ export function suppressedAdvisoryMessage(count: number): string | null {
     // Count and noun interpolate together so the sentence after them is one
     // unbroken literal: the docs-sync gate matches verbatim runs, and a
     // placeholder in the middle splits the run it is trying to match.
-    const held = count === 1 ? '1 advisory sz fallback' : `${count} advisory sz fallbacks`;
+    //
+    // The noun is "note", not "sz fallback": the count is everything
+    // `isAdvisoryDiagnostic` holds back, and two of its three kinds never touch
+    // an sz prop. A build with no fallback at all was being told it had some.
+    const held = count === 1 ? '1 advisory note' : `${count} advisory notes`;
     return (
-        `[csszyx] ${held} not listed above. At an sz prop a fallback is advisory — the ` +
-        'runtime path works and the classes are collected — so a production build keeps the ' +
+        `[csszyx] ${held} not listed above. An advisory reports something csszyx handled — a ` +
+        'fallback at an sz prop, a className whose precedence over sz is unstated, or a variable ' +
+        'hoist the planner declined — so the styles are there and a production build keeps the ' +
         'list short. A development build prints each one with its file and position.'
     );
 }
@@ -3015,6 +3029,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // (configResolved), so dev always uses readable class names that match the
     // dev CSS. `let` because the command is only known at configResolved.
     let manglingEnabled = options.production?.mangle === true;
+    // The census maps original names to tokens, so a build that renames nothing
+    // has nothing to map. It follows the RENAMING, not one feature: class
+    // mangling and variable mangling are separate switches, and a dev server
+    // keeps the second while turning the first off — a page whose variables
+    // were renamed still needs the map that decodes them.
+    const censusRequested = options.production?.hydrationCensus !== false;
+    /**
+     * Whether this build renamed anything the census would carry.
+     *
+     * Both renamings count, and they are separate switches: a dev server turns
+     * class mangling off — dev CSS keeps readable class names, so a class map
+     * would encode to tokens no dev rule matches — while it still rewrites CSS
+     * variables. A page whose variables were renamed needs the map that
+     * decodes them, whatever happened to its class names.
+     *
+     * @returns `true` when a class or a variable map has entries.
+     */
+    const censusHasContent = (): boolean =>
+        (manglingEnabled && Object.keys(state.mangleMap).length > 0) ||
+        Object.keys(state.varMangleMap).length > 0;
     // A dev server has no end, so anything it holds back is held back for
     // good: `closeBundle` is where the count of unlisted advisories prints,
     // and a server never reaches it. Knowing we are serving is what keeps the
@@ -3108,6 +3142,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         (options.production as Record<string, unknown> | undefined)?.mangleMapDelivery !== undefined
     ) {
         console.warn(removedMangleMapDeliveryMessage());
+    }
+    // Same shape, same reason: the key is gone from `ProductionConfig`, but
+    // `csszyx init` wrote it into configs for four releases, so the ones still
+    // carrying it are exactly the ones that never hear anything.
+    if ((options.production as Record<string, unknown> | undefined)?.injectChecksum !== undefined) {
+        console.warn(removedInjectChecksumMessage());
     }
     // Weighs the map against the CSS it bought. Counts channels that actually
     // shipped rather than the ones a build could have used: a library build
@@ -3285,6 +3325,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         skipWarningEmitted: false,
         classesCapped: false,
         ownedClasses: new Set<string>(),
+        mangleEligible: [],
         authoredClasses: new Set<string>(),
         mangleMap: {},
         varMangleEntriesByFile: varMangleEntries,
@@ -4833,6 +4874,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             const unmatched = manglePreserve.unmatched(state.ownedClasses);
             if (unmatched.length > 0) emitWarning(manglePreserveNoMatchMessage(unmatched));
         }
+        state.mangleEligible = eligible;
+        // Nothing reads a map the build does not apply, and the checksum is a
+        // hash of this map: allocating one with mangling off spent an encoder
+        // call per class to attest a census the page never carried.
+        if (!manglingEnabled) return {};
         return allocateMangleTokens(eligible, forbiddenTokens);
     }
 
@@ -5516,7 +5562,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // and it is what makes a mangled class traceable back to its original
         // name in devtools without rebuilding.
         const censusTag = `<script id="__CSSZYX_MANGLE_MAP__" type="application/json" dangerouslySetInnerHTML={{__html: \`${CENSUS_PLACEHOLDER}\`}} />`;
-        const bodyTag = findOpeningTag(transformedCode, 'body');
+        const bodyTag =
+            censusRequested && censusHasContent() ? findOpeningTag(transformedCode, 'body') : null;
         if (bodyTag) {
             transformedCode = `${transformedCode.slice(0, bodyTag.close + 1)}${censusTag}${transformedCode.slice(bodyTag.close + 1)}`;
         }
@@ -6306,9 +6353,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         // needs no fallback.
                         const injectedMangleMap = manglingEnabled ? state.mangleMap : {};
                         let result = injectHydrationData(html, injectedMangleMap, state.checksum, {
-                            // Always 'script' — the inert JSON census; the
-                            // checksum attribute is injected regardless.
-                            mode: 'script',
+                            census: censusRequested && censusHasContent(),
                             minify: process.env.NODE_ENV === 'production',
                             varMangleMap: state.varMangleMap,
                         });
@@ -6382,7 +6427,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const manifest: CSSzyxBundleManifest = {
             version: '0.4.0',
             buildId: state.checksum,
-            classes: Object.keys(state.mangleMap),
+            classes: [...state.mangleEligible],
         };
         if (includeMangleMap && Object.keys(state.mangleMap).length > 0) {
             manifest.mangleMap = state.mangleMap;

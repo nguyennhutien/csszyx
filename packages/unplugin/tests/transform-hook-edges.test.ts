@@ -286,8 +286,14 @@ describe('transform hook branch edges', () => {
         expect(result?.code).toBe(code);
     });
 
+    // Mangling on AND a class for it to rename, because the census is written
+    // for a build that renamed something: with an empty map there is no tag to
+    // place and the tag-finding this pins never runs.
     it('skips body-prefixed custom elements before the real body tag', async () => {
-        const { root, transform } = await boot();
+        const { root, transform } = await boot(
+            { production: { mangle: true } },
+            { 'src/Seed.tsx': 'export const Seed = () => <div sz={{ p: 4 }} />;\n' },
+        );
         const code =
             'export default function Doc(){return <html><bodyguard /><body>x</body></html>;}';
         const result = (await transform(code, path.join(root, 'app/layout.tsx'))) as {

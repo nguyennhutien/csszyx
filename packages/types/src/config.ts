@@ -118,12 +118,41 @@ export interface ProductionConfig {
     manglePreserve?: string[];
 
     /**
+     * Ship the inert class census in the built HTML.
+     *
+     * The census is a `<script type="application/json">` block listing every
+     * original class name against the token that replaced it. It is what lets
+     * someone read a deployed page in devtools — `.z` was `p-4` — on a build
+     * they cannot rebuild, and it is read by `loadMangleMapFromDOM` and
+     * `verifyMangleMapIntegrity`.
+     *
+     * It follows `mangle`: a build that renames nothing has nothing to map, so
+     * no census is written whatever this says. Setting it `false` drops the tag
+     * from a build that DOES mangle — for an organisation that inventories every
+     * `<script>` element in its pages and will not carry this one. The cost is
+     * that a deployed page can no longer be decoded, and those two functions
+     * answer "nothing to read" instead. The hydration checksum is unaffected:
+     * it is an attribute, and the guard that reads it compares the document
+     * against the bundle, never against the census.
+     *
+     * @default true
+     */
+    hydrationCensus?: boolean;
+
+    /**
      * Expose the runtime mangle registry as `window.__csszyx` for debugging.
      *
      * The registry (`mangleMap`, `decode`, `encode`, `decodeVar`, …) is what
      * runtime helpers read internally; nothing about correctness depends on
-     * the global. It is off by default so a production page carries no
-     * inspection surface it did not ask for; nothing else assigns the global.
+     * the global. Off by default because it is a named handle on `window`:
+     * any script sharing the page — an extension, a host shell, a third-party
+     * embed — can bind to it and keep working against it, and a stable
+     * surface to bind to is what mangling takes away.
+     *
+     * It hides nothing when off. The same map already ships in the page as
+     * the inert `__CSSZYX_MANGLE_MAP__` census and inside the JS bundle, and
+     * devtools reads the census with one `JSON.parse`. Nothing else assigns
+     * the global.
      *
      * @default false
      */
@@ -141,13 +170,6 @@ export interface ProductionConfig {
      * @default undefined (disabled)
      */
     mangleGlobalVars?: GlobalVarMangleConfig;
-
-    /**
-     * Inject checksum for SSR hydration validation.
-     *
-     * @default true
-     */
-    injectChecksum: boolean;
 
     /**
      * Minify output (class names and attributes).
@@ -683,7 +705,6 @@ export const DEFAULT_PRODUCTION_CONFIG: ProductionConfig = {
     mangle: false,
     mangleVars: false,
     mangleVarHoistMaxDepth: 5,
-    injectChecksum: true,
     minify: true,
 };
 

@@ -46,7 +46,6 @@ behave exactly as before, because these never reached the build.
           },
           production: {
             mangle: true,
-            injectChecksum: true,
           },
           build: {
             astBudgetLimit: 50_000, // optional, default 50k
@@ -77,7 +76,7 @@ scans them to generate CSS.
       webpack(config) {
         config.plugins.push(
           csszyxWebpack({
-            production: { mangle: true, injectChecksum: true },
+            production: { mangle: true },
           }),
         );
         return config;
@@ -97,7 +96,7 @@ scans them to generate CSS.
     module.exports = {
       plugins: [
         csszyxWebpack({
-          production: { mangle: true, injectChecksum: true },
+          production: { mangle: true },
         }),
       ],
     };
@@ -150,8 +149,8 @@ interface ProductionConfig {
   mangleVars: boolean; // Opt into dynamic sz CSS variable mangling and hoisting
   mangleVarHoistMaxDepth: number; // Max cascade depth for mangleVars hoisting
   mangleGlobalVars?: GlobalVarMangleConfig; // Explicit global token alias tier
+  hydrationCensus?: boolean;   // Ship the class census in the HTML (default true, mangling only)
   mangleDebugGlobal?: boolean; // Expose the registry as window.__csszyx (default false)
-  injectChecksum: boolean; // Add hydration checksum to HTML
   minify: boolean; // Minify output
 }
 ```
@@ -264,6 +263,31 @@ ships once, inside the bundle. Enable mangling when you want the class
 names unreadable, and treat the byte delta as a rounding error in either direction.
 :::
 
+#### What mangling buys
+
+Two things, both about names rather than bytes.
+
+**A class name stops looking like an API.** Tokens are allocated over the
+sorted census of classes the build found, so a class added earlier in that
+order shifts every token after it and one added later shifts none — there is
+no rule for when a token changes, only no promise that it will not. A browser
+extension, a host page, another team's E2E selectors can still latch onto a
+token; what they cannot have is a contract, and a selector that keeps matching
+may be matching a different element. An opaque name does not invite that
+dependency the way a readable one does. It is not confidentiality — the
+stylesheet ships, so `.z{padding:1rem}` reads plainly, and the census in the
+page maps every token back to the name it came from.
+
+**The DOM tree is readable in devtools.** Atomic utilities plus transition,
+animation and variant states give one element a `className` of dozens of names,
+and in the Elements panel that line wraps over several rows and buries the
+structure — the cost lands on whoever is debugging something that is not
+styling. Mangled, each element carries a handful of short tokens and the tree
+fits the panel again. When the question does turn out to be styling, `szDecode`
+and the
+[census](/docs/reference/hydration/#reading-the-map-on-a-page-you-cannot-rebuild)
+name the class the token came from.
+
 #### Where the runtime mangle map ships
 
 The runtime mangle map is what lets `szr`, `szv`, `szcn`, and `szDecode` speak
@@ -292,6 +316,31 @@ inline lane is gone, so the option has nothing left to select; a build that
 still passes it warns once and ignores the value. Delete the line.
 :::
 
+#### `hydrationCensus`
+
+```ts
+production: { mangle: true, hydrationCensus: false }
+```
+
+Every mangled build writes the class census into the built HTML, as an inert
+`<script type="application/json">` listing each original class name against the
+token that replaced it. It is what lets someone read a deployed page in
+devtools — see [Reading the map on a page you cannot
+rebuild](/docs/reference/hydration/#reading-the-map-on-a-page-you-cannot-rebuild)
+— and it is what `loadMangleMapFromDOM` and `verifyMangleMapIntegrity` read.
+
+It follows `mangle`. A build that renames nothing has nothing to map, so no
+census is written whatever this option says, and a page that carries the
+readable names carries no tag either.
+
+Set it `false` on a build that DOES mangle and the tag is gone. That is for one
+reader: an organisation that inventories every `<script>` element in its pages
+and will not carry this one — the browser never objects to it, but a review
+process can. What it costs is the ability to decode a page you have already
+deployed, and the two functions above answer "nothing to read" instead. The
+hydration checksum is unaffected: that is an attribute, and the guard that
+reads it weighs the document against the bundle, never against the census.
+
 #### `mangleDebugGlobal`
 
 ```ts
@@ -300,10 +349,16 @@ production: { mangle: true, mangleDebugGlobal: true }
 
 Also assigns the runtime registry to `window.__csszyx` (`mangleMap`,
 `varMangleMap`, `checksum`, `encode`, `decode`, `encodeVar`, `decodeVar`,
-`decodeGlobalVar`, `decodeAll`) for inspection in devtools. Off by default: the
-helpers read the registry internally, so nothing about correctness depends on
-the global, and a production page should carry no inspection surface it did not
-ask for. Nothing else assigns the global.
+`decodeGlobalVar`, `decodeAll`) for inspection in devtools. The helpers read
+the registry internally, so nothing about correctness depends on the global.
+
+Off by default because the global is a named handle any script on the page can
+bind to — an extension, a host shell, a third-party embed — and a stable
+surface to bind to is what mangling takes away. It keeps nothing secret: the
+same map ships in the page as the inert `__CSSZYX_MANGLE_MAP__` census and
+inside your JS bundle, and
+[devtools reads the census](/docs/reference/hydration/#reading-the-map-on-a-page-you-cannot-rebuild)
+on a build you cannot rebuild. Nothing else assigns the global.
 
 :::note[Mangling follows your bundler, not your framework]
 Class mangling (and the collision warning above) run wherever csszyx builds your
@@ -343,11 +398,10 @@ interface GlobalVarMangleConfig {
 
 | Option                   | Default | Description                                                                                                                                               |
 | ------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mangle`                 | `true`  | Replace class names with short encoded symbols                                                                                                            |
+| `mangle`                 | `false` | Replace class names with short encoded symbols                                                                                                            |
 | `mangleVars`             | `false` | Opt into shorter names and bounded hoisting for dynamic CSS variables generated from runtime `sz` values. Disabled builds keep existing `--_sz-*` output. |
 | `mangleVarHoistMaxDepth` | `5`     | Maximum DOM ancestor distance for component-tier CSS variable hoisting when `mangleVars` is enabled.                                                      |
 | `mangleGlobalVars`       | `undefined` | Opt-in alias gate for explicit app-owned global CSS custom properties. Aliasing is the only mode and keeps original public variables defined.          |
-| `injectChecksum`         | `true`  | Embed SHA-256 checksum in HTML                                                                                                                            |
 | `minify`                 | `true`  | Minify emitted CSS and JS                                                                                                                                 |
 
 `mangleVars` does not define global theme-token aliases. It only rewrites the

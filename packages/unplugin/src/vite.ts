@@ -13,7 +13,7 @@
  *   plugins: [
  *     csszyx({
  *       development: { debug: true },
- *       production: { injectChecksum: true }
+ *       production: { mangle: true }
  *     })
  *   ]
  * });
