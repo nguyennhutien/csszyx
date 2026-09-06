@@ -102,7 +102,7 @@ whenever it can PROVE objects never flow:
   the plugin never retargets to this one — you import it by hand when a project
   reads Tailwind strings and never passes sz objects to the toolkit. Under ESM
   the main entry already tree-shakes to within 76&nbsp;B of it; the saving is on
-  the `require()` path, where nothing shakes: 22.6&nbsp;KB gz against
+  the `require()` path, where nothing shakes: 22.5&nbsp;KB gz against
   30.9&nbsp;KB. It does not drop `@csszyx/compiler` from the dependency graph:
   both halves of the toolkit live in one module, so `dist/split.cjs` still
   requires `@csszyx/compiler/browser` even though nothing on this entry calls
@@ -214,7 +214,7 @@ szcn('shadow-lg', 'shadow-red-500');  // → 'shadow-lg shadow-red-500'
 // decoration: thickness / style / color
 szcn('decoration-2', 'decoration-red-500'); // → 'decoration-2 decoration-red-500'
 
-// stroke: width vs paint
+// stroke: width vs color
 szcn('stroke-2', 'stroke-red-500'); // → 'stroke-2 stroke-red-500'
 
 // from / via / to: gradient stop position vs stop color

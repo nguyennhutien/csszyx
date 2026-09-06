@@ -15,15 +15,16 @@
  *
  * Measured with esbuild, minified, `NODE_ENV=production`, both entries from the
  * same build. Under ESM the barrel already tree-shakes and this entry saves
- * almost nothing — 5 406 B gzip against 5 482 B. The payoff is on the CJS path,
- * where `require()` cannot shake at all: 22 552 B against 30 919 B, 27 % less.
+ * almost nothing — 5 337 B gzip against 5 413 B. The payoff is on the CJS path,
+ * where `require()` cannot shake at all: 22 515 B against 30 876 B, 27% less.
  * That is the reason this entry exists; the fact that ESM barely moves is the
- * reason a separate PACKAGE does not.
- * See `.agent/decisions/0021-atomic-only-class-vocabulary.md`.
+ * reason a separate PACKAGE does not. It is a smaller entry, not a
+ * dependency-free one — both halves live in one module, so `dist/split.cjs`
+ * still requires `@csszyx/compiler/browser`.
  *
- * The vocabulary is atomic Tailwind utilities — a class whose name states one
- * feature. A custom `@utility` that declares several properties at once is out
- * of scope by decision, not by omission; the same ADR says why.
+ * The vocabulary is atomic Tailwind utilities. A custom utility declaring
+ * several properties cannot be assigned one box role reliably; place it with
+ * an explicit override instead. See https://csszyx.com/docs/box-model-splitbox/.
  *
  * @module @csszyx/runtime/split
  */

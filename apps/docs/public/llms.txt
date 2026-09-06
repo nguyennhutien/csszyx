@@ -819,6 +819,27 @@ import { __szColorVar } from "csszyx/lite";
 
 ## Nested Element Routing — splitBox + class toolkit
 
+For className-only consumers, import `classify`, `has`, `pick`, `omit` and
+`splitBox` from `@csszyx/runtime/split`. The entry excludes sz-object adapters;
+ESM can tree-shake the main entry too, while CommonJS benefits from the narrower
+surface. The compiler dependency remains.
+
+The supported vocabulary is atomic utilities. A multi-property custom
+`@utility card` is not classified: `pick` excludes it, `omit` retains it, and
+`splitBox` leaves it on the fallback node with a development warning unless
+explicitly placed. Use `splitBox('card p-4', { inner: ['card'] })` to place the
+whole class; no CSS declarations are split. Literal placement matches a whole
+base name, so `card` does not match `card-lg`. Use authored names when mangling.
+`{ outer: ['hidden'] }` matches every variant of `hidden`; naming `md:hidden`
+in a class placement list matches nothing and warns. Query helpers still
+require recognised selectors.
+
+`scope` is the category for `group` and `peer`, including `group/item`. Both
+route outer: `group` supplies an ancestor and `peer` keeps its sibling position.
+The expanded vocabulary also recognises `placeholder-*` as inner and
+`start-*`/`end-*` as outer. These classes previously used the fallback, so
+review old routing assumptions and category-query expectations when upgrading.
+
 When a caller passes one flat `className` to a component that renders nested elements, `splitBox` partitions it at the CSS box-model border line so each element gets the classes that act on it. Pure string functions, framework-agnostic. The class-token → box-role map is generated from the compiler's property tables (never drifts).
 
 ```tsx
@@ -866,6 +887,10 @@ omit("p-2 overflow-y-auto flex", "overflow"); // "p-2 flex"
 splitBoxSz({ m: 4, px: 2 }); // { outer: { m: 4 }, inner: { px: 2 } }
 splitBoxSz({ gap: 2, hover: { px: 1 }, md: { m: 4 } }); // variants route by inner prop; split when they disagree
 splitBoxSz({ grow: 2, self: "center" }, { inner: ["grow", "self"] }); // item utils (grow/order/self/col-span) are OUTER by default; this forces them back to the content
+// Placement lists can pin a whole literal variant key, preserving its contents.
+splitBoxSz({ hover: { p: 2, m: 4 } }, { outer: ["hover"] });
+// { outer: { hover: { p: 2, m: 4 } }, inner: {} }
+// Literal keys such as "[&:hover]" work too; inner wins if both lists name it.
 splitBoxSz({ overflow: "hidden", p: 4 }); // { outer: { overflow: 'hidden' }, inner: { p: 4 } }
 // classifySzKey(key, value?) / hasSz / pickSz / omitSz — the sz-object toolkit twins
 // (pass the value for a key whose side depends on it: classifySzKey('overflow', 'hidden') → outer)

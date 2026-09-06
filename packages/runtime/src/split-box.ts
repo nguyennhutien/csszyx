@@ -376,10 +376,18 @@ function warnUnknownSelector(name: string): void {
  *
  * @param info - The classified token info, or `undefined`.
  * @param selector - The selector to test the token against.
+ * @param base - The literal name to fall back on when `info` is `undefined`:
+ *   an unrecognised token answers to its own whole name so a placement list can
+ *   address it.
  * @returns `true` if the token matches the selector.
  */
-function matches(info: TokenInfo | undefined, selector: BoxSelector): boolean {
-    if (!info) return false;
+function matches(info: TokenInfo | undefined, selector: BoxSelector, base = ''): boolean {
+    // A token csszyx does not recognise still answers to its own name. That is
+    // the escape hatch the atomic-only scope owes the author: a custom
+    // `@utility` has no correct side, so `{ inner: ['card'] }` must be able to
+    // place it by hand. Whole name only — reading `card` as a prefix of
+    // `card-lg` would be a guess about a structure csszyx knows nothing about.
+    if (!info) return typeof selector === 'string' && selector !== '' && selector === base;
     if (typeof selector === 'object') {
         return Object.entries(selector).every(
             ([category, value]) => info.category === category && info.value === value,
@@ -399,10 +407,24 @@ function matches(info: TokenInfo | undefined, selector: BoxSelector): boolean {
  *
  * @param info - The classified token info, or `undefined`.
  * @param selectors - The selectors to test the token against.
+ * @param base - The literal name to fall back on when `info` is `undefined`.
  * @returns `true` if the token matches at least one selector.
  */
-function anyMatch(info: TokenInfo | undefined, selectors: BoxSelector[]): boolean {
-    return selectors.some(s => matches(info, s));
+function anyMatch(info: TokenInfo | undefined, selectors: BoxSelector[], base = ''): boolean {
+    return selectors.some(s => matches(info, s, base));
+}
+
+/**
+ * The name an unrecognised token answers to: decoded, variant- and
+ * marker-stripped, the same normalisation {@link inspectUncached} does before
+ * it gives up.
+ *
+ * @param token - A single raw class token.
+ * @param bridge - The mangle bridge read once by the caller.
+ * @returns The token's base name.
+ */
+function tokenBase(token: string, bridge: MangleBridge | undefined): string {
+    return normalizeBase(stripVariant(decodeToken(token, bridge)));
 }
 
 /**
@@ -481,6 +503,88 @@ export function splitBox(className: string, options: SplitBoxOptions = {}): Spli
 }
 
 /**
+ * Decide which node one token goes to.
+ *
+ * @param info - The classified token info, or `undefined` if unowned.
+ * @param base - The token's literal name, for an unowned token.
+ * @param forceInner - Placement selectors pinning a token to the content node.
+ * @param forceOuter - Placement selectors pinning a token to the frame.
+ * @returns The node, `'both'` for a property declared on each, or `undefined`
+ *   when no rule decided and the caller's fallback is what places the token.
+ */
+function placementFor(
+    info: TokenInfo | undefined,
+    base: string,
+    forceInner: BoxSelector[],
+    forceOuter: BoxSelector[],
+): BoxRole | 'both' | undefined {
+    if (anyMatch(info, forceInner, base)) return 'inner';
+    if (anyMatch(info, forceOuter, base)) return 'outer';
+    // A transition is declared on both nodes unless the caller pinned it: it
+    // does nothing on its own, and the state that fires it can sit on either
+    // side. An override still wins, which is why this runs after the two
+    // checks above.
+    if (info?.both) return 'both';
+    // `undefined` here is the whole point of the return type: it separates "the
+    // table chose this side" from "nothing chose, so the fallback did". Asking
+    // instead whether the chosen side EQUALS the fallback cannot tell a
+    // deliberate placement onto that side from an unplaced token, and reports
+    // the author's own decision back to them as a problem.
+    return info?.role;
+}
+
+/**
+ * Keep the placement selectors that can match something.
+ *
+ * A placement list may address an unrecognised token by its literal name —
+ * that is the escape hatch the atomic-only scope owes the author, since a
+ * custom `@utility` declaring several properties has no correct side.
+ *
+ * @param selectors - The caller's `outer` or `inner` list, possibly absent.
+ * @param side - The placement option to name in the correction.
+ * @param family - Class names strip variants; sz placements name literal keys.
+ * @returns The selectors worth testing tokens against.
+ */
+function usablePlacements(
+    selectors: BoxSelector[] | undefined,
+    side: BoxRole,
+    family: SelectorFamily = 'class',
+): BoxSelector[] {
+    if (selectors === undefined || selectors.length === 0) return [];
+    // A string here names a class the author wrote, not a category they are
+    // querying, so an unrecognised one is accepted rather than reported. That
+    // is the escape hatch the atomic-only scope owes them: a custom `@utility`
+    // declaring several properties has no correct side, so they must be able to
+    // pick one. It also has to hold for a className that does not carry the
+    // name — one options object serves many renders, and a render without the
+    // class is not a typo.
+    //
+    // The cost is that a misspelt CATEGORY in a placement list is now silent.
+    // It always was for a spelling that happened to exist: `{ inner: ['ring'] }`
+    // against a className with no ring classes has never said anything. Only
+    // `has`/`pick`/`omit` promise that warning, because there the string IS the
+    // query and matching nothing is the whole answer.
+    return selectors.filter(sel => {
+        if (typeof sel !== 'string') return selectorIsUsable(sel, family);
+        // The same normalisation `tokenBase` applies to the token, so a
+        // placement written as `md:hidden`, `!hidden` or `-mt-4` can never equal
+        // a base. Say so rather than let it match nothing.
+        const base = family === 'class' ? normalizeBase(stripVariant(sel)) : sel;
+        if (base !== sel && base !== '') {
+            if (process.env.NODE_ENV !== 'production') {
+                devWarn(
+                    `splitBox: a placement list names a class by its base, so '${sel}' never matches; ` +
+                        'the variant prefix and the ! or - marker are stripped before the comparison. ' +
+                        `help: write { ${side}: ['${base}'] }; it places every variant of '${base}'.`,
+                );
+            }
+            return false;
+        }
+        return sel !== '';
+    });
+}
+
+/**
  * The uncached partition — see {@link splitBox} for the contract.
  *
  * @param className - The flat className string to partition.
@@ -493,36 +597,33 @@ function splitBoxUncached(
     options: SplitBoxOptions,
     bridge: MangleBridge | undefined,
 ): SplitBoxResult {
-    const forceInner = (options.inner ?? []).filter(sel => selectorIsUsable(sel, 'class'));
-    const forceOuter = (options.outer ?? []).filter(sel => selectorIsUsable(sel, 'class'));
+    const tokens = tokenize(className);
+    const forceInner = usablePlacements(options.inner, 'inner');
+    const forceOuter = usablePlacements(options.outer, 'outer');
     const fallback: BoxRole = options.fallback ?? 'outer';
     const outer: string[] = [];
     const inner: string[] = [];
 
-    for (const token of tokenize(className)) {
+    const unplaced: string[] = [];
+
+    for (const token of tokens) {
         const info = inspect(token, bridge);
-        if (anyMatch(info, forceInner)) {
-            inner.push(token);
-            continue;
-        }
-        if (anyMatch(info, forceOuter)) {
-            outer.push(token);
-            continue;
-        }
-        // A transition is declared on both nodes unless the caller pinned it:
-        // it does nothing on its own, and the state that fires it can sit on
-        // either side. An override still wins, which is why this runs after the
-        // two checks above.
-        if (info?.both) {
+        const base = info ? '' : tokenBase(token, bridge);
+        const decided = placementFor(info, base, forceInner, forceOuter);
+        // An empty base is a malformed token (`md:` on its own, a bare `!`).
+        // There is no class to name and no placement list that could hold one.
+        if (decided === undefined && base !== '') unplaced.push(base);
+        const side = decided ?? fallback;
+        if (side === 'both') {
             outer.push(token);
             inner.push(token);
             continue;
         }
-        const role = info ? info.role : fallback;
-        (role === 'outer' ? outer : inner).push(token);
+        (side === 'outer' ? outer : inner).push(token);
     }
 
     if (process.env.NODE_ENV !== 'production') {
+        warnUnplacedTokens(unplaced, fallback);
         warnUnusableSplit(outer, inner, bridge);
     }
 
@@ -578,6 +679,27 @@ const STRETCHED_BASES: ReadonlySet<string> = new Set(['flex-1', 'grow']);
 
 /** Prefixes of the same, for the sized forms (`grow-0`, `basis-1/2`). */
 const STRETCHED_PREFIXES = ['grow-', 'basis-'];
+
+/**
+ * Say that a token nothing classified was placed by the fallback rather than by
+ * a rule. The atomic-only scope means a custom `@utility` declaring several
+ * properties at once has no correct side, so the author has to make the call —
+ * and cannot make it without being told. Development only; the caller guards on
+ * `NODE_ENV`.
+ *
+ * @param unplaced - Base names of the tokens the fallback placed.
+ * @param fallback - The role the fallback sent them to.
+ */
+function warnUnplacedTokens(unplaced: readonly string[], fallback: BoxRole): void {
+    const node = fallback === 'outer' ? 'frame' : 'content';
+    const other = fallback === 'outer' ? 'inner' : 'outer';
+    for (const token of new Set(unplaced)) {
+        devWarn(
+            `splitBox: '${token}' is not a utility csszyx knows, so it went to the ${node} node with everything else it could not classify. ` +
+                `help: if it is a custom @utility that declares properties for both nodes, csszyx cannot split it — no side is correct — so place it yourself with { ${other}: ['${token}'] }.`,
+        );
+    }
+}
 
 /**
  * Say when a partition produced a shape that cannot do what the className asked
@@ -891,8 +1013,8 @@ function partitionSz(
     depth: number,
 ): void {
     if (depth >= MAX_SZ_DEPTH) throw new SzDepthError();
-    const forceInner = (options.inner ?? []).filter(sel => selectorIsUsable(sel, 'sz'));
-    const forceOuter = (options.outer ?? []).filter(sel => selectorIsUsable(sel, 'sz'));
+    const forceInner = usablePlacements(options.inner, 'inner', 'sz');
+    const forceOuter = usablePlacements(options.outer, 'outer', 'sz');
     const fallback: BoxRole = options.fallback ?? 'outer';
     const context: SzPartitionContext = {
         options,

@@ -267,6 +267,30 @@ A `BoxSelector` is whatever is most convenient:
 { overflow: 'hidden' }     // a category + value pair (most precise)
 ```
 
+The `splitBox` placement lists also accept a **literal base class name**. Use
+this to place a custom class whose properties the toolkit cannot classify:
+
+```ts
+splitBox('card p-4', { inner: ['card'] });
+// outer → ""   inner → "card p-4"
+```
+
+An unknown name matches only that whole base name: `card` does not match
+`card-lg`. On a mangled build, use the authored name; the toolkit decodes the
+token before comparing. An explicit placement is quiet even when it chooses
+the same node as `fallback`.
+
+Placement matches the base utility across variants. Write
+`{ outer: ['hidden'] }` to place `hidden`, `md:hidden` and `hover:hidden`
+on the frame. `{ outer: ['md:hidden'] }` matches nothing and warns in
+development; a placement list cannot select just one variant, and the same
+goes for the `!` and `-` markers — write `mt-4`, not `-mt-4`.
+
+Literal placement is specific to `splitBox`'s `outer` and `inner` lists.
+`has`, `pick`, `omit` and their sz-object query siblings still require a
+recognised selector. `splitBoxSz` placement lists instead name literal sz
+keys, including a whole variant container (see below).
+
 ## The toolkit: csszyx owns the truth, you own the rule
 
 Routing is one job. The harder one is **cross-element dependencies**: “if the
@@ -295,6 +319,37 @@ classify('totally-custom');// undefined  (not a csszyx utility)
 They see through variants and markers too: `classify('md:px-2')` and
 `classify('px-2!')` both report `padding`.
 
+### Categories
+
+The supported category names are:
+
+`accent`, `alignment`, `backdrop`, `bg`, `blend`, `border`, `color-scheme`,
+`columns`, `display`, `divide`, `filter`, `flex`, `fragmentation`, `gap`,
+`gradient`, `grid`, `interaction`, `list`, `margin`, `mask`, `object`,
+`opacity`, `outline`, `overflow`, `overscroll`, `padding`, `placeholder`,
+`position`, `ring`, `rounded`, `scope`, `scroll`, `shadow`, `sizing`, `snap`,
+`space`, `svg`, `table`, `text`, `touch`, `transform`, `transition`,
+`visibility`.
+
+`scope` identifies the `group` and `peer` markers, including named markers
+such as `group/item`. Both default to the outer node: `group` establishes
+the ancestor for descendant variants, while `peer` keeps the marker in
+position among the frame's siblings. `classify('group')` returns
+`{ role: 'outer', category: 'scope' }`.
+
+### Upgrading an existing split
+
+The expanded Tailwind vocabulary changes results for classes that previously
+used the fallback. `placeholder-*` now classifies as `placeholder` and goes
+inner; `start-*` and `end-*` classify as `position` and go outer. `group` and
+`peer`, including named markers, classify as `scope` and go outer even with
+`fallback: 'inner'`. Category queries with `pick` and `omit` now recognise
+these classes too.
+
+Review components that relied on the old fallback placement. Use an explicit
+`outer` or `inner` selector where your component needs to keep that placement,
+and update assertions that expect these tokens to be unclassified.
+
 ### The narrow entry
 
 `classify`, `has`, `pick`, `omit` and `splitBox` read a className **string**.
@@ -306,9 +361,9 @@ ever writes Tailwind strings, import the half you use:
 import { classify, has, omit, pick, splitBox } from '@csszyx/runtime/split';
 ```
 
-Under a bundler that tree-shakes, this saves almost nothing — 5.4&nbsp;KB gz
-against the main entry's 5.5&nbsp;KB, because the main entry already shakes.
-It matters under `require()`, where nothing shakes at all: 22.6&nbsp;KB gz
+Under a bundler that tree-shakes, this saves almost nothing — 5.3&nbsp;KB gz
+against the main entry's 5.4&nbsp;KB, because the main entry already shakes.
+It matters under `require()`, where nothing shakes at all: 22.5&nbsp;KB gz
 against 30.9&nbsp;KB.
 
 ### What counts as a class here
@@ -335,8 +390,9 @@ moves inside the frame; send it to both and the margin applies twice while the
 background paints twice. The only way to be right would be to rewrite your CSS
 into per-property fragments, which csszyx will not do behind your back.
 
-So the helpers tell you what they know and leave the call to you — the same
-division as the rest of this page: csszyx owns the truth, you own the rule.
+Choose the node explicitly with a literal placement such as
+`{ inner: ['card'] }`, as shown in [Override the defaults](#override-the-defaults).
+The class stays intact on that node; its CSS declarations are never split.
 
 ### Worked example: a scroll frame
 
@@ -411,7 +467,7 @@ splitBoxSz({ gap: 2, hover: { px: 1 }, md: { m: 4 } });
 splitBoxSz([base, isLoading && { opacity: 50 }]);
 ```
 
-- **Overrides** behave exactly like `SplitBoxOptions`. Flex and grid *item*
+- **Overrides** can select roles, categories or sz keys. Flex and grid *item*
   utilities (`grow`/`shrink`/`basis`/`order`/`self`/`col-span`…) describe how the
   box sits among its siblings, so they go to the frame; the *container*
   utilities (`flex-col`, `items-*`, `gap-*`, `grid-cols-*`) describe its contents
@@ -425,6 +481,18 @@ splitBoxSz(
 );
 // → { outer: {}, inner: { grow: 2, self: 'center', order: 'first' } }
 ```
+
+- **Pin a whole variant container** by naming its literal sz key. This keeps
+  all its nested properties on one node, even when their defaults differ:
+
+```ts
+splitBoxSz({ hover: { p: 2, m: 4 } }, { outer: ['hover'] });
+// → { outer: { hover: { p: 2, m: 4 } }, inner: {} }
+```
+
+A selector such as `'[&:hover]'` works the same way for that literal key.
+`inner` wins if both lists name it. This is sz-key placement; class-string
+placement still matches base utilities across variants.
 
 - **`overflow` routes by its value**, the way it does on the class side:
   `{ overflow: 'hidden' }` clips the frame and goes outer, `{ overflow: 'auto' }`

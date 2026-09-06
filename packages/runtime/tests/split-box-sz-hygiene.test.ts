@@ -20,6 +20,23 @@ afterEach(() => warn.mockRestore());
 const said = (): string => warn.mock.calls.map(c => String(c[0])).join('\n');
 
 describe('overrides written as sz keys', () => {
+    it.each(['hover', '[&:hover]'])('pins the whole %s variant container', key => {
+        const variant = { p: 2, m: 4 };
+        expect(splitBoxSz({ [key]: variant }, { outer: [key] })).toEqual({
+            outer: { [key]: variant },
+            inner: {},
+        });
+        expect(said()).toBe('');
+    });
+
+    it('keeps the inner override precedence for a named variant', () => {
+        const input = { hover: { m: 4 } };
+        expect(splitBoxSz(input, { outer: ['hover'], inner: ['hover'] })).toEqual({
+            outer: {},
+            inner: input,
+        });
+        expect(said()).toBe('');
+    });
     it('are honoured by splitBoxSz', () => {
         expect(splitBoxSz({ minW: 0, p: 2 }, { inner: ['minW'] })).toEqual({
             outer: {},

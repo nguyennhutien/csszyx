@@ -1,13 +1,10 @@
 /**
  * `@csszyx/runtime/split` exists to publish the className half of the class
- * toolkit WITHOUT the sz-object half, so a project that only writes Tailwind
- * strings never resolves the compiler's key vocabulary.
- *
- * Both halves live in one source file, so nothing but this test stops a later
- * edit from re-exporting `splitBoxSz` here and quietly putting the compiler
- * back on the entry's dependency path. The barrel's own tree-shaking does not
- * cover it: under `require()` nothing shakes, which is where this entry pays
- * (22 552 B gzip against the barrel's 30 919 B).
+ * toolkit WITHOUT the sz-object half. Both halves live in one source file, so
+ * nothing but this test stops a later edit from re-exporting `splitBoxSz` here
+ * and quietly widening the entry. The barrel's own tree-shaking does not cover
+ * it: under `require()` nothing shakes, which is where this entry pays
+ * (22 515 B gzip against the barrel's 30 876 B).
  */
 import { describe, expect, it } from 'vitest';
 import * as split from '../src/split.js';

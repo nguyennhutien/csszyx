@@ -49,4 +49,37 @@ describe('devWarn', () => {
         devWarn('reset test');
         expect(warn).toHaveBeenCalledTimes(2);
     });
+
+    it('stops admitting warnings after 512 unique messages, and says so once', () => {
+        process.env.NODE_ENV = 'development';
+        for (let index = 0; index < 1024; index++) {
+            devWarn(`user-data-${index}`);
+        }
+        // 512 real messages plus the one line announcing the cap — never more,
+        // however many distinct messages arrive after it.
+        expect(warn).toHaveBeenCalledTimes(513);
+        expect(warn).toHaveBeenNthCalledWith(512, '[csszyx] user-data-511');
+        expect(warn).toHaveBeenLastCalledWith(
+            expect.stringContaining('512 distinct development warnings have been printed'),
+        );
+
+        devWarn('user-data-0');
+        devWarn('user-data-512');
+        expect(warn).toHaveBeenCalledTimes(513);
+    });
+
+    it('admits a previously suppressed warning after resetting a full cache', () => {
+        process.env.NODE_ENV = 'development';
+        for (let index = 0; index <= 512; index++) {
+            devWarn(`user-data-${index}`);
+        }
+        expect(warn).not.toHaveBeenCalledWith('[csszyx] user-data-512');
+        expect(warn).toHaveBeenLastCalledWith(expect.stringContaining('suppressed'));
+
+        resetDevWarnCache();
+        warn.mockClear();
+        devWarn('user-data-512');
+        devWarn('user-data-512');
+        expect(warn).toHaveBeenCalledExactlyOnceWith('[csszyx] user-data-512');
+    });
 });
