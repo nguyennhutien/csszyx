@@ -32,6 +32,11 @@ import {
 import { decodeToken, type MangleBridge, mangleBridge } from './class-codec.js';
 import type { SzInput } from './concatenate.js';
 import { devWarn } from './dev-warn.js';
+import {
+    classifyAmbiguousValue,
+    getSzcnGroupsGeneration,
+    MERGE_GROUP_PROPERTIES,
+} from './merge-groups.js';
 
 export type { BoxRole };
 
@@ -41,6 +46,22 @@ export interface Classification {
     readonly role: BoxRole;
     /** Semantic group (margin, padding, border, overflow, text, …). */
     readonly category: string;
+    /**
+     * Which CSS property inside the category, for the prefixes that span more
+     * than one (`text-red-500` is color, `text-sm` is font-size), including for
+     * token names the app declared in its Tailwind `@theme`. Absent — never
+     * `null`, never `''` — when the prefix means exactly one property
+     * (`p-4`) or when the value does not confidently name one.
+     *
+     * The BARE half of `szcn`'s group id (`'color'`, not `'text:color'`). The
+     * qualified half names the CLASS PREFIX, which is not always the category:
+     * `font-bold` is prefix `font` and category `text`. Carrying it would put a
+     * second, differently-spelled family name next to {@link Classification.category}
+     * and invite a consumer to branch on the wrong one. What the field answers
+     * is one question — which property within this token's family — and the
+     * family is already in the object next to it.
+     */
+    readonly property?: string;
 }
 
 /**
@@ -51,6 +72,9 @@ export interface Classification {
  * - a category: `'overflow'`, `'text'`, `'bg'`, …
  * - a class-prefix: `'px'`, `'bg'`, … (matches `px-2`, `bg-red-500`, …)
  * - a category+value pair: `{ overflow: 'hidden' }`
+ * - any of the above qualified by a CSS property: `'text:color'`, `'font:weight'`,
+ *   `'outer:color'` — the token must match the half before the colon AND carry
+ *   that {@link Classification.property}
  */
 export type BoxSelector = string | Readonly<Record<string, string>>;
 
@@ -141,17 +165,21 @@ export const BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT: ReadonlyMap<
 
 /**
  * Per-token classification memo, keyed by the RAW token. `inspect` is a pure
- * function of the static generated tables and of the installed mangle bridge:
- * custom szcn theme groups do not affect box roles, so the only thing that can
- * change an answer is the bridge, and {@link syncMemos} empties both memos
- * whenever its identity changes. The cap only bounds adversarial dynamic
- * classNames. The cached info objects are shared across callers — every
- * consumer (`splitBox`, `matches`, `classify`) reads, never mutates.
+ * function of the static generated tables, the installed mangle bridge and the
+ * registered szcn theme groups. Box ROLE and category come from the tables
+ * alone; the theme groups reach {@link Classification.property} only, and both
+ * of the other two can change at runtime, so {@link syncMemos} empties both
+ * memos whenever the bridge identity or the registration generation moves. The
+ * cap only bounds adversarial dynamic classNames. The cached info objects are
+ * shared across callers — every consumer (`splitBox`, `matches`, `classify`)
+ * reads, never mutates.
  */
 const INSPECT_MEMO_MAX = 4096;
 const inspectMemo = new Map<string, TokenInfo | undefined>();
 /** The bridge both memos were filled under; `undefined` until the first call. */
 let memoBridgeRef: MangleBridge | undefined;
+/** The theme-group registration generation both memos were filled under. */
+let memoGroupsGeneration = getSzcnGroupsGeneration();
 
 /**
  * Read the mangle bridge once for a public operation, dropping every memo
@@ -163,14 +191,20 @@ let memoBridgeRef: MangleBridge | undefined;
  * never serves answers memoized under the previous map. In production the
  * registry is installed once for the page lifetime, so this never clears.
  *
+ * The theme-group generation is checked for the same reason and is NOT rare:
+ * an HMR edit to a `@theme` block re-runs the build's `setSzcnGroups`, and a
+ * token that was `{ category: 'text' }` a moment ago is `text:color` now.
+ *
  * @returns The bridge to decode through for this operation.
  */
 function syncMemos(): MangleBridge | undefined {
     const bridge = mangleBridge();
-    if (bridge !== memoBridgeRef) {
+    const generation = getSzcnGroupsGeneration();
+    if (bridge !== memoBridgeRef || generation !== memoGroupsGeneration) {
         inspectMemo.clear();
         splitMemo.clear();
         memoBridgeRef = bridge;
+        memoGroupsGeneration = generation;
     }
     return bridge;
 }
@@ -217,7 +251,18 @@ function inspectUncached(token: string): TokenInfo | undefined {
     // reads a prefixed token. Value-keyed sugar has no prefix and its class name
     // IS the value (`block`, `italic`), so it answers with the whole base.
     const exact = BOX_ROLE_TOKENS.get(base);
-    if (exact) return { ...exact, base, value: exact.value ?? base };
+    if (exact) {
+        const value = exact.value ?? base;
+        // Exact sugar can still belong to an ambiguous family (text-ellipsis).
+        // Derive that family from its spelling, as the merge classifier does.
+        const prefix = exact.prefix ?? (base.split('-', 1)[0] as string);
+        return {
+            ...exact,
+            base,
+            value,
+            property: propertyOf(prefix, base.slice(prefix.length + 1)),
+        };
+    }
 
     // `group/item` names WHICH ancestor a `group-hover/item:` variant reads; the
     // marker itself does the same thing named or bare. Only the tokens in the
@@ -231,24 +276,63 @@ function inspectUncached(token: string): TokenInfo | undefined {
 
     const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(base.split('-', 1)[0] as string) ?? [];
     for (const [prefix, entry] of bucket) {
-        if (base === prefix) return { ...entry, base, value: '' };
+        if (base === prefix) return { ...entry, base, value: '', property: propertyOf(prefix, '') };
         if (base.startsWith(`${prefix}-`)) {
-            return { ...entry, base, value: base.slice(prefix.length + 1) };
+            const value = base.slice(prefix.length + 1);
+            return { ...entry, base, value, property: propertyOf(prefix, value) };
         }
     }
     return undefined;
 }
 
 /**
+ * The CSS property a token's value names inside its family, or `undefined`.
+ *
+ * Reads `szcn`'s value classifier, so the two halves of csszyx answer the same
+ * thing about the same token — including for names an app declared in its
+ * Tailwind `@theme`, which the build registers through `setSzcnGroups`.
+ *
+ * ⚠ The two consumers fail safe in OPPOSITE directions and must not be
+ * unified. `null` from the classifier means "not confidently one property":
+ * for `szcn` that means KEEP BOTH classes, because merging on a guess deletes
+ * a class the author wrote; here it means fall back to the coarse category, so
+ * the field is simply absent. Passing the `null` through would hand consumers
+ * a third state to destructure, and defaulting it to a guessed property would
+ * import szcn's under-merge bias as an over-claim.
+ *
+ * @param prefix - The class prefix the token matched. Every caller has one: a
+ *   prefix match by construction, and an exact token derives it from its own
+ *   spelling, which is how `text-ellipsis` reaches the `text` classifier.
+ * @param value - The value segment after that prefix.
+ * @returns The bare property name, or `undefined` when it is not certain.
+ */
+function propertyOf(prefix: string, value: string): string | undefined {
+    const group = classifyAmbiguousValue(prefix, value);
+    // Group ids are `<prefix>:<property>`; the caller already has the family.
+    return group === null ? undefined : group.slice(group.indexOf(':') + 1);
+}
+
+/**
  * Classify a class token by box-model role + semantic category, or `undefined`
  * if it is not a csszyx-owned utility. Variant-, important- and negative-aware.
  *
+ * A prefix that spans more than one CSS property also answers with the
+ * {@link Classification.property} its value names — `text-red-500` is a color
+ * and `text-sm` a font-size — and a name the app declared in its Tailwind
+ * `@theme` is read the same way a built-in one is.
+ *
  * @param token - A single class token to classify.
- * @returns The token's role and category, or `undefined` if unowned.
+ * @returns The token's role, category and property, or `undefined` if unowned.
+ * @example classify('text-sm') // → { role: 'inner', category: 'text', property: 'size' }
  */
 export function classify(token: string): Classification | undefined {
     const info = inspect(token, syncMemos());
-    return info ? { role: info.role, category: info.category } : undefined;
+    if (!info) return undefined;
+    // The key is omitted rather than set to `undefined`, so a consumer testing
+    // `'property' in c` reads the same answer as one testing `c.property`.
+    return info.property === undefined
+        ? { role: info.role, category: info.category }
+        : { role: info.role, category: info.category, property: info.property };
 }
 
 /** Every category the generated tables use, for telling a typo from a miss. */
@@ -272,6 +356,37 @@ const CATEGORY_HINTS: Readonly<Record<string, string>> = {
     background: 'bg',
     cursor: 'interaction',
 };
+
+/**
+ * A property half is a plain word (`color`, `size`, `weight`), which
+ * is what tells a qualified selector from a CLASS that happens to carry a colon
+ * in an arbitrary value — `bg-[url(https://x)]` is a legitimate literal name a
+ * placement list may address.
+ */
+const PROPERTY_HALF = /^[a-z]+$/i;
+
+/**
+ * Split `'<selector>:<property>'` into its two halves, or `null` if the string
+ * is not that shape.
+ *
+ * The qualified STRING is the additive way to say this. A colon cannot appear
+ * in a base utility — {@link stripVariant} removes everything up to the last
+ * one before anything is matched — so the string namespace has room for it,
+ * while the object form is already spoken for by `{ category: value }`, whose
+ * value is the token's value segment and not its property. Qualifying an
+ * existing selector rather than adding a parallel one also means every left
+ * half keeps working: a role (`'outer:color'`), a category (`'text:color'`) and
+ * a class prefix (`'font:weight'`) all compose with the property.
+ *
+ * @param selector - The string the caller passed.
+ * @returns The `[selector, property]` halves, or `null`.
+ */
+function splitQualified(selector: string): readonly [string, string] | null {
+    const sep = selector.indexOf(':');
+    if (sep <= 0) return null;
+    const property = selector.slice(sep + 1);
+    return PROPERTY_HALF.test(property) ? [selector.slice(0, sep), property] : null;
+}
 
 /**
  * Which vocabulary a string selector is checked against.
@@ -351,8 +466,18 @@ function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class
         }
         return true;
     }
-    if (stringSelectorIsKnown(selector, family)) return true;
-    warnUnknownSelector(selector);
+    const qualified = family === 'class' ? splitQualified(selector) : null;
+    if (qualified && !MERGE_GROUP_PROPERTIES.has(qualified[1])) {
+        devWarn(
+            `'${qualified[1]}' is not a property csszyx tells apart; '${selector}' matches nothing. ` +
+                `help: the properties are ${[...MERGE_GROUP_PROPERTIES].join(', ')} — ` +
+                "classify('<a class>') shows the one a class carries.",
+        );
+        return false;
+    }
+    const name = qualified ? qualified[0] : selector;
+    if (stringSelectorIsKnown(name, family)) return true;
+    warnUnknownSelector(name);
     return false;
 }
 
@@ -363,12 +488,24 @@ function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class
  */
 function warnUnknownSelector(name: string): void {
     const hint = CATEGORY_HINTS[name];
-    devWarn(
-        `'${name}' is not a category or class prefix csszyx knows; ` +
-            (hint === undefined
-                ? "classify('<a class>') shows the category a class belongs to."
-                : `the category is '${hint}'.`),
-    );
+    if (hint === undefined) {
+        devWarn(
+            `'${name}' is not a category or class prefix csszyx knows; ` +
+                "classify('<a class>') shows the category a class belongs to.",
+        );
+        return;
+    }
+    // `color` is both the word people reach for and a property the qualified
+    // form can name, so the hint offers the narrower selector as well: `text`
+    // alone would also catch `text-sm`.
+    if (MERGE_GROUP_PROPERTIES.has(name)) {
+        devWarn(
+            `'${name}' is not a category or class prefix csszyx knows; ` +
+                `the category is '${hint}', and '${hint}:${name}' matches that property only.`,
+        );
+        return;
+    }
+    devWarn(`'${name}' is not a category or class prefix csszyx knows; the category is '${hint}'.`);
 }
 
 /**
@@ -392,6 +529,10 @@ function matches(info: TokenInfo | undefined, selector: BoxSelector, base = ''):
         return Object.entries(selector).every(
             ([category, value]) => info.category === category && info.value === value,
         );
+    }
+    const qualified = splitQualified(selector);
+    if (qualified) {
+        return info.property === qualified[1] && matches(info, qualified[0], base);
     }
     if (selector === 'outer' || selector === 'inner') {
         return info.role === selector;
@@ -447,9 +588,12 @@ function tokenize(className: string): string[] {
  * selectors with no cheap identity, and the components that pass one are not
  * the per-render leaf this exists to serve.
  *
- * Safe to cache for the same reason `inspectMemo` is — the partition is a
- * pure function of the static generated tables and the installed mangle
- * bridge, and {@link syncMemos} empties it whenever the bridge changes.
+ * Safe to cache for the same reason `inspectMemo` is, and cleared by the same
+ * {@link syncMemos}. The partition itself reads only the static generated
+ * tables and the mangle bridge — a theme registration can add a `property` to
+ * a token but can never move it between the two nodes — so this memo is
+ * emptied on a registration change out of a single invalidation rule rather
+ * than out of need.
  */
 const SPLIT_MEMO_MAX = 512;
 const splitMemo = new Map<string, { readonly outer: string; readonly inner: string }>();

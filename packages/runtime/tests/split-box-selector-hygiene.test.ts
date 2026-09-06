@@ -113,6 +113,9 @@ describe('a selector nobody can act on names what to do', () => {
     it('knows the CSS property words people reach for', () => {
         has('text-red-500', 'color');
         expect(said()).toContain("'text'");
+        // `text` alone would also catch `text-sm`; the qualified form is the
+        // answer that matches what the word meant.
+        expect(said()).toContain("'text:color'");
         has('bg-red-500', 'background');
         expect(said()).toContain("'bg'");
     });

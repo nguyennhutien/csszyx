@@ -91,6 +91,7 @@ itself.
 | A split box will not scroll, clips its corners incorrectly, or leaves its frame visible | [Split layout warnings](#a-split-that-cannot-do-what-the-classname-asked-for) |
 | A custom class falls onto the wrong node | [Unrecognised classes](#a-class-csszyx-does-not-recognise) |
 | A placement such as `outer: ['md:hidden']` does nothing | [Base class placement](#a-placement-names-a-variant) |
+| `pick(cls, 'text:colour')` returns nothing | [Qualified selectors](#a-qualified-selector-names-a-property-csszyx-does-not-tell-apart) |
 | Warnings stopped appearing part-way through a session | [The cap on development warnings](#the-cap-on-development-warnings) |
 | The build got slower or bigger | [Mangling](#mangling) |
 | Only *some* files are styled | [Build pipeline](#build-pipeline) |
@@ -1114,6 +1115,15 @@ answers as if nothing matched:
 [csszyx] '{selector}' is not a category or class prefix csszyx knows; the category is '{hint}'.
 ```
 
+When the word is also a property the qualified form can name — `color` is
+the usual one — the hint offers that form beside the category, because the
+category alone would catch more than the word meant: `'text'` also matches
+`text-sm`.
+
+```text
+[csszyx] '{name}' is not a category or class prefix csszyx knows; the category is '{hint}', and '{hint}:{name}' matches that property only.
+```
+
 ```text
 [csszyx] '{selector}' is not a category or class prefix csszyx knows; classify('<a class>') shows the category a class belongs to.
 ```
@@ -1134,6 +1144,21 @@ selector.
 Two helpers take two different inputs, and mixing them up says so:
 `splitBoxSz partitions sz objects, not raw class strings — use splitBox() for {value}.`
 `splitBox` takes a class string; `splitBoxSz` takes an `sz` object.
+
+### A qualified selector names a property csszyx does not tell apart
+
+```text
+[csszyx] '{property}' is not a property csszyx tells apart; '{selector}' matches nothing. help: the properties are {list} — classify('<a class>') shows the one a class carries.
+```
+
+A selector such as `'text:color'` reads the half after the colon as a
+property, and the toolkit only knows the eighteen it distinguishes itself:
+`align`, `attachment`, `clip`, `color`, `direction`, `family`, `image`,
+`origin`, `overflow`, `position`, `repeat`, `shorthand`, `size`, `style`,
+`thickness`, `weight`, `width` and `wrap`. Anything else — `colour`, `paint`,
+`fontSize` — would have matched nothing silently, which is worse than the
+category half being wrong, because that half already warns. The message
+lists the set so the fix is a lookup rather than a search.
 
 ### A split that cannot do what the className asked for
 

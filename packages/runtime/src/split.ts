@@ -15,12 +15,17 @@
  *
  * Measured with esbuild, minified, `NODE_ENV=production`, both entries from the
  * same build. Under ESM the barrel already tree-shakes and this entry saves
- * almost nothing — 5 337 B gzip against 5 413 B. The payoff is on the CJS path,
- * where `require()` cannot shake at all: 22 515 B against 30 876 B, 27% less.
+ * almost nothing — 7 239 B gzip against 7 312 B. The payoff is on the CJS path,
+ * where `require()` cannot shake at all: 25 167 B against 31 242 B, 19% less.
  * That is the reason this entry exists; the fact that ESM barely moves is the
  * reason a separate PACKAGE does not. It is a smaller entry, not a
  * dependency-free one — both halves live in one module, so `dist/split.cjs`
  * still requires `@csszyx/compiler/browser`.
+ *
+ * Of those 7 239 B, about 1.9 KB is the value classifier `classify` reads its
+ * `property` from — the same tables `szcn` merges by, so an app already using
+ * `szcn` pays nothing extra for it, and an app using only this entry pays it
+ * once.
  *
  * The vocabulary is atomic Tailwind utilities. A custom utility declaring
  * several properties cannot be assigned one box role reliably; place it with

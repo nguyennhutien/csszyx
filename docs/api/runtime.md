@@ -186,7 +186,7 @@ The category-aware toolkit. csszyx owns the **truth** (which box-role / category
 ```ts
 function classify(
   token: string,
-): { role: "outer" | "inner"; category: string } | undefined;
+): { role: "outer" | "inner"; category: string; property?: string } | undefined;
 function has(classes: string, selector: BoxSelector): boolean;
 function pick(classes: string, selector: BoxSelector): string;
 function omit(classes: string, selector: BoxSelector): string;
@@ -206,7 +206,7 @@ const dep = has(outer, { overflow: "hidden" }) ? "overflow-y-auto h-full" : "";
 ```
 
 ```tsx
-classify("inset-ring-2"); // → { role: "inner", category: "ring" }
+classify("inset-ring-2"); // → { role: "outer", category: "ring" }
 has("p-2 overflow-y-auto", "overflow"); // → true
 pick("m-4 px-2 text-sm", "text"); // → "text-sm"
 omit("p-2 overflow-y-auto flex", "overflow"); // → "p-2 flex"

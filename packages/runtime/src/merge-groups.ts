@@ -30,6 +30,31 @@
  */
 import { sortStrings } from './sort.js';
 
+/** Canonical property suffixes shared by group classification and selectors. */
+const GROUP_PROPERTY = {
+    align: 'align',
+    attachment: 'attachment',
+    clip: 'clip',
+    color: 'color',
+    direction: 'direction',
+    family: 'family',
+    image: 'image',
+    origin: 'origin',
+    overflow: 'overflow',
+    position: 'position',
+    repeat: 'repeat',
+    shorthand: 'shorthand',
+    size: 'size',
+    style: 'style',
+    thickness: 'thickness',
+    weight: 'weight',
+    width: 'width',
+    wrap: 'wrap',
+} as const;
+
+/** Closed property vocabulary emitted by the ambiguous-value classifiers. */
+export const MERGE_GROUP_PROPERTIES: ReadonlySet<string> = new Set(Object.values(GROUP_PROPERTY));
+
 /** Tailwind palette shades — `{name}-{shade}` is the standard color shape. */
 const PALETTE_SHADES = new Set([
     '50',
@@ -629,10 +654,10 @@ export function classifyAmbiguousValue(prefix: string, value: string): string | 
  * @returns The shadow property group, or `null` when uncertain.
  */
 function classifyShadowValue(prefix: string, value: string): string | null {
-    if (isColorValue(value)) return `${prefix}:color`;
+    if (isColorValue(value)) return `${prefix}:${GROUP_PROPERTY.color}`;
     // The bare prefix (`shadow`) is the default size, not a colour.
     if (value === '' || SHADOW_SIZES.has(value) || isLengthArbitrary(value)) {
-        return `${prefix}:size`;
+        return `${prefix}:${GROUP_PROPERTY.size}`;
     }
     return null;
 }
@@ -643,10 +668,10 @@ function classifyShadowValue(prefix: string, value: string): string | null {
  * @returns The decoration property group, or `null` when uncertain.
  */
 function classifyDecorationValue(value: string): string | null {
-    if (isColorValue(value)) return 'decoration:color';
-    if (DECORATION_STYLES.has(value)) return 'decoration:style';
+    if (isColorValue(value)) return `decoration:${GROUP_PROPERTY.color}`;
+    if (DECORATION_STYLES.has(value)) return `decoration:${GROUP_PROPERTY.style}`;
     if (DECORATION_THICKNESSES.has(value) || /^\d+$/.test(value) || isLengthArbitrary(value)) {
-        return 'decoration:thickness';
+        return `decoration:${GROUP_PROPERTY.thickness}`;
     }
     return null;
 }
@@ -661,8 +686,8 @@ function classifyDecorationValue(value: string): string | null {
  * @returns The stroke property group, or `null` when uncertain.
  */
 function classifyStrokeValue(value: string): string | null {
-    if (isColorValue(value)) return 'stroke:color';
-    if (/^\d+$/.test(value) || isLengthArbitrary(value)) return 'stroke:width';
+    if (isColorValue(value)) return `stroke:${GROUP_PROPERTY.color}`;
+    if (/^\d+$/.test(value) || isLengthArbitrary(value)) return `stroke:${GROUP_PROPERTY.width}`;
     return null;
 }
 
@@ -673,9 +698,9 @@ function classifyStrokeValue(value: string): string | null {
  * @returns The gradient stop group, or `null` when uncertain.
  */
 function classifyGradientStopValue(prefix: string, value: string): string | null {
-    if (isColorValue(value)) return `${prefix}:color`;
+    if (isColorValue(value)) return `${prefix}:${GROUP_PROPERTY.color}`;
     if (GRADIENT_STOP_POSITION.test(value) || isLengthArbitrary(value)) {
-        return `${prefix}:position`;
+        return `${prefix}:${GROUP_PROPERTY.position}`;
     }
     return null;
 }
@@ -688,26 +713,26 @@ function classifyGradientStopValue(prefix: string, value: string): string | null
 function classifyTextValue(value: string): string | null {
     const sizeValue = value.replace(/\/[\w.[\]]+$/, '');
     if (TEXT_SIZES.has(sizeValue) || customTokens.textSizes.has(sizeValue)) {
-        return 'text:size';
+        return `text:${GROUP_PROPERTY.size}`;
     }
     if (isLengthArbitrary(sizeValue)) {
-        return 'text:size';
+        return `text:${GROUP_PROPERTY.size}`;
     }
     // Explicit data-type hint: `text-(length:--x)` / `text-[length:var(--x)]`
     // declare a font-size value, mirroring the color hint in isColorValue.
     if (sizeValue.startsWith('[length:') || sizeValue.startsWith('(length:')) {
-        return 'text:size';
+        return `text:${GROUP_PROPERTY.size}`;
     }
     if (TEXT_ALIGNS.has(value)) {
-        return 'text:align';
+        return `text:${GROUP_PROPERTY.align}`;
     }
     if (TEXT_WRAPS.has(value)) {
-        return 'text:wrap';
+        return `text:${GROUP_PROPERTY.wrap}`;
     }
     if (TEXT_OVERFLOWS.has(value)) {
-        return 'text:overflow';
+        return `text:${GROUP_PROPERTY.overflow}`;
     }
-    return isColorValue(value) ? 'text:color' : null;
+    return isColorValue(value) ? `text:${GROUP_PROPERTY.color}` : null;
 }
 
 /**
@@ -717,10 +742,10 @@ function classifyTextValue(value: string): string | null {
  */
 function classifyFontValue(value: string): string | null {
     if (FONT_FAMILIES.has(value) || customTokens.fontFamilies.has(value)) {
-        return 'font:family';
+        return `font:${GROUP_PROPERTY.family}`;
     }
     if (FONT_WEIGHTS.has(value) || customTokens.fontWeights.has(value) || /^\[\d+\]$/.test(value)) {
-        return 'font:weight';
+        return `font:${GROUP_PROPERTY.weight}`;
     }
     return null;
 }
@@ -731,14 +756,15 @@ function classifyFontValue(value: string): string | null {
  * @returns The background property group, or `null` when uncertain.
  */
 function classifyBackgroundValue(value: string): string | null {
-    if (isColorValue(value)) return 'bg:color';
-    if (BG_POSITIONS.has(value) || value.startsWith('position-')) return 'bg:position';
-    if (BG_SIZES.has(value) || value.startsWith('size-')) return 'bg:size';
-    if (BG_REPEATS.has(value)) return 'bg:repeat';
-    if (BG_ATTACHMENTS.has(value)) return 'bg:attachment';
-    if (value.startsWith('clip-')) return 'bg:clip';
-    if (value.startsWith('origin-')) return 'bg:origin';
-    return isBackgroundImage(value) ? 'bg:image' : null;
+    if (isColorValue(value)) return `bg:${GROUP_PROPERTY.color}`;
+    if (BG_POSITIONS.has(value) || value.startsWith('position-'))
+        return `bg:${GROUP_PROPERTY.position}`;
+    if (BG_SIZES.has(value) || value.startsWith('size-')) return `bg:${GROUP_PROPERTY.size}`;
+    if (BG_REPEATS.has(value)) return `bg:${GROUP_PROPERTY.repeat}`;
+    if (BG_ATTACHMENTS.has(value)) return `bg:${GROUP_PROPERTY.attachment}`;
+    if (value.startsWith('clip-')) return `bg:${GROUP_PROPERTY.clip}`;
+    if (value.startsWith('origin-')) return `bg:${GROUP_PROPERTY.origin}`;
+    return isBackgroundImage(value) ? `bg:${GROUP_PROPERTY.image}` : null;
 }
 
 /**
@@ -769,11 +795,11 @@ function isBackgroundImage(value: string): boolean {
 function classifyBorderValue(prefix: string, value: string): string | null {
     const firstSegment = value.split('-', 1)[0] ?? '';
     if (DIRECTIONAL_SEGMENTS.has(firstSegment)) return null;
-    if (isColorValue(value)) return `${prefix}:color`;
+    if (isColorValue(value)) return `${prefix}:${GROUP_PROPERTY.color}`;
     if (value === '' || /^\d+$/.test(value) || isLengthArbitrary(value)) {
-        return `${prefix}:width`;
+        return `${prefix}:${GROUP_PROPERTY.width}`;
     }
-    return BORDER_STYLES.has(value) ? `${prefix}:style` : null;
+    return BORDER_STYLES.has(value) ? `${prefix}:${GROUP_PROPERTY.style}` : null;
 }
 
 /**
@@ -782,10 +808,10 @@ function classifyBorderValue(prefix: string, value: string): string | null {
  * @returns The flex property group, or `null` when uncertain.
  */
 function classifyFlexValue(value: string): string | null {
-    if (FLEX_DIRECTIONS.has(value)) return 'flex:direction';
-    if (FLEX_WRAPS.has(value)) return 'flex:wrap';
+    if (FLEX_DIRECTIONS.has(value)) return `flex:${GROUP_PROPERTY.direction}`;
+    if (FLEX_WRAPS.has(value)) return `flex:${GROUP_PROPERTY.wrap}`;
     if (FLEX_SHORTHANDS.has(value) || /^\d+$/.test(value) || isLengthArbitrary(value)) {
-        return 'flex:shorthand';
+        return `flex:${GROUP_PROPERTY.shorthand}`;
     }
     return null;
 }

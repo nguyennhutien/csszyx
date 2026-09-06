@@ -111,8 +111,8 @@ purpose: `classify` returns `undefined` for it and the helpers leave it where
 it is, rather than guessing which element half of its declarations belong to.
 
 For a project that only reads className strings, `@csszyx/runtime/split`
-publishes these five without the sz-object adapters — worth 27% under
-`require()` (22.5 KB gz against 30.9 KB), and within 76 B of the main entry
+publishes these five without the sz-object adapters — worth 19% under
+`require()` (25.2 KB gz against 31.2 KB), and within 73 B of the main entry
 under a bundler that tree-shakes. It is a smaller entry, not a dependency-free
 one: `@csszyx/compiler` stays in the graph because both halves of the toolkit
 live in one module.
