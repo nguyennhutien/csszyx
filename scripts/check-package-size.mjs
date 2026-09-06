@@ -79,10 +79,18 @@ export const SIZE_BUDGETS = [
         // development-warning cache announcing itself instead of going quiet
         // (+208). Both are message text under the same `NODE_ENV` guard as the
         // rest, so again package weight rather than app weight.
+        //
+        // Raised again from 25,472 for `classify` reporting a `property`,
+        // measured 2026-09-06 at 25,840 from 25,183. `split-box.ts` now reads
+        // the value classifier in `merge-groups.ts`, so its keyword tables join
+        // the closure of the `./split` entry and rollup re-chunks around the new
+        // edge: +657 on the closure, and the entry itself goes from 5,337 to
+        // 7,239 gzip bytes for a consumer that uses nothing else. An app that
+        // already uses `szcn` has those tables in its bundle and pays nothing.
         name: '@csszyx/runtime export closure',
         kind: 'package-exports',
         target: 'packages/runtime',
-        maxGzipBytes: 25_472,
+        maxGzipBytes: 26_176,
     },
     {
         name: '@csszyx/dynamic export closure',
