@@ -64,6 +64,16 @@
         "default": "./dist/lowering.cjs"
       }
     },
+    "./split": {
+      "import": {
+        "types": "./dist/split.d.mts",
+        "default": "./dist/split.mjs"
+      },
+      "require": {
+        "types": "./dist/split.d.cts",
+        "default": "./dist/split.cjs"
+      }
+    },
     "./merge": {
       "import": {
         "types": "./dist/merge.d.mts",

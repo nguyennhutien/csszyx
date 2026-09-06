@@ -295,6 +295,49 @@ classify('totally-custom');// undefined  (not a csszyx utility)
 They see through variants and markers too: `classify('md:px-2')` and
 `classify('px-2!')` both report `padding`.
 
+### The narrow entry
+
+`classify`, `has`, `pick`, `omit` and `splitBox` read a className **string**.
+Their sz-object siblings (`splitBoxSz` and friends, further down this page) read
+an sz object, which needs the compiler's key vocabulary. If your project only
+ever writes Tailwind strings, import the half you use:
+
+```ts
+import { classify, has, omit, pick, splitBox } from '@csszyx/runtime/split';
+```
+
+Under a bundler that tree-shakes, this saves almost nothing — 5.4&nbsp;KB gz
+against the main entry's 5.5&nbsp;KB, because the main entry already shakes.
+It matters under `require()`, where nothing shakes at all: 22.6&nbsp;KB gz
+against 30.9&nbsp;KB.
+
+### What counts as a class here
+
+The vocabulary is **atomic** utilities — a class whose name states one feature.
+`p-4` is padding. `bg-red-500` is a background. `end-2` is a logical inset.
+
+A custom `@utility` that declares several properties at once is deliberately
+**not** in scope:
+
+```css
+@utility card {
+  margin: 0.5rem;   /* outer */
+  padding: 1rem;    /* inner */
+  background: white;
+}
+```
+
+`classify('card')` returns `undefined`, `pick(classes, 'padding')` does not
+return it, `omit(classes, 'padding')` keeps it, and `splitBox` leaves it on the
+fallback node. That is a decision, not a gap. There is no correct answer: send
+`card` outward and the content loses its padding; send it inward and the margin
+moves inside the frame; send it to both and the margin applies twice while the
+background paints twice. The only way to be right would be to rewrite your CSS
+into per-property fragments, which csszyx will not do behind your back.
+
+So the helpers tell you what they know and leave the call to you — the same
+division as the rest of this page: csszyx owns the truth, you own the rule.
+
 ### Worked example: a scroll frame
 
 The frame takes the height bound and the rounded clip; the content scrolls

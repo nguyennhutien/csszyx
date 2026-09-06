@@ -96,6 +96,17 @@ whenever it can PROVE objects never flow:
 - **`@csszyx/runtime/merge`** — the group-merge family (`_szcn`, `_szPart`,
   `_szMerge`, ~5&nbsp;KB of merge tables, no compiler). Injected instead of the
   main entry when every dynamic `sz` array element is provably a string.
+- **`@csszyx/runtime/split`** — the className half of the class toolkit
+  (`classify`, `has`, `pick`, `omit`, `splitBox`, `normalizeBase`,
+  `stripVariant`), without the sz-object adapters. Unlike the entries above,
+  the plugin never retargets to this one — you import it by hand when a project
+  reads Tailwind strings and never passes sz objects to the toolkit. Under ESM
+  the main entry already tree-shakes to within 76&nbsp;B of it; the saving is on
+  the `require()` path, where nothing shakes: 22.6&nbsp;KB gz against
+  30.9&nbsp;KB. It does not drop `@csszyx/compiler` from the dependency graph:
+  both halves of the toolkit live in one module, so `dist/split.cjs` still
+  requires `@csszyx/compiler/browser` even though nothing on this entry calls
+  into it.
 - **`@csszyx/runtime/lowering`** — one bare side-effect import that makes the
   slim helpers object-capable. The plugin handles it; outside the plugin
   pipeline (unit tests, scripts) add `import '@csszyx/runtime/lowering'` once
