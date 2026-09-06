@@ -1,6 +1,6 @@
 ---
 title: Mangling
-description: Why a production build renames p-4 to z — a DOM tree that fits the Elements panel, and class names nothing outside your build can hold onto.
+description: Why a production build renames p-4 to z — a DOM tree that fits the Elements panel, and class names that carry no promise of staying put.
 ---
 
 A component renders twice and you open the Elements panel to find out which
@@ -61,21 +61,28 @@ question does turn out to be styling, `szDecode` gives you the name back at
 runtime, and on a build you can no longer rebuild the census in the page
 answers the same question from the console.
 
-## Nothing outside your build can bind to a class name
+## A class name stops looking like an API
 
-Tokens are handed out over the census of classes this build found. Add a
-component, delete one, or list one more entry in `manglePreserve`, and every
-token after that point in the order shifts. `z9` is one class in today's build
-and a different class in tomorrow's.
+Tokens are handed out over the census of classes this build found, in sorted
+order. Add a class that sorts before an existing one, and every token after
+that point shifts: `z9` names one class in today's build and a different class
+in tomorrow's. Add one that sorts after, and nothing before it moves. So there
+is no rule for when a token changes, only that nothing promises it will not.
 
-So a browser extension, a host page your app is embedded in, another team's
-end-to-end selectors, an analytics rule keyed on `bg-red-500`, a scraper: none
-of them can hold onto a class name across two deploys. Mangling turns "do not
-depend on my class names" from a request into something the build enforces.
+That is the point, and it is narrower than "nothing can bind to it". A browser
+extension, a host page your app is embedded in, another team's end-to-end
+selectors, an analytics rule keyed on `bg-red-500`: any of them CAN latch onto
+a token, and it may hold for many deploys. What they cannot have is a contract.
+The selector may keep matching, stop matching, or — the case to fear — go on
+matching a different element, with no error to say so. A readable name invites
+that dependency by looking stable; an opaque one does not.
 
-The guarantee does not rest on the map being secret. The map ships in the
-page, anyone can read it, and the token still moves on the next build. What
-makes an external selector fail is the movement, not any secrecy.
+None of this rests on the map being secret. The map ships in the page, anyone
+can read it, and reading it changes nothing above: a token found today is still
+a token with no promise attached. What mangling gives a maintainer is a class
+surface that visibly is not an interface, so the integration hooks that ARE one
+— a data attribute, a role, a name you list in `manglePreserve` — are what a
+consumer reaches for first.
 
 Two kinds of class keep their readable names on purpose: one you also write as
 a literal string anywhere in your source, and anything you list in

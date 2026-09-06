@@ -267,14 +267,16 @@ names unreadable, and treat the byte delta as a rounding error in either directi
 
 Two things, both about names rather than bytes.
 
-**Nothing outside your build can bind to a class name.** A token is allocated
-from the set of classes the build found, so it moves whenever that set changes.
-A browser extension, a host page your app is embedded in, another team's E2E
-selectors, a scraper: none of them can hold onto `bg-red-500` across two
-deploys. Mangling is how a build enforces "do not depend on my class names".
-It is not confidentiality — the stylesheet ships, so `.z{padding:1rem}` reads
-plainly, and the census in the page maps every token back to the name it came
-from.
+**A class name stops looking like an API.** Tokens are allocated over the
+sorted census of classes the build found, so a class added earlier in that
+order shifts every token after it and one added later shifts none — there is
+no rule for when a token changes, only no promise that it will not. A browser
+extension, a host page, another team's E2E selectors can still latch onto a
+token; what they cannot have is a contract, and a selector that keeps matching
+may be matching a different element. An opaque name does not invite that
+dependency the way a readable one does. It is not confidentiality — the
+stylesheet ships, so `.z{padding:1rem}` reads plainly, and the census in the
+page maps every token back to the name it came from.
 
 **The DOM tree is readable in devtools.** Atomic utilities plus transition,
 animation and variant states give one element a `className` of dozens of names,
