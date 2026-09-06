@@ -376,10 +376,18 @@ function warnUnknownSelector(name: string): void {
  *
  * @param info - The classified token info, or `undefined`.
  * @param selector - The selector to test the token against.
+ * @param base - The literal name to fall back on when `info` is `undefined`:
+ *   an unrecognised token answers to its own whole name so a placement list can
+ *   address it.
  * @returns `true` if the token matches the selector.
  */
-function matches(info: TokenInfo | undefined, selector: BoxSelector): boolean {
-    if (!info) return false;
+function matches(info: TokenInfo | undefined, selector: BoxSelector, base = ''): boolean {
+    // A token csszyx does not recognise still answers to its own name. That is
+    // the escape hatch the atomic-only scope owes the author: a custom
+    // `@utility` has no correct side, so `{ inner: ['card'] }` must be able to
+    // place it by hand. Whole name only — reading `card` as a prefix of
+    // `card-lg` would be a guess about a structure csszyx knows nothing about.
+    if (!info) return typeof selector === 'string' && selector !== '' && selector === base;
     if (typeof selector === 'object') {
         return Object.entries(selector).every(
             ([category, value]) => info.category === category && info.value === value,
@@ -399,10 +407,24 @@ function matches(info: TokenInfo | undefined, selector: BoxSelector): boolean {
  *
  * @param info - The classified token info, or `undefined`.
  * @param selectors - The selectors to test the token against.
+ * @param base - The literal name to fall back on when `info` is `undefined`.
  * @returns `true` if the token matches at least one selector.
  */
-function anyMatch(info: TokenInfo | undefined, selectors: BoxSelector[]): boolean {
-    return selectors.some(s => matches(info, s));
+function anyMatch(info: TokenInfo | undefined, selectors: BoxSelector[], base = ''): boolean {
+    return selectors.some(s => matches(info, s, base));
+}
+
+/**
+ * The name an unrecognised token answers to: decoded, variant- and
+ * marker-stripped, the same normalisation {@link inspectUncached} does before
+ * it gives up.
+ *
+ * @param token - A single raw class token.
+ * @param bridge - The mangle bridge read once by the caller.
+ * @returns The token's base name.
+ */
+function tokenBase(token: string, bridge: MangleBridge | undefined): string {
+    return normalizeBase(stripVariant(decodeToken(token, bridge)));
 }
 
 /**
@@ -493,22 +515,36 @@ function splitBoxUncached(
     options: SplitBoxOptions,
     bridge: MangleBridge | undefined,
 ): SplitBoxResult {
-    const forceInner = (options.inner ?? []).filter(sel => selectorIsUsable(sel, 'class'));
-    const forceOuter = (options.outer ?? []).filter(sel => selectorIsUsable(sel, 'class'));
+    const tokens = tokenize(className);
+    // The names in the className that nothing classified. A placement list may
+    // address one of them literally — that is the escape hatch the atomic-only
+    // scope owes the author — while a name that is neither a known selector nor
+    // present here is still reported as the typo it probably is.
+    const unclassified = new Set(
+        tokens.filter(t => !inspect(t, bridge)).map(t => tokenBase(t, bridge)),
+    );
+    const placeable = (sel: BoxSelector): boolean =>
+        (typeof sel === 'string' && unclassified.has(sel)) || selectorIsUsable(sel, 'class');
+    const forceInner = (options.inner ?? []).filter(placeable);
+    const forceOuter = (options.outer ?? []).filter(placeable);
     const fallback: BoxRole = options.fallback ?? 'outer';
     const outer: string[] = [];
     const inner: string[] = [];
 
-    for (const token of tokenize(className)) {
+    const unplaced: string[] = [];
+
+    for (const token of tokens) {
         const info = inspect(token, bridge);
-        if (anyMatch(info, forceInner)) {
+        const base = info ? '' : tokenBase(token, bridge);
+        if (anyMatch(info, forceInner, base)) {
             inner.push(token);
             continue;
         }
-        if (anyMatch(info, forceOuter)) {
+        if (anyMatch(info, forceOuter, base)) {
             outer.push(token);
             continue;
         }
+        if (!info) unplaced.push(base);
         // A transition is declared on both nodes unless the caller pinned it:
         // it does nothing on its own, and the state that fires it can sit on
         // either side. An override still wins, which is why this runs after the
@@ -523,6 +559,7 @@ function splitBoxUncached(
     }
 
     if (process.env.NODE_ENV !== 'production') {
+        warnUnplacedTokens(unplaced, fallback);
         warnUnusableSplit(outer, inner, bridge);
     }
 
@@ -578,6 +615,27 @@ const STRETCHED_BASES: ReadonlySet<string> = new Set(['flex-1', 'grow']);
 
 /** Prefixes of the same, for the sized forms (`grow-0`, `basis-1/2`). */
 const STRETCHED_PREFIXES = ['grow-', 'basis-'];
+
+/**
+ * Say that a token nothing classified was placed by the fallback rather than by
+ * a rule. The atomic-only scope means a custom `@utility` declaring several
+ * properties at once has no correct side, so the author has to make the call —
+ * and cannot make it without being told. Development only; the caller guards on
+ * `NODE_ENV`.
+ *
+ * @param unplaced - Base names of the tokens the fallback placed.
+ * @param fallback - The role the fallback sent them to.
+ */
+function warnUnplacedTokens(unplaced: readonly string[], fallback: BoxRole): void {
+    const node = fallback === 'outer' ? 'frame' : 'content';
+    const other = fallback === 'outer' ? 'inner' : 'outer';
+    for (const token of new Set(unplaced)) {
+        devWarn(
+            `splitBox: '${token}' is not a utility csszyx knows, so it went to the ${node} node with everything else it could not classify. ` +
+                `help: if it is a custom @utility that declares properties for both nodes, csszyx cannot split it — no side is correct — so place it yourself with { ${other}: ['${token}'] }.`,
+        );
+    }
+}
 
 /**
  * Say when a partition produced a shape that cannot do what the className asked

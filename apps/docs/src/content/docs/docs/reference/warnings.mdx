@@ -1166,6 +1166,31 @@ the bare form is named.
 These three read the class buckets, so they do not fire for `splitBoxSz`, which
 partitions an sz object.
 
+### A class csszyx does not recognise
+
+```text
+[csszyx] splitBox: '{token}' is not a utility csszyx knows, so it went to the {node} node with everything else it could not classify. help: if it is a custom @utility that declares properties for both nodes, csszyx cannot split it — no side is correct — so place it yourself with { {other}: ['{token}'] }.
+```
+
+The toolkit's vocabulary is atomic utilities — a class whose name states one
+feature. A custom `@utility` that declares several properties at once has no
+correct side: send it outward and the content loses the padding it declared,
+inward and the margin moves inside the frame, to both and the margin applies
+twice while the background paints twice. csszyx will not rewrite your CSS into
+per-property fragments to make the question answerable, so it says what it did
+and hands the call back.
+
+`{node}` is the node the fallback chose — `frame` by default, `content` when
+you passed `fallback: 'inner'` — and `{other}` is the opposite one, so the help
+line always suggests moving the class rather than leaving it where it is.
+
+Placing the token by hand is the fix, and a placement list accepts the literal
+class name for exactly this case — `{ inner: ['card'] }` works even though
+`card` is in no category. It is matched as a whole name, never as a prefix of
+`card-lg`, because csszyx knows nothing about an unrecognised token's
+structure. `has`, `pick` and `omit` keep asking category questions, so an
+unknown string there is still reported as the typo it usually is.
+
 ## Editor diagnostics
 
 The VS Code extension reports key problems as squiggles, with its own shorter
