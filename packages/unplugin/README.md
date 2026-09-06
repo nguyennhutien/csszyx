@@ -69,7 +69,7 @@ module.exports = {
 - **sz prop transform** -- Compiles `sz={{ }}` objects into `className` strings with ONE engine that ships as two artifacts: the **native Rust addon** (default, through the optional `@csszyx/core-*` platform package) and the same engine compiled to **WebAssembly** (shipped inside `@csszyx/core`, the automatic fallback when the native binary is absent — pin it with `build.parser: "wasm"`).
 - **HTML injection** -- Injects mangle maps and checksums for SSR hydration
 - **HMR support** -- Updates styles instantly during development
-- **CSS mangling** -- Compresses owned class names (e.g., `text-center` -> `z`) while retaining names shared with source-visible `class`/`className` strings and template quasis
+- **CSS mangling** (opt-in) -- Renames owned class names to short tokens (e.g., `text-center` -> `z`) to hide the utility vocabulary, not to shrink the payload, while retaining names shared with source-visible `class`/`className` strings and template quasis
 - **File filters** -- Top-level `include` / `exclude` (glob or RegExp) skip large generated files before the AST budget guard fires; see [Config Overview](https://csszyx.com/config/overview#file-filters)
 
 Class mangling runs in Vite, Webpack, and Rollup final-output hooks. The esbuild

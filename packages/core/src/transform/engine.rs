@@ -709,6 +709,8 @@ fn unknown_property_diagnostics(
     let mut border_side_styles = Vec::new();
     let mut property_objects = Vec::new();
     let mut mask_members = Vec::new();
+    let mut dead_enums: Vec<(String, String, u32)> = Vec::new();
+    let mut unknown_variants: Vec<(String, u32)> = Vec::new();
     // Built on the first position lookup, not up front: a file whose `sz` props
     // are all clean reaches none of the branches below, and must not pay a pass
     // over its own source for a table nobody reads.
@@ -733,37 +735,7 @@ fn unknown_property_diagnostics(
                 .filter(|dropped| dropped.reason == DroppedKeyReason::RemovedKey)
                 .map(|dropped| (dropped.key.clone(), dropped.span.start)),
         );
-        for (key, offset) in &unknown {
-            let (line, _) = lines
-                .get_or_insert_with(|| LineIndex::new(&file.source))
-                .line_column(&file.source, *offset);
-            // A numeric key is almost never a typo — it means an array or a spread
-            // reached `sz`. Match the removed JavaScript lanes' wording so a `build.parser` flip
-            // does not change the diagnostic text.
-            if let Some(note) = super::generated::tables::key_migration_note(key) {
-                // Wording mirrors the runtime channel's unknownSzPropertyMessage
-                // so the same key reads the same everywhere.
-                out.push(format!(
-                    "[csszyx] \"{key}\" was removed at {location}:{line}: {note}."
-                ));
-            } else if let Some(suggestion) = super::generated::tables::key_suggestion(key) {
-                out.push(format!(
-                    "[csszyx] Use the canonical key \"{suggestion}\" instead of \"{key}\" at {location}:{line}."
-                ));
-            } else if is_numeric_key(key) {
-                out.push(format!(
-                    "[csszyx] sz received a numeric key \"{key}\" at {location}:{line}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored."
-                ));
-            } else {
-                // Wording mirrors the JS lanes byte for byte. Deliberately NOT
-                // "this will be ignored": the key is lowered as a literal class
-                // exactly like a known one, so the old text sent people looking
-                // for a missing class instead of a dead one.
-                out.push(format!(
-                    "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility."
-                ));
-            }
-        }
+        push_unknown_key_diagnostics(file, &unknown, &location, &mut lines, &mut out);
         dead_steps.clear();
         super::lower::collect_dead_spacing_steps(object, &mut dead_steps);
         for (key, value, offset) in &dead_steps {
@@ -804,6 +776,18 @@ fn unknown_property_diagnostics(
                 "[csszyx] \"{key}\" is a property, not a variant, but received an object {{ {nested} }} at {location}:{line}. This compiles to \"{key}:*\" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use {{ color: '...', op: ... }}."
             ));
         }
+        unknown_variants.clear();
+        super::lower::collect_owned_key_variant_objects(object, &mut unknown_variants);
+        push_owned_key_variant_diagnostics(
+            file,
+            &unknown_variants,
+            &location,
+            &mut lines,
+            &mut out,
+        );
+        dead_enums.clear();
+        super::lower::collect_dead_enum_values(object, &mut dead_enums);
+        push_dead_enum_diagnostics(file, &dead_enums, &location, &mut lines, &mut out);
         mask_members.clear();
         super::lower::collect_unknown_mask_slot_members(object, &mut mask_members);
         for (owner, member, allowed, offset) in &mask_members {
@@ -885,6 +869,93 @@ fn push_removed_sugar_diagnostics(
             .line_column(&file.source, *offset);
         out.push(format!(
             "[csszyx] \"{key}\" boolean sugar was removed at {location}:{line}. Use {{ {canonical}: '{value}' }} instead, or run `csszyx migrate`."
+        ));
+    }
+}
+
+/// Report one unknown, removed, aliased, or numeric sz key.
+///
+/// Four wordings for one collector, because the remedy differs: a removed key
+/// has a replacement, an alias has a canonical spelling, a numeric key means an
+/// array or spread leaked in, and anything else may still target a project's
+/// own `@utility`. Every wording mirrors the runtime channel byte for byte.
+fn push_unknown_key_diagnostics(
+    file: &TransformFile,
+    found: &[(String, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    for (key, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        if let Some(note) = super::generated::tables::key_migration_note(key) {
+            out.push(format!(
+                "[csszyx] \"{key}\" was removed at {location}:{line}: {note}."
+            ));
+        } else if let Some(suggestion) = super::generated::tables::key_suggestion(key) {
+            out.push(format!(
+                "[csszyx] Use the canonical key \"{suggestion}\" instead of \"{key}\" at {location}:{line}."
+            ));
+        } else if is_numeric_key(key) {
+            out.push(format!(
+                "[csszyx] sz received a numeric key \"{key}\" at {location}:{line}. This usually means an array or a spread was passed where an object of sz keys was expected. The value is ignored."
+            ));
+        } else {
+            // Deliberately NOT "this will be ignored": the key is lowered as a
+            // literal class exactly like a known one, so the old text sent
+            // people looking for a missing class instead of a dead one.
+            out.push(format!(
+                "[csszyx] Unknown property \"{key}\" in sz prop at {location}:{line}. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind's @utility."
+            ));
+        }
+    }
+}
+
+/// Report a csszyx-owned key that carries an object and so becomes a prefix.
+///
+/// Wording matches the runtime channel's `warnOwnedKeyVariantObject` so the
+/// same mistake reads the same in a build log and in a browser console.
+fn push_owned_key_variant_diagnostics(
+    file: &TransformFile,
+    found: &[(String, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    for (key, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        out.push(format!(
+            "[csszyx] \"{key}\" at {location}:{line} is not a variant, but it holds an object, so it lowers to the class prefix \"{key}:\" and Tailwind generates no CSS for it. A \"--*\" key takes a declaration value; \"container\" takes true."
+        ));
+    }
+}
+
+/// Report a closed-enum key carrying a value CSS does not define for it.
+///
+/// Wording matches the runtime channel's `warnClosedEnumValue`. The legal set
+/// is named in full, like the mask-slot diagnostic: the author has to pick a
+/// replacement, and the alternative is a second trip to the docs.
+fn push_dead_enum_diagnostics(
+    file: &TransformFile,
+    found: &[(String, String, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    for (key, value, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        // The collector proved the key is a closed enum by finding it, so the
+        // lookup below cannot miss.
+        let allowed = super::generated::tables::closed_enum_values(key).unwrap_or_default();
+        let bare = super::lower::bare_closed_enum_class(key, value);
+        out.push(format!(
+            "[csszyx] \"{key}: {value}\" at {location}:{line} is not a {key} value. The class \"{bare}\" is still emitted and styles nothing, unless a rule of your own happens to match it. {key} takes one of: {allowed}."
         ));
     }
 }
@@ -1583,6 +1654,176 @@ mod tests {
             .diagnostics
             .iter()
             .any(|diagnostic| diagnostic.contains("maskLinear: unknown field \"form\"")));
+    }
+
+    #[test]
+    fn static_engine_names_a_value_outside_a_closed_enum() {
+        // The four keys that spell their value as the class itself. An
+        // unrecognised one used to ship verbatim as a bare class name, which
+        // in a hybrid app can MATCH a rule the author never meant.
+        for (key, value, bare, legal) in [
+            ("display", "bogus", "bogus", "inline-block"),
+            ("position", "bogus", "bogus", "sticky"),
+            ("visibility", "bogus", "bogus", "collapse"),
+            ("isolation", "bogus", "isolation-bogus", "isolate, auto"),
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: format!("export const A = () => <div sz={{{{ {key}: '{value}' }}}} />;"),
+            };
+            let result = transform_static_classes(&file, 0, std::time::Instant::now());
+            let hit = result
+                .diagnostics
+                .iter()
+                .find(|diagnostic| diagnostic.contains(&format!("\"{key}: {value}\"")))
+                .unwrap_or_else(|| panic!("{key}: {:?}", result.diagnostics));
+            assert!(
+                hit.contains(&format!("The class \"{bare}\" is still emitted")),
+                "{hit}"
+            );
+            assert!(hit.contains(legal), "{hit}");
+            // Still emitted, as before the diagnostic existed: the collectors
+            // do not reach every site the lowering does, and a drop where the
+            // diagnostic cannot follow would be a silent loss.
+            assert!(
+                result.code.contains(&format!("className=\"{bare}\"")),
+                "{}",
+                result.code
+            );
+        }
+    }
+
+    #[test]
+    fn static_engine_reads_the_important_modifier_on_a_closed_enum() {
+        // `flex!` is a legal value with a legal class suffix. The lowering
+        // splits the bang off before its lookup; the collector must too, or
+        // it reports a class the build just emitted correctly.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source:
+                "export const A = () => <div sz={{ display: 'flex!', position: 'absolute!' }} />;"
+                    .to_string(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert!(result.code.contains("flex! absolute!"), "{}", result.code);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    }
+
+    #[test]
+    fn static_engine_names_an_owned_key_under_a_min_or_max_breakpoint() {
+        // `min` / `max` hold breakpoint names the project defines, which are
+        // not judged — but the object each one holds is walked, as the runtime
+        // lane walks it, so the two lanes report the same site.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = () => <div sz={{ min: { md: { '--v-y': { p: 2 } } } }} />;"
+                .to_string(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert!(result.code.contains("min-md:--v-y:p-2"), "{}", result.code);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.contains("\"--v-y\"")
+                    && diagnostic.contains("it holds an object")),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn the_closed_enum_tables_agree_on_which_keys_are_closed() {
+        // The diagnostic reads the legal set with `unwrap_or_default`, on the
+        // grounds that the collector has already proved the key is a closed
+        // enum. If the two generated tables ever disagreed, that would print an
+        // empty list instead of failing — so the agreement is the assertion.
+        for key in [
+            "display",
+            "position",
+            "visibility",
+            "isolation",
+            "p",
+            "bg",
+            "hover",
+        ] {
+            assert_eq!(
+                super::super::generated::tables::is_closed_enum_key(key),
+                super::super::generated::tables::closed_enum_values(key).is_some(),
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
+    fn static_engine_keeps_quiet_for_a_value_inside_a_closed_enum() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "export const A = () => <div sz={{ display: 'none', position: 'sticky' }} />;"
+                .to_string(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert!(result.code.contains("hidden sticky"), "{}", result.code);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    }
+
+    #[test]
+    fn static_engine_names_a_csszyx_owned_key_holding_an_object() {
+        for (key, source) in [
+            (
+                "--v-x",
+                "export const A = () => <div sz={{ '--v-x': { p: 4 } }} />;",
+            ),
+            (
+                "container",
+                "export const A = () => <div sz={{ container: { sm: { p: 4 } } }} />;",
+            ),
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            };
+            let result = transform_static_classes(&file, 0, std::time::Instant::now());
+            let hit = result
+                .diagnostics
+                .iter()
+                .find(|diagnostic| diagnostic.contains(&format!("\"{key}\"")))
+                .unwrap_or_else(|| panic!("{key}: {:?}", result.diagnostics));
+            assert!(hit.contains("it holds an object"), "{hit}");
+            // Still emitted: dropping it would be a second behaviour change on
+            // a shape the diagnostic already covers.
+            assert!(result.code.contains(&format!("{key}:")), "{}", result.code);
+        }
+    }
+
+    #[test]
+    fn static_engine_leaves_the_open_variant_namespace_alone() {
+        // A project declares its own breakpoints in `@theme` and its own
+        // variants with `@custom-variant`, neither of which this engine reads,
+        // so a name it does not know is not evidence of a typo. Warning on
+        // these was measured in the field as worse than silence.
+        for source in [
+            "export const A = () => <div sz={{ tablet: { p: 4 } }} />;",
+            "export const A = () => <div sz={{ 'desktop-sm': { p: 4 } }} />;",
+            "export const A = () => <div sz={{ has: { img: { p: 4 } } }} />;",
+            "export const A = () => <div sz={{ supports: { 'display:grid': { p: 4 } } }} />;",
+            "export const A = () => <div sz={{ '--v-x': '0.18' }} />;",
+            "export const A = () => <div sz={{ container: true }} />;",
+        ] {
+            let file = TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            };
+            let result = transform_static_classes(&file, 0, std::time::Instant::now());
+            assert!(
+                !result
+                    .diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.contains("it holds an object")),
+                "{source}: {:?}",
+                result.diagnostics
+            );
+        }
     }
 
     #[test]

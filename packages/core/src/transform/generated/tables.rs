@@ -818,6 +818,65 @@ pub(crate) fn is_special_variant(key: &str) -> bool {
     )
 }
 
+/// The utility a closed-enum key emits for one value, if the value is in its set.
+///
+/// These keys spell their value as the BARE Tailwind utility, so a value
+/// outside the set used to ship as an unprefixed class name of exactly the
+/// shape a project's own component CSS is made of. Returning `None` is what
+/// lets the lowering drop it and the diagnostic name it.
+pub(crate) fn closed_enum_class(key: &str, value: &str) -> Option<&'static str> {
+    match (key, value) {
+        ("display", "block") => Some("block"),
+        ("display", "inline-block") => Some("inline-block"),
+        ("display", "inline") => Some("inline"),
+        ("display", "flex") => Some("flex"),
+        ("display", "inline-flex") => Some("inline-flex"),
+        ("display", "grid") => Some("grid"),
+        ("display", "inline-grid") => Some("inline-grid"),
+        ("display", "contents") => Some("contents"),
+        ("display", "table") => Some("table"),
+        ("display", "inline-table") => Some("inline-table"),
+        ("display", "table-caption") => Some("table-caption"),
+        ("display", "table-cell") => Some("table-cell"),
+        ("display", "table-column") => Some("table-column"),
+        ("display", "table-column-group") => Some("table-column-group"),
+        ("display", "table-footer-group") => Some("table-footer-group"),
+        ("display", "table-header-group") => Some("table-header-group"),
+        ("display", "table-row-group") => Some("table-row-group"),
+        ("display", "table-row") => Some("table-row"),
+        ("display", "flow-root") => Some("flow-root"),
+        ("display", "list-item") => Some("list-item"),
+        ("display", "none") => Some("hidden"),
+        ("position", "static") => Some("static"),
+        ("position", "fixed") => Some("fixed"),
+        ("position", "absolute") => Some("absolute"),
+        ("position", "relative") => Some("relative"),
+        ("position", "sticky") => Some("sticky"),
+        ("visibility", "visible") => Some("visible"),
+        ("visibility", "hidden") => Some("invisible"),
+        ("visibility", "collapse") => Some("collapse"),
+        ("isolation", "isolate") => Some("isolate"),
+        ("isolation", "auto") => Some("isolation-auto"),
+        _ => None,
+    }
+}
+
+/// Whether a key's value set is closed. Mirrors `CLOSED_ENUM_CLASSES`'s keys.
+pub(crate) fn is_closed_enum_key(key: &str) -> bool {
+    matches!(key, "display" | "position" | "visibility" | "isolation")
+}
+
+/// The legal values of a closed-enum key, in table order, for the diagnostic.
+pub(crate) fn closed_enum_values(key: &str) -> Option<&'static str> {
+    match key {
+        "display" => Some("block, inline-block, inline, flex, inline-flex, grid, inline-grid, contents, table, inline-table, table-caption, table-cell, table-column, table-column-group, table-footer-group, table-header-group, table-row-group, table-row, flow-root, list-item, none"),
+        "position" => Some("static, fixed, absolute, relative, sticky"),
+        "visibility" => Some("visible, hidden, collapse"),
+        "isolation" => Some("isolate, auto"),
+        _ => None,
+    }
+}
+
 /// Returns true when a key's `-(--var)` form resolves to a DIFFERENT CSS
 /// property than the literal form — Tailwind styles the element, just not the
 /// way the author asked. See transform::var_hostile.

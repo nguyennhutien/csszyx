@@ -101,7 +101,7 @@ npx csszyx next-watch
 
 ### `audit`
 
-View performance statistics and mangle compression rates.
+View build statistics for a mangled build.
 
 ```bash
 npx csszyx audit

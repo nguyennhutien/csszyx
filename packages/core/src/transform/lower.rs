@@ -381,6 +381,134 @@ pub(crate) fn collect_dead_spacing_steps(
     }
 }
 
+/// Keys csszyx OWNS that cannot mean a variant, reported when they carry an
+/// object.
+///
+/// The variant namespace is open — a project declares its own with
+/// `@custom-variant` and its own breakpoints with `--breakpoint-*` in `@theme`
+/// — so `{ tablet: { p: 4 } }` and `{ 'tablt': { p: 4 } }` are the same shape
+/// to a compiler that cannot read the project's CSS. Warning on both was
+/// measured as worse than silence in the field and is locked out by
+/// `custom-theme-variant-keys.test.ts`.
+///
+/// These two are different: csszyx defines what they mean, and neither meaning
+/// is a variant. A `--*` key is a custom-property declaration whose value is a
+/// declaration value; `container` is the boolean/`@container/name` utility. An
+/// object under either lowers to a class prefix Tailwind serves nothing for.
+#[cfg(feature = "native-engine")]
+fn is_owned_non_variant_key(key: &str) -> bool {
+    key.starts_with("--") || key == "container"
+}
+
+/// Collect csszyx-owned keys used in variant position, for the diagnostic.
+///
+/// `{ '--v-x': { p: 4 } }` emits `--v-x:p-4` and `{ container: { sm: { … } } }`
+/// emits `container:sm:p-4`. Both are dead classes on a green build. Descends
+/// like the lowering does, minus the parametric stems whose nested keys are
+/// selector text rather than key names.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_owned_key_variant_objects(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, u32)>,
+) {
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            continue;
+        };
+        let key = property.key.as_str();
+        if is_owned_non_variant_key(key) {
+            out.push((property.key.clone(), property.span.start));
+            continue;
+        }
+        // `min` / `max` hold breakpoint NAMES, each holding a variant object:
+        // the names are the project's own and are not judged, but what they
+        // hold is walked, as the runtime lane walks it.
+        if matches!(key, "min" | "max") {
+            for breakpoint in &nested.properties {
+                if let StaticSzValue::Object(scoped) = &breakpoint.value {
+                    collect_owned_key_variant_objects(scoped, out);
+                }
+            }
+            continue;
+        }
+        // Object-shaped VALUE keys, and the parametric stems whose nested keys
+        // are SELECTOR text (`has: { img: … }`, `supports: { 'display:grid': … }`).
+        // Same boundary `collect_property_object_values` draws.
+        if matches!(
+            key,
+            "css" | "bgImg" | "supports" | "data" | "not" | "aria" | "has" | "group" | "peer"
+        ) || mask_slot_members(key).is_some()
+        {
+            continue;
+        }
+        collect_owned_key_variant_objects(nested, out);
+    }
+}
+
+/// The class a closed-enum key emits for a value outside its table.
+///
+/// On these keys the value IS the class, so it goes out verbatim — except
+/// `isolation`, whose utilities are prefixed. Mirrors `bareClosedEnumClass` in
+/// the TypeScript core, so the diagnostic names the class both engines emit.
+pub(crate) fn bare_closed_enum_class(key: &str, value: &str) -> String {
+    if key == "isolation" {
+        format!("isolation-{value}")
+    } else {
+        value.to_string()
+    }
+}
+
+/// Collect closed-enum keys whose value is not in their set, for the diagnostic.
+///
+/// `display`, `position`, `visibility` and `isolation` spell their value as the
+/// bare Tailwind utility, so an unrecognised one is emitted verbatim as an
+/// unprefixed class name — the shape a project's own component CSS is made
+/// of, which makes the typo a possible collision rather than a plain dead
+/// class. Descends like the lowering does, so a value nested under a variant
+/// is reported too. The important modifier is split off first, as
+/// `format_static_class` does: `flex!` is a legal value with a legal suffix.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_dead_enum_values(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, u32)>,
+) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::String(value) => {
+                let base = value.strip_suffix('!').unwrap_or(value);
+                if super::generated::tables::is_closed_enum_key(&property.key)
+                    && super::generated::tables::closed_enum_class(&property.key, base).is_none()
+                {
+                    out.push((property.key.clone(), base.to_string(), property.span.start));
+                }
+            }
+            StaticSzValue::Object(nested) => {
+                if matches!(
+                    property.key.as_str(),
+                    "css"
+                        | "bgImg"
+                        | "supports"
+                        | "data"
+                        | "not"
+                        | "aria"
+                        | "has"
+                        | "group"
+                        | "peer"
+                ) {
+                    continue;
+                }
+                if property_prefix(&property.key).is_some()
+                    && object_string_property(nested, "color").is_some()
+                {
+                    continue;
+                }
+                collect_dead_enum_values(nested, out);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Legal members of one mask slot, minus the linear sides.
 ///
 /// `maskLinear` also accepts every entry in `MASK_SIDES`, reported by the
@@ -1214,34 +1342,19 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             if key == "content" {
                 return Some(format_content(value, prefix));
             }
-            // display / position / visibility carry their value as the bare
-            // Tailwind utility (`flex`, `grid`, `absolute`, `visible`), not a
-            // `display-flex` style prefix-value pair. This mirrors the removed JavaScript lanes
-            // transform so both parser paths emit classes Tailwind actually
-            // generates.
-            if key == "display" {
-                return Some(if value == "none" {
-                    format!("{prefix}hidden")
-                } else {
-                    format!("{prefix}{value}")
-                });
-            }
-            if key == "position" {
-                return Some(format!("{prefix}{value}"));
-            }
-            if key == "visibility" {
-                return Some(if value == "hidden" {
-                    format!("{prefix}invisible")
-                } else {
-                    format!("{prefix}{value}")
-                });
-            }
-            if key == "isolation" {
-                return Some(if value == "isolate" {
-                    format!("{prefix}isolate")
-                } else {
-                    format!("{prefix}isolation-{value}")
-                });
+            // display / position / visibility / isolation carry their value as
+            // the bare Tailwind utility (`flex`, `grid`, `absolute`, `visible`),
+            // not a `display-flex` style prefix-value pair. CSS closes all four
+            // value sets, so a value outside the table is a typo the build can
+            // decide — and `collect_dead_enum_values` reports it. The class is
+            // still emitted: the collectors do not reach a conditional branch
+            // or a parametric variant, and a drop there would be a silent loss
+            // where the pre-diagnostic behaviour at least left the typo in the
+            // DOM to find.
+            if super::generated::tables::is_closed_enum_key(key) {
+                let utility = super::generated::tables::closed_enum_class(key, value)
+                    .map_or_else(|| bare_closed_enum_class(key, value), str::to_string);
+                return Some(format!("{prefix}{utility}"));
             }
             // Single-property typography utilities carry their value as a bare
             // Tailwind class (`uppercase`, `italic`, `underline`, `antialiased`),
@@ -2318,7 +2431,11 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     #[cfg(feature = "native-engine")]
+    use super::collect_dead_enum_values;
+    #[cfg(feature = "native-engine")]
     use super::collect_dead_weight_values;
+    #[cfg(feature = "native-engine")]
+    use super::collect_owned_key_variant_objects;
     use super::{
         build_mask_radial_classes, build_mask_slot_classes, build_mask_stop_classes,
         collect_unknown_sz_keys, format_color_opacity_object, format_mask_position,
@@ -2531,6 +2648,103 @@ mod tests {
         assert!(
             out.is_empty(),
             "must not warn on parametric params: {out:?}"
+        );
+    }
+
+    /// A mask slot's members are geometry, not sz keys.
+    ///
+    /// `maskLinear` is not one of the parametric stems named beside it in the
+    /// same guard — it is recognised by its own lookup — so a build that walked
+    /// only that list descended into it and reported its members as classes
+    /// that style nothing. Both halves of the guard have to hold on their own.
+    /// A dead enum value is reported wherever it sits, not only at the top.
+    ///
+    /// `display` and its three siblings emit the value as a bare class, so a
+    /// typo collides with a project's own CSS rather than doing nothing. Under
+    /// a variant it is the same class and the same collision, and the walk has
+    /// to descend to find it.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collect_dead_enum_values_descends_into_a_variant() {
+        let object = StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: "hover".to_string(),
+                span: TextSpan { start: 0, end: 0 },
+                value: StaticSzValue::Object(StaticSzObject {
+                    properties: vec![property(
+                        "display",
+                        StaticSzValue::String("bogus".to_string()),
+                    )],
+                }),
+            }],
+        };
+        let mut out = Vec::new();
+        collect_dead_enum_values(&object, &mut out);
+        assert_eq!(
+            out.iter()
+                .map(|(k, v, _)| (k.as_str(), v.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("display", "bogus")],
+            "a variant hides nothing: {out:?}"
+        );
+    }
+
+    /// The colour-opacity shape is skipped for BOTH of its reasons at once.
+    ///
+    /// `{ bg: { color: 'red-500', opacity: 50 } }` is one declaration written as
+    /// an object, so its members are not sz keys and must not be walked. A
+    /// prefixed key whose object is NOT that shape is an ordinary nesting, and a
+    /// dead value inside it still has to be reported — which is what fails if
+    /// the two halves of the guard are joined with `or`.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collect_dead_enum_values_walks_a_prefixed_key_that_is_not_a_colour_object() {
+        let object = StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: "bg".to_string(),
+                span: TextSpan { start: 0, end: 0 },
+                value: StaticSzValue::Object(StaticSzObject {
+                    properties: vec![property(
+                        "position",
+                        StaticSzValue::String("bogus".to_string()),
+                    )],
+                }),
+            }],
+        };
+        let mut out = Vec::new();
+        collect_dead_enum_values(&object, &mut out);
+        assert_eq!(
+            out.iter()
+                .map(|(k, v, _)| (k.as_str(), v.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("position", "bogus")],
+            "only the colour-opacity object is skipped: {out:?}"
+        );
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collect_owned_key_variants_does_not_descend_a_mask_slot() {
+        let object = StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: "maskLinear".to_string(),
+                span: TextSpan { start: 0, end: 0 },
+                value: StaticSzValue::Object(StaticSzObject {
+                    properties: vec![StaticSzProperty {
+                        key: "--v-x".to_string(),
+                        span: TextSpan { start: 0, end: 0 },
+                        value: StaticSzValue::Object(StaticSzObject {
+                            properties: vec![property("p", StaticSzValue::Number(4.0))],
+                        }),
+                    }],
+                }),
+            }],
+        };
+        let mut out = Vec::new();
+        collect_owned_key_variant_objects(&object, &mut out);
+        assert!(
+            out.is_empty(),
+            "a mask slot's members are geometry, not owned keys: {out:?}"
         );
     }
 

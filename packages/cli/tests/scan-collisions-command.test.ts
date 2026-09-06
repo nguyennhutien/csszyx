@@ -50,6 +50,32 @@ describe('csszyx scan-collisions', () => {
         expect(process.exitCode).toBe(1);
     });
 
+    it('ignores stylesheets a tool generated into a conventional output directory', async () => {
+        // Field report: run in a package that had once run `vitest --coverage`,
+        // the command reported 32 names, 30 of them from istanbul's own HTML
+        // report (`.L0`…`.L9`, `.kwd`, `.pun`, `.typ`), and the paste-ready
+        // list reserved 34 token names on behalf of a gitignored artefact.
+        vi.spyOn(console, 'log').mockImplementation(() => {});
+        // Every directory on the default list carries one token-shaped name, so
+        // dropping any single entry fails this test rather than a user's run.
+        const generated = '.kwd { color: #008 }\n.pun { color: #660 }';
+        const cwd = projectWith({
+            'coverage/lcov-report/prettify.css': generated,
+            'playwright-report/index.css': generated,
+            'storybook-static/sb.css': generated,
+            'out/_next/static/a.css': generated,
+            '.output/public/a.css': generated,
+            '.svelte-kit/output/a.css': generated,
+            '.vercel/output/a.css': generated,
+            '.turbo/cache/a.css': generated,
+            'src/app.css': '.main-body { display: flex }',
+        });
+
+        await scanCollisions({ cwd });
+
+        expect(process.exitCode).toBeUndefined();
+    });
+
     it('passes cleanly when no class name can collide with a token', async () => {
         vi.spyOn(console, 'log').mockImplementation(() => {});
         const cwd = projectWith({

@@ -46,12 +46,13 @@ describe('patch coverage', () => {
     it('counts source as measurable and everything untestable as not', () => {
         assert.ok(isMeasurable('packages/cli/src/commands/check.ts'));
         assert.ok(isMeasurable('packages/core/src/transform/parser.rs'));
+        // Once declarations only; it carries a runtime export and a suite now.
+        assert.ok(isMeasurable('packages/types/src/index.ts'));
 
         // Each of these would otherwise be reported as an uncovered gap in a
         // file no coverage run was ever asked to measure.
         assert.ok(!isMeasurable('packages/cli/tests/check.test.ts'));
         assert.ok(!isMeasurable('packages/cli/src/thing.test.ts'));
-        assert.ok(!isMeasurable('packages/types/src/index.ts'));
         assert.ok(!isMeasurable('packages/core/scripts/build-native.mjs'));
         assert.ok(!isMeasurable('packages/cli/src/index.d.ts'));
         assert.ok(!isMeasurable('docs/config/overview.md'));
@@ -82,6 +83,8 @@ describe('patch coverage', () => {
         // able to tell "this language was never measured" from "this file has
         // no test" — they call for opposite fixes.
         assert.ok(isMeasurable('packages/core/src/transform/parser.rs'));
+        // Once declarations only; it carries a runtime export and a suite now.
+        assert.ok(isMeasurable('packages/types/src/index.ts'));
     });
 
     it('exempts the napi bindings, which the coverage run does not compile', () => {

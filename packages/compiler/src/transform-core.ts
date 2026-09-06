@@ -2684,8 +2684,20 @@ function collectBasicSpecialProperty(
         classes.push(`${prefix}${formatWillChange(value)}`);
         return true;
     }
-    if (typeof value === 'string' && isDirectKeywordProperty(key)) {
-        classes.push(`${prefix}${formatDirectKeywordProperty(key, value)}`);
+    const legal = typeof value === 'string' ? CLOSED_ENUM_LOOKUP.get(key) : undefined;
+    if (legal !== undefined && typeof value === 'string') {
+        // The important modifier is a class suffix, never part of the value:
+        // `flex!` is a legal display value that a raw lookup would refuse.
+        const { value: base, important } = handleImportant(value);
+        const bang = important ? '!' : '';
+        const utility = legal.get(base);
+        if (utility !== undefined) {
+            classes.push(`${prefix}${utility}${bang}`);
+            return true;
+        }
+        const bare = bareClosedEnumClass(key, base);
+        warnClosedEnumValue(key, base, bare, legal);
+        classes.push(`${prefix}${bare}${bang}`);
         return true;
     }
     if (isGradientPositionKey(rawKey) && typeof value === 'number') {
@@ -2703,17 +2715,125 @@ function formatWillChange(value: string): string {
         : `will-change-[${normalizeArbitraryValue(value)}]`;
 }
 
-/** Returns whether a property maps its string value directly to a utility. */
-function isDirectKeywordProperty(key: string): boolean {
-    return key === 'display' || key === 'position' || key === 'visibility' || key === 'isolation';
+/**
+ * Keys whose value set is closed, mapped value → the utility it emits.
+ *
+ * These four spell their value as the BARE Tailwind utility (`flex`,
+ * `absolute`, `invisible`), which is what made an unrecognised value dangerous
+ * rather than merely dead: `{ display: 'bogus' }` used to emit the class
+ * `bogus`, a single unprefixed word of exactly the shape a project's own
+ * component CSS is made of, so the typo could match a rule that was never meant
+ * for it. CSS closes all four value sets, so the typo is decidable here and the
+ * class is dropped instead — the same answer `textTransform` and `fontStyle`
+ * already give.
+ *
+ * Source of truth for the members: `docs/specs/snippets/layout.md`. The engine
+ * reads a generated copy of this table, so both artifacts refuse the same
+ * values.
+ */
+const CLOSED_ENUM_CLASSES: Record<string, Record<string, string>> = {
+    display: {
+        block: 'block',
+        'inline-block': 'inline-block',
+        inline: 'inline',
+        flex: 'flex',
+        'inline-flex': 'inline-flex',
+        grid: 'grid',
+        'inline-grid': 'inline-grid',
+        contents: 'contents',
+        table: 'table',
+        'inline-table': 'inline-table',
+        'table-caption': 'table-caption',
+        'table-cell': 'table-cell',
+        'table-column': 'table-column',
+        'table-column-group': 'table-column-group',
+        'table-footer-group': 'table-footer-group',
+        'table-header-group': 'table-header-group',
+        'table-row-group': 'table-row-group',
+        'table-row': 'table-row',
+        'flow-root': 'flow-root',
+        'list-item': 'list-item',
+        none: 'hidden',
+    },
+    position: {
+        static: 'static',
+        fixed: 'fixed',
+        absolute: 'absolute',
+        relative: 'relative',
+        sticky: 'sticky',
+    },
+    visibility: {
+        visible: 'visible',
+        hidden: 'invisible',
+        collapse: 'collapse',
+    },
+    isolation: {
+        isolate: 'isolate',
+        auto: 'isolation-auto',
+    },
+};
+
+/**
+ * The same tables as maps, for the lookup.
+ *
+ * A bracket read on the object literal answers for `constructor` and
+ * `__proto__` through the prototype chain; a map answers only for its own
+ * entries. The literal stays because the Rust table is generated from it.
+ */
+const CLOSED_ENUM_LOOKUP: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map(
+    Object.entries(CLOSED_ENUM_CLASSES).map(([key, table]) => [
+        key,
+        new Map(Object.entries(table)),
+    ]),
+);
+
+/** Closed-enum key/value pairs already warned about, so a re-render cannot spam. */
+const _warnedClosedEnumValues = new Set<string>();
+
+/**
+ * The class a closed-enum key emits for a value outside its table.
+ *
+ * On these keys the value IS the class, so it goes out verbatim — except
+ * `isolation`, whose utilities are prefixed. This is the pre-diagnostic
+ * behaviour, kept on purpose: the class is what makes the typo findable in
+ * the DOM when no diagnostic reaches it.
+ * @param key - The closed-enum key.
+ * @param value - The value outside its set, without the important modifier.
+ * @returns The bare utility, before any variant prefix.
+ */
+function bareClosedEnumClass(key: string, value: string): string {
+    return key === 'isolation' ? `isolation-${value}` : value;
 }
 
-/** Formats display, position, visibility, and isolation values. */
-function formatDirectKeywordProperty(key: string, value: string): string {
-    if (key === 'display') return value === 'none' ? 'hidden' : value;
-    if (key === 'visibility') return value === 'hidden' ? 'invisible' : value;
-    if (key === 'isolation') return value === 'isolate' ? 'isolate' : `isolation-${value}`;
-    return value;
+/**
+ * Warns when a closed-enum key carries a value CSS does not define for it.
+ *
+ * On these four keys the value IS the class, so the typo ships as a bare
+ * unprefixed class name — the shape a project's own component CSS is made of,
+ * which makes it a possible collision rather than a plain dead class. The
+ * class is still emitted: the lowering cannot see whether a diagnostic will
+ * reach this site, and a drop where none does is a silent loss. Naming the
+ * emitted class is what makes it findable either way.
+ * @param key - The closed-enum key.
+ * @param value - The value that is not in its set.
+ * @param bare - The class emitted for it.
+ * @param legal - Its value table, whose keys the message lists.
+ */
+function warnClosedEnumValue(
+    key: string,
+    value: string,
+    bare: string,
+    legal: ReadonlyMap<string, string>,
+): void {
+    const token = `${key}:${value}`;
+    if (!szDevWarningsEnabled() || _warnedClosedEnumValues.has(token)) return;
+    _warnedClosedEnumValues.add(token);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] "${key}: ${value}"${at} is not a ${key} value. The class "${bare}" is ` +
+            'still emitted and styles nothing, unless a rule of your own happens to match ' +
+            `it. ${key} takes one of: ${[...legal.keys()].join(', ')}.`,
+    );
 }
 
 /** Returns whether a key controls a gradient stop position. */
@@ -3776,8 +3896,53 @@ function collectObjectProperty(
         return true;
     }
     warnPropertyObjectValue(rawKey, value);
+    warnOwnedKeyVariantObject(rawKey);
     collectNestedVariant(rawKey, value as SzObject, prefix, classes);
     return true;
+}
+
+/** Keys already nudged about an object in variant position (once each). */
+const _warnedOwnedKeyVariants = new Set<string>();
+
+/**
+ * Warns when a key csszyx OWNS carries an object and so lowers to a class
+ * prefix.
+ *
+ * The variant namespace is open — a project declares its own with
+ * `@custom-variant`, and its breakpoints with `--breakpoint-*` in `@theme` — so
+ * `{ tablet: { p: 4 } }` and `{ tablt: { p: 4 } }` are the same shape to a
+ * compiler that cannot read the project's CSS. Warning on both was measured in
+ * the field as worse than silence; `custom-theme-variant-keys.test.ts` locks
+ * that out.
+ *
+ * These two are decidable: csszyx defines what they mean and neither meaning is
+ * a variant. A `--*` key declares a custom property, whose value is a
+ * declaration value; `container` is the boolean / `@container/name` utility.
+ * @param key - The sz key holding the object.
+ */
+function warnOwnedKeyVariantObject(key: string): void {
+    // The key test first: every nested variant reaches this line, and the
+    // environment read behind `szDevWarningsEnabled` is the expensive half
+    // (+13% on a six-variant object when it ran first).
+    if (!isOwnedNonVariantKey(key) || !szDevWarningsEnabled() || _warnedOwnedKeyVariants.has(key)) {
+        return;
+    }
+    _warnedOwnedKeyVariants.add(key);
+    const at = szWarnLocation ? ` at ${szWarnLocation}` : '';
+    console.warn(
+        `[csszyx] "${key}"${at} is not a variant, but it holds an object, so it ` +
+            `lowers to the class prefix "${key}:" and Tailwind generates no CSS ` +
+            'for it. A "--*" key takes a declaration value; "container" takes true.',
+    );
+}
+
+/**
+ * Whether csszyx owns a key's meaning and that meaning is not a variant.
+ * @param key - The sz key holding an object.
+ * @returns Whether an object under it is decidably wrong.
+ */
+function isOwnedNonVariantKey(key: string): boolean {
+    return key.startsWith('--') || key === 'container';
 }
 
 /** Property keys already nudged about stray object values (once each). */
@@ -3801,6 +3966,8 @@ export function __resetSzWarnDedupForTests(): void {
     _warnedBorderSideStyles.clear();
     _warnedOpacityTokens.clear();
     _warnedPropertyObjects.clear();
+    _warnedClosedEnumValues.clear();
+    _warnedOwnedKeyVariants.clear();
     warnedRemovedSugar.clear();
 }
 

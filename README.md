@@ -2,7 +2,7 @@
 
 CSS-in-JS framework for the AI era — Tailwind-v4 object syntax, build-time class mangling, and SSR-safe hydration.
 
-> **Pronunciation:** "css-zyx". Class names are encoded in reversed tier order `z → y → x → … → A` for maximum compression of the most common utilities.
+> **Pronunciation:** "css-zyx". With mangling on, class names are encoded in reversed tier order `z → y → x → … → A`, so the most common utilities get the shortest names — a name-hiding feature, not a size one (see below).
 
 [![npm version](https://img.shields.io/npm/v/csszyx.svg)](https://www.npmjs.com/package/csszyx)
 [![npm downloads](https://img.shields.io/npm/dm/csszyx.svg)](https://www.npmjs.com/package/csszyx)

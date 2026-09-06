@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+    emitKeyValueDiagnostic,
     isAdvisoryDiagnostic,
     shouldHoldAdvisories,
     suppressedAdvisoryMessage,
@@ -23,6 +24,18 @@ describe('isAdvisoryDiagnostic', () => {
         ).toBe(true);
     });
 
+    // The variable-hoist planner declining an optimisation: every class and
+    // variable is still emitted, so this is advice. It was held back before
+    // the key/value channel existed, and the positive classifier that channel
+    // needed sent it to production logs as if a class were dead.
+    it('holds back the mangleVars hoist note', () => {
+        expect(
+            isAdvisoryDiagnostic(
+                '[csszyx] mangleVars skipped component CSS variable hoist for --v-x across 3 usages: no-lca',
+            ),
+        ).toBe(true);
+    });
+
     it.each([
         ['an szr-site fallback', 'szr fallback at 4:43: function call `t()` result is unknown'],
         ['an unresolvable spread', 'unresolvable sz spread at 2:10'],
@@ -30,6 +43,105 @@ describe('isAdvisoryDiagnostic', () => {
     ])('never holds back %s', (_name, message) => {
         // Each of these says output is missing, which prints regardless of mode.
         expect(isAdvisoryDiagnostic(message)).toBe(false);
+    });
+});
+
+describe('key and value diagnostics are not advisory fallbacks', () => {
+    // Field report against 0.16.0: a production build of a file with five
+    // typo'd sz keys and values printed nothing but the advisory census, while
+    // `csszyx check` on the same tree exited 1 and named all six findings. The
+    // classifier is why — it was written as "everything that is not one of
+    // three known kinds", so a key diagnostic fell to the advisory side and a
+    // production build held it back and counted it as a FALLBACK. It is not a
+    // fallback: no runtime path picks these up, the class is dead either way.
+    it.each([
+        [
+            'an unknown key',
+            '[csszyx] Unknown property "zzz" in sz prop at src/A.tsx:1. The class is still emitted, so it styles nothing unless Tailwind serves that utility. Check for typos. If the class is intentional, define it with Tailwind\'s @utility.',
+        ],
+        [
+            'a closed-enum value',
+            '[csszyx] "display: bogus" at src/A.tsx:1 is not a display value. The class "bogus" is still emitted and styles nothing, unless a rule of your own happens to match it. display takes one of: block, flex.',
+        ],
+        [
+            'an object under a csszyx-owned key',
+            '[csszyx] "--v-x" at src/A.tsx:1 is not a variant, but it holds an object, so it lowers to the class prefix "--v-x:" and Tailwind generates no CSS for it. A "--*" key takes a declaration value; "container" takes true.',
+        ],
+        [
+            'a dead spacing step',
+            '[csszyx] "p: 1.1" at src/A.tsx:1: 1.1 is not on Tailwind\'s spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value ("1.1rem").',
+        ],
+        [
+            'a property holding an object',
+            '[csszyx] "p" is a property, not a variant, but received an object { bg } at src/A.tsx:1. This compiles to "p:*" classes that match no Tailwind variant and generate no CSS.',
+        ],
+        [
+            'a file left uncompiled by the nesting guard',
+            '[csszyx] src/A.tsx: source nesting exceeded 64 levels (found 90) — this usually means accidentally or programmatically over-nested sz/JSX. Flatten the structure. (This guard prevents a parser stack overflow.)',
+        ],
+    ])('never holds back %s', (_name, message) => {
+        expect(isAdvisoryDiagnostic(message)).toBe(false);
+    });
+
+    it('still holds back the className precedence advisory', () => {
+        // The one diagnostic in the family that IS advice: the styles are
+        // present, the surprise is which of two sources wins.
+        expect(
+            isAdvisoryDiagnostic(
+                '[csszyx] "sz" takes precedence over the runtime "className" on this element at src/A.tsx:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.',
+            ),
+        ).toBe(true);
+    });
+});
+
+describe('emitKeyValueDiagnostic', () => {
+    const UNKNOWN_KEY =
+        '[csszyx] Unknown property "zzz" in sz prop at src/A.tsx:1. The class is still emitted, so it styles nothing unless Tailwind serves that utility.';
+
+    /**
+     * Route one diagnostic and collect what reached the output channel.
+     *
+     * @param quiet - The resolved quiet mode for the run.
+     * @param message - The diagnostic to route.
+     * @returns Every line the channel received.
+     */
+    function emitted(quiet: 'off' | 'nudges' | 'all', message: string): string[] {
+        const lines: string[] = [];
+        emitKeyValueDiagnostic(quiet, message, 'src/A.tsx', line => lines.push(line));
+        return lines;
+    }
+
+    it('prints a key diagnostic with the module that produced it', () => {
+        // The gap this closes: it reached neither the missing-css channel nor
+        // the advisory one, so a build said nothing about it at all.
+        const lines = emitted('off', UNKNOWN_KEY);
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toContain('src/A.tsx');
+        expect(lines[0]).toContain('Unknown property "zzz"');
+    });
+
+    it('still prints when only usage nudges are muted', () => {
+        // A dead class is wrong output, not a nudge about how csszyx is used.
+        expect(emitted('nudges', UNKNOWN_KEY)).toHaveLength(1);
+    });
+
+    it('says nothing when every csszyx warning is muted', () => {
+        expect(emitted('all', UNKNOWN_KEY)).toEqual([]);
+    });
+
+    it('leaves an advisory to the advisory channel', () => {
+        expect(
+            emitted(
+                'off',
+                '[csszyx] "sz" takes precedence over the runtime "className" on this element at src/A.tsx:1.',
+            ),
+        ).toEqual([]);
+    });
+
+    it('leaves a missing-css fallback to its own channel', () => {
+        expect(
+            emitted('off', 'szr fallback at 4:43: function call `t()` result is unknown'),
+        ).toEqual([]);
     });
 });
 

@@ -10,6 +10,7 @@
  */
 
 // Internal imports for use in initRuntime
+import { version as packageVersion } from '../package.json';
 import { enableCSRRecovery as _enableCSRRecovery } from './hydration.js';
 
 // Export SzInput type from concatenate
@@ -120,7 +121,7 @@ export {
 /**
  * Runtime version.
  */
-export const VERSION = '0.0.0';
+export const VERSION: string = packageVersion;
 
 /**
  * Runtime configuration options.

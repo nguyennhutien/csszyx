@@ -7,10 +7,12 @@
  * @module @csszyx/types
  */
 
+import { version as packageVersion } from '../package.json';
+
 /**
  * Package version.
  */
-export const VERSION = '0.0.0';
+export const VERSION: string = packageVersion;
 
 export type { Szs, SzsCompiled, SzsProps } from '@csszyx/compiler';
 // Re-export all compiler types

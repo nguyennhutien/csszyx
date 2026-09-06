@@ -54,7 +54,7 @@ export interface ManglePreserveMatcher {
  * @param className - A csszyx-owned class.
  * @returns The index after its last variant separator.
  */
-function utilityStart(className: string): number {
+export function utilityStart(className: string): number {
     let depth = 0;
     let start = 0;
     for (let index = 0; index < className.length; index += 1) {
