@@ -411,9 +411,9 @@ export const BOX_ROLE_PREFIXES: ReadonlyArray<readonly [string, BoxRoleEntry]> =
  * opacity modifier — so the runtime consults this set rather than splitting on
  * `/` in general.
  */
-export const BOX_ROLE_SCOPE_MARKERS: ReadonlySet<string> = new Set([
-    "group",
-    "peer",
+export const BOX_ROLE_SCOPE_MARKERS: ReadonlyMap<string, BoxRoleEntry> = new Map([
+    ["group", { role: "outer", category: "scope" }],
+    ["peer", { role: "outer", category: "scope" }],
 ]);
 
 /**

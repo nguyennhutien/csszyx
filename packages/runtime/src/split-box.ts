@@ -225,11 +225,8 @@ function inspectUncached(token: string): TokenInfo | undefined {
     // everywhere else (`bg-red-500/50`).
     const slash = base.indexOf('/');
     if (slash > 0) {
-        const marker = base.slice(0, slash);
-        if (BOX_ROLE_SCOPE_MARKERS.has(marker)) {
-            const entry = BOX_ROLE_TOKENS.get(marker);
-            if (entry) return { ...entry, base, value: base.slice(slash + 1) };
-        }
+        const marker = BOX_ROLE_SCOPE_MARKERS.get(base.slice(0, slash));
+        if (marker) return { ...marker, base, value: base.slice(slash + 1) };
     }
 
     const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(base.split('-', 1)[0] as string) ?? [];
