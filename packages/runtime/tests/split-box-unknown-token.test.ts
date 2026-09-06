@@ -54,6 +54,23 @@ describe('placing an unrecognised token by hand', () => {
         }
     });
 
+    it('still honours an object selector in the same list', () => {
+        // Accepting a literal class name did not replace the selector forms a
+        // placement list already took — an object selector is still validated,
+        // and still matches by category and value.
+        expect(splitBox('overflow-hidden p-4', { inner: [{ overflow: 'hidden' }] })).toEqual({
+            outer: '',
+            inner: 'overflow-hidden p-4',
+        });
+    });
+
+    it('ignores an empty name in a placement list', () => {
+        // An empty string would otherwise match every token whose base is also
+        // empty, which is how a malformed `md:` reaches a node it was not sent
+        // to.
+        expect(splitBox('md: p-4', { inner: [''] })).toEqual({ outer: 'md:', inner: 'p-4' });
+    });
+
     it('matches the whole name only, never a prefix', () => {
         // csszyx knows nothing about an unrecognised token's structure, so
         // reading `card` as a prefix of `card-lg` would be a guess.
