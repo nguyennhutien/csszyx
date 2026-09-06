@@ -1,20 +1,25 @@
 /**
- * csszyx audit - Performance analysis and statistics.
+ * csszyx audit - reports what a build left in dist/.
+ *
+ * The report carries no mangle tier distribution. A token cannot be read back
+ * for the tier that produced it: tiers 2 and 3 are both two characters, tiers
+ * 4 and 5 both three (packages/core/src/encoder.rs), so counting lengths would
+ * report every tier-3 class as tier 2 on any build past 52 classes. The counts
+ * would have to come from the allocator that assigned the tokens, which means
+ * the build emitting them rather than this command deriving them.
  */
 
 import path from 'node:path';
 
 import fs from 'fs-extra';
 
-import { colors, printBar, printHeader, printInfo, printSection } from '../utils/terminal-ui.js';
+import { printHeader, printInfo, printSection } from '../utils/terminal-ui.js';
 
 /**
  *
  */
 export interface AuditOptions {
     json?: boolean;
-    watch?: boolean;
-    compare?: string;
     cwd?: string;
 }
 
@@ -22,13 +27,10 @@ export interface AuditOptions {
  *
  */
 interface AuditStats {
-    totalClasses: number;
-    tierDistribution: Record<number, number>;
-    bundleSavings: {
-        originalHTML: number;
-        mangledHTML: number;
-        originalCSS: number;
-        mangledCSS: number;
+    /** Byte sizes of the first HTML and CSS asset in the build output, as built. */
+    output: {
+        html: { file: string; bytes: number } | null;
+        css: { file: string; bytes: number } | null;
     };
 }
 
@@ -48,63 +50,25 @@ export async function audit(options: AuditOptions = {}): Promise<void> {
 
     printHeader('csszyx Audit Report');
 
-    // Mangle Statistics
-    printSection('📊 Mangle Statistics');
-    if (stats.totalClasses === 0) {
-        console.log('  Tier distribution not yet available.');
-        console.log('  Run a production build first, then re-run csszyx audit.');
-    } else {
-        console.log(`  Total Classes:       ${stats.totalClasses}`);
-        console.log(`  Mangled Classes:     ${stats.totalClasses} (100%)`);
-        console.log('  Unmangled Classes:   0');
-        console.log();
-        console.log('  Tier Distribution:');
-
-        const tierNames = [
-            'Tier 1 (a-Z)',
-            'Tier 2 (a0-Z9)',
-            'Tier 3 (aa-ZZ)',
-            'Tier 4 (a00-Z99)',
-            'Tier 5 (aaa+)',
-        ];
-
-        for (let i = 1; i <= 5; i++) {
-            const count = stats.tierDistribution[i] || 0;
-            const percent = stats.totalClasses ? Math.round((count / stats.totalClasses) * 100) : 0;
-            const bar = printBar([count], stats.totalClasses, 20);
-
-            console.log(
-                `  • ${tierNames[i - 1].padEnd(18)} ${String(count).padStart(3)} (${String(percent).padStart(2)}%)  ${colors.dim(bar)}`,
-            );
-        }
+    // Build output, as built. What mangling did to the payload is not
+    // something a dist directory can answer after the fact: the build weighs
+    // the CSS and the map before and after, gzipped, and prints the verdict.
+    printSection('📦 Build Output');
+    for (const asset of [stats.output.html, stats.output.css]) {
+        if (asset) console.log(`  ${asset.file.padEnd(20)} ${formatBytes(asset.bytes)}`);
     }
-
-    // Bundle Size Impact
-    printSection('💾 Bundle Size Impact');
-    if (stats.bundleSavings.originalHTML > 0) {
-        const htmlSavings = stats.bundleSavings.originalHTML - stats.bundleSavings.mangledHTML;
-        const htmlPercent = Math.round((htmlSavings / stats.bundleSavings.originalHTML) * 100);
-
-        console.log(`  Original HTML:       ${formatBytes(stats.bundleSavings.originalHTML)}`);
-        console.log(
-            `  Mangled HTML:        ${formatBytes(stats.bundleSavings.mangledHTML)}   ↓ ${htmlPercent}% (-${formatBytes(htmlSavings)})`,
-        );
-        console.log();
+    if (!stats.output.html && !stats.output.css) {
+        console.log('  No built HTML or CSS found under dist/.');
     }
-
-    if (stats.bundleSavings.originalCSS > 0) {
-        const cssSavings = stats.bundleSavings.originalCSS - stats.bundleSavings.mangledCSS;
-        const cssPercent = Math.round((cssSavings / stats.bundleSavings.originalCSS) * 100);
-
-        console.log(`  Original CSS:        ${formatBytes(stats.bundleSavings.originalCSS)}`);
-        console.log(
-            `  Mangled CSS:         ${formatBytes(stats.bundleSavings.mangledCSS)}   ↓ ${cssPercent}% (-${formatBytes(cssSavings)})`,
-        );
-    }
-
     console.log();
-    printInfo('💡 Tip: Enable runtime lite bundle for -1.1KB');
-    console.log("     → import { _sz } from 'csszyx/lite'");
+    printInfo(
+        'Mangling hides class names; it does not shrink a gzip-served payload. The production ' +
+            'build measures the trade and prints a `[csszyx] production.mangle …` line when the ' +
+            'map outweighs the shorter names.',
+    );
+    printInfo(
+        "Tip: `csszyx/lite` is the compiler-free runtime entry — import { _sz } from 'csszyx/lite'.",
+    );
 }
 
 /**
@@ -115,14 +79,7 @@ export async function audit(options: AuditOptions = {}): Promise<void> {
 async function collectStats(cwd: string): Promise<AuditStats> {
     // Initialize default stats
     const stats: AuditStats = {
-        totalClasses: 0,
-        tierDistribution: {},
-        bundleSavings: {
-            originalHTML: 0,
-            mangledHTML: 0,
-            originalCSS: 0,
-            mangledCSS: 0,
-        },
+        output: { html: null, css: null },
     };
 
     // Try to read from dist folder
@@ -140,21 +97,14 @@ async function collectStats(cwd: string): Promise<AuditStats> {
         .filter(f => String(f).endsWith('.css'));
 
     if (htmlFiles.length > 0) {
-        const htmlContent = fs.readFileSync(path.join(distDir, String(htmlFiles[0])), 'utf-8');
-        stats.bundleSavings.mangledHTML = Buffer.byteLength(htmlContent);
-        // Estimate original size (mangled classes are typically 60% smaller)
-        stats.bundleSavings.originalHTML = Math.round(stats.bundleSavings.mangledHTML * 1.67);
+        const file = String(htmlFiles[0]);
+        stats.output.html = { file, bytes: fs.statSync(path.join(distDir, file)).size };
     }
 
     if (cssFiles.length > 0) {
-        const cssContent = fs.readFileSync(path.join(distDir, String(cssFiles[0])), 'utf-8');
-        stats.bundleSavings.mangledCSS = Buffer.byteLength(cssContent);
-        stats.bundleSavings.originalCSS = Math.round(stats.bundleSavings.mangledCSS * 1.71);
+        const file = String(cssFiles[0]);
+        stats.output.css = { file, bytes: fs.statSync(path.join(distDir, file)).size };
     }
-
-    // Tier distribution requires the csszyx mangle map (injected by the build plugin
-    // into the HTML as data-sz-manifest). Not available from dist files alone — this
-    // will be implemented when the manifest reader is added in a future release.
 
     return stats;
 }

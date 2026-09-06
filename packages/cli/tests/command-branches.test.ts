@@ -3,7 +3,7 @@
  * silent / default-output paths, byte formatting, the doctor checksum-missing
  * branch, check's pattern + no-sz skip, scan-collisions' unclosed-span handling,
  * and pure helpers (isColorValue, sz-codegen null/array, flattenColors DEFAULT,
- * printBar default width, explain null literal).
+ * explain null literal).
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -23,7 +23,6 @@ import {
     generateTypeDeclarations,
 } from '../src/generator/type-generator.js';
 import { flattenColors } from '../src/scanner/tailwind-scanner.js';
-import { printBar } from '../src/utils/terminal-ui.js';
 
 const dirs: string[] = [];
 function tempRoot(): string {
@@ -54,7 +53,7 @@ describe('audit byte formatting', () => {
         await audit({ cwd });
         const out = logs.join('\n');
         expect(out).toContain('KB');
-        expect(out).toContain('Original HTML');
+        expect(out).toContain('index.html');
     });
 });
 
@@ -191,12 +190,6 @@ describe('pure helper branches', () => {
             'brand',
             'brand-500',
         ]);
-    });
-
-    it('printBar uses the default width when called with two arguments', () => {
-        const bar = printBar([2, 2], 4);
-        expect(bar).toHaveLength(20); // default width
-        expect(bar).toContain('■');
     });
 
     it('explainSz resolves a null literal value', () => {

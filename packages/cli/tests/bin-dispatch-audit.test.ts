@@ -34,6 +34,6 @@ describe('bin audit dispatch (real command)', () => {
             await new Promise(resolve => setTimeout(resolve, 25));
         }
 
-        expect(JSON.parse(logs.join('\n'))).toHaveProperty('totalClasses');
+        expect(JSON.parse(logs.join('\n'))).toHaveProperty('output');
     }, 15000);
 });

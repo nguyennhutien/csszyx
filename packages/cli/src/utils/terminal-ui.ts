@@ -93,15 +93,3 @@ export const spinner = {
         spinner.warn(colors.warn(text));
     },
 };
-
-/**
- * Renders a simple bar chart string using filled/empty squares.
- * @param values - Array of numeric values to sum
- * @param max - The maximum value for the bar scale
- * @param width - The character width of the bar
- * @returns A string of filled and empty squares
- */
-export function printBar(values: number[], max: number, width: number = 20): string {
-    const filled = Math.round((values.reduce((a, b) => a + b, 0) / max) * width);
-    return '■'.repeat(filled) + '□'.repeat(width - filled);
-}

@@ -232,8 +232,9 @@ in order:
    token of every class allocated after the preserved ones, and the checksum with
    it, exactly as adding a class would.
 
-`scan-collisions` reports the candidates and prints a paste-ready `mangleExclude`;
-it does not edit your files — apply the rename, the exclude or the preserve yourself.
+[`scan-collisions`](/docs/reference/cli/#scan-collisions) reports the candidates and
+prints a paste-ready `mangleExclude`; it does not edit your files — apply the rename,
+the exclude or the preserve yourself.
 
 One more trap, with no warning attached: keep build output outside the roots
 the prescan walks. The prescan reads any source under the root as authored

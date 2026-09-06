@@ -47,7 +47,7 @@ This is the single most useful distinction in this page.
 
 | Class | Means | Dev build | Production build | `quiet: 'nudges'` | `quiet: true` |
 | --- | --- | --- | --- | --- | --- |
-| **missing output** | Classes never reached the safelist, so no build step was told to generate their CSS. The markup names utilities that do not exist. | prints | **prints** | prints | silent |
+| **missing output** | Classes never reached the safelist, so no build step was told to generate their CSS — or a key or value the compiler read emitted a class that styles nothing. The markup names utilities that do not exist. | prints | **prints** | prints | silent |
 | **usage nudge** | The classes *were* collected. The message is advice for whoever writes csszyx code. | prints | silent | silent | silent |
 
 <Aside type="caution" title="`quiet: true` hides missing output too">
@@ -177,8 +177,8 @@ barrel is followed and does not report. The other cause is
 
 A fallback at an `sz` prop is advisory: the runtime path works and the classes
 are still collected, so a production build does not print it. Only the kinds
-that mean **absent output** — `szr`, `szs`, spreads, budget bails — print in
-every mode.
+that mean **absent output** print in every mode: `szr`, `szs`, spreads, budget
+bails, and a key or value that emits a dead class.
 
 That makes the fallbacks a production log *does* list a lower bound, never a
 total. So the build closes with a count of what it held back:
@@ -211,9 +211,9 @@ The main gate is: development **and** not a browser. That means they appear in
 your dev-server terminal (build and SSR), not in the browser console. Set
 `CSSZYX_QUIET_SZ_WARNINGS=1` to mute them, or run `npx @csszyx/cli check` for a
 whole-project pass. The rows marked **browser too** use only the `NODE_ENV`
-half of that gate and do reach the console. The rows marked **production
-builds too** say a class is dead, and the bundler plugin prints them in a
-production build as well — only `quiet: true` silences them.
+half of that gate and do reach the console. Every row below says a class is
+dead, so the bundler plugin prints the whole family in a production build as
+well as a development one; only `quiet: true` silences the build's copy.
 </Aside>
 
 ### Keys
@@ -259,8 +259,8 @@ silently preserving obsolete API spellings or leaving dead classes in the DOM.
 | `[csszyx] "weight: '{value}'"{ at LOC}: Tailwind spells a numeric font weight through --font-weight-*, so "font-{value}" generates no CSS. Write weight: {value} as a number, which brackets to "font-[{value}]".` | A weight written as a string. The NUMBER form brackets for this reason. |
 | `[csszyx] fontSmoothing: '{value}' is not supported — use 'grayscale' or 'subpixel'.` | |
 | `[csszyx] fontStyle: '{value}' is not supported — Tailwind only models 'italic' and 'normal'. For oblique, use css: { fontStyle: '{value}' }.` | |
-| `[csszyx] "{key}: {value}"{ at LOC} is not a {key} value. The class "{class}" is still emitted and styles nothing, unless a rule of your own happens to match it. {key} takes one of: {values}.` | `display`, `position`, `visibility` and `isolation` only. **Production builds too.** See below. |
-| `[csszyx] "{key}"{ at LOC} is not a variant, but it holds an object, so it lowers to the class prefix "{key}:" and Tailwind generates no CSS for it. A "--*" key takes a declaration value; "container" takes true.` | The class *is* emitted. Only `--*` and `container` are reported — see below. **Production builds too.** |
+| `[csszyx] "{key}: {value}"{ at LOC} is not a {key} value. The class "{class}" is still emitted and styles nothing, unless a rule of your own happens to match it. {key} takes one of: {values}.` | `display`, `position`, `visibility` and `isolation` only. See below. |
+| `[csszyx] "{key}"{ at LOC} is not a variant, but it holds an object, so it lowers to the class prefix "{key}:" and Tailwind generates no CSS for it. A "--*" key takes a declaration value; "container" takes true.` | The class *is* emitted. Only `--*` and `container` are reported — see below. |
 | `[csszyx] "{key}" cannot take a runtime value at {LOC}: Tailwind has no utility for this key that reads a CSS variable, so the class and the variable were dropped instead of styling a different property. Name the values with szv(), or use dynamic() for open-ended data.` | Build only — a *literal* on the same key is unaffected. See below. |
 | `[csszyx] "{key}: '{value}'"{ at LOC}: Tailwind has no per-side border style, so this generated no CSS and the class is dropped. Use borderStyle: '{value}' for every side, or a number on "{key}" for the width.` | A style keyword on a side key. See below. |
 
@@ -755,8 +755,14 @@ lanes it described.
 
 ## Mangling
 
+{/* The hazard messages below are quoted as ONE line each, though the build
+prints them as paragraphs. That is deliberate: scripts/validate-warning-docs.mjs
+only checks the line carrying the `[csszyx]` prefix, so breaking a message
+across lines silently drops its finding and its remedy out of the anti-drift
+gate. Keep them on one line. */}
+
 Mangling replaces class names with short tokens. It is an **obfuscation**
-feature — see [Plugin Config](/docs/reference/config/#mangle-mangle). Two
+feature — see [Plugin Config](/docs/reference/config/#production). Two
 reports exist, both ungated.
 
 ### Hybrid hazards
@@ -832,7 +838,9 @@ worse than the names they replaced)` when shortening lost.
 
 Also: `[csszyx] mangleVars skipped component CSS variable hoist for {name}
 across {n} usages: {reason}` where `reason` is `no-lca`, `non-host-ancestor`,
-or `max-depth`.
+or `max-depth`. It is a usage nudge: the planner declined an optimisation and
+every class and variable is still emitted, so a production build holds the line
+back and counts it in the advisory total instead.
 
 ### Global variable aliasing
 

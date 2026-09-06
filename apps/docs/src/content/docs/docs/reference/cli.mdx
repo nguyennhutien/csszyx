@@ -1,0 +1,127 @@
+---
+title: CLI Commands
+description: Every csszyx command, its options and its exit code, and the page that documents each one in full.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`@csszyx/cli` installs one binary, `csszyx`.
+
+```bash
+npx csszyx <command> [options]
+```
+
+`csszyx --help` lists the commands. `csszyx --version` reads the installed
+package's own manifest, so it reports the version that is actually on disk.
+Every command except `explain` accepts `--cwd <dir>` and runs against that
+directory instead of the shell's.
+
+## Every command
+
+| Command | What it does | Documented in |
+| --- | --- | --- |
+| `init` | Detects the framework, writes the bundler config and the CSS entry, and installs the packages those files need. | [Installation](/docs/installation/) |
+| `migrate [dir]` | Rewrites `className=` and `class=` to `sz` props, and normalises legacy `sz` keys under `--keys-only`. | [Migrate from Tailwind](/docs/migrate/) |
+| `check` | Scans static `sz` props and `szv()`/`szr()` catalogs for keys that emit nothing, then asks the project's own Tailwind whether every emitted class produces CSS. | [What `check` reports](/docs/reference/warnings/#what-check-reports) |
+| `doctor` | Reports on the install itself: config file, Tailwind, packages, build output, optional tooling. | [CLI](/docs/reference/warnings/#cli) |
+| `explain <sz>` | Prints the className one `sz` object literal compiles to. `csszyx explain "{ p: 4, bg: 'blue-500' }"` prints `p-4 bg-blue-500`. | [Plugin Config](/docs/reference/config/#production) |
+| `generate-types` | Turns a Tailwind v3 `tailwind.config.js` into TypeScript declarations. Only v3 projects have a config to read. | [`generate-types` and Tailwind v3](/docs/reference/warnings/#generate-types-and-tailwind-v3) |
+| `next-prebuild [pattern]` | Seeds the Next.js Turbopack safelist and generation manifest before `next build`. Also spelled `csszyx next prebuild`. | [Installation](/docs/installation/#nextjs-turbopack-setup) |
+| `next-watch [pattern]` | Keeps that safelist current beside `next dev`. Also spelled `csszyx next watch`. | [Installation](/docs/installation/#nextjs-turbopack-setup) |
+| `audit` | Reports the built asset sizes of a `dist/` directory. | [Below](#audit) |
+| `scan-collisions` | Finds class names in the project's own CSS that a mangled token could collide with. | [Below](#scan-collisions) |
+
+## `audit`
+
+`csszyx audit` reads the `dist/` directory under the working directory and
+reports what the build left there.
+
+```bash
+npx csszyx audit
+```
+
+One section prints. **📦 Build Output** lists the first HTML file and the first
+CSS file found under `dist/`, each at its size on disk. No figure here is
+scaled, compared or derived: `statSync` answers and the report prints what it
+said. A project that builds somewhere else — a Next.js app, for one — gets
+`No built HTML or CSS found under dist/.`
+
+The report closes with two notes. Mangling hides class names and does not shrink
+a gzip-served payload; the production build weighs that trade and prints its own
+verdict. And `csszyx/lite` is the compiler-free runtime entry.
+
+<Aside type="note" title="The saving that is no longer printed">
+Through 0.16.0 the report opened with an `Original HTML` figure and a percentage
+saved. The figure was the built size multiplied by 1.67, and it printed whether
+or not the build had mangling on. Both are gone. The measured answer comes from
+the build itself, which weighs the CSS and the map before and after: see
+[Mangling made the build bigger](/docs/reference/warnings/#mangling-made-the-build-bigger).
+</Aside>
+
+| Option | Effect |
+| --- | --- |
+| `--json` | Prints `{ output }` and nothing else. `output.html` and `output.css` are `null` when `dist/` holds no asset of that kind. |
+| `--cwd <dir>` | The directory holding `dist/`. |
+
+## `scan-collisions`
+
+`csszyx scan-collisions` reads the project's own stylesheets and names the
+classes a mangled token could collide with. It is the command the hybrid hazard
+warning points at.
+
+```bash
+npx csszyx scan-collisions
+npx csszyx scan-collisions --pattern "src/**/*.css"
+```
+
+A mangle token is base62 and never contains `-` or `_`, so only a short and
+purely alphanumeric class name can equal one. The scan reports a name of one
+letter followed by at most two alphanumerics and passes over every other name.
+Comments, `url(…)` contents and quoted strings are blanked first, so a `.z`
+written in a comment and an `@import 'theme.css'` are not read as selectors.
+
+Both forms of the report — the clean line and the list with its paste-ready
+`mangleExclude` — are in [CLI](/docs/reference/warnings/#cli).
+
+| Option | Effect |
+| --- | --- |
+| `--pattern <glob>` | Replaces the default glob, `**/*.{css,scss,sass,less}`. |
+| `--ignore <glob>` | Appended to the defaults below. Repeatable. |
+| `--cwd <dir>` | Project root to scan. |
+
+Ignored by default:
+
+```text
+**/node_modules/**   **/.next/**          **/.vercel/**
+**/dist/**           **/.nuxt/**          **/.turbo/**
+**/build/**          **/.astro/**         **/storybook-static/**
+**/out/**            **/.output/**        **/playwright-report/**
+**/coverage/**       **/.svelte-kit/**
+```
+
+Every one of those holds CSS a tool wrote, and generated CSS cannot collide with
+a mangled token because nothing renders it into the app. A coverage report is
+the case that set the list: run in a package that had once collected coverage,
+the command reported 32 names, of which 30 were istanbul's HTML report — `.L0`
+through `.L9`, `.kwd`, `.pun`, `.typ` — and the paste-ready `mangleExclude`
+reserved 34 token names on behalf of a gitignored artefact.
+
+The command edits nothing. Which fix to apply — rename, `mangleExclude` or
+`manglePreserve` — is decided in [Plugin Config](/docs/reference/config/#production).
+
+## Exit codes
+
+Every command exits `0` unless a row below applies.
+
+| Command | Exits non-zero when |
+| --- | --- |
+| `check` | Any finding, or a path passed to `--files` that names a source file it could not read. |
+| `scan-collisions` | Any collision-prone class name was found, which makes it a CI gate. |
+| `explain` | The argument is not a statically readable `sz` object literal. |
+| `migrate` | A file failed to migrate, or the native engine is not installed. |
+| `generate-types` | No Tailwind config was found, or Tailwind v3 is not resolvable. |
+| `next-prebuild` | The pattern matched no files, or seeding the safelist threw. |
+| `next-watch` | The watcher could not start, including on an out-of-range `--debounce-ms`, or it failed while running. |
+
+`audit`, `doctor` and `init` report and never fail the shell. `doctor` closes
+with `Found {n} issue(s)` and still exits `0`.

@@ -215,14 +215,10 @@ cli.command('explain <sz>', 'Print the Tailwind className an sz object compiles 
 // audit command
 cli.command('audit', 'Analyze mangling performance')
     .option('--json', 'Output as JSON')
-    .option('--watch', 'Live updates')
-    .option('--compare <dir>', 'Compare with previous build')
     .option('--cwd <dir>', 'Current working directory')
     .action(async options => {
         await (await import('./commands/audit.js')).audit({
             json: options.json,
-            watch: options.watch,
-            compare: options.compare,
             cwd: options.cwd,
         });
     });

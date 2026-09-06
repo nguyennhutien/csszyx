@@ -116,26 +116,35 @@ describe('audit', () => {
         const cwd = tempRoot();
         await audit({ cwd, json: true });
         const stats = JSON.parse(logs.join('\n'));
-        expect(stats).toHaveProperty('totalClasses');
+        expect(stats).toHaveProperty('output');
+        expect(stats).not.toHaveProperty('totalClasses');
+        expect(stats).not.toHaveProperty('tierDistribution');
     });
 
-    it('prints the human report with the not-built-yet guidance', async () => {
+    it('prints the human report and says when dist holds nothing to weigh', async () => {
         const { logs } = captureLogs();
         const cwd = tempRoot();
         await audit({ cwd });
-        expect(logs.join('\n')).toContain('Run a production build first');
+        expect(logs.join('\n')).toContain('No built HTML or CSS found under dist/.');
     });
 
-    it('measures bundle savings from build output', async () => {
+    it('reports the built asset sizes as measured, never an estimated original', async () => {
+        // The command once printed an "Original HTML" figure computed by
+        // multiplying the built size by 1.67 — a saving invented from nothing,
+        // and the number a consumer quoted when enabling mangling for size.
         const { logs } = captureLogs();
         const cwd = tempRoot();
         mkdirSync(join(cwd, 'dist'));
-        writeFileSync(join(cwd, 'dist/index.html'), '<html><body class="a b"></body></html>');
+        const html = '<html><body class="a b"></body></html>';
+        writeFileSync(join(cwd, 'dist/index.html'), html);
         writeFileSync(join(cwd, 'dist/app.css'), '.a{p:1}.b{m:2}');
         await audit({ cwd });
         const output = logs.join('\n');
-        expect(output).toContain('Original HTML');
-        expect(output).toContain('Original CSS');
+        expect(output).toContain(`index.html           ${Buffer.byteLength(html)} B`);
+        expect(output).toContain('app.css');
+        expect(output).not.toContain('Original');
+        expect(output).not.toContain('↓');
+        expect(output).toContain('does not shrink');
     });
 });
 
