@@ -118,9 +118,11 @@ two reasons above, the line is the price and you can ignore it.
 
 The stylesheet ships beside the markup, so `.z{padding:1rem}` reads plainly to
 anyone who opens it. csszyx renames its own utility classes and nothing else —
-your component names, routes, data attributes and copy are untouched, and the
-utility vocabulary carries no product meaning to begin with. The census in the
-page maps every token back to the name it came from.
+your component names, routes, data attributes and copy are untouched. Most of
+that vocabulary is Tailwind's and says nothing about your product; a theme
+token such as `bg-brand-500` or an arbitrary value does say something, and the
+build does not tell the two apart when it picks what to rename. The census in
+the page maps every token back to the name it came from either way.
 
 Do not present mangling to a security reviewer as a confidentiality measure.
 When a reviewer finds the census tag in your `dist/`,

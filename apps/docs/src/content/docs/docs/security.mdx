@@ -177,9 +177,11 @@ the census raises none.
 their tokens — `{"p-4":"z","bg-red-500":"y"}`. The stylesheet beside it already
 says the same thing in readable form (`.z{padding:1rem}`), so the census adds no
 information that the page was keeping. It contains no application data, no
-route, no source path and no identifier of yours. Mangling is name
-obfuscation, and it is not a confidentiality control — do not present it as one
-to a reviewer. The recovery manifest is the tag with something of yours in it:
+route and no source path. It does contain your theme token names — a class
+such as `bg-brand-500` is yours — but every one of them is already a selector
+in the stylesheet next to it, so the census repeats them rather than reveals
+them. Mangling is name obfuscation, and it is not a confidentiality control —
+do not present it as one to a reviewer. The recovery manifest is the tag with something of yours in it:
 it names components. Drop `szRecover` from a component and its name leaves the
 manifest with it.
 
