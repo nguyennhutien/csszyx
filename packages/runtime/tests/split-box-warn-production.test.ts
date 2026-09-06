@@ -21,7 +21,7 @@ vi.mock('../src/dev-warn.js', () => ({
     resetDevWarnCache: () => {},
 }));
 
-const { splitBox } = await import('../src/split-box.js');
+const { has, splitBox } = await import('../src/split-box.js');
 
 /** A className that trips all three warnings, unique per test to skip the memo. */
 const TRIPWIRE = 'rounded-xl overflow-y-auto hidden';
@@ -65,5 +65,25 @@ describe('the placement-name warning in a production build', () => {
         process.env.NODE_ENV = 'development';
         splitBox('dev-only-2 md:hidden', { outer: ['md:hidden'] });
         expect(devWarn).toHaveBeenCalledWith(expect.stringContaining("'md:hidden' never matches"));
+    });
+});
+
+describe('the selector warnings in a production build', () => {
+    // `devWarn` refuses to print in production on its own, but a bundler only
+    // removes what it can prove dead, and a call with a string argument is not
+    // that: measured, the unknown-selector text shipped in every production
+    // bundle. The guard has to sit around the message, not inside the helper.
+    it('are never reached', () => {
+        process.env.NODE_ENV = 'production';
+        has('p-4', 'nonsense-prod');
+        has('p-4', 'text:nonsense');
+        has('p-4', ['p'] as unknown as string);
+        expect(devWarn).not.toHaveBeenCalled();
+    });
+
+    it('are reached everywhere else', () => {
+        process.env.NODE_ENV = 'development';
+        has('p-4', 'nonsense-dev');
+        expect(devWarn).toHaveBeenCalledWith(expect.stringContaining('is not a category'));
     });
 });

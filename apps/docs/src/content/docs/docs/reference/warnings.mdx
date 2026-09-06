@@ -1146,6 +1146,18 @@ Two helpers take two different inputs, and mixing them up says so:
 `splitBoxSz partitions sz objects, not raw class strings — use splitBox() for {value}.`
 `splitBox` takes a class string; `splitBoxSz` takes an `sz` object.
 
+### A qualified selector reached the sz twins
+
+```text
+[csszyx] '{selector}' names a property, which the sz twins do not read: an sz key has no value to classify. help: pass '{name}'.
+```
+
+`'text:color'` qualifies a *class* selector by the property its value names —
+`text-red-500` is a colour, `text-sm` a size. An sz key is a property already
+(`color`, `text`), so there is no value to classify and the form means
+nothing on `hasSz`, `pickSz`, `omitSz` and `splitBoxSz`. The message says what
+to pass instead of pretending the selector does not exist.
+
 ### A peer rule kept a class on the frame
 
 ```text

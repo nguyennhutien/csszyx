@@ -489,28 +489,19 @@ function stringSelectorIsKnown(selector: string, family: SelectorFamily): boolea
  */
 function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class'): boolean {
     if (Array.isArray(selector)) {
-        devWarn(
-            'has/pick/omit take one selector, not an array; pass the selectors one at a time, ' +
-                'or use splitBox whose inner/outer options take a list.',
-        );
+        warnUnusableSelector({ kind: 'array' });
         return false;
     }
     if (typeof selector === 'object') {
         const categories = Object.keys(selector);
         if (categories.length === 0) {
-            devWarn(
-                'an empty selector {} matches nothing; name a category and value, ' +
-                    'e.g. { overflow: "hidden" }.',
-            );
+            warnUnusableSelector({ kind: 'empty' });
             return false;
         }
         if (categories.length > 1) {
             // A token belongs to one category, so two entries can never both
             // agree on it.
-            devWarn(
-                'an object selector names one category and value; ' +
-                    `{ ${categories.join(', ')} } can never match a single token.`,
-            );
+            warnUnusableSelector({ kind: 'multi', categories });
             return false;
         }
         const category = categories[0] as string;
@@ -520,13 +511,17 @@ function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class
         }
         return true;
     }
-    const qualified = family === 'class' ? splitQualified(selector) : null;
+    const qualified = splitQualified(selector);
+    // The qualified form reads the property a CLASS value names. An sz key has
+    // no value to classify, so on the sz twins it means nothing — and the docs
+    // put the form on the shared `BoxSelector` type, so the answer has to be
+    // what to pass, not that the selector does not exist.
+    if (qualified && family === 'sz') {
+        warnUnusableSelector({ kind: 'sz-qualified', selector, name: qualified[0] });
+        return false;
+    }
     if (qualified && !MERGE_GROUP_PROPERTIES.has(qualified[1])) {
-        devWarn(
-            `'${qualified[1]}' is not a property csszyx tells apart; '${selector}' matches nothing. ` +
-                `help: the properties are ${[...MERGE_GROUP_PROPERTIES].join(', ')} — ` +
-                "classify('<a class>') shows the one a class carries.",
-        );
+        warnUnusableSelector({ kind: 'property', selector, property: qualified[1] });
         return false;
     }
     const name = qualified ? qualified[0] : selector;
@@ -535,31 +530,94 @@ function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class
     return false;
 }
 
+/** The shapes of selector {@link warnUnusableSelector} explains. */
+type UnusableSelector =
+    | { readonly kind: 'array' }
+    | { readonly kind: 'empty' }
+    | { readonly kind: 'multi'; readonly categories: readonly string[] }
+    | { readonly kind: 'property'; readonly selector: string; readonly property: string }
+    | { readonly kind: 'sz-qualified'; readonly selector: string; readonly name: string };
+
 /**
- * Say that a name matches nothing, and what would.
+ * Say why a selector cannot be used.
+ *
+ * Every message sits inside the `NODE_ENV` block on purpose. `devWarn`
+ * already refuses to print in production, but a bundler removes only what it
+ * can prove dead, and a call with a string argument is not that: measured,
+ * the unknown-selector text shipped in every production bundle, 157 gzip
+ * bytes of it. Inside the block the whole switch is unreachable and leaves
+ * with it.
+ *
+ * @param why - Which shape was refused, with what the message needs to name.
+ */
+function warnUnusableSelector(why: UnusableSelector): void {
+    if (process.env.NODE_ENV !== 'production') {
+        switch (why.kind) {
+            case 'array':
+                devWarn(
+                    'has/pick/omit take one selector, not an array; pass the selectors one at a time, ' +
+                        'or use splitBox whose inner/outer options take a list.',
+                );
+                break;
+            case 'empty':
+                devWarn(
+                    'an empty selector {} matches nothing; name a category and value, ' +
+                        'e.g. { overflow: "hidden" }.',
+                );
+                break;
+            case 'multi':
+                devWarn(
+                    'an object selector names one category and value; ' +
+                        `{ ${why.categories.join(', ')} } can never match a single token.`,
+                );
+                break;
+            case 'property':
+                devWarn(
+                    `'${why.property}' is not a property csszyx tells apart; '${why.selector}' matches nothing. ` +
+                        `help: the properties are ${[...MERGE_GROUP_PROPERTIES].join(', ')} — ` +
+                        "classify('<a class>') shows the one a class carries.",
+                );
+                break;
+            case 'sz-qualified':
+                devWarn(
+                    `'${why.selector}' names a property, which the sz twins do not read: an sz key has no value to classify. ` +
+                        `help: pass '${why.name}'.`,
+                );
+                break;
+        }
+    }
+}
+
+/**
+ * Say that a name matches nothing, and what would. Guarded the same way as
+ * {@link warnUnusableSelector}, for the same 157 bytes.
  *
  * @param name - The category or prefix the caller wrote.
  */
 function warnUnknownSelector(name: string): void {
-    const hint = CATEGORY_HINTS[name];
-    if (hint === undefined) {
+    if (process.env.NODE_ENV !== 'production') {
+        const hint = CATEGORY_HINTS[name];
+        if (hint === undefined) {
+            devWarn(
+                `'${name}' is not a category or class prefix csszyx knows; ` +
+                    "classify('<a class>') shows the category a class belongs to.",
+            );
+            return;
+        }
+        // `color` is both the word people reach for and a property the
+        // qualified form can name, so the hint offers the narrower selector
+        // as well: `text` alone would also catch `text-sm`.
+        if (MERGE_GROUP_PROPERTIES.has(name)) {
+            devWarn(
+                `'${name}' is not a category or class prefix csszyx knows; ` +
+                    `the category is '${hint}', and '${hint}:${name}' matches that property only.`,
+            );
+            return;
+        }
         devWarn(
-            `'${name}' is not a category or class prefix csszyx knows; ` +
-                "classify('<a class>') shows the category a class belongs to.",
+            `'${name}' is not a category or class prefix csszyx knows; the category is '${hint}'.`,
         );
-        return;
     }
-    // `color` is both the word people reach for and a property the qualified
-    // form can name, so the hint offers the narrower selector as well: `text`
-    // alone would also catch `text-sm`.
-    if (MERGE_GROUP_PROPERTIES.has(name)) {
-        devWarn(
-            `'${name}' is not a category or class prefix csszyx knows; ` +
-                `the category is '${hint}', and '${hint}:${name}' matches that property only.`,
-        );
-        return;
-    }
-    devWarn(`'${name}' is not a category or class prefix csszyx knows; the category is '${hint}'.`);
 }
 
 /**
