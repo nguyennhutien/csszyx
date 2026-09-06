@@ -665,6 +665,17 @@ function hasSplitOverrides(options: SplitBoxOptions): boolean {
 }
 
 /**
+ * Entries in the whole-partition memo. Test-only: the memo's one observable
+ * property from outside is whether a className got in, and every public call
+ * hands back a fresh object, so nothing else can tell a hit from a miss.
+ *
+ * @returns The number of cached partitions.
+ */
+export function _splitMemoSize(): number {
+    return splitMemo.size;
+}
+
+/**
  * Partition a className string into `{ outer, inner }` at the CSS box-model
  * border line. Nothing is lost and every token keeps its variant prefix: each
  * lands in exactly one bucket, except the timing group (`transition-*`,
@@ -686,12 +697,17 @@ export function splitBox(className: string, options: SplitBoxOptions = {}): Spli
     let cached = splitMemo.get(className);
     if (cached === undefined) {
         cached = splitBoxUncached(className, options, bridge);
-        // Admission stop at the cap, not a clear: clearing flushed every hot
-        // entry whenever cold traffic crossed the cap, while overflow calls
-        // pay only their own uncached split under either policy.
-        if (splitMemo.size < SPLIT_MEMO_MAX) {
-            splitMemo.set(className, cached);
+        // Clear at the cap rather than stop admitting. Admission-stop kept the
+        // first 512 classNames for the life of the page and never cached a
+        // later one: measured, the same className repeated after the cap cost
+        // 625 ns per call, forever, against 83 ns for one admitted before it —
+        // a component first rendered late, a modal say, paid the uncached split
+        // on every render. A clear costs each hot entry one uncached split per
+        // 512 cold classNames, which is bounded; the other policy's cost was not.
+        if (splitMemo.size >= SPLIT_MEMO_MAX) {
+            splitMemo.clear();
         }
+        splitMemo.set(className, cached);
     }
     // A FRESH result object per call, never the cached one: `SplitBoxResult`'s
     // fields are mutable and callers have always received an object they own.
