@@ -265,6 +265,7 @@ A `BoxSelector` is whatever is most convenient:
 'overflow' | 'bg' | 'text' // a category
 'px' | 'bg'                // a class-prefix (matches px-2, bg-red-500, …)
 { overflow: 'hidden' }     // a category + value pair (most precise)
+'text:color'               // any of the above, qualified by a CSS property
 ```
 
 The `splitBox` placement lists also accept a **literal base class name**. Use
@@ -303,7 +304,7 @@ csszyx owns the **truth** (a class's box-role + category); you own the **rule**.
 Four pure helpers expose the truth — no rule-DSL, no hardcoded vocabulary:
 
 ```ts
-classify(token)             // → { role, category } | undefined
+classify(token)             // → { role, category, property? } | undefined
 has(classes, selector)      // → boolean   ("is there an overflow class?")
 pick(classes, selector)     // → string    (keep only matching tokens)
 omit(classes, selector)     // → string    (drop matching tokens)
@@ -318,6 +319,53 @@ classify('totally-custom');// undefined  (not a csszyx utility)
 
 They see through variants and markers too: `classify('md:px-2')` and
 `classify('px-2!')` both report `padding`.
+
+### Which property, not just which category
+
+Some prefixes cover more than one CSS property: `text-red-500` is a colour and
+`text-sm` is a font size, yet both are the `text` category. For those, `classify`
+also names the property — the same answer `szcn` merges by, so the two halves of
+csszyx never disagree about a token:
+
+```ts
+classify('text-red-500'); // { role: 'inner', category: 'text', property: 'color' }
+classify('text-sm');      // { role: 'inner', category: 'text', property: 'size' }
+classify('font-bold');    // { role: 'inner', category: 'text', property: 'weight' }
+classify('bg-cover');     // { role: 'outer', category: 'bg',   property: 'size' }
+```
+
+Token names your app declares in its Tailwind `@theme` are read the same way a
+built-in one is, because the build registers them (see
+[the theme group registry](/docs/reference/runtime/#theme-group-registry)). With
+`--color-brand` and `--text-huge` in the theme, `classify('text-brand')` reports
+`color` and `classify('text-huge')` reports `size`.
+
+`property` is **absent** — never `null`, never empty — when the prefix means
+exactly one property (`p-4` is padding whatever the value) and when the value
+does not confidently name one (`border-t-2` sets a width on one side; szcn keeps
+both classes there rather than guess, and `classify` says nothing rather than
+guess). It never affects which node a token is routed to: it is extra
+information about a class, not a vote on where the class goes.
+
+Any selector can be qualified with a property, so a rule can address text
+colours without touching text sizes:
+
+```ts
+pick('text-red-500 text-sm font-bold', 'text:color'); // 'text-red-500'
+omit('text-red-500 text-sm', 'text:color');           // 'text-sm'
+pick('font-bold font-sans', 'font:weight');           // 'font-bold'
+has('bg-cover', 'outer:size');                        // true
+```
+
+The half before the colon is an ordinary selector — a role, a category or a
+class prefix — so `'text:color'` and `'font:weight'` each read the way the class
+itself reads. The half after it must be one of the eighteen properties csszyx
+tells apart; any other word is reported in development, because
+`pick(cls, 'text:colour')` matching nothing silently is exactly the kind of
+mistake that costs an afternoon.
+
+`property` is additive: an equality assertion on `classify`'s whole result in
+your own tests needs the new field where it applies.
 
 ### Categories
 
@@ -361,10 +409,12 @@ ever writes Tailwind strings, import the half you use:
 import { classify, has, omit, pick, splitBox } from '@csszyx/runtime/split';
 ```
 
-Under a bundler that tree-shakes, this saves almost nothing — 5.3&nbsp;KB gz
-against the main entry's 5.4&nbsp;KB, because the main entry already shakes.
-It matters under `require()`, where nothing shakes at all: 22.5&nbsp;KB gz
-against 30.9&nbsp;KB.
+Under a bundler that tree-shakes, this saves almost nothing — 7.2&nbsp;KB gz
+against the main entry's 7.3&nbsp;KB, because the main entry already shakes.
+It matters under `require()`, where nothing shakes at all: 25.2&nbsp;KB gz
+against 31.2&nbsp;KB. About 1.9&nbsp;KB of either number is the value
+classifier `property` reads — the tables `szcn` already ships, so an app that
+uses `szcn` pays nothing extra for it.
 
 ### What counts as a class here
 
