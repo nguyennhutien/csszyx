@@ -33,14 +33,25 @@ const repoRoot = join(fileURLToPath(import.meta.url), '..', '..');
 const corpusDir = join(repoRoot, 'scripts/corpus');
 
 /**
- * Fewest served utilities the corpora may yield before the run is treated as
- * broken rather than clean. Without it this gate has the failure shape it
- * exists to catch: if the oracle stops answering — a Tailwind upgrade changing
- * `build`'s semantics, a corpus that failed to load — every candidate reads as
- * "not served", nothing is checked, and the gate reports success. 1459 today;
- * the floor sits below that so an edited corpus does not trip it.
+ * How many served utilities the corpora yield today, pinned exactly.
+ *
+ * Without it this gate has the failure shape it exists to catch: if the oracle
+ * stops answering — a Tailwind upgrade changing `build`'s semantics, a corpus
+ * that failed to load — every candidate reads as "not served", nothing is
+ * checked, and a run that measured nothing reports success.
+ *
+ * A floor was the first attempt and it is not enough: any aggregate ceiling
+ * catches TOTAL blindness while letting partial blindness through, and partial
+ * is the likelier failure. With a floor of 1400 against 1459 served, sixty
+ * utilities could stop being measured and the gate would still print 100%.
+ * Only a pinned expectation notices one.
+ *
+ * The cost is a deliberate bump whenever the corpora or the installed Tailwind
+ * change what is served, which is the same bargain every `gen:*:check` in this
+ * repo already makes — and a Tailwind upgrade that changes which classes exist
+ * is a thing to read, not a thing to absorb silently.
  */
-export const MIN_SERVED = 1400;
+export const EXPECTED_SERVED = 1459;
 
 /** @returns {Map<string, string[]>} Corpus file name → its class lines. */
 export function readCorpora(dir = corpusDir) {
@@ -105,35 +116,64 @@ async function tailwindOracle() {
     };
 }
 
-async function main() {
-    const { classify } = await import('../packages/runtime/src/split-box.js');
-    const { served, classified, gaps } = evaluate(readCorpora(), await tailwindOracle(), classify);
+/**
+ * Turn a measurement into an exit code and the lines to print.
+ *
+ * Separated from {@link main} so the decision — including the exit code, which
+ * is the only part CI reads — is reachable from a test. A gate whose failure
+ * path never runs under test can lose its `process.exitCode` and go on printing
+ * the failure while reporting success.
+ *
+ * @param measurement - Counts and gaps from {@link evaluate}.
+ * @param expectedServed - How many utilities the corpora should have served.
+ * @returns The exit code, the normal output, and the error output.
+ */
+export function verdict({ served, classified, gaps }, expectedServed = EXPECTED_SERVED) {
     const pct = served === 0 ? 0 : (100 * classified) / served;
-    console.log(
+    const out = [
         `[check-classify-coverage] ${classified}/${served} served utilities classified (${pct.toFixed(1)}%).`,
-    );
+    ];
 
-    if (served < MIN_SERVED) {
-        console.error(
-            `[check-classify-coverage] only ${served} utilities were served, below the floor of ${MIN_SERVED}.\n` +
-                'The oracle stopped answering — this run checked nothing. Do not read it as a pass.',
-        );
-        process.exitCode = 1;
-        return;
+    // Before the gaps, because a run that measured nothing HAS no gaps: read in
+    // the other order, total blindness is indistinguishable from a clean pass.
+    if (served !== expectedServed) {
+        return {
+            exitCode: 1,
+            out,
+            err: [
+                `[check-classify-coverage] ${served} utilities were served, expected ${expectedServed}.`,
+                'Fewer means the run checked less than it should have — do not read it as a pass.',
+                'If the corpora or the installed Tailwind deliberately changed what is served,',
+                'update EXPECTED_SERVED here and say why.',
+            ],
+        };
     }
 
     if (gaps.length > 0) {
-        console.error(
-            `[check-classify-coverage] ${gaps.length} served utilities are unclassified:`,
-        );
-        for (const { token, file } of gaps) console.error(`  ${token}  (${file})`);
-        console.error(
-            'Add the prefix to TAILWIND_ONLY_PREFIXES in scripts/gen-box-role-map.mjs, then\n' +
-                'run pnpm gen:box-role. If the utility is deliberately out of scope, say so in\n' +
+        return {
+            exitCode: 1,
+            out,
+            err: [
+                `[check-classify-coverage] ${gaps.length} served utilities are unclassified:`,
+                ...gaps.map(({ token, file }) => `  ${token}  (${file})`),
+                'Add the prefix to TAILWIND_ONLY_PREFIXES in scripts/gen-box-role-map.mjs, then',
+                'run pnpm gen:box-role. If the utility is deliberately out of scope, say so in',
                 '.agent/decisions/0021-atomic-only-class-vocabulary.md before silencing it here.',
-        );
-        process.exitCode = 1;
+            ],
+        };
     }
+
+    return { exitCode: 0, out, err: [] };
+}
+
+async function main() {
+    const { classify } = await import('../packages/runtime/src/split-box.js');
+    const { exitCode, out, err } = verdict(
+        evaluate(readCorpora(), await tailwindOracle(), classify),
+    );
+    for (const line of out) console.log(line);
+    for (const line of err) console.error(line);
+    process.exitCode = exitCode;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
