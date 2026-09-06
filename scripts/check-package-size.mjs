@@ -72,10 +72,17 @@ export const SIZE_BUDGETS = [
         // The second step is package weight only, not app weight, for the same
         // reason the 2026-09-05 note above gives: bundled with
         // `process.env.NODE_ENV` defined as production the message text is gone.
+        //
+        // Raised again from 25,088 after five principal reviews of the same
+        // work, measured 2026-09-06 from 24,783: 24,975 with the warning for a
+        // placement written as `md:hidden` (+192) and 25,183 with the cap on the
+        // development-warning cache announcing itself instead of going quiet
+        // (+208). Both are message text under the same `NODE_ENV` guard as the
+        // rest, so again package weight rather than app weight.
         name: '@csszyx/runtime export closure',
         kind: 'package-exports',
         target: 'packages/runtime',
-        maxGzipBytes: 25_088,
+        maxGzipBytes: 25_472,
     },
     {
         name: '@csszyx/dynamic export closure',
