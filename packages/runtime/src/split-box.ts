@@ -32,7 +32,11 @@ import {
 import { decodeToken, type MangleBridge, mangleBridge } from './class-codec.js';
 import type { SzInput } from './concatenate.js';
 import { devWarn } from './dev-warn.js';
-import { classifyAmbiguousValue, getSzcnGroupsGeneration } from './merge-groups.js';
+import {
+    classifyAmbiguousValue,
+    getSzcnGroupsGeneration,
+    MERGE_GROUP_PROPERTIES,
+} from './merge-groups.js';
 
 export type { BoxRole };
 
@@ -249,7 +253,15 @@ function inspectUncached(token: string): TokenInfo | undefined {
     const exact = BOX_ROLE_TOKENS.get(base);
     if (exact) {
         const value = exact.value ?? base;
-        return { ...exact, base, value, property: propertyOf(exact.prefix, value) };
+        // Exact sugar can still belong to an ambiguous family (text-ellipsis).
+        // Derive that family from its spelling, as the merge classifier does.
+        const prefix = exact.prefix ?? (base.split('-', 1)[0] as string);
+        return {
+            ...exact,
+            base,
+            value,
+            property: propertyOf(prefix, base.slice(prefix.length + 1)),
+        };
     }
 
     // `group/item` names WHICH ancestor a `group-hover/item:` variant reads; the
@@ -345,12 +357,12 @@ const CATEGORY_HINTS: Readonly<Record<string, string>> = {
 };
 
 /**
- * A property half is a plain lowercase word (`color`, `size`, `weight`), which
+ * A property half is a plain word (`color`, `size`, `weight`), which
  * is what tells a qualified selector from a CLASS that happens to carry a colon
  * in an arbitrary value — `bg-[url(https://x)]` is a legitimate literal name a
  * placement list may address.
  */
-const PROPERTY_HALF = /^[a-z]+$/;
+const PROPERTY_HALF = /^[a-z]+$/i;
 
 /**
  * Split `'<selector>:<property>'` into its two halves, or `null` if the string
@@ -453,11 +465,15 @@ function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class
         }
         return true;
     }
-    // Only the half before the colon is checked. The property half is not, for
-    // the same reason the value half of `{ overflow: 'hidden' }` is not: a
-    // vocabulary of values does not live in these tables, and a value that
-    // matches nothing simply matches nothing.
     const qualified = family === 'class' ? splitQualified(selector) : null;
+    if (qualified && !MERGE_GROUP_PROPERTIES.has(qualified[1])) {
+        devWarn(
+            `'${qualified[1]}' is not a property csszyx tells apart; '${selector}' matches nothing. ` +
+                `help: the properties are ${[...MERGE_GROUP_PROPERTIES].join(', ')} — ` +
+                "classify('<a class>') shows the one a class carries.",
+        );
+        return false;
+    }
     const name = qualified ? qualified[0] : selector;
     if (stringSelectorIsKnown(name, family)) return true;
     warnUnknownSelector(name);
@@ -471,12 +487,24 @@ function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class
  */
 function warnUnknownSelector(name: string): void {
     const hint = CATEGORY_HINTS[name];
-    devWarn(
-        `'${name}' is not a category or class prefix csszyx knows; ` +
-            (hint === undefined
-                ? "classify('<a class>') shows the category a class belongs to."
-                : `the category is '${hint}'.`),
-    );
+    if (hint === undefined) {
+        devWarn(
+            `'${name}' is not a category or class prefix csszyx knows; ` +
+                "classify('<a class>') shows the category a class belongs to.",
+        );
+        return;
+    }
+    // `color` is both the word people reach for and a property the qualified
+    // form can name, so the hint offers the narrower selector as well: `text`
+    // alone would also catch `text-sm`.
+    if (MERGE_GROUP_PROPERTIES.has(name)) {
+        devWarn(
+            `'${name}' is not a category or class prefix csszyx knows; ` +
+                `the category is '${hint}', and '${hint}:${name}' matches that property only.`,
+        );
+        return;
+    }
+    devWarn(`'${name}' is not a category or class prefix csszyx knows; the category is '${hint}'.`);
 }
 
 /**

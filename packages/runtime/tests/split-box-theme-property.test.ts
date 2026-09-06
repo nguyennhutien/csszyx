@@ -204,14 +204,25 @@ describe('a selector can name the property', () => {
         warn.mockRestore();
     });
 
-    it('does not warn about a property half it has never heard of', () => {
-        // The value half of `{ overflow: 'hidden' }` is not checked either: a
-        // value that matches nothing simply matches nothing.
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        expect(has('text-red-500', 'text:colour')).toBe(false);
-        expect(warn).not.toHaveBeenCalled();
-        warn.mockRestore();
-    });
+    it.each(['text:colour', 'stroke:paint', 'text:fontSize'])(
+        'diagnoses the unknown property half in %s',
+        selector => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            try {
+                expect(has('text-red-500', selector)).toBe(false);
+                expect(pick('text-red-500', selector)).toBe('');
+                expect(omit('text-red-500', selector)).toBe('text-red-500');
+                expect(warn).toHaveBeenCalledExactlyOnceWith(
+                    expect.stringContaining(
+                        `'${selector.split(':')[1]}' is not a property csszyx tells apart`,
+                    ),
+                );
+                expect(warn.mock.calls[0]?.[0]).toContain('help: the properties are');
+            } finally {
+                warn.mockRestore();
+            }
+        },
+    );
 
     it('still warns when the half before the colon names nothing', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -219,4 +230,13 @@ describe('a selector can name the property', () => {
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('widht'));
         warn.mockRestore();
     });
+});
+
+it.each(['clip', 'ellipsis'])('classifies text-%s by the shared overflow group', value => {
+    expect(classify(`text-${value}`)).toStrictEqual({
+        role: 'inner',
+        category: 'text',
+        property: 'overflow',
+    });
+    expect(pick(`md:text-${value} text-red-500`, 'text:overflow')).toBe(`md:text-${value}`);
 });
