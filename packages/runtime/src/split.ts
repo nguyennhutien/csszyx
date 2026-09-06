@@ -5,9 +5,13 @@
  * `classify`/`has`/`pick`/`omit`/`splitBox` take a className STRING and answer
  * from the generated box-role table. Their sz-object siblings
  * (`classifySzKey`, `splitBoxSz`, …) answer the same questions about an sz
- * object, which needs the compiler's key vocabulary — a dependency a project
- * that only ever writes Tailwind class strings should not have to resolve.
- * This entry publishes the first half without the second.
+ * object, which needs the compiler's key vocabulary. This entry publishes the
+ * first half without the second.
+ *
+ * It does NOT drop `@csszyx/compiler` from the graph: both halves live in one
+ * module, whose top-level import of `isForbiddenSzKey` and friends survives
+ * into `dist/split.cjs`. A bundler shakes it out of an ESM app; `require()`
+ * does not. The win here is the shipped surface, not the dependency list.
  *
  * Measured with esbuild, minified, `NODE_ENV=production`, both entries from the
  * same build. Under ESM the barrel already tree-shakes and this entry saves

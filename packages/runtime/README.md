@@ -113,7 +113,9 @@ it is, rather than guessing which element half of its declarations belong to.
 For a project that only reads className strings, `@csszyx/runtime/split`
 publishes these five without the sz-object adapters — worth 27% under
 `require()`, and within 76 B of the main entry under a bundler that
-tree-shakes.
+tree-shakes. It is a smaller entry, not a dependency-free one:
+`@csszyx/compiler` stays in the graph because both halves of the toolkit
+live in one module.
 
 ### `stripSzProps(props)` — safe prop forwarding
 
