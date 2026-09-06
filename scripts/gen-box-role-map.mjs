@@ -651,10 +651,13 @@ const SCOPE_MARKERS = { role: 'outer', category: 'scope', tokens: ['group', 'pee
  * @param prefixes - Prefix map built from `PROPERTY_MAP`, mutated in place.
  * @param tokens - Exact-token map built from `PROPERTY_MAP`, mutated in place.
  */
-function addTailwindOnly(prefixes, tokens) {
+export function addTailwindOnly(prefixes, tokens) {
     for (const { role, category, prefixes: names } of TAILWIND_ONLY_PREFIXES) {
         for (const name of names) {
-            if (prefixes.has(name)) {
+            // Both tables, the same way the marker rows check below: a future
+            // exact-token sugar spelled `end` would otherwise slip past a check
+            // that only asked the prefix table.
+            if (tokens.has(name) || prefixes.has(name)) {
                 throw new Error(
                     `[gen-box-role-map] "${name}" is listed as Tailwind-only but csszyx emits it; drop the row`,
                 );
