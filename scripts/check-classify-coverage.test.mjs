@@ -55,11 +55,12 @@ test('reads the pinned corpora as one list per file', () => {
 test('a run that checked nothing exits non-zero even though it found no gaps', () => {
     const { exitCode, err } = verdict({ served: 12, classified: 12, gaps: [] });
     assert.equal(exitCode, 1);
-    assert.match(err.join('\n'), /do not read it as a pass/);
+    assert.match(err.join('\n'), /not gated/);
 });
 
+const clean = { served: EXPECTED_SERVED, classified: EXPECTED_SERVED - 1 };
+
 test('a run with an unclassified served utility exits non-zero', () => {
-    const clean = { served: EXPECTED_SERVED, classified: EXPECTED_SERVED - 1 };
     const { exitCode, err } = verdict({ ...clean, gaps: [{ token: 'x-1', file: 'a.txt' }] });
     assert.equal(exitCode, 1);
     assert.match(err.join('\n'), /x-1/);
@@ -85,5 +86,39 @@ test('a blind run is reported as blind rather than as clean', () => {
     // A run whose oracle stopped answering has no gaps BECAUSE it checked
     // nothing, so the gap test alone would call it a pass. Order matters.
     const { err } = verdict({ served: 0, classified: 0, gaps: [] });
-    assert.match(err.join('\n'), /do not read it as a pass/);
+    assert.match(err.join('\n'), /not gated/);
+});
+
+test('explains BOTH directions, because the count can move either way', () => {
+    // Compare the explanation, not the first line — that one carries the count,
+    // so it differs by design.
+    const explain = served => verdict({ served, classified: 1, gaps: [] }).err.slice(1).join('\n');
+    const more = explain(EXPECTED_SERVED + 7);
+    assert.match(more, /More means/);
+    assert.match(more, /fewer means/);
+    assert.equal(
+        more,
+        explain(EXPECTED_SERVED - 7),
+        'one explanation covers both, so neither direction reads as a contradiction',
+    );
+});
+
+test('names the file to edit and how to tell which input moved', () => {
+    const { err } = verdict({ served: 3, classified: 3, gaps: [] });
+    const text = err.join('\n');
+    assert.match(text, /scripts\/check-classify-coverage\.mjs/);
+    assert.match(text, /scripts\/corpus\//);
+    assert.match(text, /tailwindcss/);
+});
+
+test('does not point at a path the public repository does not carry', () => {
+    // `.agent/` is gitignored here — the AI docs live on their own branch — so
+    // a contributor told to edit a file there finds nothing.
+    const all = [
+        verdict({ served: 3, classified: 3, gaps: [] }),
+        verdict({ ...clean, gaps: [{ token: 'x-1', file: 'a.txt' }] }),
+    ]
+        .flatMap(v => v.err)
+        .join('\n');
+    assert.doesNotMatch(all, /\.agent\//);
 });

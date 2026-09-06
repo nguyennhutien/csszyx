@@ -15,8 +15,9 @@
  * did not — so prose accidentally scraped into a corpus (`should`, `and`), a
  * project's own `@utility` (`no-scrollbar`, `cn-menu-target`) and a third-party
  * plugin's utilities (`fade-out-0`) all fall out on their own. Those are out of
- * scope by decision, not by omission:
- * `.agent/decisions/0021-atomic-only-class-vocabulary.md`.
+ * scope by decision, not by omission: the toolkit's vocabulary is atomic
+ * utilities, and a class declaring several properties at once has no correct
+ * side to be routed to.
  *
  * `group` and `peer` are the converse case — classified here, served by nobody,
  * because they emit no CSS at all. This gate cannot see them, so their routing
@@ -99,8 +100,15 @@ async function tailwindOracle() {
     const compile = mod.compile ?? mod.default?.compile;
     const compiler = await compile('@import "tailwindcss";', {
         base,
-        loadStylesheet: async id => {
-            const p = join(base, id === 'tailwindcss' ? 'index.css' : id);
+        // Resolved through the module system rather than joined onto a
+        // directory, the way this repo's other Tailwind-reading scripts do
+        // (`check-var-hostile-keys.mjs`, `check-szcn-collision-blocklist.mjs`).
+        // Tailwind only ever calls this with our own literal import today —
+        // measured — but a hand-joined id is one upstream change away from
+        // reading outside the package, and this runs in CI.
+        loadStylesheet: async (id, from) => {
+            const spec = id === 'tailwindcss' ? 'tailwindcss/index.css' : id;
+            const p = require.resolve(spec, { paths: [from ?? base] });
             return { path: p, base: dirname(p), content: readFileSync(p, 'utf8') };
         },
     });
@@ -142,9 +150,12 @@ export function verdict({ served, classified, gaps }, expectedServed = EXPECTED_
             out,
             err: [
                 `[check-classify-coverage] ${served} utilities were served, expected ${expectedServed}.`,
-                'Fewer means the run checked less than it should have — do not read it as a pass.',
-                'If the corpora or the installed Tailwind deliberately changed what is served,',
-                'update EXPECTED_SERVED here and say why.',
+                'More means something new is being served; fewer means this run checked less than',
+                'it should have. Either way the percentage above was not gated — do not read it',
+                'as a pass.',
+                'help: `git diff scripts/corpus/` and the installed tailwindcss version say which',
+                'of the two moved. If the change is deliberate, set EXPECTED_SERVED in',
+                'scripts/check-classify-coverage.mjs and say why in the commit.',
             ],
         };
     }
@@ -157,8 +168,9 @@ export function verdict({ served, classified, gaps }, expectedServed = EXPECTED_
                 `[check-classify-coverage] ${gaps.length} served utilities are unclassified:`,
                 ...gaps.map(({ token, file }) => `  ${token}  (${file})`),
                 'Add the prefix to TAILWIND_ONLY_PREFIXES in scripts/gen-box-role-map.mjs, then',
-                'run pnpm gen:box-role. If the utility is deliberately out of scope, say so in',
-                '.agent/decisions/0021-atomic-only-class-vocabulary.md before silencing it here.',
+                'run pnpm gen:box-role. If the utility is deliberately out of scope — a custom',
+                'utility declaring several properties has no correct side — say so in the commit',
+                'before silencing it here.',
             ],
         };
     }
