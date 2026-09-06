@@ -50,3 +50,20 @@ describe('the warning analysis in a production build', () => {
         expect(devWarn).toHaveBeenCalled();
     });
 });
+
+describe('the placement-name warning in a production build', () => {
+    // The placement list is filtered before the partition runs and takes the
+    // uncached path every time, so this is a separate guard from the one on
+    // the warning analysis above and needs its own pin.
+    it('is never reached', () => {
+        process.env.NODE_ENV = 'production';
+        splitBox('prod-only-2 md:hidden', { outer: ['md:hidden'] });
+        expect(devWarn).not.toHaveBeenCalled();
+    });
+
+    it('is reached everywhere else', () => {
+        process.env.NODE_ENV = 'development';
+        splitBox('dev-only-2 md:hidden', { outer: ['md:hidden'] });
+        expect(devWarn).toHaveBeenCalledWith(expect.stringContaining("'md:hidden' never matches"));
+    });
+});
