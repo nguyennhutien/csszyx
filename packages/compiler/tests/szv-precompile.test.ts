@@ -619,8 +619,10 @@ describe('the single-dimension picker', () => {
         const code = result.code ?? source;
         const single = /__szvPick1\(([^)]*)\)/.exec(code);
         const full = /__szvPick\(([^)]*)\)/.exec(code);
+        const matched = single ?? full;
+        const helper = single ? 'pick1' : 'pick';
         return {
-            helper: single ? 'pick1' : full ? 'pick' : 'none',
+            helper: matched ? helper : 'none',
             args: ((single ?? full)?.[1] ?? '').replace(/\s+/g, ''),
             usesSzvPick: result.usesSzvPick === true,
             usesSzvPick1: result.usesSzvPick1 === true,

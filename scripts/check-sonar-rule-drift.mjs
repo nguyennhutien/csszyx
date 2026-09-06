@@ -62,6 +62,7 @@ const FOREIGN_RULES = new Map([
     // typescript-eslint rule prints the same sentence SonarCloud does, verified
     // on a deliberate violation before this pair went in.
     ['S6551', '@typescript-eslint/no-base-to-string'],
+    ['S3358', 'sonarjs/no-nested-conditional'],
 ]);
 
 /**

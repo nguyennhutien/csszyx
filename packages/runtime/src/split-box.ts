@@ -507,7 +507,8 @@ function splitBoxUncached(
             inner.push(token);
             continue;
         }
-        ((info ? info.role : fallback) === 'outer' ? outer : inner).push(token);
+        const role = info ? info.role : fallback;
+        (role === 'outer' ? outer : inner).push(token);
     }
 
     if (process.env.NODE_ENV !== 'production') {
