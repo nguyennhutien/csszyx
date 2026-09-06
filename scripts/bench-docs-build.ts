@@ -556,10 +556,10 @@ function formatBaselineComparison(
         return 'not measured successfully';
     }
     const parts: string[] = [`${formatMs(baseline.medianMs)} (Tailwind only)`];
-    if (oxc && oxc.status === 'measured') {
+    if (oxc?.status === 'measured') {
         parts.push(`csszyx oxc is ${formatRatio(oxc.medianMs / baseline.medianMs)} vs baseline`);
     }
-    if (rust && rust.status === 'measured') {
+    if (rust?.status === 'measured') {
         parts.push(`csszyx rust is ${formatRatio(rust.medianMs / baseline.medianMs)} vs baseline`);
     }
     return parts.join('; ');
@@ -581,7 +581,7 @@ function formatFloor(floor: BuildStats | undefined, baseline: BuildStats | undef
         return 'not measured successfully';
     }
     const parts: string[] = [`${formatMs(floor.medianMs)} (Astro/Vite/React only)`];
-    if (baseline && baseline.status === 'measured') {
+    if (baseline?.status === 'measured') {
         const tailwindAdd = baseline.medianMs - floor.medianMs;
         parts.push(`Tailwind adds ${formatMs(tailwindAdd)} over floor`);
     }
@@ -609,12 +609,9 @@ function formatShareBreakdown(
 ): string {
     if (
         floor?.status !== 'measured' ||
-        !baseline ||
-        baseline.status !== 'measured' ||
-        !oxc ||
-        oxc.status !== 'measured' ||
-        !rust ||
-        rust.status !== 'measured'
+        baseline?.status !== 'measured' ||
+        oxc?.status !== 'measured' ||
+        rust?.status !== 'measured'
     ) {
         return '';
     }

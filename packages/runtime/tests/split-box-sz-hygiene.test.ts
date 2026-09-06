@@ -75,3 +75,16 @@ describe('the twins refuse what the class toolkit refuses', () => {
         expect(said()).toContain('array');
     });
 });
+
+describe('a qualified selector on the sz twins', () => {
+    // `'text:color'` qualifies a CLASS selector by the property its value names.
+    // An sz key has no value to classify, so the form means nothing here — and
+    // the docs put it on the shared `BoxSelector` type, so a reader who tries
+    // it must be told what to pass, not that the selector does not exist.
+    it('is refused with the class-only reason and the form to pass instead', () => {
+        expect(pickSz({ color: 'red', text: 'sm' }, 'text:color')).toEqual({});
+        expect(said()).toContain("'text:color'");
+        expect(said()).toContain("pass 'text'");
+        expect(said()).not.toContain('is not a category or class prefix');
+    });
+});

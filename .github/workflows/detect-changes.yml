@@ -144,6 +144,11 @@ jobs:
               # (scripts/gen-key-tests.mjs → sz-key-cases.json); a snippet edit
               # can make the committed fixture stale, so it must run the suite.
               - 'docs/specs/snippets/**'
+              # The pinned class corpora feed three gates that only run in the
+              # test job — corpus:check, check:emitted-classes and
+              # check:classify-coverage. A refresh that touches nothing else
+              # would otherwise skip the very job that reads it.
+              - 'scripts/corpus/**'
               # The coverage workflow decides what the coverage numbers are and now
               # enforces them. Left out, a change to it rides in on a pull request
               # where the job it changes never runs, and main is the first place

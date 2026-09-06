@@ -63,6 +63,7 @@ const FOREIGN_RULES = new Map([
     // on a deliberate violation before this pair went in.
     ['S6551', '@typescript-eslint/no-base-to-string'],
     ['S3358', 'sonarjs/no-nested-conditional'],
+    ['S6582', '@typescript-eslint/prefer-optional-chain'],
 ]);
 
 /**

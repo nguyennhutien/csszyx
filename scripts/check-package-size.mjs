@@ -87,10 +87,16 @@ export const SIZE_BUDGETS = [
         // edge: +657 on the closure, and the entry itself goes from 5,337 to
         // 7,239 gzip bytes for a consumer that uses nothing else. An app that
         // already uses `szcn` has those tables in its bundle and pays nothing.
+        //
+        // Raised again from 26,176 for the peer-consumer routing and its
+        // warning, measured 2026-09-06 at 26,155 — 21 bytes under. Two builds
+        // of the same source measured 40 bytes apart earlier the same day, so
+        // 21 bytes of headroom is inside the noise between a local build and
+        // CI's; the budget is set the usual ~300 above the measurement.
         name: '@csszyx/runtime export closure',
         kind: 'package-exports',
         target: 'packages/runtime',
-        maxGzipBytes: 26_176,
+        maxGzipBytes: 26_496,
     },
     {
         name: '@csszyx/dynamic export closure',

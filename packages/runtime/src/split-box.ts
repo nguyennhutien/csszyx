@@ -104,6 +104,11 @@ interface TokenInfo extends Classification {
     readonly value: string;
     /** Declared on both nodes rather than routed to one (`transition-*`). */
     readonly both?: boolean;
+    /**
+     * The side the base belongs to, when a sibling-bound variant forced the
+     * token off it. Read by the development warning only.
+     */
+    readonly movedFrom?: BoxRole;
 }
 
 /**
@@ -243,7 +248,56 @@ function inspect(token: string, bridge: MangleBridge | undefined): TokenInfo | u
  * @returns Token info, or `undefined` if unowned.
  */
 function inspectUncached(token: string): TokenInfo | undefined {
-    const base = normalizeBase(stripVariant(token));
+    const info = classifyBase(normalizeBase(stripVariant(token)));
+    // A `peer-*` rule reaches its target through the general sibling
+    // combinator, and the inner node is a CHILD of the outer one — a sibling of
+    // nothing the author wrote. Whatever side the base belongs to, the only
+    // node where such a rule can match is the outer one: on the inner node it
+    // is dead, and a `not-peer-*` rule there is worse, permanently on, because
+    // the negation of a match that cannot happen is always true. The category
+    // stays, so a category query still finds the token.
+    if (info?.role === 'inner' && !info.both && hasPeerVariant(token)) {
+        return { ...info, role: 'outer', movedFrom: 'inner' };
+    }
+    return info;
+}
+
+/**
+ * Whether a variant chain carries a `peer-*` variant or its `not-peer-*` form.
+ * Measured on `tailwindcss@4.3.3`, every served `peer-*` variant compiles to
+ * the general sibling combinator; `group-*`, `has-*` and `in-*` do not. Walks
+ * top-level `:` only, the way {@link stripVariant} does, so an arbitrary
+ * variant that merely mentions peer inside its brackets is left alone.
+ *
+ * @param token - A single class token, variants intact.
+ * @returns `true` when one of its variants is sibling-bound.
+ */
+function hasPeerVariant(token: string): boolean {
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < token.length; i++) {
+        const ch = token[i];
+        if (ch === '[' || ch === '(') depth++;
+        else if (ch === ']' || ch === ')') depth--;
+        else if (ch === ':' && depth === 0) {
+            if (token.startsWith('peer-', start) || token.startsWith('not-peer-', start))
+                return true;
+            start = i + 1;
+        }
+    }
+    // What follows the last colon is the base, not a variant.
+    return false;
+}
+
+/**
+ * Classify a base utility — variants and markers already stripped — from the
+ * generated tables. See {@link inspectUncached} for the one thing layered on
+ * top of the tables.
+ *
+ * @param base - The normalised base utility.
+ * @returns Token info, or `undefined` if unowned.
+ */
+function classifyBase(base: string): TokenInfo | undefined {
     if (!base) return undefined;
 
     // A token built from one closed value of a prefixed key carries that value
@@ -435,28 +489,19 @@ function stringSelectorIsKnown(selector: string, family: SelectorFamily): boolea
  */
 function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class'): boolean {
     if (Array.isArray(selector)) {
-        devWarn(
-            'has/pick/omit take one selector, not an array; pass the selectors one at a time, ' +
-                'or use splitBox whose inner/outer options take a list.',
-        );
+        warnUnusableSelector({ kind: 'array' });
         return false;
     }
     if (typeof selector === 'object') {
         const categories = Object.keys(selector);
         if (categories.length === 0) {
-            devWarn(
-                'an empty selector {} matches nothing; name a category and value, ' +
-                    'e.g. { overflow: "hidden" }.',
-            );
+            warnUnusableSelector({ kind: 'empty' });
             return false;
         }
         if (categories.length > 1) {
             // A token belongs to one category, so two entries can never both
             // agree on it.
-            devWarn(
-                'an object selector names one category and value; ' +
-                    `{ ${categories.join(', ')} } can never match a single token.`,
-            );
+            warnUnusableSelector({ kind: 'multi', categories });
             return false;
         }
         const category = categories[0] as string;
@@ -466,13 +511,17 @@ function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class
         }
         return true;
     }
-    const qualified = family === 'class' ? splitQualified(selector) : null;
+    const qualified = splitQualified(selector);
+    // The qualified form reads the property a CLASS value names. An sz key has
+    // no value to classify, so on the sz twins it means nothing — and the docs
+    // put the form on the shared `BoxSelector` type, so the answer has to be
+    // what to pass, not that the selector does not exist.
+    if (qualified && family === 'sz') {
+        warnUnusableSelector({ kind: 'sz-qualified', selector, name: qualified[0] });
+        return false;
+    }
     if (qualified && !MERGE_GROUP_PROPERTIES.has(qualified[1])) {
-        devWarn(
-            `'${qualified[1]}' is not a property csszyx tells apart; '${selector}' matches nothing. ` +
-                `help: the properties are ${[...MERGE_GROUP_PROPERTIES].join(', ')} — ` +
-                "classify('<a class>') shows the one a class carries.",
-        );
+        warnUnusableSelector({ kind: 'property', selector, property: qualified[1] });
         return false;
     }
     const name = qualified ? qualified[0] : selector;
@@ -481,31 +530,94 @@ function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class
     return false;
 }
 
+/** The shapes of selector {@link warnUnusableSelector} explains. */
+type UnusableSelector =
+    | { readonly kind: 'array' }
+    | { readonly kind: 'empty' }
+    | { readonly kind: 'multi'; readonly categories: readonly string[] }
+    | { readonly kind: 'property'; readonly selector: string; readonly property: string }
+    | { readonly kind: 'sz-qualified'; readonly selector: string; readonly name: string };
+
 /**
- * Say that a name matches nothing, and what would.
+ * Say why a selector cannot be used.
+ *
+ * Every message sits inside the `NODE_ENV` block on purpose. `devWarn`
+ * already refuses to print in production, but a bundler removes only what it
+ * can prove dead, and a call with a string argument is not that: measured,
+ * the unknown-selector text shipped in every production bundle, 157 gzip
+ * bytes of it. Inside the block the whole switch is unreachable and leaves
+ * with it.
+ *
+ * @param why - Which shape was refused, with what the message needs to name.
+ */
+function warnUnusableSelector(why: UnusableSelector): void {
+    if (process.env.NODE_ENV !== 'production') {
+        switch (why.kind) {
+            case 'array':
+                devWarn(
+                    'has/pick/omit take one selector, not an array; pass the selectors one at a time, ' +
+                        'or use splitBox whose inner/outer options take a list.',
+                );
+                break;
+            case 'empty':
+                devWarn(
+                    'an empty selector {} matches nothing; name a category and value, ' +
+                        'e.g. { overflow: "hidden" }.',
+                );
+                break;
+            case 'multi':
+                devWarn(
+                    'an object selector names one category and value; ' +
+                        `{ ${why.categories.join(', ')} } can never match a single token.`,
+                );
+                break;
+            case 'property':
+                devWarn(
+                    `'${why.property}' is not a property csszyx tells apart; '${why.selector}' matches nothing. ` +
+                        `help: the properties are ${[...MERGE_GROUP_PROPERTIES].join(', ')} — ` +
+                        "classify('<a class>') shows the one a class carries.",
+                );
+                break;
+            case 'sz-qualified':
+                devWarn(
+                    `'${why.selector}' names a property, which the sz twins do not read: an sz key has no value to classify. ` +
+                        `help: pass '${why.name}'.`,
+                );
+                break;
+        }
+    }
+}
+
+/**
+ * Say that a name matches nothing, and what would. Guarded the same way as
+ * {@link warnUnusableSelector}, for the same 157 bytes.
  *
  * @param name - The category or prefix the caller wrote.
  */
 function warnUnknownSelector(name: string): void {
-    const hint = CATEGORY_HINTS[name];
-    if (hint === undefined) {
+    if (process.env.NODE_ENV !== 'production') {
+        const hint = CATEGORY_HINTS[name];
+        if (hint === undefined) {
+            devWarn(
+                `'${name}' is not a category or class prefix csszyx knows; ` +
+                    "classify('<a class>') shows the category a class belongs to.",
+            );
+            return;
+        }
+        // `color` is both the word people reach for and a property the
+        // qualified form can name, so the hint offers the narrower selector
+        // as well: `text` alone would also catch `text-sm`.
+        if (MERGE_GROUP_PROPERTIES.has(name)) {
+            devWarn(
+                `'${name}' is not a category or class prefix csszyx knows; ` +
+                    `the category is '${hint}', and '${hint}:${name}' matches that property only.`,
+            );
+            return;
+        }
         devWarn(
-            `'${name}' is not a category or class prefix csszyx knows; ` +
-                "classify('<a class>') shows the category a class belongs to.",
+            `'${name}' is not a category or class prefix csszyx knows; the category is '${hint}'.`,
         );
-        return;
     }
-    // `color` is both the word people reach for and a property the qualified
-    // form can name, so the hint offers the narrower selector as well: `text`
-    // alone would also catch `text-sm`.
-    if (MERGE_GROUP_PROPERTIES.has(name)) {
-        devWarn(
-            `'${name}' is not a category or class prefix csszyx knows; ` +
-                `the category is '${hint}', and '${hint}:${name}' matches that property only.`,
-        );
-        return;
-    }
-    devWarn(`'${name}' is not a category or class prefix csszyx knows; the category is '${hint}'.`);
 }
 
 /**
@@ -611,6 +723,17 @@ function hasSplitOverrides(options: SplitBoxOptions): boolean {
 }
 
 /**
+ * Entries in the whole-partition memo. Test-only: the memo's one observable
+ * property from outside is whether a className got in, and every public call
+ * hands back a fresh object, so nothing else can tell a hit from a miss.
+ *
+ * @returns The number of cached partitions.
+ */
+export function _splitMemoSize(): number {
+    return splitMemo.size;
+}
+
+/**
  * Partition a className string into `{ outer, inner }` at the CSS box-model
  * border line. Nothing is lost and every token keeps its variant prefix: each
  * lands in exactly one bucket, except the timing group (`transition-*`,
@@ -632,12 +755,17 @@ export function splitBox(className: string, options: SplitBoxOptions = {}): Spli
     let cached = splitMemo.get(className);
     if (cached === undefined) {
         cached = splitBoxUncached(className, options, bridge);
-        // Admission stop at the cap, not a clear: clearing flushed every hot
-        // entry whenever cold traffic crossed the cap, while overflow calls
-        // pay only their own uncached split under either policy.
-        if (splitMemo.size < SPLIT_MEMO_MAX) {
-            splitMemo.set(className, cached);
+        // Clear at the cap rather than stop admitting. Admission-stop kept the
+        // first 512 classNames for the life of the page and never cached a
+        // later one: measured, the same className repeated after the cap cost
+        // 625 ns per call, forever, against 83 ns for one admitted before it —
+        // a component first rendered late, a modal say, paid the uncached split
+        // on every render. A clear costs each hot entry one uncached split per
+        // 512 cold classNames, which is bounded; the other policy's cost was not.
+        if (splitMemo.size >= SPLIT_MEMO_MAX) {
+            splitMemo.clear();
         }
+        splitMemo.set(className, cached);
     }
     // A FRESH result object per call, never the cached one: `SplitBoxResult`'s
     // fields are mutable and callers have always received an object they own.
@@ -768,6 +896,7 @@ function splitBoxUncached(
 
     if (process.env.NODE_ENV !== 'production') {
         warnUnplacedTokens(unplaced, fallback);
+        warnSiblingBound(outer, bridge);
         warnUnusableSplit(outer, inner, bridge);
     }
 
@@ -823,6 +952,32 @@ const STRETCHED_BASES: ReadonlySet<string> = new Set(['flex-1', 'grow']);
 
 /** Prefixes of the same, for the sized forms (`grow-0`, `basis-1/2`). */
 const STRETCHED_PREFIXES = ['grow-', 'basis-'];
+
+/**
+ * Say that a token stayed on the frame although its base belongs inside,
+ * because a `peer-*` rule can only ever match there. The frame is where the
+ * author's own DOM has the sibling; the content node is a child of it. The
+ * help names the arbitrary variant that reaches the content FROM the frame,
+ * which is the one way to get the effect where the base wanted it.
+ *
+ * @param outer - Raw tokens routed to the frame.
+ * @param bridge - The mangle bridge for this operation.
+ */
+function warnSiblingBound(outer: readonly string[], bridge: MangleBridge | undefined): void {
+    for (const token of outer) {
+        const info = inspect(token, bridge);
+        if (info?.movedFrom === undefined) continue;
+        // The variant chain is everything before the base; `stripVariant`
+        // already found the last top-level colon, so a colon inside an
+        // arbitrary value cannot split the token in the wrong place.
+        const tail = stripVariant(token);
+        const reaching = `${token.slice(0, token.length - tail.length)}[&>*]:${tail}`;
+        devWarn(
+            `splitBox: '${token}' stays on the frame although '${info.base}' belongs inside, because a peer rule reaches siblings and the content node is a child of the frame, where it could never match. ` +
+                `help: to reach the content instead, target it from the frame: '${reaching}'.`,
+        );
+    }
+}
 
 /**
  * Say that a token nothing classified was placed by the fallback rather than by

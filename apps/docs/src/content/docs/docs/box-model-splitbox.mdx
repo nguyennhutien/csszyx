@@ -385,6 +385,14 @@ the ancestor for descendant variants, while `peer` keeps the marker in
 position among the frame's siblings. `classify('group')` returns
 `{ role: 'outer', category: 'scope' }`.
 
+The *consumers* of those markers differ too. A `group-hover:p-4` reaches its
+target through descent, and the content node is a descendant, so it routes
+by its base like any other class. A `peer-hover:p-4` reaches its target as a
+*sibling* — and the content node is a child of the frame, a sibling of
+nothing you wrote — so every `peer-*` class stays on the frame whatever its
+base, with a development warning when that moved it. To reach the content
+from there, write the child variant on the frame: `peer-hover:[&>*]:p-4`.
+
 ### Upgrading an existing split
 
 The expanded Tailwind vocabulary changes results for classes that previously

@@ -577,6 +577,7 @@ function splitBox(className: string, options?: {
 
 // box-role | category | class-prefix | category+value pair,
 // optionally qualified by a property (`text:color`)
+  The qualified form reads a class token, so it applies to `splitBox`, `classify`, `has`, `pick` and `omit` only; the sz-object twins key by sz prop and take the unqualified forms.
 type BoxSelector = string | Readonly<Record<string, string>>
 ```
 

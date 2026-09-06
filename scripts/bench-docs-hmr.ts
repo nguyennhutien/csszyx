@@ -718,7 +718,7 @@ function formatFloor(
         return 'not measured successfully';
     }
     const parts: string[] = [`${formatMs(floor[field])} (Astro/Vite/React only)`];
-    if (baseline && baseline.status === 'measured') {
+    if (baseline?.status === 'measured') {
         const tailwindAdd = baseline[field] - floor[field];
         parts.push(`Tailwind adds ${formatMs(tailwindAdd)} over floor`);
     }
@@ -744,12 +744,9 @@ function formatShareBreakdown(
 ): string {
     if (
         floor?.status !== 'measured' ||
-        !baseline ||
-        baseline.status !== 'measured' ||
-        !oxc ||
-        oxc.status !== 'measured' ||
-        !rust ||
-        rust.status !== 'measured'
+        baseline?.status !== 'measured' ||
+        oxc?.status !== 'measured' ||
+        rust?.status !== 'measured'
     ) {
         return '';
     }
@@ -780,10 +777,10 @@ function formatBaselineComparison(
         return 'not measured successfully';
     }
     const parts: string[] = [`${formatMs(baseline[field])} (Tailwind only)`];
-    if (oxc && oxc.status === 'measured') {
+    if (oxc?.status === 'measured') {
         parts.push(`csszyx oxc is ${formatRatio(oxc[field] / baseline[field])} vs baseline`);
     }
-    if (rust && rust.status === 'measured') {
+    if (rust?.status === 'measured') {
         parts.push(`csszyx rust is ${formatRatio(rust[field] / baseline[field])} vs baseline`);
     }
     return parts.join('; ');
