@@ -185,6 +185,14 @@ pnpm corpus:check --require-no-broken
 echo "[verify-like-ci] Emitted-class oracle (dead classes vs real Tailwind)..."
 pnpm check:emitted-classes
 
+# The same oracle, read the other way. The gate above asks whether every class
+# csszyx EMITS still produces CSS; this one asks whether every class Tailwind
+# SERVES can be classified, because `classify` reads what the application wrote,
+# not what csszyx wrote. Three families were missing from the table for as long
+# as `classify` had shipped.
+echo "[verify-like-ci] Classify coverage (served utilities vs the box-role table)..."
+pnpm check:classify-coverage
+
 echo "[verify-like-ci] Workspace build (every playground, every package)..."
 pnpm build
 
