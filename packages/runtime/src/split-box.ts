@@ -509,16 +509,15 @@ export function splitBox(className: string, options: SplitBoxOptions = {}): Spli
  * @param base - The token's literal name, for an unowned token.
  * @param forceInner - Placement selectors pinning a token to the content node.
  * @param forceOuter - Placement selectors pinning a token to the frame.
- * @param fallback - Where a token nothing classified goes.
- * @returns The node, or `'both'` for a property declared on each.
+ * @returns The node, `'both'` for a property declared on each, or `undefined`
+ *   when no rule decided and the caller's fallback is what places the token.
  */
 function placementFor(
     info: TokenInfo | undefined,
     base: string,
     forceInner: BoxSelector[],
     forceOuter: BoxSelector[],
-    fallback: BoxRole,
-): BoxRole | 'both' {
+): BoxRole | 'both' | undefined {
     if (anyMatch(info, forceInner, base)) return 'inner';
     if (anyMatch(info, forceOuter, base)) return 'outer';
     // A transition is declared on both nodes unless the caller pinned it: it
@@ -526,7 +525,12 @@ function placementFor(
     // side. An override still wins, which is why this runs after the two
     // checks above.
     if (info?.both) return 'both';
-    return info ? info.role : fallback;
+    // `undefined` here is the whole point of the return type: it separates "the
+    // table chose this side" from "nothing chose, so the fallback did". Asking
+    // instead whether the chosen side EQUALS the fallback cannot tell a
+    // deliberate placement onto that side from an unplaced token, and reports
+    // the author's own decision back to them as a problem.
+    return info?.role;
 }
 
 /**
@@ -540,22 +544,24 @@ function placementFor(
  * unknownness, is what opens the hatch.
  *
  * @param selectors - The caller's `outer` or `inner` list, possibly absent.
- * @param tokens - The tokens of the className being split.
- * @param bridge - The mangle bridge read once by the caller.
  * @returns The selectors worth testing tokens against.
  */
-function usablePlacements(
-    selectors: BoxSelector[] | undefined,
-    tokens: readonly string[],
-    bridge: MangleBridge | undefined,
-): BoxSelector[] {
+function usablePlacements(selectors: BoxSelector[] | undefined): BoxSelector[] {
     if (selectors === undefined || selectors.length === 0) return [];
-    const unclassified = new Set(
-        tokens.filter(t => !inspect(t, bridge)).map(t => tokenBase(t, bridge)),
-    );
-    return selectors.filter(
-        sel => (typeof sel === 'string' && unclassified.has(sel)) || selectorIsUsable(sel, 'class'),
-    );
+    // A string here names a class the author wrote, not a category they are
+    // querying, so an unrecognised one is accepted rather than reported. That
+    // is the escape hatch the atomic-only scope owes them: a custom `@utility`
+    // declaring several properties has no correct side, so they must be able to
+    // pick one. It also has to hold for a className that does not carry the
+    // name — one options object serves many renders, and a render without the
+    // class is not a typo.
+    //
+    // The cost is that a misspelt CATEGORY in a placement list is now silent.
+    // It always was for a spelling that happened to exist: `{ inner: ['ring'] }`
+    // against a className with no ring classes has never said anything. Only
+    // `has`/`pick`/`omit` promise that warning, because there the string IS the
+    // query and matching nothing is the whole answer.
+    return selectors.filter(sel => (typeof sel === 'string' ? sel !== '' : selectorIsUsable(sel)));
 }
 
 /**
@@ -572,8 +578,8 @@ function splitBoxUncached(
     bridge: MangleBridge | undefined,
 ): SplitBoxResult {
     const tokens = tokenize(className);
-    const forceInner = usablePlacements(options.inner, tokens, bridge);
-    const forceOuter = usablePlacements(options.outer, tokens, bridge);
+    const forceInner = usablePlacements(options.inner);
+    const forceOuter = usablePlacements(options.outer);
     const fallback: BoxRole = options.fallback ?? 'outer';
     const outer: string[] = [];
     const inner: string[] = [];
@@ -583,8 +589,11 @@ function splitBoxUncached(
     for (const token of tokens) {
         const info = inspect(token, bridge);
         const base = info ? '' : tokenBase(token, bridge);
-        const side = placementFor(info, base, forceInner, forceOuter, fallback);
-        if (info === undefined && side === fallback) unplaced.push(base);
+        const decided = placementFor(info, base, forceInner, forceOuter);
+        // An empty base is a malformed token (`md:` on its own, a bare `!`).
+        // There is no class to name and no placement list that could hold one.
+        if (decided === undefined && base !== '') unplaced.push(base);
+        const side = decided ?? fallback;
         if (side === 'both') {
             outer.push(token);
             inner.push(token);

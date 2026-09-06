@@ -13,6 +13,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetDevWarnCache } from '../src/dev-warn.js';
+import { clearMangleRegistry, installMangleRuntime } from '../src/mangle-registry.js';
 import { omit, pick, splitBox } from '../src/split-box.js';
 
 describe('placing an unrecognised token by hand', () => {
@@ -35,6 +36,22 @@ describe('placing an unrecognised token by hand', () => {
             outer: '',
             inner: 'md:card p-4',
         });
+    });
+
+    it('pins a name the caller wrote even against a mangled className', () => {
+        // The DOM carries the mangled token, the author's options object
+        // carries the name they wrote. `tokenBase` decodes before comparing, so
+        // the placement list is written in the source spelling — the only one
+        // the author can know.
+        installMangleRuntime({ mangleMap: { widget: 'a1' }, checksum: 'x' });
+        try {
+            expect(splitBox('a1 p-4', { inner: ['widget'] })).toEqual({
+                outer: '',
+                inner: 'a1 p-4',
+            });
+        } finally {
+            clearMangleRegistry();
+        }
     });
 
     it('matches the whole name only, never a prefix', () => {
@@ -93,6 +110,35 @@ describe('warning that a token was placed by the fallback', () => {
     it('stays quiet when the caller already placed the token', () => {
         splitBox('card p-4', { inner: ['card'] });
         expect(messages()).toEqual([]);
+    });
+
+    it.each([
+        ['outer', { outer: ['placed1'] }, 'placed1'],
+        ['inner', { fallback: 'inner' as const, inner: ['placed2'] }, 'placed2'],
+    ])(
+        'stays quiet when the caller placed the token on the %s node, which is also the fallback',
+        (_side, options, token) => {
+            // The combination the first test cannot see: a deliberate placement
+            // onto the side the fallback would have chosen anyway. Reporting it
+            // does not just add noise — the help line tells the author to move
+            // the class to the OTHER node, undoing a decision they made.
+            splitBox(`${token} p-4`, options);
+            expect(messages()).toEqual([]);
+        },
+    );
+
+    it('does not name a token whose base is empty', () => {
+        // `md:` and `!` normalise to nothing, so there is no class to name and
+        // no placement list that could hold one.
+        splitBox('md: p-1');
+        expect(messages()).toEqual([]);
+    });
+
+    it('accepts a placement name the className does not happen to carry', () => {
+        // A component builds its options once and splits many classNames. A
+        // render without `shared1` must not report the name as a typo.
+        splitBox('p-4 m-2', { inner: ['shared1'] });
+        expect(warn.mock.calls.map(c => String(c[0]))).toEqual([]);
     });
 
     it('stays quiet for a className csszyx fully understands', () => {

@@ -1188,8 +1188,17 @@ Placing the token by hand is the fix, and a placement list accepts the literal
 class name for exactly this case — `{ inner: ['card'] }` works even though
 `card` is in no category. It is matched as a whole name, never as a prefix of
 `card-lg`, because csszyx knows nothing about an unrecognised token's
-structure. `has`, `pick` and `omit` keep asking category questions, so an
-unknown string there is still reported as the typo it usually is.
+structure, and it is the name you WROTE even on a mangled build, since the
+token is decoded before the comparison.
+
+A placement list therefore never reports an unknown string: it names a class,
+not a category, and one options object usually serves many classNames, so a
+render without that class is not a mistake. `has`, `pick` and `omit` are the
+other way round — there the string IS the query, so an unknown one is still
+reported as the typo it usually is.
+
+The message also never fires for a token you placed yourself, including onto
+the side the fallback would have chosen anyway.
 
 ## Editor diagnostics
 
