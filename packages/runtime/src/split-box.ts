@@ -503,6 +503,62 @@ export function splitBox(className: string, options: SplitBoxOptions = {}): Spli
 }
 
 /**
+ * Decide which node one token goes to.
+ *
+ * @param info - The classified token info, or `undefined` if unowned.
+ * @param base - The token's literal name, for an unowned token.
+ * @param forceInner - Placement selectors pinning a token to the content node.
+ * @param forceOuter - Placement selectors pinning a token to the frame.
+ * @param fallback - Where a token nothing classified goes.
+ * @returns The node, or `'both'` for a property declared on each.
+ */
+function placementFor(
+    info: TokenInfo | undefined,
+    base: string,
+    forceInner: BoxSelector[],
+    forceOuter: BoxSelector[],
+    fallback: BoxRole,
+): BoxRole | 'both' {
+    if (anyMatch(info, forceInner, base)) return 'inner';
+    if (anyMatch(info, forceOuter, base)) return 'outer';
+    // A transition is declared on both nodes unless the caller pinned it: it
+    // does nothing on its own, and the state that fires it can sit on either
+    // side. An override still wins, which is why this runs after the two
+    // checks above.
+    if (info?.both) return 'both';
+    return info ? info.role : fallback;
+}
+
+/**
+ * Keep the placement selectors that can match something.
+ *
+ * A placement list may address an unrecognised token by its literal name —
+ * that is the escape hatch the atomic-only scope owes the author, since a
+ * custom `@utility` declaring several properties has no correct side. A name
+ * that is neither a known selector nor actually present in this className is
+ * still reported as the typo it probably is, which is why presence, not mere
+ * unknownness, is what opens the hatch.
+ *
+ * @param selectors - The caller's `outer` or `inner` list, possibly absent.
+ * @param tokens - The tokens of the className being split.
+ * @param bridge - The mangle bridge read once by the caller.
+ * @returns The selectors worth testing tokens against.
+ */
+function usablePlacements(
+    selectors: BoxSelector[] | undefined,
+    tokens: readonly string[],
+    bridge: MangleBridge | undefined,
+): BoxSelector[] {
+    if (selectors === undefined || selectors.length === 0) return [];
+    const unclassified = new Set(
+        tokens.filter(t => !inspect(t, bridge)).map(t => tokenBase(t, bridge)),
+    );
+    return selectors.filter(
+        sel => (typeof sel === 'string' && unclassified.has(sel)) || selectorIsUsable(sel, 'class'),
+    );
+}
+
+/**
  * The uncached partition — see {@link splitBox} for the contract.
  *
  * @param className - The flat className string to partition.
@@ -516,17 +572,8 @@ function splitBoxUncached(
     bridge: MangleBridge | undefined,
 ): SplitBoxResult {
     const tokens = tokenize(className);
-    // The names in the className that nothing classified. A placement list may
-    // address one of them literally — that is the escape hatch the atomic-only
-    // scope owes the author — while a name that is neither a known selector nor
-    // present here is still reported as the typo it probably is.
-    const unclassified = new Set(
-        tokens.filter(t => !inspect(t, bridge)).map(t => tokenBase(t, bridge)),
-    );
-    const placeable = (sel: BoxSelector): boolean =>
-        (typeof sel === 'string' && unclassified.has(sel)) || selectorIsUsable(sel, 'class');
-    const forceInner = (options.inner ?? []).filter(placeable);
-    const forceOuter = (options.outer ?? []).filter(placeable);
+    const forceInner = usablePlacements(options.inner, tokens, bridge);
+    const forceOuter = usablePlacements(options.outer, tokens, bridge);
     const fallback: BoxRole = options.fallback ?? 'outer';
     const outer: string[] = [];
     const inner: string[] = [];
@@ -536,26 +583,14 @@ function splitBoxUncached(
     for (const token of tokens) {
         const info = inspect(token, bridge);
         const base = info ? '' : tokenBase(token, bridge);
-        if (anyMatch(info, forceInner, base)) {
-            inner.push(token);
-            continue;
-        }
-        if (anyMatch(info, forceOuter, base)) {
-            outer.push(token);
-            continue;
-        }
-        if (!info) unplaced.push(base);
-        // A transition is declared on both nodes unless the caller pinned it:
-        // it does nothing on its own, and the state that fires it can sit on
-        // either side. An override still wins, which is why this runs after the
-        // two checks above.
-        if (info?.both) {
+        const side = placementFor(info, base, forceInner, forceOuter, fallback);
+        if (info === undefined && side === fallback) unplaced.push(base);
+        if (side === 'both') {
             outer.push(token);
             inner.push(token);
             continue;
         }
-        const role = info ? info.role : fallback;
-        (role === 'outer' ? outer : inner).push(token);
+        (side === 'outer' ? outer : inner).push(token);
     }
 
     if (process.env.NODE_ENV !== 'production') {
