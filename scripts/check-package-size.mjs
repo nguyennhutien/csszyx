@@ -55,10 +55,27 @@ export const SIZE_BUDGETS = [
         // `process.env.NODE_ENV` defined as production, the warning text is gone
         // from the output (measured with esbuild — zero occurrences, and 794
         // gzip bytes smaller than the same bundle built for development).
+        // Raised again from 23,552 for the class-toolkit work, measured
+        // 2026-09-06 in two steps on top of a 23,552 baseline: 24,405 with the
+        // `./split` entry (+853) and 24,783 with the unrecognised-token warning
+        // (+378).
+        //
+        // The first step is the one worth reading twice, because it is NOT the
+        // entry file — `dist/split.mjs` is 202 gzip bytes and this measurement
+        // dedupes shared chunks, so a re-export would have cost about that. It
+        // is rollup re-chunking the package once a second entry reaches the
+        // box-role tables: the barrel got smaller (6,120 to 5,482 gzip for a
+        // toolkit-only import) and the package got bigger. That is a real
+        // install-size cost paid so a `require()` consumer can drop ~6 KB from
+        // their bundle, which is the trade the entry exists to make.
+        //
+        // The second step is package weight only, not app weight, for the same
+        // reason the 2026-09-05 note above gives: bundled with
+        // `process.env.NODE_ENV` defined as production the message text is gone.
         name: '@csszyx/runtime export closure',
         kind: 'package-exports',
         target: 'packages/runtime',
-        maxGzipBytes: 23_552,
+        maxGzipBytes: 25_088,
     },
     {
         name: '@csszyx/dynamic export closure',
