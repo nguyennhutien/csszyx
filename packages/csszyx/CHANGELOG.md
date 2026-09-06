@@ -2,27 +2,59 @@
 
 ## [0.17.0](https://github.com/nguyennhutien/csszyx/compare/v0.16.0...v0.17.0) (2026-09-06)
 
-
 ### ⚠ BREAKING CHANGES
 
-* **unplugin:** `production.injectChecksum` is removed from `CsszyxConfig`. It was never read: the hydration checksum and the inert census ship on every production build and no value of it changed either. Delete the option; a build that still sets it warns once. `csszyx init` no longer scaffolds a `production` block. The internal `InjectionMode` type and `injectMangleMapAttribute` are removed from `@csszyx/unplugin`, which exported neither.
-* **runtime:** `splitBox` / `splitBoxSz` / `classify` now report flex and grid item utilities (`grow`, `shrink`, `basis`, `flex-1`, `order-*`, `self-*`, `justify-self-*`, `place-self-*`, `col-*`, `row-*`) as `outer`; they were `inner`. A component whose frame is itself the flex container laying out its one content node keeps the old placement with `{ inner: ['grow', 'self', 'order'] }`.
+* **runtime:** `splitBox` / `splitBoxSz` / `classify` route by CSS role. Now `outer`: `overflow-hidden`/`overflow-clip` (also `-x`/`-y`), `cursor-*`, `select-*`, `pointer-events-*`, `will-change-*`, `scroll-m*`, `snap-start`/`snap-end`/`snap-center`/`snap-align-none`, `snap-normal`/`snap-always`, `align-*`, `inset-ring*`, `inset-shadow*`. Now `inner`: `divide-*`, `perspective*`, `transform-3d`/`transform-flat`. `transition*`, `duration-*`, `ease-*` and `delay-*` land on both nodes, so `outer` + `inner` can repeat those tokens. `overflow-auto`/`overflow-scroll`/`overflow-visible` stay `inner`. A one-line `{ inner: [...] }` / `{ outer: [...] }` override restores any previous placement. The documented `ScrollArea` recipe was replaced: the old one pinned overflow outer with `{ outer: ['overflow'] }` and derived the scroller with `has`, and it produced a frame that did not scroll. ([#286](https://github.com/nguyennhutien/csszyx/issues/286))
+* **runtime:** `splitBox` / `splitBoxSz` / `classify` now report flex and grid item utilities (`grow`, `shrink`, `basis`, `flex-1`, `order-*`, `self-*`, `justify-self-*`, `place-self-*`, `col-*`, `row-*`) as `outer`; they were `inner`. A component whose frame is itself the flex container laying out its one content node keeps the old placement with `{ inner: ['grow', 'self', 'order'] }`. ([#286](https://github.com/nguyennhutien/csszyx/issues/286))
+* **unplugin:** ship the census only when it decodes something ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* `production.injectChecksum` is removed from `CsszyxConfig`. It was never read: the hydration checksum and the inert census ship on every production build and no value of it changed either. Delete the option; a build that still sets it warns once. `csszyx init` no longer scaffolds a `production` block. The internal `InjectionMode` type and `injectMangleMapAttribute` are removed from `@csszyx/unplugin`, which exported neither. ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **unplugin:** the `__CSSZYX_MANGLE_MAP__` census is no longer written into the HTML of a build with `production.mangle` off, where it only ever carried `{}`. A build that mangles is unchanged unless it sets the new `production.hydrationCensus: false`. `loadMangleMapFromDOM` returns `null` and `verifyMangleMapIntegrity` returns `true` — nothing to read rather than a failed read — on a document with no census. ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
 
 ### Features
 
-* print what the build already knew, and compile sz where tests run ([#284](https://github.com/nguyennhutien/csszyx/issues/284)) ([acc23cd](https://github.com/nguyennhutien/csszyx/commit/acc23cd073e48d4e29779c9fe1152b568cfc0bab))
-* **runtime:** publish the className toolkit as its own entry ([#291](https://github.com/nguyennhutien/csszyx/issues/291)) ([33d6a93](https://github.com/nguyennhutien/csszyx/commit/33d6a93f39cfdfb12109e566eac153592e46837f))
-* **runtime:** route splitBox by CSS role ([#286](https://github.com/nguyennhutien/csszyx/issues/286)) ([8ac806a](https://github.com/nguyennhutien/csszyx/commit/8ac806a8331f338db7260e189b54216958e97160))
-* **runtime:** say which property a class sets, not just its category ([#293](https://github.com/nguyennhutien/csszyx/issues/293)) ([9365d43](https://github.com/nguyennhutien/csszyx/commit/9365d432ddaf976faf64bb55e368d9821e029799))
-* **unplugin:** ship the census only when it decodes something ([#288](https://github.com/nguyennhutien/csszyx/issues/288)) ([bfeea22](https://github.com/nguyennhutien/csszyx/commit/bfeea221babd9a6112b40dedec2f5865eb611f38))
-
+* print what the build already knew, and compile sz where tests run ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **unplugin:** give a test runner the classes the browser gets ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **runtime:** route splitBox by CSS role ([#286](https://github.com/nguyennhutien/csszyx/issues/286))
+* **runtime:** warn when a split cannot do what the className meant ([#286](https://github.com/nguyennhutien/csszyx/issues/286))
+* **unplugin:** ship the census only when it decodes something ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **unplugin:** write the census only for a build that renames something ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **runtime:** publish the className toolkit as its own entry ([#291](https://github.com/nguyennhutien/csszyx/issues/291))
+* **runtime:** say which property a class sets, not just its category ([#293](https://github.com/nguyennhutien/csszyx/issues/293))
 
 ### Bug Fixes
 
-* **cli:** make audit report what the build left, and give the CLI a reference page ([#287](https://github.com/nguyennhutien/csszyx/issues/287)) ([00aba37](https://github.com/nguyennhutien/csszyx/commit/00aba37d6ffc67dcb05771c2625d133c88b3a89d))
-* **runtime:** classify the Tailwind utilities csszyx never emits ([#289](https://github.com/nguyennhutien/csszyx/issues/289)) ([f55ef03](https://github.com/nguyennhutien/csszyx/commit/f55ef03168422b367f9d7a1c0be4fd10cea46caf))
-* **runtime:** keep a peer consumer on the node its rule can reach ([#295](https://github.com/nguyennhutien/csszyx/issues/295)) ([8a51eeb](https://github.com/nguyennhutien/csszyx/commit/8a51eeb89203bf43c78c25cdf1b1bc7726916c36))
-* **runtime:** say when a class was placed by the fallback, and let it be moved ([#292](https://github.com/nguyennhutien/csszyx/issues/292)) ([30e424c](https://github.com/nguyennhutien/csszyx/commit/30e424c4b11c85341cf4afb60c586b5e425ae05f))
+* **compiler:** refuse a value the four bare-utility keys cannot spell ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **cli:** keep `scan-collisions` out of directories a tool writes ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **unplugin:** print a dead key or value in a production build ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* report the version each package was actually published as ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **unplugin:** stop the hazard report recommending work it already covers ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **compiler:** keep emitting the class a closed enum refuses, and name it ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **unplugin:** hold the mangleVars hoist note back from production logs ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **unplugin:** finish the jest lane's output the way the plugin does ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **unplugin:** choose between cache entries by a timestamp that is one ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **runtime:** route flex and grid item properties to the outer box ([#286](https://github.com/nguyennhutien/csszyx/issues/286))
+* **cli:** make audit report what the build left, and give the CLI a reference page ([#287](https://github.com/nguyennhutien/csszyx/issues/287))
+* **cli:** stop `csszyx audit` inventing a mangle saving ([#287](https://github.com/nguyennhutien/csszyx/issues/287))
+* **cli:** drop audit's dead flags and its false build instruction ([#287](https://github.com/nguyennhutien/csszyx/issues/287))
+* **cli:** drop audit's mangle-statistics section, which never had data ([#287](https://github.com/nguyennhutien/csszyx/issues/287))
+* **unplugin:** count advisory notes, not advisory sz fallbacks ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **unplugin:** stop attesting a census the page never carried ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* drop two carriers nothing read, and a switch that switched nothing ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **runtime:** compare the bundle to the document, not the document to itself ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **unplugin:** keep the census for a build that renamed only variables ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **runtime:** classify the Tailwind utilities csszyx never emits ([#289](https://github.com/nguyennhutien/csszyx/issues/289))
+* **runtime:** let the scope-marker table carry its own entry ([#289](https://github.com/nguyennhutien/csszyx/issues/289))
+* **runtime:** say when a class was placed by the fallback, and let it be moved ([#292](https://github.com/nguyennhutien/csszyx/issues/292))
+* **runtime:** stop reporting a placement the author already made ([#292](https://github.com/nguyennhutien/csszyx/issues/292))
+* **runtime:** say when a placement names a variant, and let sz pin one ([#292](https://github.com/nguyennhutien/csszyx/issues/292))
+* **runtime:** cap the development-warning cache, and say when it fills ([#292](https://github.com/nguyennhutien/csszyx/issues/292))
+* **runtime:** reject a property half csszyx does not tell apart ([#293](https://github.com/nguyennhutien/csszyx/issues/293))
+* **runtime:** keep a peer consumer on the node its rule can reach ([#295](https://github.com/nguyennhutien/csszyx/issues/295))
+* **runtime:** guard the selector diagnostics, and name the sz form to pass ([#295](https://github.com/nguyennhutien/csszyx/issues/295))
+
+### Performance
+
+* **runtime:** let the partition memo admit a className after its cap ([#295](https://github.com/nguyennhutien/csszyx/issues/295))
 
 ## [0.16.0](https://github.com/nguyennhutien/csszyx/compare/v0.15.3...v0.16.0) (2026-09-04)
 
