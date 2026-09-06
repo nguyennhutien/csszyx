@@ -133,8 +133,9 @@ parses and never runs, plus one attribute:
   data, not a script: the browser never evaluates it, and under an enforced
   `script-src 'self'` it produces no violation. `verifyMangleChecksum` reads it
   back from the DOM, and it is what lets devtools name a mangled class on a
-  build you cannot rebuild. It ships on every build; without
-  `production.mangle` it carries no class entries.
+  build you cannot rebuild. It ships when the build renamed something —
+  a class or a CSS variable — and not otherwise, so a build with mangling off
+  carries no such tag at all.
 - `<script id="__SZ_RECOVERY_MANIFEST__" type="application/json">` — only in a
   build that emits [`szRecover`](/docs/ssr/#recovery-tokens-via-szrecover) tokens, and omitted
   entirely when it emits none. It maps each token to the recovery mode and the
@@ -155,8 +156,11 @@ never needs `'unsafe-inline'`; **do not add it for csszyx.**
 Neither carrier is configurable. The `production.mangleMapDelivery` option that
 used to choose between an inline installer script and the bundle has been
 removed — a build that still sets it is warned once and the value ignored. The
-census has no switch: hydration verification reads it from the DOM, so a build
-that omitted it would ship a checksum with nothing to check it against.
+census has one, `production.hydrationCensus`, for the reader who mangles and
+still cannot carry the tag; what it costs is the ability to decode a page you
+have already deployed. The checksum attribute is written either way, because
+the guard that reads it weighs the document against the bundle rather than
+against the census.
 
 #### When a review flags the census tag
 

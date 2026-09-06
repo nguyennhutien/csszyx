@@ -396,7 +396,7 @@ interface GlobalVarMangleConfig {
 
 | Option                   | Default | Description                                                                                                                                               |
 | ------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mangle`                 | `true`  | Replace class names with short encoded symbols                                                                                                            |
+| `mangle`                 | `false` | Replace class names with short encoded symbols                                                                                                            |
 | `mangleVars`             | `false` | Opt into shorter names and bounded hoisting for dynamic CSS variables generated from runtime `sz` values. Disabled builds keep existing `--_sz-*` output. |
 | `mangleVarHoistMaxDepth` | `5`     | Maximum DOM ancestor distance for component-tier CSS variable hoisting when `mangleVars` is enabled.                                                      |
 | `mangleGlobalVars`       | `undefined` | Opt-in alias gate for explicit app-owned global CSS custom properties. Aliasing is the only mode and keeps original public variables defined.          |
