@@ -1,5 +1,63 @@
 # csszyx
 
+## [0.17.0](https://github.com/nguyennhutien/csszyx/compare/v0.16.0...v0.17.0) (2026-09-06)
+
+### ⚠ BREAKING CHANGES
+
+* **runtime:** `splitBox` / `splitBoxSz` / `classify` route by CSS role. Now `outer`: `overflow-hidden`/`overflow-clip` (also `-x`/`-y`), `cursor-*`, `select-*`, `pointer-events-*`, `will-change-*`, `scroll-m*`, `snap-start`/`snap-end`/`snap-center`/`snap-align-none`, `snap-normal`/`snap-always`, `align-*`, `inset-ring*`, `inset-shadow*`. Now `inner`: `divide-*`, `perspective*`, `transform-3d`/`transform-flat`. `transition*`, `duration-*`, `ease-*` and `delay-*` land on both nodes, so `outer` + `inner` can repeat those tokens. `overflow-auto`/`overflow-scroll`/`overflow-visible` stay `inner`. A one-line `{ inner: [...] }` / `{ outer: [...] }` override restores any previous placement. The documented `ScrollArea` recipe was replaced: the old one pinned overflow outer with `{ outer: ['overflow'] }` and derived the scroller with `has`, and it produced a frame that did not scroll. ([#286](https://github.com/nguyennhutien/csszyx/issues/286))
+* **runtime:** `splitBox` / `splitBoxSz` / `classify` now report flex and grid item utilities (`grow`, `shrink`, `basis`, `flex-1`, `order-*`, `self-*`, `justify-self-*`, `place-self-*`, `col-*`, `row-*`) as `outer`; they were `inner`. A component whose frame is itself the flex container laying out its one content node keeps the old placement with `{ inner: ['grow', 'self', 'order'] }`. ([#286](https://github.com/nguyennhutien/csszyx/issues/286))
+* **unplugin:** ship the census only when it decodes something ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* `production.injectChecksum` is removed from `CsszyxConfig`. It was never read: the hydration checksum and the inert census ship on every production build and no value of it changed either. Delete the option; a build that still sets it warns once. `csszyx init` no longer scaffolds a `production` block. The internal `InjectionMode` type and `injectMangleMapAttribute` are removed from `@csszyx/unplugin`, which exported neither. ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **unplugin:** the `__CSSZYX_MANGLE_MAP__` census is no longer written into the HTML of a build with `production.mangle` off, where it only ever carried `{}`. A build that mangles is unchanged unless it sets the new `production.hydrationCensus: false`. `loadMangleMapFromDOM` returns `null` and `verifyMangleMapIntegrity` returns `true` — nothing to read rather than a failed read — on a document with no census. ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **runtime:** every `peer-*` and `not-peer-*` utility now routes `outer`, whatever side its base belongs to — `peer-hover:p-4`, `peer-checked:block` and `peer-focus:text-*` were `inner` and are `outer`. A peer rule reaches its target through the general sibling combinator, and `splitBox` renders the content node as a child of the frame, so a peer rule placed there could never match; `not-peer-*` there was permanently on, because the negation of a match that cannot happen is always true. `splitBox('peer-checked:block hidden')` returned `{ outer: '', inner: 'peer-checked:block hidden' }` and now returns `{ outer: 'peer-checked:block', inner: 'hidden' }`. `group-*`, `has-*` and `in-*` are unchanged — their rules reach descendants. To put the effect on the content node, write the child variant on the frame: `peer-hover:[&>*]:p-4`. An explicit `{ inner: [...] }` override still wins. ([#295](https://github.com/nguyennhutien/csszyx/issues/295))
+* **runtime:** `classify` now recognises three families it used to return `undefined` for, so `has` / `pick` / `omit` / `splitBox` return different strings for the same input: `placeholder-<color>` (category `placeholder`, `inner`), `start-*` and `end-*` — the pre-v4.2 spelling of `inset-s-*` / `inset-e-*` — (category `position`, `outer`), and the `group` / `peer` markers including named forms such as `group/item` (category `scope`, `outer`). `pick('top-2 end-2', 'position')` returned `'top-2'` and now returns `'top-2 end-2'`; `splitBox('group p-4', { fallback: 'inner' })` returned `{ outer: '', inner: 'group p-4' }` and now returns `{ outer: 'group', inner: 'p-4' }`, because a marker must stay on the node its dependents resolve against. `scope` is a new category name. A one-line `{ inner: [...] }` / `{ outer: [...] }` override restores any previous placement. ([#289](https://github.com/nguyennhutien/csszyx/issues/289))
+
+### Features
+
+* print what the build already knew, and compile sz where tests run ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **unplugin:** give a test runner the classes the browser gets ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **runtime:** route splitBox by CSS role ([#286](https://github.com/nguyennhutien/csszyx/issues/286))
+* **runtime:** warn when a split cannot do what the className meant ([#286](https://github.com/nguyennhutien/csszyx/issues/286))
+* **unplugin:** ship the census only when it decodes something ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **unplugin:** write the census only for a build that renames something ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **runtime:** publish the className toolkit as its own entry ([#291](https://github.com/nguyennhutien/csszyx/issues/291))
+* **runtime:** say which property a class sets, not just its category ([#293](https://github.com/nguyennhutien/csszyx/issues/293))
+
+### Bug Fixes
+
+* **compiler:** refuse a value the four bare-utility keys cannot spell ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **cli:** keep `scan-collisions` out of directories a tool writes ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **unplugin:** print a dead key or value in a production build ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* report the version each package was actually published as ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **unplugin:** stop the hazard report recommending work it already covers ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **compiler:** keep emitting the class a closed enum refuses, and name it ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **unplugin:** hold the mangleVars hoist note back from production logs ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **unplugin:** finish the jest lane's output the way the plugin does ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **unplugin:** choose between cache entries by a timestamp that is one ([#284](https://github.com/nguyennhutien/csszyx/issues/284))
+* **runtime:** route flex and grid item properties to the outer box ([#286](https://github.com/nguyennhutien/csszyx/issues/286))
+* **cli:** make audit report what the build left, and give the CLI a reference page ([#287](https://github.com/nguyennhutien/csszyx/issues/287))
+* **cli:** stop `csszyx audit` inventing a mangle saving ([#287](https://github.com/nguyennhutien/csszyx/issues/287))
+* **cli:** drop audit's dead flags and its false build instruction ([#287](https://github.com/nguyennhutien/csszyx/issues/287))
+* **cli:** drop audit's mangle-statistics section, which never had data ([#287](https://github.com/nguyennhutien/csszyx/issues/287))
+* **unplugin:** count advisory notes, not advisory sz fallbacks ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **unplugin:** stop attesting a census the page never carried ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* drop two carriers nothing read, and a switch that switched nothing ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **runtime:** compare the bundle to the document, not the document to itself ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **unplugin:** keep the census for a build that renamed only variables ([#288](https://github.com/nguyennhutien/csszyx/issues/288))
+* **runtime:** classify the Tailwind utilities csszyx never emits ([#289](https://github.com/nguyennhutien/csszyx/issues/289))
+* **runtime:** let the scope-marker table carry its own entry ([#289](https://github.com/nguyennhutien/csszyx/issues/289))
+* **runtime:** say when a class was placed by the fallback, and let it be moved ([#292](https://github.com/nguyennhutien/csszyx/issues/292))
+* **runtime:** stop reporting a placement the author already made ([#292](https://github.com/nguyennhutien/csszyx/issues/292))
+* **runtime:** say when a placement names a variant, and let sz pin one ([#292](https://github.com/nguyennhutien/csszyx/issues/292))
+* **runtime:** cap the development-warning cache, and say when it fills ([#292](https://github.com/nguyennhutien/csszyx/issues/292))
+* **runtime:** reject a property half csszyx does not tell apart ([#293](https://github.com/nguyennhutien/csszyx/issues/293))
+* **runtime:** keep a peer consumer on the node its rule can reach ([#295](https://github.com/nguyennhutien/csszyx/issues/295))
+* **runtime:** guard the selector diagnostics, and name the sz form to pass ([#295](https://github.com/nguyennhutien/csszyx/issues/295))
+
+### Performance
+
+* **runtime:** let the partition memo admit a className after its cap ([#295](https://github.com/nguyennhutien/csszyx/issues/295))
+
 ## [0.16.0](https://github.com/nguyennhutien/csszyx/compare/v0.15.3...v0.16.0) (2026-09-04)
 
 ### ⚠ BREAKING CHANGES
