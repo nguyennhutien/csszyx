@@ -88,6 +88,10 @@ itself.
 | A variant (`hover:`, `md:`) never applies | [sz key and value warnings](#sz--key-and-value-warnings) |
 | Slots on a component are unstyled | [szs and szsc](#szs--szsc) |
 | Merging two class strings keeps both | [szcn](#szcn) |
+| A split box will not scroll, clips its corners incorrectly, or leaves its frame visible | [Split layout warnings](#a-split-that-cannot-do-what-the-classname-asked-for) |
+| A custom class falls onto the wrong node | [Unrecognised classes](#a-class-csszyx-does-not-recognise) |
+| A placement such as `outer: ['md:hidden']` does nothing | [Base class placement](#a-placement-names-a-variant) |
+| Warnings stopped appearing part-way through a session | [The cap on development warnings](#the-cap-on-development-warnings) |
 | The build got slower or bigger | [Mangling](#mangling) |
 | Only *some* files are styled | [Build pipeline](#build-pipeline) |
 
@@ -1191,14 +1195,47 @@ class name for exactly this case — `{ inner: ['card'] }` works even though
 structure, and it is the name you WROTE even on a mangled build, since the
 token is decoded before the comparison.
 
-A placement list therefore never reports an unknown string: it names a class,
-not a category, and one options object usually serves many classNames, so a
+A placement list therefore does not report an unknown base name: it can name
+a literal class, and one options object usually serves many classNames, so a
 render without that class is not a mistake. `has`, `pick` and `omit` are the
 other way round — there the string IS the query, so an unknown one is still
 reported as the typo it usually is.
 
 The message also never fires for a token you placed yourself, including onto
 the side the fallback would have chosen anyway.
+
+### A placement names a variant
+
+```text
+[csszyx] splitBox: a placement list names a class by its base, so '{token}' never matches; the variant prefix and the ! or - marker are stripped before the comparison. help: write { {side}: ['{base}'] }; it places every variant of '{base}'.
+```
+
+Use the base name in `outer` and `inner` placement lists. The rule applies to
+every variant of that base, so `{ outer: ['hidden'] }` also places
+`hover:hidden` and bare `hidden` on the frame. Selecting only `md:hidden`
+is not supported, and neither is the important or negative form — `!hidden`
+and `-mt-4` normalise to `hidden` and `mt-4` before the comparison, and the
+message names that form. This development warning leaves routing unchanged;
+update the placement to make it take effect.
+
+See [Override the defaults](/docs/box-model-splitbox/#override-the-defaults)
+for literal custom-class placement, and
+[Categories](/docs/box-model-splitbox/#categories) for recognised selectors.
+
+### The cap on development warnings
+
+```text
+[csszyx] {count} distinct development warnings have been printed; further ones are suppressed for this session. help: a className built from data is the usual cause — look above for one warning repeating with different values.
+```
+
+Every warning prints once per distinct message, and the cache behind that
+holds at most 512 of them. Several messages interpolate a class name from your
+own className, so a class built from data — `user-data-42`, one per row —
+would otherwise make every render a new message and the cache grow for as long
+as the dev server runs. Rather than go quiet when it fills, the cache says so,
+once: the line above replaces the first message it would have dropped. A
+warning that repeats above it with different values names the component to
+look at. Production is unaffected; no warning is emitted there at all.
 
 ## Editor diagnostics
 
