@@ -38,6 +38,7 @@ describe('placeholder utilities', () => {
         expect(classify('placeholder:text-gray-400')).toEqual({
             role: 'inner',
             category: 'text',
+            property: 'color',
         });
     });
 
@@ -97,7 +98,11 @@ describe('scope markers', () => {
     });
 
     it('does not treat an opacity modifier as a named marker', () => {
-        expect(classify('bg-red-500/50')).toEqual({ role: 'outer', category: 'bg' });
+        expect(classify('bg-red-500/50')).toEqual({
+            role: 'outer',
+            category: 'bg',
+            property: 'color',
+        });
     });
 });
 

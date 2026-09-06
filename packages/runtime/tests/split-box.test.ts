@@ -101,6 +101,7 @@ describe('classify', () => {
         expect(classify('hover:bg-red-500')).toEqual({
             role: 'outer',
             category: 'bg',
+            property: 'color',
         });
         expect(classify('absolute')).toEqual({
             role: 'outer',

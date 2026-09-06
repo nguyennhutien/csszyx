@@ -575,7 +575,8 @@ function splitBox(className: string, options?: {
   fallback?: 'outer' | 'inner';   // unrecognized token → default 'outer'
 }): { outer: string; inner: string }
 
-// box-role | category | class-prefix | category+value pair
+// box-role | category | class-prefix | category+value pair,
+// optionally qualified by a property (`text:color`)
 type BoxSelector = string | Readonly<Record<string, string>>
 ```
 
@@ -607,10 +608,33 @@ csszyx owns the **truth** (a class's box-role + category); your project owns the
 no hardcoded Tailwind vocabulary.
 
 ```ts
-function classify(token: string): { role: 'outer' | 'inner'; category: string } | undefined
+function classify(token: string): {
+  role: 'outer' | 'inner';
+  category: string;
+  property?: string;    // only for prefixes that span more than one property
+} | undefined
 function has(classes: string, selector: BoxSelector): boolean
 function pick(classes: string, selector: BoxSelector): string
 function omit(classes: string, selector: BoxSelector): string
+```
+
+`property` names the CSS property inside the category for the prefixes that
+cover several — `classify('text-red-500')` reports `color` and
+`classify('text-sm')` reports `size`, both in category `text`. It is the same
+classification `szcn` merges by, so a token name declared in the app's Tailwind
+`@theme` (see [Theme group registry](#theme-group-registry)) is read the way a
+built-in one is. The field is **absent** when the prefix means exactly one
+property (`p-4`) and when the value does not confidently name one
+(`border-t-2`) — never `null`, never empty — and it never changes which node
+`splitBox` routes a token to.
+
+A selector qualified with a property matches tokens that satisfy both halves,
+which is how a rule addresses text colours without touching text sizes:
+
+```ts
+pick('text-red-500 text-sm font-bold', 'text:color'); // 'text-red-500'
+pick('font-bold font-sans', 'font:weight');           // 'font-bold'
+has('bg-cover', 'outer:size');                        // true
 ```
 
 ```tsx
