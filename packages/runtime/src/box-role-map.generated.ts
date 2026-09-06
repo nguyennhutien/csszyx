@@ -61,6 +61,7 @@ export const BOX_ROLE_TOKENS: ReadonlyMap<string, BoxRoleEntry> = new Map([
     ["flex-wrap-reverse", { role: "inner", category: "flex", prefix: "flex", value: "wrap-reverse" }],
     ["flow-root", { role: "inner", category: "display" }],
     ["grid", { role: "inner", category: "display" }],
+    ["group", { role: "outer", category: "scope" }],
     ["hidden", { role: "inner", category: "display" }],
     ["inline", { role: "inner", category: "display" }],
     ["inline-block", { role: "inner", category: "display" }],
@@ -95,6 +96,7 @@ export const BOX_ROLE_TOKENS: ReadonlyMap<string, BoxRoleEntry> = new Map([
     ["overflow-y-scroll", { role: "inner", category: "overflow", prefix: "overflow-y", value: "scroll" }],
     ["overflow-y-visible", { role: "inner", category: "overflow", prefix: "overflow-y", value: "visible" }],
     ["overline", { role: "inner", category: "text" }],
+    ["peer", { role: "outer", category: "scope" }],
     ["proportional-nums", { role: "inner", category: "text" }],
     ["prose", { role: "inner", category: "text" }],
     ["prose-invert", { role: "inner", category: "text" }],
@@ -174,6 +176,7 @@ export const BOX_ROLE_PREFIXES: ReadonlyArray<readonly [string, BoxRoleEntry]> =
     ["mask-repeat", { role: "outer", category: "mask" }],
     ["perspective", { role: "inner", category: "transform" }],
     ["place-items", { role: "inner", category: "alignment" }],
+    ["placeholder", { role: "inner", category: "placeholder" }],
     ["ring-offset", { role: "outer", category: "ring" }],
     ["text-shadow", { role: "inner", category: "text" }],
     ["translate-x", { role: "outer", category: "transform" }],
@@ -343,6 +346,7 @@ export const BOX_ROLE_PREFIXES: ReadonlyArray<readonly [string, BoxRoleEntry]> =
     ["right", { role: "outer", category: "position" }],
     ["scale", { role: "outer", category: "transform" }],
     ["sepia", { role: "outer", category: "filter" }],
+    ["start", { role: "outer", category: "position" }],
     ["table", { role: "inner", category: "table" }],
     ["touch", { role: "inner", category: "touch" }],
     ["blur", { role: "outer", category: "filter" }],
@@ -364,6 +368,7 @@ export const BOX_ROLE_PREFIXES: ReadonlyArray<readonly [string, BoxRoleEntry]> =
     ["zoom", { role: "outer", category: "transform" }],
     ["box", { role: "outer", category: "sizing" }],
     ["col", { role: "outer", category: "grid" }],
+    ["end", { role: "outer", category: "position" }],
     ["gap", { role: "inner", category: "gap" }],
     ["mbe", { role: "outer", category: "margin" }],
     ["mbs", { role: "outer", category: "margin" }],
@@ -397,6 +402,19 @@ export const BOX_ROLE_PREFIXES: ReadonlyArray<readonly [string, BoxRoleEntry]> =
     ["w", { role: "outer", category: "sizing" }],
     ["z", { role: "outer", category: "position" }],
 ];
+
+/**
+ * Markers that accept a `/<name>` suffix (`group/item`, `peer/email`). The name
+ * picks WHICH ancestor a `group-hover/item:` variant reads; it never changes
+ * what the marker itself does, so the named form classifies as the bare one.
+ * A slash means something else entirely everywhere else — `bg-red-500/50` is an
+ * opacity modifier — so the runtime consults this set rather than splitting on
+ * `/` in general.
+ */
+export const BOX_ROLE_SCOPE_MARKERS: ReadonlySet<string> = new Set([
+    "group",
+    "peer",
+]);
 
 /**
  * sz prop key → box-model role, for partitioning an sz OBJECT (`splitBoxSz`)

@@ -24,6 +24,7 @@ import {
 import {
     BOX_ROLE_BY_KEY,
     BOX_ROLE_PREFIXES,
+    BOX_ROLE_SCOPE_MARKERS,
     BOX_ROLE_TOKENS,
     type BoxRole,
     type BoxRoleEntry,
@@ -217,6 +218,19 @@ function inspectUncached(token: string): TokenInfo | undefined {
     // IS the value (`block`, `italic`), so it answers with the whole base.
     const exact = BOX_ROLE_TOKENS.get(base);
     if (exact) return { ...exact, base, value: exact.value ?? base };
+
+    // `group/item` names WHICH ancestor a `group-hover/item:` variant reads; the
+    // marker itself does the same thing named or bare. Only the tokens in the
+    // generated set take a name, because a slash means an opacity modifier
+    // everywhere else (`bg-red-500/50`).
+    const slash = base.indexOf('/');
+    if (slash > 0) {
+        const marker = base.slice(0, slash);
+        if (BOX_ROLE_SCOPE_MARKERS.has(marker)) {
+            const entry = BOX_ROLE_TOKENS.get(marker);
+            if (entry) return { ...entry, base, value: base.slice(slash + 1) };
+        }
+    }
 
     const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(base.split('-', 1)[0] as string) ?? [];
     for (const [prefix, entry] of bucket) {

@@ -591,6 +591,75 @@ function markDeclaredOnBoth(prefixes, keyRoles) {
     }
 }
 
+/**
+ * Utilities Tailwind SERVES that csszyx never EMITS.
+ *
+ * Every other table in this file is projected from `PROPERTY_MAP`, so it
+ * describes csszyx's output. `classify` reads the opposite direction — the
+ * className string an application wrote — and those two vocabularies are not
+ * the same set. Measured against the pinned corpora in `scripts/corpus/` and
+ * confirmed served by `tailwindcss@4.3.3`:
+ *
+ * - `placeholder-<color>`: csszyx models the same CSS as a variant
+ *   (`placeholder:text-gray`), so no key emits the utility spelling.
+ * - `start-*` / `end-*`: the pre-v4.2 spelling of `inset-s-*` / `inset-e-*`.
+ *   Deprecated upstream, still served, still in code written before v4.2.
+ *
+ * These are ALIASES and GAPS, not a licence to grow a second vocabulary: an
+ * entry belongs here only when Tailwind serves the class and csszyx's own
+ * output cannot produce it. The assertion below fails if one ever collides
+ * with a prefix csszyx does emit, so a future compiler prop cannot be
+ * silently shadowed by a hand-written row.
+ */
+const TAILWIND_ONLY_PREFIXES = [
+    { role: 'outer', category: 'position', prefixes: ['start', 'end'] },
+    { role: 'inner', category: 'placeholder', prefixes: ['placeholder'] },
+];
+
+/**
+ * `group` and `peer` emit no CSS, so no table built from CSS properties can
+ * hold them — but they are the anchor every `group-hover:` / `peer-checked:`
+ * descendant resolves against, which makes the node they land on a
+ * CORRECTNESS question rather than a classification one.
+ *
+ * Both pin to OUTER, and the reason is structural rather than a default:
+ * `splitBox`'s outer node is the ancestor of its inner node, and a dependent
+ * utility can route to either side (`group-hover:bg-red` is bg → outer;
+ * `group-hover:p-4` is padding → inner). Only the outer node is an ancestor of
+ * both, so only the outer node keeps every dependent resolving. A `fallback`
+ * of `'inner'` must not move them — which is why they are a table entry and
+ * not an unclassified token.
+ */
+const SCOPE_MARKERS = { role: 'outer', category: 'scope', tokens: ['group', 'peer'] };
+
+/**
+ * Add the Tailwind-only prefixes and scope markers, refusing any that csszyx
+ * already owns.
+ *
+ * @param prefixes - Prefix map built from `PROPERTY_MAP`, mutated in place.
+ * @param tokens - Exact-token map built from `PROPERTY_MAP`, mutated in place.
+ */
+function addTailwindOnly(prefixes, tokens) {
+    for (const { role, category, prefixes: names } of TAILWIND_ONLY_PREFIXES) {
+        for (const name of names) {
+            if (prefixes.has(name)) {
+                throw new Error(
+                    `[gen-box-role-map] "${name}" is listed as Tailwind-only but csszyx emits it; drop the row`,
+                );
+            }
+            prefixes.set(name, { role, category });
+        }
+    }
+    for (const token of SCOPE_MARKERS.tokens) {
+        if (tokens.has(token) || prefixes.has(token)) {
+            throw new Error(
+                `[gen-box-role-map] scope marker "${token}" collides with an emitted utility; reconcile`,
+            );
+        }
+        tokens.set(token, { role: SCOPE_MARKERS.role, category: SCOPE_MARKERS.category });
+    }
+}
+
 function buildPrefixes(keyRole, propertyKeys) {
     const prefixes = new Map();
     const resolvedByValue = [];
@@ -743,6 +812,7 @@ export function buildRoleMaps() {
     const tokens = buildExactTokens(keyRole);
     const keyRoles = buildCompleteKeyRoles(keyRole);
     markDeclaredOnBoth(prefixes, keyRoles);
+    addTailwindOnly(prefixes, tokens);
     return { prefixes, tokens, keyRoles };
 }
 
@@ -754,6 +824,10 @@ function render({ prefixes, tokens, keyRoles }) {
     );
     const tokenEntries = [...tokens.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     const keyEntries = [...keyRoles.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const markerEntries = [...SCOPE_MARKERS.tokens]
+        .sort()
+        .map(t => `    ${JSON.stringify(t)},`)
+        .join('\n');
     const entry = ([k, v]) => {
         const fields = [
             `role: ${JSON.stringify(v.role)}`,
@@ -822,6 +896,18 @@ ${tokenEntries.map(entry).join('\n')}
 export const BOX_ROLE_PREFIXES: ReadonlyArray<readonly [string, BoxRoleEntry]> = [
 ${prefixEntries.map(entry).join('\n')}
 ];
+
+/**
+ * Markers that accept a \`/<name>\` suffix (\`group/item\`, \`peer/email\`). The name
+ * picks WHICH ancestor a \`group-hover/item:\` variant reads; it never changes
+ * what the marker itself does, so the named form classifies as the bare one.
+ * A slash means something else entirely everywhere else — \`bg-red-500/50\` is an
+ * opacity modifier — so the runtime consults this set rather than splitting on
+ * \`/\` in general.
+ */
+export const BOX_ROLE_SCOPE_MARKERS: ReadonlySet<string> = new Set([
+${markerEntries}
+]);
 
 /**
  * sz prop key → box-model role, for partitioning an sz OBJECT (\`splitBoxSz\`)
