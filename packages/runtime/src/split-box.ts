@@ -104,6 +104,11 @@ interface TokenInfo extends Classification {
     readonly value: string;
     /** Declared on both nodes rather than routed to one (`transition-*`). */
     readonly both?: boolean;
+    /**
+     * The side the base belongs to, when a sibling-bound variant forced the
+     * token off it. Read by the development warning only.
+     */
+    readonly movedFrom?: BoxRole;
 }
 
 /**
@@ -243,7 +248,56 @@ function inspect(token: string, bridge: MangleBridge | undefined): TokenInfo | u
  * @returns Token info, or `undefined` if unowned.
  */
 function inspectUncached(token: string): TokenInfo | undefined {
-    const base = normalizeBase(stripVariant(token));
+    const info = classifyBase(normalizeBase(stripVariant(token)));
+    // A `peer-*` rule reaches its target through the general sibling
+    // combinator, and the inner node is a CHILD of the outer one — a sibling of
+    // nothing the author wrote. Whatever side the base belongs to, the only
+    // node where such a rule can match is the outer one: on the inner node it
+    // is dead, and a `not-peer-*` rule there is worse, permanently on, because
+    // the negation of a match that cannot happen is always true. The category
+    // stays, so a category query still finds the token.
+    if (info !== undefined && info.role === 'inner' && !info.both && hasPeerVariant(token)) {
+        return { ...info, role: 'outer', movedFrom: 'inner' };
+    }
+    return info;
+}
+
+/**
+ * Whether a variant chain carries a `peer-*` variant or its `not-peer-*` form.
+ * Measured on `tailwindcss@4.3.3`, every served `peer-*` variant compiles to
+ * the general sibling combinator; `group-*`, `has-*` and `in-*` do not. Walks
+ * top-level `:` only, the way {@link stripVariant} does, so an arbitrary
+ * variant that merely mentions peer inside its brackets is left alone.
+ *
+ * @param token - A single class token, variants intact.
+ * @returns `true` when one of its variants is sibling-bound.
+ */
+function hasPeerVariant(token: string): boolean {
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < token.length; i++) {
+        const ch = token[i];
+        if (ch === '[' || ch === '(') depth++;
+        else if (ch === ']' || ch === ')') depth--;
+        else if (ch === ':' && depth === 0) {
+            if (token.startsWith('peer-', start) || token.startsWith('not-peer-', start))
+                return true;
+            start = i + 1;
+        }
+    }
+    // What follows the last colon is the base, not a variant.
+    return false;
+}
+
+/**
+ * Classify a base utility — variants and markers already stripped — from the
+ * generated tables. See {@link inspectUncached} for the one thing layered on
+ * top of the tables.
+ *
+ * @param base - The normalised base utility.
+ * @returns Token info, or `undefined` if unowned.
+ */
+function classifyBase(base: string): TokenInfo | undefined {
     if (!base) return undefined;
 
     // A token built from one closed value of a prefixed key carries that value
@@ -768,6 +822,7 @@ function splitBoxUncached(
 
     if (process.env.NODE_ENV !== 'production') {
         warnUnplacedTokens(unplaced, fallback);
+        warnSiblingBound(outer, bridge);
         warnUnusableSplit(outer, inner, bridge);
     }
 
@@ -823,6 +878,32 @@ const STRETCHED_BASES: ReadonlySet<string> = new Set(['flex-1', 'grow']);
 
 /** Prefixes of the same, for the sized forms (`grow-0`, `basis-1/2`). */
 const STRETCHED_PREFIXES = ['grow-', 'basis-'];
+
+/**
+ * Say that a token stayed on the frame although its base belongs inside,
+ * because a `peer-*` rule can only ever match there. The frame is where the
+ * author's own DOM has the sibling; the content node is a child of it. The
+ * help names the arbitrary variant that reaches the content FROM the frame,
+ * which is the one way to get the effect where the base wanted it.
+ *
+ * @param outer - Raw tokens routed to the frame.
+ * @param bridge - The mangle bridge for this operation.
+ */
+function warnSiblingBound(outer: readonly string[], bridge: MangleBridge | undefined): void {
+    for (const token of outer) {
+        const info = inspect(token, bridge);
+        if (info?.movedFrom === undefined) continue;
+        // The variant chain is everything before the base; `stripVariant`
+        // already found the last top-level colon, so a colon inside an
+        // arbitrary value cannot split the token in the wrong place.
+        const tail = stripVariant(token);
+        const reaching = `${token.slice(0, token.length - tail.length)}[&>*]:${tail}`;
+        devWarn(
+            `splitBox: '${token}' stays on the frame although '${info.base}' belongs inside, because a peer rule reaches siblings and the content node is a child of the frame, where it could never match. ` +
+                `help: to reach the content instead, target it from the frame: '${reaching}'.`,
+        );
+    }
+}
 
 /**
  * Say that a token nothing classified was placed by the fallback rather than by

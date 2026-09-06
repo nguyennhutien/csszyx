@@ -92,6 +92,7 @@ itself.
 | A custom class falls onto the wrong node | [Unrecognised classes](#a-class-csszyx-does-not-recognise) |
 | A placement such as `outer: ['md:hidden']` does nothing | [Base class placement](#a-placement-names-a-variant) |
 | `pick(cls, 'text:colour')` returns nothing | [Qualified selectors](#a-qualified-selector-names-a-property-csszyx-does-not-tell-apart) |
+| A `peer-hover:` class never fires inside a split component | [Peer rules](#a-peer-rule-kept-a-class-on-the-frame) |
 | Warnings stopped appearing part-way through a session | [The cap on development warnings](#the-cap-on-development-warnings) |
 | The build got slower or bigger | [Mangling](#mangling) |
 | Only *some* files are styled | [Build pipeline](#build-pipeline) |
@@ -1144,6 +1145,26 @@ selector.
 Two helpers take two different inputs, and mixing them up says so:
 `splitBoxSz partitions sz objects, not raw class strings — use splitBox() for {value}.`
 `splitBox` takes a class string; `splitBoxSz` takes an `sz` object.
+
+### A peer rule kept a class on the frame
+
+```text
+[csszyx] splitBox: '{token}' stays on the frame although '{base}' belongs inside, because a peer rule reaches siblings and the content node is a child of the frame, where it could never match. help: to reach the content instead, target it from the frame: '{reaching}'.
+```
+
+Every `peer-*` variant compiles to the general sibling combinator — the rule
+for `peer-hover:p-4` matches an element that is a *following sibling* of the
+hovered `.peer`. The frame is that sibling; the content node is a child of the
+frame, so a rule placed there can never match, and `not-peer-*` there is worse:
+the negation of a match that cannot happen is always true, so the class is
+permanently on. `splitBox` therefore keeps every `peer-*` utility on the frame
+whatever side its base belongs to, and says so once when that moved it —
+`peer-checked:bg-red-500` was going outside anyway and stays quiet.
+
+The help line names the one way to get the effect onto the content: an
+arbitrary child variant on the frame, `peer-hover:[&>*]:p-4`, which Tailwind
+compiles to the sibling rule followed by `> *`. `group-*`, `has-*` and `in-*`
+are not affected — their rules reach descendants, and the content node is one.
 
 ### A qualified selector names a property csszyx does not tell apart
 
