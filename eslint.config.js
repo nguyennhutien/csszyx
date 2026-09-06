@@ -204,6 +204,12 @@ export default [
             // S5843. A pattern past this size stops being checkable against the
             // grammar it encodes, one rule at a time.
             'sonarjs/regex-complexity': 'error',
+
+            // S3358. Reported on a pull request while nothing here had a word
+            // to say: a ternary inside a ternary reads as one expression and is
+            // two decisions, and the one that triggered this sat inside the
+            // argument of a method call, which is where it is hardest to see.
+            'sonarjs/no-nested-conditional': 'error',
             // S2310. A counter the body rewrites is no longer a counter, and
             // where the next step lands stops being readable from the header.
             'sonarjs/updated-loop-counter': 'error',

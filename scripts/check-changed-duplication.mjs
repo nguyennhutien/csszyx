@@ -31,6 +31,12 @@ const IGNORE = [
     '**/dist/**',
     '**/node_modules/**',
     '**/generated/**',
+    // A generated file is named, not foldered, three times in this repo: the
+    // box-role map, the sz allowlist and the tooling metadata. Each is a table
+    // of one-line entries, so a duplication measure reads half of it as copied
+    // — a report about a script's output shape, not about anything a person
+    // wrote or could change here.
+    '**/*.generated.ts',
     '**/*.d.ts',
     '**/*.type-test.ts',
     'packages/core/fuzz/**',

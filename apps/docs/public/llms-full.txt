@@ -3918,31 +3918,43 @@ import {
   stripSzProps,
 } from "@csszyx/runtime";
 
-// Partition: outer = border-outward (margin/position/border/ring/sizing/bg/shadow/transform/visibility),
-//            inner = border-inward (padding/overflow/display/flex/grid/gap/text/interaction)
+// Partition: outer = border-outward (margin/position/border/ring/sizing/bg/shadow/transform/
+//            visibility/overflow-hidden+clip/cursor/select/pointer-events/scroll-m/snap-start/align),
+//            inner = border-inward (padding/overflow-auto+scroll/display/flex/grid/gap/text/divide/
+//            perspective/transform-3d/resize/appearance)
+// Both: transition/duration/ease/delay are declared on BOTH nodes (a transition is inert until a
+//       property changes, and the state that changes it can sit on either side).
 const { outer, inner } = splitBox("m-4 px-2 md:flex");
 // outer: "m-4"   inner: "px-2 md:flex"
 
+// overflow routes by VALUE: hidden/clip clip the frame, auto/scroll scroll the content
+splitBox("overflow-hidden overflow-y-auto p-4");
+// outer: "overflow-hidden"   inner: "overflow-y-auto p-4"
+
 // Override any default per call (BoxSelector = box-role | category | class-prefix | { category: value })
-splitBox("overflow-hidden p-4", { outer: ["overflow"] });
-// outer: "overflow-hidden"   inner: "p-4"
+splitBox("overflow-hidden p-4", { inner: ["overflow"] });
+// outer: ""   inner: "overflow-hidden p-4"
 
 // Toolkit: csszyx owns the truth (box-role/category), your project owns the rule
-classify("inset-ring-2"); // { role: 'inner', category: 'ring' }
+classify("inset-ring-2"); // { role: 'outer', category: 'ring' }
 has("p-2 overflow-y-auto", "overflow"); // true
 pick("m-4 text-sm", "text"); // "text-sm"
 omit("p-2 overflow-y-auto flex", "overflow"); // "p-2 flex"
 
-// A scroller scrolls only when the outer frame clips (project-owned dependency rule)
-const dep = has(outer, { overflow: "hidden" }) ? "overflow-y-auto h-full" : "";
+// A scroll frame: the clip and the height land outer on their own; the plumbing that lets a
+// child inherit the frame's height is the component's own (min-h-0 defeats flex's min-height:auto)
+// frame: `${outer} flex flex-col min-h-0 overflow-hidden`
+// content: `${inner} flex-1 min-h-0 overflow-y-auto`
 
 // sz-OBJECT routing: splitBoxSz partitions an sz OBJECT (not a className) into
 // { outer, inner } sz objects — keeps a szv-based component sz-native and routes
 // each key to the same side its class would (splitBoxSz(x) ≡ splitBox(compile(x))).
 splitBoxSz({ m: 4, px: 2 }); // { outer: { m: 4 }, inner: { px: 2 } }
 splitBoxSz({ gap: 2, hover: { px: 1 }, md: { m: 4 } }); // variants route by inner prop; split when they disagree
-splitBoxSz({ grow: 2, self: "center" }, { outer: ["grow", "self"] }); // force flex-item utils to the frame
-// classifySzKey(key) / hasSz / pickSz / omitSz — the sz-object toolkit twins
+splitBoxSz({ grow: 2, self: "center" }, { inner: ["grow", "self"] }); // item utils (grow/order/self/col-span) are OUTER by default; this forces them back to the content
+splitBoxSz({ overflow: "hidden", p: 4 }); // { outer: { overflow: 'hidden' }, inner: { p: 4 } }
+// classifySzKey(key, value?) / hasSz / pickSz / omitSz — the sz-object toolkit twins
+// (pass the value for a key whose side depends on it: classifySzKey('overflow', 'hidden') → outer)
 
 // stripSzProps: drop sz before forwarding ...rest to the DOM (guards uncompiled files
 // whose raw sz would leak as sz="[object Object]"; dev-warns once on a raw-object sz)

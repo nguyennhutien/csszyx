@@ -142,6 +142,39 @@ function classifyMatchedPrefix(
 }
 
 /**
+ * The conflict group for a token under an ambiguous prefix, or `null`.
+ *
+ * A token that belongs to an ambiguous prefix AND classifies to a concrete
+ * value group (`text-ellipsis` / `text-clip` → `text:overflow`, or a
+ * data-type-hinted variable like `text-(color:--x)` → `text:color`) is a single
+ * mutually-exclusive property, so it must last-win even when it also appears in
+ * the box-role map or contains `--` — the hinted-variable forms do. The caller
+ * asks this BEFORE the BEM `--` guard and the box-role under-merge, which would
+ * otherwise keep both. A BEM name under an ambiguous prefix
+ * (`text-foo--active`) classifies to null here and falls through to that guard.
+ *
+ * Measured: only `text-ellipsis` and `text-clip` sit in both the classifier and
+ * the box-role map; every other box-role token is null here.
+ *
+ * @param norm - Normalized utility token.
+ * @param variant - Variant prefix removed from the token.
+ * @param firstSegment - The token's first dash-segment.
+ * @returns The conflict classification, or `null` when this is not that shape.
+ */
+function classifyAmbiguousToken(
+    norm: string,
+    variant: string,
+    firstSegment: string,
+): { key: string; covers: string[] } | null {
+    if (!AMBIGUOUS_PREFIXES.has(firstSegment)) return null;
+    const value = norm === firstSegment ? '' : norm.slice(firstSegment.length + 1);
+    const group = classifyAmbiguousValue(firstSegment, value);
+    if (group === null) return null;
+    const key = `${variant} ${group}`;
+    return { key, covers: [key] };
+}
+
+/**
  * Mask utilities key by the `--tw-mask-*` custom property they write, not by
  * the `mask` prefix they share. Tailwind composites mask-image from three
  * layer variables, and inside the linear layer every side owns another, so
@@ -234,24 +267,8 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
         const masked = classifyMaskToken(norm, variant);
         if (masked !== null) return masked;
     }
-    // A token that belongs to an ambiguous prefix AND classifies to a concrete
-    // value group (e.g. `text-ellipsis`/`text-clip` → `text:overflow`, or a
-    // data-type-hinted variable like `text-(color:--x)` → `text:color`) is a
-    // single mutually-exclusive property, so it must last-wins even when it also
-    // appears in the box-role map or contains `--` (the hinted-variable forms
-    // do). Resolve that BEFORE the BEM `--` guard and the box-role under-merge
-    // below, which would otherwise keep both. A BEM name under an ambiguous
-    // prefix (`text-foo--active`) classifies to null and still falls through to
-    // the guard. (Measured: only text-ellipsis and text-clip sit in both the
-    // classifier and the box-role map; every other box-role token is null here.)
-    if (AMBIGUOUS_PREFIXES.has(firstSegment)) {
-        const value = norm === firstSegment ? '' : norm.slice(firstSegment.length + 1);
-        const group = classifyAmbiguousValue(firstSegment, value);
-        if (group !== null) {
-            const key = `${variant} ${group}`;
-            return { key, covers: [key] };
-        }
-    }
+    const grouped = classifyAmbiguousToken(norm, variant, firstSegment);
+    if (grouped !== null) return grouped;
     // A BEM-style modifier (`tab-item-header--active`) is a DISTINCT class from its
     // base (`tab-item-header`), not a value-pair of the same utility — collapsing
     // them last-wins would drop the base (e.g. `tab-item-header` happens to start
@@ -264,8 +281,16 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
     }
     // Exact value-keyed tokens (flex/block/italic/underline …) span several CSS
     // properties under one category, so under-merge to avoid dropping a sibling.
-    if (BOX_ROLE_TOKENS.has(norm)) {
-        return null;
+    //
+    // A token that is one CLOSED VALUE of a prefixed key is a different animal:
+    // it sits in the same map only so the box-role split can read its value, and
+    // it is a single mutually-exclusive property (`overflow-hidden` against
+    // `overflow-auto`). Those keep merging by their prefix, exactly as they did
+    // before the map learned them.
+    const exact = BOX_ROLE_TOKENS.get(norm);
+    if (exact !== undefined) {
+        if (exact.prefix === undefined) return null;
+        return classifyMatchedPrefix(norm, variant, exact.prefix);
     }
     const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(firstSegment) ?? [];
     for (const [prefix] of bucket) {

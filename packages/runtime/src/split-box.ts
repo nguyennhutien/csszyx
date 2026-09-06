@@ -26,6 +26,7 @@ import {
     BOX_ROLE_PREFIXES,
     BOX_ROLE_TOKENS,
     type BoxRole,
+    type BoxRoleEntry,
 } from './box-role-map.generated.js';
 import { decodeToken, type MangleBridge, mangleBridge } from './class-codec.js';
 import type { SzInput } from './concatenate.js';
@@ -76,6 +77,8 @@ interface TokenInfo extends Classification {
     readonly base: string;
     /** Value segment after the matched prefix (`''` for value-keyed tokens). */
     readonly value: string;
+    /** Declared on both nodes rather than routed to one (`transition-*`). */
+    readonly both?: boolean;
 }
 
 /**
@@ -208,8 +211,12 @@ function inspectUncached(token: string): TokenInfo | undefined {
     const base = normalizeBase(stripVariant(token));
     if (!base) return undefined;
 
+    // A token built from one closed value of a prefixed key carries that value
+    // (`overflow-hidden` → `hidden`), so an object selector reads it the way it
+    // reads a prefixed token. Value-keyed sugar has no prefix and its class name
+    // IS the value (`block`, `italic`), so it answers with the whole base.
     const exact = BOX_ROLE_TOKENS.get(base);
-    if (exact) return { ...exact, base, value: base };
+    if (exact) return { ...exact, base, value: exact.value ?? base };
 
     const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(base.split('-', 1)[0] as string) ?? [];
     for (const [prefix, entry] of bucket) {
@@ -428,9 +435,12 @@ function hasSplitOverrides(options: SplitBoxOptions): boolean {
 
 /**
  * Partition a className string into `{ outer, inner }` at the CSS box-model
- * border line. Every token lands in exactly one bucket (no loss, no duplication)
- * and keeps its variant prefix. Overrides in `options.inner` / `options.outer`
- * win over the default map; `inner` is checked first when a token matches both.
+ * border line. Nothing is lost and every token keeps its variant prefix: each
+ * lands in exactly one bucket, except the timing group (`transition-*`,
+ * `duration-*`, `ease-*`, `delay-*`), which is declared on both because the
+ * state that fires a transition can sit on either node. Overrides in
+ * `options.inner` / `options.outer` win over the default map and over the
+ * both-node rule; `inner` is checked first when a token matches both.
  *
  * @param className - The flat className string to partition.
  * @param options - Overrides for forcing tokens onto a node and the fallback role.
@@ -480,14 +490,160 @@ function splitBoxUncached(
 
     for (const token of tokenize(className)) {
         const info = inspect(token, bridge);
-        let role: BoxRole;
-        if (anyMatch(info, forceInner)) role = 'inner';
-        else if (anyMatch(info, forceOuter)) role = 'outer';
-        else role = info ? info.role : fallback;
+        if (anyMatch(info, forceInner)) {
+            inner.push(token);
+            continue;
+        }
+        if (anyMatch(info, forceOuter)) {
+            outer.push(token);
+            continue;
+        }
+        // A transition is declared on both nodes unless the caller pinned it:
+        // it does nothing on its own, and the state that fires it can sit on
+        // either side. An override still wins, which is why this runs after the
+        // two checks above.
+        if (info?.both) {
+            outer.push(token);
+            inner.push(token);
+            continue;
+        }
+        const role = info ? info.role : fallback;
         (role === 'outer' ? outer : inner).push(token);
     }
 
+    if (process.env.NODE_ENV !== 'production') {
+        warnUnusableSplit(outer, inner, bridge);
+    }
+
     return { outer: outer.join(' '), inner: inner.join(' ') };
+}
+
+/**
+ * Whether any token in `tokens` satisfies `predicate` once classified.
+ *
+ * @param tokens - Raw tokens from one bucket.
+ * @param bridge - The mangle bridge for this operation.
+ * @param predicate - Test run against each token's info and its stripped base.
+ * @returns `true` when at least one token satisfies it.
+ */
+function someToken(
+    tokens: readonly string[],
+    bridge: MangleBridge | undefined,
+    predicate: (info: TokenInfo | undefined, base: string) => boolean,
+): boolean {
+    // A token csszyx does not own has no base to test: every utility these
+    // predicates name is one csszyx emits, so it can never be a match.
+    return tokens.some(token => {
+        const info = inspect(token, bridge);
+        return predicate(info, info?.base ?? '');
+    });
+}
+
+/**
+ * A token that asks its element to scroll, rather than to clip.
+ *
+ * @param info - The classified token info, or `undefined` if unowned.
+ * @returns `true` for `overflow-auto` / `overflow-scroll` on any axis.
+ */
+function isScroller(info: TokenInfo | undefined): boolean {
+    return info?.category === 'overflow' && (info.value === 'auto' || info.value === 'scroll');
+}
+
+/**
+ * A token that clips the element it is on.
+ *
+ * @param info - The classified token info, or `undefined` if unowned.
+ * @returns `true` for `overflow-hidden` / `overflow-clip` on any axis.
+ */
+function isClip(info: TokenInfo | undefined): boolean {
+    return info?.category === 'overflow' && (info.value === 'hidden' || info.value === 'clip');
+}
+
+/** Height bounds a scroll container can inherit or be given directly. */
+const HEIGHT_BOUND_PREFIXES = ['h-', 'max-h-', 'min-h-', 'size-'];
+
+/** Utilities that let a parent decide the height instead of a class here. */
+const STRETCHED_BASES: ReadonlySet<string> = new Set(['flex-1', 'grow']);
+
+/** Prefixes of the same, for the sized forms (`grow-0`, `basis-1/2`). */
+const STRETCHED_PREFIXES = ['grow-', 'basis-'];
+
+/**
+ * Say when a partition produced a shape that cannot do what the className asked
+ * for. Development only — the caller guards on `NODE_ENV`, so nothing here is
+ * reachable in a production bundle, and every lookup goes through the same
+ * memoized `inspect` the partition already filled.
+ *
+ * @param outer - Raw tokens routed to the frame.
+ * @param inner - Raw tokens routed to the content.
+ * @param bridge - The mangle bridge for this operation.
+ */
+function warnUnusableSplit(
+    outer: readonly string[],
+    inner: readonly string[],
+    bridge: MangleBridge | undefined,
+): void {
+    const scroller = inner.find(token => isScroller(inspect(token, bridge)));
+
+    if (scroller !== undefined) {
+        // A scroll container with no height grows to fit its content, so it
+        // never scrolls. The bound can be a class on either node, or it can
+        // come from the parent, which is what the position and flex cases are.
+        const bounded =
+            someToken(
+                [...outer, ...inner],
+                bridge,
+                (info, base) =>
+                    info?.category === 'sizing' &&
+                    HEIGHT_BOUND_PREFIXES.some(prefix => base.startsWith(prefix)),
+            ) ||
+            someToken(
+                outer,
+                bridge,
+                (_info, base) =>
+                    STRETCHED_BASES.has(base) ||
+                    STRETCHED_PREFIXES.some(prefix => base.startsWith(prefix)),
+            ) ||
+            (someToken(outer, bridge, (_info, base) => base === 'absolute' || base === 'fixed') &&
+                someToken(
+                    outer,
+                    bridge,
+                    (info, base) =>
+                        info?.category === 'position' && base !== 'absolute' && base !== 'fixed',
+                ));
+        if (!bounded) {
+            devWarn(
+                `splitBox: '${scroller}' went to the content node, but nothing bounds the height of either node, so the content will grow instead of scrolling. ` +
+                    "help: give the className a height bound such as h-64, max-h-96 or h-full, or put 'flex flex-col min-h-0' on the frame and 'flex-1 min-h-0' on the content.",
+            );
+        }
+
+        // Scrolled content paints to the padding box, so it runs over a corner
+        // the frame rounded but did not clip.
+        if (
+            someToken(outer, bridge, info => info?.category === 'rounded') &&
+            !someToken(outer, bridge, isClip)
+        ) {
+            devWarn(
+                'splitBox: the frame is rounded and the content scrolls, but the frame does not clip, so scrolled content paints over the corners. ' +
+                    "help: add 'overflow-hidden' to the frame.",
+            );
+        }
+    }
+
+    // `hidden` is display:none, which is inner: it stops the CONTENT node from
+    // rendering while the frame keeps its own background, border and size. Under
+    // a variant the pair is usually deliberate, so only the bare form is named.
+    const hidden = inner.find(
+        token =>
+            token === stripVariant(token) && normalizeBase(decodeToken(token, bridge)) === 'hidden',
+    );
+    if (hidden !== undefined) {
+        devWarn(
+            `splitBox: '${hidden}' went to the content node, so the frame keeps its background, border and size and stays visible. ` +
+                "help: pass { outer: ['hidden'] } if the whole box should disappear.",
+        );
+    }
 }
 
 /**
@@ -571,11 +727,34 @@ export interface SplitBoxSzResult {
  * takes an emitted class token) — both read the same generated map, so
  * `classifySzKey('m')` and `classify('m-4')` agree.
  *
+ * A few keys mean different things per value — `overflow: 'hidden'` clips the
+ * frame while `overflow: 'auto'` scrolls the content — so pass the value to get
+ * the role the emitted class would have. Without it the key's own role is
+ * returned, which is what the class for any other value has.
+ *
  * @param key - An sz prop key (e.g. `'m'`, `'px'`, `'grow'`).
+ * @param value - The value the key holds, when it is known.
  * @returns The key's role and category, or `undefined` if unowned.
  */
-export function classifySzKey(key: string): Classification | undefined {
-    return BOX_ROLE_BY_KEY.get(key);
+export function classifySzKey(key: string, value?: SzValue): Classification | undefined {
+    const entry = BOX_ROLE_BY_KEY.get(key);
+    if (entry === undefined) return undefined;
+    // A fresh pair, never the generated entry: that entry also carries the
+    // routing detail behind the answer — a per-value role map, a both-node flag
+    // — and this reads as `{ role, category }` everywhere it is documented.
+    return { role: roleForValue(entry, value), category: entry.category };
+}
+
+/**
+ * The role an sz entry takes for the value it holds.
+ *
+ * @param entry - The key's classification.
+ * @param value - The value the key holds.
+ * @returns The value's role, or the key's own when the value does not change it.
+ */
+function roleForValue(entry: BoxRoleEntry, value: SzValue | undefined): BoxRole {
+    if (entry.byValue === undefined || typeof value !== 'string') return entry.role;
+    return entry.byValue.get(value) ?? entry.role;
 }
 
 /**
@@ -749,7 +928,15 @@ function partitionSzEntry(key: string, value: SzValue, context: SzPartitionConte
         return;
     }
     if (entry) {
-        (entry.role === 'inner' ? context.inner : context.outer)[key] = value;
+        // Declared on both nodes, for the reason `splitBoxUncached` gives: the
+        // transition is inert until something changes, and the change can sit
+        // on either side.
+        if (entry.both) {
+            context.outer[key] = value;
+            context.inner[key] = value;
+            return;
+        }
+        (roleForValue(entry, value) === 'inner' ? context.inner : context.outer)[key] = value;
         return;
     }
     if (!isPlainObject(value)) {

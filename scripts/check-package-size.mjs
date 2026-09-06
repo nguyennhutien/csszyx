@@ -44,10 +44,21 @@ export const SIZE_BUDGETS = [
         // global that an inline HTML script installed, which strict CSP
         // refuses; registering it from inside the bundle moved that code into
         // the shipped runtime, so the growth is the fix rather than drift.
+        //
+        // Raised again from 22,800 for routing `splitBox` by CSS role, measured
+        // 2026-09-05 at 23,266 B in three steps: 22,109 before, 22,580 with the
+        // value-routed box-role map (+471, real payload — the exact tokens now
+        // carry the prefix and value they were built from), 23,266 with the
+        // three development warnings (+686, all of it message text).
+        //
+        // That second half is package weight only, not app weight: bundled with
+        // `process.env.NODE_ENV` defined as production, the warning text is gone
+        // from the output (measured with esbuild — zero occurrences, and 794
+        // gzip bytes smaller than the same bundle built for development).
         name: '@csszyx/runtime export closure',
         kind: 'package-exports',
         target: 'packages/runtime',
-        maxGzipBytes: 22_800,
+        maxGzipBytes: 23_552,
     },
     {
         name: '@csszyx/dynamic export closure',

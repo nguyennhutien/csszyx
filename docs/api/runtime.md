@@ -31,7 +31,7 @@ name; `_sz` is the identical helper the compiler injects (the `_` marks generate
 code — do not hand-author it). Use `szr` when you build a className from `szv`
 factory output or sz objects (e.g. a code-split layout that resolves variants at
 the leaf). `szr` CONCATENATES; to merge with last-wins override on a same-utility
-conflict use [`szcn()`](#szcn). `szr` accepts sz OBJECTS; `szcn` accepts STRINGS.
+conflict use [`szcn()`](/docs/reference/runtime/#szcnclasses--mangle-aware-override-merge). `szr` accepts sz OBJECTS; `szcn` accepts STRINGS.
 
 **Signature:**
 
@@ -128,19 +128,23 @@ These are pure string functions — framework-agnostic, no React, no DOM. The cl
 
 The border line splits two roles:
 
-- **`outer`** (border-outward): margin, position/inset/z, border/rounded/outline/ring/divide, drop shadow, sizing, background, opacity/transform/transition/filter/backdrop, visibility.
-- **`inner`** (border-inward): padding, overflow/overscroll/scroll/snap, display, flex/grid layout, gap/space, text & typography, paint-inside (gradient, fill/stroke, caret/accent, inset-ring/inset-shadow), interactivity.
+- **`outer`** (border-outward): margin, position/inset/z, border/rounded/outline/ring (`inset-ring` too), shadow (`inset-shadow` too), sizing, background, opacity/transform/filter/backdrop, visibility, the clip the box applies to itself (`overflow-hidden`, `overflow-clip`), the pointer (`cursor-*`, `select-*`, `pointer-events-*`, `will-change-*`), scroll margin, snap position (`snap-start`, `snap-always`), `align-*`, and the flex/grid **item** utilities.
+- **`inner`** (border-inward): padding, scrolling (`overflow-auto`, `overflow-scroll`), overscroll, scroll padding, `snap-x`/`snap-y`, display, flex/grid **container** layout, gap/space, `divide-*`, text & typography, paint-inside (gradient, fill/stroke, caret/accent), `perspective-*`/`transform-3d`, and the form affordances (`resize-*`, `appearance-*`, `field-sizing-*`).
+- **both**: `transition-*`, `duration-*`, `ease-*`, `delay-*` are declared on both nodes — a transition is inert until a property changes, and the state that changes it can sit on either side.
 
 Every default is overridable per call.
 
 ### `splitBox()`
 
-Partition a className into `{ outer, inner }`. Every token lands in exactly one bucket (no loss, no duplication) and keeps its variant prefix.
+Partition a className into `{ outer, inner }`. Nothing is lost and every token keeps its variant prefix: each lands in exactly one bucket, except the timing group above, which lands on both.
 
 **Signature:**
 
 ```ts
-function splitBox(className: string, options?: SplitBoxOptions): {
+function splitBox(
+  className: string,
+  options?: SplitBoxOptions,
+): {
   outer: string;
   inner: string;
 };
@@ -164,9 +168,13 @@ import { splitBox } from "@csszyx/runtime";
 splitBox("m-4 px-2 md:flex");
 // → { outer: "m-4", inner: "px-2 md:flex" }
 
-// Override the default: route overflow to the outer frame instead of inner
-splitBox("overflow-hidden p-4", { outer: ["overflow"] });
-// → { outer: "overflow-hidden", inner: "p-4" }
+// overflow routes by value: the clip goes to the frame, the scroller to the content
+splitBox("overflow-hidden overflow-y-auto p-4");
+// → { outer: "overflow-hidden", inner: "overflow-y-auto p-4" }
+
+// Override the default: send the clip to the content instead
+splitBox("overflow-hidden p-4", { inner: ["overflow"] });
+// → { outer: "", inner: "overflow-hidden p-4" }
 ```
 
 ### `classify()`, `has()`, `pick()`, `omit()`
@@ -176,7 +184,9 @@ The category-aware toolkit. csszyx owns the **truth** (which box-role / category
 **Signatures:**
 
 ```ts
-function classify(token: string): { role: "outer" | "inner"; category: string } | undefined;
+function classify(
+  token: string,
+): { role: "outer" | "inner"; category: string } | undefined;
 function has(classes: string, selector: BoxSelector): boolean;
 function pick(classes: string, selector: BoxSelector): string;
 function omit(classes: string, selector: BoxSelector): string;
@@ -211,7 +221,9 @@ Removes the `sz` prop before a component spreads `...rest` onto a host element. 
 **Signature:**
 
 ```ts
-function stripSzProps<T extends Record<string, unknown>>(props: T): Omit<T, "sz">;
+function stripSzProps<T extends Record<string, unknown>>(
+  props: T,
+): Omit<T, "sz">;
 ```
 
 **Example:**

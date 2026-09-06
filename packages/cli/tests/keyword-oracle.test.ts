@@ -15,6 +15,12 @@ import { describe, expect, it } from 'vitest';
 import { keywordOracleFrom } from '../src/scanner/keyword-oracle.js';
 
 /** A design system standing in for a compiled project stylesheet. */
+/** The two candidates this oracle stub knows, and the CSS each stands for. */
+const STUB_CSS: Record<string, string> = {
+    'text-balance': '.text-balance { text-wrap: balance; }',
+    'text-red-500': '.text-red-500 { --tw-x: 1; color: var(--color-red-500); }',
+};
+
 const design = {
     theme: {
         entries: () => [
@@ -34,13 +40,7 @@ const design = {
               ]
             : [{ kind: 'functional', root: 'text', value: { kind: 'named', value: 'red-500' } }],
     candidatesToCss: (candidates: readonly string[]) =>
-        candidates.map(candidate =>
-            candidate === 'text-balance'
-                ? '.text-balance { text-wrap: balance; }'
-                : candidate === 'text-red-500'
-                  ? '.text-red-500 { --tw-x: 1; color: var(--color-red-500); }'
-                  : null,
-        ),
+        candidates.map(candidate => STUB_CSS[candidate] ?? null),
 };
 
 describe('keywordOracleFrom', () => {
