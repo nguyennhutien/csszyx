@@ -2432,6 +2432,8 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
 mod tests {
     #[cfg(feature = "native-engine")]
     use super::collect_dead_weight_values;
+    #[cfg(feature = "native-engine")]
+    use super::collect_owned_key_variant_objects;
     use super::{
         build_mask_radial_classes, build_mask_slot_classes, build_mask_stop_classes,
         collect_unknown_sz_keys, format_color_opacity_object, format_mask_position,
@@ -2644,6 +2646,38 @@ mod tests {
         assert!(
             out.is_empty(),
             "must not warn on parametric params: {out:?}"
+        );
+    }
+
+    /// A mask slot's members are geometry, not sz keys.
+    ///
+    /// `maskLinear` is not one of the parametric stems named beside it in the
+    /// same guard — it is recognised by its own lookup — so a build that walked
+    /// only that list descended into it and reported its members as classes
+    /// that style nothing. Both halves of the guard have to hold on their own.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collect_owned_key_variants_does_not_descend_a_mask_slot() {
+        let object = StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: "maskLinear".to_string(),
+                span: TextSpan { start: 0, end: 0 },
+                value: StaticSzValue::Object(StaticSzObject {
+                    properties: vec![StaticSzProperty {
+                        key: "--v-x".to_string(),
+                        span: TextSpan { start: 0, end: 0 },
+                        value: StaticSzValue::Object(StaticSzObject {
+                            properties: vec![property("p", StaticSzValue::Number(4.0))],
+                        }),
+                    }],
+                }),
+            }],
+        };
+        let mut out = Vec::new();
+        collect_owned_key_variant_objects(&object, &mut out);
+        assert!(
+            out.is_empty(),
+            "a mask slot's members are geometry, not owned keys: {out:?}"
         );
     }
 

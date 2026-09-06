@@ -18,7 +18,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -409,5 +409,76 @@ describe('the cache index', () => {
             name: 'b.json',
         });
         expect(transformer.process(SOURCE, '/repo/b.tsx').code).toBe('second');
+    });
+});
+
+/**
+ * The index re-reads a directory it saw moving, and trusts one that has settled.
+ *
+ * A write landing in the same clock tick as a read leaves the directory's
+ * modification time unchanged, so a time this recent proves nothing and the
+ * next lookup has to read again — git's index applies the same racy-timestamp
+ * rule. Once the time is old enough to be trusted, an unchanged time means an
+ * unchanged directory and the cached entries stand.
+ *
+ * Both halves are pinned by moving the directory's clock rather than waiting on
+ * the real one, because a test that waits is a test that measures the machine.
+ */
+describe('the cache index and a directory whose time is still moving', () => {
+    const FILE = '/repo/src/Card.tsx';
+    const OTHER = '/repo/src/Other.tsx';
+    const SOURCE = 'export const A = () => <div sz={cardSz} />;';
+    const CODE = 'export const A = () => <div className="p-4" />;';
+    const OTHER_CODE = 'export const B = () => <div className="m-2" />;';
+
+    /**
+     * Move a directory's modification time into the past.
+     *
+     * @param dir - The directory to age.
+     * @param seconds - How far back to set it.
+     */
+    function age(dir: string, seconds: number): void {
+        const when = new Date(Date.now() - seconds * 1000);
+        utimesSync(dir, when, when);
+    }
+
+    // The transformer holds ONE index across every file Jest hands it, which is
+    // where the rule earns its place; `findCachedTransform` builds a fresh index
+    // per call and re-reads regardless.
+    it('reads again when the directory was touched a moment ago', () => {
+        const root = cacheWith(FILE, SOURCE, CODE);
+        const transformer = createTransformer({ cacheRoot: root });
+        expect(transformer.process(SOURCE, FILE).code).toBe(CODE);
+
+        // A second entry, written so soon after the first read that the
+        // directory's time cannot distinguish them. The index has to look again.
+        writeEntry(root, {
+            filename: OTHER,
+            source: SOURCE,
+            code: OTHER_CODE,
+            name: 'second.json',
+        });
+        expect(transformer.process(SOURCE, OTHER).code).toBe(OTHER_CODE);
+    });
+
+    it('trusts a directory whose time has settled', () => {
+        const root = cacheWith(FILE, SOURCE, CODE);
+        age(join(root, '9c'), 60);
+        age(root, 60);
+        const transformer = createTransformer({ cacheRoot: root });
+        expect(transformer.process(SOURCE, FILE).code).toBe(CODE);
+
+        // Written behind the index's back: the directory's time is old enough to
+        // be trusted and nothing touched it, so the entry stays unseen. A build
+        // that writes the cache moves that time, which is what ends the trust.
+        writeEntry(root, {
+            filename: OTHER,
+            source: SOURCE,
+            code: OTHER_CODE,
+            name: 'second.json',
+        });
+        age(join(root, '9c'), 60);
+        age(root, 60);
+        expect(transformer.process(SOURCE, OTHER).code).not.toBe(OTHER_CODE);
     });
 });
