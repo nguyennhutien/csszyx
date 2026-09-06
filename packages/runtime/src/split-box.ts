@@ -256,7 +256,7 @@ function inspectUncached(token: string): TokenInfo | undefined {
     // is dead, and a `not-peer-*` rule there is worse, permanently on, because
     // the negation of a match that cannot happen is always true. The category
     // stays, so a category query still finds the token.
-    if (info !== undefined && info.role === 'inner' && !info.both && hasPeerVariant(token)) {
+    if (info?.role === 'inner' && !info.both && hasPeerVariant(token)) {
         return { ...info, role: 'outer', movedFrom: 'inner' };
     }
     return info;

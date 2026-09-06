@@ -139,6 +139,12 @@ export default [
             // win. Type-aware, so only this block can run it.
             '@typescript-eslint/no-base-to-string': 'error',
 
+            // S6582. `a !== undefined && a.b === c` is `a?.b === c`, and the
+            // narrowing is the same either way. Enabling it cost nothing: one
+            // violation across every package source, the one SonarCloud had
+            // just reported. Type-aware, so only this block can run it.
+            '@typescript-eslint/prefer-optional-chain': 'error',
+
             // JSDoc enforcement (csszyx convention)
             'jsdoc/require-jsdoc': [
                 'error',
