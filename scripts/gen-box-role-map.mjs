@@ -619,16 +619,28 @@ const TAILWIND_ONLY_PREFIXES = [
 /**
  * `group` and `peer` emit no CSS, so no table built from CSS properties can
  * hold them — but they are the anchor every `group-hover:` / `peer-checked:`
- * descendant resolves against, which makes the node they land on a
- * CORRECTNESS question rather than a classification one.
+ * utility resolves against, which makes the node they land on a CORRECTNESS
+ * question rather than a classification one.
  *
- * Both pin to OUTER, and the reason is structural rather than a default:
- * `splitBox`'s outer node is the ancestor of its inner node, and a dependent
- * utility can route to either side (`group-hover:bg-red` is bg → outer;
- * `group-hover:p-4` is padding → inner). Only the outer node is an ancestor of
- * both, so only the outer node keeps every dependent resolving. A `fallback`
- * of `'inner'` must not move them — which is why they are a table entry and
- * not an unclassified token.
+ * Both pin to OUTER, for two different reasons — the combinators are not the
+ * same, measured on `tailwindcss@4.3.3`:
+ *
+ *   .group-hover\:p-4:is(:where(.group):hover *)     ← descendant
+ *   .peer-hover\:p-4:is(:where(.peer):hover ~ *)     ← general sibling
+ *
+ * `group` is an ancestor relationship, so the marker has to sit on the node
+ * that is an ancestor of every dependent. A dependent routes to either side
+ * (`group-hover:bg-red` is bg → outer; `group-hover:p-4` is padding → inner),
+ * and only the outer node is an ancestor of both.
+ *
+ * `peer` is a SIBLING relationship, so ancestry is the wrong frame entirely:
+ * the marker has to keep the position the author gave it among its siblings,
+ * and the outer node is the one that occupies that position. Moving it inward
+ * makes it a child of the box rather than a sibling of the next one, and every
+ * `peer-*` rule stops matching.
+ *
+ * Neither reason tolerates a `fallback` of `'inner'` moving them, which is why
+ * they are a table entry and not an unclassified token.
  */
 const SCOPE_MARKERS = { role: 'outer', category: 'scope', tokens: ['group', 'peer'] };
 

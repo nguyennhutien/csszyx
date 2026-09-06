@@ -185,6 +185,19 @@ pnpm corpus:check --require-no-broken
 echo "[verify-like-ci] Emitted-class oracle (dead classes vs real Tailwind)..."
 pnpm check:emitted-classes
 
+# The same oracle, read the other way. The gate above asks whether every class
+# csszyx EMITS still produces CSS; this one asks whether every class Tailwind
+# SERVES can be classified, because `classify` reads what the application wrote,
+# not what csszyx wrote. Three families were missing from the table for as long
+# as `classify` had shipped.
+# Reads the RUNTIME source, which imports the compiler's built browser entry.
+# The turbo test run above happens to build it, but depending on that leaves the
+# gate at the mercy of step order — CI has a different one, and there this gate
+# failed on a missing `transform-core.mjs` while every local run was green.
+echo "[verify-like-ci] Classify coverage (served utilities vs the box-role table)..."
+pnpm exec turbo run build --filter=@csszyx/compiler
+pnpm check:classify-coverage
+
 echo "[verify-like-ci] Workspace build (every playground, every package)..."
 pnpm build
 

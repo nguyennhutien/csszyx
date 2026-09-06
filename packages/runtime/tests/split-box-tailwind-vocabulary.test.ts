@@ -14,8 +14,11 @@
  *   Deprecated upstream, still served, still all over existing code.
  * - `group` / `peer` emit no CSS at all, so no table built from CSS properties
  *   can contain them — but they are the anchor every `group-hover:` and
- *   `peer-checked:` descendant resolves against, which makes WHICH NODE they
- *   land on a correctness question, not a classification one.
+ *   `peer-checked:` utility resolves against, which makes WHICH NODE they land
+ *   on a correctness question, not a classification one. The two anchor
+ *   differently, measured on `tailwindcss@4.3.3`: `group` is a descendant
+ *   relationship (`:is(:where(.group):hover *)`) and `peer` a general-sibling
+ *   one (`:is(:where(.peer):hover ~ *)`).
  */
 import { describe, expect, it } from 'vitest';
 import { szcn } from '../src/merge-classes.js';
@@ -72,7 +75,7 @@ describe('scope markers', () => {
         expect(classify(token)).toEqual({ role: 'outer', category: 'scope' });
     });
 
-    it('pins the marker to the ancestor even when the fallback says inner', () => {
+    it('pins group to the ancestor even when the fallback says inner', () => {
         // `group-hover:bg-red-500` is a bg utility, so it routes OUTER. If the
         // fallback carried `group` to the inner node the marker would no longer
         // be an ancestor of its own dependent, and the hover would stop firing.
@@ -81,6 +84,16 @@ describe('scope markers', () => {
         });
         expect(outer.split(' ')).toContain('group');
         expect(inner.split(' ')).not.toContain('group');
+    });
+
+    it('pins peer to the sibling position even when the fallback says inner', () => {
+        // `peer` reaches its dependents through `~`, not through descent, so
+        // the question is not ancestry but position among siblings. The outer
+        // node holds the position the author gave it; the inner node is a CHILD
+        // of that box and a sibling of nothing the author wrote.
+        const { outer, inner } = splitBox('peer p-4', { fallback: 'inner' });
+        expect(outer.split(' ')).toContain('peer');
+        expect(inner.split(' ')).not.toContain('peer');
     });
 
     it('does not treat an opacity modifier as a named marker', () => {
@@ -106,8 +119,15 @@ describe('szcn reads the same table', () => {
 
     it('keeps both spellings of the same logical inset', () => {
         // `start-*` and `inset-s-*` are the same CSS under two prefixes, so the
-        // table cannot see them as one group. Keeping both is the conservative
-        // answer: source order still decides, which is what the author wrote.
+        // table cannot see them as one group and both survive the merge.
+        //
+        // Keeping both is conservative in the sense that nothing is deleted,
+        // but it does NOT mean the author's order wins: the two selectors have
+        // equal specificity, so the STYLESHEET decides, and Tailwind 4.3.3
+        // emits `.inset-s-4` before `.start-2`. Writing `inset-s-4` last to
+        // override a `start-2` silently loses. Merging them would need the two
+        // prefixes declared as one group, which is `szcn`'s question, not this
+        // table's.
         expect(szcn('start-2', 'inset-s-4')).toBe('start-2 inset-s-4');
     });
 });
