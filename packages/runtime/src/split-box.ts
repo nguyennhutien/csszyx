@@ -300,12 +300,13 @@ function inspectUncached(token: string): TokenInfo | undefined {
  * a third state to destructure, and defaulting it to a guessed property would
  * import szcn's under-merge bias as an over-claim.
  *
- * @param prefix - The class prefix the token matched, if it has one.
+ * @param prefix - The class prefix the token matched. Every caller has one: a
+ *   prefix match by construction, and an exact token derives it from its own
+ *   spelling, which is how `text-ellipsis` reaches the `text` classifier.
  * @param value - The value segment after that prefix.
  * @returns The bare property name, or `undefined` when it is not certain.
  */
-function propertyOf(prefix: string | undefined, value: string): string | undefined {
-    if (prefix === undefined) return undefined;
+function propertyOf(prefix: string, value: string): string | undefined {
     const group = classifyAmbiguousValue(prefix, value);
     // Group ids are `<prefix>:<property>`; the caller already has the family.
     return group === null ? undefined : group.slice(group.indexOf(':') + 1);
