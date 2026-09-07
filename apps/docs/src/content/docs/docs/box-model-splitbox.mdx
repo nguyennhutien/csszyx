@@ -335,14 +335,14 @@ classify('tab-items-wrapper');  // { role: 'inner', category: 'text',    confide
 `exact` means the whole name is in the table — value-keyed sugar (`block`), a
 boolean shorthand (`truncate`), one closed value of a prefixed key
 (`overflow-hidden`), a scope marker, or a prefix that is itself a whole utility
-(`flex`). `prefix` means only the part before the value matched and the value
-was taken on trust, which is where `p-4` and a made-up class land together.
+(`flex`). `prefix` means only the part before the value matched and the
+classifier took the value on trust: `p-4` and a made-up class land together.
 
 So `confidence` is **not a verdict on whether the class is real** — the runtime
 cannot know that, because Tailwind is a build tool and is not present in the
 browser. It says which of the two ways the classifier reached its answer, so a
 caller that wants to be strict can be, and the toolkit never claims a certainty
-it does not have. `classifySzKey` always answers `exact`: an sz key is looked up
+it does not have. `classifySzKey` always answers `exact`: it looks up an sz key
 whole, with no prefix to guess at.
 
 Deciding whether a `prefix` answer names a real utility needs the project's own

@@ -1302,7 +1302,7 @@ look at. Production is unaffected; no warning is emitted there at all.
 `classify` matches a className by class PREFIX and knows nothing about which
 values a prefix accepts, so an app's own `tab-items-wrapper` reads as a
 `tab-size` utility and `splitBox` routes it to a node by a rule rather than by
-the fallback. The runtime warns about a class it cannot classify; it cannot
+the fallback. The runtime warns about a class it cannot classify. It cannot
 warn about this one, because from inside the runtime the answer looks certain.
 Measured against Tailwind 4.3, every prefix in the generated table accepts at
 least one suffix Tailwind does not serve.
