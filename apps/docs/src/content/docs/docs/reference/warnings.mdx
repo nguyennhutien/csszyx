@@ -922,8 +922,6 @@ about files I happen to open".
 | `✖ {n} value(s) written on a key that does not own them. Each one compiles, ships CSS and renders, so nothing else reports it; the style asked for is simply absent. Move the value to the key that owns it, or declare a theme token by that name if the spelling was deliberate.` | Exits non-zero. |
 | `Theme tokens a built-in utility already claims:` + one line per token reading `"{name}" also names {classes}. Tailwind merges both meanings into one rule, so szcn keeps the classes apart instead of merging them and the stylesheet decides which wins — not the order you wrote.` | Reported at the declaration, with its line. |
 | `✖ {n} theme token(s) shadow a built-in utility. Rename them; no spelling of the merge can fix this while the name is shared. To keep one anyway, pass --allow-token <name>.` | Exits non-zero. |
-| `Classes the toolkit reads as utilities, which this project does not serve:` + one line per offender reading `"{token}" is read as a {category} utility and routed to the {node} node, but this project's Tailwind produces no CSS for it. help: if it is your own class, pin it with { {role}: ['{token}'] }.` | A className that collides with a utility prefix — `tab-items-wrapper` reads as `tab-size`. See below. |
-| `These are warnings, not failures: a custom @utility or a plugin class can look the same.` + `If one is your own class, pin it at the splitBox call: { {role}: ['{token}'] }.` | **Does not exit non-zero**, unlike every other pass here. |
 
 A skip is not always harmless. Two things can stop the dead-class pass, and
 only one of them is your project's:
@@ -1296,32 +1294,6 @@ as the dev server runs. Rather than go quiet when it fills, the cache says so,
 once: the line above replaces the first message it would have dropped. A
 warning that repeats above it with different values names the component to
 look at. Production is unaffected; no warning is emitted there at all.
-
-### A class the toolkit reads with false confidence
-
-`classify` matches a className by class PREFIX and knows nothing about which
-values a prefix accepts, so an app's own `tab-items-wrapper` reads as a
-`tab-size` utility and `splitBox` routes it to a node by a rule rather than by
-the fallback. The runtime warns about a class it cannot classify. It cannot
-warn about this one, because from inside the runtime the answer looks certain.
-Measured against Tailwind 4.3, every prefix in the generated table accepts at
-least one suffix Tailwind does not serve.
-
-The pass fires only when both hold: `classify` answered confidently, and every
-stylesheet in the project produces no CSS for the token. A class nothing
-classifies stays quiet here — that one is the runtime's warning.
-
-It **warns without failing the run**, which is deliberate and unlike the other
-passes in this command. The boundary between a utility and an app's own class
-is genuinely blurry: a custom `@utility`, a class from a third-party plugin, a
-name built by concatenation. A check that fails a commit on a blurry call is
-one a team switches off, and a check nobody runs catches nothing. `--json`
-carries every finding under the `misclassified-class` rule, so a project that
-wants to gate on it can read the report and decide for itself.
-
-Because the oracle is the project's own design system, a class the project
-declares itself — `@utility tab-items-wrapper { … }` — is a real class here and
-is not reported.
 
 ## Editor diagnostics
 
