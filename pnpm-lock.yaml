@@ -165,6 +165,9 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@csszyx/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@csszyx/types':
         specifier: workspace:*
         version: link:../types

@@ -21,7 +21,8 @@ export type CheckRule =
     | 'dead-class'
     | 'broken-opacity'
     | 'sibling-keyword'
-    | 'theme-collision';
+    | 'theme-collision'
+    | 'misclassified-class';
 
 /** One machine-readable finding. */
 export interface CheckFinding {
