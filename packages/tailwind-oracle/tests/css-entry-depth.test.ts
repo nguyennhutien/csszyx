@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { comparePathDepth } from '../src/scanner/emitted-class-oracle.js';
+import { comparePathDepth } from '../src/emitted-class-oracle.js';
 
 describe('comparePathDepth', () => {
     it('puts the shallower path first', () => {

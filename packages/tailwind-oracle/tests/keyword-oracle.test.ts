@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { keywordOracleFrom } from '../src/scanner/keyword-oracle.js';
+import { keywordOracleFrom } from '../src/keyword-oracle.js';
 
 /** A design system standing in for a compiled project stylesheet. */
 /** The two candidates this oracle stub knows, and the CSS each stands for. */

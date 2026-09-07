@@ -41,6 +41,9 @@ importers:
       '@biomejs/biome':
         specifier: 2.5.10
         version: 2.5.10
+      '@csszyx/tailwind-oracle':
+        specifier: workspace:*
+        version: link:packages/tailwind-oracle
       '@playwright/test':
         specifier: ^1.62.0
         version: 1.62.1
@@ -202,6 +205,9 @@ importers:
         specifier: ^2.4.2
         version: 2.4.2
     devDependencies:
+      '@csszyx/tailwind-oracle':
+        specifier: workspace:*
+        version: link:../tailwind-oracle
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
@@ -462,6 +468,15 @@ importers:
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@22.20.1)(@vitest/coverage-v8@4.1.11)(jsdom@29.1.1)(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/tailwind-oracle:
+    dependencies:
+      '@csszyx/compiler':
+        specifier: workspace:*
+        version: link:../compiler
+      fast-glob:
+        specifier: ^3.3.3
+        version: 3.3.3
 
   packages/tooling-metadata:
     devDependencies:

@@ -12,7 +12,7 @@ import {
     brokenOpacityValue,
     collectCustomProperties,
     resolveCustomPropertyValue,
-} from '../src/scanner/opacity-verdict.js';
+} from '../src/opacity-verdict.js';
 
 describe('collectCustomProperties', () => {
     it('reads a declaration with whitespace before the colon', () => {

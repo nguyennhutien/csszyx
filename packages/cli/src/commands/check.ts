@@ -15,25 +15,24 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { transformSource } from '@csszyx/compiler';
-import fg from 'fast-glob';
-import { createReporter, type Reporter, renderJsonReport } from '../scanner/check-report.js';
 import {
     createEmittedClassOracle,
+    type DeclaredToken,
     type EmittedClassOracle,
+    findSiblingKeywordValues,
     findTailwindCssEntries,
-} from '../scanner/emitted-class-oracle.js';
+    findThemeCollisions,
+    type SiblingKeywordFinding,
+    type SzValuePair,
+    szValuePairs,
+} from '@csszyx/tailwind-oracle';
+import fg from 'fast-glob';
+import { createReporter, type Reporter, renderJsonReport } from '../scanner/check-report.js';
 import {
     classNameTokens,
     findMisclassified,
     type MisclassifiedClass,
 } from '../scanner/misclassified-class.js';
-import {
-    findSiblingKeywordValues,
-    type SiblingKeywordFinding,
-    type SzValuePair,
-    szValuePairs,
-} from '../scanner/sibling-keyword.js';
-import { type DeclaredToken, findThemeCollisions } from '../scanner/theme-collision.js';
 import { declaredThemeTokens } from '../scanner/theme-declarations.js';
 import { relativePosix, withPosixSeparators } from '../utils/posix-path.js';
 import { spinner } from '../utils/terminal-ui.js';

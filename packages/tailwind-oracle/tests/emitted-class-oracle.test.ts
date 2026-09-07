@@ -11,7 +11,7 @@ import {
     findTailwindCssEntry,
     type TailwindLoader,
     type TailwindModule,
-} from '../src/scanner/emitted-class-oracle.js';
+} from '../src/emitted-class-oracle.js';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
 
