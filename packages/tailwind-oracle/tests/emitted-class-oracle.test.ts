@@ -245,6 +245,35 @@ describe('createEmittedClassOracle — imports that name a package', () => {
         expect(oracle.findDead(['bg-fixture-brand', 'zz-probe'])).toEqual(['zz-probe']);
     });
 
+    it('prefers a sibling file over node resolution for a bare specifier', async () => {
+        // CSS reads `@import "tokens.css"` as the file next door; node reads the
+        // same string as a package. Stylesheets written before this distinction
+        // mattered rely on the file winning, so the sibling is preferred when
+        // one is actually there.
+        const root = fs.mkdtempSync(path.join(REPO, '.tmp-oracle-sibling-'));
+        created.push(root);
+        fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'proj' }));
+        fs.writeFileSync(
+            path.join(root, 'tokens.css'),
+            '@theme { --color-sibling-brand: #654321; }',
+        );
+        fs.writeFileSync(
+            path.join(root, 'app.css'),
+            '@import "tailwindcss";\n@import "tokens.css";',
+        );
+
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: root,
+            css: await readFile(path.join(root, 'app.css'), 'utf8'),
+            cssBase: root,
+        });
+
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+        // `bg-sibling-brand` exists only through the sibling file, so serving it
+        // proves the file was read rather than a package lookup being attempted.
+        expect(oracle.findDead(['bg-sibling-brand', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
     it('names the specifier when the package is absent', async () => {
         const root = projectImporting('@fixture/not-installed/sz-theme');
         const oracle = await createEmittedClassOracle({
