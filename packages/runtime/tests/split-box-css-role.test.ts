@@ -89,16 +89,32 @@ describe('keys routed by their CSS formatting context', () => {
     // The generated entries carry routing detail the callers do not need — a
     // per-value role map, a both-node flag — and returning them raw would put a
     // Map in a public answer that reads as `{ role, category }` everywhere else.
-    it('answers with the role and the category, and nothing else', () => {
-        expect(Object.keys(classifySzKey('overflow') ?? {}).sort()).toEqual(['category', 'role']);
-        expect(Object.keys(classifySzKey('transition') ?? {}).sort()).toEqual(['category', 'role']);
-        expect(classifySzKey('transition')).toEqual({ role: 'outer', category: 'transition' });
+    it('answers with the role, the category and the confidence, and nothing else', () => {
+        // The generated entry also carries the routing detail behind the answer
+        // — a per-value role map, a both-node flag, the prefix it came from —
+        // and none of that is part of what this function documents.
+        const keys = ['category', 'confidence', 'role'];
+        expect(Object.keys(classifySzKey('overflow') ?? {}).sort()).toEqual(keys);
+        expect(Object.keys(classifySzKey('transition') ?? {}).sort()).toEqual(keys);
+        expect(classifySzKey('transition')).toEqual({
+            role: 'outer',
+            category: 'transition',
+            confidence: 'exact',
+        });
     });
 
     it('keeps the category, so a category selector still reaches both sides', () => {
         expect(classifySzKey('divideX')?.category).toBe('divide');
-        expect(classify('inset-ring-2')).toEqual({ role: 'outer', category: 'ring' });
-        expect(classify('cursor-pointer')).toEqual({ role: 'outer', category: 'interaction' });
+        expect(classify('inset-ring-2')).toEqual({
+            role: 'outer',
+            category: 'ring',
+            confidence: 'prefix',
+        });
+        expect(classify('cursor-pointer')).toEqual({
+            role: 'outer',
+            category: 'interaction',
+            confidence: 'prefix',
+        });
     });
 });
 
@@ -114,7 +130,9 @@ describe('overflow routes by value', () => {
         ['overflow-y-auto', 'inner'],
         ['overflow-x-scroll', 'inner'],
     ])('%s is %s', (token, role) => {
-        expect(classify(token)).toEqual({ role, category: 'overflow' });
+        // Every case here is a closed value of a prefixed key, so the table
+        // holds the whole name.
+        expect(classify(token)).toEqual({ role, category: 'overflow', confidence: 'exact' });
     });
 
     it('reads through a variant prefix', () => {
@@ -125,8 +143,16 @@ describe('overflow routes by value', () => {
     // A value the compiler does not close over still classifies by the key's
     // default role, through the prefix that has always carried it.
     it('falls back to the key role for an arbitrary value', () => {
-        expect(classify('overflow-[overlay]')).toEqual({ role: 'inner', category: 'overflow' });
-        expect(classify('overflow-x-[overlay]')).toEqual({ role: 'inner', category: 'overflow' });
+        expect(classify('overflow-[overlay]')).toEqual({
+            role: 'inner',
+            category: 'overflow',
+            confidence: 'prefix',
+        });
+        expect(classify('overflow-x-[overlay]')).toEqual({
+            role: 'inner',
+            category: 'overflow',
+            confidence: 'prefix',
+        });
     });
 
     it('splits a clip and a scroller onto opposite nodes', () => {

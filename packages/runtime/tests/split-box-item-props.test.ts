@@ -78,7 +78,7 @@ describe('flex and grid item properties', () => {
         ['col-span-2', 'grid'],
         ['basis-auto', 'flex'],
     ])('%s is an outer %s token', (token, category) => {
-        expect(classify(token)).toEqual({ role: 'outer', category });
+        expect(classify(token)).toMatchObject({ role: 'outer', category });
     });
 
     // The override still answers for the component whose CONTENT is the item:

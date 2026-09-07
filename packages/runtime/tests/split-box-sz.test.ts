@@ -153,8 +153,18 @@ describe('splitBoxSz parity with splitBox(compile(x))', () => {
 
 describe('sz toolkit (classifySzKey / hasSz / pickSz / omitSz)', () => {
     it('classifySzKey mirrors classify on the emitted class', () => {
-        expect(classifySzKey('m')).toEqual({ role: 'outer', category: 'margin' });
-        expect(classifySzKey('px')).toEqual({ role: 'inner', category: 'padding' });
+        // An sz key is looked up whole, so the answer is always `exact` — where
+        // the class side says `prefix` for `m-4`, whose value it took on trust.
+        expect(classifySzKey('m')).toEqual({
+            role: 'outer',
+            category: 'margin',
+            confidence: 'exact',
+        });
+        expect(classifySzKey('px')).toEqual({
+            role: 'inner',
+            category: 'padding',
+            confidence: 'exact',
+        });
         expect(classifySzKey('nope')).toBeUndefined();
     });
 

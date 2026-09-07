@@ -47,9 +47,11 @@ describe('with a mangle registry installed', () => {
     });
 
     it('classifies a mangled token by its original name', () => {
-        expect(classify('a')).toEqual({ role: 'outer', category: 'sizing' });
-        expect(classify('c')).toEqual({ role: 'inner', category: 'padding' });
-        expect(classify('f')).toEqual({ role: 'outer', category: 'sizing' });
+        // `w-full`, `px-2` and `md:w-1/2` all match by prefix once decoded, so
+        // the confidence travels through the bridge with the rest of the answer.
+        expect(classify('a')).toEqual({ role: 'outer', category: 'sizing', confidence: 'prefix' });
+        expect(classify('c')).toEqual({ role: 'inner', category: 'padding', confidence: 'prefix' });
+        expect(classify('f')).toEqual({ role: 'outer', category: 'sizing', confidence: 'prefix' });
     });
 
     it('answers has() for a mangled token the way it does for the original', () => {
@@ -97,7 +99,7 @@ describe('registry lifecycle', () => {
         installMangleRuntime({ mangleMap: MAP, checksum: 'late' });
 
         expect(has('a', 'w')).toBe(true);
-        expect(classify('a')).toEqual({ role: 'outer', category: 'sizing' });
+        expect(classify('a')).toEqual({ role: 'outer', category: 'sizing', confidence: 'prefix' });
         expect(splitBox('a c')).toEqual({ outer: 'a', inner: 'c' });
     });
 

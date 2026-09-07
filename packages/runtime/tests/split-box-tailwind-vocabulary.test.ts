@@ -29,6 +29,7 @@ describe('placeholder utilities', () => {
         expect(classify('placeholder-gray-400')).toEqual({
             role: 'inner',
             category: 'placeholder',
+            confidence: 'prefix',
         });
     });
 
@@ -39,6 +40,7 @@ describe('placeholder utilities', () => {
             role: 'inner',
             category: 'text',
             property: 'color',
+            confidence: 'prefix',
         });
     });
 
@@ -55,7 +57,12 @@ describe('logical inset aliases', () => {
         ['-start-2', 'negative start'],
         ['md:end-4', 'responsive end'],
     ])('classifies %s (%s) the way inset-e-* is classified', token => {
-        expect(classify(token)).toEqual({ role: 'outer', category: 'position' });
+        // `start-2` matches the prefix and its value is taken on trust.
+        expect(classify(token)).toEqual({
+            role: 'outer',
+            category: 'position',
+            confidence: 'prefix',
+        });
     });
 
     it('does not drop the alias from a position filter', () => {
@@ -69,11 +76,19 @@ describe('logical inset aliases', () => {
 
 describe('scope markers', () => {
     it.each(['group', 'peer'])('classifies %s as an outer scope marker', token => {
-        expect(classify(token)).toEqual({ role: 'outer', category: 'scope' });
+        expect(classify(token)).toEqual({
+            role: 'outer',
+            category: 'scope',
+            confidence: 'exact',
+        });
     });
 
     it.each(['group/item', 'peer/email'])('classifies the named form %s too', token => {
-        expect(classify(token)).toEqual({ role: 'outer', category: 'scope' });
+        expect(classify(token)).toEqual({
+            role: 'outer',
+            category: 'scope',
+            confidence: 'exact',
+        });
     });
 
     it('pins group to the ancestor even when the fallback says inner', () => {
@@ -102,6 +117,7 @@ describe('scope markers', () => {
             role: 'outer',
             category: 'bg',
             property: 'color',
+            confidence: 'prefix',
         });
     });
 });

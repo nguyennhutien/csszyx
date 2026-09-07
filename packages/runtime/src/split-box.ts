@@ -47,6 +47,27 @@ export interface Classification {
     /** Semantic group (margin, padding, border, overflow, text, …). */
     readonly category: string;
     /**
+     * How the answer was reached, which is not the same as how right it is.
+     *
+     * `exact` — the whole name is in the generated table: value-keyed sugar
+     * (`block`), a boolean shorthand (`truncate`), one closed value of a
+     * prefixed key (`overflow-hidden`), a scope marker, or a prefix that is
+     * itself a whole utility (`flex`).
+     *
+     * `prefix` — only the part before the value matched, and the value was
+     * taken on trust. `p-4` and an app's own `tab-items-wrapper` both land
+     * here, and the runtime cannot tell them apart: the table holds no
+     * knowledge of which values a prefix accepts, and every prefix in it
+     * accepts at least one suffix Tailwind does not serve. Deciding needs the
+     * project's design system, which lives at build time — `csszyx check`
+     * reports exactly this case.
+     *
+     * So this field is not a verdict. It says which of the two ways the
+     * classifier got here, so a caller that wants to be strict can be, without
+     * the runtime pretending to a certainty it does not have.
+     */
+    readonly confidence: 'exact' | 'prefix';
+    /**
      * Which CSS property inside the category, for the prefixes that span more
      * than one (`text-red-500` is color, `text-sm` is font-size), including for
      * token names the app declared in its Tailwind `@theme`. Absent — never
@@ -314,6 +335,7 @@ function classifyBase(base: string): TokenInfo | undefined {
             ...exact,
             base,
             value,
+            confidence: 'exact',
             property: propertyOf(prefix, base.slice(prefix.length + 1)),
         };
     }
@@ -325,15 +347,31 @@ function classifyBase(base: string): TokenInfo | undefined {
     const slash = base.indexOf('/');
     if (slash > 0) {
         const marker = BOX_ROLE_SCOPE_MARKERS.get(base.slice(0, slash));
-        if (marker) return { ...marker, base, value: base.slice(slash + 1) };
+        if (marker) return { ...marker, base, value: base.slice(slash + 1), confidence: 'exact' };
     }
 
     const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(base.split('-', 1)[0] as string) ?? [];
     for (const [prefix, entry] of bucket) {
-        if (base === prefix) return { ...entry, base, value: '', property: propertyOf(prefix, '') };
+        // The bare prefix IS the whole utility here (`flex`, `grid`), so the
+        // table holds the entire name — nothing was taken on trust.
+        if (base === prefix) {
+            return {
+                ...entry,
+                base,
+                value: '',
+                confidence: 'exact',
+                property: propertyOf(prefix, ''),
+            };
+        }
         if (base.startsWith(`${prefix}-`)) {
             const value = base.slice(prefix.length + 1);
-            return { ...entry, base, value, property: propertyOf(prefix, value) };
+            return {
+                ...entry,
+                base,
+                value,
+                confidence: 'prefix',
+                property: propertyOf(prefix, value),
+            };
         }
     }
     return undefined;
@@ -382,11 +420,14 @@ function propertyOf(prefix: string, value: string): string | undefined {
 export function classify(token: string): Classification | undefined {
     const info = inspect(token, syncMemos());
     if (!info) return undefined;
+    const answer = {
+        role: info.role,
+        category: info.category,
+        confidence: info.confidence,
+    };
     // The key is omitted rather than set to `undefined`, so a consumer testing
     // `'property' in c` reads the same answer as one testing `c.property`.
-    return info.property === undefined
-        ? { role: info.role, category: info.category }
-        : { role: info.role, category: info.category, property: info.property };
+    return info.property === undefined ? answer : { ...answer, property: info.property };
 }
 
 /** Every category the generated tables use, for telling a typo from a miss. */
@@ -1174,7 +1215,11 @@ export function classifySzKey(key: string, value?: SzValue): Classification | un
     // A fresh pair, never the generated entry: that entry also carries the
     // routing detail behind the answer — a per-value role map, a both-node flag
     // — and this reads as `{ role, category }` everywhere it is documented.
-    return { role: roleForValue(entry, value), category: entry.category };
+    //
+    // Always `exact`: an sz KEY is looked up whole in the generated table.
+    // There is no prefix to match and no value taken on trust, which is the
+    // one thing `confidence` distinguishes on the class side.
+    return { role: roleForValue(entry, value), category: entry.category, confidence: 'exact' };
 }
 
 /**
@@ -1200,6 +1245,15 @@ function isPlainObject(value: unknown): value is SzObject {
 }
 
 /**
+ * What the sz-key matchers read: the side and the family, nothing else.
+ *
+ * Narrower than {@link Classification} on purpose — the generated entries these
+ * are called with carry routing detail the matchers do not look at, and they
+ * have no `confidence`, because a key lookup is not a prefix guess.
+ */
+type KeyRole = Pick<Classification, 'role' | 'category'>;
+
+/**
  * Does an sz key (with its classification) satisfy `selector`? A category+value
  * object selector matches on category alone, since the value lives on the sz
  * value rather than the key.
@@ -1209,11 +1263,7 @@ function isPlainObject(value: unknown): value is SzObject {
  * @param selector - The selector to test the key against.
  * @returns `true` if the key matches the selector.
  */
-function matchesKey(
-    key: string,
-    entry: Classification | undefined,
-    selector: BoxSelector,
-): boolean {
+function matchesKey(key: string, entry: KeyRole | undefined, selector: BoxSelector): boolean {
     if (typeof selector === 'object') {
         return !!entry && Object.keys(selector).every(category => entry.category === category);
     }
@@ -1233,7 +1283,7 @@ function matchesKey(
  */
 function anyMatchKey(
     key: string,
-    entry: Classification | undefined,
+    entry: KeyRole | undefined,
     selectors: readonly BoxSelector[],
 ): boolean {
     return selectors.some(s => matchesKey(key, entry, s));

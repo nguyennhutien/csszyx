@@ -304,7 +304,7 @@ csszyx owns the **truth** (a class's box-role + category); you own the **rule**.
 Four pure helpers expose the truth — no rule-DSL, no hardcoded vocabulary:
 
 ```ts
-classify(token)             // → { role, category, property? } | undefined
+classify(token)             // → { role, category, confidence, property? } | undefined
 has(classes, selector)      // → boolean   ("is there an overflow class?")
 pick(classes, selector)     // → string    (keep only matching tokens)
 omit(classes, selector)     // → string    (drop matching tokens)
@@ -319,6 +319,35 @@ classify('totally-custom');// undefined  (not a csszyx utility)
 
 They see through variants and markers too: `classify('md:px-2')` and
 `classify('px-2!')` both report `padding`.
+
+### How sure the answer is
+
+The table matches a class by its PREFIX and holds no knowledge of which values
+a prefix accepts, so your own `tab-items-wrapper` comes back looking exactly
+like a real `text-sm`:
+
+```ts
+classify('text-sm');            // { role: 'inner', category: 'text', confidence: 'exact', property: 'size' }
+classify('p-4');                // { role: 'inner', category: 'padding', confidence: 'prefix' }
+classify('tab-items-wrapper');  // { role: 'inner', category: 'text',    confidence: 'prefix' }
+```
+
+`exact` means the whole name is in the table — value-keyed sugar (`block`), a
+boolean shorthand (`truncate`), one closed value of a prefixed key
+(`overflow-hidden`), a scope marker, or a prefix that is itself a whole utility
+(`flex`). `prefix` means only the part before the value matched and the
+classifier took the value on trust: `p-4` and a made-up class land together.
+
+So `confidence` is **not a verdict on whether the class is real** — the runtime
+cannot know that, because Tailwind is a build tool and is not present in the
+browser. It says which of the two ways the classifier reached its answer, so a
+caller that wants to be strict can be, and the toolkit never claims a certainty
+it does not have. `classifySzKey` always answers `exact`: it looks up an sz key
+whole, with no prefix to guess at.
+
+Deciding whether a `prefix` answer names a real utility needs the project's own
+design system, which lives at build time. `csszyx check` reports exactly that
+case — a class the toolkit reads confidently that your Tailwind does not serve.
 
 ### Which property, not just which category
 

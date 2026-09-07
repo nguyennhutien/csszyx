@@ -44,6 +44,7 @@
   },
   "dependencies": {
     "@csszyx/compiler": "workspace:*",
+    "@csszyx/runtime": "workspace:*",
     "@csszyx/types": "workspace:*",
     "@csszyx/unplugin": "workspace:*",
     "cac": "^7.0.0",

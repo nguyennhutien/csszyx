@@ -36,7 +36,11 @@ describe('inspect() per-token memo eviction (INSPECT_MEMO_MAX cap)', () => {
         for (let i = 0; i < 4200; i++) {
             expect(classify(`not-owned-${i}`)).toBeUndefined();
         }
-        expect(classify('m-4')).toEqual({ role: 'outer', category: 'margin' });
+        expect(classify('m-4')).toEqual({
+            role: 'outer',
+            category: 'margin',
+            confidence: 'prefix',
+        });
     });
 });
 
@@ -44,7 +48,11 @@ describe('bare (no-suffix) prefix token', () => {
     it('classifies a bare multi-part-prefix token with an empty value segment', () => {
         // 'inset' (no numeric suffix) matches the `inset` PREFIX entry itself
         // (base === prefix), distinct from `inset-2` (base.startsWith('inset-')).
-        expect(classify('inset')).toEqual({ role: 'outer', category: 'position' });
+        expect(classify('inset')).toEqual({
+            role: 'outer',
+            category: 'position',
+            confidence: 'exact',
+        });
     });
 });
 
