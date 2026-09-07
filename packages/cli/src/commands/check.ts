@@ -734,12 +734,13 @@ async function classNameTokensFor(
         // Read directly rather than through `readSzSource`, which skips a file
         // with no `sz` in it. A component that only ever writes className
         // strings is exactly the file this pass exists for.
-        let source: string;
-        try {
-            source = await readFile(file, 'utf8');
-        } catch {
-            continue;
-        }
+        //
+        // No try/catch: every path here came from the scan, which either
+        // globbed it off disk or — for `--files` — already reported the missing
+        // ones and returned before reaching this pass. A catch would be a
+        // branch nothing can enter, and an unreachable guard reads as though
+        // the case were possible.
+        const source = await readFile(file, 'utf8');
         const relative = relativePosix(cwd, file);
         for (const { token, line } of classNameTokens(source)) {
             out.push({ token, file: relative, line });
@@ -779,10 +780,12 @@ function reportMisclassified(
         });
         out.info(`  ${finding.token.padEnd(28)} ${finding.file}:${finding.line}  → ${node}`);
     }
-    const first = found[0];
+    // `found` is non-empty — the early return above covers the other case — so
+    // the first finding is always there to name in the hint.
+    const first = found[0] as MisclassifiedClass;
     out.warn(
         '  These are warnings, not failures: a custom @utility or a plugin class can look the same.\n' +
-            `  If one is your own class, pin it at the splitBox call: { ${first?.role ?? 'inner'}: ['${first?.token ?? 'your-class'}'] }.`,
+            `  If one is your own class, pin it at the splitBox call: { ${first.role}: ['${first.token}'] }.`,
     );
 }
 

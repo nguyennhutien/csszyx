@@ -25,6 +25,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { check } from '../src/commands/check.js';
+import { classNameTokens, findMisclassified } from '../src/scanner/misclassified-class.js';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
 const TAILWIND_V4 = path.dirname(
@@ -133,5 +134,76 @@ describe('csszyx check — a class the toolkit reads with false confidence', () 
         });
         const { text } = await run(cwd);
         expect(text).not.toContain('tab-items-wrapper');
+    });
+});
+
+describe('reading className out of source', () => {
+    it('reads both quoting styles and the braced form', () => {
+        const src = [
+            'const a = <i className="tab-a" />;',
+            "const b = <i className='tab-b' />;",
+            'const c = <i className={"tab-c"} />;',
+            "const d = <i className={ 'tab-d' } />;",
+        ].join('\n');
+        expect(classNameTokens(src).map(t => `${t.token}:${t.line}`)).toEqual([
+            'tab-a:1',
+            'tab-b:2',
+            'tab-c:3',
+            'tab-d:4',
+        ]);
+    });
+
+    it('skips an unterminated string rather than reading past it', () => {
+        // The bundler rejects this file anyway; reading on would attribute the
+        // next line's tokens to this one.
+        expect(classNameTokens('const a = <i className="tab-a\n')).toEqual([]);
+    });
+
+    it('skips an empty and a whitespace-only className', () => {
+        expect(classNameTokens('const a = <i className="" />;')).toEqual([]);
+        expect(classNameTokens('const a = <i className="   " />;')).toEqual([]);
+    });
+
+    it('collapses repeated whitespace between tokens', () => {
+        expect(classNameTokens('const a = <i className="p-4   m-2" />;').map(t => t.token)).toEqual(
+            ['p-4', 'm-2'],
+        );
+    });
+
+    it('reads a class once however many times it appears', () => {
+        const tokens = [
+            { token: 'tab-x', file: 'a.tsx', line: 1 },
+            { token: 'md:tab-x', file: 'b.tsx', line: 9 },
+            { token: '', file: 'c.tsx', line: 3 },
+        ];
+        const found = findMisclassified(tokens, classes => [...classes]);
+        // One finding, attributed to where it was first seen, and the variant
+        // form folded into the same base rather than reported twice.
+        expect(found).toEqual([
+            { token: 'tab-x', file: 'a.tsx', line: 1, role: 'inner', category: 'text' },
+        ]);
+    });
+
+    it('reports nothing when no token classifies', () => {
+        const found = findMisclassified(
+            [{ token: 'dems-panel', file: 'a.tsx', line: 1 }],
+            classes => [...classes],
+        );
+        expect(found).toEqual([]);
+    });
+});
+
+describe('the frame node, and a file that cannot be read', () => {
+    it('says "frame" for a class the toolkit routes outward', async () => {
+        const cwd = projectWith({
+            'src/app.css': CSS,
+            // `ring-` is an outer-role prefix, so this exercises the other
+            // branch of the node label and of the pin hint.
+            'src/Card.tsx': 'export const C = () => <div className="ring-outer-glow" />;\n',
+        });
+        const { text } = await run(cwd);
+        expect(text).toContain('ring-outer-glow');
+        expect(text).toContain('frame');
+        expect(text).toMatch(/outer: \['ring-outer-glow'\]/);
     });
 });

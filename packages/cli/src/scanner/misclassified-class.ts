@@ -68,8 +68,10 @@ export function classNameTokens(source: string): Array<{ token: string; line: nu
         const value = source.slice(start, end);
         if (value.trim() === '') continue;
         const line = source.slice(0, match.index).split('\n').length;
-        for (const token of value.split(/\s+/)) {
-            if (token !== '') found.push({ token, line });
+        // `value` is non-blank and trimmed before splitting, so no element of
+        // the split can be empty — a guard here would be an unreachable branch.
+        for (const token of value.trim().split(/\s+/)) {
+            found.push({ token, line });
         }
     }
     return found;
