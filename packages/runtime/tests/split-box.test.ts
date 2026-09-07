@@ -90,22 +90,33 @@ describe('splitBox', () => {
 
 describe('classify', () => {
     it('returns role + category for owned tokens', () => {
-        expect(classify('px-2')).toEqual({ role: 'inner', category: 'padding' });
-        expect(classify('m-4')).toEqual({ role: 'outer', category: 'margin' });
+        expect(classify('px-2')).toEqual({
+            role: 'inner',
+            category: 'padding',
+            confidence: 'prefix',
+        });
+        expect(classify('m-4')).toEqual({
+            role: 'outer',
+            category: 'margin',
+            confidence: 'prefix',
+        });
         // Painted inside the border, but on the border box of the element that
         // declares it — the frame's own painting, like `ring-2`.
         expect(classify('inset-ring-2')).toEqual({
             role: 'outer',
             category: 'ring',
+            confidence: 'prefix',
         });
         expect(classify('hover:bg-red-500')).toEqual({
             role: 'outer',
             category: 'bg',
             property: 'color',
+            confidence: 'prefix',
         });
         expect(classify('absolute')).toEqual({
             role: 'outer',
             category: 'position',
+            confidence: 'exact',
         });
     });
 
@@ -228,9 +239,21 @@ describe('toolkit — variant- and marker-aware', () => {
     });
 
     it('classify strips negative / important / variant markers', () => {
-        expect(classify('-mt-4')).toEqual({ role: 'outer', category: 'margin' });
-        expect(classify('px-2!')).toEqual({ role: 'inner', category: 'padding' });
-        expect(classify('md:px-2')).toEqual({ role: 'inner', category: 'padding' });
+        expect(classify('-mt-4')).toEqual({
+            role: 'outer',
+            category: 'margin',
+            confidence: 'prefix',
+        });
+        expect(classify('px-2!')).toEqual({
+            role: 'inner',
+            category: 'padding',
+            confidence: 'prefix',
+        });
+        expect(classify('md:px-2')).toEqual({
+            role: 'inner',
+            category: 'padding',
+            confidence: 'prefix',
+        });
     });
 });
 

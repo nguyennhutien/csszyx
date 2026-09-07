@@ -35,11 +35,13 @@ describe('classify names the property under an ambiguous prefix', () => {
             role: 'inner',
             category: 'text',
             property: 'color',
+            confidence: 'prefix',
         });
         expect(classify('text-sm')).toStrictEqual({
             role: 'inner',
             category: 'text',
             property: 'size',
+            confidence: 'prefix',
         });
     });
 
@@ -48,11 +50,13 @@ describe('classify names the property under an ambiguous prefix', () => {
             role: 'inner',
             category: 'text',
             property: 'weight',
+            confidence: 'prefix',
         });
         expect(classify('font-sans')).toStrictEqual({
             role: 'inner',
             category: 'text',
             property: 'family',
+            confidence: 'prefix',
         });
     });
 
@@ -61,11 +65,13 @@ describe('classify names the property under an ambiguous prefix', () => {
             role: 'outer',
             category: 'bg',
             property: 'size',
+            confidence: 'prefix',
         });
         expect(classify('bg-red-500')).toStrictEqual({
             role: 'outer',
             category: 'bg',
             property: 'color',
+            confidence: 'prefix',
         });
     });
 
@@ -77,6 +83,7 @@ describe('classify names the property under an ambiguous prefix', () => {
             role: 'outer',
             category: 'shadow',
             property: 'size',
+            confidence: 'prefix',
         });
     });
 });
@@ -85,7 +92,11 @@ describe('classify keeps the coarse answer when the property is not certain', ()
     it('says nothing about a prefix that means exactly one property', () => {
         // `p-4` is padding, whatever the value. There is no finer answer to
         // give, so the field must be absent rather than invented.
-        expect(classify('p-4')).toStrictEqual({ role: 'inner', category: 'padding' });
+        expect(classify('p-4')).toStrictEqual({
+            role: 'inner',
+            category: 'padding',
+            confidence: 'prefix',
+        });
     });
 
     it('leaves the field absent, not null or empty, for an unclassifiable value', () => {
@@ -93,7 +104,10 @@ describe('classify keeps the coarse answer when the property is not certain', ()
         // means "keep both classes". Passing that value through would make
         // `property` a third state consumers have to handle.
         const info = classify('text-foo');
-        expect(info).toStrictEqual({ role: 'inner', category: 'text' });
+        // `confidence` is always present; `property` is the one that must be
+        // absent rather than `null`, which is what the whole-object comparison
+        // is here to prove.
+        expect(info).toStrictEqual({ role: 'inner', category: 'text', confidence: 'prefix' });
         expect(Object.hasOwn(info as object, 'property')).toBe(false);
     });
 
@@ -128,7 +142,11 @@ describe('a theme registered after the first classify is not served stale', () =
         // tables and the mangle bridge. Reading the theme registry breaks that,
         // and the memo would keep serving the answer from before the theme
         // existed.
-        expect(classify('text-brand')).toStrictEqual({ role: 'inner', category: 'text' });
+        expect(classify('text-brand')).toStrictEqual({
+            role: 'inner',
+            category: 'text',
+            confidence: 'prefix',
+        });
 
         registerSzcnGroups({ colors: ['brand'] });
 
@@ -136,6 +154,7 @@ describe('a theme registered after the first classify is not served stale', () =
             role: 'inner',
             category: 'text',
             property: 'color',
+            confidence: 'prefix',
         });
     });
 
@@ -236,6 +255,7 @@ it.each(['clip', 'ellipsis'])('classifies text-%s by the shared overflow group',
     expect(classify(`text-${value}`)).toStrictEqual({
         role: 'inner',
         category: 'text',
+        confidence: 'exact',
         property: 'overflow',
     });
     expect(pick(`md:text-${value} text-red-500`, 'text:overflow')).toBe(`md:text-${value}`);

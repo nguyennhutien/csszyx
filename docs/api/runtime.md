@@ -184,9 +184,14 @@ The category-aware toolkit. csszyx owns the **truth** (which box-role / category
 **Signatures:**
 
 ```ts
-function classify(
-  token: string,
-): { role: "outer" | "inner"; category: string; property?: string } | undefined;
+function classify(token: string):
+  | {
+      role: "outer" | "inner";
+      category: string;
+      confidence: "exact" | "prefix";
+      property?: string;
+    }
+  | undefined;
 function has(classes: string, selector: BoxSelector): boolean;
 function pick(classes: string, selector: BoxSelector): string;
 function omit(classes: string, selector: BoxSelector): string;
