@@ -162,6 +162,7 @@ import {
     type TransformCacheKeyInput,
     writeTransformCache,
 } from './transform-cache.js';
+import { openUnservedAsk, unservedAuthoredClasses } from './unserved-classes.js';
 import {
     CENSUS_PLACEHOLDER,
     CHECKSUM_PLACEHOLDER,
@@ -169,16 +170,20 @@ import {
     createMangleMapModule,
     createMangleRuntimeModule,
     createThemeGroupsModule,
+    createUnservedRuntimeModule,
     isVirtualModule,
     MANGLE_MAP_PLACEHOLDER,
     MANGLE_RUNTIME_VIRTUAL_ID,
     RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID,
     RESOLVED_THEME_GROUPS_VIRTUAL_ID,
+    RESOLVED_UNSERVED_VIRTUAL_ID,
     RESOLVED_VIRTUAL_CHECKSUM_ID,
     RESOLVED_VIRTUAL_MODULE_ID,
     resolveVirtualModule,
     THEME_GROUPS_VIRTUAL_ID,
     type ThemeGroupTokens,
+    UNSERVED_PLACEHOLDER,
+    UNSERVED_VIRTUAL_ID,
     VAR_MANGLE_MAP_PLACEHOLDER,
 } from './virtual-modules.js';
 
@@ -4846,6 +4851,33 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Class names the project's Tailwind serves nothing for.
+     *
+     * Empty until `renderStart` computes it, and empty forever when the project
+     * has no design system to ask -- an empty list registers nothing and every
+     * token keeps the placement it has today.
+     */
+    let unservedClasses: string[] = [];
+
+    /**
+     * Ask the project's design systems which authored names produce no CSS.
+     *
+     * Runs once, at `renderStart`: every module has been transformed by then, so
+     * `state.authoredClasses` is complete, and nothing has been written yet.
+     * The stylesheets come from the walk the theme scan already did.
+     *
+     * @returns Nothing; the result lands in `unservedClasses`.
+     */
+    async function computeUnservedClasses(): Promise<void> {
+        if (state.authoredClasses.size === 0) return;
+        const ask = await openUnservedAsk(state.rootDir, projectCssFiles);
+        // No design system is no answer. Reporting nothing is right: every
+        // token then keeps the placement it has today.
+        if (ask === null) return;
+        unservedClasses = unservedAuthoredClasses(state.authoredClasses, ask);
+    }
+
+    /**
      * Allocate the class → token map from the census collected so far.
      *
      * @returns The class → token map for the current owned/authored sets.
@@ -5030,6 +5062,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 createHydrationMangleMap(state.mangleMap, state.varMangleMap),
             );
             result = result.split(CENSUS_PLACEHOLDER).join(escapeJsonForStringLiteral(census));
+        }
+        if (result.includes(UNSERVED_PLACEHOLDER)) {
+            result = result.split(UNSERVED_PLACEHOLDER).join(JSON.stringify(unservedClasses));
         }
         if (result.includes(MANGLE_MAP_PLACEHOLDER)) {
             // Map keys are class names, and arbitrary-value classes can carry
@@ -5740,6 +5775,41 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Pull in the module that registers what the project's Tailwind does not serve.
+     *
+     * Anywhere `splitBox` can be reached, the registration has to have run
+     * first, so this rides the same test the mangle runtime uses: a module that
+     * imports the csszyx runtime. The bundler folds the repeated import into
+     * one instance.
+     *
+     * Vite and Rollup only, exactly like the mangle runtime -- webpack reads
+     * the colon in `virtual:` as a URI scheme and fails before any resolve
+     * plugin runs.
+     *
+     * The generated module reads the runtime's main entry rather than the light
+     * `/core` one the mangle module uses. The test above already restricts this
+     * to modules importing that entry, so it is present either way, and `/core`
+     * would add a subpath that has to resolve in every build.
+     *
+     * @param transformedCode - Current transformed source.
+     * @param id - Bundler module identifier.
+     * @returns Rewritten source when the import is needed, otherwise null.
+     */
+    function injectUnservedRuntime(transformedCode: string, id: string): string | null {
+        if (activeFramework !== 'vite' && activeFramework !== 'rollup') {
+            return null;
+        }
+        if (
+            !shouldProcessSource(id) ||
+            !MANGLE_RUNTIME_CONSUMER_RE.test(transformedCode) ||
+            transformedCode.includes(UNSERVED_VIRTUAL_ID)
+        ) {
+            return null;
+        }
+        return insertRuntimeImport(transformedCode, `import '${UNSERVED_VIRTUAL_ID}';\n`);
+    }
+
+    /**
      * Register the mangle map as an entry of the webpack build.
      *
      * webpack parses the colon in `virtual:` as a URI scheme and fails the
@@ -5843,7 +5913,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     id === RESOLVED_VIRTUAL_MODULE_ID ||
                     id === RESOLVED_VIRTUAL_CHECKSUM_ID ||
                     id === RESOLVED_THEME_GROUPS_VIRTUAL_ID ||
-                    id === RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID
+                    id === RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID ||
+                    id === RESOLVED_UNSERVED_VIRTUAL_ID
                 );
             },
 
@@ -5875,6 +5946,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         globalVarAliasPrefix,
                         options.production?.mangleDebugGlobal === true,
                     );
+                }
+                if (id === RESOLVED_UNSERVED_VIRTUAL_ID) {
+                    return createUnservedRuntimeModule();
                 }
                 if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
                     return createThemeGroupsModule(themeGroupTokens());
@@ -5973,6 +6047,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 const mangleRuntimeCode = injectMangleRuntime(output.code, id);
                 if (mangleRuntimeCode !== null) {
                     output.code = mangleRuntimeCode;
+                    output.transformed = true;
+                }
+
+                const unservedCode = injectUnservedRuntime(output.code, id);
+                if (unservedCode !== null) {
+                    output.code = unservedCode;
                     output.transformed = true;
                 }
 
@@ -6848,8 +6928,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * offers no ordering guarantee among chunks — so the map is completed
          * here rather than from whichever chunk arrives first.
          */
-        renderStart() {
+        async renderStart() {
             finalizeMangleMap();
+            // After every module is transformed and before any chunk is
+            // rendered: `state.authoredClasses` is complete, and the
+            // placeholder this fills has not been substituted yet.
+            await computeUnservedClasses();
         },
 
         /**
