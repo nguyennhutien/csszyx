@@ -19,6 +19,7 @@ export {
     type OracleSkipKind,
     type TailwindLoader,
     type TailwindModule,
+    tailwindEntriesAmong,
 } from './emitted-class-oracle.js';
 export {
     findSiblingKeywordValues,

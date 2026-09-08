@@ -3,14 +3,16 @@ import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import {
     createEmittedClassOracle,
     designSystemEntry,
+    findTailwindCssEntries,
     findTailwindCssEntry,
     type TailwindLoader,
     type TailwindModule,
+    tailwindEntriesAmong,
 } from '../src/emitted-class-oracle.js';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
@@ -703,5 +705,82 @@ describe('createEmittedClassOracle — the collision oracle is built once', () =
         expect(await oracle.loadCollisionOracle()).toBeNull();
         // The project stylesheet, then the probe attempt. Nothing after.
         expect(compiles).toBe(2);
+    });
+});
+
+describe('tailwindEntriesAmong', () => {
+    // A caller that already walked the project -- the bundler plugin does --
+    // should not pay for a second walk. `findTailwindCssEntries` globs; this
+    // takes the paths it was handed and applies the same test.
+    const roots: string[] = [];
+
+    afterAll(() => {
+        for (const root of roots) fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    /**
+     * Write a throwaway project holding the given stylesheets.
+     *
+     * @param files - Relative path to contents.
+     * @returns The project directory.
+     */
+    function projectWith(files: Record<string, string>): string {
+        const root = fs.mkdtempSync(path.join(REPO, '.tmp-oracle-among-'));
+        roots.push(root);
+        for (const [rel, body] of Object.entries(files)) {
+            const target = path.join(root, rel);
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.writeFileSync(target, body);
+        }
+        return root;
+    }
+
+    it('keeps only the stylesheets that import tailwind', async () => {
+        const root = projectWith({
+            'app.css': '@import "tailwindcss";',
+            'plain.css': '.a { color: red }',
+        });
+        const entries = await tailwindEntriesAmong([
+            path.join(root, 'plain.css'),
+            path.join(root, 'app.css'),
+        ]);
+        expect(entries).toEqual([path.join(root, 'app.css')]);
+    });
+
+    it('orders shallowest first, whatever order it was handed', async () => {
+        const root = projectWith({
+            'deep/nested/late.css': '@import "tailwindcss";',
+            'app.css': '@import "tailwindcss";',
+        });
+        const entries = await tailwindEntriesAmong([
+            path.join(root, 'deep/nested/late.css'),
+            path.join(root, 'app.css'),
+        ]);
+        expect(entries).toEqual([
+            path.join(root, 'app.css'),
+            path.join(root, 'deep/nested/late.css'),
+        ]);
+    });
+
+    it('skips a path it cannot read rather than failing the caller', async () => {
+        const root = projectWith({ 'app.css': '@import "tailwindcss";' });
+        const entries = await tailwindEntriesAmong([
+            path.join(root, 'gone.css'),
+            path.join(root, 'app.css'),
+        ]);
+        expect(entries).toEqual([path.join(root, 'app.css')]);
+    });
+
+    it('agrees with the globbing finder on the same project', async () => {
+        const root = projectWith({
+            'app.css': '@import "tailwindcss";',
+            'plain.css': '.a { color: red }',
+        });
+        const globbed = await findTailwindCssEntries(root);
+        const handed = await tailwindEntriesAmong([
+            path.join(root, 'app.css'),
+            path.join(root, 'plain.css'),
+        ]);
+        expect(handed).toEqual(globbed);
     });
 });
