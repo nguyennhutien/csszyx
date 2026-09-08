@@ -11,14 +11,10 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { splitBox } from '../src/split-box.js';
-import {
-    _resetUnservedClasses,
-    getUnservedGeneration,
-    registerUnservedClasses,
-} from '../src/unserved-classes.js';
+import { getUnservedGeneration, registerUnservedClasses } from '../src/unserved-classes.js';
 
 afterEach(() => {
-    _resetUnservedClasses();
+    registerUnservedClasses([]);
     vi.restoreAllMocks();
 });
 
@@ -97,9 +93,9 @@ describe('unserved classes', () => {
         });
     });
 
-    it('resetting an already-empty registry changes nothing', () => {
+    it('emptying an already-empty registry changes nothing', () => {
         const before = getUnservedGeneration();
-        _resetUnservedClasses();
+        registerUnservedClasses([]);
         expect(getUnservedGeneration()).toBe(before);
     });
 });

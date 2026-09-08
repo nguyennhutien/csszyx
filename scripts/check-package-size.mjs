@@ -93,10 +93,19 @@ export const SIZE_BUDGETS = [
         // of the same source measured 40 bytes apart earlier the same day, so
         // 21 bytes of headroom is inside the noise between a local build and
         // CI's; the budget is set the usual ~300 above the measurement.
+        // Raised again from 26,496 for the registry that holds the class names
+        // the project's Tailwind serves nothing for, measured 2026-09-08 at
+        // 26,542 — 46 over. The build compiles the real design system and
+        // registers those names; `splitBox` then places them by the fallback
+        // instead of by a prefix rule that matched by accident. What ships is a
+        // `Set`, three functions over it and one branch in `inspectUncached`:
+        // the list itself is app data that arrives from the build, and it is
+        // small — 73 bytes for this repository's own React sources. Budget set
+        // the usual ~300 above the measurement.
         name: '@csszyx/runtime export closure',
         kind: 'package-exports',
         target: 'packages/runtime',
-        maxGzipBytes: 26_496,
+        maxGzipBytes: 26_880,
     },
     {
         name: '@csszyx/dynamic export closure',

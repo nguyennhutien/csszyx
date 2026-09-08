@@ -66,10 +66,3 @@ export function isUnservedClass(base: string): boolean {
 export function getUnservedGeneration(): number {
     return _generation;
 }
-
-/** Empty the registry — test-only. */
-export function _resetUnservedClasses(): void {
-    if (unserved.size === 0) return;
-    unserved.clear();
-    _generation += 1;
-}
