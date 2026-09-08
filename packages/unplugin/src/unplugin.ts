@@ -95,7 +95,11 @@ import {
     manglePreserveNoMatchMessage,
     utilityStart,
 } from './mangle-preserve.js';
-import { applyMangleRuntimeEntry, ensureMangleRuntimeFile } from './mangle-runtime-file.js';
+import {
+    applyMangleRuntimeEntry,
+    ensureMangleRuntimeFile,
+    ensureUnservedRuntimeFile,
+} from './mangle-runtime-file.js';
 import {
     computeMangleSizeVerdict,
     createMangleSizeAccount,
@@ -5810,6 +5814,42 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Prepend the unserved-class registration to every webpack entrypoint.
+     *
+     * Unlike the mangle runtime this is not gated on a feature flag: the list
+     * decides where a class lands, so a build that skipped it would route
+     * differently from one that did not.
+     *
+     * @param compiler - The webpack compiler this plugin instance runs under.
+     */
+    function applyWebpackUnservedEntry(compiler: WebpackCompiler): void {
+        const root = compiler.context;
+        // An entry is prepended to EVERY entrypoint, so unlike the Vite lane --
+        // which only reaches modules that already import the runtime -- nothing
+        // guarantees the import resolves. A project without it would fail to
+        // build over a registration it never asked for, so check first.
+        try {
+            createRequire(path.join(root, 'package.json')).resolve('@csszyx/runtime');
+        } catch {
+            return;
+        }
+        const file = ensureUnservedRuntimeFile(path.join(root, '.csszyx'));
+        // An unwritable output directory must not fail the build: without the
+        // file every token keeps the placement it had before this existed.
+        if (file === null) return;
+        applyMangleRuntimeEntry(compiler, root, file, () => {});
+        // `renderStart` is a Rollup hook and webpack never calls it, so the
+        // list would stay empty on this lane and the file would register
+        // nothing. `finishModules` is the webpack moment with the same
+        // property: every module is built, and no asset has been written.
+        compiler.hooks?.thisCompilation?.tap?.('csszyx:unserved', compilation => {
+            compilation.hooks?.finishModules?.tapPromise?.('csszyx:unserved', async () => {
+                await computeUnservedClasses();
+            });
+        });
+    }
+
+    /**
      * Register the mangle map as an entry of the webpack build.
      *
      * webpack parses the colon in `virtual:` as a URI scheme and fails the
@@ -6219,6 +6259,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (manglingEnabled) {
                     applyWebpackMangleRuntimeEntry(compiler);
                 }
+                applyWebpackUnservedEntry(compiler);
                 compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
