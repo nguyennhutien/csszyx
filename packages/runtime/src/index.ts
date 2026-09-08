@@ -103,6 +103,10 @@ export {
     type SzvCompiledTable,
     type SzvPickSelection,
 } from './szv-pick.js';
+// Class names the project's Tailwind serves nothing for. The build compiles the
+// real design system and registers them here; `splitBox` then places them by
+// the fallback, the way it already places a class it cannot classify.
+export { registerUnservedClasses } from './unserved-classes.js';
 // Export variant authoring helper
 export { szv } from './variants.js';
 // Export verification functions

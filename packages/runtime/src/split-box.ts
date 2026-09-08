@@ -37,6 +37,7 @@ import {
     getSzcnGroupsGeneration,
     MERGE_GROUP_PROPERTIES,
 } from './merge-groups.js';
+import { getUnservedGeneration, isUnservedClass } from './unserved-classes.js';
 
 export type { BoxRole };
 
@@ -225,7 +226,7 @@ let memoGroupsGeneration = getSzcnGroupsGeneration();
  */
 function syncMemos(): MangleBridge | undefined {
     const bridge = mangleBridge();
-    const generation = getSzcnGroupsGeneration();
+    const generation = getSzcnGroupsGeneration() + getUnservedGeneration();
     if (bridge !== memoBridgeRef || generation !== memoGroupsGeneration) {
         inspectMemo.clear();
         splitMemo.clear();
@@ -269,7 +270,13 @@ function inspect(token: string, bridge: MangleBridge | undefined): TokenInfo | u
  * @returns Token info, or `undefined` if unowned.
  */
 function inspectUncached(token: string): TokenInfo | undefined {
-    const info = classifyBase(normalizeBase(stripVariant(token)));
+    const base = normalizeBase(stripVariant(token));
+    // The build compiled the project's own design system and found nothing for
+    // this name, so the prefix that matched was a coincidence. Answering
+    // `undefined` puts it on the fallback path, where the app's own vocabulary
+    // belongs.
+    if (isUnservedClass(base)) return undefined;
+    const info = classifyBase(base);
     // A `peer-*` rule reaches its target through the general sibling
     // combinator, and the inner node is a CHILD of the outer one — a sibling of
     // nothing the author wrote. Whatever side the base belongs to, the only
@@ -925,7 +932,11 @@ function splitBoxUncached(
         const decided = placementFor(info, base, forceInner, forceOuter);
         // An empty base is a malformed token (`md:` on its own, a bare `!`).
         // There is no class to name and no placement list that could hold one.
-        if (decided === undefined && base !== '') unplaced.push(base);
+        // A name the build reported as unserved is left out too: the warning
+        // asks the author to decide, and for those the build already did.
+        if (decided === undefined && base !== '' && !isUnservedClass(base)) {
+            unplaced.push(base);
+        }
         const side = decided ?? fallback;
         if (side === 'both') {
             outer.push(token);
