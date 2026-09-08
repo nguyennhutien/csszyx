@@ -147,6 +147,32 @@ describe('vite lane', () => {
 
         expect(rendered?.code).toContain('registerUnservedClasses([])');
     }, 60_000);
+
+    it('hands a dev server the finished list, never the hole a build fills', async () => {
+        const root = project('csszyx-unserved-serve-');
+        // On disk, because the prescan reads the project from the filesystem at
+        // `configResolved` -- which is what makes the answer available this
+        // early on a lane that never renders a chunk.
+        writeFileSync(
+            join(root, 'src/A.tsx'),
+            `export const A = () => <div className="${AUTHORED}" />;\n`,
+            'utf8',
+        );
+        const plugins = vitePlugin({ production: { mangle: false } }) as unknown as Record<
+            string,
+            unknown
+        >[];
+        const call = callHooks(plugins);
+
+        await call('configResolved', { root, command: 'serve' });
+        const module_ = (await call('load', RESOLVED_UNSERVED_VIRTUAL_ID)) as string;
+
+        // `renderChunk` is a Rollup OUTPUT hook and a dev server never renders
+        // a chunk, so a placeholder here would reach the browser as an
+        // undefined identifier: `ReferenceError: ___CSSZYX_UNSERVED___`.
+        expect(module_).not.toContain(UNSERVED_PLACEHOLDER);
+        expect(module_).toContain('registerUnservedClasses(["tab-items-wrapper"])');
+    }, 60_000);
 });
 
 describe('webpack lane', () => {

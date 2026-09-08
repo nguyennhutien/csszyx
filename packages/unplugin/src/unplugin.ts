@@ -6006,7 +6006,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     );
                 }
                 if (id === RESOLVED_UNSERVED_VIRTUAL_ID) {
-                    return createUnservedRuntimeModule();
+                    // A build leaves a hole here and fills it in `renderChunk`,
+                    // where every module has been transformed. A dev server
+                    // never renders a chunk, so that hole would reach the
+                    // browser as an undefined identifier and throw on
+                    // evaluation. It does not need the hole: the prescan walked
+                    // every source at `configResolved`, so the answer is already
+                    // available and only this branch waits for it.
+                    if (!serving) return createUnservedRuntimeModule();
+                    return computeUnservedClasses().then(() =>
+                        createUnservedRuntimeModule(unservedClasses),
+                    );
                 }
                 if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
                     return createThemeGroupsModule(themeGroupTokens());
