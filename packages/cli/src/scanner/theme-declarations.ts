@@ -9,10 +9,8 @@
  *
  * @module
  */
+import type { DeclaredToken, ThemeNamespace } from '@csszyx/tailwind-oracle';
 import { parseThemeBlocks } from '@csszyx/unplugin';
-
-import type { ThemeNamespace } from './sibling-keyword.js';
-import type { DeclaredToken } from './theme-collision.js';
 
 /** Where each guarded namespace's names come from, and how they are spelled. */
 const NAMESPACES: ReadonlyArray<{

@@ -31,7 +31,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createEmittedClassOracle } from '../packages/cli/src/scanner/emitted-class-oracle.ts';
+import { createEmittedClassOracle } from '@csszyx/tailwind-oracle';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CORPUS = path.join(REPO, 'packages/core/tests/fixtures/parity-corpus.json');

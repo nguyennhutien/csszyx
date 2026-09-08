@@ -19,7 +19,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { type CollisionOracle, findThemeCollisions } from '../src/scanner/theme-collision.js';
+import { type CollisionOracle, findThemeCollisions } from '../src/theme-collision.js';
 
 /**
  * An oracle standing in for a project's design system.

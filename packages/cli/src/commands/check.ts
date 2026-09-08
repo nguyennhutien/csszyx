@@ -15,25 +15,19 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { transformSource } from '@csszyx/compiler';
-import fg from 'fast-glob';
-import { createReporter, type Reporter, renderJsonReport } from '../scanner/check-report.js';
 import {
     createEmittedClassOracle,
+    type DeclaredToken,
     type EmittedClassOracle,
-    findTailwindCssEntries,
-} from '../scanner/emitted-class-oracle.js';
-import {
-    classNameTokens,
-    findMisclassified,
-    type MisclassifiedClass,
-} from '../scanner/misclassified-class.js';
-import {
     findSiblingKeywordValues,
+    findTailwindCssEntries,
+    findThemeCollisions,
     type SiblingKeywordFinding,
     type SzValuePair,
     szValuePairs,
-} from '../scanner/sibling-keyword.js';
-import { type DeclaredToken, findThemeCollisions } from '../scanner/theme-collision.js';
+} from '@csszyx/tailwind-oracle';
+import fg from 'fast-glob';
+import { createReporter, type Reporter, renderJsonReport } from '../scanner/check-report.js';
 import { declaredThemeTokens } from '../scanner/theme-declarations.js';
 import { relativePosix, withPosixSeparators } from '../utils/posix-path.js';
 import { spinner } from '../utils/terminal-ui.js';
@@ -700,96 +694,6 @@ async function resolveScanFiles(
 }
 
 /**
- * Report a className the toolkit classifies confidently although this
- * project's Tailwind serves nothing for it.
- *
- * WARNS rather than gates, and that is the decision rather than an oversight.
- * The boundary between a utility and an app's own class is genuinely blurry —
- * a custom `@utility`, a third-party plugin, a name built by concatenation —
- * and a check that fails a commit on a blurry call is one a team switches off,
- * which costs more than the bug it was catching. `--json` still carries every
- * finding, so a consumer that wants to gate can.
- *
- * @param out - Reporter for both channels.
- * @param oracle - The project's design system, or a skip.
- * @param tokens - Literal className tokens read from source.
- */
-/**
- * Read literal className tokens out of every scanned file.
- *
- * Separate from the sz pass because it reads a different thing out of the same
- * files: that pass lowers `sz` objects, this one looks at the className strings
- * an author wrote by hand, which is what `splitBox` is handed at runtime.
- *
- * @param cwd - Project root.
- * @param files - Absolute paths already resolved by the scan.
- * @returns Every literal token, with the file and line it came from.
- */
-async function classNameTokensFor(
-    cwd: string,
-    files: readonly string[],
-): Promise<Array<{ token: string; file: string; line: number }>> {
-    const out: Array<{ token: string; file: string; line: number }> = [];
-    for (const file of files) {
-        // Read directly rather than through `readSzSource`, which skips a file
-        // with no `sz` in it. A component that only ever writes className
-        // strings is exactly the file this pass exists for.
-        //
-        // No try/catch: every path here came from the scan, which either
-        // globbed it off disk or — for `--files` — already reported the missing
-        // ones and returned before reaching this pass. A catch would be a
-        // branch nothing can enter, and an unreachable guard reads as though
-        // the case were possible.
-        const source = await readFile(file, 'utf8');
-        const relative = relativePosix(cwd, file);
-        for (const { token, line } of classNameTokens(source)) {
-            out.push({ token, file: relative, line });
-        }
-    }
-    return out;
-}
-
-function reportMisclassified(
-    out: Reporter,
-    opened: OpenedOracles,
-    tokens: readonly { token: string; file: string; line: number }[],
-): void {
-    const { oracles } = opened;
-    if (oracles.length === 0 || tokens.length === 0) return;
-    // Dead only when EVERY stylesheet agrees, the same rule the dead-class pass
-    // uses: a project with two entries may serve a class from one of them, and
-    // reporting it because the other does not would be a false positive.
-    const findDead = (classes: readonly string[]): string[] => {
-        const perOracle = oracles.map(oracle => new Set(oracle.findDead(classes)));
-        return classes.filter(token => perOracle.every(byToken => byToken.has(token)));
-    };
-    const found: MisclassifiedClass[] = findMisclassified(tokens, findDead);
-    if (found.length === 0) return;
-    out.warn('\nClasses the toolkit reads as utilities, which this project does not serve:');
-    for (const finding of found) {
-        const node = finding.role === 'outer' ? 'frame' : 'inner';
-        const message =
-            `"${finding.token}" is read as a ${finding.category} utility and routed to the ` +
-            `${node} node, but this project's Tailwind produces no CSS for it. ` +
-            `help: if it is your own class, pin it with { ${finding.role}: ['${finding.token}'] }.`;
-        out.push({
-            rule: 'misclassified-class',
-            file: finding.file,
-            line: finding.line,
-            message,
-        });
-        out.info(`  ${finding.token.padEnd(28)} ${finding.file}:${finding.line}  → ${node}`);
-    }
-    // `found` is non-empty — the early return above covers the other case — so
-    // the first finding is always there to name in the hint.
-    const first = found[0] as MisclassifiedClass;
-    out.warn(
-        '  These are warnings, not failures: a custom @utility or a plugin class can look the same.\n' +
-            `  If one is your own class, pin it at the splitBox call: { ${first.role}: ['${first.token}'] }.`,
-    );
-}
-
-/**
  * Scan the project for unknown/aliased `sz` keys and report them in one pass.
  *
  * Sets `process.exitCode` to 1 when any issue is found so the command can gate
@@ -816,13 +720,12 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     if (!files) return;
 
     const { issues, classOrigins, pairsByFile } = await collectSzDiagnostics(files, cwd);
-    const authored = await classNameTokensFor(cwd, files);
     // Compiling a stylesheet is the expensive part of this command, so it is
     // skipped when no pass that reads it has anything to ask. The className
     // pass counts here too: a component that writes only class strings has no
     // sz signal at all, and it is exactly the file that pass exists for.
     const opened =
-        classOrigins.size > 0 || pairsByFile.size > 0 || authored.length > 0
+        classOrigins.size > 0 || pairsByFile.size > 0
             ? await openOracles(cwd)
             : { oracles: [], skipped: [], stylesheetFailed: false, hadEntries: false };
 
@@ -852,8 +755,6 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     if (await reportThemeCollisions(out, opened, cwd, options.allowToken ?? [])) {
         process.exitCode = 1;
     }
-    // No `process.exitCode` here on purpose — see `reportMisclassified`.
-    reportMisclassified(out, opened, authored);
 
     // Written last, after every pass has recorded what it found, so the
     // document is the whole run rather than whatever had arrived by then.

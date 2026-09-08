@@ -31,7 +31,7 @@ import {
     findSiblingKeywordValues,
     type KeywordOracle,
     szValuePairs,
-} from '../src/scanner/sibling-keyword.js';
+} from '../src/sibling-keyword.js';
 
 /**
  * An oracle standing in for a project's design system.

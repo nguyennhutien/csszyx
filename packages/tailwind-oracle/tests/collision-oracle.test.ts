@@ -19,7 +19,7 @@ import {
     type CollisionDesignSystem,
     collisionOracleFrom,
     PROBE_TOKENS,
-} from '../src/scanner/collision-oracle.js';
+} from '../src/collision-oracle.js';
 
 /** One way Tailwind reads a candidate class name. */
 type Reading = { kind: string; root: string; value?: { kind: string; value: string } | null };

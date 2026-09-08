@@ -1,0 +1,29 @@
+{
+  "name": "@csszyx/tailwind-oracle",
+  "version": "0.17.0",
+  "description": "Asks a project's own Tailwind whether a class name produces CSS",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyennhutien/csszyx.git",
+    "directory": "packages/tailwind-oracle"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@csszyx/compiler": "workspace:*",
+    "fast-glob": "^3.3.3"
+  },
+  "sideEffects": false,
+  "license": "MIT"
+}
