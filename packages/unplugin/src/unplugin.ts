@@ -5129,6 +5129,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Fold one injector's result into the module output.
+     *
+     * Five injectors run in sequence in `transform`, each reading the source the
+     * previous one produced, and each owing the same two-field update when it
+     * rewrote anything. Repeating the fold inline made the branch count of
+     * `transform` grow with every injector added rather than with what the hook
+     * decides.
+     *
+     * @param output - Module output being assembled; mutated in place.
+     * @param rewritten - Injector result: new source, or null when unchanged.
+     */
+    function applyInjection(output: PreTransformOutput, rewritten: string | null): void {
+        if (rewritten === null) return;
+        output.code = rewritten;
+        output.transformed = true;
+    }
+
+    /**
      * Record a hot-updated file that produced no classes, and bail.
      *
      * Three paths reach it — a file with no `sz` at all, one the parser
@@ -6066,35 +6084,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     recordFileCSSVariableMetrics(state, id, null);
                 }
 
-                const layoutCode = injectLayoutHydration(output.code, id);
-                if (layoutCode !== null) {
-                    output.code = layoutCode;
-                    output.transformed = true;
-                }
-
-                const runtimeCode = injectRuntimeHelpers(output.code, output);
-                if (runtimeCode !== null) {
-                    output.code = runtimeCode;
-                    output.transformed = true;
-                }
-
-                const themedCode = injectThemeGroups(code, output.code, id, output.usesSzcn);
-                if (themedCode !== null) {
-                    output.code = themedCode;
-                    output.transformed = true;
-                }
-
-                const mangleRuntimeCode = injectMangleRuntime(output.code, id);
-                if (mangleRuntimeCode !== null) {
-                    output.code = mangleRuntimeCode;
-                    output.transformed = true;
-                }
-
-                const unservedCode = injectUnservedRuntime(output.code, id);
-                if (unservedCode !== null) {
-                    output.code = unservedCode;
-                    output.transformed = true;
-                }
+                // Sequential, and order matters: each injector reads the source
+                // the previous one produced.
+                applyInjection(output, injectLayoutHydration(output.code, id));
+                applyInjection(output, injectRuntimeHelpers(output.code, output));
+                applyInjection(output, injectThemeGroups(code, output.code, id, output.usesSzcn));
+                applyInjection(output, injectMangleRuntime(output.code, id));
+                applyInjection(output, injectUnservedRuntime(output.code, id));
 
                 if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
                     assertNoRSCBoundaryViolation(output.code, id);
