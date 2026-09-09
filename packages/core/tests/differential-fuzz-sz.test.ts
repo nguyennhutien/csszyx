@@ -21,6 +21,7 @@ import type { SzObject } from '../../compiler/src/transform-core.js';
 import { transform } from '../../compiler/src/transform-core.js';
 import { init, transform_sz } from '../pkg-node/csszyx_core.js';
 import {
+    commitSeed,
     createRng,
     fuzzBudget,
     generateSzObject,
@@ -117,8 +118,15 @@ describe('sz differential fuzz (TS transform vs Rust transform_sz)', () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {});
     });
 
-    it('agrees on every generated case outside the recorded prefix-drop keys', () => {
-        const { seed, cases } = fuzzBudget(4000);
+    /**
+     * Draws cases from one seed and reports the divergences that are not
+     * explained by a recorded defect.
+     *
+     * @param seed The seed to draw from.
+     * @param cases How many objects to generate.
+     * @returns One report block per unexplained divergence, up to ten.
+     */
+    function unexplainedDivergences(seed: number, cases: number): string[] {
         const rng = createRng(seed);
         const unexplained: string[] = [];
 
@@ -142,12 +150,37 @@ describe('sz differential fuzz (TS transform vs Rust transform_sz)', () => {
             );
             if (unexplained.length >= 10) break;
         }
+        return unexplained;
+    }
 
+    it('agrees on the fixed regression slice', () => {
+        // One seed, the same cases on every run and every machine: this is the
+        // slice that must never regress.
+        const { seed, cases } = fuzzBudget(4000);
+        const found = unexplainedDivergences(seed, cases);
         expect(
-            unexplained,
-            `${unexplained.length} TS↔Rust lowering divergence(s) outside the recorded ` +
-                `prefix-drop keys. Replay one with ` +
-                `SZ_FUZZ_SEED=${seed} SZ_FUZZ_CASES=${cases}:\n${unexplained.join('\n')}`,
+            found,
+            `${found.length} TS↔Rust lowering divergence(s). Replay with ` +
+                `SZ_FUZZ_SEED=${seed} SZ_FUZZ_CASES=${cases}:\n${found.join('\n')}`,
+        ).toEqual([]);
+    });
+
+    it('agrees on the slice this commit explores', () => {
+        // A suite pinned to one seed explores one fixed slice forever, so a
+        // defect outside it is permanently invisible. This second seed comes
+        // from the commit, so the covered area grows with history while a
+        // single run stays exactly reproducible — rerunning this commit draws
+        // the same cases, and the failure message carries the seed either way.
+        //
+        // A failure here is a real divergence, not a flake: the two engines
+        // answered differently on an input, and that input is replayable.
+        const { cases } = fuzzBudget(4000);
+        const seed = commitSeed(0x5a5a5a5a);
+        const found = unexplainedDivergences(seed, cases);
+        expect(
+            found,
+            `${found.length} TS↔Rust lowering divergence(s) in this commit's slice. ` +
+                `Replay with SZ_FUZZ_SEED=${seed} SZ_FUZZ_CASES=${cases}:\n${found.join('\n')}`,
         ).toEqual([]);
     });
 

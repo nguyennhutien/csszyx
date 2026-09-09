@@ -19,6 +19,7 @@
  * `scripts/gen-rust-parity-corpus.mjs` records the same reasoning for the
  * frozen corpus.
  */
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -303,6 +304,55 @@ export function shrinkSzObject(
         current = next;
     }
     return current;
+}
+
+/**
+ * A seed derived from the commit under test.
+ *
+ * A generated suite pinned to one seed explores one fixed slice of the input
+ * space, however many times it runs: a defect outside those cases is invisible
+ * to it permanently. Deriving a second seed from the commit moves that slice
+ * per commit, so the covered area grows with history while any single run stays
+ * exactly reproducible — the seed is printed on failure, and it is a property
+ * of the commit, not of the clock.
+ *
+ * That distinction is what keeps this compatible with determinism as a
+ * precondition: two runs of the same commit draw the same cases. A time-based
+ * or random seed would make a real divergence look like a flake and a flake
+ * look like a divergence.
+ *
+ * @param fallback Seed to use when the commit cannot be read (a tarball, a
+ *   shallow export, git missing).
+ * @returns A 32-bit seed.
+ */
+export function commitSeed(fallback: number): number {
+    const sha = process.env.GITHUB_SHA ?? readHeadSha();
+    if (sha === null) return fallback;
+    // FNV-1a over the hex: any spread of the bits will do, and this needs no
+    // dependency and no crypto import.
+    let hash = 0x811c9dc5;
+    for (let index = 0; index < sha.length; index += 1) {
+        hash ^= sha.charCodeAt(index);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return hash >>> 0;
+}
+
+/**
+ * Reads the commit at `HEAD`.
+ *
+ * @returns The sha, or `null` outside a git checkout.
+ */
+function readHeadSha(): string | null {
+    try {
+        return execFileSync('git', ['rev-parse', 'HEAD'], {
+            cwd: fileURLToPath(new URL('../../../..', import.meta.url)),
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+    } catch {
+        return null;
+    }
 }
 
 /**
