@@ -92,6 +92,7 @@
   "scripts": {
     "build": "unbuild",
     "dev": "unbuild --stub",
+    "bench": "vitest bench --run",
     "test": "vitest run",
     "test:watch": "vitest",
     "type-check": "tsc --noEmit"

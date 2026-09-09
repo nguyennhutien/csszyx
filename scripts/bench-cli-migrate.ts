@@ -19,8 +19,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
-
 import { migrateRustBatch, migrateRustClassName } from '../packages/compiler/src/migrate-rust.js';
+import { formatDispersion, median, recordBenchRun, summarize } from './bench-stats.ts';
 import { type ChaosRepoStats, writeChaosRepo } from './chaos-repo-fixture.ts';
 
 interface CliOptions {
@@ -65,6 +65,17 @@ interface BenchRow {
     samplesMs: number[];
     /** Human-readable note. */
     note: string;
+}
+
+/**
+ * Formats the coefficient of variation for a report column.
+ *
+ * @param samples The row's raw timing samples.
+ * @returns The CV to one decimal place, or `n/a` where it is undefined.
+ */
+function formatCv(samples: readonly number[]): string {
+    const { cvPercent } = summarize(samples);
+    return Number.isFinite(cvPercent) ? cvPercent.toFixed(1) : 'n/a';
 }
 
 interface ReportPayload {
@@ -126,6 +137,26 @@ const markdownReportPath = join(options.outDir, `${REPORT_NAME}.md`);
 const jsonReportPath = join(options.outDir, `${REPORT_NAME}.json`);
 console.log(`Wrote ${markdownReportPath}`);
 console.log(`Wrote ${jsonReportPath}`);
+
+// Dispersion on stdout, so a reader can tell a real change from noise without
+// opening the report. A CV above ~5 % means the median is not a number to
+// compare against another run.
+for (const row of payload.rows) {
+    console.log(`  ${row.name}: ${formatDispersion(summarize(row.samplesMs))}`);
+}
+
+const historyFile = recordBenchRun(
+    'cli-migrate',
+    payload.rows.map(row => ({
+        name: row.name,
+        items: row.items,
+        ...summarize(row.samplesMs),
+        itemsPerSecond: row.itemsPerSecond,
+    })),
+);
+if (historyFile !== null) {
+    console.log(`Recorded run in ${historyFile}`);
+}
 
 /**
  * Parse CLI args.
@@ -399,21 +430,6 @@ function measureCase(
 }
 
 /**
- * Return median of a numeric list.
- *
- * @param values input values.
- * @returns median.
- */
-function median(values: number[]): number {
-    const sorted = [...values].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    if (sorted.length % 2 === 0) {
-        return (sorted[mid - 1] + sorted[mid]) / 2;
-    }
-    return sorted[mid];
-}
-
-/**
  * Render the markdown report.
  *
  * @param payload report payload.
@@ -467,11 +483,13 @@ function renderReport(payload: ReportPayload): string {
     lines.push('');
 
     lines.push('## Rows', '');
-    lines.push('| Case | Items | Median ms | Mean ms | Min ms | Max ms | Items/sec | Note |');
-    lines.push('|---|---:|---:|---:|---:|---:|---:|---|');
+    lines.push(
+        '| Case | Items | Median ms | p95 ms | CV % | Mean ms | Min ms | Max ms | Items/sec | Note |',
+    );
+    lines.push('|---|---:|---:|---:|---:|---:|---:|---:|---:|---|');
     for (const row of payload.rows) {
         lines.push(
-            `| \`${row.name}\` | ${row.items} | ${formatNumber(row.medianMs)} | ${formatNumber(row.meanMs)} | ${formatNumber(row.minMs)} | ${formatNumber(row.maxMs)} | ${formatNumber(row.itemsPerSecond)} | ${row.note} |`,
+            `| \`${row.name}\` | ${row.items} | ${formatNumber(row.medianMs)} | ${formatNumber(summarize(row.samplesMs).p95)} | ${formatCv(row.samplesMs)} | ${formatNumber(row.meanMs)} | ${formatNumber(row.minMs)} | ${formatNumber(row.maxMs)} | ${formatNumber(row.itemsPerSecond)} | ${row.note} |`,
         );
     }
     lines.push('');

@@ -25,9 +25,7 @@ import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
-
 import { type PluginOption, build as viteBuild } from 'vite';
-
 import { transformWasm } from '../packages/compiler/src/transform-wasm.js';
 import {
     planGlobalVarAliases,
@@ -35,6 +33,7 @@ import {
     scanGlobalVarCss,
 } from '../packages/unplugin/src/global-var-scanner.js';
 import { vitePlugin } from '../packages/unplugin/src/unplugin.js';
+import { formatDispersion, median, recordBenchRun, summarize } from './bench-stats.ts';
 
 interface CliOptions {
     /** Synthetic token counts to benchmark. */
@@ -70,6 +69,17 @@ interface BenchRow {
     output: OutputMetrics;
     /** Human-readable note. */
     note: string;
+}
+
+/**
+ * Formats the coefficient of variation for a report column.
+ *
+ * @param samples The row's raw timing samples.
+ * @returns The CV to one decimal place, or `n/a` where it is undefined.
+ */
+function formatCv(samples: readonly number[]): string {
+    const { cvPercent } = summarize(samples);
+    return Number.isFinite(cvPercent) ? cvPercent.toFixed(1) : 'n/a';
 }
 
 interface OutputMetrics {
@@ -575,6 +585,27 @@ function writeReports(rows: BenchRow[], options: CliOptions): void {
     const jsonReportPath = join(options.outDir, `${REPORT_NAME}.json`);
     console.log(`Wrote ${markdownReportPath}`);
     console.log(`Wrote ${jsonReportPath}`);
+
+    // Dispersion on stdout, so a reader can tell a real change from noise
+    // without opening the report. A CV above ~5 % means the median is not a
+    // number to compare against another run.
+    for (const row of payload.rows) {
+        console.log(`  ${row.name}: ${formatDispersion(summarize(row.samplesMs))}`);
+    }
+
+    const historyFile = recordBenchRun(
+        'global-var-mangling',
+        payload.rows.map(row => ({
+            name: row.name,
+            tokens: row.tokens,
+            ...summarize(row.samplesMs),
+            byteDelta: row.output.byteDelta,
+            gzipDelta: row.output.gzipDelta,
+        })),
+    );
+    if (historyFile !== null) {
+        console.log(`Recorded run in ${historyFile}`);
+    }
 }
 
 /**
@@ -591,7 +622,7 @@ function renderMarkdown(payload: ReportPayload): string {
     const rows = payload.rows
         .map(
             row =>
-                `| \`${row.name}\` | ${row.tokens} | ${format(row.medianMs)} | ${format(row.meanMs)} | ${row.output.aliasDeclarations} | ${row.output.rewrittenReferences} | ${formatSigned(row.output.byteDelta)} | ${formatSigned(row.output.gzipDelta)} | ${formatSigned(row.output.brotliDelta)} | ${row.note} |`,
+                `| \`${row.name}\` | ${row.tokens} | ${format(row.medianMs)} | ${format(summarize(row.samplesMs).p95)} | ${formatCv(row.samplesMs)} | ${format(row.meanMs)} | ${row.output.aliasDeclarations} | ${row.output.rewrittenReferences} | ${formatSigned(row.output.byteDelta)} | ${formatSigned(row.output.gzipDelta)} | ${formatSigned(row.output.brotliDelta)} | ${row.note} |`,
         )
         .join('\n');
     return `# Phase H Global Var Mangling Bench
@@ -600,8 +631,8 @@ Generated: ${payload.generated}
 
 Environment: ${payload.platform}, ${payload.node}
 
-| Case | Tokens | Median ms | Mean ms | Alias decls | Rewritten refs | Raw Δ bytes | Gzip Δ bytes | Brotli Δ bytes | Note |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Case | Tokens | Median ms | p95 ms | CV % | Mean ms | Alias decls | Rewritten refs | Raw Δ bytes | Gzip Δ bytes | Brotli Δ bytes | Note |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 ${rows}
 
 ## Notes
@@ -665,20 +696,6 @@ function brotliSize(value: string): number {
  */
 function mean(values: number[]): number {
     return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-/**
- * Median.
- *
- * @param values samples.
- * @returns median.
- */
-function median(values: number[]): number {
-    const sorted = [...values].sort((left, right) => left - right);
-    const middle = Math.floor(sorted.length / 2);
-    return sorted.length % 2 === 0
-        ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
-        : (sorted[middle] ?? 0);
 }
 
 /**

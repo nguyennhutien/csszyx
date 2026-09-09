@@ -24,6 +24,8 @@ import { extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 
+import { recordBenchRun } from './bench-stats.ts';
+
 const BACKSLASH = String.fromCodePoint(92);
 
 type BenchMode = 'mangle-vars-off' | 'mangle-vars-on';
@@ -77,6 +79,25 @@ writeFileSync(REPORT_JSON, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 writeFileSync(REPORT_MD, renderReport(payload), 'utf8');
 console.log(`Wrote ${relative(REPO_ROOT, REPORT_MD)}`);
 console.log(`Wrote ${relative(REPO_ROOT, REPORT_JSON)}`);
+
+// No dispersion figure here, and that is not an omission: compressed output size
+// is deterministic — the same build inputs produce the same byte count, so a p95
+// or a CV over repeated runs would be zero by construction and would read as
+// evidence of stability that was never measured. What a deterministic metric DOES
+// want is a series, because it is the one kind that can be gated on an absolute
+// threshold and the one where a change point is unambiguous.
+const historyFile = recordBenchRun(
+    'vite-react-output-size',
+    rows.map(row => ({
+        name: row.name,
+        mode: row.mode,
+        status: row.status,
+        groups: row.groups,
+    })),
+);
+if (historyFile !== null) {
+    console.log(`Recorded run in ${historyFile}`);
+}
 
 /**
  * Runs one build and collects output sizes.

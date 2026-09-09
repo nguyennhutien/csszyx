@@ -18,6 +18,8 @@
 
 import { gzipSync } from 'node:zlib';
 
+import { recordBenchRun } from './bench-stats.ts';
+
 /** One measured scenario. */
 interface Scenario {
     /** Human-readable label. */
@@ -49,6 +51,17 @@ interface Measurement {
     injectedGzip: number;
     /** Manifest transfer plus injected CSS, both gzipped — what the user pays. */
     totalGzip: number;
+    /**
+     * Cost of the timed loop, from ONE observation — not a median.
+     *
+     * Deliberately unsampled. `dynamic()` injects each rule and then dedupes it,
+     * so a second pass over the same objects measures cache hits rather than the
+     * same work: measured at 2718 µs on the first pass against 1186 µs on the
+     * second, a 2.3x gap. A median over repeated passes would therefore be a
+     * median of two different operations. The number is the cold cost, and the
+     * report labels it as one observation so it is not read beside the sampled
+     * medians of the other harnesses as if comparable.
+     */
     microseconds: number;
 }
 
@@ -346,10 +359,10 @@ async function main(): Promise<void> {
         for (const scenario of scenarios) rows.push(await measure(scenario, objects, everyClass));
         console.log(`\n${title}\n`);
         console.log(
-            '| scenario                   | manifest gz | rules | inject gz | total gz | time µs |',
+            '| scenario                   | manifest gz | rules | inject gz | total gz | time µs (n=1) |',
         );
         console.log(
-            '| -------------------------- | ----------- | ----- | --------- | -------- | ------- |',
+            '| -------------------------- | ----------- | ----- | --------- | -------- | ------------- |',
         );
         for (const row of rows) console.log(formatRow(row));
         return rows;
@@ -410,6 +423,24 @@ async function main(): Promise<void> {
             `  ${row.name.padEnd(24)} ${delta >= 0 ? '+' : ''}${delta} B gz ` +
                 `${delta >= 0 ? '(costs more than it saves)' : '(saves)'}`,
         );
+    }
+
+    // The gzip figures here are deterministic, which makes them the one metric
+    // in this harness worth keeping a series of.
+    const historyFile = recordBenchRun(
+        'dynamic-manifest',
+        [...sameSize, ...realistic].map(row => ({
+            name: row.name,
+            manifestGzip: row.manifestGzip,
+            injectedRules: row.injectedRules,
+            injectedGzip: row.injectedGzip,
+            totalGzip: row.totalGzip,
+            microseconds: row.microseconds,
+            timeSamples: 1,
+        })),
+    );
+    if (historyFile !== null) {
+        console.log(`\nRecorded run in ${historyFile}`);
     }
 }
 

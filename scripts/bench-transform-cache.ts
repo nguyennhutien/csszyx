@@ -27,6 +27,7 @@ import {
     type TransformCacheKeyInput,
     writeTransformCache,
 } from '../packages/unplugin/src/transform-cache.js';
+import { formatDispersion, median, recordBenchRun, summarize } from './bench-stats.ts';
 
 interface CliOptions {
     /** Synthetic project sizes to benchmark. */
@@ -54,6 +55,10 @@ interface BenchStats {
     minMs: number;
     /** Maximum milliseconds per full iteration. */
     maxMs: number;
+    /** 95th percentile milliseconds, nearest rank. */
+    p95Ms: number;
+    /** Coefficient of variation, percent of mean. Above ~5 % the median is noise. */
+    cvPercent: number;
     /** Median files processed per second. */
     filesPerSecond: number;
     /** Notes for report readers. */
@@ -173,6 +178,40 @@ writeFileSync(
 
 console.log(`Wrote ${join(options.outDir, 'phase-e-transform-cache-bench.md')}`);
 console.log(`Wrote ${join(options.outDir, 'phase-e-babel-vs-oxc-bench.md')}`);
+
+// Dispersion on stdout, so a reader can tell a real change from noise without
+// opening the report. A CV above ~5 % means the median is not a number to
+// compare against another run.
+for (const stat of [...cacheReport, ...parserReport]) {
+    if (stat.status !== 'measured') continue;
+    console.log(
+        `  ${stat.name}: ${formatDispersion({
+            samples: options.iterations,
+            median: stat.medianMs,
+            min: stat.minMs,
+            p95: stat.p95Ms,
+            cvPercent: stat.cvPercent,
+        })}`,
+    );
+}
+
+const historyFile = recordBenchRun(
+    'transform-cache',
+    [...cacheReport, ...parserReport].map(stat => ({
+        name: stat.name,
+        status: stat.status,
+        files: stat.files,
+        samples: options.iterations,
+        median: stat.medianMs,
+        min: stat.minMs,
+        p95: stat.p95Ms,
+        cvPercent: stat.cvPercent,
+        filesPerSecond: stat.filesPerSecond,
+    })),
+);
+if (historyFile !== null) {
+    console.log(`Recorded run in ${historyFile}`);
+}
 
 /**
  * Parse CLI options.
@@ -677,14 +716,17 @@ function measureCase(
         samples.push(performance.now() - start);
     }
 
-    const medianMs = median(samples);
+    const spread = summarize(samples);
+    const medianMs = spread.median;
     return {
         name,
         files,
         medianMs,
         meanMs: samples.reduce((sum, sample) => sum + sample, 0) / samples.length,
-        minMs: Math.min(...samples),
+        minMs: spread.min,
         maxMs: Math.max(...samples),
+        p95Ms: spread.p95,
+        cvPercent: spread.cvPercent,
         filesPerSecond: (files / medianMs) * 1000,
         note,
         status: 'measured',
@@ -707,6 +749,8 @@ function nativeUnavailableCase(name: string, files: number, note: string): Bench
         meanMs: 0,
         minMs: 0,
         maxMs: 0,
+        p95Ms: 0,
+        cvPercent: Number.NaN,
         filesPerSecond: 0,
         note,
         status: 'native-unavailable',
@@ -888,21 +932,6 @@ function hasSzProp(source: string): boolean {
 }
 
 /**
- * Compute the median of timing samples.
- *
- * @param samples timing samples
- * @returns median sample
- */
-function median(samples: number[]): number {
-    const sorted = [...samples].sort((a, b) => a - b);
-    const middle = Math.floor(sorted.length / 2);
-    if (sorted.length % 2 === 0) {
-        return (sorted[middle - 1] + sorted[middle]) / 2;
-    }
-    return sorted[middle];
-}
-
-/**
  * Render transform-cache markdown report.
  *
  * @param stats benchmark stats
@@ -946,8 +975,8 @@ The no-sz case measures the real pre-transform gate separately. Files with no sz
 
 ## Results
 
-| Case | Status | Files | Median ms | Mean ms | Min ms | Max ms | Files/sec | Note |
-|---|---|---:|---:|---:|---:|---:|---:|---|
+| Case | Status | Files | Median ms | p95 ms | CV % | Mean ms | Min ms | Max ms | Files/sec | Note |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
 ${rows}
 
 ## Interpretation
@@ -1015,8 +1044,8 @@ The batch fixtures repeat representative csszyx patterns: static object, string 
 
 ## Results
 
-| Case | Status | Files | Median ms | Mean ms | Min ms | Max ms | Files/sec | Note |
-|---|---|---:|---:|---:|---:|---:|---:|---|
+| Case | Status | Files | Median ms | p95 ms | CV % | Mean ms | Min ms | Max ms | Files/sec | Note |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
 ${rows}
 
 ## Interpretation
@@ -1134,9 +1163,12 @@ function findStat(stats: BenchStats[], name: string): BenchStats {
  * @returns markdown table row
  */
 function tableRow(stat: BenchStats): string {
+    const cv = Number.isFinite(stat.cvPercent) ? stat.cvPercent.toFixed(1) : 'n/a';
     return `| \`${stat.name}\` | ${stat.status} | ${stat.files} | ${formatMs(
         stat.medianMs,
-    )} | ${formatMs(stat.meanMs)} | ${formatMs(stat.minMs)} | ${formatMs(
+    )} | ${formatMs(stat.p95Ms)} | ${cv} | ${formatMs(stat.meanMs)} | ${formatMs(
+        stat.minMs,
+    )} | ${formatMs(
         stat.maxMs,
     )} | ${Math.round(stat.filesPerSecond).toLocaleString()} | ${stat.note} |`;
 }

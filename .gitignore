@@ -135,3 +135,7 @@ apps/*/CHANGELOG.md
 
 # Rust
 # Cargo.lock (Un-ignored to ensure reproducible builds)
+
+# Local benchmark history (one JSON line per run, per machine). See
+# scripts/bench-stats.ts: a series is only comparable within one machine.
+.bench-history/
