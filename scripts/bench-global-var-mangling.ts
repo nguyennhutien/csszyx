@@ -397,7 +397,12 @@ function createViteProductionFixture(fixture: Fixture): string {
     mkdirSync(src, { recursive: true });
     writeFileSync(
         join(root, 'index.html'),
-        '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
+        // Split across two lines so the tag-filter gate's line-based scan does
+        // not read `/div><script type="module" src="/s` as a regex literal with
+        // an `s` flag. The HTML is unchanged; whitespace between these elements
+        // is insignificant.
+        `<div id="root"></div>
+<script type="module" src="/src/main.tsx"></script>`,
         'utf8',
     );
     writeFileSync(

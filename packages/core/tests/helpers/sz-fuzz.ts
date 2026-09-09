@@ -192,47 +192,72 @@ export function isSzObject(value: SzValue | undefined): value is SzObject {
  * @returns Candidate reductions, unordered; the caller sorts them by size.
  */
 function reductions(sz: SzObject): SzObject[] {
+    return [...withoutOneProperty(sz), ...withOneVariantUnwrapped(sz), ...withOneGroupMember(sz)];
+}
+
+/**
+ * Copies an object, leaving out one key.
+ *
+ * @param entries The source entries.
+ * @param omitted The key to leave out.
+ * @returns A new object without that key.
+ */
+function omitting(entries: readonly (readonly [string, SzValue])[], omitted: string): SzObject {
+    const out: SzObject = {};
+    for (const [key, value] of entries) {
+        if (key !== omitted) out[key] = value;
+    }
+    return out;
+}
+
+/**
+ * Reductions that drop one top-level property.
+ *
+ * @param sz The object to reduce.
+ * @returns One candidate per property.
+ */
+function withoutOneProperty(sz: SzObject): SzObject[] {
+    const entries = Object.entries(sz);
+    return entries.map(([key]) => omitting(entries, key));
+}
+
+/**
+ * Reductions that lift one variant group's members up a level, replacing
+ * `{ hover: { p: 4 } }` with `{ p: 4 }`.
+ *
+ * A variant-prefix defect survives this reduction only if it does not depend
+ * on that level, which is exactly what the shrink is trying to find out.
+ *
+ * @param sz The object to reduce.
+ * @returns One candidate per nested group.
+ */
+function withOneVariantUnwrapped(sz: SzObject): SzObject[] {
     const entries = Object.entries(sz);
     const out: SzObject[] = [];
-
-    // Drop one property.
-    for (const [dropped] of entries) {
-        const candidate: SzObject = {};
-        for (const [key, value] of entries) {
-            if (key !== dropped) candidate[key] = value;
-        }
-        out.push(candidate);
-    }
-
-    // Unwrap one variant level: replace `{ hover: { p: 4 } }` with `{ p: 4 }`.
-    // A variant prefix bug survives this reduction only if it does not depend
-    // on that level, which is exactly the information the shrink is after.
     for (const [key, value] of entries) {
         if (!isSzObject(value)) continue;
-        const candidate: SzObject = {};
-        for (const [other, otherValue] of entries) {
-            if (other !== key) candidate[other] = otherValue;
-        }
-        for (const [inner, innerValue] of Object.entries(value)) {
-            candidate[inner] = innerValue;
-        }
-        out.push(candidate);
+        out.push({ ...omitting(entries, key), ...value });
     }
+    return out;
+}
 
-    // Shrink a nested group without unwrapping it.
-    for (const [key, value] of entries) {
+/**
+ * Reductions that shrink a nested group without unwrapping it.
+ *
+ * @param sz The object to reduce.
+ * @returns One candidate per member of each nested group, skipping the
+ *   reductions that would leave a group empty.
+ */
+function withOneGroupMember(sz: SzObject): SzObject[] {
+    const out: SzObject[] = [];
+    for (const [key, value] of Object.entries(sz)) {
         if (!isSzObject(value)) continue;
-        for (const inner of Object.keys(value)) {
-            const group: SzObject = {};
-            for (const [other, otherValue] of Object.entries(value)) {
-                if (other !== inner) group[other] = otherValue;
-            }
-            if (Object.keys(group).length === 0) continue;
-            const candidate = { ...sz, [key]: group };
-            out.push(candidate);
+        const groupEntries = Object.entries(value);
+        if (groupEntries.length < 2) continue;
+        for (const [inner] of groupEntries) {
+            out.push({ ...sz, [key]: omitting(groupEntries, inner) });
         }
     }
-
     return out;
 }
 
