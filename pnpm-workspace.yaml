@@ -4,29 +4,56 @@ packages:
   - "playground/*"
 
 # pnpm 11 reads workspace configuration here, not from package.json#pnpm.
+#
+# How an entry actually works, because the semantics are not what they look
+# like: the LEFT side is matched against the range a dependent REQUESTS, never
+# against the version that would be installed. `@hono/node-server` asks for
+# `hono: ^4`, which overlaps `hono@>=4.0.0 <4.12.34`, so that entry fired and
+# replaced `^4` wholesale — which is how a selector reading `<4.12.34` pinned the
+# tree AT 4.12.34 and held it there while 4.13.7 was published.
+#
+# Two rules follow.
+#
+#   The right side is a RANGE, never a bare version. `^4.13.5` is a floor: the
+#   resolver still takes the newest 4.x, and a dependent that needs more is not
+#   dragged down. A bare `4.13.5` is floor and ceiling at once — it freezes the
+#   package, and it hands dependents a version their own range rejects.
+#
+#   The left side covers the whole major line the advisory lives in. A narrow
+#   upper bound only spares dependents whose range STARTS above it, which real
+#   packages almost never do, and it fails open for anything pinned inside the
+#   vulnerable band above that bound.
+#
+# Entries go stale in silence: an advisory that grows leaves one guarding a range
+# that no longer matches, still looking like protection. Three were in that state
+# on 2026-09-09 — `hono` at `<4.12.34` against `<4.13.5`, `js-yaml` at `<4.3.1`
+# against `<4.3.2`, `sharp` at `<0.35.0` against `<0.35.4`. Re-check by comparing
+# `pnpm audit` against this list, not by reading the list alone.
 overrides:
   "@azure/msal-node@>=5.1.0 <5.4.1": "^5.4.1"
   "@hono/node-server@<2.0.5": "^2.0.5"
   "brace-expansion@>=1.0.0 <1.1.17": "^1.1.17"
   "browserslist@<4.28.7": "^4.28.7"
+  "baseline-browser-mapping@>=2.0.0 <2.11.0": "^2.11.0"
   "brace-expansion@>=5.0.0 <5.0.8": "^5.0.8"
   "devalue@>=5.0.0 <5.8.1": "^5.8.1"
   "esbuild@>=0.17.0 <0.28.1": "^0.28.1"
   "fast-uri@>=3.0.0 <3.1.6": "^3.1.6"
   "form-data@>=4.0.0 <4.0.6": "^4.0.6"
   "http-proxy-middleware@>=2.0.0 <3.0.6": "^3.0.6"
-  "js-yaml@>=4.0.0 <4.3.1": "^4.3.1"
+  "js-yaml@>=4.0.0 <4.3.2": "^4.3.2"
   "js-yaml@>=5.0.0 <5.2.2": "^5.2.2"
   "lodash@>=4.0.0 <4.18.0": "^4.18.1"
   "markdown-it@>=14.0.0 <14.2.0": "^14.2.0"
   "minimatch@>=10.0.0 <10.2.3": "^10.2.5"
   "nanoid@<3.3.17": "^3.3.17"
-  "hono@>=4.0.0 <4.12.34": "4.12.34"
-  "ip-address@>=10.0.0 <10.3.1": "10.3.1"
+  "hono@^4": "^4.13.5"
+  "ip-address@^10": "^10.3.1"
   "postcss@>=8.0.0 <8.5.23": "^8.5.23"
   "qs@>=6.0.0 <6.16.0": "^6.16.0"
-  "sharp@<0.35.0": "^0.35.3"
+  "sharp@<0.35.4": "^0.35.4"
   "shell-quote@>=1.0.0 <1.9.0": "^1.9.0"
+  "svgo@>=4.0.0 <4.1.0": "^4.1.0"
   "tmp@>=0.2.0 <0.2.6": "^0.2.7"
   "undici@>=7.0.0 <7.29.0": "^7.29.0"
   "vite@>=6.0.0 <6.4.3": "^6.4.3"
