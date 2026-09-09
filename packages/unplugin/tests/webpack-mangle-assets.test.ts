@@ -130,7 +130,13 @@ describe('webpack processAssets mangle pass', () => {
         expect(html).toContain(token as string);
         expect(html).not.toContain('m-3');
         expect(html).toContain('author-kept');
-        expect(html).toContain(`<aside class='${token}'></aside>`);
+        // Read the attribute rather than a spelling of it: the HTML minifier
+        // chooses its own quoting and drops the quotes entirely when the value
+        // allows, so asserting one spelling pins a formatting choice that is not
+        // this test's subject. What matters is that the element carries the
+        // mangled token and nothing else.
+        const aside = /<aside class=(["']?)([^"'>]+)\1><\/aside>/.exec(html);
+        expect(aside?.[2]).toBe(token);
 
         // The extra JS asset's class string is mangled too.
         const extraJs = readFileSync(join(root, 'dist/extra.js'), 'utf8');
