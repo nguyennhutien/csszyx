@@ -424,8 +424,12 @@ describe('string property handler chain', () => {
         expect(cls({ fontStretch: '50.5%' })).toBe('font-stretch-[50.5%]');
         expect(cls({ fontStretch: 'wide' })).toBe('font-stretch-[wide]');
     });
-    it('maxW container sugar / shadowColor / insetShadowColor', () => {
-        expect(cls({ maxW: 'container' })).toBe('container');
+    it('maxW unrecognised token / shadowColor / insetShadowColor', () => {
+        // `container` used to be sugar for the `container` component. It is an
+        // unrecognised `--container-*` token like any other now, so it emits a
+        // class in its own namespace and the emitted-class oracle reports it.
+        // The routing contract itself is pinned in `sizing.test.ts`.
+        expect(cls({ maxW: 'container' })).toBe('max-w-container');
         expect(cls({ shadowColor: 'red-500' })).toBe('shadow-red-500');
         expect(cls({ shadowColor: '--s' })).toBe('shadow-(color:--s)');
         expect(cls({ insetShadowColor: 'red-500' })).toBe('inset-shadow-red-500');

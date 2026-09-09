@@ -271,3 +271,48 @@ describe('sizing — utilities', () => {
         expect(t({ proseInvert: true })).toBe('prose-invert');
     });
 });
+
+describe('maxW string routing — one namespace, no exceptions', () => {
+    // The routes a string value can take. Every one of them lands in the
+    // `max-w-` namespace: that is the whole contract, and it is what makes an
+    // unrecognised token a thing `csszyx check` can see and block.
+    const ROUTES: readonly (readonly [string, string, string])[] = [
+        ['css variable', '--w', 'max-w-(--w)'],
+        ['fraction', '1/2', 'max-w-1/2'],
+        ['value with a unit', '3px', 'max-w-[3px]'],
+        ['percentage', '50%', 'max-w-[50%]'],
+        ['named token', 'sm', 'max-w-sm'],
+        ['named token', 'none', 'max-w-none'],
+        // An unrecognised token is emitted, not rejected. Whether it is a typo
+        // or a `--container-*` key this project defines cannot be decided while
+        // lowering, so the class goes out and the emitted-class oracle — which
+        // asks the real design system — is what reports it.
+        ['unrecognised token', 'bogus', 'max-w-bogus'],
+        // `container` is an unrecognised token like any other. It reads like it
+        // should work because `maxW` resolves against the `--container-*`
+        // namespace, but no `--container-container` key exists. Mapping it to
+        // the `container` component instead would emit a class the author never
+        // wrote, set `width` from a `max-width` key, and hide the mistake from
+        // the oracle, which only sees classes that style nothing.
+        ['unrecognised token', 'container', 'max-w-container'],
+    ];
+
+    it.each(ROUTES)('%s: { maxW: "%s" } → %s', (_route, value, expected) => {
+        expect(t({ maxW: value })).toBe(expected);
+    });
+
+    it('no string value leaves the max-w- namespace', () => {
+        // The invariant, stated once. An exception here is how `container`
+        // stopped being checkable: a class that styles something cannot be
+        // reported as a class that styles nothing.
+        const escaped = ROUTES.map(([, value]) => value)
+            .map(value => [value, t({ maxW: value })] as const)
+            .filter(([, className]) => !className.startsWith('max-w-'));
+        expect(escaped).toEqual([]);
+    });
+
+    it('a variant prefixes it like any other utility', () => {
+        expect(t({ sm: { maxW: 'container' } })).toBe('sm:max-w-container');
+        expect(t({ md: { hover: { maxW: 'bogus' } } })).toBe('md:hover:max-w-bogus');
+    });
+});

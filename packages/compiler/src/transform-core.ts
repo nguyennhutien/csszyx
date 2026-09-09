@@ -3044,16 +3044,7 @@ function collectEffectStringProperty(
     classes: string[],
 ): boolean {
     let utility: string | null = null;
-    // Every branch below takes the prefix. The one exception is the legacy
-    // `maxW: 'container'` alias, which lowers to the `container` plugin
-    // component rather than to a `max-w-*` utility; the snippets point at the
-    // `container` prop instead, and the two engines do not agree on that alias
-    // at all, so it is left exactly as it was and tracked separately.
-    let includePrefix = true;
-    if (key === 'maxW' && value === 'container') {
-        utility = 'container';
-        includePrefix = false;
-    } else if (key === 'shadowColor') {
+    if (key === 'shadowColor') {
         utility = formatShadowFamilyColor('shadow', value);
     } else if (key === 'insetShadowColor') {
         utility = formatShadowFamilyColor('inset-shadow', value);
@@ -3066,7 +3057,7 @@ function collectEffectStringProperty(
         utility = formatGradientPosition(key, value);
     }
     if (utility === null) return false;
-    classes.push(`${includePrefix ? prefix : ''}${utility}`);
+    classes.push(`${prefix}${utility}`);
     return true;
 }
 
