@@ -222,24 +222,58 @@ function readTableColumns(cells) {
     return tw >= 0 && sz >= 0 ? { tw, sz } : null;
 }
 
+/**
+ * Pairs one documented class with one documented sz object.
+ *
+ * A row is dropped for two very different reasons, and telling them apart is
+ * the point of the `drift` result. Either the row could not be read at all — a
+ * placeholder no substitution makes concrete, a cell with no sz key — which is
+ * expected and silent; or the row WAS read and the compiler disagreed with it.
+ *
+ * The second used to be silent too, and that is a hole: this fixture exists to
+ * hold the compiler to the snippets, and dropping the rows the compiler fails
+ * means the generated suite can only ever contain cases that already pass. Six
+ * rows were being discarded that way, each one a real defect — `{ grow: 2.5 }`
+ * documented as `grow-[2.5]` and emitted as `grow-2.5`, a class Tailwind serves
+ * nothing for.
+ *
+ * @param rawClass Raw Tailwind-class cell.
+ * @param rawObject Raw sz-literal cell.
+ * @returns The pair, a drift report, or null when the row is unreadable.
+ */
 function verifiedForwardPair(rawClass, rawObject) {
     const cls = concretizeClass(rawClass);
     if (!cls) return null;
     const sz = concretizeSz(rawObject);
     const key = topKey(sz);
     if (!sz || !key) return null;
+    let emitted;
     try {
-        return transform(sz).className === cls ? { key, sz, class: cls } : null;
-    } catch {
-        return null;
+        emitted = transform(sz).className;
+    } catch (error) {
+        return { drift: { key, sz, documented: cls, emitted: `threw ${error.name}` } };
     }
+    if (emitted === cls) return { key, sz, class: cls };
+    return { drift: { key, sz, documented: cls, emitted } };
 }
 
-function recordForwardPairs(keys, classes, objects) {
+function recordForwardPairs(keys, classes, objects, drifts) {
     const pairCount = Math.min(classes.length, objects.length);
+    // A row listing several classes and several sz objects is paired by index,
+    // which is right often enough to be worth doing and wrong often enough that
+    // a mismatch on such a row says nothing: `align-baseline | align-middle`
+    // beside `{ align: 'baseline' } | { align: 'middle' }` pairs correctly only
+    // if both cells list their values in the same order. Only a row with
+    // exactly one of each can report drift, because only there does a mismatch
+    // mean the compiler disagrees rather than the pairing being wrong.
+    const pairingIsCertain = classes.length === 1 && objects.length === 1;
     for (let index = 0; index < pairCount; index++) {
         const pair = verifiedForwardPair(classes[index], objects[index]);
         if (!pair) continue;
+        if (pair.drift) {
+            if (pairingIsCertain) drifts.push(pair.drift);
+            continue;
+        }
         ensureKey(keys, pair.key).forward.set(JSON.stringify([pair.key, pair.class]), {
             sz: pair.sz,
             class: pair.class,
@@ -270,7 +304,7 @@ function canonicalKey(className) {
     }
 }
 
-function collectSnippetFile(file, keys, reverseCandidates) {
+function collectSnippetFile(file, keys, reverseCandidates, drifts) {
     const lines = readFileSync(join(snippetsDir, file), 'utf8').split('\n');
     let columns = null;
     for (const line of lines) {
@@ -285,16 +319,16 @@ function collectSnippetFile(file, keys, reverseCandidates) {
         const classes = classTokens(cells[columns.tw] ?? '');
         const szCell = cells[columns.sz] ?? '';
         const objects = szCell.includes('{') ? szObjectLiterals(szCell) : [];
-        recordForwardPairs(keys, classes, objects);
+        recordForwardPairs(keys, classes, objects, drifts);
         recordReverseCandidates(reverseCandidates, classes);
     }
 }
 
-function collectSnippetCases(keys, reverseCandidates) {
+function collectSnippetCases(keys, reverseCandidates, drifts) {
     const files = readdirSync(snippetsDir)
         .filter(file => file.endsWith('.md'))
         .sort();
-    for (const file of files) collectSnippetFile(file, keys, reverseCandidates);
+    for (const file of files) collectSnippetFile(file, keys, reverseCandidates, drifts);
 }
 
 function indexDocumentedClasses(keys) {
@@ -333,10 +367,11 @@ function collect() {
     const keys = {}; // key -> { forward: Map<sig,{sz,class}>, reverse: Set<class> }
     const reverseSkipped = [];
     const reverseCandidates = new Set();
-    collectSnippetCases(keys, reverseCandidates);
+    const drifts = [];
+    collectSnippetCases(keys, reverseCandidates, drifts);
     const classToDocKey = indexDocumentedClasses(keys);
     bucketReverseCases(keys, reverseCandidates, reverseSkipped, classToDocKey);
-    return { keys, reverseSkipped };
+    return { keys, reverseSkipped, drifts };
 }
 
 /**
@@ -345,7 +380,7 @@ function collect() {
  * @returns The full JSON object to emit.
  */
 function build() {
-    const { keys, reverseSkipped } = collect();
+    const { keys, reverseSkipped, drifts } = collect();
 
     const outKeys = {};
     for (const k of Object.keys(keys).sort()) {
@@ -370,6 +405,20 @@ function build() {
             'GENERATED by scripts/gen-key-tests.mjs from docs/specs/snippets. Do not edit by hand. Run pnpm gen:key-tests.',
         keyCount: Object.keys(outKeys).length,
         reverseSkippedCount: new Set(reverseSkipped).size,
+        // Rows the snippets document that the compiler does not reproduce.
+        // Recorded rather than discarded: a fixture that silently drops the
+        // rows its subject fails can only ever contain cases that pass.
+        // `snippet-drift.test.ts` holds this list to a named, explained set.
+        drifted: [...drifts]
+            .sort((a, b) =>
+                `${a.key}${JSON.stringify(a.sz)}`.localeCompare(`${b.key}${JSON.stringify(b.sz)}`),
+            )
+            .map(drift => ({
+                key: drift.key,
+                sz: drift.sz,
+                documented: drift.documented,
+                emitted: drift.emitted,
+            })),
         keys: outKeys,
         exempt,
     };
