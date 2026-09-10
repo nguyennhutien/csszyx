@@ -24,6 +24,8 @@ import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 
+import { formatDispersion, mean, median, recordBenchRun, summarize } from './bench-stats.ts';
+
 export type ExternalBenchParser = 'rust' | 'wasm';
 export type ExternalBenchToggle = 'off' | 'on';
 type SupportStatus = 'observed' | 'not-observed' | 'not-measured';
@@ -256,11 +258,11 @@ export function renderExternalBenchMarkdown(report: ExternalBenchReport): string
         `- Host: ${report.platform}, ${report.cpuParallelism} logical CPUs, ${report.node}`,
         `- App commit: ${report.gitHead ? `\`${report.gitHead}\`` : 'not available'}`,
         '',
-        '| Parser | mangleVars | Status | Parser env | Mangle env | Output stable | Median ms | Mean ms | Raw bytes | Gzip bytes | Brotli bytes |',
-        '| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |',
+        '| Parser | mangleVars | Status | Parser env | Mangle env | Output stable | Median ms | p95 ms | CV % | Mean ms | Raw bytes | Gzip bytes | Brotli bytes |',
+        '| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
         ...report.rows.map(
             row =>
-                `| ${parserLabel(row.parser)} | ${row.mangleVars} | ${row.status} | ${row.parserSupport} | ${row.mangleVarsSupport} | ${row.outputStable ? 'yes' : 'no'} | ${formatNumber(row.medianMs)} | ${formatNumber(row.meanMs)} | ${row.output.bytes} | ${row.output.gzipBytes} | ${row.output.brotliBytes} |`,
+                `| ${parserLabel(row.parser)} | ${row.mangleVars} | ${row.status} | ${row.parserSupport} | ${row.mangleVarsSupport} | ${row.outputStable ? 'yes' : 'no'} | ${formatNumber(row.medianMs)} | ${formatNumber(summarize(row.samplesMs).p95)} | ${formatCv(row.samplesMs)} | ${formatNumber(row.meanMs)} | ${row.output.bytes} | ${row.output.gzipBytes} | ${row.output.brotliBytes} |`,
         ),
         '',
         '## Compressed-size verdict',
@@ -284,6 +286,17 @@ export function renderExternalBenchMarkdown(report: ExternalBenchReport): string
     return lines.join('\n');
 }
 
+/**
+ * Formats the coefficient of variation for a report column.
+ *
+ * @param samples The row's raw timing samples.
+ * @returns The CV to one decimal place, or `n/a` where it is undefined.
+ */
+function formatCv(samples: readonly number[]): string {
+    const { cvPercent } = summarize(samples);
+    return Number.isFinite(cvPercent) ? cvPercent.toFixed(1) : 'n/a';
+}
+
 async function main(): Promise<void> {
     const options = parseExternalBenchArgs(process.argv.slice(2));
     const report = await runExternalBenchmark(options);
@@ -297,6 +310,33 @@ async function main(): Promise<void> {
     writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
     console.log(`Wrote ${markdownPath}`);
     console.log(`Wrote ${jsonPath}`);
+
+    // Dispersion on stdout, so a reader can tell a real change from noise
+    // without opening the report. A CV above ~5 % means the median is not a
+    // number to compare against another run.
+    for (const row of report.rows) {
+        if (row.status === 'failed') continue;
+        console.log(
+            `  ${parserLabel(row.parser)}/${row.mangleVars}: ` +
+                `${formatDispersion(summarize(row.samplesMs))}`,
+        );
+    }
+
+    const historyFile = recordBenchRun(
+        'external-app',
+        report.rows.map(row => ({
+            parser: row.parser,
+            mangleVars: row.mangleVars,
+            status: row.status,
+            ...summarize(row.samplesMs),
+            bytes: row.output.bytes,
+            gzipBytes: row.output.gzipBytes,
+        })),
+    );
+    if (historyFile !== null) {
+        console.log(`Recorded run in ${historyFile}`);
+    }
+
     if (report.rows.some(row => row.status === 'failed')) process.exitCode = 1;
 }
 
@@ -524,16 +564,6 @@ function medianOutput(samples: readonly ExternalOutputStats[]): ExternalOutputSt
         gzipBytes: median(samples.map(sample => sample.gzipBytes)),
         brotliBytes: median(samples.map(sample => sample.brotliBytes)),
     };
-}
-
-function median(values: readonly number[]): number {
-    const sorted = [...values].sort((left, right) => left - right);
-    const middle = Math.floor(sorted.length / 2);
-    return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
-}
-
-function mean(values: readonly number[]): number {
-    return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 function compressedVerdicts(rows: readonly ExternalBenchRow[]): string[] {

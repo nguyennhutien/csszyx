@@ -14,6 +14,13 @@ import { dirname, join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { type Browser, chromium, type Page } from 'playwright';
+import {
+    coefficientOfVariation,
+    formatDispersion,
+    percentile,
+    recordBenchRun,
+    summarize,
+} from './bench-stats.ts';
 
 /**
  * Bench mode. `oxc` and `rust` exercise csszyx with the respective parser.
@@ -86,6 +93,40 @@ writeFileSync(
     'utf8',
 );
 console.log(`Wrote ${join(options.outDir, 'phase-e-docs-hmr-bench.md')}`);
+
+// Dispersion on stdout, so a reader can tell a real change from noise without
+// opening the report. HMR latency is the noisiest thing this repo measures — it
+// crosses a dev server, a watcher and a browser — so the CV is the figure that
+// decides whether a median here can be compared with another run at all.
+for (const stat of stats) {
+    if (stat.status !== 'measured') continue;
+    console.log(`  ${stat.name}: ${formatDispersion(summarize(stat.samplesMs))}`);
+}
+
+const historyFile = recordBenchRun(
+    'docs-hmr',
+    stats.map(stat => ({
+        name: stat.name,
+        parser: stat.parser,
+        status: stat.status,
+        ...summarize(stat.samplesMs),
+        timeouts: stat.timeouts,
+    })),
+);
+if (historyFile !== null) {
+    console.log(`Recorded run in ${historyFile}`);
+}
+
+/**
+ * Formats the coefficient of variation for a report column.
+ *
+ * @param samples The row's raw timing samples.
+ * @returns The CV to one decimal place, or `n/a` where it is undefined.
+ */
+function formatCv(samples: readonly number[]): string {
+    const cv = coefficientOfVariation(samples);
+    return Number.isFinite(cv) ? cv.toFixed(1) : 'n/a';
+}
 
 /**
  * Parses CLI options.
@@ -612,21 +653,6 @@ function summarizeLogs(logs: string[]): string {
 }
 
 /**
- * Calculates a percentile from sorted samples.
- *
- * @param sorted sorted samples
- * @param p percentile in [0, 1]
- * @returns percentile value
- */
-function percentile(sorted: number[], p: number): number {
-    if (sorted.length === 0) {
-        return Number.NaN;
-    }
-    const index = Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1);
-    return sorted[index] ?? Number.NaN;
-}
-
-/**
  * Renders benchmark report markdown.
  *
  * @param rows benchmark rows
@@ -672,8 +698,8 @@ React pipeline floor.
 
 ## Results
 
-| Case | Status | Median ms | p95 ms | Mean ms | Min ms | Max ms | Rounds | Failed rounds | Timeouts | Samples ms | Note |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
+| Case | Status | Median ms | p95 ms | CV % | Mean ms | Min ms | Max ms | Rounds | Failed rounds | Timeouts | Samples ms | Note |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
 ${rows.map(renderRow).join('\n')}
 
 ## csszyx Trace
@@ -812,7 +838,7 @@ function formatComparison(
  * @returns markdown table row
  */
 function renderRow(row: HmrStats): string {
-    return `| \`${row.name}\` | ${row.status} | ${formatMs(row.medianMs)} | ${formatMs(row.p95Ms)} | ${formatMs(row.meanMs)} | ${formatMs(row.minMs)} | ${formatMs(row.maxMs)} | ${row.rounds} | ${row.failedRounds} | ${row.timeouts} | ${row.samplesMs.map(formatMs).join(', ') || '-'} | ${row.note} |`;
+    return `| \`${row.name}\` | ${row.status} | ${formatMs(row.medianMs)} | ${formatMs(row.p95Ms)} | ${formatCv(row.samplesMs)} | ${formatMs(row.meanMs)} | ${formatMs(row.minMs)} | ${formatMs(row.maxMs)} | ${row.rounds} | ${row.failedRounds} | ${row.timeouts} | ${row.samplesMs.map(formatMs).join(', ') || '-'} | ${row.note} |`;
 }
 
 /**

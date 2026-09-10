@@ -15,6 +15,7 @@ import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 import { transformRust, transformRustBatch } from '../packages/compiler/src/transform-rust.js';
 import { transformWasm } from '../packages/compiler/src/transform-wasm.js';
 import { loadNativeBinding } from '../packages/core/native/index.js';
+import { formatDispersion, median, recordBenchRun, summarize } from './bench-stats.ts';
 
 type ParserMode = 'oxc' | 'rust' | 'rust-batch';
 type MangleMode = 'disabled' | 'enabled';
@@ -137,6 +138,31 @@ const markdownReportPath = join(options.outDir, `${REPORT_NAME}.md`);
 const jsonReportPath = join(options.outDir, `${REPORT_NAME}.json`);
 console.log(`Wrote ${markdownReportPath}`);
 console.log(`Wrote ${jsonReportPath}`);
+
+// Dispersion on stdout, so a reader can tell a real change from noise without
+// opening the report. A CV above ~5 % means the median is not a number to
+// compare against another run.
+for (const row of rows) {
+    if (row.status !== 'measured') continue;
+    console.log(`  ${row.name}: ${formatDispersion(summarize(row.samplesMs))}`);
+}
+
+const historyFile = recordBenchRun(
+    'css-var-system',
+    rows.map(row => ({
+        name: row.name,
+        parser: row.parser,
+        mangleVars: row.mangleVars,
+        files: row.files,
+        status: row.status,
+        ...summarize(row.samplesMs),
+        outputBytes: row.output.outputBytes,
+        gzipBytes: row.output.gzipBytes,
+    })),
+);
+if (historyFile !== null) {
+    console.log(`Recorded run in ${historyFile}`);
+}
 
 /**
  * Parses CLI options.
@@ -545,8 +571,8 @@ ${summary}
 
 ## Results
 
-| Case | Status | Files | Median ms | ms/file | Files/sec | Output bytes | Gzip bytes | Brotli bytes | Byte delta | Var entries | Diagnostics | Note |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| Case | Status | Files | Median ms | p95 ms | CV % | ms/file | Files/sec | Output bytes | Gzip bytes | Brotli bytes | Byte delta | Var entries | Diagnostics | Note |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 ${payload.rows.map(renderRow).join('\n')}
 
 ## Interpretation
@@ -667,9 +693,12 @@ function findRow(
  * @returns markdown table row.
  */
 function renderRow(row: BenchRow): string {
+    const spread = summarize(row.samplesMs);
     return `| \`${row.name}\` | ${row.status} | ${row.files} | ${formatMs(
         row.medianMs,
-    )} | ${formatMs(row.msPerFile)} | ${formatInt(row.filesPerSecond)} | ${formatInt(
+    )} | ${formatMs(spread.p95)} | ${
+        Number.isFinite(spread.cvPercent) ? spread.cvPercent.toFixed(1) : 'n/a'
+    } | ${formatMs(row.msPerFile)} | ${formatInt(row.filesPerSecond)} | ${formatInt(
         row.output.outputBytes,
     )} | ${formatInt(row.output.gzipBytes)} | ${formatInt(
         row.output.brotliBytes,
@@ -694,22 +723,6 @@ function compressedOutputMetrics(
             params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
         }).byteLength,
     };
-}
-
-/**
- * Calculates median.
- *
- * @param samples numeric samples.
- * @returns median value.
- */
-function median(samples: number[]): number {
-    const sorted = [...samples].sort((a, b) => a - b);
-    if (sorted.length === 0) {
-        return 0;
-    }
-    return sorted.length % 2 === 0
-        ? ((sorted[sorted.length / 2 - 1] ?? 0) + (sorted[sorted.length / 2] ?? 0)) / 2
-        : (sorted[Math.floor(sorted.length / 2)] ?? 0);
 }
 
 /**

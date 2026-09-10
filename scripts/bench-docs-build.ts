@@ -17,6 +17,8 @@ import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
+import { formatDispersion, median, recordBenchRun, summarize } from './bench-stats.ts';
+
 /**
  * Bench mode. `oxc` and `rust` exercise csszyx with the respective parser.
  * `rust-mangle-vars` uses Rust with production.mangleVars enabled through the
@@ -114,6 +116,27 @@ writeFileSync(
 );
 console.log(`Wrote ${join(options.outDir, 'phase-e-docs-build-bench.md')}`);
 console.log(`Wrote ${join(options.outDir, 'phase-e-docs-build-bench.json')}`);
+
+// Dispersion on stdout, so a reader can tell a real change from noise without
+// opening the report. A CV above ~5 % means the median is not a number to
+// compare against another run.
+for (const stat of stats) {
+    if (stat.status !== 'measured') continue;
+    console.log(`  ${stat.name}: ${formatDispersion(summarize(stat.samplesMs))}`);
+}
+
+const historyFile = recordBenchRun(
+    'docs-build',
+    stats.map(stat => ({
+        name: stat.name,
+        status: stat.status,
+        ...summarize(stat.samplesMs),
+        prescanMedian: median(stat.prescanMs),
+    })),
+);
+if (historyFile !== null) {
+    console.log(`Recorded run in ${historyFile}`);
+}
 
 /**
  * Parses CLI options.
@@ -433,8 +456,8 @@ build wall time across csszyx, Tailwind, and the pipeline floor.
 
 ## Results
 
-| Case | Status | Median ms | Prescan median ms | Mean ms | Min ms | Max ms | Samples ms | Note |
-|---|---|---:|---:|---:|---:|---:|---|---|
+| Case | Status | Median ms | p95 ms | CV % | Prescan median ms | Mean ms | Min ms | Max ms | Samples ms | Note |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|---|
 ${rows.map(renderRow).join('\n')}
 
 ## Interpretation
@@ -628,27 +651,13 @@ function formatShareBreakdown(
  * @returns markdown table row
  */
 function renderRow(row: BuildStats): string {
+    const spread = summarize(row.samplesMs);
+    const cv = Number.isFinite(spread.cvPercent) ? spread.cvPercent.toFixed(1) : 'n/a';
     return `| \`${row.name}\` | ${row.status} | ${formatMs(row.medianMs)} | ${formatMs(
-        median(row.prescanMs),
-    )} | ${formatMs(row.meanMs)} | ${formatMs(row.minMs)} | ${formatMs(
+        spread.p95,
+    )} | ${cv} | ${formatMs(median(row.prescanMs))} | ${formatMs(row.meanMs)} | ${formatMs(row.minMs)} | ${formatMs(
         row.maxMs,
     )} | ${row.samplesMs.map(formatMs).join(', ') || '-'} | ${row.note} |`;
-}
-
-/**
- * Calculates median.
- *
- * @param samples numeric samples
- * @returns median, or NaN when empty
- */
-function median(samples: number[]): number {
-    if (samples.length === 0) {
-        return Number.NaN;
-    }
-    const sorted = [...samples].sort((a, b) => a - b);
-    return sorted.length % 2 === 0
-        ? ((sorted[sorted.length / 2 - 1] ?? 0) + (sorted[sorted.length / 2] ?? 0)) / 2
-        : (sorted[Math.floor(sorted.length / 2)] ?? Number.NaN);
 }
 
 /**
