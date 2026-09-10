@@ -31,13 +31,45 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { createMangleRuntimeModule } from './virtual-modules.js';
+import { createMangleRuntimeModule, createUnservedRuntimeModule } from './virtual-modules.js';
 
 /** File name inside the project's generated-output directory. */
 const MANGLE_RUNTIME_FILE = 'mangle-runtime.mjs';
 
 /** The generated module's path, relative to the project root. */
 export const MANGLE_RUNTIME_FILE_MARKER: string = `.csszyx/${MANGLE_RUNTIME_FILE}`;
+
+const UNSERVED_RUNTIME_FILE = 'unserved-runtime.mjs';
+
+/**
+ * Write the module that registers what the project's Tailwind does not serve.
+ *
+ * webpack reads the colon in `virtual:` as a URI scheme and fails before any
+ * resolve plugin runs, so this lane gets the registration as a real file --
+ * the same reason the mangle runtime has one.
+ *
+ * Written then renamed, for the reason the mangle runtime file is: Next
+ * compiles the server and the client in parallel over one project directory,
+ * so a plain write would truncate the file while the other compiler reads it.
+ *
+ * @param outputDir - Directory to write into.
+ * @returns The path to import, or null when the directory cannot be written.
+ */
+export function ensureUnservedRuntimeFile(outputDir: string): string | null {
+    const target = path.join(outputDir, UNSERVED_RUNTIME_FILE);
+    const staging = `${target}.${process.pid}.tmp`;
+    try {
+        fs.mkdirSync(outputDir, { recursive: true });
+        fs.writeFileSync(staging, createUnservedRuntimeModule(), 'utf8');
+        fs.renameSync(staging, target);
+        return target;
+    } catch {
+        // An unwritable output directory must not fail the build. Without the
+        // file every token keeps the placement it has today, which is the
+        // behaviour before this existed rather than something wrong.
+        return null;
+    }
+}
 
 /**
  * Write the registration module, returning the path to import.

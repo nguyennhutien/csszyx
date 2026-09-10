@@ -565,6 +565,9 @@ importers:
       '@csszyx/runtime':
         specifier: workspace:*
         version: link:../runtime
+      '@csszyx/tailwind-oracle':
+        specifier: workspace:*
+        version: link:../tailwind-oracle
       '@csszyx/tooling-metadata':
         specifier: workspace:*
         version: link:../tooling-metadata

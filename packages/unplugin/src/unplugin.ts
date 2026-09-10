@@ -95,7 +95,11 @@ import {
     manglePreserveNoMatchMessage,
     utilityStart,
 } from './mangle-preserve.js';
-import { applyMangleRuntimeEntry, ensureMangleRuntimeFile } from './mangle-runtime-file.js';
+import {
+    applyMangleRuntimeEntry,
+    ensureMangleRuntimeFile,
+    ensureUnservedRuntimeFile,
+} from './mangle-runtime-file.js';
 import {
     computeMangleSizeVerdict,
     createMangleSizeAccount,
@@ -162,6 +166,7 @@ import {
     type TransformCacheKeyInput,
     writeTransformCache,
 } from './transform-cache.js';
+import { openUnservedAsk, unservedAuthoredClasses } from './unserved-classes.js';
 import {
     CENSUS_PLACEHOLDER,
     CHECKSUM_PLACEHOLDER,
@@ -169,16 +174,20 @@ import {
     createMangleMapModule,
     createMangleRuntimeModule,
     createThemeGroupsModule,
+    createUnservedRuntimeModule,
     isVirtualModule,
     MANGLE_MAP_PLACEHOLDER,
     MANGLE_RUNTIME_VIRTUAL_ID,
     RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID,
     RESOLVED_THEME_GROUPS_VIRTUAL_ID,
+    RESOLVED_UNSERVED_VIRTUAL_ID,
     RESOLVED_VIRTUAL_CHECKSUM_ID,
     RESOLVED_VIRTUAL_MODULE_ID,
     resolveVirtualModule,
     THEME_GROUPS_VIRTUAL_ID,
     type ThemeGroupTokens,
+    UNSERVED_PLACEHOLDER,
+    UNSERVED_VIRTUAL_ID,
     VAR_MANGLE_MAP_PLACEHOLDER,
 } from './virtual-modules.js';
 
@@ -4846,6 +4855,33 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Class names the project's Tailwind serves nothing for.
+     *
+     * Empty until `renderStart` computes it, and empty forever when the project
+     * has no design system to ask -- an empty list registers nothing and every
+     * token keeps the placement it has today.
+     */
+    let unservedClasses: string[] = [];
+
+    /**
+     * Ask the project's design systems which authored names produce no CSS.
+     *
+     * Runs once, at `renderStart`: every module has been transformed by then, so
+     * `state.authoredClasses` is complete, and nothing has been written yet.
+     * The stylesheets come from the walk the theme scan already did.
+     *
+     * @returns Nothing; the result lands in `unservedClasses`.
+     */
+    async function computeUnservedClasses(): Promise<void> {
+        if (state.authoredClasses.size === 0) return;
+        const ask = await openUnservedAsk(state.rootDir, projectCssFiles);
+        // No design system is no answer. Reporting nothing is right: every
+        // token then keeps the placement it has today.
+        if (ask === null) return;
+        unservedClasses = unservedAuthoredClasses(state.authoredClasses, ask);
+    }
+
+    /**
      * Allocate the class → token map from the census collected so far.
      *
      * @returns The class → token map for the current owned/authored sets.
@@ -5031,6 +5067,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             );
             result = result.split(CENSUS_PLACEHOLDER).join(escapeJsonForStringLiteral(census));
         }
+        if (result.includes(UNSERVED_PLACEHOLDER)) {
+            result = result.split(UNSERVED_PLACEHOLDER).join(JSON.stringify(unservedClasses));
+        }
         if (result.includes(MANGLE_MAP_PLACEHOLDER)) {
             // Map keys are class names, and arbitrary-value classes can carry
             // backticks, ${ or </script — escape so the JSON cannot break out
@@ -5087,6 +5126,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesUnitVar: false,
             usesBoolClass: false,
         };
+    }
+
+    /**
+     * Fold one injector's result into the module output.
+     *
+     * Five injectors run in sequence in `transform`, each reading the source the
+     * previous one produced, and each owing the same two-field update when it
+     * rewrote anything. Repeating the fold inline made the branch count of
+     * `transform` grow with every injector added rather than with what the hook
+     * decides.
+     *
+     * @param output - Module output being assembled; mutated in place.
+     * @param rewritten - Injector result: new source, or null when unchanged.
+     */
+    function applyInjection(output: PreTransformOutput, rewritten: string | null): void {
+        if (rewritten === null) return;
+        output.code = rewritten;
+        output.transformed = true;
     }
 
     /**
@@ -5740,6 +5797,77 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Pull in the module that registers what the project's Tailwind does not serve.
+     *
+     * Anywhere `splitBox` can be reached, the registration has to have run
+     * first, so this rides the same test the mangle runtime uses: a module that
+     * imports the csszyx runtime. The bundler folds the repeated import into
+     * one instance.
+     *
+     * Vite and Rollup only, exactly like the mangle runtime -- webpack reads
+     * the colon in `virtual:` as a URI scheme and fails before any resolve
+     * plugin runs.
+     *
+     * The generated module reads the runtime's main entry rather than the light
+     * `/core` one the mangle module uses. The test above already restricts this
+     * to modules importing that entry, so it is present either way, and `/core`
+     * would add a subpath that has to resolve in every build.
+     *
+     * @param transformedCode - Current transformed source.
+     * @param id - Bundler module identifier.
+     * @returns Rewritten source when the import is needed, otherwise null.
+     */
+    function injectUnservedRuntime(transformedCode: string, id: string): string | null {
+        if (activeFramework !== 'vite' && activeFramework !== 'rollup') {
+            return null;
+        }
+        if (
+            !shouldProcessSource(id) ||
+            !MANGLE_RUNTIME_CONSUMER_RE.test(transformedCode) ||
+            transformedCode.includes(UNSERVED_VIRTUAL_ID)
+        ) {
+            return null;
+        }
+        return insertRuntimeImport(transformedCode, `import '${UNSERVED_VIRTUAL_ID}';\n`);
+    }
+
+    /**
+     * Prepend the unserved-class registration to every webpack entrypoint.
+     *
+     * Unlike the mangle runtime this is not gated on a feature flag: the list
+     * decides where a class lands, so a build that skipped it would route
+     * differently from one that did not.
+     *
+     * @param compiler - The webpack compiler this plugin instance runs under.
+     */
+    function applyWebpackUnservedEntry(compiler: WebpackCompiler): void {
+        const root = compiler.context;
+        // An entry is prepended to EVERY entrypoint, so unlike the Vite lane --
+        // which only reaches modules that already import the runtime -- nothing
+        // guarantees the import resolves. A project without it would fail to
+        // build over a registration it never asked for, so check first.
+        try {
+            createRequire(path.join(root, 'package.json')).resolve('@csszyx/runtime');
+        } catch {
+            return;
+        }
+        const file = ensureUnservedRuntimeFile(path.join(root, '.csszyx'));
+        // An unwritable output directory must not fail the build: without the
+        // file every token keeps the placement it had before this existed.
+        if (file === null) return;
+        applyMangleRuntimeEntry(compiler, root, file, () => {});
+        // `renderStart` is a Rollup hook and webpack never calls it, so the
+        // list would stay empty on this lane and the file would register
+        // nothing. `finishModules` is the webpack moment with the same
+        // property: every module is built, and no asset has been written.
+        compiler.hooks?.thisCompilation?.tap?.('csszyx:unserved', compilation => {
+            compilation.hooks?.finishModules?.tapPromise?.('csszyx:unserved', async () => {
+                await computeUnservedClasses();
+            });
+        });
+    }
+
+    /**
      * Register the mangle map as an entry of the webpack build.
      *
      * webpack parses the colon in `virtual:` as a URI scheme and fails the
@@ -5843,7 +5971,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     id === RESOLVED_VIRTUAL_MODULE_ID ||
                     id === RESOLVED_VIRTUAL_CHECKSUM_ID ||
                     id === RESOLVED_THEME_GROUPS_VIRTUAL_ID ||
-                    id === RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID
+                    id === RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID ||
+                    id === RESOLVED_UNSERVED_VIRTUAL_ID
                 );
             },
 
@@ -5874,6 +6003,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     return createMangleRuntimeModule(
                         globalVarAliasPrefix,
                         options.production?.mangleDebugGlobal === true,
+                    );
+                }
+                if (id === RESOLVED_UNSERVED_VIRTUAL_ID) {
+                    // A build leaves a hole here and fills it in `renderChunk`,
+                    // where every module has been transformed. A dev server
+                    // never renders a chunk, so that hole would reach the
+                    // browser as an undefined identifier and throw on
+                    // evaluation. It does not need the hole: the prescan walked
+                    // every source at `configResolved`, so the answer is already
+                    // available and only this branch waits for it.
+                    if (!serving) return createUnservedRuntimeModule();
+                    return computeUnservedClasses().then(() =>
+                        createUnservedRuntimeModule(unservedClasses),
                     );
                 }
                 if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {
@@ -5952,29 +6094,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     recordFileCSSVariableMetrics(state, id, null);
                 }
 
-                const layoutCode = injectLayoutHydration(output.code, id);
-                if (layoutCode !== null) {
-                    output.code = layoutCode;
-                    output.transformed = true;
-                }
-
-                const runtimeCode = injectRuntimeHelpers(output.code, output);
-                if (runtimeCode !== null) {
-                    output.code = runtimeCode;
-                    output.transformed = true;
-                }
-
-                const themedCode = injectThemeGroups(code, output.code, id, output.usesSzcn);
-                if (themedCode !== null) {
-                    output.code = themedCode;
-                    output.transformed = true;
-                }
-
-                const mangleRuntimeCode = injectMangleRuntime(output.code, id);
-                if (mangleRuntimeCode !== null) {
-                    output.code = mangleRuntimeCode;
-                    output.transformed = true;
-                }
+                // Sequential, and order matters: each injector reads the source
+                // the previous one produced.
+                applyInjection(output, injectLayoutHydration(output.code, id));
+                applyInjection(output, injectRuntimeHelpers(output.code, output));
+                applyInjection(output, injectThemeGroups(code, output.code, id, output.usesSzcn));
+                applyInjection(output, injectMangleRuntime(output.code, id));
+                applyInjection(output, injectUnservedRuntime(output.code, id));
 
                 if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
                     assertNoRSCBoundaryViolation(output.code, id);
@@ -6139,6 +6265,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (manglingEnabled) {
                     applyWebpackMangleRuntimeEntry(compiler);
                 }
+                applyWebpackUnservedEntry(compiler);
                 compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
@@ -6848,8 +6975,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * offers no ordering guarantee among chunks — so the map is completed
          * here rather than from whichever chunk arrives first.
          */
-        renderStart() {
+        async renderStart() {
             finalizeMangleMap();
+            // After every module is transformed and before any chunk is
+            // rendered: `state.authoredClasses` is complete, and the
+            // placeholder this fills has not been substituted yet.
+            await computeUnservedClasses();
         },
 
         /**

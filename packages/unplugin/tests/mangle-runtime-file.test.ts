@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
     applyMangleRuntimeEntry,
     ensureMangleRuntimeFile,
+    ensureUnservedRuntimeFile,
     MANGLE_RUNTIME_FILE_MARKER,
 } from '../src/mangle-runtime-file.js';
 
@@ -125,5 +126,47 @@ describe('applyMangleRuntimeEntry', () => {
         applyMangleRuntimeEntry({ webpack: {} }, '/root', '/root/.csszyx/x.mjs', count);
         // Nothing shipped, so nothing is charged for.
         expect(registered).toBe(0);
+    });
+});
+
+describe('ensureUnservedRuntimeFile', () => {
+    it('writes a module that registers the list the build fills in later', () => {
+        const root = tempRoot();
+        const file = ensureUnservedRuntimeFile(root);
+
+        expect(file).toBe(join(root, 'unserved-runtime.mjs'));
+        const body = readFileSync(file as string, 'utf8');
+        // The hole, not the values: the names are only known once every module
+        // has been transformed, and this file is written before that.
+        expect(body).toContain('___CSSZYX_UNSERVED___');
+        expect(body).toContain('registerUnservedClasses');
+    });
+
+    it('leaves no staging file behind', () => {
+        // The write is a write then a rename, because the server and client
+        // compilations share one project directory and run at the same time.
+        const root = tempRoot();
+        ensureUnservedRuntimeFile(root);
+
+        expect(readdirSync(root)).toEqual(['unserved-runtime.mjs']);
+    });
+
+    it('overwrites a previous build without appending to it', () => {
+        const root = tempRoot();
+        writeFileSync(join(root, 'unserved-runtime.mjs'), 'stale\n');
+        const file = ensureUnservedRuntimeFile(root);
+
+        expect(readFileSync(file as string, 'utf8')).not.toContain('stale');
+    });
+
+    it('answers null rather than failing the build when the path is unwritable', () => {
+        // A file where the directory should be. Registering nothing leaves
+        // every token with the placement it had before this existed, which is
+        // a working build rather than a wrong one.
+        const root = tempRoot();
+        const blocked = join(root, 'blocked');
+        writeFileSync(blocked, 'not a directory\n');
+
+        expect(ensureUnservedRuntimeFile(blocked)).toBeNull();
     });
 });
