@@ -27,21 +27,93 @@ import { ENGINES, normalizeEmit } from './engine-parity-harness.js';
 
 const lower = (sz: SzObject): string => transform(sz).className;
 
-/** `[key, string value, the bare utility the spec snippets document]`. */
-const STRING_VALUED: readonly (readonly [string, string, string])[] = [
-    ['backdropBrightness', '1.25', 'backdrop-brightness-[1.25]'],
-    ['backdropContrast', '--c', 'backdrop-contrast-(--c)'],
-    ['backdropSaturate', '1.5', 'backdrop-saturate-[1.5]'],
-    ['brightness', '--c', 'brightness-(--c)'],
-    ['contrast', '1.5', 'contrast-[1.5]'],
-    ['saturate', '--c', 'saturate-(--c)'],
-    ['scale', '1.5', 'scale-[1.5]'],
-    ['shadowColor', 'blue-500', 'shadow-blue-500'],
-    ['shadowColor', '--c', 'shadow-(color:--c)'],
-    ['fromPos', '300px', 'from-[300px]'],
-    ['viaPos', '--via-pos', 'via-(--via-pos)'],
-    ['toPos', '50%', 'to-50%'],
-    ['toPos', '12.5%', 'to-[12.5%]'],
+/**
+ * `[key, string value, the bare utility the spec snippets document, the JSX
+ * source that carries it]`.
+ *
+ * The source is written out per row rather than assembled from the key and
+ * value. Building a module by concatenating a name into a template is the
+ * shape CodeQL reports as `js/bad-code-sanitization`, and it reports it
+ * whether or not the pieces happen to be safe — `JSON.stringify` escapes for
+ * JSON, not for a JavaScript source, so it does not clear the rule and should
+ * not be read as making the construction safe. Fixed strings have no data
+ * flowing into them at all, and they read as what the engine is actually
+ * given.
+ */
+const STRING_VALUED: readonly (readonly [string, string, string, string])[] = [
+    [
+        'backdropBrightness',
+        '1.25',
+        'backdrop-brightness-[1.25]',
+        "export const A = () => <div sz={{ sm: { backdropBrightness: '1.25' } }} />;",
+    ],
+    [
+        'backdropContrast',
+        '--c',
+        'backdrop-contrast-(--c)',
+        "export const A = () => <div sz={{ sm: { backdropContrast: '--c' } }} />;",
+    ],
+    [
+        'backdropSaturate',
+        '1.5',
+        'backdrop-saturate-[1.5]',
+        "export const A = () => <div sz={{ sm: { backdropSaturate: '1.5' } }} />;",
+    ],
+    [
+        'brightness',
+        '--c',
+        'brightness-(--c)',
+        "export const A = () => <div sz={{ sm: { brightness: '--c' } }} />;",
+    ],
+    [
+        'contrast',
+        '1.5',
+        'contrast-[1.5]',
+        "export const A = () => <div sz={{ sm: { contrast: '1.5' } }} />;",
+    ],
+    [
+        'saturate',
+        '--c',
+        'saturate-(--c)',
+        "export const A = () => <div sz={{ sm: { saturate: '--c' } }} />;",
+    ],
+    [
+        'scale',
+        '1.5',
+        'scale-[1.5]',
+        "export const A = () => <div sz={{ sm: { scale: '1.5' } }} />;",
+    ],
+    [
+        'shadowColor',
+        'blue-500',
+        'shadow-blue-500',
+        "export const A = () => <div sz={{ sm: { shadowColor: 'blue-500' } }} />;",
+    ],
+    [
+        'shadowColor',
+        '--c',
+        'shadow-(color:--c)',
+        "export const A = () => <div sz={{ sm: { shadowColor: '--c' } }} />;",
+    ],
+    [
+        'fromPos',
+        '300px',
+        'from-[300px]',
+        "export const A = () => <div sz={{ sm: { fromPos: '300px' } }} />;",
+    ],
+    [
+        'viaPos',
+        '--via-pos',
+        'via-(--via-pos)',
+        "export const A = () => <div sz={{ sm: { viaPos: '--via-pos' } }} />;",
+    ],
+    ['toPos', '50%', 'to-50%', "export const A = () => <div sz={{ sm: { toPos: '50%' } }} />;"],
+    [
+        'toPos',
+        '12.5%',
+        'to-[12.5%]',
+        "export const A = () => <div sz={{ sm: { toPos: '12.5%' } }} />;",
+    ],
 ];
 
 describe('variant prefix on string-valued effect and gradient keys', () => {
@@ -87,17 +159,7 @@ describe('both Rust artifacts already agreed, and still do', () => {
     // is hard-failed under CI; locally, run `pnpm --filter @csszyx/core
     // native:build` before trusting a green here.
     it.each(ENGINES)('%s emits what transform() emits', (_lane, engine) => {
-        for (const [key, value, bare] of STRING_VALUED) {
-            // Serialise the whole object rather than splicing the key in raw.
-            // The key is a plain identifier in every case above, so the two
-            // spellings parse the same today — but a source string built by
-            // concatenating an unescaped name is the shape CodeQL flags as
-            // `js/bad-code-sanitization`, and it stops being equivalent the
-            // moment this table grows a key needing quotes, such as
-            // `@container` or `[&>*]`.
-            const source = `export const A = () => <div sz={${JSON.stringify({
-                sm: { [key]: value },
-            })}} />;`;
+        for (const [key, value, bare, source] of STRING_VALUED) {
             const emitted = normalizeEmit(engine(source, 'variant-prefix.tsx').code ?? '');
             expect(emitted, `${key}: ${value}`).toContain(`sm:${bare}`);
         }
