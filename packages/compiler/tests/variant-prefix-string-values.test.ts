@@ -88,9 +88,16 @@ describe('both Rust artifacts already agreed, and still do', () => {
     // native:build` before trusting a green here.
     it.each(ENGINES)('%s emits what transform() emits', (_lane, engine) => {
         for (const [key, value, bare] of STRING_VALUED) {
-            const source = `export const A = () => <div sz={{ sm: { ${key}: ${JSON.stringify(
-                value,
-            )} } }} />;`;
+            // Serialise the whole object rather than splicing the key in raw.
+            // The key is a plain identifier in every case above, so the two
+            // spellings parse the same today — but a source string built by
+            // concatenating an unescaped name is the shape CodeQL flags as
+            // `js/bad-code-sanitization`, and it stops being equivalent the
+            // moment this table grows a key needing quotes, such as
+            // `@container` or `[&>*]`.
+            const source = `export const A = () => <div sz={${JSON.stringify({
+                sm: { [key]: value },
+            })}} />;`;
             const emitted = normalizeEmit(engine(source, 'variant-prefix.tsx').code ?? '');
             expect(emitted, `${key}: ${value}`).toContain(`sm:${bare}`);
         }
