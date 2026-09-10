@@ -163,7 +163,13 @@ describe('sz differential fuzz (TS transform vs Rust transform_sz)', () => {
             `${found.length} TS↔Rust lowering divergence(s). Replay with ` +
                 `SZ_FUZZ_SEED=${seed} SZ_FUZZ_CASES=${cases}:\n${found.join('\n')}`,
         ).toEqual([]);
-    });
+        // The drawing and comparing costs ~270 ms for the default budget on a
+        // developer machine. The budget here is not for that: this is the first
+        // test in the file, so vitest bills it for the module import as well —
+        // the compiler, both engine artifacts and the WASM init. That import
+        // measured 153 ms locally and 4.17 s on a CI runner, which is what put
+        // this over the 5 s default there while it passed everywhere else.
+    }, 30000);
 
     it('agrees on the slice this commit explores', () => {
         // A suite pinned to one seed explores one fixed slice forever, so a
@@ -182,7 +188,9 @@ describe('sz differential fuzz (TS transform vs Rust transform_sz)', () => {
             `${found.length} TS↔Rust lowering divergence(s) in this commit's slice. ` +
                 `Replay with SZ_FUZZ_SEED=${seed} SZ_FUZZ_CASES=${cases}:\n${found.join('\n')}`,
         ).toEqual([]);
-    });
+        // Same budget as the slice above: this one draws its own cases, and a
+        // shared runner is slow enough that the default leaves no margin.
+    }, 30000);
 
     it('every recorded prefix-drop key still diverges', () => {
         // A key that starts agreeing has been fixed; the entry must go, or the
