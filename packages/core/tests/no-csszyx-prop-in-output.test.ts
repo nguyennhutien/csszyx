@@ -28,6 +28,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { SzObject } from '../../compiler/src/transform-core.js';
 import { transform } from '../../compiler/src/transform-core.js';
 import { ENGINES, type ParityEngine } from '../../compiler/tests/engine-parity-harness.js';
+import { jsxAttributes } from '../../compiler/tests/jsx-attributes.js';
 import {
     createRng,
     fuzzBudget,
@@ -65,24 +66,27 @@ function isHost(tag: string): boolean {
  * Every csszyx prop still present in a transformed module, minus the two
  * allowed survivals.
  *
- * A one-line regex is enough because every source this file transforms is one
- * it generated: single-line elements, attribute values that contain no `>`.
+ * Reads the attributes off an AST rather than matching them. A regex over
+ * `<tag ...>` stops at the first `>`, so a `>` inside an earlier attribute
+ * value hides everything after it: `<div title={"a>b"} sz={{ p: 4 }} />` and
+ * `<div onClick={() => x} sz={{ p: 4 }} />` both report no leak from a regex
+ * and report one from the parser. A gate that misses in silence is worse than
+ * no gate.
  *
  * @param code The transformed module.
  * @returns The offending props, in document order.
  */
 function leaksIn(code: string): Leak[] {
+    const attributes = jsxAttributes(code);
+    const tokenBearing = new Set(
+        attributes.filter(a => a.name === 'data-sz-recovery-token').map(a => a.tag),
+    );
     const out: Leak[] = [];
-    for (const match of code.matchAll(/<([a-z][\w.-]*)\s([^>]*?)\/?>/gi)) {
-        const tag = match[1] as string;
-        const attrs = match[2] as string;
-        const hasToken = /\bdata-sz-recovery-token=/.test(attrs);
-        for (const prop of AUTHORING_PROPS) {
-            if (!new RegExp(`(^|\\s)${prop}=`).test(attrs)) continue;
-            if (prop === 'szsc' && !isHost(tag)) continue;
-            if (prop === 'szRecover' && hasToken) continue;
-            out.push({ tag, prop });
-        }
+    for (const { tag, name } of attributes) {
+        if (!AUTHORING_PROPS.includes(name as (typeof AUTHORING_PROPS)[number])) continue;
+        if (name === 'szsc' && !isHost(tag)) continue;
+        if (name === 'szRecover' && tokenBearing.has(tag)) continue;
+        out.push({ tag, prop: name });
     }
     return out;
 }
@@ -357,6 +361,20 @@ describe('no csszyx authoring prop survives into the output', () => {
                 `${fixed.length} recorded leak(s) no longer leak — remove them from KNOWN_LEAKS`,
             ).toEqual([]);
         });
+    });
+
+    it('finds a prop hidden behind an angle bracket in an earlier value', () => {
+        // The reader is tested directly rather than through an engine, because
+        // the engine handles these shapes correctly — it is the READER that a
+        // regex gets wrong. Matching `<tag ...>` stops at the `>` inside the
+        // earlier value, so everything after it goes unseen and the suite would
+        // report a clean file. These two fail that way and pass on an AST.
+        expect(leaksIn('const A = () => <div title={"a>b"} sz={{"p":4}} />;')).toEqual([
+            { tag: 'div', prop: 'sz' },
+        ]);
+        expect(leaksIn('const A = () => <div onClick={() => x} szs={{"r":{}}} />;')).toEqual([
+            { tag: 'div', prop: 'szs' },
+        ]);
     });
 
     it('both engine artifacts agree on what leaks', () => {
