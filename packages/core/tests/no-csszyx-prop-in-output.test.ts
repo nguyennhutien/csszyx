@@ -170,9 +170,31 @@ function assertNoBreakout(fragment: string): void {
  * @returns A module source.
  */
 function moduleOf(elements: readonly string[]): string {
-    // Each element came from `element` above, which already refused anything
-    // that could break out of its position; the index is a loop counter.
+    // The comment that stood here claimed every element came from `element`
+    // above and was therefore already checked. That was not true: three of the
+    // recorded leaks pass a literal, because they need bare slot keys that
+    // `JSON.stringify` cannot produce. So the shape is checked here, where the
+    // splice happens, rather than assumed from where the caller usually is.
+    for (const el of elements) assertElement(el);
     return elements.map((el, i) => `export const C${i} = () => ${el};`).join('\n');
+}
+
+/**
+ * A single self-closing JSX element on one line — what every caller passes and
+ * the only shape the module template is written for.
+ */
+const ELEMENT = /^<[a-z][\w.-]*\s[^\n\r\u2028\u2029]*\/>$/i;
+
+/**
+ * Rejects an element that would not sit correctly in the module template.
+ *
+ * @param el One JSX element.
+ * @throws When it is not a single self-closing element on one line.
+ */
+function assertElement(el: string): void {
+    if (!ELEMENT.test(el)) {
+        throw new Error(`probe element is not a single self-closing tag: ${JSON.stringify(el)}`);
+    }
 }
 
 /**
