@@ -26,7 +26,6 @@
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { SzObject } from '../../compiler/src/transform-core.js';
-import { transform } from '../../compiler/src/transform-core.js';
 import { ENGINES, type ParityEngine } from '../../compiler/tests/engine-parity-harness.js';
 import { jsxAttributes } from '../../compiler/tests/jsx-attributes.js';
 import {
@@ -242,20 +241,6 @@ function assertElement(el: string): void {
 }
 
 /**
- * Whether an object lowers to no class at all.
- *
- * @param sz The object.
- * @returns True when `transform` emits an empty className, or refuses it.
- */
-function lowersToNothing(sz: SzObject): boolean {
-    try {
-        return transform(sz).className === '';
-    } catch {
-        return true;
-    }
-}
-
-/**
  * Defects this gate has found and that are recorded rather than fixed here.
  * The same idiom as `sz-known-defects.ts`: a recorded case that stops leaking
  * fails the suite as loudly as a new one that starts, so the list can only
@@ -265,31 +250,6 @@ function lowersToNothing(sz: SzObject): boolean {
  * theory.
  */
 const KNOWN_LEAKS: readonly { name: string; source: string; why: string }[] = [
-    {
-        name: 'an element whose sz lowers to nothing aborts the whole file',
-        source: moduleOf([
-            element('div', 'sz', { truncate: false }),
-            element('div', 'sz', { p: 4 }),
-        ]),
-        why:
-            '`rewrite.rs` returns `Err(EmptyClassList)` for a non-empty object that lowers to zero ' +
-            'classes, and the `?` in `rewrite_static_sz_attributes_with_options` propagates it out ' +
-            "of the file, discarding every other element's edits. The sibling `{ p: 4 }` is left raw " +
-            'too. `sz={{}}` does not trigger it: the guard tests whether the LITERAL was empty, not ' +
-            'whether the lowering was, while the pinning test one screen down describes the intent ' +
-            'as "an sz that lowers to zero classes emits className={undefined}".',
-    },
-    {
-        name: 'an emptied-out variant block aborts the whole file the same way',
-        source: moduleOf([
-            element('div', 'sz', { hover: {} }),
-            element('Card', 'sz', { bg: 'blue-500' }),
-        ]),
-        why:
-            'Same path as above. `{ hover: {} }` is pinned as correct object-level behaviour in ' +
-            '`transform-core-branch-coverage.test.ts`, so a variant block a refactor left empty is ' +
-            'a realistic way to hit it. No diagnostic is emitted.',
-    },
     {
         name: 'szs on a host element is left in place',
         source: moduleOf(['<div szs={{ root: { p: 4 } }} />']),
@@ -341,9 +301,9 @@ describe('no csszyx authoring prop survives into the output', () => {
     });
 
     /**
-     * Draws a multi-element module whose every element lowers to at least one
-     * class. Objects that lower to nothing are the recorded defect above, and
-     * mixing them in would make every generated failure a duplicate of it.
+     * Draws a multi-element module. Objects that lower to nothing are drawn
+     * like any other: they used to be filtered out while they were a recorded
+     * defect, and now they are the shape most worth mixing in.
      *
      * @param rng Seeded generator.
      * @returns A module and the objects behind its elements.
@@ -354,7 +314,6 @@ describe('no csszyx authoring prop survives into the output', () => {
         const count = 2 + Math.floor(rng() * 3);
         while (elements.length < count) {
             const sz = generateSzObject(rng, pool, { maxKeys: 3, maxVariantDepth: 2 });
-            if (lowersToNothing(sz)) continue;
             const tag = TAGS[Math.floor(rng() * TAGS.length)] as string;
             objects.push(sz);
             elements.push(element(tag, 'sz', sz));
@@ -371,8 +330,19 @@ describe('no csszyx authoring prop survives into the output', () => {
                 moduleOf([element('div', 'sz', { p: 4 }, ' szRecover="csr"')]),
                 moduleOf([element('Card', 'sz', { p: 4 }, ' szRecover="dev-only"')]),
                 moduleOf([element('div', 'sz', { p: 4 }), '<Card szs={{ root: { m: 2 } }} />']),
-                // Empty literal: the one zero-class shape the engine handles.
+                // Zero-class shapes. `false` turns a key off and a variant block can
+                // be left empty, so both are ordinary authoring, and the sibling
+                // is there because each once aborted the whole file — the sibling
+                // came out raw too, and that is what this gate was written for.
                 moduleOf([element('div', 'sz', {}), element('div', 'sz', { p: 4 })]),
+                moduleOf([
+                    element('div', 'sz', { truncate: false }),
+                    element('div', 'sz', { p: 4 }),
+                ]),
+                moduleOf([
+                    element('div', 'sz', { hover: {} }),
+                    element('Card', 'sz', { bg: 'blue-500' }),
+                ]),
             ];
             for (const source of sources) {
                 const code = engine(source, 'probe.tsx').code ?? '';
