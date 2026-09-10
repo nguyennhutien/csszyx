@@ -166,12 +166,12 @@
     "@types/node": "^22.20.1",
     "@types/proper-lockfile": "^4.1.4",
     "esbuild": "0.28.2",
-    "rollup": "^4.63.0",
+    "rollup": "^4.63.1",
     "typescript": "^6.0.3",
     "unbuild": "^3.6.1",
     "vite": "^8.2.2",
     "vitest": "^4.1.11",
-    "webpack": "^5.109.0"
+    "webpack": "^5.110.3"
   },
   "sideEffects": false,
   "engines": {
