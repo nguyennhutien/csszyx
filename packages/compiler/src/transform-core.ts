@@ -3044,27 +3044,20 @@ function collectEffectStringProperty(
     classes: string[],
 ): boolean {
     let utility: string | null = null;
-    let includePrefix = true;
-    if (key === 'maxW' && value === 'container') {
-        utility = 'container';
-        includePrefix = false;
-    } else if (key === 'shadowColor') {
+    if (key === 'shadowColor') {
         utility = formatShadowFamilyColor('shadow', value);
-        includePrefix = false;
     } else if (key === 'insetShadowColor') {
         utility = formatShadowFamilyColor('inset-shadow', value);
     } else if (ARBITRARY_EFFECT_KEYS.has(key)) {
         utility = formatArbitraryEffect(key, value);
-        includePrefix = key === 'scale' && value === '3d';
     } else if (key === 'textShadow') utility = formatTextShadow(value);
     else if (key === 'textShadowColor') {
         utility = formatShadowFamilyColor('text-shadow', value);
     } else if (isGradientPositionKey(key)) {
         utility = formatGradientPosition(key, value);
-        includePrefix = false;
     }
     if (utility === null) return false;
-    classes.push(`${includePrefix ? prefix : ''}${utility}`);
+    classes.push(`${prefix}${utility}`);
     return true;
 }
 

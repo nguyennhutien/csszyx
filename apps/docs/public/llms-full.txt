@@ -2906,9 +2906,9 @@ Controlling inline-size (logical equivalent of width). Added in Tailwind v4.2.
 
 Component-like utility for fixing an element's width to the current breakpoint.
 
-| Concept    | CSS Rule                                        | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note                                                    |
-| :--------- | :---------------------------------------------- | :---------------- | :------------------------ | :------------------------------------------------------ |
-| **Enable** | `width: 100%; max-width: 100% (at breakpoints)` | `container`       | `{ container: true }`     | **Top-level prop**. Better DX than `maxW: 'container'`. |
+| Concept    | CSS Rule                                                    | Tailwind v4 Class | `sz` Prop (Object Syntax) | Note                                                                                                                                                                                                           |
+| :--------- | :---------------------------------------------------------- | :---------------- | :------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Enable** | `width: 100%; max-width: <breakpoint> (at each breakpoint)` | `container`       | `{ container: true }`     | **Top-level prop**. `maxW` does not accept `container`: it resolves against the `--container-*` scale, where no `container` key exists, so `{ maxW: 'container' }` emits `max-w-container` and styles nothing. |
 
 ## Typography Plugin (Prose)
 
