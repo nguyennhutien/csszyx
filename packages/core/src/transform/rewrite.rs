@@ -20,8 +20,10 @@ pub enum StaticRewriteUnsupported {
     NoStaticSzAttribute,
     /// No JSX opening element group can be rewritten safely.
     NoStaticOpeningElement,
-    /// Static `sz` lowered to no classes.
-    EmptyClassList,
+    /// An element carries more than one `sz` attribute in a lane that rewrites
+    /// exactly one — array, ternary or runtime fallback. The static lane merges
+    /// them instead. This is a whole-file refusal, and it is silent.
+    MultipleSzAttributes,
 }
 
 /// Native rewrite options.
@@ -111,7 +113,7 @@ pub fn rewrite_static_sz_attributes_with_options(
                 continue;
             }
 
-            rewrite_static_sz_element(source, ir, element, &mut magic)?;
+            rewrite_static_sz_element(source, ir, element, &mut magic);
             rewrote = true;
         }
 
@@ -215,7 +217,7 @@ fn rewrite_array_sz_attribute(
     magic: &mut MagicString<'_>,
 ) -> Result<(), StaticRewriteUnsupported> {
     if element.sz_attribute_indices.len() != 1 {
-        return Err(StaticRewriteUnsupported::EmptyClassList);
+        return Err(StaticRewriteUnsupported::MultipleSzAttributes);
     }
     let attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
 
@@ -273,27 +275,31 @@ fn rewrite_array_sz_attribute(
     Ok(())
 }
 
+/// Rewrite every static `sz` on one element into a single `className`.
+///
+/// Infallible on purpose: this lane has nothing to refuse, so it cannot abort
+/// the file. The three lanes that can are the ones that take exactly one
+/// attribute.
 fn rewrite_static_sz_element(
     source: &str,
     ir: &SourceIr,
     element: &super::JsxOpeningElementIr,
     magic: &mut MagicString<'_>,
-) -> Result<(), StaticRewriteUnsupported> {
-    let mut classes = Vec::new();
-    let mut rewrites_empty_class = false;
-    for index in &element.sz_attribute_indices {
-        let attribute = &ir.sz_attributes[*index];
-        classes.extend(lower_sz_attribute_classes(attribute));
-        rewrites_empty_class |= attribute.rewrites_empty_class;
-    }
-    if classes.is_empty() && !rewrites_empty_class {
-        return Err(StaticRewriteUnsupported::EmptyClassList);
-    }
+) {
+    // An object that lowers to nothing — `{ truncate: false }`, `{ hover: {} }`
+    // — is rewritten like the empty literal: `overwrite_attribute` emits
+    // `className={undefined}`. It used to be refused here, and the refusal
+    // left the whole file untouched, sibling elements included.
+    let classes = element
+        .sz_attribute_indices
+        .iter()
+        .flat_map(|index| lower_sz_attribute_classes(&ir.sz_attributes[*index]))
+        .collect::<Vec<_>>();
 
     if let Some(class_index) = element.class_attribute_index {
         rewrite_static_sz_with_existing_class(source, ir, element, magic, class_index, &classes);
         apply_dynamic_style_props(source, ir, element, magic);
-        return Ok(());
+        return;
     }
 
     // The caller dispatches here only for elements carrying at least one sz
@@ -308,7 +314,6 @@ fn rewrite_static_sz_element(
         );
     }
     apply_dynamic_style_props(source, ir, element, magic);
-    Ok(())
 }
 
 fn rewrite_static_sz_with_existing_class(
@@ -362,7 +367,7 @@ fn rewrite_ternary_sz_attribute(
     magic: &mut MagicString<'_>,
 ) -> Result<(), StaticRewriteUnsupported> {
     if element.sz_attribute_indices.len() != 1 {
-        return Err(StaticRewriteUnsupported::EmptyClassList);
+        return Err(StaticRewriteUnsupported::MultipleSzAttributes);
     }
     let only_attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
     let ternaries = &only_attribute.ternaries;
@@ -516,7 +521,7 @@ fn rewrite_runtime_fallback_sz_attribute(
     magic: &mut MagicString<'_>,
 ) -> Result<(), StaticRewriteUnsupported> {
     if element.sz_attribute_indices.len() != 1 {
-        return Err(StaticRewriteUnsupported::EmptyClassList);
+        return Err(StaticRewriteUnsupported::MultipleSzAttributes);
     }
     let only_attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
     debug_assert!(only_attribute.runtime_fallback);
@@ -1203,7 +1208,7 @@ mod tests {
 
         assert_eq!(
             rewrite(source),
-            Err(StaticRewriteUnsupported::EmptyClassList)
+            Err(StaticRewriteUnsupported::MultipleSzAttributes)
         );
     }
 
@@ -2007,7 +2012,7 @@ mod tests {
         ] {
             assert_eq!(
                 rewrite(source),
-                Err(StaticRewriteUnsupported::EmptyClassList),
+                Err(StaticRewriteUnsupported::MultipleSzAttributes),
                 "{source}"
             );
         }
@@ -2036,12 +2041,49 @@ mod tests {
     }
 
     #[test]
-    fn rejects_empty_class_list() {
-        let source = "export const App = () => <div sz={{ bg: 'red-500/50' }} />;";
+    fn zero_class_lowering_emits_undefined_classname() {
+        // Not an empty literal: the object has a key, and the key lowers to
+        // nothing. Same emit as `sz={{}}` — the DOM gets no `class` attribute.
+        for (source, expected) in [
+            (
+                "export const App = () => <div sz={{ truncate: false }} />;",
+                "export const App = () => <div className={undefined} />;",
+            ),
+            (
+                "export const App = () => <div sz={{ hover: {} }} />;",
+                "export const App = () => <div className={undefined} />;",
+            ),
+            (
+                "export const App = () => <div sz={{ bg: 'red-500/50' }} />;",
+                "export const App = () => <div className={undefined} />;",
+            ),
+        ] {
+            assert_eq!(rewrite(source).as_deref(), Ok(expected), "{source}");
+        }
+    }
+
+    #[test]
+    fn zero_class_lowering_keeps_an_authored_classname() {
+        let source =
+            "export const App = () => <div className=\"block\" sz={{ truncate: false }} />;";
 
         assert_eq!(
-            rewrite(source),
-            Err(StaticRewriteUnsupported::EmptyClassList)
+            rewrite(source).expect("rewritten"),
+            "export const App = () => <div className=\"block\" />;"
+        );
+    }
+
+    #[test]
+    fn zero_class_lowering_does_not_abort_the_rest_of_the_file() {
+        // The per-element contract: one element that lowers to nothing must
+        // not leave its siblings' `sz` in the output. Before this was fixed the
+        // whole file came back untouched, and the sibling's raw `sz` reached the
+        // DOM as `sz="[object Object]"`.
+        let source = "export const A = () => <div sz={{ truncate: false }} />;\nexport const B = () => <div sz={{ p: 4 }} />;";
+
+        assert_eq!(
+            rewrite(source).expect("rewritten"),
+            "export const A = () => <div className={undefined} />;\nexport const B = () => <div className=\"p-4\" />;"
         );
     }
 }

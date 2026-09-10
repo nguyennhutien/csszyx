@@ -387,7 +387,10 @@ pub struct SzAttributeIr {
     pub object: StaticSzObject,
     /// Static class string from `sz="..."` syntax.
     pub literal_class_name: Option<String>,
-    /// Whether an empty class result should still rewrite to `className=""`.
+    /// The static object literal had no properties. The rewrite no longer
+    /// reads this: every attribute that lowers to zero classes emits
+    /// `className={undefined}`, literal or not. The parser still reports it
+    /// and its tests pin it.
     pub rewrites_empty_class: bool,
     /// Static ternary forms, in source property order. One entry for the
     /// attribute-level `sz={cond ? A : B}` form, or one per property-level
