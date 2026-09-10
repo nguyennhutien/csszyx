@@ -97,7 +97,66 @@ function leaksIn(code: string): Leak[] {
  * @returns One JSX element.
  */
 function element(tag: string, prop: string, value: SzObject, extra = ''): string {
-    return `<${tag} ${prop}={${JSON.stringify(value)}}${extra} />`;
+    // Each piece is checked in the role it plays, because the same character is
+    // fine in one position and not in another: an angle bracket belongs in
+    // `extra`, never in a tag or prop name, and a quote belongs inside the
+    // serialised object, never around it.
+    //
+    // Serialising is what makes the object a JSX expression, and it is also
+    // what keeps `@container` — the one key in the vocabulary that needs
+    // quoting — from producing a source that does not parse. It is not a
+    // sanitizer though: `JSON.stringify` escapes for JSON, not for a
+    // JavaScript source, and it leaves `</script>` and the line separators
+    // alone. Hence the checks.
+    assertName(tag);
+    assertName(prop);
+    assertNoBreakout(extra);
+    const serialised = JSON.stringify(value);
+    assertNoBreakout(serialised);
+    return `<${tag} ${prop}={${serialised}}${extra} />`;
+}
+
+/** A JSX tag or attribute name: letters, digits, dot, dash. Nothing else. */
+const NAME = /^[a-z][a-z0-9.-]*$/i;
+
+/**
+ * Characters that would end the current construct early wherever they appear.
+ *
+ * `SEP` is a real line terminator to a JavaScript parser, so a raw one splices
+ * a source into two — which is the half of this that `JSON.stringify` does not
+ * cover, along with `</script>`.
+ *
+ * A probe module is only ever built from this file's own tables and from the
+ * generated `sz` vocabulary: 298 keys, of which one needs quoting, and no
+ * documented value carries a backtick, an angle bracket or a line break. These
+ * checks are here so that stays measured rather than assumed — a fixture that
+ * grows such a value fails loudly instead of producing a module whose meaning
+ * is not the object it came from.
+ */
+const BREAKOUT = /[\n\r<>`\u2028\u2029]|\$\{/;
+
+/**
+ * Rejects a tag or attribute name that is not a plain identifier.
+ *
+ * @param name The name to check.
+ * @throws When the name could not appear literally in JSX.
+ */
+function assertName(name: string): void {
+    if (!NAME.test(name)) {
+        throw new Error(`probe source name is not a plain identifier: ${JSON.stringify(name)}`);
+    }
+}
+
+/**
+ * Rejects a fragment that would break out of the position it is spliced into.
+ *
+ * @param fragment One piece of a probe source.
+ * @throws When the fragment carries a construct-ending character.
+ */
+function assertNoBreakout(fragment: string): void {
+    if (BREAKOUT.test(fragment)) {
+        throw new Error(`probe source fragment is not safe to splice: ${JSON.stringify(fragment)}`);
+    }
 }
 
 /**
@@ -107,6 +166,8 @@ function element(tag: string, prop: string, value: SzObject, extra = ''): string
  * @returns A module source.
  */
 function moduleOf(elements: readonly string[]): string {
+    // Each element came from `element` above, which already refused anything
+    // that could break out of its position; the index is a loop counter.
     return elements.map((el, i) => `export const C${i} = () => ${el};`).join('\n');
 }
 
