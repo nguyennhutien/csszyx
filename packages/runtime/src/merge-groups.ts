@@ -788,13 +788,28 @@ function isBackgroundImage(value: string): boolean {
 
 /**
  * Classifies an ambiguous border-like utility value.
+ *
+ * A leading side or `offset` segment names a utility of its own, so it joins
+ * the prefix and the rest of the value is classified against that: `border-t-4`
+ * is a width of the top border, `ring-offset-gray-800` is the colour of the
+ * ring's offset and not of the ring. Reading the whole value instead made
+ * `ring-offset-gray-800` a ring colour, which deleted an earlier
+ * `ring-blue-500` — the focus-ring idiom Tailwind documents.
+ *
  * @param prefix - The border-like utility prefix.
  * @param value - The value after the utility prefix.
  * @returns The border property group, or `null` when uncertain.
  */
 function classifyBorderValue(prefix: string, value: string): string | null {
     const firstSegment = value.split('-', 1)[0] ?? '';
-    if (DIRECTIONAL_SEGMENTS.has(firstSegment)) return null;
+    if (firstSegment === 'offset' || DIRECTIONAL_SEGMENTS.has(firstSegment)) {
+        // `border-t` carries no value of its own and is a width, which the
+        // empty remainder already answers below.
+        return classifyBorderValue(
+            `${prefix}-${firstSegment}`,
+            value.slice(firstSegment.length + 1),
+        );
+    }
     if (isColorValue(value)) return `${prefix}:${GROUP_PROPERTY.color}`;
     if (value === '' || /^\d+$/.test(value) || isLengthArbitrary(value)) {
         return `${prefix}:${GROUP_PROPERTY.width}`;
