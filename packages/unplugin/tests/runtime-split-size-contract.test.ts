@@ -30,6 +30,18 @@ const require = createRequire(import.meta.url);
  */
 const COMPILER_MARKER = 'received a numeric key';
 
+/**
+ * A string only the compiler's property tables carry — a display value from its
+ * closed-enum map, kept verbatim by minification.
+ *
+ * The compiler marker above catches the browser TRANSFORM shipping; it does not
+ * catch the TABLES, which live in the same shared chunk but hold no warning
+ * text. Those tables are built by module-level calls a bundler cannot prove
+ * pure, so an entry that imports anything from that chunk keeps them whether or
+ * not it reads them — measured at 577 B gzip in `core` and 527 B in `merge`.
+ */
+const COMPILER_TABLES_MARKER = '"table-column-group"';
+
 /** One bundled entry probe. */
 interface BundleProbe {
     gzipBytes: number;
@@ -122,6 +134,16 @@ describe('runtime split size contract', () => {
         expect(probe.hasCompiler).toBe(true);
     });
 
+    it('core carries the depth limits but not the compiler tables beside them', async () => {
+        const probe = await bundleProbe(
+            "import { szr } from '@csszyx/runtime/core'; console.log(szr);",
+        );
+        expect(probe.code).not.toContain(COMPILER_TABLES_MARKER);
+        // The limits themselves are what `core` does need: its depth guard
+        // throws this message on hostile input.
+        expect(probe.code).toContain('nesting exceeded the maximum depth');
+    });
+
     it.each(LIGHT_RUNTIME_PROBES)('$label', async ({ source, minGzipBytes, maxGzipBytes }) => {
         // A ceiling catches compiler poisoning; the floor catches a probe
         // tree-shaken empty, which would make that ceiling meaningless.
@@ -136,6 +158,7 @@ describe('runtime split size contract', () => {
             "import { _szPart, _szcn } from '@csszyx/runtime/merge'; console.log(_szPart, _szcn);",
         );
         expect(probe.hasCompiler).toBe(false);
+        expect(probe.code).not.toContain(COMPILER_TABLES_MARKER);
         // The box-role tables are the merge family's data — ~5 KB is its
         // honest cost. The barrel _szPart was 17 KB WITH the compiler.
         expect(probe.gzipBytes).toBeLessThan(7_000);
