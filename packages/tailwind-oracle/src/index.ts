@@ -17,6 +17,7 @@ export {
     findTailwindCssEntries,
     type OracleOptions,
     type OracleSkipKind,
+    type StylesheetFacts,
     type TailwindLoader,
     type TailwindModule,
     tailwindEntriesAmong,
