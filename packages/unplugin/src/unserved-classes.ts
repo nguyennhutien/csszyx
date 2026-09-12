@@ -19,12 +19,8 @@
  * @module
  */
 
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-
 import { sortStrings } from '@csszyx/compiler';
 import { classify, normalizeBase, stripVariant } from '@csszyx/runtime/split';
-import { createEmittedClassOracle, tailwindEntriesAmong } from '@csszyx/tailwind-oracle';
 
 /**
  * The authored names the design system serves nothing for.
@@ -56,39 +52,3 @@ export function unservedAuthoredClasses(
 
 /** Asks the project's design systems which of these names produce no CSS. */
 export type UnservedAsk = (classes: readonly string[]) => string[];
-
-/**
- * Compile the project's design systems from stylesheets the caller already found.
- *
- * The plugin walks the project for `@theme` blocks before this runs, so its
- * result is handed over rather than globbed again: measured at 1 ms for one app
- * against 96 ms at the root of a monorepo, and the gap widens with the tree.
- *
- * A name counts as unserved only when EVERY compiled system agrees, matching
- * what `csszyx check` does -- a project with two stylesheets serves a class if
- * either one does. A stylesheet that will not compile is dropped rather than
- * allowed to answer, because a broken stylesheet is not evidence.
- *
- * @param resolveFrom - Project directory whose `package.json` anchors resolution.
- * @param cssFiles - Stylesheet paths the caller already walked.
- * @returns The ask, or null when nothing compiled and there is no answer.
- */
-export async function openUnservedAsk(
-    resolveFrom: string,
-    cssFiles: readonly string[],
-): Promise<UnservedAsk | null> {
-    const ready: Array<(classes: readonly string[]) => string[]> = [];
-    for (const entry of await tailwindEntriesAmong(cssFiles)) {
-        const oracle = await createEmittedClassOracle({
-            resolveFrom,
-            css: await readFile(entry, 'utf8'),
-            cssBase: path.dirname(entry),
-        });
-        if (oracle.ok) ready.push(classes => oracle.findDead(classes));
-    }
-    if (ready.length === 0) return null;
-    return classes => {
-        const perOracle = ready.map(findDead => new Set(findDead(classes)));
-        return classes.filter(token => perOracle.every(dead => dead.has(token)));
-    };
-}

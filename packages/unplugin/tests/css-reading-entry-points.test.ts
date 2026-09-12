@@ -57,7 +57,10 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
     createEmittedClassOracle: [
         'packages/tailwind-oracle/src/emitted-class-oracle.ts',
         'packages/tailwind-oracle/src/index.ts',
-        'packages/unplugin/src/unserved-classes.ts',
+        // The one path through the bundler plugin. `unserved-classes.ts` used
+        // to compile its own, which is how two answers to the same question
+        // came to exist.
+        'packages/unplugin/src/project-style-model.ts',
         'packages/cli/src/commands/check.ts',
     ],
     // Entry-point discovery. A glob is the last resort; a bundler hands its own
@@ -70,7 +73,7 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
     tailwindEntriesAmong: [
         'packages/tailwind-oracle/src/emitted-class-oracle.ts',
         'packages/tailwind-oracle/src/index.ts',
-        'packages/unplugin/src/unserved-classes.ts',
+        'packages/unplugin/src/project-style-model.ts',
     ],
     // Tailwind's own loader. Exactly one file may call it.
     __unstable__loadDesignSystem: ['packages/tailwind-oracle/src/emitted-class-oracle.ts'],

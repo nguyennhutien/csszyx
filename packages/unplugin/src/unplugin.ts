@@ -141,6 +141,7 @@ export {
     SAFELIST_FILE,
 } from './safelist-source.js';
 
+import { openProjectStyleModel } from './project-style-model.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { discoverProjectTheme } from './theme-discovery.js';
@@ -166,7 +167,7 @@ import {
     type TransformCacheKeyInput,
     writeTransformCache,
 } from './transform-cache.js';
-import { openUnservedAsk, unservedAuthoredClasses } from './unserved-classes.js';
+import { unservedAuthoredClasses } from './unserved-classes.js';
 import {
     CENSUS_PLACEHOLDER,
     CHECKSUM_PLACEHOLDER,
@@ -4880,11 +4881,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     async function computeUnservedClasses(): Promise<void> {
         if (state.authoredClasses.size === 0) return;
-        const ask = await openUnservedAsk(state.rootDir, projectCssFiles);
+        const model = await openProjectStyleModel(state.rootDir, projectCssFiles);
         // No design system is no answer. Reporting nothing is right: every
         // token then keeps the placement it has today.
-        if (ask === null) return;
-        unservedClasses = unservedAuthoredClasses(state.authoredClasses, ask);
+        if (model === null) return;
+        unservedClasses = unservedAuthoredClasses(state.authoredClasses, classes =>
+            model.unserved(classes),
+        );
     }
 
     /**
