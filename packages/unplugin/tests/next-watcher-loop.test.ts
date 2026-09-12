@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { NextSafelistStateLockedError } from '../src/next-safelist-state.js';
 import { createNextStateContext } from '../src/next-state-context.js';
 import { NextWatcherLoop, type NextWatcherLoopCycleRunner } from '../src/next-watcher-loop.js';
 
@@ -168,6 +169,131 @@ describe('Next watcher loop', () => {
         loop.notify('source-change');
         expect(loop.flush()?.materialize.classCount).toBe(1);
         expect(loop.lastError).toBeUndefined();
+    });
+
+    /**
+     * The documented Next setup runs `csszyx next watch` beside `next dev`, and
+     * the Turbopack loader takes the same lock for a cycle of its own. The
+     * loader already yields to a watcher. This is the other direction: a
+     * scheduled watcher cycle that lands inside the loader's critical section.
+     *
+     * Reporting it ended the watch process, and `concurrently
+     * --kill-others-on-fail` — the documented way to run the pair — then killed
+     * `next dev` with it. The cycle is retried rather than dropped, because the
+     * loader's pass read the shards as they were when it started, and the
+     * event that woke the watcher may be newer than that.
+     *
+     * @param command - what the holder calls itself on the lock file.
+     * @returns the error a cycle throws when that holder is live.
+     */
+    function heldBy(command: string): NextSafelistStateLockedError {
+        return new NextSafelistStateLockedError({
+            version: 1,
+            pid: 4242,
+            token: 'holder-token',
+            hostname: 'host',
+            root: '/repo/apps/web',
+            mode: 'development',
+            command,
+            startedAt: '2026-09-12T17:25:39.000Z',
+            updatedAt: '2026-09-12T17:25:39.000Z',
+        });
+    }
+
+    const RESULT = {
+        materialize: { classCount: 3, sourceCount: 2, tombstonedSourceCount: 0, shardCount: 2 },
+        manifestPath: '/manifest.json',
+        lockPath: '/state.lock',
+    };
+
+    it('retries the cycle after the debounce when a Turbopack loader holds the lock', () => {
+        const timers = scheduler();
+        const errors: unknown[] = [];
+        const calls: string[][] = [];
+        const loop = new NextWatcherLoop({
+            context: context(),
+            debounceMs: 40,
+            runCycle: (_context, _options, reasons) => {
+                calls.push([...reasons]);
+                if (calls.length === 1) {
+                    throw heldBy('csszyx next turbo-loader');
+                }
+                return RESULT;
+            },
+            setTimeout: timers.setTimeout,
+            clearTimeout: timers.clearTimeout,
+            onError: caught => {
+                errors.push(caught);
+            },
+        });
+
+        loop.notify('shard:add');
+        timers.runAll();
+
+        // Not a failure: nothing reported, and the same work is queued again.
+        expect(errors).toEqual([]);
+        expect(loop.lastError).toBeUndefined();
+        expect(loop.pending).toBe(true);
+        expect(loop.reasons).toEqual(['shard:add']);
+        expect([...timers.pending.values()].map(task => task.delayMs)).toEqual([40]);
+
+        timers.runAll();
+
+        expect(calls).toEqual([['shard:add'], ['shard:add']]);
+        expect(loop.lastResult).toBe(RESULT);
+        expect(loop.pending).toBe(false);
+        expect(errors).toEqual([]);
+    });
+
+    it('still reports a lock held by anything other than a loader', () => {
+        const timers = scheduler();
+        const errors: unknown[] = [];
+        // A second watcher on the same root is a misconfiguration, not a race.
+        const error = heldBy('csszyx next watch');
+        const loop = new NextWatcherLoop({
+            context: context(),
+            runCycle: () => {
+                throw error;
+            },
+            setTimeout: timers.setTimeout,
+            clearTimeout: timers.clearTimeout,
+            onError: caught => {
+                errors.push(caught);
+            },
+        });
+
+        loop.notify('shard:change');
+        timers.runAll();
+
+        expect(errors).toEqual([error]);
+        expect(loop.lastError).toBe(error);
+        expect(loop.pending).toBe(false);
+    });
+
+    it('does not queue a retry once the loop is disposed', () => {
+        const timers = scheduler();
+        const errors: unknown[] = [];
+        let loop: NextWatcherLoop | undefined;
+        loop = new NextWatcherLoop({
+            context: context(),
+            runCycle: () => {
+                // Shutdown lands while the loader holds the lock.
+                loop?.dispose();
+                throw heldBy('csszyx next turbo-loader');
+            },
+            setTimeout: timers.setTimeout,
+            clearTimeout: timers.clearTimeout,
+            onError: caught => {
+                errors.push(caught);
+            },
+        });
+
+        loop.notify('shard:add');
+        timers.runAll();
+
+        expect(timers.pending.size).toBe(0);
+        expect(loop.pending).toBe(false);
+        expect(errors).toEqual([]);
     });
 
     it('clears pending work and ignores new events after dispose', () => {

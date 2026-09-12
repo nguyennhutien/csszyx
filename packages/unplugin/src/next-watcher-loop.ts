@@ -1,4 +1,8 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
+import {
+    NEXT_TURBO_LOADER_LOCK_COMMAND,
+    NextSafelistStateLockedError,
+} from './next-safelist-state.js';
 import type { NextStateContext } from './next-state-context.js';
 import {
     type NextWatcherCycleOptions,
@@ -17,6 +21,25 @@ export type NextWatcherLoopCycleRunner = (
     options: NextWatcherCycleOptions,
     reasons: readonly string[],
 ) => NextWatcherCycleResult;
+
+/**
+ * Whether a cycle failed only because the Turbopack loader was mid-cycle.
+ *
+ * The documented Next setup runs `csszyx next watch` beside `next dev`, and the
+ * loader takes the same lock for a cycle of its own after writing a shard. The
+ * loader already steps aside for a watcher; this is the same overlap seen from
+ * the watcher's side. Reported as a failure, it ended the watch process, and
+ * `concurrently --kill-others-on-fail` then stopped `next dev` with it.
+ *
+ * @param error - What the cycle threw.
+ * @returns True when the lock is held by the loader and nothing else went wrong.
+ */
+function isHeldByTurbopackLoader(error: unknown): boolean {
+    return (
+        error instanceof NextSafelistStateLockedError &&
+        error.holder.command === NEXT_TURBO_LOADER_LOCK_COMMAND
+    );
+}
 
 /** Timer hooks kept injectable so debounce behavior is deterministic in tests. */
 export interface NextWatcherLoopTimerHooks {
@@ -98,9 +121,19 @@ export class NextWatcherLoop {
         }
 
         this.timer = this.setTimeoutFn(() => {
+            const reasons = [...this.pendingReasons];
             try {
                 this.runPendingCycle();
             } catch (error) {
+                if (isHeldByTurbopackLoader(error)) {
+                    // Retried, not dropped: the loader's pass read the shards as
+                    // they stood when it began, and the event that woke this
+                    // cycle may be newer. A disposed loop ignores the notify.
+                    for (const reason of reasons) {
+                        this.notify(reason);
+                    }
+                    return;
+                }
                 this.lastError = error;
                 this.onError?.(error);
             }
