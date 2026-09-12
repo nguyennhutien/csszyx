@@ -45,7 +45,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@csszyx/compiler": "workspace:*"
+    "@csszyx/compiler": "workspace:*",
+    "@csszyx/runtime": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=17.0.0"
