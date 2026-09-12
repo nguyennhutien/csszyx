@@ -60,6 +60,11 @@ const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
     'from', // from-10% (stop position) vs from-red-500 (stop colour)
     'via', // via-40% (stop position) vs via-red-500 (stop colour)
     'to', // to-90% (stop position) vs to-red-500 (stop colour)
+    'snap', // snap-x (axis) vs snap-mandatory (strictness) vs snap-center (align)
+    'list', // list-disc (marker) vs list-inside (position) vs list-item (display)
+    'object', // object-cover (fit) vs object-center (position)
+    'content', // content-none (content) vs content-center (align-content)
+    'touch', // touch-pan-x / touch-pan-y / touch-pinch-zoom write three variables
 ]);
 
 /**

@@ -32,11 +32,15 @@ import { sortStrings } from './sort.js';
 
 /** Canonical property suffixes shared by group classification and selectors. */
 const GROUP_PROPERTY = {
+    action: 'action',
     align: 'align',
     attachment: 'attachment',
     clip: 'clip',
     color: 'color',
+    content: 'content',
     direction: 'direction',
+    display: 'display',
+    fit: 'fit',
     family: 'family',
     image: 'image',
     origin: 'origin',
@@ -45,8 +49,11 @@ const GROUP_PROPERTY = {
     repeat: 'repeat',
     shorthand: 'shorthand',
     size: 'size',
+    stop: 'stop',
+    strictness: 'strictness',
     style: 'style',
     thickness: 'thickness',
+    type: 'type',
     weight: 'weight',
     width: 'width',
     wrap: 'wrap',
@@ -638,9 +645,135 @@ export function classifyAmbiguousValue(prefix: string, value: string): string | 
         case 'via':
         case 'to':
             return classifyGradientStopValue(prefix, value);
+        case 'snap':
+            return classifySnapValue(value);
+        case 'list':
+            return classifyListValue(value);
+        case 'object':
+            return classifyObjectValue(value);
+        case 'content':
+            return classifyContentValue(value);
+        case 'touch':
+            return classifyTouchValue(value);
         default:
             return null;
     }
+}
+
+/** `snap-*` values that select the snap axis, including the off switch. */
+const SNAP_AXES = new Set(['x', 'y', 'both', 'none']);
+
+/** `snap-*` values that select how strictly the snap point is honoured. */
+const SNAP_STRICTNESS = new Set(['mandatory', 'proximity']);
+
+/** `snap-*` values that align the box to its snap point. */
+const SNAP_ALIGNMENTS = new Set(['start', 'end', 'center', 'align-none']);
+
+/** `snap-*` values that decide whether snapping can be skipped. */
+const SNAP_STOPS = new Set(['normal', 'always']);
+
+/**
+ * Classifies a `snap-*` value.
+ *
+ * The four groups write four different declarations — the axis and the off
+ * switch write `scroll-snap-type`, the strictness writes the variable that
+ * declaration reads, and the other two write `scroll-snap-align` and
+ * `scroll-snap-stop`. Merging them by prefix turned `snap-x snap-mandatory`,
+ * the pairing Tailwind documents, into `snap-mandatory` alone: snapping off.
+ *
+ * @param value - The value after `snap-`.
+ * @returns The snap property group, or `null` when uncertain.
+ */
+function classifySnapValue(value: string): string | null {
+    if (SNAP_AXES.has(value)) return `snap:${GROUP_PROPERTY.type}`;
+    if (SNAP_STRICTNESS.has(value)) return `snap:${GROUP_PROPERTY.strictness}`;
+    if (SNAP_ALIGNMENTS.has(value)) return `snap:${GROUP_PROPERTY.align}`;
+    return SNAP_STOPS.has(value) ? `snap:${GROUP_PROPERTY.stop}` : null;
+}
+
+/** `list-*` values that place the marker inside or outside the box. */
+const LIST_POSITIONS = new Set(['inside', 'outside']);
+
+/**
+ * Classifies a `list-*` value.
+ *
+ * `list-item` is the odd one: it sets `display`, not a marker property, so it
+ * keys on its own and never displaces a marker.
+ *
+ * @param value - The value after `list-`.
+ * @returns The list property group, or `null` when uncertain.
+ */
+function classifyListValue(value: string): string | null {
+    if (LIST_POSITIONS.has(value)) return `list:${GROUP_PROPERTY.position}`;
+    if (value === 'item') return `list:${GROUP_PROPERTY.display}`;
+    if (value === 'image-none' || value.startsWith('image-')) {
+        return `list:${GROUP_PROPERTY.image}`;
+    }
+    // What is left sets `list-style-type`: the built-in markers, and any
+    // arbitrary or theme value written in their place.
+    return value === '' ? null : `list:${GROUP_PROPERTY.style}`;
+}
+
+/** `object-*` values that select how the replaced element fills its box. */
+const OBJECT_FITS = new Set(['contain', 'cover', 'fill', 'none', 'scale-down']);
+
+/**
+ * Classifies an `object-*` value.
+ *
+ * @param value - The value after `object-`.
+ * @returns The object property group, or `null` when uncertain.
+ */
+function classifyObjectValue(value: string): string | null {
+    if (OBJECT_FITS.has(value)) return `object:${GROUP_PROPERTY.fit}`;
+    // Everything else names a position — the nine keywords, their `-safe`
+    // forms, and arbitrary or custom-property values.
+    return value === '' ? null : `object:${GROUP_PROPERTY.position}`;
+}
+
+/**
+ * Classifies a `content-*` value.
+ *
+ * Two unrelated properties share this prefix: `content-none` and an arbitrary
+ * value write the `content` property, everything else writes `align-content`.
+ *
+ * @param value - The value after `content-`.
+ * @returns The content property group, or `null` when uncertain.
+ */
+function classifyContentValue(value: string): string | null {
+    if (value === 'none' || value.startsWith('[') || value.startsWith('(')) {
+        return `content:${GROUP_PROPERTY.content}`;
+    }
+    return value === '' ? null : `content:${GROUP_PROPERTY.align}`;
+}
+
+/** `touch-*` values that write `touch-action` on their own. */
+const TOUCH_ACTIONS = new Set(['auto', 'none', 'manipulation']);
+
+/** `touch-pan-*` values, by the variable each one writes. */
+const TOUCH_PAN_AXES: ReadonlyMap<string, string> = new Map([
+    ['pan-x', 'x'],
+    ['pan-left', 'x'],
+    ['pan-right', 'x'],
+    ['pan-y', 'y'],
+    ['pan-up', 'y'],
+    ['pan-down', 'y'],
+]);
+
+/**
+ * Classifies a `touch-*` value.
+ *
+ * The pan and pinch utilities each write their own variable and compose into
+ * one `touch-action`, so a horizontal pan, a vertical pan and the pinch flag
+ * are meant to be written together.
+ *
+ * @param value - The value after `touch-`.
+ * @returns The touch property group, or `null` when uncertain.
+ */
+function classifyTouchValue(value: string): string | null {
+    if (TOUCH_ACTIONS.has(value)) return `touch:${GROUP_PROPERTY.action}`;
+    const axis = TOUCH_PAN_AXES.get(value);
+    if (axis !== undefined) return `touch-pan-${axis}:${GROUP_PROPERTY.action}`;
+    return value === 'pinch-zoom' ? `touch-pinch-zoom:${GROUP_PROPERTY.action}` : null;
 }
 
 /**
