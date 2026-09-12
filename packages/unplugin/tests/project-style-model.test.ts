@@ -99,6 +99,31 @@ describe('openProjectStyleModel', () => {
         expect(model?.facts).toEqual({ prefix: null, important: false });
     });
 
+    it('withholds a forced important the entries disagree about', async () => {
+        // The same rule on the other fact, stated separately: one arm agreeing
+        // proves nothing about the other, and `important` decides whether a
+        // csszyx class can override the library class beside it.
+        const files = writeStylesheets({
+            'a.css': '@import "tailwindcss" important;',
+            'b.css': '@import "tailwindcss";',
+        });
+
+        const model = await openProjectStyleModel(REPO, files);
+
+        expect(model?.facts).toEqual({ prefix: null, important: false });
+    });
+
+    it('reports a forced important every entry agrees on', async () => {
+        const files = writeStylesheets({
+            'a.css': '@import "tailwindcss" important;',
+            'b.css': '@import "tailwindcss" important;',
+        });
+
+        const model = await openProjectStyleModel(REPO, files);
+
+        expect(model?.facts).toEqual({ prefix: null, important: true });
+    });
+
     it('reports nothing when no stylesheet is an entry point', async () => {
         const files = writeStylesheets({ 'plain.css': '.card { padding: 1rem }' });
 

@@ -141,7 +141,7 @@ export {
     SAFELIST_FILE,
 } from './safelist-source.js';
 
-import { openProjectStyleModel } from './project-style-model.js';
+import { openProjectStyleModel, unsupportedStylesheetFactsMessage } from './project-style-model.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { discoverProjectTheme } from './theme-discovery.js';
@@ -4880,8 +4880,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Nothing; the result lands in `unservedClasses`.
      */
     async function computeUnservedClasses(): Promise<void> {
-        if (state.authoredClasses.size === 0) return;
         const model = await openProjectStyleModel(state.rootDir, projectCssFiles);
+        // Said before the early return below: a project whose Tailwind renames
+        // or forces every utility gets classes that style nothing, whether or
+        // not it authored any className of its own.
+        if (model !== null) {
+            const unsupported = unsupportedStylesheetFactsMessage(model.facts);
+            if (unsupported !== null) emitWarning(unsupported);
+        }
+        if (state.authoredClasses.size === 0) return;
         // No design system is no answer. Reporting nothing is right: every
         // token then keeps the placement it has today.
         if (model === null) return;
