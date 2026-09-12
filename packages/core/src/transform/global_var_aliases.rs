@@ -189,6 +189,7 @@ mod tests {
             runtime_fallback_diagnostic: None,
             dynamic_css_vars: Vec::new(),
             dropped_dynamic_keys: Vec::new(),
+            folded_attribute_spans: Vec::new(),
         });
 
         let result = apply_global_var_aliases(
@@ -384,6 +385,7 @@ mod tests {
             runtime_fallback_diagnostic: None,
             dynamic_css_vars: Vec::new(),
             dropped_dynamic_keys: Vec::new(),
+            folded_attribute_spans: Vec::new(),
         });
 
         let result = apply_global_var_aliases(

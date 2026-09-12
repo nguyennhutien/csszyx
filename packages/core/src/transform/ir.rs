@@ -88,6 +88,9 @@ pub struct SourceIr {
     /// offsets, so the diagnostics carry real line numbers.
     #[serde(default)]
     pub catalog_sz_objects: Vec<StaticSzObject>,
+    /// Elements whose several `sz` attributes were folded into one.
+    #[serde(default)]
+    pub duplicate_sz_attributes: Vec<DuplicateSzAttributeIr>,
 }
 
 /// One compiled `szs` slot.
@@ -144,6 +147,7 @@ impl SourceIr {
             szs_attributes: Vec::new(),
             szs_diagnostics: Vec::new(),
             catalog_sz_objects: Vec::new(),
+            duplicate_sz_attributes: Vec::new(),
         }
     }
 
@@ -156,6 +160,7 @@ impl SourceIr {
             && self.unsupported_recovery_attributes.is_empty()
             && self.szs_attributes.is_empty()
             && self.szs_diagnostics.is_empty()
+            && self.duplicate_sz_attributes.is_empty()
     }
 }
 
@@ -433,6 +438,27 @@ pub struct SzAttributeIr {
     /// the reason its report needs.
     #[serde(default)]
     pub dropped_dynamic_keys: Vec<DroppedSzKeyIr>,
+    /// Spans of the element's other `sz` attributes, folded into this one by
+    /// the parser so that every rewrite lane sees exactly one. The rewrite
+    /// removes them; their content already lives in `object` or
+    /// `array_parts`.
+    #[serde(default)]
+    pub folded_attribute_spans: Vec<TextSpan>,
+}
+
+/// An element that carried more than one `sz` attribute.
+///
+/// The parser merges them as if they were one array, so nothing is lost; the
+/// record exists so the engine can say where it happened and how many there
+/// were.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DuplicateSzAttributeIr {
+    /// JSX tag name, as written.
+    pub element_name: String,
+    /// Span of the first `sz` attribute — where the merged one now sits.
+    pub span: TextSpan,
+    /// How many `sz` attributes the element carried.
+    pub count: usize,
 }
 
 /// Pre-lowered class lists for a static ternary `sz={cond ? A : B}` attribute.
@@ -748,6 +774,7 @@ mod tests {
                 runtime_fallback_diagnostic: None,
                 dynamic_css_vars: Vec::new(),
                 dropped_dynamic_keys: Vec::new(),
+                folded_attribute_spans: Vec::new(),
             }],
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {
@@ -784,6 +811,7 @@ mod tests {
             szs_attributes: Vec::new(),
             szs_diagnostics: Vec::new(),
             catalog_sz_objects: Vec::new(),
+            duplicate_sz_attributes: Vec::new(),
         };
 
         assert!(!ir.is_noop());

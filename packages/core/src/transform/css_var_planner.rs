@@ -647,6 +647,7 @@ mod tests {
             szs_attributes: Vec::new(),
             szs_diagnostics: Vec::new(),
             catalog_sz_objects: Vec::new(),
+            duplicate_sz_attributes: Vec::new(),
         };
 
         let planned = apply_scoped_css_variable_names(&ir);
@@ -805,6 +806,7 @@ mod tests {
             runtime_fallback_diagnostic: None,
             dynamic_css_vars,
             dropped_dynamic_keys: Vec::new(),
+            folded_attribute_spans: Vec::new(),
         }
     }
 

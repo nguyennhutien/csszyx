@@ -804,7 +804,31 @@ fn unknown_property_diagnostics(
     out.extend(class_name_precedence_advisories(
         file, ir, &location, &mut lines,
     ));
+    out.extend(duplicate_sz_diagnostics(file, ir, &location, &mut lines));
     out
+}
+
+/// Advice for an element that carried more than one `sz` attribute.
+///
+/// The parser has already merged them as one array, so nothing is lost and
+/// the build goes on. The note exists because the shape is one lint rejects,
+/// and the order the merge used is worth writing down where it is read.
+fn duplicate_sz_diagnostics(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    location: &str,
+    lines: &mut Option<LineIndex>,
+) -> Vec<String> {
+    ir.duplicate_sz_attributes
+        .iter()
+        .map(|duplicate| {
+            let (line, column) = babel_line_column(&file.source, lines, duplicate.span.start);
+            format!(
+                "[csszyx] <{}> at {location}:{line}:{column} carries {} `sz` attributes; they were merged as sz={{[first, …, last]}}, later wins per property.\n  Suggestion: fold them into one sz array so the order is written down.",
+                duplicate.element_name, duplicate.count
+            )
+        })
+        .collect()
 }
 
 /// Strip the project-root prefix from a diagnostic filename so it reads
@@ -2381,6 +2405,32 @@ mod tests {
                     "[csszyx] \"sz\" takes precedence over the runtime \"className\" on this element at /repo/src/App.tsx:1, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.\n  Suggestion: state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win."
                 ),
             ]
+        );
+    }
+
+    #[test]
+    fn static_engine_reports_an_element_carrying_two_sz_attributes() {
+        // The shape is merged, not refused, so the note is advice: it names
+        // the element, where it is, how many there were, and the array form
+        // that says the same thing on purpose.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = () => <div sz={{ p: 4 }} sz={{ p: 2 }} />;\nconst Y = () => <span sz={{ m: 1 }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(
+            result.code,
+            "const X = () => <div className=\"p-2\" />;\nconst Y = () => <span className=\"m-1\" />;"
+        );
+        assert!(result.metadata.transformed);
+        assert_eq!(result.classes, vec!["p-2".to_string(), "m-1".to_string()]);
+        assert_eq!(
+            result.diagnostics,
+            vec![String::from(
+                "[csszyx] <div> at /repo/src/App.tsx:1:22 carries 2 `sz` attributes; they were merged as sz={[first, …, last]}, later wins per property.\n  Suggestion: fold them into one sz array so the order is written down."
+            )]
         );
     }
 

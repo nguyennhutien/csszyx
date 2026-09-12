@@ -1063,6 +1063,11 @@ export function unscopedMonorepoMessage(): string {
  */
 const CLASS_NAME_PRECEDENCE_MARKER = 'takes precedence over the runtime "className"';
 /**
+ * Two `sz` on one element were merged as one array. Every class compiled and
+ * was collected; the note only says which order the merge used.
+ */
+const DUPLICATE_SZ_MARKER = '`sz` attributes; they were merged as sz={[';
+/**
  * The variable-hoist planner's note that it left a variable per element.
  *
  * An optimisation it declined, not a style it lost: every class and variable
@@ -1093,6 +1098,7 @@ export function isAdvisoryDiagnostic(message: string): boolean {
     return (
         szFallbackConsequenceOf(message) === 'nudge' ||
         message.includes(CLASS_NAME_PRECEDENCE_MARKER) ||
+        message.includes(DUPLICATE_SZ_MARKER) ||
         message.includes(MANGLE_VARS_HOIST_SKIP_MARKER)
     );
 }
