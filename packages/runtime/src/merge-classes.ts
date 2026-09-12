@@ -94,6 +94,38 @@ const SHORTHAND_COVERAGE: Record<string, readonly string[]> = {
     m: ['m', 'mx', 'my', 'mt', 'mr', 'mb', 'ml', 'ms', 'me'],
     mx: ['mx', 'ml', 'mr', 'ms', 'me'],
     my: ['my', 'mt', 'mb'],
+    // `gap-4` writes `gap`, which is `row-gap` and `column-gap` together, so it
+    // leaves nothing of an earlier axis gap.
+    gap: ['gap', 'gap-x', 'gap-y'],
+    // Scroll margin and padding mirror their box counterparts, logical sides
+    // included: `scroll-mx-*` writes `scroll-margin-inline`, which is what
+    // `scroll-ms`/`scroll-me` write one side of.
+    'scroll-m': [
+        'scroll-m',
+        'scroll-mx',
+        'scroll-my',
+        'scroll-mt',
+        'scroll-mr',
+        'scroll-mb',
+        'scroll-ml',
+        'scroll-ms',
+        'scroll-me',
+    ],
+    'scroll-mx': ['scroll-mx', 'scroll-ml', 'scroll-mr', 'scroll-ms', 'scroll-me'],
+    'scroll-my': ['scroll-my', 'scroll-mt', 'scroll-mb'],
+    'scroll-p': [
+        'scroll-p',
+        'scroll-px',
+        'scroll-py',
+        'scroll-pt',
+        'scroll-pr',
+        'scroll-pb',
+        'scroll-pl',
+        'scroll-ps',
+        'scroll-pe',
+    ],
+    'scroll-px': ['scroll-px', 'scroll-pl', 'scroll-pr', 'scroll-ps', 'scroll-pe'],
+    'scroll-py': ['scroll-py', 'scroll-pt', 'scroll-pb'],
     // inset (position) — physical sides only.
     inset: ['inset', 'inset-x', 'inset-y', 'top', 'right', 'bottom', 'left'],
     'inset-x': ['inset-x', 'left', 'right'],
