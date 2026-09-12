@@ -1,5 +1,20 @@
 # csszyx
 
+## [0.17.1](https://github.com/nguyennhutien/csszyx/compare/v0.17.0...v0.17.1) (2026-09-12)
+
+
+### Features
+
+* read the project's Tailwind once, and stop the merge deleting live classes ([#314](https://github.com/nguyennhutien/csszyx/issues/314)) ([d87635a](https://github.com/nguyennhutien/csszyx/commit/d87635aa3008717f606d7edc79fd467f42ac8126))
+* report a class the toolkit reads with false confidence ([#296](https://github.com/nguyennhutien/csszyx/issues/296)) ([014afb2](https://github.com/nguyennhutien/csszyx/commit/014afb2e04a1db2ab8c4adf5440eac768fe440a3))
+* **unplugin:** place a class the project's Tailwind does not serve by the fallback ([#312](https://github.com/nguyennhutien/csszyx/issues/312)) ([efddfcc](https://github.com/nguyennhutien/csszyx/commit/efddfccececee6f87daf884af660eee1aee67c5b))
+
+
+### Bug Fixes
+
+* **compiler:** keep string-valued effect keys inside their variant and namespace ([#309](https://github.com/nguyennhutien/csszyx/issues/309)) ([5ac34fd](https://github.com/nguyennhutien/csszyx/commit/5ac34fde937a9fba355ec8846c57836ce3cde5a3))
+* **core:** keep transforming a file when one `sz` lowers to nothing ([#313](https://github.com/nguyennhutien/csszyx/issues/313)) ([cc8411b](https://github.com/nguyennhutien/csszyx/commit/cc8411b512eef021b6a3eaad9adfd322d7404341))
+
 ## [0.17.0](https://github.com/nguyennhutien/csszyx/compare/v0.16.0...v0.17.0) (2026-09-06)
 
 ### ⚠ BREAKING CHANGES
