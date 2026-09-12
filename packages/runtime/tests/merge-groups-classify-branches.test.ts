@@ -53,11 +53,26 @@ describe('classifyAmbiguousValue — bg clip / origin / image groups', () => {
     });
 });
 
-describe('classifyAmbiguousValue — border/divide/ring/outline directional guard', () => {
-    it('stays keep-both (null) for a directional/axis first segment', () => {
-        expect(classifyAmbiguousValue('divide', 'x-2')).toBeNull();
-        expect(classifyAmbiguousValue('border', 't-4')).toBeNull();
-        expect(classifyAmbiguousValue('ring', 'y-2')).toBeNull();
+describe('classifyAmbiguousValue — border/divide/ring/outline side and offset segments', () => {
+    it('reads a directional/axis first segment as a utility of its own', () => {
+        // This used to answer null — a give-up that sent the token to the
+        // prefix bucket, where `border-t-4` and `border-t-transparent` shared
+        // one key and the colour deleted the width.
+        expect(classifyAmbiguousValue('divide', 'x-2')).toBe('divide-x:width');
+        expect(classifyAmbiguousValue('border', 't-4')).toBe('border-t:width');
+        expect(classifyAmbiguousValue('border', 't-transparent')).toBe('border-t:color');
+        expect(classifyAmbiguousValue('ring', 'y-2')).toBe('ring-y:width');
+    });
+
+    it('reads an offset segment as a utility of its own', () => {
+        // `ring-offset-*` sets the offset's width and colour, not the ring's.
+        expect(classifyAmbiguousValue('ring', 'offset-2')).toBe('ring-offset:width');
+        expect(classifyAmbiguousValue('ring', 'offset-gray-800')).toBe('ring-offset:color');
+        expect(classifyAmbiguousValue('outline', 'offset-4')).toBe('outline-offset:width');
+    });
+
+    it('still gives up when the rest of the value names no group', () => {
+        expect(classifyAmbiguousValue('divide', 'x-reverse')).toBeNull();
     });
 
     it('classifies the bare (empty-value) form as :width', () => {

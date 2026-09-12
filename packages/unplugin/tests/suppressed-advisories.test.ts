@@ -83,6 +83,16 @@ describe('key and value diagnostics are not advisory fallbacks', () => {
         expect(isAdvisoryDiagnostic(message)).toBe(false);
     });
 
+    it('holds back the note about two sz attributes merged into one', () => {
+        // Same family: both compiled, both collected; the note is only
+        // about the order the merge used.
+        expect(
+            isAdvisoryDiagnostic(
+                '[csszyx] <div> at src/A.tsx:1:22 carries 2 `sz` attributes; they were merged as sz={[first, …, last]}, later wins per property.\n  Suggestion: fold them into one sz array so the order is written down.',
+            ),
+        ).toBe(true);
+    });
+
     it('still holds back the className precedence advisory', () => {
         // The one diagnostic in the family that IS advice: the styles are
         // present, the surprise is which of two sources wins.

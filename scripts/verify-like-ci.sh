@@ -122,6 +122,7 @@ pnpm gen:migrate-golden:check
 pnpm gen:sz-fallback-matrix:check
 pnpm gen:sz-allowlist:check
 pnpm gen:box-role:check
+pnpm gen:longhand:check
 pnpm gen:llms:check
 pnpm check:key-corpus
 # Derives the var-hostile key list from the pinned Tailwind rather than trusting

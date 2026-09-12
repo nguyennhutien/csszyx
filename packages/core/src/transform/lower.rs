@@ -4213,6 +4213,7 @@ mod tests {
                 runtime_fallback_diagnostic: None,
                 dynamic_css_vars: Vec::new(),
                 dropped_dynamic_keys: Vec::new(),
+                folded_attribute_spans: Vec::new(),
             }],
             unsupported_sz_attribute_spans: Vec::new(),
             class_attributes: vec![ClassAttributeIr {
@@ -4235,6 +4236,7 @@ mod tests {
             szs_attributes: Vec::new(),
             szs_diagnostics: Vec::new(),
             catalog_sz_objects: Vec::new(),
+            duplicate_sz_attributes: Vec::new(),
         };
 
         let lowered = lower_source_ir_classes(&ir);

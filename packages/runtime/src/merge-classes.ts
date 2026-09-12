@@ -60,6 +60,11 @@ const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
     'from', // from-10% (stop position) vs from-red-500 (stop colour)
     'via', // via-40% (stop position) vs via-red-500 (stop colour)
     'to', // to-90% (stop position) vs to-red-500 (stop colour)
+    'snap', // snap-x (axis) vs snap-mandatory (strictness) vs snap-center (align)
+    'list', // list-disc (marker) vs list-inside (position) vs list-item (display)
+    'object', // object-cover (fit) vs object-center (position)
+    'content', // content-none (content) vs content-center (align-content)
+    'touch', // touch-pan-x / touch-pan-y / touch-pinch-zoom write three variables
 ]);
 
 /**
@@ -79,37 +84,67 @@ const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
  * ambiguous (width vs color vs style), so it needs value-aware classification
  * (the same work as collapsing two `text-<size>` / two `bg-<color>`); deferred.
  */
-const SHORTHAND_COVERAGE: Record<string, readonly string[]> = {
-    // `size-*` writes width and height together. Not `min-*`/`max-*`: those
-    // are separate properties that clamp rather than set.
-    size: ['size', 'w', 'h'],
-    p: ['p', 'px', 'py', 'pt', 'pr', 'pb', 'pl', 'ps', 'pe'],
-    px: ['px', 'pl', 'pr', 'ps', 'pe'],
-    py: ['py', 'pt', 'pb'],
-    m: ['m', 'mx', 'my', 'mt', 'mr', 'mb', 'ml', 'ms', 'me'],
-    mx: ['mx', 'ml', 'mr', 'ms', 'me'],
-    my: ['my', 'mt', 'mb'],
-    // inset (position) — physical sides only.
-    inset: ['inset', 'inset-x', 'inset-y', 'top', 'right', 'bottom', 'left'],
-    'inset-x': ['inset-x', 'left', 'right'],
-    'inset-y': ['inset-y', 'top', 'bottom'],
-    // border-radius — physical corners only (logical rounded-s*/e* stay keep-both).
-    rounded: [
-        'rounded',
-        'rounded-t',
-        'rounded-r',
-        'rounded-b',
-        'rounded-l',
-        'rounded-tl',
-        'rounded-tr',
-        'rounded-br',
-        'rounded-bl',
-    ],
-    'rounded-t': ['rounded-t', 'rounded-tl', 'rounded-tr'],
-    'rounded-r': ['rounded-r', 'rounded-tr', 'rounded-br'],
-    'rounded-b': ['rounded-b', 'rounded-bl', 'rounded-br'],
-    'rounded-l': ['rounded-l', 'rounded-tl', 'rounded-bl'],
-};
+/**
+ * The coverage of a box shorthand: its two axes and every side, logical sides
+ * included — what `p`, `m`, `scroll-m` and `scroll-p` each write over.
+ *
+ * @param prefix - The shorthand's utility prefix.
+ * @returns Its entries: the shorthand, then the `x` and `y` axes.
+ */
+function boxCoverage(prefix: string): Record<string, readonly string[]> {
+    const side = (name: string): string => `${prefix}${name}`;
+    return {
+        [prefix]: [prefix, side('x'), side('y'), ...['t', 'r', 'b', 'l', 's', 'e'].map(side)],
+        [side('x')]: [side('x'), side('l'), side('r'), side('s'), side('e')],
+        [side('y')]: [side('y'), side('t'), side('b')],
+    };
+}
+
+let shorthandCoverage: Record<string, readonly string[]> | undefined;
+
+/**
+ * The coverage table, built on first use.
+ *
+ * @returns Shorthand prefix → the prefixes it writes over.
+ */
+function getShorthandCoverage(): Record<string, readonly string[]> {
+    shorthandCoverage ??= {
+        // `size-*` writes width and height together. Not `min-*`/`max-*`: those
+        // are separate properties that clamp rather than set.
+        size: ['size', 'w', 'h'],
+        ...boxCoverage('p'),
+        ...boxCoverage('m'),
+        // `gap-4` writes `gap`, which is `row-gap` and `column-gap` together, so it
+        // leaves nothing of an earlier axis gap.
+        gap: ['gap', 'gap-x', 'gap-y'],
+        // Scroll margin and padding mirror their box counterparts, logical sides
+        // included: `scroll-mx-*` writes `scroll-margin-inline`, which is what
+        // `scroll-ms`/`scroll-me` write one side of.
+        ...boxCoverage('scroll-m'),
+        ...boxCoverage('scroll-p'),
+        // inset (position) — physical sides only.
+        inset: ['inset', 'inset-x', 'inset-y', 'top', 'right', 'bottom', 'left'],
+        'inset-x': ['inset-x', 'left', 'right'],
+        'inset-y': ['inset-y', 'top', 'bottom'],
+        // border-radius — physical corners only (logical rounded-s*/e* stay keep-both).
+        rounded: [
+            'rounded',
+            'rounded-t',
+            'rounded-r',
+            'rounded-b',
+            'rounded-l',
+            'rounded-tl',
+            'rounded-tr',
+            'rounded-br',
+            'rounded-bl',
+        ],
+        'rounded-t': ['rounded-t', 'rounded-tl', 'rounded-tr'],
+        'rounded-r': ['rounded-r', 'rounded-tr', 'rounded-br'],
+        'rounded-b': ['rounded-b', 'rounded-bl', 'rounded-br'],
+        'rounded-l': ['rounded-l', 'rounded-tl', 'rounded-bl'],
+    };
+    return shorthandCoverage;
+}
 
 /**
  * Classify a normalized token after its utility prefix has matched.
@@ -134,7 +169,7 @@ function classifyMatchedPrefix(
         return { key, covers: [key] };
     }
 
-    const coveredPrefixes = SHORTHAND_COVERAGE[prefix] ?? [prefix];
+    const coveredPrefixes = getShorthandCoverage()[prefix] ?? [prefix];
     return {
         key: `${variant} ${prefix}`,
         covers: coveredPrefixes.map(covered => `${variant} ${covered}`),

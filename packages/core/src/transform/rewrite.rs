@@ -20,10 +20,6 @@ pub enum StaticRewriteUnsupported {
     NoStaticSzAttribute,
     /// No JSX opening element group can be rewritten safely.
     NoStaticOpeningElement,
-    /// An element carries more than one `sz` attribute in a lane that rewrites
-    /// exactly one — array, ternary or runtime fallback. The static lane merges
-    /// them instead. This is a whole-file refusal, and it is silent.
-    MultipleSzAttributes,
 }
 
 /// Native rewrite options.
@@ -79,41 +75,7 @@ pub fn rewrite_static_sz_attributes_with_options(
         }
 
         if !element.sz_attribute_indices.is_empty() {
-            let has_array_parts = element
-                .sz_attribute_indices
-                .iter()
-                .any(|index| !ir.sz_attributes[*index].array_parts.is_empty());
-
-            if has_array_parts {
-                rewrite_array_sz_attribute(source, ir, element, &mut magic)?;
-                rewrote = true;
-                continue;
-            }
-
-            let has_ternary = element
-                .sz_attribute_indices
-                .iter()
-                .any(|index| !ir.sz_attributes[*index].ternaries.is_empty());
-
-            if has_ternary {
-                apply_dynamic_style_props(source, ir, element, &mut magic);
-                rewrite_ternary_sz_attribute(source, ir, element, &mut magic)?;
-                rewrote = true;
-                continue;
-            }
-
-            let has_runtime_fallback = element
-                .sz_attribute_indices
-                .iter()
-                .any(|index| ir.sz_attributes[*index].runtime_fallback);
-
-            if has_runtime_fallback {
-                rewrite_runtime_fallback_sz_attribute(source, ir, element, &mut magic)?;
-                rewrote = true;
-                continue;
-            }
-
-            rewrite_static_sz_element(source, ir, element, &mut magic);
+            rewrite_element_sz_attributes(source, ir, element, &mut magic);
             rewrote = true;
         }
 
@@ -190,6 +152,69 @@ fn apply_szv_precompile(magic: &mut MagicString<'_>, ir: &SourceIr) -> bool {
     rewrote
 }
 
+/// Rewrite the `sz` attributes of one element, whichever lane they take.
+///
+/// Nothing here can refuse: the parser has folded several attributes into one,
+/// and every lane handles every value shape of its kind, so one element can no
+/// longer leave the rest of the file untouched.
+fn rewrite_element_sz_attributes(
+    source: &str,
+    ir: &SourceIr,
+    element: &super::JsxOpeningElementIr,
+    magic: &mut MagicString<'_>,
+) {
+    // Attributes the parser folded into the first one leave the source here,
+    // so every lane below rewrites exactly one attribute.
+    let attributes = element
+        .sz_attribute_indices
+        .iter()
+        .map(|index| &ir.sz_attributes[*index]);
+    for span in attributes
+        .clone()
+        .flat_map(|attribute| &attribute.folded_attribute_spans)
+    {
+        magic.remove(
+            whitespace_start(source, span.start as usize),
+            span.end as usize,
+        );
+    }
+
+    if attributes
+        .clone()
+        .any(|attribute| !attribute.array_parts.is_empty())
+    {
+        rewrite_array_sz_attribute(source, ir, element, magic);
+        // An array carries no runtime css vars of its own; a folded attribute
+        // can, and their style props still have to land.
+        if attributes
+            .clone()
+            .any(|attribute| !attribute.dynamic_css_vars.is_empty())
+        {
+            apply_dynamic_style_props(source, ir, element, magic);
+        }
+        return;
+    }
+
+    if attributes
+        .clone()
+        .any(|attribute| !attribute.ternaries.is_empty())
+    {
+        apply_dynamic_style_props(source, ir, element, magic);
+        rewrite_ternary_sz_attribute(source, ir, element, magic);
+        return;
+    }
+
+    if attributes
+        .clone()
+        .any(|attribute| attribute.runtime_fallback)
+    {
+        rewrite_runtime_fallback_sz_attribute(source, ir, element, magic);
+        return;
+    }
+
+    rewrite_static_sz_element(source, ir, element, magic);
+}
+
 /// Retarget a proven-safe szr import at the slim core entry.
 ///
 /// The parser finalized the whole-file proof; this only splices the pre-quoted
@@ -215,10 +240,12 @@ fn rewrite_array_sz_attribute(
     ir: &SourceIr,
     element: &super::JsxOpeningElementIr,
     magic: &mut MagicString<'_>,
-) -> Result<(), StaticRewriteUnsupported> {
-    if element.sz_attribute_indices.len() != 1 {
-        return Err(StaticRewriteUnsupported::MultipleSzAttributes);
-    }
+) {
+    debug_assert_eq!(
+        element.sz_attribute_indices.len(),
+        1,
+        "the parser folds an element's sz attributes into one"
+    );
     let attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
 
     let mut arguments = Vec::with_capacity(attribute.array_parts.len());
@@ -272,7 +299,6 @@ fn rewrite_array_sz_attribute(
             format!("className={{_szcn({rest})}}"),
         );
     }
-    Ok(())
 }
 
 /// Rewrite every static `sz` on one element into a single `className`.
@@ -286,15 +312,19 @@ fn rewrite_static_sz_element(
     element: &super::JsxOpeningElementIr,
     magic: &mut MagicString<'_>,
 ) {
-    // An object that lowers to nothing — `{ truncate: false }`, `{ hover: {} }`
-    // — is rewritten like the empty literal: `overwrite_attribute` emits
-    // `className={undefined}`. It used to be refused here, and the refusal
-    // left the whole file untouched, sibling elements included.
-    let classes = element
-        .sz_attribute_indices
-        .iter()
-        .flat_map(|index| lower_sz_attribute_classes(&ir.sz_attributes[*index]))
-        .collect::<Vec<_>>();
+    // The parser folds an element's several `sz` into one, so there is one
+    // attribute here. An object that lowers to nothing — `{ truncate: false }`,
+    // `{ hover: {} }` — is rewritten like the empty literal:
+    // `overwrite_attribute` emits `className={undefined}`. It used to be
+    // refused here, and the refusal left the whole file untouched, sibling
+    // elements included.
+    debug_assert_eq!(
+        element.sz_attribute_indices.len(),
+        1,
+        "the parser folds an element's sz attributes into one"
+    );
+    let attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
+    let classes = lower_sz_attribute_classes(attribute);
 
     if let Some(class_index) = element.class_attribute_index {
         rewrite_static_sz_with_existing_class(source, ir, element, magic, class_index, &classes);
@@ -302,17 +332,7 @@ fn rewrite_static_sz_element(
         return;
     }
 
-    // The caller dispatches here only for elements carrying at least one sz
-    // attribute; array, ternary, and runtime fallbacks take earlier lanes.
-    let first_attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
-    overwrite_attribute(magic, first_attribute.attribute_span, &classes.join(" "));
-    for index in element.sz_attribute_indices.iter().skip(1) {
-        let attribute = &ir.sz_attributes[*index];
-        magic.remove(
-            whitespace_start(source, attribute.attribute_span.start as usize),
-            attribute.attribute_span.end as usize,
-        );
-    }
+    overwrite_attribute(magic, attribute.attribute_span, &classes.join(" "));
     apply_dynamic_style_props(source, ir, element, magic);
 }
 
@@ -355,20 +375,18 @@ fn rewrite_static_sz_with_existing_class(
 }
 
 /// Emit `className={cond ? "…" : "…"}` or merge it with an existing class.
-///
-/// Multiple `sz` attributes are still unsupported for ternary because the
-/// runtime expression shape would need ordered merging across separate source
-/// spans.
 #[allow(clippy::too_many_lines)]
 fn rewrite_ternary_sz_attribute(
     source: &str,
     ir: &SourceIr,
     element: &super::JsxOpeningElementIr,
     magic: &mut MagicString<'_>,
-) -> Result<(), StaticRewriteUnsupported> {
-    if element.sz_attribute_indices.len() != 1 {
-        return Err(StaticRewriteUnsupported::MultipleSzAttributes);
-    }
+) {
+    debug_assert_eq!(
+        element.sz_attribute_indices.len(),
+        1,
+        "the parser folds an element's sz attributes into one"
+    );
     let only_attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
     let ternaries = &only_attribute.ternaries;
     debug_assert!(!ternaries.is_empty(), "caller verified ternary presence");
@@ -506,7 +524,6 @@ fn rewrite_ternary_sz_attribute(
             },
         );
     }
-    Ok(())
 }
 
 /// Emit a runtime fallback for a single `sz` attribute.
@@ -519,10 +536,12 @@ fn rewrite_runtime_fallback_sz_attribute(
     ir: &SourceIr,
     element: &super::JsxOpeningElementIr,
     magic: &mut MagicString<'_>,
-) -> Result<(), StaticRewriteUnsupported> {
-    if element.sz_attribute_indices.len() != 1 {
-        return Err(StaticRewriteUnsupported::MultipleSzAttributes);
-    }
+) {
+    debug_assert_eq!(
+        element.sz_attribute_indices.len(),
+        1,
+        "the parser folds an element's sz attributes into one"
+    );
     let only_attribute = &ir.sz_attributes[element.sz_attribute_indices[0]];
     debug_assert!(only_attribute.runtime_fallback);
     let expression_source =
@@ -551,7 +570,6 @@ fn rewrite_runtime_fallback_sz_attribute(
             },
         );
     }
-    Ok(())
 }
 
 fn js_string_literal(value: &str) -> String {
@@ -1203,13 +1221,77 @@ mod tests {
     }
 
     #[test]
-    fn rejects_multiple_array_sz_attributes_on_one_element() {
+    fn two_array_sz_attributes_fold_into_one_composition() {
+        // `sz={a} sz={b}` reads as `sz={[a, b]}`: the parts of both arrays
+        // join in source order and compose through the same `_szcn` call
+        // that the single array would have produced.
         let source = "const App = ({ active }) => <div sz={[active && { p: 2 }]} sz={[active && { m: 2 }]} />;";
 
         assert_eq!(
-            rewrite(source),
-            Err(StaticRewriteUnsupported::MultipleSzAttributes)
+            rewrite(source).expect("rewritten"),
+            "const App = ({ active }) => <div className={_szcn(active && \"p-2\", active && \"m-2\")} />;"
         );
+    }
+
+    #[test]
+    fn two_static_sz_attributes_merge_like_an_array() {
+        // Later wins per property, the way `sz={[{ p: 4 }, { p: 2 }]}` does —
+        // not the string concatenation that let `p-4` win the cascade.
+        for (source, expected) in [
+            (
+                "export const App = () => <div sz={{ p: 4 }} sz={{ p: 2 }} />;",
+                "export const App = () => <div className=\"p-2\" />;",
+            ),
+            (
+                "export const App = () => <div sz={{ p: 4, bg: 'blue-500' }} sz={{ p: 2 }} />;",
+                "export const App = () => <div className=\"p-2 bg-blue-500\" />;",
+            ),
+            (
+                "export const App = () => <div sz={{ p: 4 }} id=\"x\" sz={{ p: 2 }} />;",
+                "export const App = () => <div className=\"p-2\" id=\"x\" />;",
+            ),
+            (
+                "export const App = () => <div className=\"block\" sz={{ p: 4 }} sz={{ p: 2 }} />;",
+                "export const App = () => <div className=\"block p-2\" />;",
+            ),
+            (
+                "const App = ({ w }) => <div sz={{ w }} sz={{ p: 4 }} />;",
+                // The order `sz={{ w, p: 4 }}` itself emits: static classes,
+                // then the css-var classes.
+                "const App = ({ w }) => <div className=\"p-4 w-(--_sz-w)\" style={{\"--_sz-w\": __szSpacingVar(w, \"w\")}} />;",
+            ),
+        ] {
+            assert_eq!(rewrite(source).as_deref(), Ok(expected), "{source}");
+        }
+    }
+
+    #[test]
+    fn mixed_sz_attributes_fold_in_source_order() {
+        for (source, expected) in [
+            (
+                "const App = ({ c }) => <div sz={c ? { p: 4 } : { p: 2 }} sz={{ m: 2 }} />;",
+                "const App = ({ c }) => <div className={_szcn(c ? \"p-4\" : \"p-2\", \"m-2\")} />;",
+            ),
+            (
+                "const App = () => <div sz={{ p: 4 }} sz=\"flex\" />;",
+                "const App = () => <div className={_szcn(\"p-4\", \"flex\")} />;",
+            ),
+            (
+                // A runtime css var folded into the composition keeps both
+                // halves: its class joins the parts, its style prop still lands.
+                "const App = ({ w }) => <div sz={{ w }} sz=\"flex\" />;",
+                "const App = ({ w }) => <div className={_szcn(\"w-(--_sz-w)\", \"flex\")} style={{\"--_sz-w\": __szSpacingVar(w, \"w\")}} />;",
+            ),
+            (
+                // An all-static array is already one object by the time it is
+                // folded, so this is the static merge — the same output
+                // `className={a} sz={[{ p: 4 }, { p: 2 }]}` gives.
+                "const App = ({ a }) => <div className={a} sz={{ p: 4 }} sz={[{ p: 2 }]} />;",
+                "const App = ({ a }) => <div className={_szMerge(a, \"p-2\")} />;",
+            ),
+        ] {
+            assert_eq!(rewrite(source).as_deref(), Ok(expected), "{source}");
+        }
     }
 
     #[test]
@@ -2005,16 +2087,18 @@ mod tests {
     }
 
     #[test]
-    fn rejects_multiple_runtime_expression_attributes() {
-        for source in [
-            "const App=({ a, b }) => <div sz={a ? { p: 2 } : { p: 4 }} sz={b ? { m: 2 } : { m: 4 }} />;",
-            "const App=({ a, b }) => <div sz={a} sz={b} />;",
+    fn two_runtime_sz_attributes_fold_into_one_composition() {
+        for (source, expected) in [
+            (
+                "const App = ({ a, b }) => <div sz={a ? { p: 2 } : { p: 4 }} sz={b ? { m: 2 } : { m: 4 }} />;",
+                "const App = ({ a, b }) => <div className={_szcn(a ? \"p-2\" : \"p-4\", b ? \"m-2\" : \"m-4\")} />;",
+            ),
+            (
+                "const App = ({ a, b }) => <div sz={a} sz={b} />;",
+                "const App = ({ a, b }) => <div className={_szcn(_szPart(a), _szPart(b))} />;",
+            ),
         ] {
-            assert_eq!(
-                rewrite(source),
-                Err(StaticRewriteUnsupported::MultipleSzAttributes),
-                "{source}"
-            );
+            assert_eq!(rewrite(source).as_deref(), Ok(expected), "{source}");
         }
     }
 

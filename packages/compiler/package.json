@@ -45,6 +45,16 @@
         "default": "./dist/transform-core.cjs"
       }
     },
+    "./sz-limits": {
+      "import": {
+        "types": "./dist/sz-limits.d.mts",
+        "default": "./dist/sz-limits.mjs"
+      },
+      "require": {
+        "types": "./dist/sz-limits.d.cts",
+        "default": "./dist/sz-limits.cjs"
+      }
+    },
     "./bool-class": {
       "import": {
         "types": "./dist/bool-class.d.mts",

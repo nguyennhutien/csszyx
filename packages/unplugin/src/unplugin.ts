@@ -141,6 +141,7 @@ export {
     SAFELIST_FILE,
 } from './safelist-source.js';
 
+import { openProjectStyleModel, unsupportedStylesheetFactsMessage } from './project-style-model.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { discoverProjectTheme } from './theme-discovery.js';
@@ -166,7 +167,7 @@ import {
     type TransformCacheKeyInput,
     writeTransformCache,
 } from './transform-cache.js';
-import { openUnservedAsk, unservedAuthoredClasses } from './unserved-classes.js';
+import { unservedAuthoredClasses } from './unserved-classes.js';
 import {
     CENSUS_PLACEHOLDER,
     CHECKSUM_PLACEHOLDER,
@@ -1063,6 +1064,11 @@ export function unscopedMonorepoMessage(): string {
  */
 const CLASS_NAME_PRECEDENCE_MARKER = 'takes precedence over the runtime "className"';
 /**
+ * Two `sz` on one element were merged as one array. Every class compiled and
+ * was collected; the note only says which order the merge used.
+ */
+const DUPLICATE_SZ_MARKER = '`sz` attributes; they were merged as sz={[';
+/**
  * The variable-hoist planner's note that it left a variable per element.
  *
  * An optimisation it declined, not a style it lost: every class and variable
@@ -1093,6 +1099,7 @@ export function isAdvisoryDiagnostic(message: string): boolean {
     return (
         szFallbackConsequenceOf(message) === 'nudge' ||
         message.includes(CLASS_NAME_PRECEDENCE_MARKER) ||
+        message.includes(DUPLICATE_SZ_MARKER) ||
         message.includes(MANGLE_VARS_HOIST_SKIP_MARKER)
     );
 }
@@ -4873,12 +4880,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Nothing; the result lands in `unservedClasses`.
      */
     async function computeUnservedClasses(): Promise<void> {
+        const model = await openProjectStyleModel(state.rootDir, projectCssFiles);
+        // Said before the early return below: a project whose Tailwind renames
+        // or forces every utility gets classes that style nothing, whether or
+        // not it authored any className of its own.
+        if (model !== null) {
+            const unsupported = unsupportedStylesheetFactsMessage(model.facts);
+            if (unsupported !== null) emitWarning(unsupported);
+        }
         if (state.authoredClasses.size === 0) return;
-        const ask = await openUnservedAsk(state.rootDir, projectCssFiles);
         // No design system is no answer. Reporting nothing is right: every
         // token then keeps the placement it has today.
-        if (ask === null) return;
-        unservedClasses = unservedAuthoredClasses(state.authoredClasses, ask);
+        if (model === null) return;
+        unservedClasses = unservedAuthoredClasses(state.authoredClasses, classes =>
+            model.unserved(classes),
+        );
     }
 
     /**

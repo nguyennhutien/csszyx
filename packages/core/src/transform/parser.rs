@@ -22,12 +22,12 @@ use std::time::Instant;
 
 use super::{
     lower::{dynamic_css_var_class, is_removed_sz_key, lower_static_sz_object},
-    ClassAttributeIr, DroppedKeyReason, DroppedSzKeyIr, DynamicCssVarCategory, DynamicCssVarIr,
-    JsxOpeningElementIr, RecoveryAttributeIr, RecoveryMode, SafeStyleSpreadExpressionIr,
-    SafeStyleSpreadIr, SafeStyleSpreadObjectIr, SafeStyleSpreadValueIr, SourceIr,
-    StaticArrayPartIr, StaticSzObject, StaticSzProperty, StaticSzValue, StaticTernaryIr,
-    StyleAttributeIr, SzAttributeIr, SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile,
-    TransformTimings, UnsupportedRecoveryIr,
+    ClassAttributeIr, DroppedKeyReason, DroppedSzKeyIr, DuplicateSzAttributeIr,
+    DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr, RecoveryAttributeIr, RecoveryMode,
+    SafeStyleSpreadExpressionIr, SafeStyleSpreadIr, SafeStyleSpreadObjectIr,
+    SafeStyleSpreadValueIr, SourceIr, StaticArrayPartIr, StaticSzObject, StaticSzProperty,
+    StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr, SzsAttributeIr,
+    SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings, UnsupportedRecoveryIr,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
@@ -469,6 +469,11 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             }
         }
 
+        if sz_attribute_indices.len() > 1 {
+            let folded = self.fold_sz_attributes(&sz_attribute_indices, &element_name);
+            sz_attribute_indices = vec![folded];
+        }
+
         self.ir.jsx_opening_elements.push(JsxOpeningElementIr {
             opening_span: text_span(element.span),
             parent_element_index: self.element_stack.last().copied(),
@@ -855,8 +860,83 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             runtime_fallback_diagnostic,
             dynamic_css_vars,
             dropped_dynamic_keys,
+            folded_attribute_spans: Vec::new(),
         });
         Some(index)
+    }
+
+    /// Fold an element's several `sz` attributes into one that reads as
+    /// `sz={[first, …, last]}`.
+    ///
+    /// Two `sz` on one element is a slip that lint rejects and JSX compilers
+    /// pass through as a duplicate key, where the last silently replaces the
+    /// first. Composing them the way an sz array composes keeps both, fixes
+    /// the order, and hands every rewrite lane the one attribute it expects.
+    /// The element is recorded so the engine can say so.
+    fn fold_sz_attributes(&mut self, indices: &[usize], element_name: &str) -> usize {
+        let first_index = indices[0];
+        debug_assert!(
+            indices
+                .iter()
+                .enumerate()
+                .all(|(offset, index)| *index == first_index + offset),
+            "an element's sz attributes are collected back to back"
+        );
+        let attributes: Vec<SzAttributeIr> = self.ir.sz_attributes.drain(first_index..).collect();
+        let first = &attributes[0];
+        self.ir
+            .duplicate_sz_attributes
+            .push(DuplicateSzAttributeIr {
+                element_name: element_name.to_string(),
+                span: first.attribute_span,
+                count: attributes.len(),
+            });
+        let folded_attribute_spans: Vec<TextSpan> = attributes[1..]
+            .iter()
+            .map(|attribute| attribute.attribute_span)
+            .collect();
+        let mut dynamic_css_vars = Vec::new();
+        let mut dropped_dynamic_keys = Vec::new();
+        let mut candidate_classes = Vec::new();
+        for attribute in &attributes {
+            dynamic_css_vars.extend(attribute.dynamic_css_vars.iter().cloned());
+            dropped_dynamic_keys.extend(attribute.dropped_dynamic_keys.iter().cloned());
+        }
+        let static_only = attributes.iter().all(|attribute| {
+            attribute.ternaries.is_empty()
+                && attribute.array_parts.is_empty()
+                && !attribute.runtime_fallback
+                && attribute.literal_class_name.is_none()
+        });
+        let (object, array_parts) = if static_only {
+            (
+                merged_static_sz_object(&attributes, &mut candidate_classes),
+                Vec::new(),
+            )
+        } else {
+            (
+                StaticSzObject::empty(),
+                array_parts_of_sz_attributes(&attributes, &mut candidate_classes),
+            )
+        };
+
+        self.ir.sz_attributes.push(SzAttributeIr {
+            attribute_span: first.attribute_span,
+            value_span: first.value_span,
+            rewrites_empty_class: static_only && object.properties.is_empty(),
+            object,
+            literal_class_name: None,
+            ternaries: Vec::new(),
+            array_parts,
+            runtime_fallback: false,
+            runtime_fallback_spread: false,
+            candidate_classes,
+            runtime_fallback_diagnostic: None,
+            dynamic_css_vars,
+            dropped_dynamic_keys,
+            folded_attribute_spans,
+        });
+        first_index
     }
 
     fn collect_class_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {
@@ -2158,6 +2238,81 @@ fn static_ternary_from_logical(
         },
         text_span(logical.span),
     ))
+}
+
+/// Deep-merge the static objects of several `sz` attributes — the all-static
+/// array lane's merge, so a later value wins per key path.
+fn merged_static_sz_object(
+    attributes: &[SzAttributeIr],
+    candidate_classes: &mut Vec<String>,
+) -> StaticSzObject {
+    let mut object = StaticSzObject::empty();
+    for attribute in attributes {
+        merge_static_properties_deep(
+            &mut object.properties,
+            attribute.object.properties.iter().cloned(),
+        );
+        candidate_classes.extend(attribute.candidate_classes.iter().cloned());
+    }
+    object
+}
+
+/// The parts several `sz` attributes contribute to one szcn composition, in
+/// source order: each attribute yields what one array element of the same
+/// shape would.
+fn array_parts_of_sz_attributes(
+    attributes: &[SzAttributeIr],
+    candidate_classes: &mut Vec<String>,
+) -> Vec<StaticArrayPartIr> {
+    let mut array_parts = Vec::new();
+    for attribute in attributes {
+        if let Some(literal) = &attribute.literal_class_name {
+            array_parts.push(static_array_part(split_class_tokens(literal), None));
+        }
+        let mut classes = lower_static_sz_object(&attribute.object);
+        classes.extend(
+            attribute
+                .dynamic_css_vars
+                .iter()
+                .filter(|prop| !prop.skip_class)
+                .map(dynamic_css_var_class),
+        );
+        if !classes.is_empty() {
+            array_parts.push(static_array_part(classes, None));
+        }
+        array_parts.extend(
+            attribute
+                .ternaries
+                .iter()
+                .cloned()
+                .map(|ternary| StaticArrayPartIr {
+                    condition_span: None,
+                    classes: Vec::new(),
+                    ternary: Some(ternary),
+                    dynamic_span: None,
+                    dynamic_provable: false,
+                    candidates: Vec::new(),
+                    dynamic_object_literal: false,
+                }),
+        );
+        array_parts.extend(attribute.array_parts.iter().cloned());
+        if attribute.runtime_fallback {
+            // The whole expression resolves at runtime through `_szPart`, as
+            // a dynamic array element does.
+            array_parts.push(StaticArrayPartIr {
+                condition_span: None,
+                classes: Vec::new(),
+                ternary: None,
+                dynamic_span: Some(attribute.value_span),
+                dynamic_provable: false,
+                candidates: attribute.candidate_classes.clone(),
+                dynamic_object_literal: false,
+            });
+        } else {
+            candidate_classes.extend(attribute.candidate_classes.iter().cloned());
+        }
+    }
+    array_parts
 }
 
 fn static_array_parts_from_jsx_expression(
@@ -6719,6 +6874,49 @@ export const C = ({ styles }) => <div sz={styles} />;
             });
             assert!(parsed.ir.sz_attributes[0].runtime_fallback, "{source}");
         }
+    }
+
+    #[test]
+    fn parser_shell_folds_an_elements_sz_attributes_into_one() {
+        // Three `sz` on one element: the IR carries one attribute, positioned
+        // at the first, with the other two spans listed for removal — and one
+        // record of the element for the diagnostic.
+        let source =
+            "const App = () => <div sz={{ p: 4 }} id=\"x\" sz={{ p: 2 }} sz={{ m: 1 }} />;";
+        let parsed = parse_source_shell(&TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        });
+
+        assert_eq!(parsed.ir.sz_attributes.len(), 1);
+        let attribute = &parsed.ir.sz_attributes[0];
+        assert_eq!(
+            &source[attribute.attribute_span.start as usize..attribute.attribute_span.end as usize],
+            "sz={{ p: 4 }}"
+        );
+        assert_eq!(
+            attribute
+                .folded_attribute_spans
+                .iter()
+                .map(|span| &source[span.start as usize..span.end as usize])
+                .collect::<Vec<_>>(),
+            vec!["sz={{ p: 2 }}", "sz={{ m: 1 }}"]
+        );
+        assert_eq!(
+            crate::transform::lower::lower_static_sz_object(&attribute.object),
+            vec!["p-2", "m-1"]
+        );
+        assert_eq!(parsed.ir.jsx_opening_elements[0].sz_attribute_indices, [0]);
+        // The merged object has properties, so it is not an empty literal.
+        assert!(!attribute.rewrites_empty_class);
+        assert_eq!(
+            parsed.ir.duplicate_sz_attributes,
+            vec![crate::transform::DuplicateSzAttributeIr {
+                element_name: "div".to_string(),
+                span: attribute.attribute_span,
+                count: 3,
+            }]
+        );
     }
 
     #[test]

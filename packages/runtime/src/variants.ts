@@ -9,7 +9,7 @@
  */
 
 import type { SzObject } from '@csszyx/compiler/browser';
-import { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from '@csszyx/compiler/browser';
+import { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from '@csszyx/compiler/sz-limits';
 import { devWarn } from './dev-warn.js';
 
 /**

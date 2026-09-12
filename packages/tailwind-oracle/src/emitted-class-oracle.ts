@@ -52,7 +52,12 @@ interface LoadedStylesheet {
 /** The slice of Tailwind's design system this module uses. */
 interface DesignSystem {
     candidatesToCss(candidates: readonly string[]): Array<string | null>;
-    theme: { entries(): Iterable<readonly [string, unknown]> };
+    // `prefix` and `important` are what the project's `@import "tailwindcss"`
+    // line settled, wherever that line lives. Optional because a Tailwind
+    // release is free to stop reporting them, and a missing field must read as
+    // "no prefix" rather than crash the caller.
+    theme: { entries(): Iterable<readonly [string, unknown]>; prefix?: string | null };
+    important?: boolean;
     // The value shape is what the collision oracle reads; the keyword oracle
     // only needs kind and root, so one declaration serves both.
     parseCandidate(
@@ -137,8 +142,27 @@ export type EmittedClassOracle =
            * should not pay.
            */
           loadCollisionOracle(): Promise<CollisionOracle | null>;
+          /** What the project's Tailwind import settled for every class. */
+          facts: StylesheetFacts;
       }
     | { ok: false; kind: OracleSkipKind; reason: string };
+
+/**
+ * What the project's `@import "tailwindcss"` line settled for every class.
+ *
+ * Read off the compiled design system rather than the stylesheet text, so an
+ * `@import` inside a package decides them the same way the app's own line does.
+ */
+export interface StylesheetFacts {
+    /**
+     * Utility prefix, or null when there is none. With `tw`, the project's
+     * vocabulary is `tw:p-4` and `p-4` styles nothing — so anything csszyx
+     * emits, safelists or mangles has to carry it.
+     */
+    prefix: string | null;
+    /** Whether every declaration is forced `!important` by the import. */
+    important: boolean;
+}
 
 /**
  * Why the oracle could not answer, at the granularity a caller must act on.
@@ -512,6 +536,15 @@ export async function createEmittedClassOracle(
     return {
         ok: true,
         keywords: keywordOracleFrom(design),
+        facts: {
+            // Normalised to null: Tailwind reports an absent prefix as null
+            // today, and an empty string would read as a prefix that is there.
+            prefix:
+                typeof design.theme?.prefix === 'string' && design.theme.prefix !== ''
+                    ? design.theme.prefix
+                    : null,
+            important: design.important === true,
+        },
         async loadCollisionOracle() {
             if (collisions !== undefined) return collisions;
             try {

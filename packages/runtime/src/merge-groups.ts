@@ -32,11 +32,15 @@ import { sortStrings } from './sort.js';
 
 /** Canonical property suffixes shared by group classification and selectors. */
 const GROUP_PROPERTY = {
+    action: 'action',
     align: 'align',
     attachment: 'attachment',
     clip: 'clip',
     color: 'color',
+    content: 'content',
     direction: 'direction',
+    display: 'display',
+    fit: 'fit',
     family: 'family',
     image: 'image',
     origin: 'origin',
@@ -45,8 +49,11 @@ const GROUP_PROPERTY = {
     repeat: 'repeat',
     shorthand: 'shorthand',
     size: 'size',
+    stop: 'stop',
+    strictness: 'strictness',
     style: 'style',
     thickness: 'thickness',
+    type: 'type',
     weight: 'weight',
     width: 'width',
     wrap: 'wrap',
@@ -638,6 +645,145 @@ export function classifyAmbiguousValue(prefix: string, value: string): string | 
         case 'via':
         case 'to':
             return classifyGradientStopValue(prefix, value);
+        case 'snap':
+            return classifySnapValue(value);
+        case 'list':
+            return classifyListValue(value);
+        case 'object':
+            return classifyObjectValue(value);
+        case 'content':
+            return classifyContentValue(value);
+        case 'touch':
+            return classifyTouchValue(value);
+        default:
+            return null;
+    }
+}
+
+/**
+ * Classifies a `snap-*` value.
+ *
+ * The four groups write four different declarations — the axis and the off
+ * switch write `scroll-snap-type`, the strictness writes the variable that
+ * declaration reads, and the other two write `scroll-snap-align` and
+ * `scroll-snap-stop`. Merging them by prefix turned `snap-x snap-mandatory`,
+ * the pairing Tailwind documents, into `snap-mandatory` alone: snapping off.
+ *
+ * @param value - The value after `snap-`.
+ * @returns The snap property group, or `null` when uncertain.
+ */
+function classifySnapValue(value: string): string | null {
+    switch (value) {
+        case 'x':
+        case 'y':
+        case 'both':
+        case 'none':
+            return 'snap:type';
+        case 'mandatory':
+        case 'proximity':
+            return 'snap:strictness';
+        case 'start':
+        case 'end':
+        case 'center':
+        case 'align-none':
+            return 'snap:align';
+        case 'normal':
+        case 'always':
+            return 'snap:stop';
+        default:
+            return null;
+    }
+}
+
+/**
+ * Classifies a `list-*` value.
+ *
+ * `list-item` is the odd one: it sets `display`, not a marker property, so it
+ * keys on its own and never displaces a marker.
+ *
+ * @param value - The value after `list-`.
+ * @returns The list property group, or `null` when uncertain.
+ */
+function classifyListValue(value: string): string | null {
+    switch (value) {
+        case '':
+            return null;
+        case 'inside':
+        case 'outside':
+            return 'list:position';
+        case 'item':
+            return 'list:display';
+        default:
+            // What is left sets `list-style-type`: the built-in markers, and any
+            // arbitrary or theme value written in their place.
+            return value.startsWith('image-') ? 'list:image' : 'list:style';
+    }
+}
+
+/**
+ * Classifies an `object-*` value.
+ *
+ * @param value - The value after `object-`.
+ * @returns The object property group, or `null` when uncertain.
+ */
+function classifyObjectValue(value: string): string | null {
+    switch (value) {
+        case '':
+            return null;
+        case 'contain':
+        case 'cover':
+        case 'fill':
+        case 'none':
+        case 'scale-down':
+            return 'object:fit';
+        default:
+            // Everything else names a position — the nine keywords, their `-safe`
+            // forms, and arbitrary or custom-property values.
+            return 'object:position';
+    }
+}
+
+/**
+ * Classifies a `content-*` value.
+ *
+ * Two unrelated properties share this prefix: `content-none` and an arbitrary
+ * value write the `content` property, everything else writes `align-content`.
+ *
+ * @param value - The value after `content-`.
+ * @returns The content property group, or `null` when uncertain.
+ */
+function classifyContentValue(value: string): string | null {
+    if (value === 'none' || value.startsWith('[') || value.startsWith('('))
+        return 'content:content';
+    return value === '' ? null : 'content:align';
+}
+
+/**
+ * Classifies a `touch-*` value.
+ *
+ * The pan and pinch utilities each write their own variable and compose into
+ * one `touch-action`, so a horizontal pan, a vertical pan and the pinch flag
+ * are meant to be written together.
+ *
+ * @param value - The value after `touch-`.
+ * @returns The touch property group, or `null` when uncertain.
+ */
+function classifyTouchValue(value: string): string | null {
+    switch (value) {
+        case 'auto':
+        case 'none':
+        case 'manipulation':
+            return 'touch:action';
+        case 'pan-x':
+        case 'pan-left':
+        case 'pan-right':
+            return 'touch-pan-x:action';
+        case 'pan-y':
+        case 'pan-up':
+        case 'pan-down':
+            return 'touch-pan-y:action';
+        case 'pinch-zoom':
+            return 'touch-pinch-zoom:action';
         default:
             return null;
     }
@@ -788,13 +934,28 @@ function isBackgroundImage(value: string): boolean {
 
 /**
  * Classifies an ambiguous border-like utility value.
+ *
+ * A leading side or `offset` segment names a utility of its own, so it joins
+ * the prefix and the rest of the value is classified against that: `border-t-4`
+ * is a width of the top border, `ring-offset-gray-800` is the colour of the
+ * ring's offset and not of the ring. Reading the whole value instead made
+ * `ring-offset-gray-800` a ring colour, which deleted an earlier
+ * `ring-blue-500` — the focus-ring idiom Tailwind documents.
+ *
  * @param prefix - The border-like utility prefix.
  * @param value - The value after the utility prefix.
  * @returns The border property group, or `null` when uncertain.
  */
 function classifyBorderValue(prefix: string, value: string): string | null {
     const firstSegment = value.split('-', 1)[0] ?? '';
-    if (DIRECTIONAL_SEGMENTS.has(firstSegment)) return null;
+    if (firstSegment === 'offset' || DIRECTIONAL_SEGMENTS.has(firstSegment)) {
+        // `border-t` carries no value of its own and is a width, which the
+        // empty remainder already answers below.
+        return classifyBorderValue(
+            `${prefix}-${firstSegment}`,
+            value.slice(firstSegment.length + 1),
+        );
+    }
     if (isColorValue(value)) return `${prefix}:${GROUP_PROPERTY.color}`;
     if (value === '' || /^\d+$/.test(value) || isLengthArbitrary(value)) {
         return `${prefix}:${GROUP_PROPERTY.width}`;

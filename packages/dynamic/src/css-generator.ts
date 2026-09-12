@@ -13,6 +13,7 @@
  * Returns empty string for unknown classes — graceful no-op, not a crash.
  */
 
+import { classify } from '@csszyx/runtime/split';
 import { isUtilityArbitrarySafe } from './css-sanitize.js';
 
 /** Warn once (in dev) when an arbitrary value is dropped for being unsafe. */
@@ -831,6 +832,12 @@ function resolveBorderDeclaration(utility: string): string | null {
         return property ? `${property}: 1px` : null;
     }
     if (/^border-\d+$/.test(utility)) return `border-width: ${utility.slice(7)}px`;
+    // An arbitrary width: `border-[3px]`. Gated on the classifier because the
+    // same shape carries a colour (`border-[#123]`), which the colour resolver
+    // handles.
+    if (/^border-\[.+\]$/.test(utility) && !classifiedAsOther(utility, 'width')) {
+        return `border-width: ${expandArbitrarySpaces(utility.slice(8, -1))}`;
+    }
     const sideWidth = /^border-([trblxse])-(\d+)$/.exec(utility);
     if (!sideWidth) return null;
     const property = BORDER_SIDES[sideWidth[1]];
@@ -881,9 +888,13 @@ function resolveTextDeclaration(utility: string): string | null {
     if (TEXT_SIZES.has(value)) {
         return `font-size: var(--text-${value}); line-height: var(--tw-leading, var(--text-${value}--line-height))`;
     }
-    return value.startsWith('[') && value.endsWith(']')
-        ? `font-size: ${expandArbitrarySpaces(value.slice(1, -1))}`
-        : null;
+    // `text-[#123]` is a colour and `text-[14px]` a size; the brackets say
+    // nothing about which, so the classifier decides and the colour resolver
+    // further down takes what this one declines.
+    if (!value.startsWith('[') || !value.endsWith(']') || classifiedAsOther(utility, 'size')) {
+        return null;
+    }
+    return `font-size: ${expandArbitrarySpaces(value.slice(1, -1))}`;
 }
 
 /**
@@ -942,9 +953,11 @@ function resolveFontDeclaration(utility: string): string | null {
         mono: 'var(--font-mono, ui-monospace, SFMono-Regular, monospace)',
     };
     if (value in families) return `font-family: ${families[value]}`;
-    return value.startsWith('[') && value.endsWith(']')
-        ? `font-family: ${expandArbitrarySpaces(value.slice(1, -1))}`
-        : null;
+    if (!value.startsWith('[') || !value.endsWith(']')) return null;
+    const inner = expandArbitrarySpaces(value.slice(1, -1));
+    // `font-[500]` is a weight, `font-[Inter]` a family — the same bracket
+    // shape, so the classifier is what tells them apart.
+    return classifiedAsOther(utility, 'family') ? `font-weight: ${inner}` : `font-family: ${inner}`;
 }
 
 /**
@@ -1099,6 +1112,27 @@ function resolveTimedTransition(value: string, kind: 'duration' | 'delay'): stri
 }
 
 /**
+ * Whether the shared classifier reads this token as the given property group.
+ *
+ * The class toolkit already decides what a value MEANS, from the same tables
+ * `szcn` merges by: `bg-cover` is a size, `bg-red-500` a colour, `text-[#123]`
+ * a colour, `text-[14px]` a size. Asking it here is what keeps the dynamic lane
+ * from inventing a second answer — and a second answer is exactly how
+ * `bg-cover` became `background-color: var(--color-cover)`.
+ *
+ * An unclassified token gets the benefit of the doubt, so a prefix the toolkit
+ * has no opinion about keeps whatever the resolvers made of it.
+ *
+ * @param utility - The base utility, without variants.
+ * @param group - The property group to test for.
+ * @returns Whether the classifier disagrees with that group.
+ */
+function classifiedAsOther(utility: string, group: string): boolean {
+    const property = classify(utility)?.property;
+    return property !== undefined && property !== group;
+}
+
+/**
  * Resolves color utilities.
  * @param utility
  */
@@ -1108,6 +1142,9 @@ function resolveColorDeclaration(utility: string): string | null {
         if (utility !== prefix && !utility.startsWith(`${prefix}-`)) continue;
         const value = utility.slice(prefix.length + 1);
         if (!value) continue;
+        // A prefix in this table is not enough: `bg-cover`, `bg-center` and
+        // `border-[3px]` all live under one, and none of them is a colour.
+        if (classifiedAsOther(utility, 'color')) return null;
         return `${COLOR_PROPS[prefix]}: ${resolveColorValue(value)}`;
     }
     return null;

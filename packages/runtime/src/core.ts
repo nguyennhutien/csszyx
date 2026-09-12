@@ -20,7 +20,10 @@
  * @module @csszyx/runtime/core
  */
 
-import { MAX_SZ_DEPTH, SzDepthError } from '@csszyx/compiler/browser';
+// From the limits subpath, not `/browser`: the browser entry's shared chunk
+// carries the compiler's property tables, and a bundle that imports anything
+// from it keeps them — 577 B gzip in this entry, measured with esbuild.
+import { MAX_SZ_DEPTH, SzDepthError } from '@csszyx/compiler/sz-limits';
 
 import { getSzLowering } from './lowering-slot.js';
 

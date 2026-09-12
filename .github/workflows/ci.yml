@@ -356,6 +356,8 @@ jobs:
       # can't leave a class unclassified for box-model routing.
       - name: Check runtime box-role map is current
         run: pnpm gen:box-role:check
+      - name: Check CSS longhand table is current
+        run: pnpm gen:longhand:check
 
       # Both engine builds must print identical sz runtime-fallback wording — a
       # build can switch between them with `build.parser`, and text that changes

@@ -760,17 +760,23 @@ The `sz` prop and `className` prop can coexist. The compiler puts `sz` **last**:
 ```
 
 That order is the contract, and it holds whichever order you write the two
-attributes in — JSX attribute order carries no meaning here. Since the merge is
-last-wins per conflicting utility, **`sz` beats `className` on the same
-element**: a `className` of `p-8` beside `sz={{ p: 4 }}` leaves `p-4`, and the
-`p-8` is removed from the string rather than losing in the cascade.
+attributes in — JSX attribute order carries no meaning here.
 
-When `className` is a dynamic expression, the same order applies at runtime:
+When `className` is a dynamic expression, the merge runs at runtime and is
+last-wins per conflicting utility, so **`sz` beats `className` on the same
+element**: a `className` carrying `p-8` beside `sz={{ p: 4 }}` leaves `p-4`,
+and the `p-8` is removed rather than losing in the cascade.
 
 ```tsx
 // className is dynamic → _szMerge(className, sz) at runtime
 <div sz={{ p: 4 }} className={baseClass} />
 ```
+
+When `className` is a static string the compiler joins the two lists as shown
+above and does not resolve a conflict between them at build time: with
+`className="p-8" sz={{ p: 4 }}` both classes reach the DOM and the stylesheet
+order decides. If the two can overlap, put both in one `sz` array — position
+then states the winner and the merge is the later-wins one.
 
 This is worth knowing before you write a wrapper component. A caller's `sz` is
 demoted to `className` at the call site, so it arrives on the losing side of
@@ -784,6 +790,26 @@ either direction — put both in one `sz` array, where position decides:
 
 csszyx reports the ambiguous shape as a nudge; either rewrite silences it. See
 [compound components](/docs/compound-components/) for the wrapper case in full.
+
+### Two `sz` attributes on one element
+
+An element with more than one `sz` — a merge conflict, a codemod, a copy-paste —
+is read as one array in source order:
+
+```tsx
+<div sz={{ p: 4, bg: "blue-500" }} sz={{ p: 2 }} />
+// same as
+<div sz={[{ p: 4, bg: "blue-500" }, { p: 2 }]} />
+// → className="p-2 bg-blue-500"
+```
+
+Later wins per property, one `className` is emitted, and an authored
+`className` stays first. This holds whatever shape each `sz` has: two arrays
+join their elements, a ternary or a runtime value becomes one element of the
+composition. JSX compilers pass a duplicate attribute through as a duplicate
+object key, where the last one silently replaces the first; csszyx keeps both
+and says so. The build reports the element as a nudge — write the array
+instead, so the order is on the page.
 
 ## Runtime Helpers for Dynamic Classes
 

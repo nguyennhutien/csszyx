@@ -343,6 +343,20 @@ describe('no csszyx authoring prop survives into the output', () => {
                     element('div', 'sz', { hover: {} }),
                     element('Card', 'sz', { bg: 'blue-500' }),
                 ]),
+                // Two `sz` on one element, in every lane the rewrite has. Each
+                // used to abort the whole file; now they compose as one array
+                // and the sibling transforms.
+                moduleOf(['<div sz={{ p: 4 }} sz={{ p: 2 }} />', element('div', 'sz', { m: 2 })]),
+                moduleOf([
+                    '<div sz={[a && { p: 2 }]} sz={[{ m: 2 }]} />',
+                    element('div', 'sz', { m: 2 }),
+                ]),
+                moduleOf([
+                    '<div sz={a ? { p: 4 } : { p: 2 }} sz={{ m: 2 }} />',
+                    element('div', 'sz', { m: 2 }),
+                ]),
+                moduleOf(['<div sz={a} sz={b} />', element('div', 'sz', { m: 2 })]),
+                moduleOf(['<div className="block" sz={{ p: 4 }} id="x" sz={{ p: 2 }} />']),
             ];
             for (const source of sources) {
                 const code = engine(source, 'probe.tsx').code ?? '';
