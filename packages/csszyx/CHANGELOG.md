@@ -1,5 +1,40 @@
 # csszyx
 
+## [0.17.1](https://github.com/nguyennhutien/csszyx/compare/v0.17.0...v0.17.1) (2026-09-12)
+
+### Features
+
+* report a class the toolkit reads with false confidence ([#296](https://github.com/nguyennhutien/csszyx/issues/296))
+* **cli:** report a class the toolkit reads with false confidence ([#296](https://github.com/nguyennhutien/csszyx/issues/296))
+* **runtime:** say how the classifier reached its answer ([#296](https://github.com/nguyennhutien/csszyx/issues/296))
+* **unplugin:** place a class the project's Tailwind does not serve by the fallback ([#312](https://github.com/nguyennhutien/csszyx/issues/312))
+* **runtime:** place a class the project's Tailwind does not serve by the fallback ([#312](https://github.com/nguyennhutien/csszyx/issues/312))
+* **unplugin:** work out which authored classes the design system serves nothing for ([#312](https://github.com/nguyennhutien/csszyx/issues/312))
+* **unplugin:** compile the project's design systems to answer what it serves ([#312](https://github.com/nguyennhutien/csszyx/issues/312))
+* **unplugin:** hand the runtime the classes this project's Tailwind does not serve ([#312](https://github.com/nguyennhutien/csszyx/issues/312))
+* **unplugin:** carry the unserved-class list on the webpack lane too ([#312](https://github.com/nguyennhutien/csszyx/issues/312))
+* read the project's Tailwind once, and stop the merge deleting live classes ([#314](https://github.com/nguyennhutien/csszyx/issues/314))
+* **tailwind-oracle:** report what the project's Tailwind import settled ([#314](https://github.com/nguyennhutien/csszyx/issues/314))
+* **unplugin:** say so when the project's Tailwind renames every utility ([#314](https://github.com/nguyennhutien/csszyx/issues/314))
+
+### Bug Fixes
+
+* **compiler:** keep string-valued effect keys inside their variant and namespace ([#309](https://github.com/nguyennhutien/csszyx/issues/309))
+* **compiler:** keep the variant prefix on string-valued effect keys ([#309](https://github.com/nguyennhutien/csszyx/issues/309))
+* **compiler:** drop the maxW container special case ([#309](https://github.com/nguyennhutien/csszyx/issues/309))
+* **unplugin:** fill the unserved-class module in a dev server too ([#312](https://github.com/nguyennhutien/csszyx/issues/312))
+* **core:** keep transforming a file when one `sz` lowers to nothing ([#313](https://github.com/nguyennhutien/csszyx/issues/313))
+* **core:** compose an element's several `sz` attributes as one array ([#314](https://github.com/nguyennhutien/csszyx/issues/314))
+* **runtime:** stop a ring offset from deleting the ring's colour ([#314](https://github.com/nguyennhutien/csszyx/issues/314))
+* **runtime:** keep the five keyword families that share a prefix apart ([#314](https://github.com/nguyennhutien/csszyx/issues/314))
+* **runtime:** let a later gap and scroll offset cover what they write over ([#314](https://github.com/nguyennhutien/csszyx/issues/314))
+* **dynamic:** ask the class toolkit what a value means before writing CSS ([#314](https://github.com/nguyennhutien/csszyx/issues/314))
+
+### Performance
+
+* **runtime:** take the depth limits from their own compiler entry ([#314](https://github.com/nguyennhutien/csszyx/issues/314))
+* **runtime:** build the box coverage lazily and classify by switch ([#314](https://github.com/nguyennhutien/csszyx/issues/314))
+
 ## [0.17.0](https://github.com/nguyennhutien/csszyx/compare/v0.16.0...v0.17.0) (2026-09-06)
 
 ### ⚠ BREAKING CHANGES
