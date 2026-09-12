@@ -102,10 +102,28 @@ export const SIZE_BUDGETS = [
         // the list itself is app data that arrives from the build, and it is
         // small — 73 bytes for this repository's own React sources. Budget set
         // the usual ~300 above the measurement.
+        //
+        // Raised again from 26,880 for three merge fixes, measured 2026-09-12
+        // at 27,410 from 26,542: a ring offset no longer deletes the ring's
+        // colour, the five keyword families that share a prefix (`snap`,
+        // `list`, `object`, `content`, `touch`) are classified apart, and a
+        // later `gap` or scroll offset covers the sides it writes. This is
+        // real payload, not message text — the classifier has to know the
+        // values. It was 27,595 as first written; building the box coverage
+        // on first use and writing the five classifiers as `switch` over
+        // literals brought it to 27,410. A table of pattern strings read at
+        // runtime was tried in between and measured both larger, 27,447, and
+        // 3.5× slower per classification. The generated longhand table
+        // is not imported yet and is not in this number. App weight moved far
+        // less: the `./merge` entry bundled for production is 6,690 gzip
+        // bytes against 6,686 on main, because the same work stopped it
+        // pulling the compiler's property tables in through
+        // `@csszyx/compiler/browser`. Budget set the usual ~300 above the
+        // measurement.
         name: '@csszyx/runtime export closure',
         kind: 'package-exports',
         target: 'packages/runtime',
-        maxGzipBytes: 26_880,
+        maxGzipBytes: 27_750,
     },
     {
         name: '@csszyx/dynamic export closure',
