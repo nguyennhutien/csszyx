@@ -59,8 +59,21 @@ const GROUP_PROPERTY = {
     wrap: 'wrap',
 } as const;
 
-/** Closed property vocabulary emitted by the ambiguous-value classifiers. */
-export const MERGE_GROUP_PROPERTIES: ReadonlySet<string> = new Set(Object.values(GROUP_PROPERTY));
+let mergeGroupProperties: ReadonlySet<string> | undefined;
+
+/**
+ * Closed property vocabulary emitted by the ambiguous-value classifiers.
+ *
+ * Built on first use. At module level `Object.values` is a call no bundler can
+ * prove pure, which kept this set — and every table beside it in the built
+ * chunk — in bundles that never classify anything.
+ *
+ * @returns Every property name a group id can carry.
+ */
+export function getMergeGroupProperties(): ReadonlySet<string> {
+    mergeGroupProperties ??= new Set(Object.values(GROUP_PROPERTY));
+    return mergeGroupProperties;
+}
 
 /** Tailwind palette shades — `{name}-{shade}` is the standard color shape. */
 const PALETTE_SHADES = new Set([
@@ -306,37 +319,52 @@ const FONT_STRETCHES = new Set([
     'stretch-ultra-expanded',
 ]);
 
-const COLLISION_BLOCKLIST: Record<keyof typeof customTokens, ReadonlySet<string>> = {
-    colors: new Set([
-        ...NAMED_COLORS,
-        ...TEXT_SIZES,
-        ...TEXT_ALIGNS,
-        ...TEXT_WRAPS,
-        ...TEXT_OVERFLOWS,
-        ...BG_POSITIONS,
-        ...BG_SIZES,
-        ...BG_REPEATS,
-        ...BG_ATTACHMENTS,
-        ...BORDER_STYLES,
-        ...SHADOW_SIZES,
-        ...DECORATION_STYLES,
-        ...DECORATION_THICKNESSES,
-        ...BLEND_MODES,
-        ...BG_CLIPS,
-        ...BG_ORIGINS,
-        ...BORDER_COLLAPSE,
-        ...RING_SHADOW_DIVIDE_KEYWORDS,
-    ]),
-    textSizes: new Set([
-        ...TEXT_ALIGNS,
-        ...TEXT_WRAPS,
-        ...TEXT_OVERFLOWS,
-        ...NAMED_COLORS,
-        'shadow-initial',
-    ]),
-    fontFamilies: new Set([...FONT_WEIGHTS, ...FONT_STRETCHES]),
-    fontWeights: new Set([...FONT_FAMILIES, ...FONT_STRETCHES]),
-};
+let collisionBlocklist: Record<keyof typeof customTokens, ReadonlySet<string>> | undefined;
+
+/**
+ * Built-in names a theme token may not take in each category, because szcn
+ * could no longer tell the token from the utility.
+ *
+ * Built on first use. Written at module level, the spreads make every set a
+ * statement a bundler cannot prove pure, so the object and every keyword set
+ * it spreads shipped even in bundles that never register a theme token.
+ *
+ * @returns The blocked names per category.
+ */
+function getCollisionBlocklist(): Record<keyof typeof customTokens, ReadonlySet<string>> {
+    collisionBlocklist ??= {
+        colors: new Set([
+            ...NAMED_COLORS,
+            ...TEXT_SIZES,
+            ...TEXT_ALIGNS,
+            ...TEXT_WRAPS,
+            ...TEXT_OVERFLOWS,
+            ...BG_POSITIONS,
+            ...BG_SIZES,
+            ...BG_REPEATS,
+            ...BG_ATTACHMENTS,
+            ...BORDER_STYLES,
+            ...SHADOW_SIZES,
+            ...DECORATION_STYLES,
+            ...DECORATION_THICKNESSES,
+            ...BLEND_MODES,
+            ...BG_CLIPS,
+            ...BG_ORIGINS,
+            ...BORDER_COLLAPSE,
+            ...RING_SHADOW_DIVIDE_KEYWORDS,
+        ]),
+        textSizes: new Set([
+            ...TEXT_ALIGNS,
+            ...TEXT_WRAPS,
+            ...TEXT_OVERFLOWS,
+            ...NAMED_COLORS,
+            'shadow-initial',
+        ]),
+        fontFamilies: new Set([...FONT_WEIGHTS, ...FONT_STRETCHES]),
+        fontWeights: new Set([...FONT_FAMILIES, ...FONT_STRETCHES]),
+    };
+    return collisionBlocklist;
+}
 
 /**
  * One-time dev warning helper (mirrors the runtime's devWarn conventions
@@ -492,7 +520,7 @@ function collectDeclaredTokens(): TokensByCategory {
  * @returns True when the token must be left out of the effective set.
  */
 function shadowsBuiltIn(category: ThemeCategory, name: string): boolean {
-    if (!COLLISION_BLOCKLIST[category].has(name)) return false;
+    if (!getCollisionBlocklist()[category].has(name)) return false;
     const builtInKind = category === 'colors' ? 'utility keyword' : 'value';
     warnOnce(
         `theme token "${name}" shadows a built-in ${builtInKind} — ` +

@@ -34,8 +34,8 @@ import type { SzInput } from './concatenate.js';
 import { devWarn } from './dev-warn.js';
 import {
     classifyAmbiguousValue,
+    getMergeGroupProperties,
     getSzcnGroupsGeneration,
-    MERGE_GROUP_PROPERTIES,
 } from './merge-groups.js';
 import { getUnservedGeneration, isUnservedClass } from './unserved-classes.js';
 
@@ -166,29 +166,43 @@ export function normalizeBase(base: string): string {
     return b;
 }
 
+/** One `BOX_ROLE_PREFIXES` row: the class prefix and what it classifies as. */
+type BoxRolePrefixRow = [string, (typeof BOX_ROLE_PREFIXES)[number][1]];
+
+let boxRolePrefixesByFirstSegment: ReadonlyMap<string, ReadonlyArray<BoxRolePrefixRow>> | undefined;
+
 /**
  * `BOX_ROLE_PREFIXES` bucketed by first dash-segment: a matching prefix always
  * shares the base's first segment, so per-token classification scans ~2 entries
  * instead of all 267 while returning exactly what the full ordered scan did.
  * Shared with `merge-classes.ts` (szcn), which classifies through the same
  * table.
+ *
+ * Built on first use. At module level the loop is a statement no bundler can
+ * prove pure, so it kept the whole box-role table in every bundle sharing this
+ * module's built chunk — `import { szDecode }` from the barrel included.
+ *
+ * @returns The prefixes grouped by their first dash-segment.
  */
-export const BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT: ReadonlyMap<
+export function getBoxRolePrefixesByFirstSegment(): ReadonlyMap<
     string,
-    ReadonlyArray<[string, (typeof BOX_ROLE_PREFIXES)[number][1]]>
-> = (() => {
-    const buckets = new Map<string, Array<[string, (typeof BOX_ROLE_PREFIXES)[number][1]]>>();
-    for (const [prefix, entry] of BOX_ROLE_PREFIXES) {
-        const segment = prefix.split('-', 1)[0] as string;
-        let bucket = buckets.get(segment);
-        if (!bucket) {
-            bucket = [];
-            buckets.set(segment, bucket);
+    ReadonlyArray<BoxRolePrefixRow>
+> {
+    if (boxRolePrefixesByFirstSegment === undefined) {
+        const buckets = new Map<string, BoxRolePrefixRow[]>();
+        for (const [prefix, entry] of BOX_ROLE_PREFIXES) {
+            const segment = prefix.split('-', 1)[0] as string;
+            let bucket = buckets.get(segment);
+            if (!bucket) {
+                bucket = [];
+                buckets.set(segment, bucket);
+            }
+            bucket.push([prefix, entry]);
         }
-        bucket.push([prefix, entry]);
+        boxRolePrefixesByFirstSegment = buckets;
     }
-    return buckets;
-})();
+    return boxRolePrefixesByFirstSegment;
+}
 
 /**
  * Per-token classification memo, keyed by the RAW token. `inspect` is a pure
@@ -205,8 +219,12 @@ const INSPECT_MEMO_MAX = 4096;
 const inspectMemo = new Map<string, TokenInfo | undefined>();
 /** The bridge both memos were filled under; `undefined` until the first call. */
 let memoBridgeRef: MangleBridge | undefined;
-/** The theme-group registration generation both memos were filled under. */
-let memoGroupsGeneration = getSzcnGroupsGeneration();
+/**
+ * The theme-group registration generation both memos were filled under. No
+ * real generation is negative, so the first call always syncs; reading the
+ * generation here instead would be a module-level call a bundler keeps.
+ */
+let memoGroupsGeneration = -1;
 
 /**
  * Read the mangle bridge once for a public operation, dropping every memo
@@ -357,7 +375,7 @@ function classifyBase(base: string): TokenInfo | undefined {
         if (marker) return { ...marker, base, value: base.slice(slash + 1), confidence: 'exact' };
     }
 
-    const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(base.split('-', 1)[0] as string) ?? [];
+    const bucket = getBoxRolePrefixesByFirstSegment().get(base.split('-', 1)[0] as string) ?? [];
     for (const [prefix, entry] of bucket) {
         // The bare prefix IS the whole utility here (`flex`, `grid`), so the
         // table holds the entire name — nothing was taken on trust.
@@ -437,17 +455,37 @@ export function classify(token: string): Classification | undefined {
     return info.property === undefined ? answer : { ...answer, property: info.property };
 }
 
-/** Every category the generated tables use, for telling a typo from a miss. */
-const KNOWN_CATEGORIES: ReadonlySet<string> = new Set([
-    ...[...BOX_ROLE_TOKENS.values()].map(entry => entry.category),
-    ...BOX_ROLE_PREFIXES.map(([, entry]) => entry.category),
-]);
+let knownCategories: ReadonlySet<string> | undefined;
+let knownPrefixes: ReadonlySet<string> | undefined;
 
-/** Every exact token and class prefix the generated tables know. */
-const KNOWN_PREFIXES: ReadonlySet<string> = new Set([
-    ...BOX_ROLE_TOKENS.keys(),
-    ...BOX_ROLE_PREFIXES.map(([prefix]) => prefix),
-]);
+/**
+ * Every category the generated tables use, for telling a typo from a miss.
+ *
+ * Built on first use, for the same reason as the prefix buckets: spreading
+ * calls into a set is not something a bundler can prove pure.
+ *
+ * @returns The category names.
+ */
+function getKnownCategories(): ReadonlySet<string> {
+    knownCategories ??= new Set([
+        ...[...BOX_ROLE_TOKENS.values()].map(entry => entry.category),
+        ...BOX_ROLE_PREFIXES.map(([, entry]) => entry.category),
+    ]);
+    return knownCategories;
+}
+
+/**
+ * Every exact token and class prefix the generated tables know.
+ *
+ * @returns The tokens and prefixes.
+ */
+function getKnownPrefixes(): ReadonlySet<string> {
+    knownPrefixes ??= new Set([
+        ...BOX_ROLE_TOKENS.keys(),
+        ...BOX_ROLE_PREFIXES.map(([prefix]) => prefix),
+    ]);
+    return knownPrefixes;
+}
 
 /** Words a caller reaches for that name a CSS property rather than a category. */
 const CATEGORY_HINTS: Readonly<Record<string, string>> = {
@@ -509,14 +547,14 @@ type SelectorFamily = 'class' | 'sz';
  */
 function stringSelectorIsKnown(selector: string, family: SelectorFamily): boolean {
     if (selector === 'outer' || selector === 'inner' || selector === 'content') return true;
-    if (KNOWN_CATEGORIES.has(selector)) return true;
+    if (getKnownCategories().has(selector)) return true;
     if (family === 'sz') return BOX_ROLE_BY_KEY.has(selector);
     // A whole class (`overflow-hidden`), a prefix deeper than the table's
     // (`bg-red`) and the table's own prefix (`bg`) all start with a segment the
     // tables know; a typo (`widht`) or a property name (`width`) does not.
     return (
-        KNOWN_PREFIXES.has(selector) ||
-        BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.has(selector.split('-', 1)[0] as string)
+        getKnownPrefixes().has(selector) ||
+        getBoxRolePrefixesByFirstSegment().has(selector.split('-', 1)[0] as string)
     );
 }
 
@@ -553,7 +591,7 @@ function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class
             return false;
         }
         const category = categories[0] as string;
-        if (!KNOWN_CATEGORIES.has(category)) {
+        if (!getKnownCategories().has(category)) {
             warnUnknownSelector(category);
             return false;
         }
@@ -568,7 +606,7 @@ function selectorIsUsable(selector: BoxSelector, family: SelectorFamily = 'class
         warnUnusableSelector({ kind: 'sz-qualified', selector, name: qualified[0] });
         return false;
     }
-    if (qualified && !MERGE_GROUP_PROPERTIES.has(qualified[1])) {
+    if (qualified && !getMergeGroupProperties().has(qualified[1])) {
         warnUnusableSelector({ kind: 'property', selector, property: qualified[1] });
         return false;
     }
@@ -622,7 +660,7 @@ function warnUnusableSelector(why: UnusableSelector): void {
             case 'property':
                 devWarn(
                     `'${why.property}' is not a property csszyx tells apart; '${why.selector}' matches nothing. ` +
-                        `help: the properties are ${[...MERGE_GROUP_PROPERTIES].join(', ')} — ` +
+                        `help: the properties are ${[...getMergeGroupProperties()].join(', ')} — ` +
                         "classify('<a class>') shows the one a class carries.",
                 );
                 break;
@@ -655,7 +693,7 @@ function warnUnknownSelector(name: string): void {
         // `color` is both the word people reach for and a property the
         // qualified form can name, so the hint offers the narrower selector
         // as well: `text` alone would also catch `text-sm`.
-        if (MERGE_GROUP_PROPERTIES.has(name)) {
+        if (getMergeGroupProperties().has(name)) {
             devWarn(
                 `'${name}' is not a category or class prefix csszyx knows; ` +
                     `the category is '${hint}', and '${hint}:${name}' matches that property only.`,

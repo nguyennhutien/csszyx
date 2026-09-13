@@ -64,6 +64,14 @@ async function bundleProbe(source: string): Promise<BundleProbe> {
             resolveDir: import.meta.dirname,
             loader: 'js',
         },
+        // Resolve the way an installed package does: through `exports`, to the
+        // built files. Left to find the workspace tsconfig, esbuild follows its
+        // `paths` and bundles `packages/runtime/src` instead — separate modules
+        // it can drop whole by `sideEffects` — while an app from npm gets the
+        // shared chunks, where one impure top-level statement keeps everything
+        // it reads. That gap let `import { szDecode }` from the barrel measure
+        // 273 B here and ship 3,791 B.
+        tsconfigRaw: '{}',
         bundle: true,
         minify: true,
         write: false,
