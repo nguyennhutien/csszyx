@@ -4237,6 +4237,7 @@ mod tests {
             szs_diagnostics: Vec::new(),
             catalog_sz_objects: Vec::new(),
             duplicate_sz_attributes: Vec::new(),
+            omitted_sz_objects: Vec::new(),
         };
 
         let lowered = lower_source_ir_classes(&ir);

@@ -250,6 +250,11 @@ canonical key or replacement shape. A truly unknown key is different: it warns
 but still emits a kebab-case candidate so an intentional Tailwind `@utility`
 can serve it.
 
+Diagnostics retain the statically resolved objects inside conditional branches,
+ternary spreads and sz arrays. Shared source properties are reported once, without
+changing emitted classes. Unresolved spreads still have incomplete key/value
+checking: a fallback warning does not mean their readable properties are clean.
+
 ## Type safety — unknown keys are TypeScript errors
 
 The `sz` prop type is **closed**: a key that is not a known sz prop or variant is a

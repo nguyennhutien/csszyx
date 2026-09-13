@@ -732,6 +732,9 @@ const inactive = { bg: "gray-100", color: "gray-600" } as const;
 <div sz={{ ...(isActive ? active : inactive), rotate: 45 }} />;
 ```
 
+Each resolved branch gets the same key and value checks as a plain object, so a
+misspelled key in either one is reported at build time.
+
 This works as long as:
 
 - **Exactly one** conditional spread (`...(cond ? a : b)`)

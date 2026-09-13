@@ -224,6 +224,18 @@ dead, so the bundler plugin prints the whole family in a production build as
 well as a development one; only `quiet: true` silences the build's copy.
 </Aside>
 
+### Conditional objects
+
+Key and value diagnostics also inspect statically resolved conditional branches,
+including ternary spreads, whole-object ternaries and resolved items in an sz
+array. A property shared by both branches is reported once at its source location;
+two separate declarations are still reported separately. Both branches are checked
+because either may be used. The diagnostics do not change the emitted classes.
+
+An unresolved spread still reports its runtime fallback. That warning is not a
+certificate that the literal keys beside it are valid: complete key/value checking
+of unresolved objects is not supported yet.
+
 ### Keys
 
 | Message | Notes |

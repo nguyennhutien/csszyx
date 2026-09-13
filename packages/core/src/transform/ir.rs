@@ -91,6 +91,9 @@ pub struct SourceIr {
     /// Elements whose several `sz` attributes were folded into one.
     #[serde(default)]
     pub duplicate_sz_attributes: Vec<DuplicateSzAttributeIr>,
+    /// Resolved objects omitted from emission but still requiring diagnostics.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub omitted_sz_objects: Vec<StaticSzObject>,
 }
 
 /// One compiled `szs` slot.
@@ -148,6 +151,7 @@ impl SourceIr {
             szs_diagnostics: Vec::new(),
             catalog_sz_objects: Vec::new(),
             duplicate_sz_attributes: Vec::new(),
+            omitted_sz_objects: Vec::new(),
         }
     }
 
@@ -466,8 +470,12 @@ pub struct DuplicateSzAttributeIr {
 /// The test span points at the conditional expression's `test` portion in the
 /// original source so rewriters can splice the user's exact `cond` text back
 /// into the emitted `className={…}` without re-parsing.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StaticTernaryIr {
+    /// Resolved source objects retained only for key/value diagnostics.
+    /// Never contributes classes or changes the rewrite.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resolved_objects: Vec<StaticSzObject>,
     /// Source span of the ternary `test` expression.
     pub test_span: TextSpan,
     /// Classes produced by lowering the consequent branch, in source order.
@@ -514,8 +522,12 @@ pub struct StaticTernaryArmIr {
 /// item carries only the source span of its expression, which the rewrite
 /// wraps in `_szPart(...)` so a runtime sz object still compiles and a
 /// forwarded class string passes through.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StaticArrayPartIr {
+    /// Resolved source objects retained only for key/value diagnostics.
+    /// Never contributes classes or changes the rewrite.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resolved_objects: Vec<StaticSzObject>,
     /// Condition span for `condition && object`; absent for unconditional items.
     pub condition_span: Option<TextSpan>,
     /// Classes produced by the static object/string item (empty for dynamic).
@@ -812,6 +824,7 @@ mod tests {
             szs_diagnostics: Vec::new(),
             catalog_sz_objects: Vec::new(),
             duplicate_sz_attributes: Vec::new(),
+            omitted_sz_objects: Vec::new(),
         };
 
         assert!(!ir.is_noop());
