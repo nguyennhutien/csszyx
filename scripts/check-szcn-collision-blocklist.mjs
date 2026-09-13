@@ -165,6 +165,17 @@ function declared() {
         if (!sets[category])
             throw new Error(`the collision blocklist no longer covers ${category}`);
     }
+    // The other direction too. A category the source blocks but this gate has
+    // no prefixes for would be parsed, counted nowhere and compared against
+    // nothing, and the summary line would still read as a pass.
+    for (const category of Object.keys(sets)) {
+        if (!Object.hasOwn(CATEGORY_PREFIXES, category)) {
+            throw new Error(
+                `the collision blocklist has a ${category} category this gate does not check; ` +
+                    'add the class prefixes its tokens feed to CATEGORY_PREFIXES',
+            );
+        }
+    }
     return sets;
 }
 
