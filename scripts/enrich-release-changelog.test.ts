@@ -69,6 +69,46 @@ describe('release changelog enrichment', () => {
         ]);
     });
 
+    it('keeps the scoped entry when a PR title repeats it without a scope', () => {
+        // A squash subject is the PR title, which often carries no scope while
+        // the commit that did the work does. Both describe one change, and the
+        // release notes should say it once, in the form that names the package.
+        const entries = parseConventional([
+            [
+                'fix: name the defects a conditional resolves (#316)',
+                '* fix(compiler): name the defects a conditional resolves',
+            ].join('\n'),
+        ]);
+
+        assert.deepEqual(entries, [
+            {
+                type: 'fix',
+                scope: 'compiler',
+                desc: 'name the defects a conditional resolves',
+                pr: '316',
+                breaking: false,
+                note: '',
+            },
+        ]);
+    });
+
+    it('keeps two scoped entries that share a description', () => {
+        // Two packages fixed the same way in one pull request is two entries,
+        // because each names a different package.
+        const entries = parseConventional([
+            [
+                'feat: place a class the design system does not serve (#312)',
+                '* feat(unplugin): place a class the design system does not serve',
+                '* feat(runtime): place a class the design system does not serve',
+            ].join('\n'),
+        ]);
+
+        assert.deepEqual(
+            entries.map(entry => entry.scope),
+            ['unplugin', 'runtime'],
+        );
+    });
+
     it('lifts a BREAKING CHANGE footer onto the bullet above it', () => {
         // The shape a squash body actually has: the footer sits in the body
         // below its bullet, several lines down and wrapped. 0.12.0 shipped
