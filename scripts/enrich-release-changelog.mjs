@@ -191,7 +191,43 @@ export function parseConventional(messages) {
             if (noteTarget) noteTarget.note = `${noteTarget.note} ${line}`.trim();
         }
     }
-    return out;
+    return dropUnscopedTwins(out);
+}
+
+/**
+ * Drop an entry that repeats a scoped one without its scope.
+ *
+ * A squash subject is the pull request title, which usually carries no scope
+ * while the commit that did the work does, so one change arrives as two entries
+ * and the notes read as if it happened twice. The unscoped entry yields, since
+ * the scoped one names the package. It hands over the one thing only it can
+ * know first: a `!` in the title breaks the whole pull request, whether or not
+ * the commit below repeated the mark.
+ *
+ * Two entries that both carry a scope are two changes even when they describe
+ * themselves the same way — one pull request can fix two packages the same way,
+ * and each names its own.
+ *
+ * @param {Array<{type: string, scope: string, desc: string, pr: string | null, breaking: boolean, note: string}>} entries - Parsed entries.
+ * @returns {Array<{type: string, scope: string, desc: string, pr: string | null, breaking: boolean, note: string}>} Entries without the unscoped repeats.
+ */
+function dropUnscopedTwins(entries) {
+    const twin = entry => `${entry.type}|${entry.desc}|${entry.pr}`;
+    const scoped = new Set(entries.filter(entry => entry.scope).map(twin));
+    return entries.filter(entry => {
+        if (entry.scope || !scoped.has(twin(entry))) {
+            return true;
+        }
+        if (entry.breaking) {
+            for (const other of entries) {
+                if (other.scope && twin(other) === twin(entry)) {
+                    other.breaking = true;
+                    other.note ||= entry.note;
+                }
+            }
+        }
+        return false;
+    });
 }
 
 /**
