@@ -1099,15 +1099,23 @@ No collision-prone class names found — mangling is safe to enable.
 
 ```text
 {n} class name(s) could collide with a mangled token:
-  .{name}  (in {where})
+  .{name}  (selector declared in {where})
 
-Preferred: rename these in your own CSS to something specific
-  (e.g. `.x` → `.resize-handle-x`) — short names also clash on
-  specificity with other libraries.
+These files declare the selectors; the class may be emitted elsewhere,
+  such as a shared component, so find where the class is emitted before renaming.
+
+Preferred: rename the class where it is declared and where it is emitted,
+  to something specific (e.g. `.x` → `.resize-handle-x`) — short names
+  also clash on specificity with other libraries.
 
 For names in a third-party stylesheet you cannot edit, reserve them:
   production: { mangle: true, mangleExclude: ["{name}"] }
 ```
+
+The scan reads stylesheets only, so the files it lists are where each selector
+is declared. In a monorepo the class is often emitted by a component in another
+package; rename it there too, or the component keeps emitting a name the renamed
+rule no longer matches.
 
 `npx @csszyx/cli doctor` checks the install itself: `✨ No issues found! Your
 setup looks good.`, `Found {n} issue(s)`, `Tailwind CSS not found`, `No build

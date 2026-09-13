@@ -186,11 +186,16 @@ export async function scanCollisions(options: ScanCollisionsOptions = {}): Promi
     printWarn(`${names.length} class name(s) could collide with a mangled token:`);
     for (const name of names) {
         const where = [...(risky.get(name) ?? [])].slice(0, 3).join(', ');
-        printInfo(`  .${name}  (in ${where})`);
+        printInfo(`  .${name}  (selector declared in ${where})`);
     }
-    printInfo('\nPreferred: rename these in your own CSS to something specific');
-    printInfo('  (e.g. `.x` → `.resize-handle-x`) — short names also clash on');
-    printInfo('  specificity with other libraries.');
+    // The scan reads stylesheets only. A class is usually emitted from a
+    // component, which may live in another package, so renaming only the
+    // listed files leaves the component emitting a name no rule matches.
+    printInfo('\nThese files declare the selectors; the class may be emitted elsewhere,');
+    printInfo('  such as a shared component, so find where the class is emitted before renaming.');
+    printInfo('\nPreferred: rename the class where it is declared and where it is emitted,');
+    printInfo('  to something specific (e.g. `.x` → `.resize-handle-x`) — short names');
+    printInfo('  also clash on specificity with other libraries.');
     printInfo('\nFor names in a third-party stylesheet you cannot edit, reserve them:');
     printInfo(`  production: { mangle: true, mangleExclude: ${JSON.stringify(names)} }`);
     process.exitCode = 1;
