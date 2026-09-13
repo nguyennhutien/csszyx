@@ -32,7 +32,7 @@
 import { BOX_ROLE_TOKENS } from './box-role-map.generated.js';
 import { decodeToken, encodeToken, type MangleBridge, mangleBridge } from './class-codec.js';
 import { classifyAmbiguousValue, getSzcnGroupsGeneration } from './merge-groups.js';
-import { BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT, normalizeBase, stripVariant } from './split-box.js';
+import { getBoxRolePrefixesByFirstSegment, normalizeBase, stripVariant } from './split-box.js';
 
 /** Class string accepted by the public and generated merge helpers. */
 type ClassInput = string | false | null | undefined;
@@ -327,7 +327,7 @@ function mergeClassify(token: string): { key: string; covers: string[] } | null 
         if (exact.prefix === undefined) return null;
         return classifyMatchedPrefix(norm, variant, exact.prefix);
     }
-    const bucket = BOX_ROLE_PREFIXES_BY_FIRST_SEGMENT.get(firstSegment) ?? [];
+    const bucket = getBoxRolePrefixesByFirstSegment().get(firstSegment) ?? [];
     for (const [prefix] of bucket) {
         if (norm === prefix || norm.startsWith(`${prefix}-`)) {
             return classifyMatchedPrefix(norm, variant, prefix);

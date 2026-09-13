@@ -23,7 +23,7 @@
 // prefix invents token names nobody would ever declare.
 //
 // SCOPE. This covers the static-versus-functional collision, which is what
-// COLLISION_BLOCKLIST holds. It does NOT cover two theme namespaces feeding one
+// the collision blocklist holds. It does NOT cover two theme namespaces feeding one
 // root — `--font-bold` as a family against `--font-weight-bold` — because both
 // readings are functional and Tailwind reports one candidate. merge-groups.ts
 // handles that separately with AMBIGUITY_PAIRS, and this gate asserts that pair
@@ -137,17 +137,23 @@ function declared() {
         return [...match[1].matchAll(/'([^']+)'/g)].map(entry => entry[1]);
     };
 
-    // Read the composition out of COLLISION_BLOCKLIST rather than restating it.
+    // Read the composition out of the blocklist rather than restating it.
     // Listing the constants here too would mean every new one has to be added
     // in two files, and the gate would keep passing while missing the addition
     // — the exact drift it exists to catch.
-    const blockStart = source.indexOf('const COLLISION_BLOCKLIST');
+    //
+    // The blocklist is built on first use, so its object literal sits inside
+    // `getCollisionBlocklist`, one level deeper than a module constant. The
+    // entry pattern does not pin an indentation depth: pinned, a reshuffle of
+    // the source would read zero categories, and only the coverage check below
+    // would say so.
+    const blockStart = source.indexOf('function getCollisionBlocklist(');
     if (blockStart === -1)
-        throw new Error('merge-groups.ts no longer declares COLLISION_BLOCKLIST');
-    const block = source.slice(blockStart, source.indexOf('\n};', blockStart));
+        throw new Error('merge-groups.ts no longer declares getCollisionBlocklist');
+    const block = source.slice(blockStart, source.indexOf('\n}\n', blockStart));
 
     const sets = {};
-    for (const entry of block.matchAll(/^\s{4}(\w+): new Set\(([\s\S]*?)\),$/gm)) {
+    for (const entry of block.matchAll(/^\s+(\w+): new Set\(([\s\S]*?)\),$/gm)) {
         const [, category, body] = entry;
         const names = [
             ...[...body.matchAll(/\.\.\.(\w+)/g)].flatMap(spread => literal(spread[1])),
@@ -156,7 +162,19 @@ function declared() {
         sets[category] = new Set(names);
     }
     for (const category of Object.keys(CATEGORY_PREFIXES)) {
-        if (!sets[category]) throw new Error(`COLLISION_BLOCKLIST no longer covers ${category}`);
+        if (!sets[category])
+            throw new Error(`the collision blocklist no longer covers ${category}`);
+    }
+    // The other direction too. A category the source blocks but this gate has
+    // no prefixes for would be parsed, counted nowhere and compared against
+    // nothing, and the summary line would still read as a pass.
+    for (const category of Object.keys(sets)) {
+        if (!Object.hasOwn(CATEGORY_PREFIXES, category)) {
+            throw new Error(
+                `the collision blocklist has a ${category} category this gate does not check; ` +
+                    'add the class prefixes its tokens feed to CATEGORY_PREFIXES',
+            );
+        }
     }
     return sets;
 }

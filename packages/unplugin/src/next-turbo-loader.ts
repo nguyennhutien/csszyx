@@ -20,6 +20,7 @@ import { readPackageVersion } from './next-package-version.js';
 import { injectNextRuntimeImports } from './next-runtime-injection.js';
 import {
     type AtomicWriteOptions,
+    NEXT_TURBO_LOADER_LOCK_COMMAND,
     NEXT_WATCH_LOCK_COMMAND,
     NextSafelistStateLockedError,
     writeNextSafelistShard,
@@ -213,7 +214,7 @@ export function runNextTurboLoader(
                 lockOptions: {
                     root: context.root,
                     mode: context.manifestExpectation.mode,
-                    command: 'csszyx next turbo-loader',
+                    command: NEXT_TURBO_LOADER_LOCK_COMMAND,
                 },
             });
             materialized = true;

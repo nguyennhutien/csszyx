@@ -10,7 +10,11 @@ import {
     withCrossModuleStatics,
 } from './next-cross-module.js';
 import { readPackageVersion } from './next-package-version.js';
-import { type AtomicWriteOptions, writeNextSafelistShard } from './next-safelist-state.js';
+import {
+    type AtomicWriteOptions,
+    NEXT_PREBUILD_LOCK_COMMAND,
+    writeNextSafelistShard,
+} from './next-safelist-state.js';
 import {
     type NextSourceParserMode,
     type NextSourceTransformOutput,
@@ -59,6 +63,16 @@ export interface NextPrebuildOptions {
     allowProductionMangling?: boolean;
     writeOptions?: AtomicWriteOptions;
     createdAt?: string;
+    /**
+     * What this pass records on the state lock; `csszyx next prebuild` by
+     * default.
+     *
+     * The Turbopack loader steps aside only for a watcher's command. `next
+     * watch` passes that command here because its initial cycle follows this
+     * pass and reads every shard the loader wrote meanwhile. A standalone
+     * prebuild keeps the default: nothing after it would pick those shards up.
+     */
+    lockCommand?: string;
 }
 
 /** Per-file result captured by one prebuild pass. */
@@ -191,7 +205,7 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
         lockOptions: {
             root: context.root,
             mode: context.manifestExpectation.mode,
-            command: 'csszyx next prebuild',
+            command: options.lockCommand ?? NEXT_PREBUILD_LOCK_COMMAND,
         },
         createdAt: options.createdAt,
     });

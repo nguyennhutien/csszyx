@@ -661,6 +661,19 @@ export class NextSafelistStateLockedError extends Error {
 /** The `command` a `csszyx next watch` process records on the lock. */
 export const NEXT_WATCH_LOCK_COMMAND = 'csszyx next watch';
 
+/** The `command` the Turbopack loader records on the lock. */
+export const NEXT_TURBO_LOADER_LOCK_COMMAND = 'csszyx next turbo-loader';
+
+/**
+ * The `command` a standalone `csszyx next prebuild` records on the lock.
+ *
+ * `next watch` runs a prebuild at startup too, but records
+ * {@link NEXT_WATCH_LOCK_COMMAND}: its initial cycle follows and reads every
+ * shard the loader writes meanwhile, so the loader may step aside for it. A
+ * standalone prebuild has no such follow-up.
+ */
+export const NEXT_PREBUILD_LOCK_COMMAND = 'csszyx next prebuild';
+
 /**
  *
  * @param metadata

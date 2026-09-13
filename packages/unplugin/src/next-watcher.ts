@@ -9,6 +9,12 @@ import {
     type NextWatcherLoopTimerHooks,
 } from './next-watcher-loop.js';
 
+/**
+ * Re-exported for the CLI: `next watch` records it on the lock for the prebuild
+ * it runs at startup, so the Turbopack loader steps aside for that pass too.
+ */
+export { NEXT_WATCH_LOCK_COMMAND } from './next-safelist-state.js';
+
 /** Filesystem events that can change the materialized safelist. */
 export type NextSafelistWatchEvent = 'add' | 'change' | 'unlink';
 
@@ -19,6 +25,8 @@ export interface NextSafelistWatcherOptions extends NextWatcherLoopTimerHooks {
     debounceMs?: number;
     runCycle?: NextWatcherLoopCycleRunner;
     onError?: (error: unknown) => void;
+    /** Receives a notice the watcher keeps running through; dropped by default. */
+    onWarn?: (message: string) => void;
 }
 
 /**
@@ -117,8 +125,16 @@ export class NextSafelistWatcher {
 
     /**
      * Materialize existing shards before accepting live filesystem events.
+     *
+     * `next watch` and `next dev` start together in the documented setup, so
+     * the Turbopack loader's first compile can hold the state lock at this
+     * exact moment. The initial cycle is then queued behind it instead of
+     * throwing, the same way a scheduled cycle waits.
+     *
+     * @returns The initial cycle's result, or `undefined` while it is queued
+     *   behind the Turbopack loader.
      */
-    start(): NextWatcherCycleResult {
+    start(): NextWatcherCycleResult | undefined {
         if (this.closed) {
             throw new Error('[csszyx] Cannot start a closed Next safelist watcher.');
         }
@@ -128,8 +144,8 @@ export class NextSafelistWatcher {
 
         this.started = true;
         this.loop.notify('initial');
-        const result = this.loop.flush();
-        if (!result) {
+        const result = this.loop.flushOrQueue();
+        if (!result && !this.loop.pending) {
             throw new Error('[csszyx] Next safelist watcher failed to run its initial cycle.');
         }
         return result;

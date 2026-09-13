@@ -38,6 +38,9 @@ export default defineConfig({
         {
             name: 'vite-react',
             testMatch: /vite-react/,
+            // The theme-groups spec matches the name but cannot share a run
+            // with this project: see `vite-theme-groups` below.
+            testIgnore: /vite-react-theme-groups\.spec/,
             use: {
                 ...devices['Desktop Chrome'],
                 baseURL: 'http://localhost:5173',
@@ -47,15 +50,32 @@ export default defineConfig({
             // The spec rewrites a playground source file and watches one page
             // for a reload, so nothing else may touch its dev server while it
             // runs. `fullyParallel: false` only orders the tests inside this
-            // project — Playwright still runs projects side by side — and the
-            // theme-groups spec makes csszyx send an unaddressed full-reload
-            // to every client on port 5173. Running after every project that
-            // shares that server is what keeps the page alone; `--no-deps`
+            // project — Playwright still runs projects side by side — so it
+            // runs after every project that shares port 5173. `--no-deps`
             // runs it by itself.
             name: 'vite-safelist-hmr',
             testMatch: /vite-safelist-hmr\.spec/,
             fullyParallel: false,
             dependencies: ['vite-react', 'dynamic', 'recovery-manifest'],
+            use: {
+                ...devices['Desktop Chrome'],
+                baseURL: 'http://localhost:5173',
+            },
+        },
+        {
+            // Deleting a `@theme` token makes csszyx send an unaddressed
+            // full-reload to every client on port 5173, which is the point of
+            // the spec and a hazard to everything else on that server. It lived
+            // inside `vite-react`, whose name it matches, and ran beside that
+            // project's counter and toggle tests: their page reloaded mid-test
+            // and lost its state. That only surfaced with several local
+            // workers; CI runs one. Chained after `vite-safelist-hmr`, which is
+            // itself after every other project on the port, so neither of the
+            // two specs that disturb the server can overlap the rest or each
+            // other.
+            name: 'vite-theme-groups',
+            testMatch: /vite-react-theme-groups\.spec/,
+            dependencies: ['vite-safelist-hmr'],
             use: {
                 ...devices['Desktop Chrome'],
                 baseURL: 'http://localhost:5173',
