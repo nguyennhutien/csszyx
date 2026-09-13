@@ -804,9 +804,21 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         dynamic_css_vars,
                         dropped_dynamic_keys,
                     )
-                } else if let Some((array_parts, value_span)) =
+                } else if let Some((mut array_parts, value_span)) =
                     static_array_parts_from_jsx_expression(&container.expression, ctx)
                 {
+                    // Empty guarded branches previously emitted nothing. Keep that
+                    // decision while retaining their source for key diagnostics.
+                    array_parts.retain_mut(|part| {
+                        if part.condition_span.is_some() && part.classes.is_empty() {
+                            self.ir
+                                .omitted_sz_objects
+                                .append(&mut part.resolved_objects);
+                            false
+                        } else {
+                            true
+                        }
+                    });
                     (
                         StaticSzObject::empty(),
                         value_span,
@@ -908,6 +920,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 && !attribute.runtime_fallback
                 && attribute.literal_class_name.is_none()
         });
+        let mut omitted_objects = Vec::new();
         let (object, array_parts) = if static_only {
             (
                 merged_static_sz_object(&attributes, &mut candidate_classes),
@@ -916,9 +929,14 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         } else {
             (
                 StaticSzObject::empty(),
-                array_parts_of_sz_attributes(&attributes, &mut candidate_classes),
+                array_parts_of_sz_attributes(
+                    &attributes,
+                    &mut candidate_classes,
+                    &mut omitted_objects,
+                ),
             )
         };
+        self.ir.omitted_sz_objects.append(&mut omitted_objects);
 
         self.ir.sz_attributes.push(SzAttributeIr {
             attribute_span: first.attribute_span,
@@ -2158,6 +2176,13 @@ fn static_ternary_from_expression(
 
 /// Lower one branch of a conditional sz value to the classes it contributes.
 ///
+/// Lower once while retaining the exact source object for diagnostics.
+fn lower_resolved_object(object: StaticSzObject, objects: &mut Vec<StaticSzObject>) -> Vec<String> {
+    let classes = lower_static_sz_object(&object);
+    objects.push(object);
+    classes
+}
+
 /// A falsy branch is the EMPTY style rather than an unknown one, so it folds
 /// to no classes instead of dropping the whole attribute onto the runtime.
 /// Reading only the object shape made `: undefined` and `: {}` — two spellings
@@ -2166,12 +2191,13 @@ fn static_ternary_from_expression(
 fn conditional_branch_classes(
     expression: &Expression<'_>,
     ctx: ResolveContext<'_>,
+    objects: &mut Vec<StaticSzObject>,
 ) -> Option<Vec<String>> {
     if is_falsy_style_literal(unwrap_expression(expression)) {
         return Some(Vec::new());
     }
     let (object, _, _) = static_object_from_expression(expression, ctx)?;
-    Some(lower_static_sz_object(&object))
+    Some(lower_resolved_object(object, objects))
 }
 
 /// The depth a chained conditional is followed to.
@@ -2190,6 +2216,7 @@ fn static_ternary_from_conditional(
     // the fold to happen: a chain is a choice, so a branch left unread would
     // mean emitting a conditional that can pick a class list the compiler never
     // saw.
+    let mut resolved_objects = Vec::new();
     let mut arms = Vec::new();
     let mut alternate = &conditional.alternate;
     while let Expression::ConditionalExpression(next) = unwrap_expression(alternate) {
@@ -2198,17 +2225,22 @@ fn static_ternary_from_conditional(
         }
         arms.push(super::StaticTernaryArmIr {
             test_span: text_span(next.test.span()),
-            classes: conditional_branch_classes(&next.consequent, ctx)?,
+            classes: conditional_branch_classes(&next.consequent, ctx, &mut resolved_objects)?,
         });
         alternate = &next.alternate;
     }
     Some((
         StaticTernaryIr {
             test_span: text_span(conditional.test.span()),
-            consequent_classes: conditional_branch_classes(&conditional.consequent, ctx)?,
-            alternate_classes: conditional_branch_classes(alternate, ctx)?,
+            consequent_classes: conditional_branch_classes(
+                &conditional.consequent,
+                ctx,
+                &mut resolved_objects,
+            )?,
+            alternate_classes: conditional_branch_classes(alternate, ctx, &mut resolved_objects)?,
             chain_arms: arms,
             bool_class_key: None,
+            resolved_objects,
         },
         text_span(conditional.span),
     ))
@@ -2228,13 +2260,19 @@ fn static_ternary_from_logical(
     if !logical.operator.is_and() {
         return None;
     }
+    let mut resolved_objects = Vec::new();
     Some((
         StaticTernaryIr {
             test_span: text_span(logical.left.span()),
-            consequent_classes: conditional_branch_classes(&logical.right, ctx)?,
+            consequent_classes: conditional_branch_classes(
+                &logical.right,
+                ctx,
+                &mut resolved_objects,
+            )?,
             alternate_classes: Vec::new(),
             chain_arms: Vec::new(),
             bool_class_key: None,
+            resolved_objects,
         },
         text_span(logical.span),
     ))
@@ -2260,9 +2298,14 @@ fn merged_static_sz_object(
 /// The parts several `sz` attributes contribute to one szcn composition, in
 /// source order: each attribute yields what one array element of the same
 /// shape would.
+///
+/// Folding leaves the element no object of its own, so each attribute's keys
+/// reach the diagnostic pass through the part they became, or, when they lower
+/// to no class and no part is emitted, through `omitted_objects`.
 fn array_parts_of_sz_attributes(
     attributes: &[SzAttributeIr],
     candidate_classes: &mut Vec<String>,
+    omitted_objects: &mut Vec<StaticSzObject>,
 ) -> Vec<StaticArrayPartIr> {
     let mut array_parts = Vec::new();
     for attribute in attributes {
@@ -2278,7 +2321,11 @@ fn array_parts_of_sz_attributes(
                 .map(dynamic_css_var_class),
         );
         if !classes.is_empty() {
-            array_parts.push(static_array_part(classes, None));
+            let mut part = static_array_part(classes, None);
+            part.resolved_objects.push(attribute.object.clone());
+            array_parts.push(part);
+        } else if !attribute.object.properties.is_empty() {
+            omitted_objects.push(attribute.object.clone());
         }
         array_parts.extend(
             attribute
@@ -2293,6 +2340,8 @@ fn array_parts_of_sz_attributes(
                     dynamic_provable: false,
                     candidates: Vec::new(),
                     dynamic_object_literal: false,
+                    // The ternary carries its own resolved objects.
+                    resolved_objects: Vec::new(),
                 }),
         );
         array_parts.extend(attribute.array_parts.iter().cloned());
@@ -2307,6 +2356,7 @@ fn array_parts_of_sz_attributes(
                 dynamic_provable: false,
                 candidates: attribute.candidate_classes.clone(),
                 dynamic_object_literal: false,
+                resolved_objects: Vec::new(),
             });
         } else {
             candidate_classes.extend(attribute.candidate_classes.iter().cloned());
@@ -2408,24 +2458,27 @@ fn static_array_part_from_expression(
         _ => None,
     };
     if let Some(logical) = logical {
+        let mut resolved_objects = Vec::new();
         let right = unwrap_expression(&logical.right);
         let classes = if let Expression::StringLiteral(value) = right {
             Some(split_class_tokens(&value.value))
         } else {
-            array_element_static_object(right, ctx).map(|object| lower_static_sz_object(&object))
+            array_element_static_object(right, ctx)
+                .map(|object| lower_resolved_object(object, &mut resolved_objects))
         };
-        return match classes {
-            None => Some({
-                // Dynamic right side: the whole guarded element resolves at
-                // runtime through `_szPart`.
-                dynamic_array_part(expression, unwrapped, ctx)
-            }),
-            Some(classes) if classes.is_empty() => None,
-            Some(classes) => Some(static_array_part(
-                classes,
-                Some(text_span(logical.left.span())),
-            )),
-        };
+        // An element that lowers to no class is dropped by the attribute pass,
+        // which also keeps a guarded object's properties for the diagnostics.
+        // Dropping it here as well would hide the half that has properties.
+        return Some(classes.map_or_else(
+            // Dynamic right side: the whole guarded element resolves at runtime
+            // through `_szPart`.
+            || dynamic_array_part(expression, unwrapped, ctx),
+            |classes| {
+                let mut part = static_array_part(classes, Some(text_span(logical.left.span())));
+                part.resolved_objects = resolved_objects;
+                part
+            },
+        ));
     }
     let conditional_part = match unwrapped {
         Expression::ConditionalExpression(conditional) => {
@@ -2441,12 +2494,15 @@ fn static_array_part_from_expression(
         dynamic_provable: false,
         candidates: Vec::new(),
         dynamic_object_literal: false,
+        resolved_objects: Vec::new(),
     });
     if conditional_part.is_some() {
         return conditional_part;
     }
     if let Some(object) = array_element_static_object(unwrapped, ctx) {
-        return Some(static_array_part(lower_static_sz_object(&object), None));
+        let mut part = static_array_part(lower_static_sz_object(&object), None);
+        part.resolved_objects.push(object);
+        return Some(part);
     }
     let partial = match unwrapped {
         Expression::ObjectExpression(object) => {
@@ -2467,6 +2523,7 @@ fn static_array_part_from_expression(
             dynamic_provable: false,
             candidates: Vec::new(),
             dynamic_object_literal: false,
+            resolved_objects: vec![partial.object],
         });
     }
     // Safelist best-effort: static object literals reachable inside the
@@ -2488,6 +2545,7 @@ const fn static_array_part(
         dynamic_provable: false,
         candidates: Vec::new(),
         dynamic_object_literal: false,
+        resolved_objects: Vec::new(),
     }
 }
 
@@ -2507,6 +2565,7 @@ fn dynamic_array_part(
         dynamic_provable: is_provably_non_object_argument(expression),
         candidates: candidate_classes_from_expression(expression, ctx),
         dynamic_object_literal: matches!(unwrapped, Expression::ObjectExpression(_)),
+        resolved_objects: Vec::new(),
     }
 }
 
@@ -2515,13 +2574,14 @@ fn static_array_ternary_from_conditional(
     conditional: &ConditionalExpression<'_>,
     ctx: ResolveContext<'_>,
 ) -> Option<StaticTernaryIr> {
-    let branch_classes = |branch: &Expression<'_>| {
+    let mut resolved_objects = Vec::new();
+    let mut branch_classes = |branch: &Expression<'_>| {
         let unwrapped = unwrap_expression(branch);
         if let Expression::StringLiteral(value) = unwrapped {
             return Some(split_class_tokens(&value.value));
         }
         let (object, _, _) = static_object_from_expression(unwrapped, ctx)?;
-        Some(lower_static_sz_object(&object))
+        Some(lower_resolved_object(object, &mut resolved_objects))
     };
     Some(StaticTernaryIr {
         test_span: text_span(conditional.test.span()),
@@ -2529,6 +2589,7 @@ fn static_array_ternary_from_conditional(
         alternate_classes: branch_classes(&conditional.alternate)?,
         chain_arms: Vec::new(),
         bool_class_key: None,
+        resolved_objects,
     })
 }
 
@@ -4202,16 +4263,26 @@ fn conditional_spread_ternary_from_object_expression(
     }
 
     let conditional = conditional?;
-    let consequent =
-        conditional_spread_branch_classes(&conditional.consequent, &other_properties, ctx)?;
-    let alternate =
-        conditional_spread_branch_classes(&conditional.alternate, &other_properties, ctx)?;
+    let mut resolved_objects = Vec::new();
+    let consequent = conditional_spread_branch_classes(
+        &conditional.consequent,
+        &other_properties,
+        ctx,
+        &mut resolved_objects,
+    )?;
+    let alternate = conditional_spread_branch_classes(
+        &conditional.alternate,
+        &other_properties,
+        ctx,
+        &mut resolved_objects,
+    )?;
     Some(StaticTernaryIr {
         test_span: text_span(conditional.test.span()),
         consequent_classes: consequent,
         alternate_classes: alternate,
         chain_arms: Vec::new(),
         bool_class_key: None,
+        resolved_objects,
     })
 }
 
@@ -4219,10 +4290,11 @@ fn conditional_spread_branch_classes(
     branch: &Expression<'_>,
     other_properties: &[StaticSzProperty],
     ctx: ResolveContext<'_>,
+    objects: &mut Vec<StaticSzObject>,
 ) -> Option<Vec<String>> {
     let (mut object, _, _) = static_object_from_expression(branch, ctx)?;
     object.properties.extend(other_properties.iter().cloned());
-    Some(lower_static_sz_object(&object))
+    Some(lower_resolved_object(object, objects))
 }
 
 fn unwrap_expression<'a>(expression: &'a Expression<'a>) -> &'a Expression<'a> {
@@ -4249,6 +4321,7 @@ fn conditional_class_from_property(
         alternate_classes: conditional_property_classes(key, alternate, variant_keys),
         chain_arms: Vec::new(),
         bool_class_key: None,
+        resolved_objects: Vec::new(),
     })
 }
 
@@ -4272,6 +4345,7 @@ fn nullable_conditional_class_from_property(
                 alternate_classes: Vec::new(),
                 chain_arms: Vec::new(),
                 bool_class_key: None,
+                resolved_objects: Vec::new(),
             },
             None,
         ));
@@ -4316,6 +4390,7 @@ fn nullable_conditional_class_from_property(
             },
             chain_arms: Vec::new(),
             bool_class_key: None,
+            resolved_objects: Vec::new(),
         },
         dynamic_prop,
     ))
@@ -4444,6 +4519,7 @@ fn color_opacity_ternary_from_object(
                 ),
                 chain_arms: Vec::new(),
                 bool_class_key: None,
+                resolved_objects: Vec::new(),
             })
         }
         (Some(conditional), None) => {
@@ -4473,6 +4549,7 @@ fn color_opacity_ternary_from_object(
                 ),
                 chain_arms: Vec::new(),
                 bool_class_key: None,
+                resolved_objects: Vec::new(),
             })
         }
         _ => None,
@@ -4536,6 +4613,7 @@ fn bool_class_ternary_from_property(
         alternate_classes: Vec::new(),
         chain_arms: Vec::new(),
         bool_class_key: Some(key.to_string()),
+        resolved_objects: Vec::new(),
     })
 }
 

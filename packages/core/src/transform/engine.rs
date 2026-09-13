@@ -695,6 +695,239 @@ fn var_hostile_diagnostics(
     out
 }
 
+/// Recover diagnostic input without feeding pre-lowered objects back into
+/// emission: the objects a conditional, a chain or an array element resolved,
+/// grouped by the `sz` attribute they belong to.
+///
+/// Borrowed, not merged. These objects exist for the key and value families
+/// alone, and those read one property at a time, so the findings are the same
+/// whether the families run over one merged object or over each object in turn.
+/// Merging meant deep-cloning every property — a second copy of what the parser
+/// already kept — and measured 8% of the per-file transform on conditional-heavy
+/// sources. What the merge really did was drop a repeat: a property written
+/// beside a spread is resolved into every branch it reaches, so it arrives once
+/// per branch. `retain_first_occurrence` drops that repeat from the findings
+/// instead, where an offset already names the source occurrence.
+fn resolved_branch_object_groups(ir: &super::SourceIr) -> Vec<Vec<&super::StaticSzObject>> {
+    ir.sz_attributes
+        .iter()
+        .map(|attr| {
+            attr.ternaries
+                .iter()
+                .flat_map(|ternary| &ternary.resolved_objects)
+                .chain(attr.array_parts.iter().flat_map(|part| {
+                    part.resolved_objects.iter().chain(
+                        part.ternary
+                            .iter()
+                            .flat_map(|ternary| &ternary.resolved_objects),
+                    )
+                }))
+                .collect()
+        })
+        .collect()
+}
+
+/// Drop findings an attribute's branches have already reported.
+///
+/// Two properties on one line stay two findings, while one property reached
+/// through two branches is one. The family tag keeps the families independent —
+/// a property can be both an unknown key and a dead enum value, and each is
+/// reported on its own terms.
+fn retain_first_occurrence<T>(
+    findings: &mut Vec<T>,
+    family: u8,
+    seen: &mut std::collections::HashSet<(u8, u32)>,
+    offset: impl Fn(&T) -> u32,
+) {
+    findings.retain(|finding| seen.insert((family, offset(finding))));
+}
+
+/// A spacing value Tailwind's scale has no step for.
+fn push_dead_spacing_step_diagnostics(
+    file: &TransformFile,
+    found: &[(String, f64, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    for (key, value, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        // Wording matches the removed JavaScript lanes' warnDeadSpacingStep so a
+        // `build.parser` flip does not change the diagnostic text.
+        out.push(format!(
+            "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
+        ));
+    }
+}
+
+/// A border style set on one side, which Tailwind cannot express.
+fn push_border_side_style_diagnostics(
+    file: &TransformFile,
+    found: &[(String, String, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    for (key, value, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        out.push(format!(
+            "[csszyx] \"{key}: '{value}'\" at {location}:{line}: Tailwind has no per-side border style, so this generated no CSS and the class is dropped. Use borderStyle: '{value}' for every side, or a number on \"{key}\" for the width."
+        ));
+    }
+}
+
+/// An object given to a key that names a property rather than a variant.
+fn push_property_object_diagnostics(
+    file: &TransformFile,
+    found: &[(String, String, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    for (key, nested, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        // Wording matches the removed JavaScript lanes' warnPropertyObjectValue so a
+        // `build.parser` flip does not change the diagnostic text.
+        out.push(format!(
+            "[csszyx] \"{key}\" is a property, not a variant, but received an object {{ {nested} }} at {location}:{line}. This compiles to \"{key}:*\" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use {{ color: '...', op: ... }}."
+        ));
+    }
+}
+
+/// A field a mask layer does not take.
+fn push_mask_member_diagnostics(
+    file: &TransformFile,
+    found: &[(String, String, String, u32)],
+    location: &str,
+    lines: &mut Option<LineIndex>,
+    out: &mut Vec<String>,
+) {
+    for (owner, member, allowed, offset) in found {
+        let (line, _) = lines
+            .get_or_insert_with(|| LineIndex::new(&file.source))
+            .line_column(&file.source, *offset);
+        // Wording matches the removed JavaScript lanes' warnMaskSlotMember so a
+        // `build.parser` flip does not change the diagnostic text.
+        out.push(format!(
+            "[csszyx] {owner}: unknown field \"{member}\" at {location}:{line} — nothing is emitted for it. {owner} takes {{ {allowed} }}."
+        ));
+    }
+}
+
+/// Where the key and value families write, gathered so one pass takes a handful
+/// of arguments rather than a dozen.
+struct DiagnosticSink<'a> {
+    file: &'a TransformFile,
+    location: &'a str,
+    lines: &'a mut Option<LineIndex>,
+    out: &'a mut Vec<String>,
+}
+
+/// Buffers the families refill per group, so a file with many objects allocates
+/// them once rather than once per object.
+#[derive(Default)]
+struct KeyValueFindings {
+    unknown: Vec<(String, u32)>,
+    dead_steps: Vec<(String, f64, u32)>,
+    dead_weights: Vec<(String, u32)>,
+    removed_sugar: Vec<(String, &'static str, &'static str, u32)>,
+    border_side_styles: Vec<(String, String, u32)>,
+    property_objects: Vec<(String, String, u32)>,
+    unknown_variants: Vec<(String, u32)>,
+    dead_enums: Vec<(String, String, u32)>,
+    mask_members: Vec<(String, String, String, u32)>,
+}
+
+impl KeyValueFindings {
+    /// Empty every family before a group refills them.
+    fn clear(&mut self) {
+        self.unknown.clear();
+        self.dead_steps.clear();
+        self.dead_weights.clear();
+        self.removed_sugar.clear();
+        self.border_side_styles.clear();
+        self.property_objects.clear();
+        self.unknown_variants.clear();
+        self.dead_enums.clear();
+        self.mask_members.clear();
+    }
+}
+
+/// Run every key and value family over one group of static objects, reporting
+/// each finding once per source occurrence.
+///
+/// A group is one `sz` prop, one catalog object, or the objects one attribute's
+/// conditionals resolved. Findings accumulate across the group and are reported
+/// family by family, so a group of several objects reads the same as the single
+/// merged object this used to build.
+///
+/// `repeat_free` says whether the group can hold the same source occurrence
+/// twice, which only the resolved objects can: a property written beside a
+/// spread is resolved into every branch it reaches, so it arrives once per
+/// branch.
+fn push_group_key_value_diagnostics<'a>(
+    sink: &mut DiagnosticSink<'_>,
+    objects: impl Iterator<Item = &'a super::StaticSzObject>,
+    dropped_dynamic_keys: &[super::DroppedSzKeyIr],
+    repeat_free: bool,
+    found: &mut KeyValueFindings,
+) {
+    let DiagnosticSink {
+        file,
+        location,
+        lines,
+        out,
+    } = sink;
+    found.clear();
+    for object in objects {
+        collect_unknown_sz_keys(object, &mut found.unknown);
+        super::lower::collect_dead_spacing_steps(object, &mut found.dead_steps);
+        super::lower::collect_dead_weight_values(object, &mut found.dead_weights);
+        super::lower::collect_removed_boolean_sugar(object, &mut found.removed_sugar);
+        super::lower::collect_border_side_styles(object, &mut found.border_side_styles);
+        super::lower::collect_property_object_values(object, &mut found.property_objects);
+        super::lower::collect_owned_key_variant_objects(object, &mut found.unknown_variants);
+        super::lower::collect_dead_enum_values(object, &mut found.dead_enums);
+        super::lower::collect_unknown_mask_slot_members(object, &mut found.mask_members);
+    }
+    if !repeat_free {
+        let seen = &mut std::collections::HashSet::new();
+        retain_first_occurrence(&mut found.unknown, 0, seen, |(_, at)| *at);
+        retain_first_occurrence(&mut found.dead_steps, 1, seen, |(_, _, at)| *at);
+        retain_first_occurrence(&mut found.dead_weights, 2, seen, |(_, at)| *at);
+        retain_first_occurrence(&mut found.removed_sugar, 3, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.border_side_styles, 4, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.property_objects, 5, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.unknown_variants, 6, seen, |(_, at)| *at);
+        retain_first_occurrence(&mut found.dead_enums, 7, seen, |(.., at)| *at);
+        retain_first_occurrence(&mut found.mask_members, 8, seen, |(.., at)| *at);
+    }
+    // Only the removed-key drops belong in this pass. A key dropped for having
+    // no var form is still a supported key, and reporting it as unknown would
+    // send the author looking for a typo.
+    found.unknown.extend(
+        dropped_dynamic_keys
+            .iter()
+            .filter(|dropped| dropped.reason == DroppedKeyReason::RemovedKey)
+            .map(|dropped| (dropped.key.clone(), dropped.span.start)),
+    );
+    push_unknown_key_diagnostics(file, &found.unknown, location, lines, out);
+    push_dead_spacing_step_diagnostics(file, &found.dead_steps, location, lines, out);
+    push_dead_weight_diagnostics(file, &found.dead_weights, location, lines, out);
+    push_removed_sugar_diagnostics(file, &found.removed_sugar, location, lines, out);
+    push_border_side_style_diagnostics(file, &found.border_side_styles, location, lines, out);
+    push_property_object_diagnostics(file, &found.property_objects, location, lines, out);
+    push_owned_key_variant_diagnostics(file, &found.unknown_variants, location, lines, out);
+    push_dead_enum_diagnostics(file, &found.dead_enums, location, lines, out);
+    push_mask_member_diagnostics(file, &found.mask_members, location, lines, out);
+}
+
 fn unknown_property_diagnostics(
     file: &TransformFile,
     ir: &super::SourceIr,
@@ -702,19 +935,17 @@ fn unknown_property_diagnostics(
 ) -> Vec<String> {
     let location = relativize_diagnostic_path(&file.filename, root_dir);
     let mut out = Vec::new();
-    let mut unknown = Vec::new();
-    let mut dead_weights: Vec<(String, u32)> = Vec::new();
-    let mut dead_steps = Vec::new();
-    let mut removed_sugar = Vec::new();
-    let mut border_side_styles = Vec::new();
-    let mut property_objects = Vec::new();
-    let mut mask_members = Vec::new();
-    let mut dead_enums: Vec<(String, String, u32)> = Vec::new();
-    let mut unknown_variants: Vec<(String, u32)> = Vec::new();
+    let mut found = KeyValueFindings::default();
     // Built on the first position lookup, not up front: a file whose `sz` props
     // are all clean reaches none of the branches below, and must not pay a pass
     // over its own source for a table nobody reads.
     let mut lines: Option<LineIndex> = None;
+    let mut sink = DiagnosticSink {
+        file,
+        location: &location,
+        lines: &mut lines,
+        out: &mut out,
+    };
     // sz props first, then the catalog objects (szv leaves + static szr
     // arguments) through the SAME unknown/numeric emission — a typo inside a
     // catalog must be as findable by `csszyx check` as one on an element.
@@ -722,84 +953,28 @@ fn unknown_property_diagnostics(
         .sz_attributes
         .iter()
         .map(|attr| (&attr.object, attr.dropped_dynamic_keys.as_slice()));
-    let catalog_objects = ir.catalog_sz_objects.iter().map(|object| (object, &[][..]));
+    let catalog_objects = ir
+        .catalog_sz_objects
+        .iter()
+        .chain(&ir.omitted_sz_objects)
+        .map(|object| (object, &[][..]));
     for (object, dropped_dynamic_keys) in attribute_objects.chain(catalog_objects) {
-        unknown.clear();
-        collect_unknown_sz_keys(object, &mut unknown);
-        // Only the removed-key drops belong in this pass. A key dropped for
-        // having no var form is still a supported key, and reporting it as
-        // unknown would send the author looking for a typo.
-        unknown.extend(
-            dropped_dynamic_keys
-                .iter()
-                .filter(|dropped| dropped.reason == DroppedKeyReason::RemovedKey)
-                .map(|dropped| (dropped.key.clone(), dropped.span.start)),
+        push_group_key_value_diagnostics(
+            &mut sink,
+            std::iter::once(object),
+            dropped_dynamic_keys,
+            true,
+            &mut found,
         );
-        push_unknown_key_diagnostics(file, &unknown, &location, &mut lines, &mut out);
-        dead_steps.clear();
-        super::lower::collect_dead_spacing_steps(object, &mut dead_steps);
-        for (key, value, offset) in &dead_steps {
-            let (line, _) = lines
-                .get_or_insert_with(|| LineIndex::new(&file.source))
-                .line_column(&file.source, *offset);
-            // Wording matches the removed JavaScript lanes' warnDeadSpacingStep so a
-            // `build.parser` flip does not change the diagnostic text.
-            out.push(format!(
-                "[csszyx] \"{key}: {value}\" at {location}:{line}: {value} is not on Tailwind's spacing scale (quarter steps only), so the class generates no CSS. Use a quarter step (1.25, 1.5, 1.75) or a unit value (\"{value}rem\")."
-            ));
+    }
+    // Then the objects the conditionals resolved, one group per attribute, so a
+    // property that reached several branches is reported once and two properties
+    // on one line stay two.
+    for group in resolved_branch_object_groups(ir) {
+        if group.is_empty() {
+            continue;
         }
-        dead_weights.clear();
-        super::lower::collect_dead_weight_values(object, &mut dead_weights);
-        push_dead_weight_diagnostics(file, &dead_weights, &location, &mut lines, &mut out);
-        removed_sugar.clear();
-        super::lower::collect_removed_boolean_sugar(object, &mut removed_sugar);
-        push_removed_sugar_diagnostics(file, &removed_sugar, &location, &mut lines, &mut out);
-        border_side_styles.clear();
-        super::lower::collect_border_side_styles(object, &mut border_side_styles);
-        for (key, value, offset) in &border_side_styles {
-            let (line, _) = lines
-                .get_or_insert_with(|| LineIndex::new(&file.source))
-                .line_column(&file.source, *offset);
-            out.push(format!(
-                "[csszyx] \"{key}: '{value}'\" at {location}:{line}: Tailwind has no per-side border style, so this generated no CSS and the class is dropped. Use borderStyle: '{value}' for every side, or a number on \"{key}\" for the width."
-            ));
-        }
-        property_objects.clear();
-        super::lower::collect_property_object_values(object, &mut property_objects);
-        for (key, nested, offset) in &property_objects {
-            let (line, _) = lines
-                .get_or_insert_with(|| LineIndex::new(&file.source))
-                .line_column(&file.source, *offset);
-            // Wording matches the removed JavaScript lanes' warnPropertyObjectValue so a
-            // `build.parser` flip does not change the diagnostic text.
-            out.push(format!(
-                "[csszyx] \"{key}\" is a property, not a variant, but received an object {{ {nested} }} at {location}:{line}. This compiles to \"{key}:*\" classes that match no Tailwind variant and generate no CSS. Move the nested keys up a level, or for color opacity use {{ color: '...', op: ... }}."
-            ));
-        }
-        unknown_variants.clear();
-        super::lower::collect_owned_key_variant_objects(object, &mut unknown_variants);
-        push_owned_key_variant_diagnostics(
-            file,
-            &unknown_variants,
-            &location,
-            &mut lines,
-            &mut out,
-        );
-        dead_enums.clear();
-        super::lower::collect_dead_enum_values(object, &mut dead_enums);
-        push_dead_enum_diagnostics(file, &dead_enums, &location, &mut lines, &mut out);
-        mask_members.clear();
-        super::lower::collect_unknown_mask_slot_members(object, &mut mask_members);
-        for (owner, member, allowed, offset) in &mask_members {
-            let (line, _) = lines
-                .get_or_insert_with(|| LineIndex::new(&file.source))
-                .line_column(&file.source, *offset);
-            // Wording matches the removed JavaScript lanes' warnMaskSlotMember so a
-            // `build.parser` flip does not change the diagnostic text.
-            out.push(format!(
-                "[csszyx] {owner}: unknown field \"{member}\" at {location}:{line} — nothing is emitted for it. {owner} takes {{ {allowed} }}."
-            ));
-        }
+        push_group_key_value_diagnostics(&mut sink, group.into_iter(), &[], false, &mut found);
     }
     out.extend(class_name_precedence_advisories(
         file, ir, &location, &mut lines,
@@ -1117,7 +1292,8 @@ fn elapsed_ns(start: Instant) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        merge_variable_maps, relativize_diagnostic_path, transform_file,
+        lower_source_ir_classes, merge_variable_maps, relativize_diagnostic_path,
+        resolved_branch_object_groups, rewrite_static_sz_attributes, transform_file,
         transform_file_with_options, transform_static_classes,
         transform_static_classes_with_options,
     };
@@ -1126,11 +1302,290 @@ mod tests {
         TransformProducer,
     };
 
-    /// A weight written as a numeric string emits a class Tailwind does not
-    /// serve, and the build has to say so — silently emitting `font-700`,
-    /// which generates no CSS, is how the defect went unseen. The wording is
-    /// the TypeScript compiler's, so flipping `build.parser` does not change
-    /// the build log.
+    #[test]
+    fn unresolved_spread_branch_retains_runtime_fallback() {
+        let file = TransformFile {
+            filename: "src/Branch.tsx".into(),
+            source: "const App = (k, value) => <b sz={{ p: 2, ...(k ? value : {}) }} />;".into(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert!(result.code.contains("_sz("), "{}", result.code);
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|message| message.contains("unresolvable sz spread")));
+    }
+
+    #[test]
+    fn resolved_empty_guarded_array_objects_keep_diagnostics() {
+        for defect in ["italic: true", "wordBreak: 'all'"] {
+            let file = TransformFile {
+                filename: "src/Branch.tsx".into(),
+                source: format!("const App = k => <b sz={{[k && {{ {defect} }}]}} />;"),
+            };
+            let result = transform_static_classes(&file, 0, std::time::Instant::now());
+            assert_eq!(
+                result.diagnostics.len(),
+                1,
+                "{defect}: {:?}",
+                result.diagnostics
+            );
+            assert!(result.diagnostics[0].contains("src/Branch.tsx:1"));
+            let parsed = super::super::parser::parse_source_shell(&file);
+            assert!(parsed.ir.sz_attributes[0].array_parts.is_empty());
+        }
+    }
+
+    #[test]
+    fn resolved_branch_diagnostics_preserve_families_locations_and_occurrences() {
+        let defects = [
+            ("workBreak: 'all'", "Unknown property \"workBreak\""),
+            ("wordBreak: 'all'", "canonical key \"break\""),
+            ("zzzNotAKey: 'x'", "Unknown property \"zzzNotAKey\""),
+            ("display: 'bogus'", "not a display value"),
+            ("italic: true", "italic"),
+        ];
+        for (defect, message) in defects {
+            for expression in [
+                format!("{{ {defect}, ...(k ? {{ p: 2 }} : {{}}) }}"),
+                format!("{{ p: 2, ...(k ? {{ {defect} }} : {{}}) }}"),
+                format!("{{ p: 2, ...(k ? {{}} : {{ {defect} }}) }}"),
+                format!("{{ hover: {{ {defect} }}, ...(k ? {{ p: 2 }} : {{}}) }}"),
+            ] {
+                let result = transform_static_classes(
+                    &TransformFile {
+                        filename: "src/Branch.tsx".into(),
+                        source: format!("const App = k => <b\n sz={{{expression}}} />;"),
+                    },
+                    0,
+                    std::time::Instant::now(),
+                );
+                let reports: Vec<_> = result
+                    .diagnostics
+                    .iter()
+                    .filter(|d| d.contains(message))
+                    .collect();
+                assert_eq!(reports.len(), 1, "{expression}: {:?}", result.diagnostics);
+                assert!(reports[0].contains("src/Branch.tsx:2"), "{}", reports[0]);
+            }
+        }
+        let result = transform_static_classes(
+            &TransformFile {
+                filename: "src/Branch.tsx".into(),
+                source:
+                    "const App = k => <b sz={k ? { workBreak: 'all' } : { workBreak: 'all' }} />;"
+                        .into(),
+            },
+            0,
+            std::time::Instant::now(),
+        );
+        assert_eq!(
+            result
+                .diagnostics
+                .iter()
+                .filter(|d| d.contains("Unknown property \"workBreak\""))
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn resolved_provenance_roundtrips_without_affecting_emission() {
+        let file = TransformFile {
+            filename: "src/Branch.tsx".into(),
+            source: "const App = k => <b sz={[{ p: 2 }, k ? { workBreak: 'all' } : { p: 4 }]} />;"
+                .into(),
+        };
+        let parsed = super::super::parser::parse_source_shell(&file);
+        let json = serde_json::to_value(&parsed.ir).unwrap();
+        let roundtrip: super::super::SourceIr = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(parsed.ir, roundtrip);
+        let mut legacy = json;
+        let parts = legacy["sz_attributes"][0]["array_parts"]
+            .as_array_mut()
+            .unwrap();
+        for part in parts {
+            part.as_object_mut().unwrap().remove("resolved_objects");
+            if let Some(ternary) = part["ternary"].as_object_mut() {
+                ternary.remove("resolved_objects");
+            }
+        }
+        let legacy: super::super::SourceIr = serde_json::from_value(legacy).unwrap();
+        assert_eq!(
+            lower_source_ir_classes(&parsed.ir),
+            lower_source_ir_classes(&legacy)
+        );
+        assert_eq!(
+            rewrite_static_sz_attributes(&file.source, &file.filename, &parsed.ir),
+            rewrite_static_sz_attributes(&file.source, &file.filename, &legacy)
+        );
+        assert!(resolved_branch_object_groups(&legacy)
+            .iter()
+            .all(Vec::is_empty));
+    }
+
+    #[test]
+    fn omitted_objects_roundtrip_and_stay_optional_in_older_ir() {
+        // A guarded array element that lowers to no class is dropped from the
+        // rewrite but keeps its object in `omitted_sz_objects` for diagnostics.
+        // IR written before that field existed must still read, and lower and
+        // rewrite exactly as before.
+        let file = TransformFile {
+            filename: "src/Guarded.tsx".into(),
+            source: "const App = k => <b sz={[{ p: 2 }, k && { truncate: false }]} />;".into(),
+        };
+        let parsed = super::super::parser::parse_source_shell(&file);
+        assert!(!parsed.ir.omitted_sz_objects.is_empty());
+        let json = serde_json::to_value(&parsed.ir).unwrap();
+        let roundtrip: super::super::SourceIr = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(parsed.ir, roundtrip);
+
+        let mut legacy = json;
+        legacy.as_object_mut().unwrap().remove("omitted_sz_objects");
+        let legacy: super::super::SourceIr = serde_json::from_value(legacy).unwrap();
+        assert!(legacy.omitted_sz_objects.is_empty());
+        assert_eq!(
+            lower_source_ir_classes(&parsed.ir),
+            lower_source_ir_classes(&legacy)
+        );
+        assert_eq!(
+            rewrite_static_sz_attributes(&file.source, &file.filename, &parsed.ir),
+            rewrite_static_sz_attributes(&file.source, &file.filename, &legacy)
+        );
+    }
+
+    #[test]
+    fn a_guarded_empty_string_contributes_no_array_element() {
+        // `k && ""` lowers to no class and leaves no object behind, so it drops
+        // out of the composition rather than emitting an element that could
+        // only ever add an empty string. A guarded object that lowers to no
+        // class is the other half of the pair: it stays, because its keys are
+        // still worth checking.
+        let cases = [
+            (
+                r#"const F = k => <b sz={[{ p: 2 }, k && ""]} />;"#,
+                r#"const F = k => <b className={_szcn("p-2")} />;"#,
+            ),
+            (
+                r#"const F = k => <b sz={[{ p: 2 }, k && "  "]} />;"#,
+                r#"const F = k => <b className={_szcn("p-2")} />;"#,
+            ),
+            (
+                r#"const F = k => <b sz={[k && ""]} />;"#,
+                "const F = k => <b className={undefined} />;",
+            ),
+        ];
+        for (source, expected) in cases {
+            let result = transform_static_classes(
+                &TransformFile {
+                    filename: "src/Guard.tsx".into(),
+                    source: source.into(),
+                },
+                0,
+                std::time::Instant::now(),
+            );
+            assert_eq!(result.code, expected, "{source}");
+        }
+    }
+
+    #[test]
+    fn folded_sz_attributes_keep_key_diagnostics_from_every_attribute() {
+        // Several `sz` attributes fold into one before any lane runs. A defect
+        // must still be named whichever attribute carries it and whichever
+        // lane the fold lands on: all-static objects merge into one object,
+        // any other mix becomes array parts, and an object that lowers to no
+        // class emits no part at all.
+        let cases = [
+            (
+                "const App = () => <b sz={{ p: 2 }} sz={{ workBreak: 'all' }} />;",
+                "Unknown property \"workBreak\"",
+            ),
+            (
+                "const App = k => <b sz={{ workBreak: 'all' }} sz={k ? { p: 2 } : {}} />;",
+                "Unknown property \"workBreak\"",
+            ),
+            (
+                "const App = k => <b sz={k ? { p: 2 } : {}} sz={{ workBreak: 'all' }} />;",
+                "Unknown property \"workBreak\"",
+            ),
+            (
+                "const App = k => <b sz={{ p: 2 }} sz={k ? { workBreak: 'all' } : {}} />;",
+                "Unknown property \"workBreak\"",
+            ),
+            (
+                "const App = k => <b sz={[k && { p: 2 }]} sz={{ workBreak: 'all' }} />;",
+                "Unknown property \"workBreak\"",
+            ),
+            (
+                "const App = k => <b sz={k ? { p: 2 } : {}} sz={{ display: 'bogus' }} />;",
+                "bogus",
+            ),
+            (
+                // A removed key lowers to no class, so no part is emitted for
+                // this attribute and its object has to travel on its own.
+                "const App = k => <b sz={k ? { p: 2 } : {}} sz={{ italic: true }} />;",
+                "italic",
+            ),
+        ];
+        let mut failures = Vec::new();
+        for (source, marker) in cases {
+            let result = transform_static_classes(
+                &TransformFile {
+                    filename: "src/Folded.tsx".into(),
+                    source: source.into(),
+                },
+                0,
+                std::time::Instant::now(),
+            );
+            let reports = result
+                .diagnostics
+                .iter()
+                .filter(|d| !d.contains("`sz` attributes; they were merged"))
+                .filter(|d| d.contains(marker))
+                .count();
+            if reports != 1 {
+                failures.push(format!("{source}: {:?}", result.diagnostics));
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn resolved_branches_keep_source_diagnostics() {
+        let cases = [
+            "const App = k => <b sz={{ workBreak: 'all', ...(k ? { p: 2 } : {}) }} />;",
+            "const App = k => <b sz={k ? { workBreak: 'all' } : { p: 2 }} />;",
+            "const App = (k, j) => <b sz={k ? { p: 2 } : j ? { workBreak: 'all' } : { p: 4 }} />;",
+            "const A = { workBreak: 'all' }; const B = { p: 2 }; const App = k => <b sz={k ? B : A} />;",
+            "const App = k => <b sz={[{ workBreak: 'all' }, k && { p: 2 }]} />;",
+            "const App = k => <b sz={[k ? { workBreak: 'all' } : { p: 2 }]} />;",
+            "const App = k => <b sz={[k && { workBreak: 'all' }]} />;",
+        ];
+        let mut failures = Vec::new();
+        for source in cases {
+            let result = transform_static_classes(
+                &TransformFile {
+                    filename: "src/Branch.tsx".into(),
+                    source: source.into(),
+                },
+                0,
+                std::time::Instant::now(),
+            );
+            let reports: Vec<_> = result
+                .diagnostics
+                .iter()
+                .filter(|d| d.contains("Unknown property \"workBreak\""))
+                .collect();
+            if reports.len() == 1 {
+                assert!(reports[0].contains("src/Branch.tsx:1"), "{}", reports[0]);
+            } else {
+                failures.push(format!("{source}: {:?}", result.diagnostics));
+            }
+            assert!(result.classes.contains(&"work-break-all".to_string()));
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
     #[test]
     fn a_numeric_string_weight_is_reported_with_the_wording_the_typescript_uses() {
         let file = TransformFile {
@@ -1319,6 +1774,11 @@ mod tests {
         assert!(merge_variable_maps(None, None).is_empty());
     }
 
+    /// A weight written as a numeric string emits a class Tailwind does not
+    /// serve, and the build has to say so — silently emitting `font-700`,
+    /// which generates no CSS, is how the defect went unseen. The wording is
+    /// the TypeScript compiler's, so flipping `build.parser` does not change
+    /// the build log.
     #[test]
     fn diagnostics_distinguish_numeric_dead_step_and_deferred_array_values() {
         let file = TransformFile {
