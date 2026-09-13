@@ -1,7 +1,14 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import {
+    acquireNextSafelistStateLock,
+    NEXT_TURBO_LOADER_LOCK_COMMAND,
+    NextSafelistStateLockedError,
+} from '../src/next-safelist-state.js';
 import { createNextStateContext } from '../src/next-state-context.js';
 import {
     isNextAppSourcePath,
@@ -69,10 +76,124 @@ describe('Next safelist watcher controller', () => {
             },
         });
 
-        expect(watcher.start().materialize.classCount).toBe(2);
-        expect(watcher.start().materialize.classCount).toBe(2);
+        expect(watcher.start()?.materialize.classCount).toBe(2);
+        expect(watcher.start()?.materialize.classCount).toBe(2);
         expect(reasons).toEqual([['initial']]);
         expect(watcher.pending).toBe(false);
+    });
+
+    /**
+     * `next watch` and `next dev` start together in the documented setup, so the
+     * loader's first compile can hold the lock exactly when the watcher runs its
+     * initial cycle. That cycle used to throw and end the watch process.
+     *
+     * @param command - What the holder records on the lock.
+     * @returns The error a cycle throws while that holder is live.
+     */
+    function heldBy(command: string): NextSafelistStateLockedError {
+        return new NextSafelistStateLockedError({
+            version: 1,
+            pid: 4242,
+            token: 'holder-token',
+            hostname: 'host',
+            root: '/repo/apps/web',
+            mode: 'development',
+            command,
+            startedAt: '2026-09-13T00:00:00.000Z',
+            updatedAt: '2026-09-13T00:00:00.000Z',
+        });
+    }
+
+    it('queues the initial cycle instead of throwing when the Turbopack loader holds the lock', () => {
+        const timers = scheduler();
+        let attempts = 0;
+        const watcher = new NextSafelistWatcher({
+            context: context(),
+            runCycle: () => {
+                attempts += 1;
+                if (attempts === 1) {
+                    throw heldBy(NEXT_TURBO_LOADER_LOCK_COMMAND);
+                }
+                return cycleResult(3);
+            },
+            setTimeout: timers.setTimeout,
+            clearTimeout: timers.clearTimeout,
+        });
+
+        expect(watcher.start()).toBeUndefined();
+        expect(watcher.pending).toBe(true);
+        expect(watcher.lastResult).toBeUndefined();
+
+        timers.runAll();
+        expect(watcher.lastResult?.materialize.classCount).toBe(3);
+        // The queued cycle ran as the initial one, so start() does not run it again.
+        expect(watcher.start()?.materialize.classCount).toBe(3);
+        expect(attempts).toBe(2);
+    });
+
+    it('still throws from start when anything but the loader holds the lock', () => {
+        const watcher = new NextSafelistWatcher({
+            context: context(),
+            runCycle: () => {
+                throw heldBy('csszyx next watch');
+            },
+        });
+
+        expect(() => watcher.start()).toThrow(/already locked by process 4242/);
+    });
+
+    it('starts against a real lock the loader holds, and materializes once it lets go', () => {
+        const root = mkdtempSync(path.join(tmpdir(), 'csszyx-watcher-start-'));
+        try {
+            const timers = scheduler();
+            const errors: unknown[] = [];
+            const ctx = createNextStateContext({
+                explicitRoot: root,
+                config: { mangleVars: false },
+                nextVersion: '16.2.7',
+                csszyxVersion: '0.9.0',
+                nativeVersion: '0.9.0-test',
+                mode: 'development',
+            });
+            const lock = acquireNextSafelistStateLock(path.join(ctx.cacheDir, 'state.lock'), {
+                root: ctx.root,
+                mode: 'development',
+                command: NEXT_TURBO_LOADER_LOCK_COMMAND,
+            });
+            const watcher = new NextSafelistWatcher({
+                context: ctx,
+                setTimeout: timers.setTimeout,
+                clearTimeout: timers.clearTimeout,
+                onError: caught => {
+                    errors.push(caught);
+                },
+            });
+
+            try {
+                expect(watcher.start()).toBeUndefined();
+                expect(watcher.pending).toBe(true);
+            } finally {
+                lock.release();
+            }
+
+            timers.runAll();
+            expect(errors).toEqual([]);
+            expect(watcher.lastResult?.materialize.sourceCount).toBe(0);
+            expect(watcher.pending).toBe(false);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    it('says the initial cycle failed when the runner hands back nothing', () => {
+        const watcher = new NextSafelistWatcher({
+            context: context(),
+            // A runner supplied from outside can break its own contract; the
+            // watcher must not carry on as if a first pass had happened.
+            runCycle: () => undefined as never,
+        });
+
+        expect(() => watcher.start()).toThrow('failed to run its initial cycle');
     });
 
     it('accepts only direct absolute JSON shard paths', () => {

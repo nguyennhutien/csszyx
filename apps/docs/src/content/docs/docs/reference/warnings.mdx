@@ -701,6 +701,18 @@ input that produced it is worth seeing.
 The watcher could not complete its first pass, so nothing after it can trust the
 safelist. Usually a permissions or path problem under `.csszyx`.
 
+```text
+[csszyx] next watch is waiting for the safelist lock held by the Turbopack loader (process {pid}). Classes added meanwhile get no CSS until it is released; a lock left by a loader that exited is recovered within 30 s.
+```
+
+Unlike the stops above, this one is a notice: the watcher keeps running. `next
+watch` and the Turbopack loader share one lock, and the loader holds it for about
+a millisecond at a time, so an overlap normally clears on the next retry without
+a word. This prints once when the wait passes a second, which in practice means
+the loader was killed while holding the lock. The wait ends on its own when that
+lock goes stale. If it lasts more than a minute, the watcher stops and reports the
+lock instead.
+
 ### No CSS at all
 
 ```text

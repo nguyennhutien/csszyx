@@ -10,7 +10,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
-import { type NextSafelistWatchEvent, NextSafelistWatcher } from '@csszyx/unplugin/next-watcher';
+import {
+    NEXT_WATCH_LOCK_COMMAND,
+    type NextSafelistWatchEvent,
+    NextSafelistWatcher,
+} from '@csszyx/unplugin/next-watcher';
 import { type ChokidarOptions, type FSWatcher, watch } from 'chokidar';
 import fg from 'fast-glob';
 import { Minimatch } from 'minimatch';
@@ -179,6 +183,10 @@ export async function startNextWatch(
         cacheDir: options.cacheDir,
         importedStaticSz: options.importedStaticSz,
         config: { mangleVars: false },
+        // The Turbopack loader steps aside only for a watcher. This pass is the
+        // watcher's own startup, and the initial cycle below reads every shard
+        // the loader writes while it runs, so it records the watcher's command.
+        lockCommand: NEXT_WATCH_LOCK_COMMAND,
     });
 
     let resolveFailure: (error: Error) => void = () => {};
@@ -198,6 +206,7 @@ export async function startNextWatch(
         context: prebuild.context,
         debounceMs,
         onError: reportFailure,
+        onWarn: printWatcherNotice,
     });
     const isIgnored = createIgnoredMatcher(root, prebuild.context.safelist.shardsDir, ignore);
     const watchFactory = dependencies.watch ?? watch;
@@ -276,6 +285,15 @@ export async function startNextWatch(
             controller.close();
         },
     };
+}
+
+/**
+ * Print a notice the watcher keeps running through.
+ *
+ * @param message - The notice, already prefixed with `[csszyx]`.
+ */
+export function printWatcherNotice(message: string): void {
+    console.warn(`${colors.warn(icons.warn)} ${message}`);
 }
 
 /**

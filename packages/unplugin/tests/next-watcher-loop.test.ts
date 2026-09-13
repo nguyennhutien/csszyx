@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { NextSafelistStateLockedError } from '../src/next-safelist-state.js';
 import { createNextStateContext } from '../src/next-state-context.js';
-import { NextWatcherLoop, type NextWatcherLoopCycleRunner } from '../src/next-watcher-loop.js';
+import {
+    LOADER_LOCK_GIVE_UP_AFTER_MS,
+    LOADER_LOCK_RETRY_MIN_MS,
+    LOADER_LOCK_WARN_AFTER_MS,
+    NextWatcherLoop,
+    type NextWatcherLoopCycleRunner,
+} from '../src/next-watcher-loop.js';
 
 describe('Next watcher loop', () => {
     function context() {
@@ -212,7 +218,7 @@ describe('Next watcher loop', () => {
         const calls: string[][] = [];
         const loop = new NextWatcherLoop({
             context: context(),
-            debounceMs: 40,
+            debounceMs: 75,
             runCycle: (_context, _options, reasons) => {
                 calls.push([...reasons]);
                 if (calls.length === 1) {
@@ -235,7 +241,7 @@ describe('Next watcher loop', () => {
         expect(loop.lastError).toBeUndefined();
         expect(loop.pending).toBe(true);
         expect(loop.reasons).toEqual(['shard:add']);
-        expect([...timers.pending.values()].map(task => task.delayMs)).toEqual([40]);
+        expect([...timers.pending.values()].map(task => task.delayMs)).toEqual([75]);
 
         timers.runAll();
 
@@ -294,6 +300,219 @@ describe('Next watcher loop', () => {
         expect(timers.pending.size).toBe(0);
         expect(loop.pending).toBe(false);
         expect(errors).toEqual([]);
+    });
+
+    /**
+     * Run every due timer once, moving the clock forward by the longest delay
+     * among them, the way real time would have passed.
+     *
+     * @param timers - The fake scheduler.
+     * @param clock - The clock the loop reads.
+     * @param clock.now - Milliseconds since the test began.
+     */
+    function tick(timers: ReturnType<typeof scheduler>, clock: { now: number }): void {
+        const tasks = [...timers.pending.values()];
+        timers.pending.clear();
+        clock.now += Math.max(0, ...tasks.map(task => task.delayMs));
+        for (const task of tasks) {
+            task.callback();
+        }
+    }
+
+    it('says nothing about an ordinary overlap with the loader', () => {
+        const timers = scheduler();
+        const clock = { now: 0 };
+        const warnings: string[] = [];
+        let attempts = 0;
+        const loop = new NextWatcherLoop({
+            context: context(),
+            runCycle: () => {
+                attempts += 1;
+                if (attempts === 1) {
+                    throw heldBy('csszyx next turbo-loader');
+                }
+                return RESULT;
+            },
+            setTimeout: timers.setTimeout,
+            clearTimeout: timers.clearTimeout,
+            now: () => clock.now,
+            onWarn: message => {
+                warnings.push(message);
+            },
+        });
+
+        loop.notify('shard:add');
+        tick(timers, clock);
+        tick(timers, clock);
+
+        expect(loop.lastResult).toBe(RESULT);
+        expect(warnings).toEqual([]);
+    });
+
+    it('warns once while a loader keeps the lock, then reports it past the limit', () => {
+        const timers = scheduler();
+        const clock = { now: 0 };
+        const errors: unknown[] = [];
+        const warnings: string[] = [];
+        const error = heldBy('csszyx next turbo-loader');
+        const loop = new NextWatcherLoop({
+            context: context(),
+            debounceMs: 50,
+            runCycle: () => {
+                throw error;
+            },
+            setTimeout: timers.setTimeout,
+            clearTimeout: timers.clearTimeout,
+            now: () => clock.now,
+            onError: caught => {
+                errors.push(caught);
+            },
+            onWarn: message => {
+                warnings.push(message);
+            },
+        });
+
+        loop.notify('shard:add');
+        tick(timers, clock);
+        const firstRefusalAt = clock.now;
+        while (clock.now - firstRefusalAt < LOADER_LOCK_WARN_AFTER_MS - 50) {
+            tick(timers, clock);
+        }
+        expect(warnings).toEqual([]);
+
+        while (warnings.length === 0 && clock.now < LOADER_LOCK_GIVE_UP_AFTER_MS) {
+            tick(timers, clock);
+        }
+        // One warning naming who holds it, and the retries go on quietly.
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain('Turbopack loader');
+        expect(warnings[0]).toContain('4242');
+        expect(errors).toEqual([]);
+        expect(loop.pending).toBe(true);
+
+        while (errors.length === 0 && clock.now < LOADER_LOCK_GIVE_UP_AFTER_MS * 2) {
+            tick(timers, clock);
+        }
+        // Past the limit no live loader explains it any more: report, stop retrying.
+        expect(errors).toEqual([error]);
+        expect(clock.now - firstRefusalAt).toBeGreaterThan(LOADER_LOCK_GIVE_UP_AFTER_MS);
+        expect(warnings).toHaveLength(1);
+        expect(loop.pending).toBe(false);
+    });
+
+    it('counts a new wait from zero once the loader has let go', () => {
+        const timers = scheduler();
+        const clock = { now: 0 };
+        const errors: unknown[] = [];
+        const warnings: string[] = [];
+        let holding = true;
+        const loop = new NextWatcherLoop({
+            context: context(),
+            runCycle: () => {
+                if (holding) {
+                    throw heldBy('csszyx next turbo-loader');
+                }
+                return RESULT;
+            },
+            setTimeout: timers.setTimeout,
+            clearTimeout: timers.clearTimeout,
+            now: () => clock.now,
+            onError: caught => {
+                errors.push(caught);
+            },
+            onWarn: message => {
+                warnings.push(message);
+            },
+        });
+
+        loop.notify('shard:add');
+        while (warnings.length === 0 && clock.now < LOADER_LOCK_GIVE_UP_AFTER_MS) {
+            tick(timers, clock);
+        }
+        holding = false;
+        tick(timers, clock);
+        expect(loop.lastResult).toBe(RESULT);
+
+        // A later overlap is a new wait: no instant warning, no instant give-up.
+        holding = true;
+        clock.now += LOADER_LOCK_GIVE_UP_AFTER_MS;
+        loop.notify('shard:change');
+        tick(timers, clock);
+        expect(errors).toEqual([]);
+        expect(warnings).toHaveLength(1);
+        expect(loop.pending).toBe(true);
+    });
+
+    it('retries no faster than the floor when the debounce is zero', () => {
+        const timers = scheduler();
+        let attempts = 0;
+        const loop = new NextWatcherLoop({
+            context: context(),
+            debounceMs: 0,
+            runCycle: () => {
+                attempts += 1;
+                if (attempts === 1) {
+                    throw heldBy('csszyx next turbo-loader');
+                }
+                return RESULT;
+            },
+            setTimeout: timers.setTimeout,
+            clearTimeout: timers.clearTimeout,
+        });
+
+        loop.notify('shard:add');
+        expect([...timers.pending.values()].map(task => task.delayMs)).toEqual([0]);
+        timers.runAll();
+
+        expect([...timers.pending.values()].map(task => task.delayMs)).toEqual([
+            LOADER_LOCK_RETRY_MIN_MS,
+        ]);
+    });
+
+    it('keeps waiting quietly when nothing listens for notices', () => {
+        const timers = scheduler();
+        const clock = { now: 0 };
+        const errors: unknown[] = [];
+        const loop = new NextWatcherLoop({
+            context: context(),
+            runCycle: () => {
+                throw heldBy('csszyx next turbo-loader');
+            },
+            setTimeout: timers.setTimeout,
+            clearTimeout: timers.clearTimeout,
+            now: () => clock.now,
+            onError: caught => {
+                errors.push(caught);
+            },
+        });
+
+        loop.notify('shard:add');
+        while (clock.now < LOADER_LOCK_WARN_AFTER_MS * 2) {
+            tick(timers, clock);
+        }
+
+        expect(errors).toEqual([]);
+        expect(loop.pending).toBe(true);
+    });
+
+    it('has nothing to flush or queue when nothing is pending, or once disposed', () => {
+        const timers = scheduler();
+        let attempts = 0;
+        const loop = new NextWatcherLoop({
+            context: context(),
+            runCycle: () => {
+                attempts += 1;
+                return RESULT;
+            },
+            setTimeout: timers.setTimeout,
+            clearTimeout: timers.clearTimeout,
+        });
+
+        expect(loop.flushOrQueue()).toBeUndefined();
+        loop.notify('shard:add');
+        loop.dispose();
+        expect(loop.flushOrQueue()).toBeUndefined();
+        expect(attempts).toBe(0);
     });
 
     it('clears pending work and ignores new events after dispose', () => {
