@@ -94,6 +94,10 @@ export interface TailwindModule {
     root: string;
     /** `__unstable__loadDesignSystem`, absent on versions that lack it. */
     loadDesignSystem?: unknown;
+    /** `compile`, which reports the features a stylesheet uses. */
+    compile?: unknown;
+    /** The bit `compile` sets when a stylesheet generates utilities. */
+    utilitiesFeature?: number;
 }
 
 /** Resolves the Tailwind a project would use. Injected in tests. */
@@ -189,13 +193,20 @@ export interface StylesheetFacts {
  */
 export type OracleSkipKind = 'environment' | 'stylesheet';
 
+/** Why a question about a stylesheet could not be answered. */
+export interface OracleSkip {
+    ok: false;
+    kind: OracleSkipKind;
+    reason: string;
+}
+
 /**
  * A skip nobody needs to act on.
  *
  * @param reason - Human-readable cause.
  * @returns The skip.
  */
-function environmentSkip(reason: string): EmittedClassOracle {
+function environmentSkip(reason: string): OracleSkip {
     return { ok: false, kind: 'environment', reason };
 }
 
@@ -205,7 +216,7 @@ function environmentSkip(reason: string): EmittedClassOracle {
  * @param reason - Human-readable cause.
  * @returns The skip.
  */
-function stylesheetSkip(reason: string): EmittedClassOracle {
+function stylesheetSkip(reason: string): OracleSkip {
     return { ok: false, kind: 'stylesheet', reason };
 }
 
@@ -232,7 +243,13 @@ const MARKER = /^(?:group|peer)(?:\/[^/\s]+)?$/;
 /** An imported Tailwind, in either of the shapes one can arrive in. */
 export interface ImportedTailwind {
     __unstable__loadDesignSystem?: unknown;
-    default?: { __unstable__loadDesignSystem?: unknown };
+    compile?: unknown;
+    Features?: { Utilities?: number };
+    default?: {
+        __unstable__loadDesignSystem?: unknown;
+        compile?: unknown;
+        Features?: { Utilities?: number };
+    };
 }
 
 /**
@@ -275,7 +292,13 @@ const defaultLoader: TailwindLoader = async resolveFrom => {
         const entry = (await import(
             pathToFileURL(require.resolve('tailwindcss')).href
         )) as ImportedTailwind;
-        return { version, root, loadDesignSystem: designSystemEntry(entry) };
+        return {
+            version,
+            root,
+            loadDesignSystem: designSystemEntry(entry),
+            compile: entry.compile ?? entry.default?.compile,
+            utilitiesFeature: (entry.Features ?? entry.default?.Features)?.Utilities,
+        };
     } catch {
         return null;
     }
@@ -511,6 +534,83 @@ export async function tailwindEntriesAmong(files: readonly string[]): Promise<st
 
 /** `@import "tailwindcss"` in either quoting style, with optional layer parts. */
 const IMPORTS_TAILWIND = /@import\s+["']tailwindcss["' /]/;
+
+/** What one stylesheet is to the project, from a compile by its own Tailwind. */
+export type StylesheetRole =
+    | {
+          ok: true;
+          /**
+           * Whether it generates utilities, the rule Tailwind's own bundler
+           * integrations use to decide a stylesheet is a root.
+           */
+          utilities: boolean;
+          /** Every stylesheet the compile loaded, as resolved paths. */
+          imports: string[];
+      }
+    | OracleSkip;
+
+/** `Features.Utilities` in every Tailwind 4 release, for a module that does not export the enum. */
+const UTILITIES_FEATURE = 16;
+
+/**
+ * Compile a stylesheet only far enough to learn whether it is a root and what
+ * it imports.
+ *
+ * A literal `@import "tailwindcss"` in the text is not the test: an entry may
+ * reach Tailwind through a package stylesheet, a commented-out line matches
+ * text, and a stylesheet that only declares `@theme` generates nothing. The
+ * compile answers all three the way the project's build does.
+ *
+ * @param options - What to compile and where to resolve it from.
+ * @param loadTailwind - Resolver override, for tests.
+ * @returns The role, or a skip carrying the reason there is none.
+ */
+export async function readStylesheetRole(
+    options: OracleOptions,
+    loadTailwind: TailwindLoader = defaultLoader,
+): Promise<StylesheetRole> {
+    const tailwind = await loadTailwind(options.resolveFrom);
+    if (tailwind === null) {
+        return environmentSkip(`could not resolve tailwindcss from ${options.resolveFrom}`);
+    }
+    if (!tailwind.version.startsWith('4.') || typeof tailwind.compile !== 'function') {
+        return environmentSkip(
+            `tailwindcss ${tailwind.version} has no compile to ask; the check needs 4.x`,
+        );
+    }
+    const compile = tailwind.compile as (
+        css: string,
+        options: LoadDesignSystemOptions,
+    ) => Promise<{ features: number }>;
+    const context: StylesheetResolution = {
+        aliases: options.aliases ?? [],
+        resolver: await projectResolver(options.resolveFrom),
+    };
+    const imports: string[] = [];
+    try {
+        const compiled = await compile(options.css, {
+            base: options.cssBase,
+            loadStylesheet: async (id, base) => {
+                const loaded = await loadStylesheet(
+                    id,
+                    base,
+                    tailwind.root,
+                    options.resolveFrom,
+                    context,
+                );
+                imports.push(loaded.path);
+                return loaded;
+            },
+            loadModule: (id, base) => loadModule(id, base, options.resolveFrom, context),
+        });
+        const utilities = tailwind.utilitiesFeature ?? UTILITIES_FEATURE;
+        return { ok: true, utilities: (compiled.features & utilities) !== 0, imports };
+    } catch (error) {
+        return stylesheetSkip(
+            `the stylesheet did not compile: ${error instanceof Error ? error.message : String(error)}`,
+        );
+    }
+}
 
 /**
  * Build an oracle over the project's own Tailwind and stylesheet.

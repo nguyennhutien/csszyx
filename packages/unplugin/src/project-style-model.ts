@@ -17,30 +17,59 @@
  *
  * @module
  */
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
     createEmittedClassOracle,
+    type OracleSkipKind,
+    readStylesheetRole,
     type StylesheetFacts,
-    tailwindEntriesAmong,
 } from '@csszyx/tailwind-oracle';
 
-/** What the project's stylesheets say, from one compile of each entry. */
+/** What one stylesheet is to the project. */
+export type StyleEntryRole =
+    /** Generates utilities and no other root imports it: it decides the facts. */
+    | 'root'
+    /** Another root imports it, so that root's compile already includes it. */
+    | 'imported'
+    /** Generates no utilities: a theme, a partial, or plain CSS. */
+    | 'not-root'
+    /** Could not be compiled, and no root that did compile imports it. */
+    | 'failed';
+
+/** One stylesheet the build handed over, and what the model made of it. */
+export interface StyleEntry {
+    /** The stylesheet path as the caller gave it. */
+    file: string;
+    /** What it is to the project. */
+    role: StyleEntryRole;
+    /** What its `@import "tailwindcss"` line settled, for a root. */
+    facts?: StylesheetFacts;
+    /** Why it could not be compiled, for a failed entry. */
+    failure?: { kind: OracleSkipKind; reason: string };
+}
+
+/** What the project's stylesheets say, from one compile of each root. */
 export interface ProjectStyleModel {
+    /** Every stylesheet handed over, in the order given. */
+    entries: readonly StyleEntry[];
     /**
-     * What the `@import "tailwindcss"` line settled for every class.
+     * What the `@import "tailwindcss"` line settled for every class, or null
+     * when no root compiled.
      *
-     * Reported only when every entry agrees. A project whose stylesheets
-     * disagree has no answer that is true of all of it, and guessing one would
-     * rename classes for half the build.
+     * Reported only when every root agrees. A project whose roots disagree has
+     * no answer that is true of all of it, and guessing one would rename
+     * classes for half the build.
      */
-    facts: StylesheetFacts;
+    facts: StylesheetFacts | null;
     /**
      * Which of these classes produce no CSS anywhere in the project.
      *
-     * A class counts as unserved only when EVERY entry agrees it is — one
-     * stylesheet serving it is enough for the project to serve it.
+     * A class counts as unserved only when EVERY root agrees it is — one
+     * stylesheet serving it is enough for the project to serve it. Empty when
+     * no root compiled: there is nothing to ask.
      *
      * @param classes - Class names, without variants.
      * @returns The subset that styles nothing, in the given order.
@@ -104,40 +133,115 @@ function agreedFacts(first: CompiledEntry, rest: readonly CompiledEntry[]): Styl
     };
 }
 
+/** Text a stylesheet must contain to reach Tailwind at all: an import or a directive. */
+const MAY_REACH_TAILWIND = /@(?:import|tailwind)\b/;
+
 /**
- * Compile the project's entry stylesheets and answer from them.
+ * The path a stylesheet resolves to on disk, so one reached through a symlink
+ * and one named directly compare equal.
+ *
+ * @param file - Stylesheet path.
+ * @returns The real path, or the path itself when it cannot be resolved.
+ */
+function realPath(file: string): string {
+    try {
+        return realpathSync(file);
+    } catch {
+        return file;
+    }
+}
+
+/**
+ * Compile the project's stylesheets and answer from its roots.
  *
  * The caller has already walked the project for stylesheets, so the list is
  * handed over rather than globbed again — measured at 1 ms for one app against
  * 96 ms at the root of this monorepo, and the gap widens with the tree.
  *
+ * A root is a stylesheet whose compile generates utilities, the rule
+ * Tailwind's own bundler integrations use: an entry that reaches Tailwind
+ * through a package stylesheet counts, a commented-out import and a
+ * theme-only file do not. A root another root imports has no say of its own,
+ * because Tailwind serves what the importing line settled.
+ *
  * @param resolveFrom - Project directory whose `package.json` anchors resolution.
  * @param cssFiles - Stylesheet paths the caller already walked.
- * @returns The model, or null when no entry compiled and there is nothing to ask.
+ * @returns The model, with every stylesheet accounted for.
  */
 export async function openProjectStyleModel(
     resolveFrom: string,
     cssFiles: readonly string[],
-): Promise<ProjectStyleModel | null> {
-    const compiled: CompiledEntry[] = [];
-    for (const entry of await tailwindEntriesAmong(cssFiles)) {
-        const oracle = await createEmittedClassOracle({
-            resolveFrom,
-            css: await readFile(entry, 'utf8'),
-            cssBase: path.dirname(entry),
-        });
-        // A stylesheet that will not compile is dropped rather than allowed to
-        // answer: a broken stylesheet is not evidence about the project.
-        if (oracle.ok) {
-            compiled.push({ facts: oracle.facts, findDead: classes => oracle.findDead(classes) });
+): Promise<ProjectStyleModel> {
+    const entries: StyleEntry[] = [];
+    const roots: Array<{ index: number; css: string }> = [];
+    const failed: number[] = [];
+    const importedByRoots = new Set<string>();
+    for (const file of cssFiles) {
+        let css: string;
+        try {
+            css = await readFile(file, 'utf8');
+        } catch {
+            // A stylesheet that cannot be read cannot be an entry point.
+            entries.push({ file, role: 'not-root' });
+            continue;
+        }
+        if (!MAY_REACH_TAILWIND.test(css)) {
+            entries.push({ file, role: 'not-root' });
+            continue;
+        }
+        const role = await readStylesheetRole({ resolveFrom, css, cssBase: path.dirname(file) });
+        if (!role.ok) {
+            failed.push(
+                entries.push({
+                    file,
+                    role: 'failed',
+                    failure: { kind: role.kind, reason: role.reason },
+                }) - 1,
+            );
+        } else if (!role.utilities) {
+            entries.push({ file, role: 'not-root' });
+        } else {
+            roots.push({ index: entries.push({ file, role: 'root' }) - 1, css });
+            for (const imported of role.imports) importedByRoots.add(realPath(imported));
         }
     }
-    const [first, ...rest] = compiled;
-    if (first === undefined) return null;
 
+    const compiled: CompiledEntry[] = [];
+    for (const { index, css } of roots) {
+        const { file } = entries[index] as StyleEntry;
+        if (importedByRoots.has(realPath(file))) {
+            entries[index] = { file, role: 'imported' };
+            continue;
+        }
+        const oracle = await createEmittedClassOracle({
+            resolveFrom,
+            css,
+            cssBase: path.dirname(file),
+        });
+        if (!oracle.ok) {
+            entries[index] = {
+                file,
+                role: 'failed',
+                failure: { kind: oracle.kind, reason: oracle.reason },
+            };
+            continue;
+        }
+        entries[index] = { file, role: 'root', facts: oracle.facts };
+        compiled.push({ facts: oracle.facts, findDead: classes => oracle.findDead(classes) });
+    }
+    // A partial that fails on its own compiles as part of the root that imports
+    // it, which is how the build reads it.
+    for (const index of failed) {
+        const { file } = entries[index] as StyleEntry;
+        if (importedByRoots.has(realPath(file))) entries[index] = { file, role: 'imported' };
+    }
+
+    const [first, ...rest] = compiled;
     return {
-        facts: agreedFacts(first, rest),
+        entries,
+        facts: first === undefined ? null : agreedFacts(first, rest),
         unserved(classes) {
+            if (compiled.length === 0) return [];
             const perEntry = compiled.map(entry => new Set(entry.findDead(classes)));
             return classes.filter(token => perEntry.every(dead => dead.has(token)));
         },

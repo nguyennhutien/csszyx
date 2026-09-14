@@ -73,6 +73,11 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
     tailwindEntriesAmong: [
         'packages/tailwind-oracle/src/emitted-class-oracle.ts',
         'packages/tailwind-oracle/src/index.ts',
+    ],
+    // Root detection by Tailwind's own compile. The model decides roots from it.
+    readStylesheetRole: [
+        'packages/tailwind-oracle/src/emitted-class-oracle.ts',
+        'packages/tailwind-oracle/src/index.ts',
         'packages/unplugin/src/project-style-model.ts',
     ],
     // Tailwind's own loader. Exactly one file may call it.

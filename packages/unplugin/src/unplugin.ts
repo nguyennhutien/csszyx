@@ -4863,14 +4863,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Said before the early return below: a project whose Tailwind renames
         // or forces every utility gets classes that style nothing, whether or
         // not it authored any className of its own.
-        if (model !== null) {
+        if (model.facts !== null) {
             const unsupported = unsupportedStylesheetFactsMessage(model.facts);
             if (unsupported !== null) emitWarning(unsupported);
         }
         if (state.authoredClasses.size === 0) return;
         // No design system is no answer. Reporting nothing is right: every
         // token then keeps the placement it has today.
-        if (model === null) return;
+        if (model.facts === null) return;
         unservedClasses = unservedAuthoredClasses(state.authoredClasses, classes =>
             model.unserved(classes),
         );
