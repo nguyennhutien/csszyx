@@ -1,5 +1,19 @@
 # csszyx
 
+## [0.17.2](https://github.com/nguyennhutien/csszyx/compare/v0.17.1...v0.17.2) (2026-09-14)
+
+### Features
+
+* let `csszyx check` gate CI by kind, and suggest misspelled keys ([#318](https://github.com/nguyennhutien/csszyx/issues/318))
+* **cli:** accept a directory argument in `check` ([#318](https://github.com/nguyennhutien/csszyx/issues/318))
+* **cli:** name the kind of each `check` finding and filter by it ([#318](https://github.com/nguyennhutien/csszyx/issues/318))
+* suggest the key an unknown `sz` key most likely misspells ([#318](https://github.com/nguyennhutien/csszyx/issues/318))
+
+### Bug Fixes
+
+* **cli:** say `scan-collisions` lists where a selector is declared ([#318](https://github.com/nguyennhutien/csszyx/issues/318))
+* **types:** spell safe alignment values the way Tailwind serves them ([#318](https://github.com/nguyennhutien/csszyx/issues/318))
+
 ## [0.17.1](https://github.com/nguyennhutien/csszyx/compare/v0.17.0...v0.17.1) (2026-09-13)
 
 ### Features
