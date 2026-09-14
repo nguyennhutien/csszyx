@@ -3781,7 +3781,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         return {
             // Null, not undefined, when no stylesheet sets one: the engine
             // then emits exactly what it emitted before prefixes existed.
-            classPrefix: styleModel.facts?.prefix ?? null,
+            classPrefix: prefixOf(styleModel),
             astBudget,
             mangleVars: options.production?.mangleVars === true,
             mangleVarHoistMaxDepth: options.production?.mangleVarHoistMaxDepth,
@@ -4912,9 +4912,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * prefix the engine writes, and reading it is asynchronous where the
      * transforms that need it are not.
      *
-     * @returns Nothing; the model lands in `styleModel`.
+     * @returns The model, which also lands in `styleModel`.
      */
-    async function openStyleModel(): Promise<void> {
+    async function openStyleModel(): Promise<ProjectStyleModel> {
         const listed = tailwindStylesheets.map(file => ({
             file,
             absolute: path.resolve(state.rootDir, file),
@@ -4934,11 +4934,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             listed.length > 0
                 ? listed.map(entry => entry.absolute)
                 : [...new Set([...projectCssFiles, ...jsImportedCssFiles])];
-        styleModel = await openProjectStyleModel(state.rootDir, candidates, specifierAliases);
-        const problem = styleModelError(styleModel, state.rootDir);
+        const opened = await openProjectStyleModel(state.rootDir, candidates, specifierAliases);
+        styleModel = opened;
+        const problem = styleModelError(opened, state.rootDir);
         if (problem !== null) throw new Error(problem);
-        const skipped = styleModelWarning(styleModel, state.rootDir);
+        const skipped = styleModelWarning(opened, state.rootDir);
         if (skipped !== null) emitWarning(skipped);
+        return opened;
     }
 
     /**
@@ -5409,6 +5411,110 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (found) modules.push(...found);
         }
         return modules;
+    }
+
+    /**
+     * The prefix a model settled, or null when no stylesheet set one.
+     *
+     * @param model - An opened style model.
+     * @returns The prefix the engine writes.
+     */
+    function prefixOf(model: ProjectStyleModel): string | null {
+        return model.facts?.prefix ?? null;
+    }
+
+    /**
+     * A prefix as a message names it.
+     *
+     * @param prefix - A prefix, or null.
+     * @returns `none`, or the prefix in backticks.
+     */
+    function describePrefix(prefix: string | null): string {
+        return prefix === null ? 'none' : `\`${prefix}\``;
+    }
+
+    /**
+     * Read the stylesheets again after one changed on a dev server, and follow
+     * a prefix that changed with them.
+     *
+     * Every module compiled before the edit carries classes under the old
+     * prefix, and the page holds them, so swapping the stylesheet alone leaves
+     * each of those classes unstyled. A changed prefix therefore lowers every
+     * source again, invalidates every module and reloads the page.
+     *
+     * An edit that leaves the stylesheets unreadable keeps the model the
+     * server had: the author is mid-edit, and a dev server that exits over it
+     * loses every open page.
+     *
+     * @param ctx - The changed file and the dev server.
+     * @param ctx.file - Absolute path of the changed stylesheet.
+     * @param ctx.server - The dev server.
+     * @returns Nothing once the page has been told.
+     */
+    async function followStyleModelEdit(ctx: {
+        file: string;
+        server: ViteDevServer;
+    }): Promise<void> {
+        const previous = styleModel;
+        // A hook that ran before the build read anything has nothing to follow.
+        if (previous === undefined) return;
+        let current: ProjectStyleModel;
+        try {
+            current = await openStyleModel();
+        } catch (error) {
+            styleModel = previous;
+            // The build-time note says nothing was written, which is not true
+            // of a server that is still serving.
+            const message = (error as Error).message.replace(/\n {2}note: .*$/, '');
+            emitWarning(
+                `${message}\n  note: the dev server keeps the prefix it last read (${describePrefix(prefixOf(previous))}) until the stylesheets agree again.`,
+            );
+            return;
+        }
+        const before = prefixOf(previous);
+        const after = prefixOf(current);
+        if (after === before) return;
+        await prescanAndWriteClasses();
+        ctx.server.moduleGraph.invalidateAll();
+        // Vite 5 has no per-environment graphs; Vite 6 and later answer each
+        // environment from its own.
+        const { environments } = ctx.server as {
+            environments?: Record<string, { moduleGraph: { invalidateAll(): void } }>;
+        };
+        for (const environment of Object.values(environments ?? {})) {
+            environment.moduleGraph.invalidateAll();
+        }
+        ctx.server.ws.send({ type: 'full-reload' });
+        // Ungated, like the active-parser line: a reload that drops the page's
+        // state with no explanation would be its own surprise.
+        console.warn(
+            `[csszyx] ${path.relative(state.rootDir, ctx.file).split(path.sep).join('/')} changed the Tailwind prefix from ${describePrefix(before)} to ${describePrefix(after)}: recompiled every module and reloaded the page.`,
+        );
+    }
+
+    /**
+     * Answer a hot update, and follow a Tailwind prefix a stylesheet edit changed.
+     *
+     * @param pass - Which pass this is and the graph its answer belongs to.
+     * @param pass.isClientPass - True for the pass that owns the page.
+     * @param pass.moduleGraph - Returns the graph this hook's answer belongs to.
+     * @param ctx - The changed file and the dev server.
+     * @param ctx.file - Absolute path of the file the watcher reported.
+     * @param ctx.server - The dev server.
+     * @returns The same answer as `handleHotFile`, once any prefix change is followed.
+     */
+    function handleHotFileFollowingPrefix<TModule>(
+        pass: {
+            isClientPass: boolean;
+            moduleGraph: () => {
+                getModulesByFile: (file: string) => Iterable<TModule> | undefined;
+            };
+        },
+        ctx: { file: string; server: ViteDevServer },
+    ): TModule[] | undefined | Promise<TModule[] | undefined> {
+        const answer = handleHotFile(pass, ctx);
+        if (!pass.isClientPass || !ctx.file.endsWith('.css')) return answer;
+        return followStyleModelEdit(ctx).then(() => answer);
     }
 
     /**
@@ -6550,7 +6656,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     //
                     // A host that calls the hook without an environment (a test
                     // double) reads as the client pass.
-                    return handleHotFile(
+                    return handleHotFileFollowingPrefix(
                         {
                             isClientPass: (this.environment?.name ?? 'client') === 'client',
                             // `server.moduleGraph` holds the backward-compatible
@@ -6586,7 +6692,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                  * otherwise.
                  */
                 handleHotUpdate(ctx) {
-                    return handleHotFile(
+                    return handleHotFileFollowingPrefix(
                         { isClientPass: true, moduleGraph: () => ctx.server.moduleGraph },
                         ctx,
                     );
