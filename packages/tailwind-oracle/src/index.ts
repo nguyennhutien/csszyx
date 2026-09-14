@@ -22,6 +22,7 @@ export {
     type TailwindModule,
     tailwindEntriesAmong,
 } from './emitted-class-oracle.js';
+export type { StylesheetAlias } from './project-resolver.js';
 export {
     findSiblingKeywordValues,
     type KeywordOracle,

@@ -39,6 +39,12 @@ import {
 } from './collision-oracle.js';
 import { keywordOracleFrom } from './keyword-oracle.js';
 import { brokenOpacityValue, collectCustomProperties } from './opacity-verdict.js';
+import {
+    expandAlias,
+    type ProjectResolver,
+    projectResolver,
+    type StylesheetAlias,
+} from './project-resolver.js';
 import type { KeywordOracle } from './sibling-keyword.js';
 import type { CollisionOracle } from './theme-collision.js';
 
@@ -101,6 +107,11 @@ export interface OracleOptions {
     css: string;
     /** Directory the stylesheet lives in, for its relative imports. */
     cssBase: string;
+    /**
+     * The bundler's aliases, tsconfig paths included, applied to `@import`
+     * specifiers before anything else resolves them.
+     */
+    aliases?: readonly StylesheetAlias[];
 }
 
 /**
@@ -289,6 +300,7 @@ const defaultLoader: TailwindLoader = async resolveFrom => {
  * @param base - Directory the importing stylesheet lives in.
  * @param tailwindRoot - Root of the resolved Tailwind package.
  * @param resolveFrom - Project directory whose `package.json` anchors packages.
+ * @param context - The aliases and the project resolver this compile uses.
  * @returns Absolute path to the stylesheet.
  */
 function resolveStylesheetPath(
@@ -296,6 +308,7 @@ function resolveStylesheetPath(
     base: string,
     tailwindRoot: string,
     resolveFrom: string,
+    context: StylesheetResolution,
 ): string {
     // Anchored rather than a prefix test: `tailwindcss-animate` is a package of
     // its own, and routing it into the Tailwind package would look for a file
@@ -303,7 +316,17 @@ function resolveStylesheetPath(
     if (id === 'tailwindcss' || id.startsWith('tailwindcss/')) {
         return tailwindPackageStylesheet(id, tailwindRoot);
     }
+    const aliased = expandAlias(id, context.aliases);
+    if (aliased !== null) return aliased;
     if (id.startsWith('.') || path.isAbsolute(id)) return path.resolve(base, id);
+    if (context.resolver !== null) {
+        try {
+            return context.resolver.resolveStylesheet(id, base);
+        } catch {
+            // Fall through to the resolution every host has, which names the
+            // specifier when it fails too.
+        }
+    }
     // A bare specifier is ambiguous: CSS reads `@import "theme.css"` as a
     // sibling file, node reads it as a package. Prefer the file when one is
     // actually there, so stylesheets that relied on the old behaviour keep
@@ -313,6 +336,12 @@ function resolveStylesheetPath(
     return createRequire(path.join(resolveFrom, 'package.json')).resolve(id);
 }
 
+/** What resolution needs beyond the specifier: the aliases and the project's resolver. */
+interface StylesheetResolution {
+    aliases: readonly StylesheetAlias[];
+    resolver: ProjectResolver | null;
+}
+
 /**
  * Read one stylesheet Tailwind asked for, from the package or from the project.
  *
@@ -320,6 +349,7 @@ function resolveStylesheetPath(
  * @param base - Directory the importing stylesheet lives in.
  * @param tailwindRoot - Root of the resolved Tailwind package.
  * @param resolveFrom - Project directory whose `package.json` anchors packages.
+ * @param context - The aliases and the project resolver this compile uses.
  * @returns The stylesheet Tailwind expects back.
  */
 async function loadStylesheet(
@@ -327,8 +357,9 @@ async function loadStylesheet(
     base: string,
     tailwindRoot: string,
     resolveFrom: string,
+    context: StylesheetResolution,
 ): Promise<LoadedStylesheet> {
-    const file = resolveStylesheetPath(id, base, tailwindRoot, resolveFrom);
+    const file = resolveStylesheetPath(id, base, tailwindRoot, resolveFrom, context);
     return { path: file, base: path.dirname(file), content: await readFile(file, 'utf8') };
 }
 
@@ -344,9 +375,24 @@ async function loadStylesheet(
  * @param id - Specifier as written in `@plugin`.
  * @param base - Directory the importing stylesheet lives in.
  * @param resolveFrom - Project directory whose `package.json` anchors packages.
+ * @param context - The aliases and the project resolver this compile uses.
  * @returns The module Tailwind expects back.
  */
-async function loadModule(id: string, base: string, resolveFrom: string): Promise<LoadedModule> {
+async function loadModule(
+    id: string,
+    base: string,
+    resolveFrom: string,
+    context: StylesheetResolution,
+): Promise<LoadedModule> {
+    if (context.resolver !== null) {
+        try {
+            // Through jiti, as Tailwind loads it: a TypeScript plugin with
+            // extensionless imports loads here and not through `import()`.
+            return await context.resolver.loadModule(id, base);
+        } catch {
+            // Fall through to the loader every host has, which names the module.
+        }
+    }
     const file = id.startsWith('.')
         ? path.resolve(base, id)
         : createRequire(path.join(resolveFrom, 'package.json')).resolve(id);
@@ -497,10 +543,15 @@ export async function createEmittedClassOracle(
         options: LoadDesignSystemOptions,
     ) => Promise<DesignSystem>;
 
+    const context: StylesheetResolution = {
+        aliases: options.aliases ?? [],
+        resolver: await projectResolver(options.resolveFrom),
+    };
     const loadOptions: LoadDesignSystemOptions = {
         base: options.cssBase,
-        loadStylesheet: (id, base) => loadStylesheet(id, base, tailwind.root, options.resolveFrom),
-        loadModule: (id, base) => loadModule(id, base, options.resolveFrom),
+        loadStylesheet: (id, base) =>
+            loadStylesheet(id, base, tailwind.root, options.resolveFrom, context),
+        loadModule: (id, base) => loadModule(id, base, options.resolveFrom, context),
     };
 
     let design: DesignSystem;
