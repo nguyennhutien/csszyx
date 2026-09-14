@@ -92,6 +92,8 @@ pub struct NativeTransformOptions {
     pub cross_module_statics_json: Option<String>,
     /// Cross-module static sz OBJECT registry payload (ordered-pair JSON).
     pub cross_module_sz_objects_json: Option<String>,
+    /// The Tailwind `prefix()` written before every class the engine emits.
+    pub class_prefix: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -253,6 +255,7 @@ pub fn transform_batch_native(
             ast_budget: options.ast_budget.map(|budget| budget as usize),
             cross_module_statics_json: options.cross_module_statics_json,
             cross_module_sz_objects_json: options.cross_module_sz_objects_json,
+            class_prefix: options.class_prefix,
         },
     )
     .map(|results| {

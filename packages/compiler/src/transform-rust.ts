@@ -151,6 +151,7 @@ export function transformRustBatch(
                 // registries share a transport but not a meaning, and the
                 // native side picks different machinery for each.
                 crossModuleSzObjectsJson: encodeCrossModuleStatics(options?.crossModuleSzObjects),
+                classPrefix: options?.classPrefix ?? undefined,
             },
         ).map(fromNativeResult);
     } catch (err) {

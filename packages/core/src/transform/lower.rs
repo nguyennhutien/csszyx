@@ -123,9 +123,87 @@ pub(super) fn dynamic_css_var_class(prop: &super::DynamicCssVarIr) -> String {
     // with the hoisted variable as the value. The generic shape below gave
     // `--ring-(--_sz---ring)`, which names no Tailwind utility.
     if prop.key.starts_with("--") {
-        return format!("{variant}[{}:var({})]", prop.key, prop.var_name);
+        return with_class_prefix(format!("{variant}[{}:var({})]", prop.key, prop.var_name));
     }
-    format!("{variant}{}-({})", prop.class_prefix, prop.var_name)
+    with_class_prefix(format!(
+        "{variant}{}-({})",
+        prop.class_prefix, prop.var_name
+    ))
+}
+
+thread_local! {
+    /// The Tailwind prefix of the file being transformed on this thread.
+    static CLASS_PREFIX: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The project's Tailwind `prefix()` for every class lowered while it lives.
+///
+/// A scope rather than a parameter: classes are lowered from more than twenty
+/// places in the parser, the rewrite and the szv precompile, and one of them
+/// missing the prefix would emit a class that styles nothing with no error.
+/// The engine opens one scope per file, the whole transform of a file runs on
+/// one thread, and dropping the scope restores the previous value even when
+/// the transform unwinds.
+#[must_use = "the prefix applies only while the scope is alive"]
+pub struct ClassPrefixScope {
+    previous: Option<String>,
+}
+
+impl ClassPrefixScope {
+    /// Apply `class_prefix` to every class lowered on this thread until the
+    /// scope drops. An empty prefix is no prefix.
+    pub fn enter(class_prefix: Option<&str>) -> Self {
+        let next = class_prefix
+            .filter(|prefix| !prefix.is_empty())
+            .map(str::to_owned);
+        Self {
+            previous: CLASS_PREFIX.with(|cell| cell.replace(next)),
+        }
+    }
+}
+
+impl Drop for ClassPrefixScope {
+    fn drop(&mut self) {
+        CLASS_PREFIX.with(|cell| cell.replace(self.previous.take()));
+    }
+}
+
+/// A lowered class with the active prefix written before it.
+fn with_class_prefix(class_name: String) -> String {
+    CLASS_PREFIX.with(|cell| match cell.borrow().as_deref() {
+        Some(prefix) => format!("{prefix}:{class_name}"),
+        None => class_name,
+    })
+}
+
+/// A variant added to a class that was already lowered, kept after the
+/// Tailwind prefix: `tw:p-4` under `hover` is `tw:hover:p-4`, never
+/// `hover:tw:p-4`, which Tailwind does not serve.
+#[cfg(feature = "native-engine")]
+pub(crate) fn with_variant(variant: &str, class_name: &str) -> String {
+    CLASS_PREFIX.with(|cell| {
+        let prefix = cell.borrow();
+        match prefix.as_deref().and_then(|prefix| {
+            class_name
+                .strip_prefix(prefix)
+                .and_then(|rest| rest.strip_prefix(':'))
+                .map(|rest| (prefix, rest))
+        }) {
+            Some((prefix, rest)) => format!("{prefix}:{variant}:{rest}"),
+            None => format!("{variant}:{class_name}"),
+        }
+    })
+}
+
+/// [`lower_static_sz_object`] with the project's Tailwind prefix written
+/// before every class.
+#[must_use]
+pub fn lower_static_sz_object_with_class_prefix(
+    object: &StaticSzObject,
+    class_prefix: Option<&str>,
+) -> Vec<String> {
+    let _scope = ClassPrefixScope::enter(class_prefix);
+    lower_static_sz_object(object)
 }
 
 /// Lower a static sz object into Tailwind/csszyx class names in source order.
@@ -133,6 +211,9 @@ pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
     let mut classes = Vec::with_capacity(object.properties.len());
     lower_object_into(object, "", &mut classes);
     merge_text_size_and_leading(classes)
+        .into_iter()
+        .map(with_class_prefix)
+        .collect()
 }
 
 /// Whether a key was removed from the authoring contract and has migration

@@ -3575,7 +3575,10 @@ fn candidate_classes_from_keyed_object(
 
 fn prefix_classes(classes: Vec<String>, prefix: Option<&str>) -> Vec<String> {
     if let Some(p) = prefix {
-        classes.into_iter().map(|c| format!("{p}:{c}")).collect()
+        classes
+            .into_iter()
+            .map(|c| super::lower::with_variant(p, &c))
+            .collect()
     } else {
         classes
     }

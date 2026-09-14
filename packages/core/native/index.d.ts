@@ -56,6 +56,8 @@ export interface NativeTransformOptions {
     crossModuleStaticsJson?: string;
     /** Cross-module static sz OBJECT registry payload (ordered-pair JSON). */
     crossModuleSzObjectsJson?: string;
+    /** The Tailwind `prefix()` written before every class the engine emits. */
+    classPrefix?: string;
 }
 
 /** Native transform output shape returned per source file. */

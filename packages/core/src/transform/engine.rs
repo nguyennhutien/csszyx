@@ -118,6 +118,7 @@ pub(super) fn transform_file_with_options(
     file: &TransformFile,
     options: TransformOptions,
 ) -> TransformResult {
+    let _class_prefix = super::lower::ClassPrefixScope::enter(options.class_prefix.as_deref());
     let total_start = Instant::now();
     let triage_start = Instant::now();
     // Bail before the parser on pathologically nested source: the recursive
