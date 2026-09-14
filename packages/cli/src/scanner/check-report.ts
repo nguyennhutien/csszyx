@@ -15,18 +15,28 @@
  */
 import { printHeader, printInfo, printSuccess, printWarn } from '../utils/terminal-ui.js';
 
+/** Every pass that produces findings, by its stable id. */
+export const CHECK_RULES = [
+    'sz-diagnostic',
+    'dead-class',
+    'broken-opacity',
+    'sibling-keyword',
+    'theme-collision',
+] as const;
+
 /** Which pass produced a finding. */
-export type CheckRule =
-    | 'sz-diagnostic'
-    | 'dead-class'
-    | 'broken-opacity'
-    | 'sibling-keyword'
-    | 'theme-collision';
+export type CheckRule = (typeof CHECK_RULES)[number];
 
 /** One machine-readable finding. */
 export interface CheckFinding {
     /** Stable id of the pass that produced it. */
     rule: CheckRule;
+    /**
+     * Stable id of what was found. For `sz-diagnostic` it is the compiler's
+     * diagnostic kind, such as `unknown-key` or `class-precedence`; for every
+     * other pass it repeats the rule.
+     */
+    kind: string;
     /** Project-relative file, when the finding has one. */
     file?: string;
     /** 1-based line, when the finding has one. */
@@ -34,6 +44,9 @@ export interface CheckFinding {
     /** What happened, in one sentence. */
     message: string;
 }
+
+/** A finding as a pass records it, before its kind defaults to its rule. */
+export type FindingInput = Omit<CheckFinding, 'kind'> & Partial<Pick<CheckFinding, 'kind'>>;
 
 /** The document `--json` writes. */
 export interface CheckReport {
@@ -48,8 +61,8 @@ export interface Reporter {
     info(text: string): void;
     warn(text: string): void;
     success(text: string): void;
-    /** Record a finding. Always collected, whatever the mode. */
-    push(finding: CheckFinding): void;
+    /** Record a finding. Always collected, whatever the mode. A finding with no kind is its rule. */
+    push(finding: FindingInput): void;
     /** Everything recorded so far. */
     readonly findings: readonly CheckFinding[];
     /** Whether prose is being suppressed. */
@@ -72,7 +85,7 @@ export function createReporter(json: boolean): Reporter {
         info: say(printInfo),
         warn: say(printWarn),
         success: say(printSuccess),
-        push: finding => findings.push(finding),
+        push: finding => findings.push({ ...finding, kind: finding.kind ?? finding.rule }),
         findings,
         quiet: json,
     };

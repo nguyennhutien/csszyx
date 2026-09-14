@@ -8,6 +8,7 @@ import {
     ASTBudgetExceededError,
     type CssVariableMangleValue,
     ensureRustTransformAvailable,
+    isAdvisorySzDiagnostic,
     isRustTransformAvailable,
     isWasmTransformAvailable,
     type SourceTransformResult,
@@ -1056,27 +1057,6 @@ export function unscopedMonorepoMessage(): string {
 }
 
 /**
- * The marker of the one advisory that is not a fallback.
- *
- * `sz` beating a runtime `className` is a precedence surprise, not absent
- * output: both sources compiled, one of them wins. Named here because the
- * predicate below is otherwise a question about fallbacks only.
- */
-const CLASS_NAME_PRECEDENCE_MARKER = 'takes precedence over the runtime "className"';
-/**
- * Two `sz` on one element were merged as one array. Every class compiled and
- * was collected; the note only says which order the merge used.
- */
-const DUPLICATE_SZ_MARKER = '`sz` attributes; they were merged as sz={[';
-/**
- * The variable-hoist planner's note that it left a variable per element.
- *
- * An optimisation it declined, not a style it lost: every class and variable
- * is still emitted. Advice, on the same footing as the precedence note.
- */
-const MANGLE_VARS_HOIST_SKIP_MARKER = 'mangleVars skipped component CSS variable hoist';
-
-/**
  * Whether a diagnostic is an advisory one — the class a build may hold back.
  *
  * Advisory means one thing: the styles are THERE, and the note is about how
@@ -1089,19 +1069,14 @@ const MANGLE_VARS_HOIST_SKIP_MARKER = 'mangleVars skipped component CSS variable
  * kinds", which quietly made every key and value diagnostic advisory: a
  * production build of a file with five typo'd keys printed nothing but a census
  * calling them fallbacks, while `csszyx check` on the same tree named all six.
- * A classifier written by exclusion cannot stay right as diagnostics are added,
- * because a new one joins the silent side by default.
+ * The answer now comes from the compiler's diagnostic table, which also names
+ * each kind for `csszyx check`, so the markers live beside the wording.
  *
  * @param message - One raw diagnostic line as an engine emitted it.
  * @returns True when the diagnostic is advisory rather than a build result.
  */
 export function isAdvisoryDiagnostic(message: string): boolean {
-    return (
-        szFallbackConsequenceOf(message) === 'nudge' ||
-        message.includes(CLASS_NAME_PRECEDENCE_MARKER) ||
-        message.includes(DUPLICATE_SZ_MARKER) ||
-        message.includes(MANGLE_VARS_HOIST_SKIP_MARKER)
-    );
+    return isAdvisorySzDiagnostic(message);
 }
 
 /**

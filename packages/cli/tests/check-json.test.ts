@@ -17,7 +17,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { check } from '../src/commands/check.js';
+import { type CheckOptions, check } from '../src/commands/check.js';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
 const TAILWIND_V4 = path.dirname(
@@ -55,15 +55,25 @@ afterEach(() => {
  * Run the command in JSON mode and parse everything it wrote to stdout.
  *
  * @param cwd - Project root.
+ * @param options - Options for the run besides the root and the format.
  * @returns The parsed report.
  */
-async function jsonFor(cwd: string): Promise<{
+async function jsonFor(
+    cwd: string,
+    options: Omit<CheckOptions, 'cwd' | 'json'> = {},
+): Promise<{
     version: number;
-    findings: Array<{ rule: string; file?: string; line?: number; message: string }>;
+    findings: Array<{
+        rule: string;
+        kind?: string;
+        file?: string;
+        line?: number;
+        message: string;
+    }>;
 }> {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await check({ cwd, json: true });
+    await check({ ...options, cwd, json: true });
     const written = log.mock.calls.map(call => call.join(' ')).join('\n');
     return JSON.parse(written);
 }
@@ -167,5 +177,158 @@ describe('csszyx check --json — a diagnostic that names no line', () => {
 
         expect(finding?.message).toContain('slot');
         expect(finding?.line).toBeUndefined();
+    });
+});
+
+/**
+ * One `rule` covered three different things: a typo'd key, an alias, and a note
+ * that `sz` beats a runtime `className`. A gate that wanted only the first two
+ * had to match the English of each message, and rewording one turned the gate
+ * green. Each finding now carries the kind the compiler reads from its own
+ * wording, and a run can be narrowed to the rules and kinds it gates on.
+ */
+describe('csszyx check --json — diagnostic kinds and rule selection', () => {
+    const PRECEDENCE_AND_TYPO = [
+        'export const A = (props) => <div className={props.className} sz={{ p: 4 }} />;',
+        'export const B = () => <div sz={{ nonsenseKey: 4 }} />;',
+    ].join('\n');
+
+    it('names the kind of each sz diagnostic', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': PRECEDENCE_AND_TYPO,
+        });
+
+        const report = await jsonFor(cwd);
+        const diagnostics = report.findings.filter(entry => entry.rule === 'sz-diagnostic');
+
+        expect(diagnostics.map(entry => entry.kind)).toEqual(
+            expect.arrayContaining(['class-precedence', 'unknown-key']),
+        );
+    });
+
+    it('gives a finding from another pass its rule as its kind', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': `export const A = () => <div sz={{ pointer: 'none' }} />;`,
+        });
+
+        const report = await jsonFor(cwd);
+        const dead = report.findings.find(entry => entry.rule === 'dead-class');
+
+        expect(dead?.kind).toBe('dead-class');
+    });
+
+    it('drops an ignored kind from the findings and from the exit code', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx':
+                'export const A = (props) => <div className={props.className} sz={{ p: 4 }} />;',
+        });
+
+        const report = await jsonFor(cwd, { ignoreRule: ['class-precedence'] });
+
+        expect(report.findings).toEqual([]);
+        expect(process.exitCode).toBeUndefined();
+    });
+
+    it('leaves an ignored pass out while the passes beside it still run', async () => {
+        // The dead-class pass also reports broken opacity, so ignoring one of
+        // its two rules must not drop the other or print the pass as clean.
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': `export const A = () => <div sz={{ pointer: 'none' }} />;`,
+        });
+
+        const report = await jsonFor(cwd, { ignoreRule: ['dead-class'] });
+
+        expect(report.findings.some(entry => entry.rule === 'dead-class')).toBe(false);
+    });
+
+    it('keeps only the selected kinds when --rule is given', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': `${PRECEDENCE_AND_TYPO}\nexport const C = () => <div sz={{ pointer: 'none' }} />;`,
+        });
+
+        const report = await jsonFor(cwd, { rule: ['unknown-key'] });
+
+        expect(new Set(report.findings.map(entry => entry.kind))).toEqual(new Set(['unknown-key']));
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('selects a whole pass by its rule id', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': `${PRECEDENCE_AND_TYPO}\nexport const C = () => <div sz={{ pointer: 'none' }} />;`,
+        });
+
+        const report = await jsonFor(cwd, { rule: ['dead-class'] });
+
+        expect(new Set(report.findings.map(entry => entry.rule))).toEqual(new Set(['dead-class']));
+    });
+
+    it.each(['runtime-fallback', 'parse-error', 'mangle-vars-hoist-skip'])(
+        'refuses %s, which check never reports, rather than selecting nothing',
+        async id => {
+            const cwd = projectWith({
+                'src/app.css': '@import "tailwindcss";',
+                'src/App.tsx': PRECEDENCE_AND_TYPO,
+            });
+            const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+            vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+            await check({ cwd, rule: [id] });
+
+            expect(process.exitCode).toBe(1);
+            expect(log.mock.calls.flat().join('\n')).toContain(`"${id}"`);
+        },
+    );
+
+    it('does not call a run clean when its only issues were left out', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx':
+                'export const A = (props) => <div className={props.className} sz={{ p: 4 }} />;',
+        });
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await check({ cwd, ignoreRule: ['class-precedence'] });
+        const printed = log.mock.calls.flat().join('\n');
+
+        expect(printed).not.toContain('No sz issues found');
+        expect(printed).toContain('1 left out by --rule or --ignore-rule');
+        expect(process.exitCode).toBeUndefined();
+    });
+
+    it('counts the issues left out beside the ones it reports', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': PRECEDENCE_AND_TYPO,
+        });
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await check({ cwd, ignoreRule: ['class-precedence'] });
+
+        expect(log.mock.calls.flat().join('\n')).toContain(
+            '1 more sz issue(s) left out by --rule or --ignore-rule.',
+        );
+    });
+
+    it('refuses an id no rule or kind has, rather than selecting nothing', async () => {
+        // A misspelt --rule that matched nothing would pass every run.
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': PRECEDENCE_AND_TYPO,
+        });
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await check({ cwd, rule: ['unknwn-key'] });
+
+        expect(process.exitCode).toBe(1);
+        expect(log.mock.calls.flat().join('\n')).toContain('"unknwn-key"');
     });
 });

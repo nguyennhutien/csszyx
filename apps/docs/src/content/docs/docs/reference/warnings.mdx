@@ -936,6 +936,8 @@ from the project root, and `--pattern` is read relative to that directory.
 | Line | Meaning |
 | --- | --- |
 | `No sz issues found across {n} files.` | Clean. |
+| `No selected sz issues across {n} files; {m} left out by --rule or --ignore-rule.` | Every issue found was left out by the rule selection. The run passes, and the line says it was not clean. |
+| `{m} more sz issue(s) left out by --rule or --ignore-rule.` | Printed under the report when the selection left some issues out. |
 | `✖ {n} sz issue(s) in {m} file(s).` | The grouped report follows. |
 | `Scope: static sz props and szv()/szr() catalog definitions. Keys that only exist at runtime (an array or spread built from runtime data, a dynamic() value) cannot be checked statically.` | Printed with every clean run, so the scope is never implied to be wider than it is. |
 | `Every one of the {n} emitted class(es) produces CSS under this project's Tailwind{, {m} accepted}.` | The dead-class check passed. The trailing clause appears only when the baseline accepts known exceptions. |
@@ -1081,7 +1083,8 @@ finding:
   "rule": "sibling-keyword",
   "file": "src/App.tsx",
   "line": 12,
-  "message": "color: 'balance' emits text-balance, which sets text-wrap — not what color sets."
+  "message": "color: 'balance' emits text-balance, which sets text-wrap — not what color sets.",
+  "kind": "sibling-keyword"
 }
 ```
 
@@ -1089,6 +1092,25 @@ finding:
 `sibling-keyword`, `theme-collision`. It is a stable id on purpose: messages get
 rewritten whenever they can be made clearer, so anything filtering on wording
 would break each time one was.
+
+`kind` says what an `sz-diagnostic` found: `unknown-key`, `canonical-key`,
+`removed-key`, `numeric-key`, `closed-enum-value`, `off-scale-value`,
+`numeric-font-weight`, `per-side-border-style`, `property-object`,
+`non-variant-object`, `unknown-field`, `runtime-value`, `unresolvable-spread`,
+`style-override`, `szs-slot-map`, `sz-recover`, `class-precedence`,
+`duplicate-sz`, or `other` for a message no kind matches. Every other pass
+repeats its `rule`. Runtime fallback notes are not `check` findings, so they
+have no kind.
+
+`--rule <id>` keeps only the findings of that rule or kind, and
+`--ignore-rule <id>` leaves them out; both repeat, and both change the exit code
+as well as the report. A gate that fails on key mistakes but not on precedence
+notes is `csszyx check --ignore-rule class-precedence`. An id that is neither a
+rule nor a kind fails the run rather than selecting nothing:
+
+```text
+[csszyx] ✖ {given} is not a rule or a diagnostic kind, so it would select nothing. Known ids: {ids}.
+```
 
 `npx @csszyx/cli scan-collisions` finds class names that would collide with a
 mangled token:

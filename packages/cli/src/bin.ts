@@ -177,6 +177,8 @@ cli.command(
     )
     .option('--files <path>', 'Check exactly these files, for a git hook (repeatable)')
     .option('--json', 'Emit one machine-readable document instead of the prose report')
+    .option('--rule <id>', 'Report only this rule or diagnostic kind (repeatable)')
+    .option('--ignore-rule <id>', 'Leave out this rule or diagnostic kind (repeatable)')
     .action(async (dir, options) => {
         await (await import('./commands/check.js')).check({
             cwd: options.cwd,
@@ -187,6 +189,8 @@ cli.command(
             allowToken: repeatableOption(options.allowToken),
             files: repeatableOption(options.files),
             json: options.json,
+            rule: repeatableOption(options.rule),
+            ignoreRule: repeatableOption(options.ignoreRule),
         });
     });
 
