@@ -579,6 +579,28 @@ build root needs no config — it is compiled and scanned automatically;
 `compileSources` is only needed for `/packages/` or for sources **outside** the
 build root.
 
+#### Tailwind Stylesheets (`tailwindStylesheet`)
+
+csszyx writes your Tailwind prefix before every class it emits, so
+`sz={{ p: 4 }}` becomes `tw:p-4` under `@import "tailwindcss" prefix(tw)`. To learn
+the prefix it compiles the stylesheets in your project that reach Tailwind. It
+finds them by walking the project root, which also finds test fixtures, copied
+stylesheets and ones the app no longer loads. When two of them set different
+prefixes, the build stops and lists each one with its prefix.
+
+List the stylesheets your app loads, and nothing else is read for the prefix:
+
+```ts
+csszyx({
+  tailwindStylesheet: "src/index.css",
+});
+```
+
+Accepts a path or an array of paths, relative to the project root. A listed path
+that does not exist stops the build. Without the option, the walk skips
+`node_modules`, `dist`, `build`, `target`, `coverage`, `storybook-static`
+and every dot-directory.
+
 #### Content Scope Check (`contentScopeCheck`)
 
 Default `true`. Tailwind v4's automatic content detection scans every file under its

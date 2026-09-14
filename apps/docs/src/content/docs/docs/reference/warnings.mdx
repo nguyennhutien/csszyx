@@ -96,6 +96,7 @@ itself.
 | Warnings stopped appearing part-way through a session | [The cap on development warnings](#the-cap-on-development-warnings) |
 | The build got slower or bigger | [Mangling](#mangling) |
 | Only *some* files are styled | [Build pipeline](#build-pipeline) |
+| The build stops with `set different prefixes` | [Tailwind entries set different prefixes](#tailwind-entries-set-different-prefixes) |
 
 ## sz — unresolved expressions
 
@@ -674,6 +675,38 @@ The build carries on without those classes, so the page renders with `sz` props
 that produce no CSS. Said once per path — a dev server retries the write on
 every edit. A read-only `.csszyx`, a full disk, or a path owned by another user
 all arrive here.
+
+### Tailwind entries set different prefixes
+
+```text
+[csszyx] your Tailwind entries set different prefixes, so no class name csszyx emits can be served by all of them:
+  {file}   {prefix(name) or no prefix}
+  help: give every entry the same `@import "tailwindcss"` line, or list the stylesheets this build loads in the csszyx `tailwindStylesheet` option.
+  note: the build stopped before transforming any module; nothing was written.
+```
+
+A build **error**, one line per stylesheet. csszyx writes one prefix before every
+class, so with two prefixes in play part of the app would get classes that style
+nothing. A stylesheet another entry imports has no say of its own, and entries
+that differ only in `important` do not stop the build. Usually one of the listed
+files is a fixture or an old copy: name the real one in the `tailwindStylesheet`
+option ([configuration](/docs/reference/config/)).
+
+```text
+[csszyx] the csszyx `tailwindStylesheet` option lists stylesheets that are not there: {paths} (relative to {rootDir}).
+  help: list the stylesheet that imports Tailwind for this build, relative to the project root.
+```
+
+A build **error**. A mistyped path would otherwise leave nothing to read the
+prefix from. Fix the path.
+
+```text
+[csszyx] your Tailwind entry sets important, which csszyx does not emit for yet: every utility is `!important`, so a class csszyx emits cannot override one the project already applies.
+  help: drop important from the `@import "tailwindcss"` line, or keep it and style those elements with `className` until csszyx supports it.
+```
+
+A warning that fires in production. The build carries on, but an `sz` override
+loses to the class it was meant to override.
 
 ### Next.js with Turbopack
 
