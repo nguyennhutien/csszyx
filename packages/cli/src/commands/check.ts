@@ -10,7 +10,7 @@
  * @module
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -36,7 +36,13 @@ import { spinner } from '../utils/terminal-ui.js';
 export interface CheckOptions {
     /** Project root to scan. Defaults to `process.cwd()`. */
     cwd?: string;
-    /** Glob to match source files. Defaults to `**\/*.{jsx,tsx}`. */
+    /**
+     * Directory to scan, relative to `cwd`. Narrows the glob and nothing else:
+     * the stylesheet and Tailwind are still resolved from `cwd`, and findings
+     * keep paths relative to it.
+     */
+    dir?: string;
+    /** Glob to match source files, relative to `dir` when one is given. Defaults to `**\/*.{jsx,tsx}`. */
     pattern?: string;
     /** Extra ignore globs appended to the defaults. */
     ignore?: string[];
@@ -637,6 +643,43 @@ async function reportThemeCollisions(
 }
 
 /**
+ * The directory the glob is rooted at, or fail the run explaining why it cannot be.
+ *
+ * A directory that does not exist globs zero files, and zero files reads as a
+ * clean run — the answer a gate must never give for a path it never opened.
+ * Given together with `--files`, each would silently drop what the other asked
+ * for, so that is refused as well.
+ *
+ * @param options - scan options.
+ * @param out - reporter the failure is written to.
+ * @param cwd - project root.
+ * @returns Absolute glob root, or null when the run has already failed.
+ */
+function scanRootFor(options: CheckOptions, out: Reporter, cwd: string): string | null {
+    if (options.dir === undefined) return cwd;
+    const dir = withPosixSeparators(options.dir);
+    const root = path.resolve(cwd, dir);
+    const stat = statSync(root, { throwIfNoEntry: false });
+    let refusal: string;
+    if (options.files) {
+        refusal = `A directory and --files both choose the files to check. Pass "${dir}" or --files, not both.`;
+    } else if (options.pattern !== undefined && path.win32.isAbsolute(options.pattern)) {
+        // fast-glob reads an absolute pattern as absolute whatever root it is
+        // given, so the scan would leave the directory without saying so.
+        refusal = `--pattern "${options.pattern}" is an absolute path, so it would not stay inside "${dir}". Pass a pattern relative to the directory.`;
+    } else if (stat?.isDirectory()) {
+        return root;
+    } else if (stat) {
+        refusal = `"${dir}" is a file, not a directory. To check single files, pass --files ${dir}.`;
+    } else {
+        refusal = `"${dir}" does not exist under ${cwd}, so there is nothing to check.`;
+    }
+    out.warn(`\u2716 ${refusal}`);
+    process.exitCode = 1;
+    return null;
+}
+
+/**
  * Resolve the files this run will scan, or fail the run explaining why.
  *
  * Two ways to end with nothing to scan, and both are fatal rather than empty:
@@ -658,6 +701,8 @@ async function resolveScanFiles(
     patterns: readonly string[],
     ignore: readonly string[],
 ): Promise<string[] | null> {
+    const root = scanRootFor(options, out, cwd);
+    if (root === null) return null;
     // ora writes straight to the tty, so it has to be skipped rather than
     // routed: a spinner frame in the middle of a JSON document is not parseable.
     const s = out.quiet ? null : spinner.start('Scanning for files...');
@@ -669,7 +714,7 @@ async function resolveScanFiles(
             missing = listed.missing;
             files = listed.files;
         } else {
-            files = await fg([...patterns], { cwd, ignore: [...ignore], absolute: true });
+            files = await fg([...patterns], { cwd: root, ignore: [...ignore], absolute: true });
         }
     } catch (err) {
         s?.fail('File scan failed');

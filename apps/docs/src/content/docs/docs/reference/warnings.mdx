@@ -929,7 +929,9 @@ See [SSR & Hydration](/docs/ssr/) and the
 
 `npx @csszyx/cli check` runs the same lowering warnings across every file at
 once and groups them by file — it is the answer to "the dev server only warns
-about files I happen to open".
+about files I happen to open". Pass a directory — `npx @csszyx/cli check src` —
+to scan only the files under it; the stylesheet and Tailwind are still found
+from the project root, and `--pattern` is read relative to that directory.
 
 | Line | Meaning |
 | --- | --- |
@@ -942,6 +944,10 @@ about files I happen to open".
 | `Dead-class check skipped: {reason}.` | |
 | `✖ The dead-class check did not run. Its stylesheet is part of this project, so this is reported as a failure rather than a skip — otherwise a check that never runs is indistinguishable from one that found nothing.` | Exits non-zero. See below. |
 | `Files that could not be read:` + one line per path | A path given to `--files` that names a source file the scan could not open. |
+| `✖ A directory and --files both choose the files to check. Pass "{dir}" or --files, not both.` | Exits non-zero, before any file is scanned. |
+| `✖ "{dir}" is a file, not a directory. To check single files, pass --files {dir}.` | Exits non-zero, before any file is scanned. |
+| `✖ --pattern "{pattern}" is an absolute path, so it would not stay inside "{dir}". Pass a pattern relative to the directory.` | Exits non-zero before scanning: an absolute pattern ignores the directory it was given. |
+| `✖ "{dir}" does not exist under {cwd}, so there is nothing to check.` | Exits non-zero rather than passing on the zero files a missing directory would match. |
 | `✖ {n} listed file(s) could not be read, so they were not checked. A pass here would report a subset as if it were the whole list. Check the paths, and note that a separator is normalised rather than trusted, so this is a missing file rather than a Windows path.` | Exits non-zero, before any file is scanned. |
 | `Values that belong to a different sz key:` + one line per offender reading ``{key}: '{value}' emits {class}, which sets {properties} — not what {key} sets.`` | A value written on a key that owns neither it nor its CSS property. |
 | `✖ {n} value(s) written on a key that does not own them. Each one compiles, ships CSS and renders, so nothing else reports it; the style asked for is simply absent. Move the value to the key that owns it, or declare a theme token by that name if the spelling was deliberate.` | Exits non-zero. |

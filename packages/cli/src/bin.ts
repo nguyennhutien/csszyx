@@ -164,10 +164,10 @@ cli.command('doctor', 'Diagnose mangling issues')
 
 // check command
 cli.command(
-    'check',
+    'check [dir]',
     'Scan static sz props and szv()/szr() catalogs for unknown/aliased sz keys (CI-friendly)',
 )
-    .option('--pattern <glob>', 'Glob of source files to scan')
+    .option('--pattern <glob>', 'Glob of source files to scan, relative to [dir]')
     .option('--ignore <glob>', 'Extra ignore glob (repeatable)')
     .option('--cwd <dir>', 'Current working directory')
     .option('--allow <class>', 'Accept an emitted class that produces no CSS (repeatable)')
@@ -177,9 +177,10 @@ cli.command(
     )
     .option('--files <path>', 'Check exactly these files, for a git hook (repeatable)')
     .option('--json', 'Emit one machine-readable document instead of the prose report')
-    .action(async options => {
+    .action(async (dir, options) => {
         await (await import('./commands/check.js')).check({
             cwd: options.cwd,
+            dir,
             pattern: options.pattern,
             ignore: repeatableOption(options.ignore),
             allow: repeatableOption(options.allow),
