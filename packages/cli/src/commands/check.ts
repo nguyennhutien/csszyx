@@ -14,7 +14,12 @@ import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { SZ_DIAGNOSTIC_KIND_IDS, szDiagnosticKindOf, transformSource } from '@csszyx/compiler';
+import {
+    SZ_DIAGNOSTIC_KIND_IDS,
+    szDiagnosticKindOf,
+    szKeySuggestionFor,
+    transformSource,
+} from '@csszyx/compiler';
 import {
     createEmittedClassOracle,
     type DeclaredToken,
@@ -102,6 +107,8 @@ export interface CheckOptions {
 /** One captured sz diagnostic, with the kind the compiler reads from its wording. */
 interface ClassifiedIssue extends SzIssue {
     kind: string;
+    /** The known key an `unknown-key` issue most likely misspells, or null. */
+    suggestion: string | null;
 }
 
 /** One captured sz diagnostic, with the project-relative file it came from. */
@@ -438,20 +445,24 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): boolean {
  * @param issues Captured compiler diagnostics, with the kind each one reports.
  */
 function reportIssues(out: Reporter, issues: ClassifiedIssue[]): void {
-    for (const { file, message, kind } of issues) {
+    for (const { file, message, kind, suggestion } of issues) {
         out.push({
             rule: 'sz-diagnostic',
             kind,
             file,
             line: lineFromMessage(message),
             message,
+            ...(suggestion === null ? {} : { suggestion }),
         });
     }
+    const suggestionOf = new Map(issues.map(issue => [issue.message, issue.suggestion]));
     const byFile = groupIssuesByFile(issues);
     for (const [file, messages] of byFile) {
         out.warn(file);
         for (const message of messages) {
             out.info(`  ${message}`);
+            const suggestion = suggestionOf.get(message);
+            if (suggestion) out.info(`    Did you mean "${suggestion}"?`);
         }
     }
     out.warn(`\n✖ ${issues.length} sz issue(s) in ${byFile.size} file(s).`);
@@ -830,7 +841,8 @@ function reportSelectedIssues(
     for (const issue of issues) {
         const kind = szDiagnosticKindOf(issue.message);
         if (!wants('sz-diagnostic', kind)) continue;
-        selected.push({ ...issue, kind });
+        const suggestion = kind === 'unknown-key' ? szKeySuggestionFor(issue.message) : null;
+        selected.push({ ...issue, kind, suggestion });
     }
     const leftOut = issues.length - selected.length;
     if (selected.length > 0) {

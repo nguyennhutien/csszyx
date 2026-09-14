@@ -130,6 +130,18 @@ describe('emitKeyValueDiagnostic', () => {
         expect(lines[0]).toContain('Unknown property "zzz"');
     });
 
+    it('adds the key an unknown key most likely misspells', () => {
+        const lines = emitted(
+            'off',
+            '[csszyx] Unknown property "workBreak" in sz prop at src/A.tsx:1. The class is still emitted, so it styles nothing unless Tailwind serves that utility.',
+        );
+        expect(lines[0]).toContain('Did you mean "break"?');
+    });
+
+    it('adds nothing when no known key is near', () => {
+        expect(emitted('off', UNKNOWN_KEY)[0]).not.toContain('Did you mean');
+    });
+
     it('still prints when only usage nudges are muted', () => {
         // A dead class is wrong output, not a nudge about how csszyx is used.
         expect(emitted('nudges', UNKNOWN_KEY)).toHaveLength(1);

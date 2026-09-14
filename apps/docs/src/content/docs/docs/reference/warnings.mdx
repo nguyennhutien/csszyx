@@ -1102,6 +1102,14 @@ would break each time one was.
 repeats its `rule`. Runtime fallback notes are not `check` findings, so they
 have no kind.
 
+An `unknown-key` finding also carries `suggestion` when one known key is a
+single edit away — two for a key of twelve letters or more — and the prose
+report, the build and the dev server print `Did you mean "{key}"?` under the
+diagnostic. A swap of two neighbouring letters counts as one edit, and an alias
+suggests its canonical key, so `workBreak` suggests `break`. Nothing is
+rewritten, and a key with no single near match gets no suggestion, so a class a
+project serves with `@utility` is not second-guessed.
+
 `--rule <id>` keeps only the findings of that rule or kind, and
 `--ignore-rule <id>` leaves them out; both repeat, and both change the exit code
 as well as the report. A gate that fails on key mistakes but not on precedence

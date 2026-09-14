@@ -43,6 +43,8 @@ export interface CheckFinding {
     line?: number;
     /** What happened, in one sentence. */
     message: string;
+    /** For an `unknown-key` finding, the known key it most likely misspells. */
+    suggestion?: string;
 }
 
 /** A finding as a pass records it, before its kind defaults to its rule. */

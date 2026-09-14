@@ -14,6 +14,7 @@ import {
     type SourceTransformResult,
     sortStrings,
     szFallbackConsequenceOf,
+    szKeySuggestionFor,
     type TokenData,
     type TransformSourceCodeOptions,
     transform,
@@ -1196,7 +1197,10 @@ export function emitKeyValueDiagnostic(
     ) {
         return;
     }
-    emit(`[csszyx] ${id}\n  ${message}`);
+    // A suggestion is a hint beside the diagnostic; nothing is rewritten.
+    const suggestion = szKeySuggestionFor(message);
+    const hint = suggestion === null ? '' : `\n  Did you mean "${suggestion}"?`;
+    emit(`[csszyx] ${id}\n  ${message}${hint}`);
 }
 
 /**

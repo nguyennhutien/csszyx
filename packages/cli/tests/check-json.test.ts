@@ -268,6 +268,33 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
         expect(new Set(report.findings.map(entry => entry.rule))).toEqual(new Set(['dead-class']));
     });
 
+    it('suggests the key an unknown key most likely misspells', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': `export const A = () => <div sz={{ workBreak: 'all' }} />;`,
+        });
+
+        const report = await jsonFor(cwd);
+        const unknown = report.findings.find(entry => entry.kind === 'unknown-key') as
+            | { suggestion?: string }
+            | undefined;
+
+        expect(unknown?.suggestion).toBe('break');
+    });
+
+    it('prints the suggestion under the diagnostic in the prose report', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/App.tsx': `export const A = () => <div sz={{ workBreak: 'all' }} />;`,
+        });
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await check({ cwd });
+
+        expect(log.mock.calls.flat().join('\n')).toContain('Did you mean "break"?');
+    });
+
     it.each(['runtime-fallback', 'parse-error', 'mangle-vars-hoist-skip'])(
         'refuses %s, which check never reports, rather than selecting nothing',
         async id => {
