@@ -44,6 +44,22 @@ const _arbSel: SzProps = { '[&>span]': { p: 4 } };
 // css escape hatch passes.
 const _css: SzProps = { css: { writingMode: 'vertical-lr' } };
 
+// Safe alignment is spelled value-first, the way Tailwind serves it.
+const _safeAlignment: SzProps = {
+    justify: 'center-safe',
+    justifyItems: 'end-safe',
+    justifySelf: 'center-safe',
+    alignContent: 'end-safe',
+    items: 'center-safe',
+    self: 'end-safe',
+    placeContent: 'center-safe',
+    placeItems: 'end-safe',
+    placeSelf: 'center-safe',
+};
+
+// @ts-expect-error - `justify-safe-center` is not a Tailwind utility, so it styles nothing.
+const _safeReversed: SzProps = { justify: 'safe-center' };
+
 // Unknown/typo key is a tsc ERROR (this assertion holds iff the next line errors).
 // @ts-expect-error - bgColor is not a valid sz key; canonical is `bg`.
 const _typo: SzProps = { bgColor: 'red-500' };
@@ -89,6 +105,8 @@ export {
     _nested1,
     _nested2,
     _nested3,
+    _safeAlignment,
+    _safeReversed,
     _szscObject,
     _szscTypo,
     _szsRead,
