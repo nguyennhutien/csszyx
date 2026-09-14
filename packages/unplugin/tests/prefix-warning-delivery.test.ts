@@ -12,70 +12,15 @@
  * a later "consolidate the early returns" edit would undo without a failing
  * test. Hence this one: a fixture with a prefix and no authored class at all.
  */
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { vitePlugin } from '../src/unplugin.js';
-
-const REPO = resolve(import.meta.dirname, '../../..');
-
-const roots: string[] = [];
+import { callHooks, removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
 afterEach(() => {
-    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+    removeTailwindProjects();
     vi.restoreAllMocks();
 });
-
-/**
- * A project the plugin can resolve Tailwind and the runtime from.
- *
- * Real packages, reached the way an installed project reaches them: the oracle
- * compiles the project's own Tailwind, so a fixture without one proves nothing.
- *
- * @param css - The entry stylesheet's contents.
- * @returns Absolute project root.
- */
-function project(css: string): string {
-    // realpath: macOS `tmpdir()` is a symlink and the plugin resolves through it.
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-prefix-warn-')));
-    roots.push(root);
-    mkdirSync(join(root, 'src'), { recursive: true });
-    writeFileSync(join(root, 'src/theme.css'), css, 'utf8');
-
-    const require_ = createRequire(join(REPO, 'package.json'));
-    mkdirSync(join(root, 'node_modules/@csszyx'), { recursive: true });
-    symlinkSync(
-        resolve(dirname(require_.resolve('tailwindcss')), '..'),
-        join(root, 'node_modules/tailwindcss'),
-        'dir',
-    );
-    symlinkSync(join(REPO, 'packages/runtime'), join(root, 'node_modules/@csszyx/runtime'), 'dir');
-    return root;
-}
-
-/**
- * Drive the plugin array through its hooks the way a bundler would.
- *
- * @param plugins - The plugin objects `vitePlugin` returned.
- * @returns Caller that invokes one hook by name and awaits its result.
- */
-function callHooks(
-    plugins: Record<string, unknown>[],
-): (hookName: string, ...args: unknown[]) => Promise<unknown> {
-    const ctx = { warn() {}, error() {}, emitFile() {}, addWatchFile() {} };
-    return async (hookName, ...args) => {
-        const plugin = plugins.find(p => p && hookName in p);
-        const hook = plugin?.[hookName];
-        const fn = (typeof hook === 'function' ? hook : (hook as { handler?: unknown })?.handler) as
-            | ((...a: unknown[]) => unknown)
-            | undefined;
-        return fn ? await fn.apply(ctx, args) : undefined;
-    };
-}
 
 /**
  * Build a project and collect what the plugin printed.
@@ -85,7 +30,7 @@ function callHooks(
  * @returns Everything passed to `console.warn`, joined.
  */
 async function warningsFrom(css: string, source?: string): Promise<string> {
-    const root = project(css);
+    const root = tailwindProject('csszyx-prefix-warn-', { 'src/theme.css': css });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const plugins = vitePlugin({ production: { mangle: false } }) as unknown as Record<
         string,

@@ -12,27 +12,15 @@
  * root with neither takes the guard that skips the whole feature -- silently
  * and correctly, which is why a fixture without them proves nothing.
  */
-import {
-    existsSync,
-    mkdirSync,
-    mkdtempSync,
-    readFileSync,
-    realpathSync,
-    rmSync,
-    symlinkSync,
-    writeFileSync,
-} from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 import webpack from 'webpack';
 
 import { vitePlugin, webpackPlugin } from '../src/unplugin.js';
 import { RESOLVED_UNSERVED_VIRTUAL_ID, UNSERVED_PLACEHOLDER } from '../src/virtual-modules.js';
-
-const REPO = resolve(import.meta.dirname, '../../..');
+import { callHooks, removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
 /**
  * Classes covering the three outcomes, so a stub answer cannot satisfy a case.
@@ -43,11 +31,7 @@ const REPO = resolve(import.meta.dirname, '../../..');
  */
 const AUTHORED = 'tab-items-wrapper card p-4';
 
-const roots: string[] = [];
-
-afterEach(() => {
-    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
-});
+afterEach(removeTailwindProjects);
 
 /**
  * A project the plugin can resolve both of its dependencies from.
@@ -56,44 +40,7 @@ afterEach(() => {
  * @returns Absolute project root.
  */
 function project(prefix: string): string {
-    // realpath: macOS `tmpdir()` is a symlink and the plugin resolves through it.
-    const root = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
-    roots.push(root);
-    mkdirSync(join(root, 'src'), { recursive: true });
-    writeFileSync(join(root, 'src/theme.css'), '@import "tailwindcss";\n', 'utf8');
-
-    // The real packages, reached the way an installed project reaches them.
-    // Copying them instead would take a different `tailwindcss` than the one
-    // the oracle's own tests measure against.
-    const require_ = createRequire(join(REPO, 'package.json'));
-    mkdirSync(join(root, 'node_modules/@csszyx'), { recursive: true });
-    symlinkSync(
-        resolve(dirname(require_.resolve('tailwindcss')), '..'),
-        join(root, 'node_modules/tailwindcss'),
-        'dir',
-    );
-    symlinkSync(join(REPO, 'packages/runtime'), join(root, 'node_modules/@csszyx/runtime'), 'dir');
-    return root;
-}
-
-/**
- * Drive a plugin array through its hooks the way a bundler would.
- *
- * @param plugins - The plugin objects `vitePlugin` returned.
- * @returns Caller that invokes one hook by name and awaits its result.
- */
-function callHooks(
-    plugins: Record<string, unknown>[],
-): (hookName: string, ...args: unknown[]) => Promise<unknown> {
-    const ctx = { warn() {}, error() {}, emitFile() {}, addWatchFile() {} };
-    return async (hookName, ...args) => {
-        const plugin = plugins.find(p => p && hookName in p);
-        const hook = plugin?.[hookName];
-        const fn = (typeof hook === 'function' ? hook : (hook as { handler?: unknown })?.handler) as
-            | ((...a: unknown[]) => unknown)
-            | undefined;
-        return fn ? await fn.apply(ctx, args) : undefined;
-    };
+    return tailwindProject(prefix, { 'src/theme.css': '@import "tailwindcss";\n' });
 }
 
 describe('vite lane', () => {
