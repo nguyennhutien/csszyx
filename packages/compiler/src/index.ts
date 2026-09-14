@@ -61,12 +61,19 @@ export {
     parseStaticObjectLiteral,
     type StaticObjectResult,
 } from './static-object-parser.js';
-// Export the fallback-consequence classifier so the bundler routes
-// diagnostics through the module that renders their labels.
+export {
+    isAdvisorySzDiagnostic,
+    SZ_DIAGNOSTIC_KIND_IDS,
+    type SzDiagnosticKindId,
+    szDiagnosticKindOf,
+} from './sz-diagnostic-kind.js';
 export {
     type SzFallbackConsequence,
     szFallbackConsequenceOf,
 } from './sz-fallback-matrix.js';
+// Export the diagnostic classifiers so the bundler and the CLI route
+// diagnostics through the package that renders their wording.
+export { nearestName, suggestSzKey, szKeySuggestionFor } from './sz-key-suggestion.js';
 // Export transform-core constants needed by MCP and CLI
 export {
     BOOLEAN_SHORTHANDS,

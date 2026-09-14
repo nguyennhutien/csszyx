@@ -89,6 +89,15 @@ describe('nearestKnownConfigKey', () => {
         expect(nearestKnownConfigKey('silent')).toBeNull();
     });
 
+    it('counts two swapped letters as one edit', () => {
+        expect(nearestKnownConfigKey('qiuet')).toBe('quiet');
+    });
+
+    it('guesses nothing when two options are equally close', () => {
+        // One edit from both `include` and `exclude`; either answer is a coin toss.
+        expect(nearestKnownConfigKey('enclude')).toBeNull();
+    });
+
     it('returns null when nothing is close', () => {
         expect(nearestKnownConfigKey('zzzNotAnOption')).toBeNull();
     });

@@ -22,7 +22,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { check } from '../src/commands/check.js';
+import { type CheckOptions, check } from '../src/commands/check.js';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
 const TAILWIND_V4 = path.dirname(
@@ -60,12 +60,13 @@ afterEach(() => {
  * Run the command over a project and return everything it printed.
  *
  * @param cwd - Project root.
+ * @param options - Options for the run besides the root.
  * @returns Concatenated report text.
  */
-async function reportFor(cwd: string): Promise<string> {
+async function reportFor(cwd: string, options: Omit<CheckOptions, 'cwd'> = {}): Promise<string> {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await check({ cwd });
+    await check({ ...options, cwd });
     return log.mock.calls.map(call => call.join(' ')).join('\n');
 }
 
@@ -166,5 +167,29 @@ describe('csszyx check — opacity modifiers judged from the compiled rule', () 
 
         expect(report).not.toContain('bg-mystery/40');
         expect(process.exitCode).not.toBe(1);
+    });
+});
+
+// The opacity pass shares a stylesheet scan with the dead-class pass, and
+// `--rule` / `--ignore-rule` name the two separately.
+describe('csszyx check — opacity findings under rule selection', () => {
+    const BROKEN = "export const B = () => <div sz={{ bg: { color: 'broken', op: 30 } }} />;";
+
+    it('still reports a broken modifier when the dead-class rule is ignored', async () => {
+        const cwd = projectWith({ 'src/app.css': ENTRY_CSS, 'src/Broken.tsx': BROKEN });
+
+        const report = await reportFor(cwd, { ignoreRule: ['dead-class'] });
+
+        expect(report).toContain('bg-broken/30');
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('leaves a broken modifier out when only dead classes are selected', async () => {
+        const cwd = projectWith({ 'src/app.css': ENTRY_CSS, 'src/Broken.tsx': BROKEN });
+
+        const report = await reportFor(cwd, { rule: ['dead-class'] });
+
+        expect(report).not.toContain('bg-broken/30');
+        expect(process.exitCode).toBeUndefined();
     });
 });

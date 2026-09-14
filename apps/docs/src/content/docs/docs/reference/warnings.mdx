@@ -195,7 +195,9 @@ holds, not only the fallbacks:
 [csszyx] {n} advisory notes not listed above. An advisory reports something csszyx handled — a fallback at an sz prop, a className whose precedence over sz is unstated, or a variable hoist the planner declined — so the styles are there and a production build keeps the list short. A development build prints each one with its file and position.
 ```
 
-Run a development build to see each one with its file and position. Silenced by
+Run a development build to see each one with its file and position. In CI, run
+[`csszyx check`](#running-it-in-ci) instead: it lists every finding with its file
+and line whatever the build mode, and fails the job on them. Silenced by
 `quiet: true` (blunt mode) along with everything else; `quiet: 'nudges'` keeps
 it, because one line saying how much was left out is what stops a calm log from
 reading as a clean one.
@@ -929,11 +931,15 @@ See [SSR & Hydration](/docs/ssr/) and the
 
 `npx @csszyx/cli check` runs the same lowering warnings across every file at
 once and groups them by file — it is the answer to "the dev server only warns
-about files I happen to open".
+about files I happen to open". Pass a directory — `npx @csszyx/cli check src` —
+to scan only the files under it; the stylesheet and Tailwind are still found
+from the project root, and `--pattern` is read relative to that directory.
 
 | Line | Meaning |
 | --- | --- |
 | `No sz issues found across {n} files.` | Clean. |
+| `No selected sz issues across {n} files; {m} left out by --rule or --ignore-rule.` | Every issue found was left out by the rule selection. The run passes, and the line says it was not clean. |
+| `{m} more sz issue(s) left out by --rule or --ignore-rule.` | Printed under the report when the selection left some issues out. |
 | `✖ {n} sz issue(s) in {m} file(s).` | The grouped report follows. |
 | `Scope: static sz props and szv()/szr() catalog definitions. Keys that only exist at runtime (an array or spread built from runtime data, a dynamic() value) cannot be checked statically.` | Printed with every clean run, so the scope is never implied to be wider than it is. |
 | `Every one of the {n} emitted class(es) produces CSS under this project's Tailwind{, {m} accepted}.` | The dead-class check passed. The trailing clause appears only when the baseline accepts known exceptions. |
@@ -942,6 +948,10 @@ about files I happen to open".
 | `Dead-class check skipped: {reason}.` | |
 | `✖ The dead-class check did not run. Its stylesheet is part of this project, so this is reported as a failure rather than a skip — otherwise a check that never runs is indistinguishable from one that found nothing.` | Exits non-zero. See below. |
 | `Files that could not be read:` + one line per path | A path given to `--files` that names a source file the scan could not open. |
+| `✖ A directory and --files both choose the files to check. Pass "{dir}" or --files, not both.` | Exits non-zero, before any file is scanned. |
+| `✖ "{dir}" is a file, not a directory. To check single files, pass --files {dir}.` | Exits non-zero, before any file is scanned. |
+| `✖ --pattern "{pattern}" is an absolute path, so it would not stay inside "{dir}". Pass a pattern relative to the directory.` | Exits non-zero before scanning: an absolute pattern ignores the directory it was given. |
+| `✖ "{dir}" does not exist under {cwd}, so there is nothing to check.` | Exits non-zero rather than passing on the zero files a missing directory would match. |
 | `✖ {n} listed file(s) could not be read, so they were not checked. A pass here would report a subset as if it were the whole list. Check the paths, and note that a separator is normalised rather than trusted, so this is a missing file rather than a Windows path.` | Exits non-zero, before any file is scanned. |
 | `Values that belong to a different sz key:` + one line per offender reading ``{key}: '{value}' emits {class}, which sets {properties} — not what {key} sets.`` | A value written on a key that owns neither it nor its CSS property. |
 | `✖ {n} value(s) written on a key that does not own them. Each one compiles, ships CSS and renders, so nothing else reports it; the style asked for is simply absent. Move the value to the key that owns it, or declare a theme token by that name if the spelling was deliberate.` | Exits non-zero. |
@@ -1040,6 +1050,25 @@ manage to read.
 a default the command line did not ask for:
 `Invalid --debounce-ms. Expected an integer between 0 and 60000.`
 
+### Running it in CI
+
+`csszyx check` is the command to gate CI on. A production build is the build CI
+usually runs, and it prints advisory notes only as a count; `check` lowers every
+source file the same way the build does, lists each finding with its file and
+line, and exits non-zero while any remain, whatever `NODE_ENV` says.
+
+```yaml
+# .github/workflows/ci.yml
+- name: csszyx
+  run: npx csszyx check --ignore-rule class-precedence --ignore-rule duplicate-sz
+```
+
+The two ignored kinds report styles that are present: `class-precedence` says
+`sz` wins over a runtime `className`, and `duplicate-sz` says which order two
+`sz` attributes merged in. Drop an `--ignore-rule` to fail on that kind too, or
+use `--rule` to gate on a chosen set only. Add `--json` when a later step reads
+the findings, for example to annotate a pull request; the exit code is the same.
+
 ### Running it as a git hook
 
 `--files` takes the paths a hook hands over, instead of a glob, and `--json`
@@ -1075,7 +1104,8 @@ finding:
   "rule": "sibling-keyword",
   "file": "src/App.tsx",
   "line": 12,
-  "message": "color: 'balance' emits text-balance, which sets text-wrap — not what color sets."
+  "message": "color: 'balance' emits text-balance, which sets text-wrap — not what color sets.",
+  "kind": "sibling-keyword"
 }
 ```
 
@@ -1083,6 +1113,33 @@ finding:
 `sibling-keyword`, `theme-collision`. It is a stable id on purpose: messages get
 rewritten whenever they can be made clearer, so anything filtering on wording
 would break each time one was.
+
+`kind` says what an `sz-diagnostic` found: `unknown-key`, `canonical-key`,
+`removed-key`, `numeric-key`, `closed-enum-value`, `off-scale-value`,
+`numeric-font-weight`, `per-side-border-style`, `property-object`,
+`non-variant-object`, `unknown-field`, `runtime-value`, `unresolvable-spread`,
+`style-override`, `szs-slot-map`, `sz-recover`, `class-precedence`,
+`duplicate-sz`, or `other` for a message no kind matches. Every other pass
+repeats its `rule`. Runtime fallback notes are not `check` findings, so they
+have no kind.
+
+An `unknown-key` finding also carries `suggestion` when one known key is a
+single edit away — two for a key of twelve letters or more — and the prose
+report, the build and the dev server print `Did you mean "{key}"?` under the
+diagnostic. A swap of two neighbouring letters counts as one edit, and an alias
+suggests its canonical key, so `workBreak` suggests `break`. Nothing is
+rewritten, and a key with no single near match gets no suggestion, so a class a
+project serves with `@utility` is not second-guessed.
+
+`--rule <id>` keeps only the findings of that rule or kind, and
+`--ignore-rule <id>` leaves them out; both repeat, and both change the exit code
+as well as the report. A gate that fails on key mistakes but not on precedence
+notes is `csszyx check --ignore-rule class-precedence`. An id that is neither a
+rule nor a kind fails the run rather than selecting nothing:
+
+```text
+[csszyx] ✖ {given} is not a rule or a diagnostic kind, so it would select nothing. Known ids: {ids}.
+```
 
 `npx @csszyx/cli scan-collisions` finds class names that would collide with a
 mangled token:
@@ -1093,15 +1150,23 @@ No collision-prone class names found — mangling is safe to enable.
 
 ```text
 {n} class name(s) could collide with a mangled token:
-  .{name}  (in {where})
+  .{name}  (selector declared in {where})
 
-Preferred: rename these in your own CSS to something specific
-  (e.g. `.x` → `.resize-handle-x`) — short names also clash on
-  specificity with other libraries.
+These files declare the selectors; the class may be emitted elsewhere,
+  such as a shared component, so find where the class is emitted before renaming.
+
+Preferred: rename the class where it is declared and where it is emitted,
+  to something specific (e.g. `.x` → `.resize-handle-x`) — short names
+  also clash on specificity with other libraries.
 
 For names in a third-party stylesheet you cannot edit, reserve them:
   production: { mangle: true, mangleExclude: ["{name}"] }
 ```
+
+The scan reads stylesheets only, so the files it lists are where each selector
+is declared. In a monorepo the class is often emitted by a component in another
+package; rename it there too, or the component keeps emitting a name the renamed
+rule no longer matches.
 
 `npx @csszyx/cli doctor` checks the install itself: `✨ No issues found! Your
 setup looks good.`, `Found {n} issue(s)`, `Tailwind CSS not found`, `No build

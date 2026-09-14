@@ -68,6 +68,17 @@ Keep that in a `package.json` script so the list is committed and reviewable.
 Accepted classes are counted in the summary, so the list cannot quietly grow
 into a place where findings go to be forgotten.
 
+This is the command to gate CI on: a production build only counts its advisory
+notes, while `check` lists every finding and fails the job. Pass a directory to
+scan part of the project, and leave out the notes about styles that are present:
+
+```bash
+npx csszyx check src --ignore-rule class-precedence --ignore-rule duplicate-sz
+```
+
+`--rule` and `--ignore-rule` take a rule or diagnostic kind, and `--json` writes
+one document for a later step to read.
+
 ### `explain`
 
 Print the Tailwind className an sz object compiles to — quick one-off checks

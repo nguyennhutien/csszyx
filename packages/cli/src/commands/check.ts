@@ -10,11 +10,16 @@
  * @module
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { transformSource } from '@csszyx/compiler';
+import {
+    SZ_DIAGNOSTIC_KIND_IDS,
+    szDiagnosticKindOf,
+    szKeySuggestionFor,
+    transformSource,
+} from '@csszyx/compiler';
 import {
     createEmittedClassOracle,
     type DeclaredToken,
@@ -27,7 +32,13 @@ import {
     szValuePairs,
 } from '@csszyx/tailwind-oracle';
 import fg from 'fast-glob';
-import { createReporter, type Reporter, renderJsonReport } from '../scanner/check-report.js';
+import {
+    CHECK_RULES,
+    type CheckRule,
+    createReporter,
+    type Reporter,
+    renderJsonReport,
+} from '../scanner/check-report.js';
 import { declaredThemeTokens } from '../scanner/theme-declarations.js';
 import { relativePosix, withPosixSeparators } from '../utils/posix-path.js';
 import { spinner } from '../utils/terminal-ui.js';
@@ -36,7 +47,13 @@ import { spinner } from '../utils/terminal-ui.js';
 export interface CheckOptions {
     /** Project root to scan. Defaults to `process.cwd()`. */
     cwd?: string;
-    /** Glob to match source files. Defaults to `**\/*.{jsx,tsx}`. */
+    /**
+     * Directory to scan, relative to `cwd`. Narrows the glob and nothing else:
+     * the stylesheet and Tailwind are still resolved from `cwd`, and findings
+     * keep paths relative to it.
+     */
+    dir?: string;
+    /** Glob to match source files, relative to `dir` when one is given. Defaults to `**\/*.{jsx,tsx}`. */
     pattern?: string;
     /** Extra ignore globs appended to the defaults. */
     ignore?: string[];
@@ -59,6 +76,13 @@ export interface CheckOptions {
      */
     allowToken?: string[];
     /**
+     * Rule or diagnostic-kind ids to report; every other finding is left out of
+     * the report and the exit code. Empty or absent means every rule.
+     */
+    rule?: string[];
+    /** Rule or diagnostic-kind ids to leave out of the report and the exit code. */
+    ignoreRule?: string[];
+    /**
      * Emit one machine-readable document instead of the prose report.
      *
      * The verdict does not change with the format: the exit code is the same
@@ -78,6 +102,13 @@ export interface CheckOptions {
      * yields in a whole-project run.
      */
     files?: string[];
+}
+
+/** One captured sz diagnostic, with the kind the compiler reads from its wording. */
+interface ClassifiedIssue extends SzIssue {
+    kind: string;
+    /** The known key an `unknown-key` issue most likely misspells, or null. */
+    suggestion: string | null;
 }
 
 /** One captured sz diagnostic, with the project-relative file it came from. */
@@ -240,6 +271,7 @@ async function openOracles(cwd: string): Promise<OpenedOracles> {
  * @param opened - The project's compiled design systems.
  * @param origins - Emitted class mapped to the file that first emitted it.
  * @param allow - Classes the project vouched for.
+ * @param wants - Whether the run reports findings of a rule.
  * @returns Whether anything dead was found.
  */
 async function reportDeadClasses(
@@ -247,6 +279,7 @@ async function reportDeadClasses(
     opened: OpenedOracles,
     origins: Map<string, string>,
     allow: readonly string[],
+    wants: (rule: CheckRule) => boolean,
 ): Promise<boolean> {
     if (origins.size === 0) return false;
 
@@ -314,6 +347,7 @@ async function reportDeadClasses(
         broken,
         acceptedCount: accepted.length,
         emittedCount: origins.size,
+        wants,
     });
 }
 
@@ -330,6 +364,8 @@ interface DeadClassReport {
     broken: readonly BrokenOpacityFinding[];
     acceptedCount: number;
     emittedCount: number;
+    /** Whether the run reports findings of this rule. */
+    wants: (rule: CheckRule) => boolean;
 }
 
 /**
@@ -343,7 +379,7 @@ interface DeadClassReport {
  * @returns Whether anything was found that should fail the command.
  */
 function printDeadClassReport(out: Reporter, report: DeadClassReport): boolean {
-    const { dead, broken, acceptedCount, emittedCount } = report;
+    const { dead, broken, acceptedCount, emittedCount, wants } = report;
     // Say how many were waved through even on a clean run: an allow list that
     // silently covers a growing pile is the failure mode of every such list.
     const acceptedNote = acceptedCount > 0 ? `, ${acceptedCount} accepted` : '';
@@ -355,9 +391,14 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): boolean {
         return false;
     }
 
-    if (dead.length > 0) {
+    // Judged on every class before narrowing, so a run narrowed to one rule
+    // never prints "every class produces CSS" over a finding it left out.
+    const shownDead = wants('dead-class') ? dead : [];
+    const shownBroken = wants('broken-opacity') ? broken : [];
+
+    if (shownDead.length > 0) {
         out.warn('\nClasses that produce no CSS:');
-        for (const [token, origin] of dead) {
+        for (const [token, origin] of shownDead) {
             out.push({
                 rule: 'dead-class',
                 file: origin,
@@ -366,18 +407,18 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): boolean {
             out.info(`  ${token.padEnd(28)} ${origin}`);
         }
         out.warn(
-            `\n✖ ${dead.length} emitted class(es) style nothing. Each is in the DOM and does ` +
+            `\n✖ ${shownDead.length} emitted class(es) style nothing. Each is in the DOM and does ` +
                 "nothing: fix the sz key, or define the class with Tailwind's @utility.",
         );
     }
 
-    if (broken.length > 0) {
+    if (shownBroken.length > 0) {
         // Judged from the compiled rule, never from the token's text: Tailwind
         // v4 wraps the modifier in color-mix(), which dims any valid color, so
         // the only broken shape is a var() chain ending in a bare comma
         // triplet — invalid inside color-mix(), silently dropped by browsers.
         out.warn('\nOpacity modifiers the compiled stylesheet drops:');
-        for (const entry of broken) {
+        for (const entry of shownBroken) {
             out.push({
                 rule: 'broken-opacity',
                 file: entry.origin,
@@ -390,28 +431,38 @@ function printDeadClassReport(out: Reporter, report: DeadClassReport): boolean {
             );
         }
         out.warn(
-            `\n✖ ${broken.length} emitted class(es) carry an opacity modifier that does not ` +
+            `\n✖ ${shownBroken.length} emitted class(es) carry an opacity modifier that does not ` +
                 'survive compilation.',
         );
     }
-    return true;
+    return shownDead.length > 0 || shownBroken.length > 0;
 }
 
 /**
  * Print captured diagnostics and mark the process as failed.
  *
  * @param out - Where this pass sends its prose and its findings.
- * @param issues Captured compiler diagnostics.
+ * @param issues Captured compiler diagnostics, with the kind each one reports.
  */
-function reportIssues(out: Reporter, issues: SzIssue[]): void {
-    for (const { file, message } of issues) {
-        out.push({ rule: 'sz-diagnostic', file, line: lineFromMessage(message), message });
+function reportIssues(out: Reporter, issues: ClassifiedIssue[]): void {
+    for (const { file, message, kind, suggestion } of issues) {
+        out.push({
+            rule: 'sz-diagnostic',
+            kind,
+            file,
+            line: lineFromMessage(message),
+            message,
+            ...(suggestion === null ? {} : { suggestion }),
+        });
     }
+    const suggestionOf = new Map(issues.map(issue => [issue.message, issue.suggestion]));
     const byFile = groupIssuesByFile(issues);
     for (const [file, messages] of byFile) {
         out.warn(file);
         for (const message of messages) {
             out.info(`  ${message}`);
+            const suggestion = suggestionOf.get(message);
+            if (suggestion) out.info(`    Did you mean "${suggestion}"?`);
         }
     }
     out.warn(`\n✖ ${issues.length} sz issue(s) in ${byFile.size} file(s).`);
@@ -637,6 +688,43 @@ async function reportThemeCollisions(
 }
 
 /**
+ * The directory the glob is rooted at, or fail the run explaining why it cannot be.
+ *
+ * A directory that does not exist globs zero files, and zero files reads as a
+ * clean run — the answer a gate must never give for a path it never opened.
+ * Given together with `--files`, each would silently drop what the other asked
+ * for, so that is refused as well.
+ *
+ * @param options - scan options.
+ * @param out - reporter the failure is written to.
+ * @param cwd - project root.
+ * @returns Absolute glob root, or null when the run has already failed.
+ */
+function scanRootFor(options: CheckOptions, out: Reporter, cwd: string): string | null {
+    if (options.dir === undefined) return cwd;
+    const dir = withPosixSeparators(options.dir);
+    const root = path.resolve(cwd, dir);
+    const stat = statSync(root, { throwIfNoEntry: false });
+    let refusal: string;
+    if (options.files) {
+        refusal = `A directory and --files both choose the files to check. Pass "${dir}" or --files, not both.`;
+    } else if (options.pattern !== undefined && path.win32.isAbsolute(options.pattern)) {
+        // fast-glob reads an absolute pattern as absolute whatever root it is
+        // given, so the scan would leave the directory without saying so.
+        refusal = `--pattern "${options.pattern}" is an absolute path, so it would not stay inside "${dir}". Pass a pattern relative to the directory.`;
+    } else if (stat?.isDirectory()) {
+        return root;
+    } else if (stat) {
+        refusal = `"${dir}" is a file, not a directory. To check single files, pass --files ${dir}.`;
+    } else {
+        refusal = `"${dir}" does not exist under ${cwd}, so there is nothing to check.`;
+    }
+    out.warn(`\u2716 ${refusal}`);
+    process.exitCode = 1;
+    return null;
+}
+
+/**
  * Resolve the files this run will scan, or fail the run explaining why.
  *
  * Two ways to end with nothing to scan, and both are fatal rather than empty:
@@ -658,6 +746,8 @@ async function resolveScanFiles(
     patterns: readonly string[],
     ignore: readonly string[],
 ): Promise<string[] | null> {
+    const root = scanRootFor(options, out, cwd);
+    if (root === null) return null;
     // ora writes straight to the tty, so it has to be skipped rather than
     // routed: a spinner frame in the middle of a JSON document is not parseable.
     const s = out.quiet ? null : spinner.start('Scanning for files...');
@@ -669,7 +759,7 @@ async function resolveScanFiles(
             missing = listed.missing;
             files = listed.files;
         } else {
-            files = await fg([...patterns], { cwd, ignore: [...ignore], absolute: true });
+            files = await fg([...patterns], { cwd: root, ignore: [...ignore], absolute: true });
         }
     } catch (err) {
         s?.fail('File scan failed');
@@ -691,6 +781,87 @@ async function resolveScanFiles(
     );
     process.exitCode = 1;
     return null;
+}
+
+/** Whether a run reports a finding of this rule and kind. */
+type RuleSelection = (rule: CheckRule, kind: string) => boolean;
+
+/**
+ * Read `--rule` and `--ignore-rule` into one predicate, or fail the run.
+ *
+ * An id is either a pass (`dead-class`) or a diagnostic kind (`unknown-key`),
+ * so a gate can take a whole pass or one kind of sz diagnostic. An id that is
+ * neither fails the run: a misspelt `--rule` would select nothing, and a run
+ * that reports nothing passes.
+ *
+ * @param options - scan options.
+ * @param out - reporter the failure is written to.
+ * @returns The predicate, or null when the run has already failed.
+ */
+function ruleSelection(options: CheckOptions, out: Reporter): RuleSelection | null {
+    const include = options.rule ?? [];
+    const exclude = options.ignoreRule ?? [];
+    const known = new Set<string>([...CHECK_RULES, ...SZ_DIAGNOSTIC_KIND_IDS]);
+    const unknown = [...include, ...exclude].filter(id => !known.has(id));
+    if (unknown.length > 0) {
+        const given = unknown.map(id => `"${id}"`).join(', ');
+        const ids = [...known].join(', ');
+        out.warn(
+            `\u2716 ${given} is not a rule or a diagnostic kind, so it would select nothing. ` +
+                `Known ids: ${ids}.`,
+        );
+        process.exitCode = 1;
+        return null;
+    }
+    return (rule, kind) =>
+        (include.length === 0 || include.includes(rule) || include.includes(kind)) &&
+        !exclude.includes(rule) &&
+        !exclude.includes(kind);
+}
+
+/**
+ * Report the sz diagnostics a run selected, and how many the selection left out.
+ *
+ * An issue left out by `--rule` or `--ignore-rule` is not an issue that was not
+ * found, and a report that said so would read as clean to anyone skimming a CI
+ * log.
+ *
+ * @param out - Where this pass sends its prose and its findings.
+ * @param issues - Every captured diagnostic, before selection.
+ * @param fileCount - How many files the run scanned.
+ * @param wants - The run's rule selection.
+ */
+function reportSelectedIssues(
+    out: Reporter,
+    issues: SzIssue[],
+    fileCount: number,
+    wants: RuleSelection,
+): void {
+    const selected: ClassifiedIssue[] = [];
+    for (const issue of issues) {
+        const kind = szDiagnosticKindOf(issue.message);
+        if (!wants('sz-diagnostic', kind)) continue;
+        const suggestion = kind === 'unknown-key' ? szKeySuggestionFor(issue.message) : null;
+        selected.push({ ...issue, kind, suggestion });
+    }
+    const leftOut = issues.length - selected.length;
+    if (selected.length > 0) {
+        reportIssues(out, selected);
+        if (leftOut > 0) {
+            out.info(`${leftOut} more sz issue(s) left out by --rule or --ignore-rule.`);
+        }
+        return;
+    }
+    out.success(
+        leftOut === 0
+            ? `No sz issues found across ${fileCount} files.`
+            : `No selected sz issues across ${fileCount} files; ${leftOut} left out by --rule or --ignore-rule.`,
+    );
+    out.info(
+        'Scope: static sz props and szv()/szr() catalog definitions. Keys that ' +
+            'only exist at runtime (an array or spread built from runtime data, a ' +
+            'dynamic() value) cannot be checked statically.',
+    );
 }
 
 /**
@@ -716,6 +887,10 @@ export async function check(options: CheckOptions = {}): Promise<void> {
 
     out.header('csszyx check — static sz diagnostics');
 
+    const wants = ruleSelection(options, out);
+    if (!wants) return;
+    const wantsRule = (rule: CheckRule) => wants(rule, rule);
+
     const files = await resolveScanFiles(options, out, cwd, patterns, ignore);
     if (!files) return;
 
@@ -729,30 +904,27 @@ export async function check(options: CheckOptions = {}): Promise<void> {
             ? await openOracles(cwd)
             : { oracles: [], skipped: [], stylesheetFailed: false, hadEntries: false };
 
-    if (issues.length === 0) {
-        out.success(`No sz issues found across ${files.length} files.`);
-        out.info(
-            'Scope: static sz props and szv()/szr() catalog definitions. Keys that ' +
-                'only exist at runtime (an array or spread built from runtime data, a ' +
-                'dynamic() value) cannot be checked statically.',
-        );
-    } else {
-        reportIssues(out, issues);
-    }
+    reportSelectedIssues(out, issues, files.length, wants);
 
     // Runs whichever way the key pass went: a canonical key can still lower to
     // a class this project's Tailwind does not serve.
-    if (await reportDeadClasses(out, opened, classOrigins, options.allow ?? [])) {
+    if (
+        (wantsRule('dead-class') || wantsRule('broken-opacity')) &&
+        (await reportDeadClasses(out, opened, classOrigins, options.allow ?? [], wantsRule))
+    ) {
         process.exitCode = 1;
     }
 
     // Runs last and independently: a value on the wrong key survives both
     // passes above, which is the whole reason it needs its own.
-    if (reportSiblingKeywords(out, opened, pairsByFile)) {
+    if (wantsRule('sibling-keyword') && reportSiblingKeywords(out, opened, pairsByFile)) {
         process.exitCode = 1;
     }
 
-    if (await reportThemeCollisions(out, opened, cwd, options.allowToken ?? [])) {
+    if (
+        wantsRule('theme-collision') &&
+        (await reportThemeCollisions(out, opened, cwd, options.allowToken ?? []))
+    ) {
         process.exitCode = 1;
     }
 

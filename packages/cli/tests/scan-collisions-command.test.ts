@@ -50,6 +50,29 @@ describe('csszyx scan-collisions', () => {
         expect(process.exitCode).toBe(1);
     });
 
+    it('labels the listed files as where the selector is declared', async () => {
+        // Reported from a monorepo: `.btn` was listed under two app stylesheets
+        // while a shared Button component emitted it. Renaming the listed files
+        // left the component emitting the old name, and the rules stopped matching.
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = projectWith({ 'src/app.scss': '.btn { color: red }' });
+
+        await scanCollisions({ cwd });
+
+        const out = log.mock.calls.map(c => c.join(' ')).join('\n');
+        expect(out).toContain('.btn  (selector declared in src/app.scss)');
+    });
+
+    it('warns that the class may be emitted outside the stylesheets it lists', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = projectWith({ 'src/app.scss': '.btn { color: red }' });
+
+        await scanCollisions({ cwd });
+
+        const out = log.mock.calls.map(c => c.join(' ')).join('\n');
+        expect(out).toContain('find where the class is emitted before renaming');
+    });
+
     it('ignores stylesheets a tool generated into a conventional output directory', async () => {
         // Field report: run in a package that had once run `vitest --coverage`,
         // the command reported 32 names, 30 of them from istanbul's own HTML

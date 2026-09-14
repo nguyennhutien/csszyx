@@ -18,7 +18,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { check } from '../src/commands/check.js';
+import { type CheckOptions, check } from '../src/commands/check.js';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
 const TAILWIND_V4 = path.dirname(
@@ -63,10 +63,36 @@ async function findingsFor(
     cwd: string,
     files: string[],
 ): Promise<Array<{ rule: string; file?: string }>> {
+    return findingsWith({ cwd, files });
+}
+
+/**
+ * Run the command with any options and return its findings.
+ *
+ * @param options - Options for the run; `json` is forced on.
+ * @returns The parsed findings.
+ */
+async function findingsWith(
+    options: CheckOptions,
+): Promise<Array<{ rule: string; file?: string }>> {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await check({ cwd, files, json: true });
+    await check({ ...options, json: true });
     return JSON.parse(log.mock.calls.map(call => call.join(' ')).join('\n')).findings;
+}
+
+/**
+ * Run the command with prose output and return everything it printed.
+ *
+ * @param options - Options for the run.
+ * @returns The printed text.
+ */
+async function printedBy(options: CheckOptions): Promise<string> {
+    // The reporter writes every level through console.log, warnings too.
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await check(options);
+    return log.mock.calls.flat().join('\n');
 }
 
 // BOTH files carry a problem, so a run that ignored the list would report two
@@ -216,5 +242,117 @@ describe('csszyx check --files with a path that does not resolve', () => {
         expect(findings.some((finding: { rule: string }) => finding.rule === 'sz-diagnostic')).toBe(
             true,
         );
+    });
+});
+
+/**
+ * `csszyx check <dir>` — the positional a person types first.
+ *
+ * `migrate [dir]` takes one, so `check src` failed with `Unused args`. The
+ * directory narrows which files are scanned and nothing else: the stylesheet
+ * and the Tailwind install are still found from the project root, because a
+ * component folder carries neither, and findings keep project-relative paths.
+ */
+describe('csszyx check [dir]', () => {
+    it('scans only the files under the directory', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/components/Bad.tsx': BAD,
+            'src/pages/Other.tsx': OTHER_BAD,
+        });
+
+        const findings = await findingsWith({ cwd, dir: 'src/components' });
+
+        expect(new Set(findings.map(entry => entry.file))).toEqual(
+            new Set(['src/components/Bad.tsx']),
+        );
+        expect(process.exitCode).toBe(1);
+    });
+
+    it('reads --pattern relative to the directory', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/components/Bad.tsx': BAD,
+            'src/components/Other.jsx': OTHER_BAD,
+            'src/pages/Also.jsx': BAD,
+        });
+
+        const findings = await findingsWith({ cwd, dir: 'src/components', pattern: '**/*.jsx' });
+
+        expect(new Set(findings.map(entry => entry.file))).toEqual(
+            new Set(['src/components/Other.jsx']),
+        );
+    });
+
+    it('reads a windows-style directory as the one it names', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/components/Bad.tsx': BAD,
+            'src/pages/Other.tsx': OTHER_BAD,
+        });
+
+        const findings = await findingsWith({ cwd, dir: 'src\\components' });
+
+        expect(new Set(findings.map(entry => entry.file))).toEqual(
+            new Set(['src/components/Bad.tsx']),
+        );
+    });
+
+    it('refuses a directory together with --files, since both choose the files', async () => {
+        // Either answer would silently drop what the other one asked for.
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Bad.tsx': BAD,
+        });
+
+        const printed = await printedBy({ cwd, dir: 'src', files: ['src/Bad.tsx'] });
+
+        expect(process.exitCode).toBe(1);
+        expect(printed).toContain('--files');
+        expect(printed).not.toContain('nonsenseKey');
+    });
+
+    it('fails on a directory that does not exist rather than passing on no files', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Bad.tsx': BAD,
+        });
+
+        const printed = await printedBy({ cwd, dir: 'scr' });
+
+        expect(process.exitCode).toBe(1);
+        expect(printed).toContain('"scr"');
+    });
+
+    it('refuses an absolute --pattern, which would not stay inside the directory', async () => {
+        // fast-glob reads an absolute pattern as absolute whatever root it is
+        // given, so the run would scan outside the directory and not say so.
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/components/Clean.tsx': 'export const C = () => <div sz={{ p: 4 }} />;',
+            'src/pages/Bad.tsx': BAD,
+        });
+
+        const printed = await printedBy({
+            cwd,
+            dir: 'src/components',
+            pattern: path.join(cwd, 'src/pages/**/*.tsx'),
+        });
+
+        expect(process.exitCode).toBe(1);
+        expect(printed).toContain('is an absolute path');
+        expect(printed).not.toContain('nonsenseKey');
+    });
+
+    it('points a single file at --files', async () => {
+        const cwd = projectWith({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Bad.tsx': BAD,
+        });
+
+        const printed = await printedBy({ cwd, dir: 'src/Bad.tsx' });
+
+        expect(process.exitCode).toBe(1);
+        expect(printed).toContain('--files src/Bad.tsx');
     });
 });

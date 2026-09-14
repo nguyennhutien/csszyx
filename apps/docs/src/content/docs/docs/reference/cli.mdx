@@ -22,7 +22,7 @@ directory instead of the shell's.
 | --- | --- | --- |
 | `init` | Detects the framework, writes the bundler config and the CSS entry, and installs the packages those files need. | [Installation](/docs/installation/) |
 | `migrate [dir]` | Rewrites `className=` and `class=` to `sz` props, and normalises legacy `sz` keys under `--keys-only`. | [Migrate from Tailwind](/docs/migrate/) |
-| `check` | Scans static `sz` props and `szv()`/`szr()` catalogs for keys that emit nothing, then asks the project's own Tailwind whether every emitted class produces CSS. | [What `check` reports](/docs/reference/warnings/#what-check-reports) |
+| `check [dir]` | Scans static `sz` props and `szv()`/`szr()` catalogs for keys that emit nothing, then asks the project's own Tailwind whether every emitted class produces CSS. It exits non-zero on a finding, so it is the command to run in CI. | [What `check` reports](/docs/reference/warnings/#what-check-reports), [Running it in CI](/docs/reference/warnings/#running-it-in-ci) |
 | `doctor` | Reports on the install itself: config file, Tailwind, packages, build output, optional tooling. | [CLI](/docs/reference/warnings/#cli) |
 | `explain <sz>` | Prints the className one `sz` object literal compiles to. `csszyx explain "{ p: 4, bg: 'blue-500' }"` prints `p-4 bg-blue-500`. | [Plugin Config](/docs/reference/config/#production) |
 | `generate-types` | Turns a Tailwind v3 `tailwind.config.js` into TypeScript declarations. Only v3 projects have a config to read. | [`generate-types` and Tailwind v3](/docs/reference/warnings/#generate-types-and-tailwind-v3) |
@@ -115,7 +115,7 @@ Every command exits `0` unless a row below applies.
 
 | Command | Exits non-zero when |
 | --- | --- |
-| `check` | Any finding, or a path passed to `--files` that names a source file it could not read. |
+| `check` | Any finding, a path passed to `--files` that names a source file it could not read, or a directory argument that is missing, is a file, or is combined with `--files` or an absolute `--pattern`. |
 | `scan-collisions` | Any collision-prone class name was found, which makes it a CI gate. |
 | `explain` | The argument is not a statically readable `sz` object literal. |
 | `migrate` | A file failed to migrate, or the native engine is not installed. |

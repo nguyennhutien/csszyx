@@ -18,6 +18,8 @@
  * @module config-keys
  */
 
+import { nearestName } from '@csszyx/compiler';
+
 /** Top-level option names the plugin reads. */
 const KNOWN_TOP_LEVEL_KEYS: ReadonlySet<string> = new Set([
     'include',
@@ -49,46 +51,20 @@ const RENAMED_KEYS: Readonly<Record<string, string>> = {
 /**
  * The nearest known key, when the author plausibly meant one.
  *
- * One edit-distance pass over a set of eleven; a typo of a short option name is
- * within two edits of its target, and beyond that the guess is noise.
+ * One edit-distance pass over the known option names; a typo of a short option
+ * name is within two edits of its target, and beyond that the guess is noise.
  *
  * @param key - The unknown key as authored.
  * @returns The closest known key, or null when nothing is close enough.
  */
 export function nearestKnownConfigKey(key: string): string | null {
-    const lower = key.toLowerCase();
-    let best: string | null = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (const candidate of KNOWN_TOP_LEVEL_KEYS) {
-        const distance = editDistance(lower, candidate.toLowerCase());
-        if (distance < bestDistance) {
-            bestDistance = distance;
-            best = candidate;
-        }
-    }
     // Two edits on a short name is already a stretch; scale the budget so
     // `quiet` does not "match" `mode`.
-    return best !== null && bestDistance <= Math.max(1, Math.floor(key.length / 4)) ? best : null;
-}
-
-/**
- * Levenshtein distance, two rows instead of a full matrix.
- *
- * @param a - First string.
- * @param b - Second string.
- * @returns Edit distance between them.
- */
-function editDistance(a: string, b: string): number {
-    let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
-    for (let i = 1; i <= a.length; i += 1) {
-        const current = [i];
-        for (let j = 1; j <= b.length; j += 1) {
-            const substitution = previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1);
-            current.push(Math.min(substitution, previous[j] + 1, current[j - 1] + 1));
-        }
-        previous = current;
-    }
-    return previous[b.length];
+    return nearestName(
+        key,
+        [...KNOWN_TOP_LEVEL_KEYS].map(name => [name, name] as const),
+        Math.max(1, Math.floor(key.length / 4)),
+    );
 }
 
 /** One unrecognized option and the best guess at what was meant. */

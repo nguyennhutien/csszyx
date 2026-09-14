@@ -568,14 +568,14 @@ export interface FlexboxGridProps {
         | 'evenly'
         | 'stretch'
         | 'baseline'
-        | 'safe-center'
-        | 'safe-end';
+        | 'center-safe'
+        | 'end-safe';
 
     /** @see https://tailwindcss.com/docs/justify-items */
-    justifyItems?: 'start' | 'end' | 'center' | 'stretch' | 'normal' | 'safe-center' | 'safe-end';
+    justifyItems?: 'start' | 'end' | 'center' | 'stretch' | 'normal' | 'center-safe' | 'end-safe';
 
     /** @see https://tailwindcss.com/docs/justify-self */
-    justifySelf?: 'auto' | 'start' | 'end' | 'center' | 'stretch' | 'safe-center' | 'safe-end';
+    justifySelf?: 'auto' | 'start' | 'end' | 'center' | 'stretch' | 'center-safe' | 'end-safe';
 
     /** @see https://tailwindcss.com/docs/align-content */
     alignContent?:
@@ -587,7 +587,9 @@ export interface FlexboxGridProps {
         | 'around'
         | 'evenly'
         | 'baseline'
-        | 'stretch';
+        | 'stretch'
+        | 'center-safe'
+        | 'end-safe';
 
     /** @see https://tailwindcss.com/docs/align-items */
     items?:
@@ -596,8 +598,8 @@ export interface FlexboxGridProps {
         | 'center'
         | 'baseline'
         | 'stretch'
-        | 'safe-center'
-        | 'safe-end'
+        | 'center-safe'
+        | 'end-safe'
         | (string & {});
 
     /** @see https://tailwindcss.com/docs/align-self */
@@ -608,8 +610,8 @@ export interface FlexboxGridProps {
         | 'center'
         | 'stretch'
         | 'baseline'
-        | 'safe-center'
-        | 'safe-end'
+        | 'center-safe'
+        | 'end-safe'
         | (string & {});
 
     /** @see https://tailwindcss.com/docs/place-content */
@@ -622,14 +624,14 @@ export interface FlexboxGridProps {
         | 'evenly'
         | 'baseline'
         | 'stretch'
-        | 'safe-center'
-        | 'safe-end';
+        | 'center-safe'
+        | 'end-safe';
 
     /** @see https://tailwindcss.com/docs/place-items */
-    placeItems?: 'start' | 'end' | 'center' | 'baseline' | 'stretch' | 'safe-center' | 'safe-end';
+    placeItems?: 'start' | 'end' | 'center' | 'baseline' | 'stretch' | 'center-safe' | 'end-safe';
 
     /** @see https://tailwindcss.com/docs/place-self */
-    placeSelf?: 'auto' | 'start' | 'end' | 'center' | 'stretch' | 'safe-center' | 'safe-end';
+    placeSelf?: 'auto' | 'start' | 'end' | 'center' | 'stretch' | 'center-safe' | 'end-safe';
 }
 
 // ============================================================================
@@ -1036,7 +1038,13 @@ export interface TypographyProps {
     /** @see https://tailwindcss.com/docs/whitespace */
     whitespace?: 'normal' | 'nowrap' | 'pre' | 'pre-line' | 'pre-wrap' | 'break-spaces';
 
-    /** @see https://tailwindcss.com/docs/word-break */
+    /**
+     * Sets `word-break`. To let a long word wrap at the container edge, which sets
+     * `overflow-wrap`, use `wrap: 'break-word'`: Tailwind's `break-words` class sets
+     * that property, not this one.
+     *
+     * @see https://tailwindcss.com/docs/word-break
+     */
     break?: 'normal' | 'all' | 'keep';
 
     /** @see https://tailwindcss.com/docs/hyphens */
