@@ -333,6 +333,34 @@ describe('createEmittedClassOracle — markers are not dead classes', () => {
             oracle.findDead(['group-hover:bg-red-500', 'peer-checked:flex', 'zz-probe']),
         ).toEqual(['zz-probe']);
     });
+
+    // Under `prefix(tw)` Tailwind selects `.tw\\:group`, so the marker an element
+    // must carry is `tw:group` and a bare `group` marks nothing.
+    it('keeps the markers a prefixed build selects', async () => {
+        const oracle = await readyOracle('@import "tailwindcss" prefix(tw);');
+        expect(oracle.findDead(['tw:group', 'tw:peer/search', 'tw:zz-probe'])).toEqual([
+            'tw:zz-probe',
+        ]);
+    });
+
+    it('reports an unprefixed marker in a prefixed build', async () => {
+        const oracle = await readyOracle('@import "tailwindcss" prefix(tw);');
+        expect(oracle.findDead(['group', 'peer/search'])).toEqual(['group', 'peer/search']);
+    });
+
+    it('asks the opacity question of prefixed classes and skips a prefixed marker', async () => {
+        const oracle = await readyOracle(
+            '@import "tailwindcss" prefix(tw);\n@theme { --color-broken: var(--v-broken); }\n:root { --v-broken: 17, 119, 224; }',
+        );
+        const broken = oracle.findBrokenOpacity([
+            'tw:group/sidebar',
+            'tw:bg-broken/30',
+            'bg-broken/30',
+        ]);
+        // The unprefixed class is the dead pass's finding: a prefixed build
+        // serves no rule for it, so there is no opacity to judge.
+        expect(broken.map(entry => entry.token)).toEqual(['tw:bg-broken/30']);
+    });
 });
 
 describe('createEmittedClassOracle — degrading instead of failing', () => {

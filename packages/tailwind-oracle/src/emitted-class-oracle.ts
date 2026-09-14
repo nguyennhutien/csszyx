@@ -235,7 +235,7 @@ const SELF_PROOF = 'zz-csszyx-not-a-class';
  * These carry no styles of their own: they mark an element so that `group-*`
  * and `peer-*` variants on its descendants have something to match. Tailwind
  * reports them as producing no CSS, which is true and is not a defect, so they
- * can never be dead. The scope name must be non-empty, which keeps `group/`
+ * can never be dead. Under a prefix the marker carries it too. The scope name must be non-empty, which keeps `group/`
  * and every misspelling reportable.
  */
 const MARKER = /^(?:group|peer)(?:\/[^/\s]+)?$/;
@@ -675,8 +675,6 @@ export async function createEmittedClassOracle(
         );
     }
 
-    const customProperties = collectCustomProperties(options.css);
-
     // Built on first use, from a SECOND compile of the same stylesheet with
     // probe tokens appended. Kept out of the main design system because that
     // one answers the dead-class question, and injecting tokens into it to save
@@ -684,18 +682,38 @@ export async function createEmittedClassOracle(
     // diagnostic's evidence.
     let collisions: CollisionOracle | null | undefined;
 
+    const facts: StylesheetFacts = {
+        // Normalised to null: Tailwind reports an absent prefix as null
+        // today, and an empty string would read as a prefix that is there.
+        prefix:
+            typeof design.theme?.prefix === 'string' && design.theme.prefix !== ''
+                ? design.theme.prefix
+                : null,
+        important: design.important === true,
+    };
+    // A prefixed build selects `.tw\:group`, so the marker an element carries
+    // there is `tw:group`, and a bare `group` marks nothing at all.
+    const markerPrefix = facts.prefix === null ? '' : `${facts.prefix}:`;
+    const isMarker = (token: string): boolean =>
+        token.startsWith(markerPrefix) && MARKER.test(token.slice(markerPrefix.length));
+
+    const authoredProperties = collectCustomProperties(options.css);
+    // A prefixed build renames every theme variable as well: `--color-x` is
+    // emitted as `--tw-color-x`, and the rule for `tw:bg-x/30` reads that name.
+    const customProperties =
+        facts.prefix === null
+            ? authoredProperties
+            : new Map([
+                  ...authoredProperties,
+                  ...[...authoredProperties].map(
+                      ([name, value]) => [`--${facts.prefix}-${name.slice(2)}`, value] as const,
+                  ),
+              ]);
+
     return {
         ok: true,
         keywords: keywordOracleFrom(design),
-        facts: {
-            // Normalised to null: Tailwind reports an absent prefix as null
-            // today, and an empty string would read as a prefix that is there.
-            prefix:
-                typeof design.theme?.prefix === 'string' && design.theme.prefix !== ''
-                    ? design.theme.prefix
-                    : null,
-            important: design.important === true,
-        },
+        facts,
         async loadCollisionOracle() {
             if (collisions !== undefined) return collisions;
             try {
@@ -717,13 +735,13 @@ export async function createEmittedClassOracle(
             // Markers are excluded before the question is asked, not filtered
             // out of the answer: Tailwind's verdict on them is "no CSS", which
             // is correct and means something different from dead.
-            const asked = classes.filter(token => !MARKER.test(token));
+            const asked = classes.filter(token => !isMarker(token));
             if (asked.length === 0) return [];
             const css = design.candidatesToCss(asked);
             return asked.filter((_, index) => css[index] === null);
         },
         findBrokenOpacity(classes) {
-            const asked = classes.filter(token => token.includes('/') && !MARKER.test(token));
+            const asked = classes.filter(token => token.includes('/') && !isMarker(token));
             if (asked.length === 0) return [];
             const css = design.candidatesToCss(asked);
             const broken: Array<{ token: string; value: string }> = [];
