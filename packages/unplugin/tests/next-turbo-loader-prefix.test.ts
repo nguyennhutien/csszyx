@@ -108,6 +108,20 @@ describe('the Next Turbopack loader and the Tailwind prefix', () => {
         expect(ctx.dependencies).toContain(join(root, 'app/globals.css'));
     }, 60_000);
 
+    it('lowers with the stylesheets it is told the app loads, past a stray one', async () => {
+        const { root, page, cacheDir } = app(PREFIXED, {
+            'legacy/old.css': '@import "tailwindcss";\n',
+        });
+        const tailwindStylesheet = ['app/globals.css'];
+        await writeNextStylesheetFacts({ root, cacheDir, tailwindStylesheet });
+        const ctx = loaderContext(root, page);
+
+        const result = runNextTurboLoader(APP, ctx, { ...OPTIONS, tailwindStylesheet });
+
+        expect(result.code).toContain('tw:p-4');
+        expect(ctx.dependencies).not.toContain(join(root, 'legacy/old.css'));
+    }, 60_000);
+
     it('needs no facts when no stylesheet reaches Tailwind', () => {
         const { root, page } = app('.card { color: red; }\n');
 
