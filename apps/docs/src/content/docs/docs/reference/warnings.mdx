@@ -731,6 +731,44 @@ broken import in a file the app does load is still worth fixing.
 A warning that fires in production. The build carries on, but an `sz` override
 loses to the class it was meant to override.
 
+### The Tailwind prefix changed during a session
+
+```text
+[csszyx] {file} changed the Tailwind prefix from {before} to {after}: recompiled every module and reloaded the page.
+```
+
+Printed by a Vite dev server, once per change, whatever `quiet` says. Every
+module compiled before the edit carried classes under the old prefix, so the
+server lowered every source again and reloaded the page. `{before}` and
+`{after}` read `none` when no prefix is set. Nothing to do.
+
+```text
+[csszyx] {files} changed the Tailwind prefix from {before} to {after}, but this watch session compiled its modules under the old one, so their classes would style nothing.
+  help: stop the watch and start it again.
+  note: modules keep the classes they were compiled with until the restart.
+```
+
+A webpack watch **rebuild error**. webpack keeps the modules it already
+compiled and a plugin cannot make it compile them all again, so every rebuild
+fails with this until the prefix is back or the watch restarts.
+
+```text
+  note: {session} keeps the prefix it last read ({prefix}) until the stylesheets agree again.
+```
+
+Closes a [prefix disagreement](#tailwind-entries-set-different-prefixes) or a
+stylesheet that did not compile when either happens during a Vite dev server
+(`the dev server`) or a webpack watch (`this watch session`). It is a warning
+there, not an error: the author is mid-edit, and the next save usually fixes it.
+
+```text
+[csszyx] internal error: the build asked for the project's Tailwind prefix before it read the project's stylesheets. This is a csszyx bug; please report it with the bundler you build with.
+```
+
+A build **error** that should never reach you: a bundler lane reached the
+engine without reading the stylesheets first. Report it with the bundler and
+its version.
+
 ### Next.js with Turbopack
 
 Turbopack compiles each module on its own, so csszyx cannot hold the class set
@@ -782,6 +820,26 @@ a word. This prints once when the wait passes a second, which in practice means
 the loader was killed while holding the lock. The wait ends on its own when that
 lock goes stale. If it lasts more than a minute, the watcher stops and reports the
 lock instead.
+
+### The Tailwind prefix on the Next.js and Jest lanes
+
+```text
+[csszyx] {lane} has not read the Tailwind prefix for {root}: {reason}.
+  help: run `csszyx next prebuild` before `next build`, and `csszyx next watch` beside `next dev`; both read the stylesheets first.
+  note: without the prefix every class this lane emits could style nothing.
+```
+
+A build **error** from the Turbopack loader or `csszyx next prebuild`. Those
+lanes read the prefix from `.csszyx/cache/stylesheet-facts.json`, and it was
+missing, or a stylesheet changed after it was written. Run the command the help
+line names. A `next dev` loader with no watcher reads the stylesheets itself
+instead of stopping.
+
+```text
+[csszyx] internal error: a Next lane asked the engine to lower a module before it read the project's Tailwind prefix. This is a csszyx bug; please report it with the Next.js version you build with.
+```
+
+Should never reach you. Report it with the Next.js version.
 
 ### No CSS at all
 
