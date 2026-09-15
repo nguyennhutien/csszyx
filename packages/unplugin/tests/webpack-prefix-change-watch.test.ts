@@ -10,7 +10,7 @@
  * The build read the stylesheets to decide the prefix, so it depends on them:
  * an edit to one triggers a rebuild even when no module imports it.
  */
-import { writeFileSync } from 'node:fs';
+import { utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -45,6 +45,13 @@ async function watchThroughEdit(
         // only thing that can trigger the second build.
         'src/App.tsx': APP,
     });
+    // Written an hour ago as far as the watcher can tell. A file changed within
+    // its timestamp accuracy of the watch starting counts as changed on the
+    // first rebuild, which would make every rebuild look like a stylesheet edit.
+    const settled = new Date(Date.now() - 60 * 60 * 1000);
+    for (const file of ['src/index.css', 'src/index.js', 'src/App.tsx']) {
+        utimesSync(join(root, file), settled, settled);
+    }
     const warnings: string[] = [];
     vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
         warnings.push(args.map(String).join(' '));
