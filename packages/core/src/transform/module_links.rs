@@ -389,6 +389,16 @@ fn skip_trivia(source: &str, start: usize) -> usize {
 mod tests {
     use super::*;
 
+    #[test]
+    fn export_type_suffix_needs_a_word_break_before_type() {
+        // `exporttype {` is one identifier, not `export type {`: without the
+        // break before `type` the clause is an ordinary export.
+        assert!(!is_export_type_suffix("exporttype"));
+        assert!(!is_export_type_suffix("mytype"));
+        assert!(is_export_type_suffix("export type"));
+        assert!(is_export_type_suffix("export\ttype "));
+    }
+
     fn links(source: &str, filename: &str) -> ModuleLinks {
         let files = [TransformFile {
             filename: filename.to_owned(),

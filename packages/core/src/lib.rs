@@ -192,6 +192,17 @@ pub fn scan_module_links_json(files_json: &str) -> Result<String, JsValue> {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn scan_module_links_crosses_the_boundary_as_json() {
+        // The wasm lane reads module links through this export; the native
+        // lane has its own binding, so nothing else runs this one.
+        let files = r#"[{"filename":"/app/main.tsx","source":"import './app.css';\nexport { cardSz } from './styles';"}]"#;
+        let json = scan_module_links_json(files).expect("module links encode");
+        assert!(json.contains("./app.css"), "css import missing from {json}");
+        assert!(json.contains("cardSz"), "forward missing from {json}");
+    }
+
     #[test]
     fn test_version() {
         init();
