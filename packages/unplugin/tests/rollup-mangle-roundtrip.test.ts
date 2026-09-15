@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { type OutputAsset, type OutputChunk, type Plugin, rollup } from 'rollup';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { rollupPlugin } from '../src/unplugin.js';
 
@@ -13,6 +13,7 @@ afterEach(() => {
     for (const directory of tempDirs.splice(0)) {
         rmSync(directory, { recursive: true, force: true });
     }
+    vi.restoreAllMocks();
 });
 
 /**
@@ -67,6 +68,10 @@ describe('pure Rollup production mangle round-trip', () => {
     it('rewrites JS and CSS with the emitted manifest while preserving shared raw classes', async () => {
         const root = mkdtempSync(join(realpathSync(tmpdir()), 'csszyx-rollup-mangle-'));
         tempDirs.push(root);
+        // The plugin reads the project's stylesheets under the directory it was
+        // started from. vitest may be started from the repository root, whose
+        // stylesheets set different prefixes, so the project is the directory.
+        vi.spyOn(process, 'cwd').mockReturnValue(root);
         const input = join(root, 'entry.jsx');
         writeFileSync(
             input,

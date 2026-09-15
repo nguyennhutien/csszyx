@@ -43,6 +43,10 @@ async function devServer({ environments = true, start = true } = {}) {
         'src/index.css': STOCK,
         'src/App.tsx': APP,
     });
+    // The plugin reads the project's stylesheets under the directory it was
+    // started from. vitest may be started from the repository root, whose
+    // stylesheets set different prefixes, so the project is the directory.
+    vi.spyOn(process, 'cwd').mockReturnValue(root);
     const warnings: string[] = [];
     vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
         warnings.push(args.map(String).join(' '));

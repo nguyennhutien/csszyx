@@ -20,6 +20,10 @@ describe('esbuild class-mangle safety', () => {
     it('warns and keeps shared and sz-only names readable when mangle is requested', async () => {
         const root = mkdtempSync(join(realpathSync(tmpdir()), 'csszyx-esbuild-mangle-'));
         tempDirs.push(root);
+        // The plugin reads the project's stylesheets under the directory it was
+        // started from. vitest may be started from the repository root, whose
+        // stylesheets set different prefixes, so the project is the directory.
+        vi.spyOn(process, 'cwd').mockReturnValue(root);
         const input = join(root, 'entry.jsx');
         writeFileSync(
             input,
