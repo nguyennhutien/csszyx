@@ -125,10 +125,9 @@ describe('openProjectStyleModel', () => {
         expect(model.facts).toEqual({ prefix: null, important: false });
     });
 
-    it('withholds a forced important the entries disagree about', async () => {
-        // The same rule on the other fact, stated separately: one arm agreeing
-        // proves nothing about the other, and `important` decides whether a
-        // csszyx class can override the library class beside it.
+    it('reports a forced important when the first entry enables it', async () => {
+        // `important` is a project-wide hazard, not a shared vocabulary fact:
+        // one root enabling it is enough to make an emitted override lose.
         const files = writeStylesheets({
             'a.css': '@import "tailwindcss" important;',
             'b.css': '@import "tailwindcss";',
@@ -136,7 +135,18 @@ describe('openProjectStyleModel', () => {
 
         const model = await openProjectStyleModel(REPO, files);
 
-        expect(model.facts).toEqual({ prefix: null, important: false });
+        expect(model.facts).toEqual({ prefix: null, important: true });
+    });
+
+    it('reports a forced important when a later entry enables it', async () => {
+        const files = writeStylesheets({
+            'a.css': '@import "tailwindcss";',
+            'b.css': '@import "tailwindcss" important;',
+        });
+
+        const model = await openProjectStyleModel(REPO, files);
+
+        expect(model.facts).toEqual({ prefix: null, important: true });
     });
 
     it('reports a forced important every entry agrees on', async () => {

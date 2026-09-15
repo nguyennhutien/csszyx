@@ -253,22 +253,34 @@ interface CompiledEntry {
 }
 
 /**
- * The facts every entry agrees on.
+ * The project facts selected from every compiled entry.
  *
  * Taking the first entry apart from the rest makes "at least one" part of the
  * signature, so there is no empty case to invent a default for.
+ * Prefix is a shared vocabulary and is retained only when every entry agrees.
+ * Forced important is a hazard, so one entry enabling it is enough to retain
+ * it for the existing unsupported-configuration warning.
+ *
+ * For R roots this performs O(R) comparisons in one pass and stores O(1)
+ * aggregation state. Build startup pays the cost when opening the style model.
  *
  * @param first - One compiled entry.
  * @param rest - The other compiled entries, possibly none.
- * @returns The shared facts, with a disagreement reported as the default.
+ * @returns The agreed prefix and whether any entry forces important.
  */
 function agreedFacts(first: CompiledEntry, rest: readonly CompiledEntry[]): StylesheetFacts {
     const { facts } = first;
+    let prefixAgrees = true;
+    let important = facts.important;
+
+    for (const entry of rest) {
+        if (entry.facts.prefix !== facts.prefix) prefixAgrees = false;
+        if (entry.facts.important) important = true;
+    }
+
     return {
-        prefix: rest.every(entry => entry.facts.prefix === facts.prefix) ? facts.prefix : null,
-        important: rest.every(entry => entry.facts.important === facts.important)
-            ? facts.important
-            : false,
+        prefix: prefixAgrees ? facts.prefix : null,
+        important,
     };
 }
 
