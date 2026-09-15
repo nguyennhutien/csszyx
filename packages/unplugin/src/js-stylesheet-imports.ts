@@ -14,7 +14,7 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
-import { scanModuleLinks } from '@csszyx/compiler';
+import { type ModuleLinks, scanModuleLinks } from '@csszyx/compiler';
 import { sortStrings } from './sort.js';
 import { aliasedSpecifierBases, type SpecifierAlias } from './specifier-aliases.js';
 
@@ -88,7 +88,8 @@ export function stylesheetsImportedBy(
     );
     const found = new Set<string>();
     importing.forEach((source, index) => {
-        for (const request of links[index]?.cssImports ?? []) {
+        // The engine answers once per module, in the order it was handed them.
+        for (const request of (links[index] as ModuleLinks).cssImports) {
             const [specifier = '', query = ''] = request.split('?');
             if (new URLSearchParams(query).has('raw')) continue;
             const file = resolveImportedStylesheet(specifier, source.filePath, aliases);

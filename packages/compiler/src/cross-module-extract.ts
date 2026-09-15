@@ -502,7 +502,7 @@ function exportClauseNames(specifier: OxcNode): { local: string; exported: strin
 export function extractCrossModuleForwards(source: string, filename: string): CrossModuleForward[] {
     // The engine reads the module record, frees its parse before it returns,
     // and skips the parse for a module with no `export {` clause.
-    return scanModuleLinks([{ filename, source }])[0]?.forwards ?? [];
+    return scanModuleLinks([{ filename, source }]).flatMap(links => links.forwards);
 }
 
 /**

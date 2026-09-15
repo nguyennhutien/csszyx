@@ -104,7 +104,8 @@ function loadParserWasm(): ParserWasmModule | null {
 function requireParserWasm(): ParserWasmModule {
     const wasm = loadParserWasm();
     if (!wasm) {
-        throw new WasmTransformUnavailableError(wasmLoadError || 'artifact not found');
+        // `loadParserWasm` records why whenever it has no module to return.
+        throw new WasmTransformUnavailableError(wasmLoadError);
     }
     return wasm;
 }
