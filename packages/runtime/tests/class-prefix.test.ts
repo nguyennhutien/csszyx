@@ -47,6 +47,15 @@ describe('setSzClassPrefix', () => {
         expect(_sz({ p: 4 })).toBe('p-4');
     });
 
+    it('normalizes an empty registered prefix to no prefix', () => {
+        registerSzClassPrefix('');
+
+        expect(_sz({ p: 4 })).toBe('p-4');
+        expect(() => registerSzClassPrefix('tw')).toThrowError(
+            /registered different Tailwind prefixes: no prefix and prefix\(tw\)/,
+        );
+    });
+
     it('allows every module from one build to register the same prefix', () => {
         registerSzClassPrefix('tw');
         registerSzClassPrefix('tw');

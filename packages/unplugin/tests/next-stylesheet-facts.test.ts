@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+    failedNextClassPrefixInputsStamp,
     NEXT_STYLESHEET_FACTS_FILE,
     prepareNextStylesheetFacts,
     projectStylesheetCandidates,
@@ -40,6 +41,22 @@ function app(files: Record<string, string>): { root: string; cacheDir: string } 
 }
 
 describe('next stylesheet facts', () => {
+    it('stamps only explicitly selected stylesheets when a selection is configured', () => {
+        const { root, cacheDir } = app({
+            'app/globals.css': PREFIXED,
+            'legacy/old.css': '@import "tailwindcss";\n',
+        });
+        const input = { root, cacheDir, tailwindStylesheet: ['app/globals.css'] };
+        const before = failedNextClassPrefixInputsStamp(input);
+
+        writeFileSync(join(root, 'legacy/old.css'), '@import "tailwindcss" prefix(old);\n');
+        const afterUnselectedEdit = failedNextClassPrefixInputsStamp(input);
+        writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss" prefix(next);\n');
+
+        expect(afterUnselectedEdit).toBe(before);
+        expect(failedNextClassPrefixInputsStamp(input)).not.toBe(before);
+    });
+
     it('records the prefix, and a loader reads it back', async () => {
         const { root, cacheDir } = app({ 'app/globals.css': PREFIXED });
 
