@@ -28,12 +28,16 @@ afterEach(() => {
 });
 
 /**
- * Watch a stock project through one stylesheet edit.
+ * Watch a stock project through one edit.
  *
- * @param css - What `src/index.css` becomes after the first build.
+ * @param content - What the edited file becomes after the first build.
+ * @param file - The file edited, relative to the root; the stylesheet unless given.
  * @returns The errors of every build, and everything printed to `console.warn`.
  */
-async function watchThroughEdit(css: string): Promise<{ builds: string[][]; warned: string }> {
+async function watchThroughEdit(
+    content: string,
+    file = 'src/index.css',
+): Promise<{ builds: string[][]; warned: string }> {
     const root = tailwindProject('csszyx-wp-prefix-watch-', {
         'src/index.css': STOCK,
         'src/index.js': 'export const ready = true;\n',
@@ -68,7 +72,7 @@ async function watchThroughEdit(css: string): Promise<{ builds: string[][]; warn
             }
             builds.push((stats?.compilation.errors ?? []).map(entry => entry.message));
             if (builds.length === 1) {
-                writeFileSync(join(root, 'src/index.css'), css, 'utf8');
+                writeFileSync(join(root, file), content, 'utf8');
                 // A stylesheet the build does not depend on never rebuilds;
                 // stop waiting rather than hang until the test times out.
                 guard = setTimeout(finish, 15_000);
@@ -93,6 +97,17 @@ describe('a Tailwind prefix that changes during a webpack watch session', () => 
             message.includes('changed the Tailwind prefix'),
         );
         expect(reported).toHaveLength(1);
+    }, 60_000);
+
+    it('does not read the stylesheets again for a rebuild no stylesheet caused', async () => {
+        const { builds, warned } = await watchThroughEdit(
+            'export const ready = false;\n',
+            'src/index.js',
+        );
+
+        expect(builds).toHaveLength(2);
+        expect(builds[1]).toEqual([]);
+        expect(warned).not.toContain('Tailwind prefix');
     }, 60_000);
 
     it('rebuilds quietly for a stylesheet edit that leaves the prefix alone', async () => {

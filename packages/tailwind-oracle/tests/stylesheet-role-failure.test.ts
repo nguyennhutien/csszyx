@@ -84,3 +84,35 @@ describe('readStylesheetRole — a compile that throws something other than an E
         });
     });
 });
+
+describe('readStylesheetRole — a Tailwind that does not export its feature flags', () => {
+    /**
+     * A Tailwind whose compile reports the given features and exports no enum.
+     *
+     * @param features - The feature bits the compile reports.
+     * @returns The loader.
+     */
+    const reporting =
+        (features: number): TailwindLoader =>
+        async () => ({ version: '4.3.3', root: dir, compile: async () => ({ features }) });
+
+    // Every Tailwind 4 release sets the same utilities bit, so a build that does
+    // not export `Features` is still read the way the ones that do are.
+    it('reads the utilities bit every Tailwind 4 release sets', async () => {
+        expect(
+            await readStylesheetRole(
+                { resolveFrom: REPO, css: '.a{}', cssBase: dir },
+                reporting(16),
+            ),
+        ).toEqual({ ok: true, utilities: true, imports: [] });
+    });
+
+    it('reads a stylesheet without that bit as generating no utilities', async () => {
+        expect(
+            await readStylesheetRole(
+                { resolveFrom: REPO, css: '.a{}', cssBase: dir },
+                reporting(1),
+            ),
+        ).toEqual({ ok: true, utilities: false, imports: [] });
+    });
+});
