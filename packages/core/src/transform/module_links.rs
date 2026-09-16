@@ -4,6 +4,8 @@
 use std::collections::{HashMap, HashSet};
 
 use oxc_allocator::Allocator;
+use oxc_ast::ast::{Expression, ImportExpression, Program};
+use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
 use oxc_span::{SourceType, Span};
 use oxc_syntax::identifier::is_identifier_name;
@@ -47,9 +49,12 @@ const TYPE_WINDOW: usize = 48;
 
 /// Read the links of every file, in input order.
 ///
-/// Each file is parsed once, and only when its text can hold a link: a
-/// stylesheet request needs `.css` in the text and a forward needs an
-/// `export {` clause, so a module with neither never reaches the parser.
+/// Each file is parsed once, and only when its text can hold a link. For `N`
+/// source bytes the lexical gate is `O(N)` time and `O(1)` space; the parser is
+/// entered for a literal `.css`, or for a module request containing a backslash
+/// because JavaScript escapes can hide any part of the extension. The worst
+/// case is an import-heavy file whose strings contain escapes, which is parsed
+/// once like a directly spelled stylesheet request.
 pub fn scan_module_links(files: &[TransformFile]) -> Vec<ModuleLinks> {
     files.par_iter().map(links_of).collect()
 }
@@ -57,7 +62,7 @@ pub fn scan_module_links(files: &[TransformFile]) -> Vec<ModuleLinks> {
 /// Read the links of one file.
 fn links_of(file: &TransformFile) -> ModuleLinks {
     let source = file.source.as_str();
-    let wants_css = source.contains(".css");
+    let wants_css = may_request_stylesheet(source);
     let wants_forwards = has_export_clause(source);
     if !wants_css && !wants_forwards {
         return ModuleLinks::default();
@@ -70,7 +75,7 @@ fn links_of(file: &TransformFile) -> ModuleLinks {
     let record = &parsed.module_record;
     ModuleLinks {
         css_imports: if wants_css {
-            css_imports(record, source)
+            css_imports(record, &parsed.program)
         } else {
             Vec::new()
         },
@@ -82,6 +87,11 @@ fn links_of(file: &TransformFile) -> ModuleLinks {
     }
 }
 
+/// Whether source text can hold a direct or escaped stylesheet request.
+fn may_request_stylesheet(source: &str) -> bool {
+    source.contains(".css") || (source.contains('\\') && source.contains("import"))
+}
+
 /// Whether a specifier names a stylesheet, ignoring a `?query` suffix.
 fn names_stylesheet(specifier: &str) -> bool {
     specifier
@@ -91,7 +101,7 @@ fn names_stylesheet(specifier: &str) -> bool {
 }
 
 /// Stylesheet specifiers a module requests, statically or through `import()`.
-fn css_imports(record: &ModuleRecord<'_>, source: &str) -> Vec<String> {
+fn css_imports(record: &ModuleRecord<'_>, program: &Program<'_>) -> Vec<String> {
     let mut found: Vec<(u32, String)> = Vec::new();
     for (specifier, requests) in &record.requested_modules {
         if !names_stylesheet(specifier.as_str()) {
@@ -101,13 +111,9 @@ fn css_imports(record: &ModuleRecord<'_>, source: &str) -> Vec<String> {
             found.push((request.span.start, specifier.as_str().to_owned()));
         }
     }
-    for dynamic in &record.dynamic_imports {
-        if let Some(specifier) = string_literal_value(dynamic.module_request.source_text(source)) {
-            if names_stylesheet(specifier) {
-                found.push((dynamic.span.start, specifier.to_owned()));
-            }
-        }
-    }
+    let mut dynamic = DynamicStylesheetImports { found: Vec::new() };
+    dynamic.visit_program(program);
+    found.extend(dynamic.found);
     // The record keys requests by specifier, so source order is restored
     // from the spans before duplicates are dropped.
     found.sort_unstable_by_key(|(start, _)| *start);
@@ -120,13 +126,26 @@ fn css_imports(record: &ModuleRecord<'_>, source: &str) -> Vec<String> {
     unique
 }
 
-/// The value of a quoted literal with no interpolation, or None for any
-/// other expression.
-fn string_literal_value(text: &str) -> Option<&str> {
-    let quoted = |quote: char| text.strip_prefix(quote)?.strip_suffix(quote);
-    quoted('"')
-        .or_else(|| quoted('\''))
-        .or_else(|| quoted('`').filter(|inner| !inner.contains("${")))
+/** Static string values requested through `import()`, with source positions. */
+struct DynamicStylesheetImports {
+    found: Vec<(u32, String)>,
+}
+
+impl<'a> Visit<'a> for DynamicStylesheetImports {
+    fn visit_import_expression(&mut self, import: &ImportExpression<'a>) {
+        let value = match &import.source {
+            Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+            Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
+                .quasis
+                .first()
+                .and_then(|quasi| quasi.value.cooked.as_ref())
+                .map(oxc_ast::ast::Str::as_str),
+            _ => None,
+        };
+        if let Some(specifier) = value.filter(|specifier| names_stylesheet(specifier)) {
+            self.found.push((import.span.start, specifier.to_owned()));
+        }
+    }
 }
 
 /// Every re-exported name in one module, with the module it points at.
@@ -680,10 +699,22 @@ mod tests {
         assert!(
             css("const t = 'dark';\nconst l = () => import(`./themes/${t}.css`);\n").is_empty()
         );
+        assert!(
+            css("const suffix = '.js';\nconst l = () => import(`./fake.css${suffix}`);\n")
+                .is_empty()
+        );
         assert_eq!(
             css("const l = () => import(`./plain.css`);\n"),
             ["./plain.css"]
         );
+    }
+
+    #[test]
+    fn stylesheet_request_gate_requires_module_syntax_beside_an_escape() {
+        assert!(!may_request_stylesheet(r"const slash = '\\';"));
+        assert!(!may_request_stylesheet("import './theme.js';"));
+        assert!(may_request_stylesheet(r"import './theme\u002ecss';"));
+        assert!(may_request_stylesheet("import './theme.css';"));
     }
 
     #[test]

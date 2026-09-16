@@ -84,6 +84,11 @@ import {
     escapeJsonForInlineScript,
     escapeJsonForStringLiteral,
 } from './inline-script-escape.js';
+import {
+    mayImportStylesheet,
+    type ScannedSource,
+    stylesheetsImportedBy,
+} from './js-stylesheet-imports.js';
 import { createLazyAggregate, type LazyAggregate } from './lazy-aggregate.js';
 import {
     needsRuntimeMangleRegistration,
@@ -3119,6 +3124,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // Every stylesheet the project walk read, used to plan global-var aliases
     // before the first CSS module is transformed.
     let projectCssFiles: readonly string[] = [];
+    /**
+     * Stylesheets the prescan found imported from JavaScript, which the `.css`
+     * walk cannot see when an app keeps no stylesheet of its own.
+     */
+    let jsImportedCssFiles: readonly string[] = [];
     // Ownership evidence gathered while CSS modules were rewritten, reported
     // once from the output hook where the whole picture exists.
     const transformMangledSources = new Set<string>();
@@ -4463,6 +4473,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Specifier bases imported by files that author sz, filled during the
         // walk and read once it finishes.
         const szObjectDemand = new Set<string>();
+        // Modules whose text names a stylesheet, read once the walk finishes.
+        const cssImportingSources: ScannedSource[] = [];
 
         /**
          * Read one processable source into the prescan queue.
@@ -4480,6 +4492,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             } catch {
                 return;
             }
+            if (mayImportStylesheet(content)) cssImportingSources.push({ filePath, content });
             // Ownership must be complete before a virtual mangle-map module can
             // load. Raw-only modules therefore participate even when they do not
             // need the expensive sz parser pass.
@@ -4582,6 +4595,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             state.rootDir,
             performance.now() - walkStarted,
         );
+
+        jsImportedCssFiles = stylesheetsImportedBy(cssImportingSources, specifierAliases);
 
         const demandStarted = performance.now();
         recordDemandedSzObjectProviders(seenSourcePaths, szObjectDemand);
@@ -4859,7 +4874,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Nothing; the result lands in `unservedClasses`.
      */
     async function computeUnservedClasses(): Promise<void> {
-        const model = await openProjectStyleModel(state.rootDir, projectCssFiles);
+        const model = await openProjectStyleModel(state.rootDir, [
+            ...new Set([...projectCssFiles, ...jsImportedCssFiles]),
+        ]);
         // Said before the early return below: a project whose Tailwind renames
         // or forces every utility gets classes that style nothing, whether or
         // not it authored any className of its own.

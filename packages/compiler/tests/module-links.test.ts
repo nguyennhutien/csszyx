@@ -25,6 +25,25 @@ describe.each(LINK_SCANNERS)('the %s artifact', (_name, scan) => {
         ]);
     });
 
+    it('decodes an escaped static stylesheet specifier before classifying it', () => {
+        const [links] = scan([
+            { filename: '/p/main.tsx', source: String.raw`import './theme\u002ecss';` },
+        ]);
+
+        expect(links?.cssImports).toEqual(['./theme.css']);
+    });
+
+    it('decodes an escaped dynamic stylesheet specifier before classifying it', () => {
+        const [links] = scan([
+            {
+                filename: '/p/main.tsx',
+                source: String.raw`const load = () => import('./theme\u002ecss?inline');`,
+            },
+        ]);
+
+        expect(links?.cssImports).toEqual(['./theme.css?inline']);
+    });
+
     it('reads a re-export as a link to the provider', () => {
         const [links] = scan([
             { filename: '/p/index.ts', source: "import card from './styles';\nexport { card };" },
