@@ -24,6 +24,13 @@ import nextTurboLoader, {
 } from '../src/next-turbo-loader.js';
 import { removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
+// Wrapped, not replaced: the loader's own reads go through it, so a test can
+// count them.
+vi.mock('../src/next-stylesheet-facts.js', async importOriginal => {
+    const actual = await importOriginal<typeof import('../src/next-stylesheet-facts.js')>();
+    return { ...actual, writeNextStylesheetFacts: vi.fn(actual.writeNextStylesheetFacts) };
+});
+
 const APP = 'export const App = () => <div sz={{ p: 4 }} />;\n';
 const PREFIXED = '@import "tailwindcss" prefix(tw);\n';
 const IDENTITY = {
@@ -156,6 +163,7 @@ describe('the Next Turbopack loader and the Tailwind prefix', () => {
 
     it('reads the stylesheets once for modules that ask at the same time', async () => {
         const { root, page } = app(PREFIXED);
+        vi.mocked(writeNextStylesheetFacts).mockClear();
 
         const [first, second] = await Promise.all([
             loadAsync(loaderContext(root, page)),
@@ -164,6 +172,7 @@ describe('the Next Turbopack loader and the Tailwind prefix', () => {
 
         expect(first).toContain('tw:p-4');
         expect(second).toContain('tw:p-4');
+        expect(writeNextStylesheetFacts).toHaveBeenCalledTimes(1);
     }, 60_000);
 
     it('hands the loader callback the error when the stylesheets cannot give one prefix', async () => {

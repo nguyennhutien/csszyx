@@ -40,6 +40,7 @@ import {
     styleModelError,
     styleModelWarning,
 } from './project-style-model.js';
+import { sortStrings } from './sort.js';
 import { collectSpecifierAliases } from './specifier-aliases.js';
 import { discoverProjectTheme } from './theme-discovery.js';
 
@@ -79,6 +80,44 @@ export const NEXT_STYLESHEET_FACTS_FILE = 'stylesheet-facts.json';
  */
 export function resolveNextStylesheetFactsPath(cacheDir: string): string {
     return path.join(cacheDir, NEXT_STYLESHEET_FACTS_FILE);
+}
+
+/**
+ * Hash every input that can change a failed synchronous prefix resolution.
+ *
+ * This is intended for error memoization. For `C` candidate stylesheets
+ * containing `B` bytes it costs `O(C log C + B)` time and `O(C)` space. The
+ * worst case is a project with many large candidate stylesheets; canonical
+ * path order makes the same filesystem state produce the same stamp in every
+ * lane that needs to retry after an edit.
+ *
+ * @param input - The project and stylesheet selection whose failure is cached.
+ * @param input.root - The project root.
+ * @param input.cacheDir - The directory containing recorded stylesheet facts.
+ * @param input.tailwindStylesheet - Explicit stylesheet paths, when configured.
+ * @returns A deterministic content hash of the facts file and candidates.
+ */
+export function failedNextClassPrefixInputsStamp(input: {
+    root: string;
+    cacheDir: string;
+    tailwindStylesheet: readonly string[];
+}): string {
+    const candidates =
+        input.tailwindStylesheet.length > 0
+            ? input.tailwindStylesheet.map(file => path.resolve(input.root, file))
+            : discoverProjectTheme(input.root).scanned;
+    const files = sortStrings([resolveNextStylesheetFactsPath(input.cacheDir), ...candidates]);
+    const hash = createHash('sha256');
+    for (const file of files) {
+        hash.update(file).update('\0');
+        try {
+            hash.update(readFileSync(file));
+        } catch {
+            hash.update('\0missing');
+        }
+        hash.update('\0');
+    }
+    return hash.digest('hex');
 }
 
 /**
