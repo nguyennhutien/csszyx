@@ -66,6 +66,11 @@ export interface ProjectStyleModel {
      */
     facts: StylesheetFacts | null;
     /**
+     * Real paths of every stylesheet a root imports, Tailwind's own included.
+     * One of them can set the prefix, so an edit to it can change the facts.
+     */
+    imports: readonly string[];
+    /**
      * Which of these classes produce no CSS anywhere in the project.
      *
      * A class counts as unserved only when EVERY root agrees it is — one
@@ -486,6 +491,7 @@ export async function openProjectStyleModel(
     return {
         entries,
         facts: first === undefined ? null : agreedFacts(first, rest),
+        imports: [...importedByRoots],
         unserved(classes) {
             if (compiled.length === 0) return [];
             const perEntry = compiled.map(entry => new Set(entry.findDead(classes)));

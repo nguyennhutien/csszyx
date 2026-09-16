@@ -26,7 +26,7 @@ const ROOT = '/app';
  * @returns A model carrying them.
  */
 function modelOf(entries: StyleEntry[]): ProjectStyleModel {
-    return { entries, facts: null, unserved: () => [] };
+    return { entries, facts: null, imports: [], unserved: () => [] };
 }
 
 /**

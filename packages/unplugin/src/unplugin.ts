@@ -148,6 +148,7 @@ export {
     SAFELIST_FILE,
 } from './safelist-source.js';
 
+import { recordStylesheetFacts } from './next-stylesheet-facts.js';
 import {
     missingTailwindStylesheetMessage,
     openProjectStyleModel,
@@ -4954,6 +4955,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         styleModelStamps = stylesheetStamps(styleModelFiles);
         const skipped = styleModelWarning(opened, state.rootDir);
         if (skipped !== null) emitWarning(skipped);
+        try {
+            recordStylesheetFacts(
+                opened,
+                state.rootDir,
+                path.dirname(resolveTransformCacheDir(state.rootDir, options.build?.cacheDir)),
+                candidates,
+            );
+        } catch {
+            // The file is for lanes with no bundler; a project where it cannot
+            // be written still builds, and those lanes read the stylesheets.
+        }
         return opened;
     }
 

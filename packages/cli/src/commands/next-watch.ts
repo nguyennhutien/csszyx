@@ -181,6 +181,8 @@ export async function startNextWatch(
             cwd,
             cacheDir: options.cacheDir,
             tailwindStylesheet: options.tailwindStylesheet,
+            files,
+            setting: 'the `--tailwind-stylesheet` flag',
         });
         if (warning !== null) printWatcherNotice(warning);
     };
@@ -253,9 +255,14 @@ export async function startNextWatch(
             // re-runs the loader for every module that depends on it. An edit
             // that leaves the stylesheets unreadable is reported, and the
             // session goes on: the author is mid-edit.
-            factsWrites = factsWrites
-                .then(recordStylesheetFacts)
-                .catch((error: unknown) => printWatcherNotice((error as Error).message));
+            factsWrites = factsWrites.then(recordStylesheetFacts).catch((error: unknown) => {
+                // The build's note says nothing was written, which a watch
+                // that goes on is not; say what it goes on with instead.
+                const message = (error as Error).message.replace(/\n {2}note: .*$/, '');
+                printWatcherNotice(
+                    `${message}\n  note: \`csszyx next watch\` keeps watching; the loader stops on this error until the stylesheets agree again.`,
+                );
+            });
             return;
         }
         // A directory that appears after the watch is running may already hold

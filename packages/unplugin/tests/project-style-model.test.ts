@@ -62,6 +62,17 @@ describe('openProjectStyleModel', () => {
         expect(model.facts).toEqual({ prefix: 'tw', important: false });
     });
 
+    it('lists the stylesheets its roots import', async () => {
+        const [entry, theme] = writeStylesheets({
+            'app.css': '@import "tailwindcss";\n@import "./theme.css";\n',
+            'theme.css': '@theme { --color-brand: #123; }\n',
+        });
+
+        const model = await openProjectStyleModel(REPO, [entry as string]);
+
+        expect(model.imports).toContain(fs.realpathSync(theme as string));
+    });
+
     it('answers both questions from one compile', async () => {
         const files = writeStylesheets({
             'app.css': '@import "tailwindcss";\n@theme { --color-brand: #123; }',

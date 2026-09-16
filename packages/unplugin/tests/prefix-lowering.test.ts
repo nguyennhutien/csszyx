@@ -11,7 +11,7 @@
  * to run when a lane skipped that step: an unread prefix is a csszyx bug, and a
  * loud one is found in a test run rather than on a customer's page.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { build } from 'esbuild';
@@ -90,6 +90,50 @@ describe('the vite lane', () => {
 
         expect(result.code).toContain('p-4');
         expect(result.code).not.toContain('tw:');
+    }, 60_000);
+});
+
+describe('the stylesheet facts a bundler build records', () => {
+    // A lane with no bundler (jest) reads the prefix from this file instead of
+    // compiling the stylesheets itself.
+    it('writes them where the other lanes look', async () => {
+        const root = project(PREFIXED);
+        const call = callHooks(vitePlugin(OPTIONS) as unknown as Record<string, unknown>[]);
+
+        await call('configResolved', { root, command: 'build' });
+
+        const facts = JSON.parse(
+            readFileSync(join(root, '.csszyx/cache/stylesheet-facts.json'), 'utf8'),
+        ) as { facts: { prefix: string | null } };
+        expect(facts.facts.prefix).toBe('tw');
+    }, 60_000);
+
+    it('writes them under the configured cache directory', async () => {
+        const root = project(PREFIXED);
+        const call = callHooks(
+            vitePlugin({
+                ...OPTIONS,
+                build: { cache: false, cacheDir: 'tmp/csszyx' },
+            }) as unknown as Record<string, unknown>[],
+        );
+
+        await call('configResolved', { root, command: 'build' });
+
+        expect(existsSync(join(root, 'tmp/csszyx/stylesheet-facts.json'))).toBe(true);
+    }, 60_000);
+
+    it('still builds when they cannot be written', async () => {
+        const root = project(PREFIXED);
+        // A file where the directory belongs: nothing can be written under it.
+        writeFileSync(join(root, '.csszyx'), 'not a directory', 'utf8');
+        const call = callHooks(vitePlugin(OPTIONS) as unknown as Record<string, unknown>[]);
+
+        await call('configResolved', { root, command: 'build' });
+        const result = (await call('transform', APP, join(root, 'src/App.tsx'))) as {
+            code: string;
+        };
+
+        expect(result.code).toContain('tw:p-4');
     }, 60_000);
 });
 

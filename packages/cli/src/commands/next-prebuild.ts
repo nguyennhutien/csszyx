@@ -66,6 +66,8 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             cwd,
             cacheDir: options.cacheDir,
             tailwindStylesheet: options.tailwindStylesheet,
+            files: matches,
+            setting: 'the `--tailwind-stylesheet` flag',
         });
         if (facts.warning !== null) console.warn(facts.warning);
 

@@ -26,6 +26,8 @@ import {
 import { type NextSourceTransformOutput, transformNextSource } from './next-source-transformer.js';
 import { createNextStateContext, type NextStateContext } from './next-state-context.js';
 import {
+    type NextClassPrefix,
+    projectStylesheetCandidates,
     resolveNextClassPrefix,
     unreadNextPrefixMessage,
     writeNextStylesheetFacts,
@@ -64,10 +66,15 @@ export interface NextTurboLoaderContext {
     query?: unknown;
     getOptions?: () => NextTurboLoaderOptions;
     addDependency?: (file: string) => void;
+    /** Loader-runner compilation identity; changes when an input invalidates the build. */
+    _compilation?: object;
     /** Turns the call asynchronous and returns the callback that completes it. */
     async?: () => (error: Error | null, code?: string, map?: unknown) => void;
     callback?: (error: Error | null, code?: string, map?: unknown) => void;
 }
+
+/** Prefix answers already validated inside one loader-runner compilation. */
+const prefixesByCompilation = new WeakMap<object, Map<string, NextClassPrefix>>();
 
 /** Testable result produced by the loader core before callback adaptation. */
 export interface NextTurboLoaderResult {
@@ -118,11 +125,7 @@ export function runNextTurboLoader(
     assertProductionManifestReady(context, options);
 
     const tailwindStylesheet = [options.tailwindStylesheet ?? []].flat();
-    const prefix = resolveNextClassPrefix({
-        root: context.root,
-        cacheDir: context.cacheDir,
-        tailwindStylesheet,
-    });
+    const prefix = prefixForCompilation(context, tailwindStylesheet, loaderContext._compilation);
     if (!prefix.ok) {
         throw new NextStylesheetFactsPending(
             unreadNextPrefixMessage(context.root, prefix.reason, 'the Next Turbopack loader'),
@@ -275,6 +278,57 @@ export function runNextTurboLoader(
         materialized,
         dependencies: themeGroups.watch,
     };
+}
+
+/**
+ * Resolve stylesheet facts once inside a loader-runner compilation.
+ *
+ * The compilation object is the invalidation epoch: every recorded dependency
+ * is still registered for every module, and an edit creates a new compilation
+ * whose first module validates the record again. Contexts without that object
+ * take the uncached path so an unknown loader runner cannot retain stale facts.
+ * Failed answers are never cached, allowing the async development fallback to
+ * write facts and retry in the same compilation.
+ *
+ * For M modules and S recorded stylesheets, a supported compilation pays O(S)
+ * synchronous validation once and O(1) lookup per later module, for O(S + M)
+ * work and O(P) cached answers for P stylesheet selections. Build startup pays
+ * this cost; each compilation object owns and releases its map through WeakMap.
+ *
+ * @param context - The resolved Next project paths.
+ * @param tailwindStylesheet - Explicit roots, or none for project discovery.
+ * @param compilation - The loader-runner invalidation epoch, when available.
+ * @returns The prefix answer and dependencies for this project selection.
+ */
+function prefixForCompilation(
+    context: NextStateContext,
+    tailwindStylesheet: readonly string[],
+    compilation: object | undefined,
+): NextClassPrefix {
+    const resolve = (): NextClassPrefix =>
+        resolveNextClassPrefix({
+            root: context.root,
+            cacheDir: context.cacheDir,
+            tailwindStylesheet,
+            candidates:
+                tailwindStylesheet.length > 0
+                    ? undefined
+                    : projectStylesheetCandidates(context.root, context.cacheDir),
+        });
+    if (compilation === undefined) return resolve();
+
+    let cached = prefixesByCompilation.get(compilation);
+    if (cached === undefined) {
+        cached = new Map();
+        prefixesByCompilation.set(compilation, cached);
+    }
+    const key = JSON.stringify([context.root, context.cacheDir, tailwindStylesheet]);
+    const known = cached.get(key);
+    if (known !== undefined) return known;
+
+    const answer = resolve();
+    if (answer.ok) cached.set(key, answer);
+    return answer;
 }
 
 /**

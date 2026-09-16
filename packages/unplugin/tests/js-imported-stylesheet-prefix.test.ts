@@ -6,6 +6,7 @@
  * `prefix(tw)`. A walk over the project's `.css` files finds nothing, so the
  * build must learn the stylesheet from the import.
  */
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -40,6 +41,11 @@ describe('a stylesheet imported only from JavaScript', () => {
         };
 
         expect(result.code).toContain('tw:p-4');
+        // Recorded for the lanes that only walk the project and cannot see it.
+        const facts = JSON.parse(
+            readFileSync(join(root, '.csszyx/cache/stylesheet-facts.json'), 'utf8'),
+        ) as { candidates?: string[] };
+        expect(facts.candidates).toContain(join(root, 'node_modules/@fixture/ui/globals.css'));
     }, 60_000);
 
     it('reads the prefix when the JavaScript specifier escapes its dot', async () => {
