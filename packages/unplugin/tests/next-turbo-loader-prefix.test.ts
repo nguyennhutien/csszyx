@@ -28,7 +28,11 @@ import { removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 // count them.
 vi.mock('../src/next-stylesheet-facts.js', async importOriginal => {
     const actual = await importOriginal<typeof import('../src/next-stylesheet-facts.js')>();
-    return { ...actual, writeNextStylesheetFacts: vi.fn(actual.writeNextStylesheetFacts) };
+    return {
+        ...actual,
+        resolveNextClassPrefix: vi.fn(actual.resolveNextClassPrefix),
+        writeNextStylesheetFacts: vi.fn(actual.writeNextStylesheetFacts),
+    };
 });
 
 const APP = 'export const App = () => <div sz={{ p: 4 }} />;\n';
@@ -77,12 +81,14 @@ function app(
  * @param root - App root.
  * @param page - The module being loaded.
  * @param mode - The Next build mode.
+ * @param compilation - Shared identity for one loader-runner compilation.
  * @returns The context, with the dependencies it was given.
  */
 function loaderContext(
     root: string,
     page: string,
     mode: 'development' | 'production' = 'development',
+    compilation?: object,
 ): NextTurboLoaderContext & { dependencies: string[] } {
     const dependencies: string[] = [];
     return {
@@ -90,12 +96,42 @@ function loaderContext(
         rootContext: root,
         context: join(root, 'app'),
         mode,
+        _compilation: compilation,
         addDependency: (file: string) => dependencies.push(file),
         dependencies,
     };
 }
 
 describe('the Next Turbopack loader and the Tailwind prefix', () => {
+    it('validates stylesheet facts once for every compilation', async () => {
+        const { root, page, cacheDir } = app(PREFIXED);
+        await writeNextStylesheetFacts({ root, cacheDir });
+        const compilation = {};
+        const facts = await import('../src/next-stylesheet-facts.js');
+        vi.mocked(facts.resolveNextClassPrefix).mockClear();
+        const first = loaderContext(root, page, 'development', compilation);
+        const second = loaderContext(root, page, 'development', compilation);
+
+        runNextTurboLoader(APP, first, OPTIONS);
+        runNextTurboLoader(APP, second, OPTIONS);
+
+        expect(facts.resolveNextClassPrefix).toHaveBeenCalledTimes(1);
+        expect(first.dependencies).toContain(join(root, 'app/globals.css'));
+        expect(second.dependencies).toEqual(first.dependencies);
+    }, 60_000);
+
+    it('validates stylesheet facts again in a later compilation', async () => {
+        const { root, page, cacheDir } = app(PREFIXED);
+        await writeNextStylesheetFacts({ root, cacheDir });
+
+        runNextTurboLoader(APP, loaderContext(root, page, 'development', {}), OPTIONS);
+        writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
+
+        expect(() =>
+            runNextTurboLoader(APP, loaderContext(root, page, 'development', {}), OPTIONS),
+        ).toThrow(/app\/globals\.css changed/);
+    }, 60_000);
+
     it('lowers with the recorded prefix, and depends on the facts and the stylesheet', async () => {
         const { root, page, cacheDir } = app(PREFIXED);
         await writeNextStylesheetFacts({ root, cacheDir });
