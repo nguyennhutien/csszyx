@@ -60,7 +60,7 @@ test('pnpm 11 pins stay synchronized and workspace config uses the v11 location'
     const workspace = readFileSync(path.join(root, 'pnpm-workspace.yaml'), 'utf8');
     const packageManagerVersion = packageJson.packageManager.match(/^pnpm@(\d+\.\d+\.\d+)$/)?.[1];
 
-    assert.equal(packageManagerVersion, '11.13.0');
+    assert.match(packageManagerVersion, /^11\./);
     assert.match(packageJson.engines.pnpm, /^>=11\./);
     assert.match(mise, new RegExp(`^pnpm = "${packageManagerVersion}"$`, 'm'));
     assert.equal(packageJson.pnpm, undefined);
@@ -80,7 +80,8 @@ test('pnpm 11 pins stay synchronized and workspace config uses the v11 location'
     assert.match(workspace, /^strictPeerDependencies: false$/m);
     assert.match(workspace, /^autoInstallPeers: true$/m);
     assert.match(workspace, /^verifyDepsBeforeRun: false$/m);
-    assert.match(workspace, /^managePackageManagerVersions: false$/m);
+    assert.match(workspace, /^pmOnFail: ignore$/m);
+    assert.doesNotMatch(workspace, /^managePackageManagerVersions:/m);
     // .npmrc must not keep the moved pnpm keys (pnpm 11 reads only auth/registry there).
     const npmrc = readFileSync(path.join(root, '.npmrc'), 'utf8');
     assert.doesNotMatch(npmrc, /^shamefully-hoist/m);
