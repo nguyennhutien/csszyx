@@ -125,35 +125,23 @@ describe('openProjectStyleModel', () => {
         expect(model.facts).toEqual({ prefix: null, important: false });
     });
 
-    it('reports a forced important when the first entry enables it', async () => {
-        // `important` is a project-wide hazard, not a shared vocabulary fact:
-        // one root enabling it is enough to make an emitted override lose.
-        const files = writeStylesheets({
-            'a.css': '@import "tailwindcss" important;',
-            'b.css': '@import "tailwindcss";',
-        });
-
-        const model = await openProjectStyleModel(REPO, files);
-
-        expect(model.facts).toEqual({ prefix: null, important: true });
-    });
-
-    it('reports a forced important when a later entry enables it', async () => {
-        const files = writeStylesheets({
-            'a.css': '@import "tailwindcss";',
-            'b.css': '@import "tailwindcss" important;',
-        });
-
-        const model = await openProjectStyleModel(REPO, files);
-
-        expect(model.facts).toEqual({ prefix: null, important: true });
-    });
-
-    it('reports a forced important every entry agrees on', async () => {
-        const files = writeStylesheets({
-            'a.css': '@import "tailwindcss" important;',
-            'b.css': '@import "tailwindcss" important;',
-        });
+    // `important` is a project-wide hazard, not a shared vocabulary fact: one
+    // root enabling it is enough to make an emitted override lose, whichever
+    // entry it is.
+    it.each([
+        [
+            'the first entry enables it',
+            '@import "tailwindcss" important;',
+            '@import "tailwindcss";',
+        ],
+        ['a later entry enables it', '@import "tailwindcss";', '@import "tailwindcss" important;'],
+        [
+            'every entry agrees on it',
+            '@import "tailwindcss" important;',
+            '@import "tailwindcss" important;',
+        ],
+    ])('reports a forced important when %s', async (_case, a, b) => {
+        const files = writeStylesheets({ 'a.css': a, 'b.css': b });
 
         const model = await openProjectStyleModel(REPO, files);
 
