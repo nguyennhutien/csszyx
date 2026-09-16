@@ -13,7 +13,15 @@
  */
 import { expect } from 'vitest';
 
-import { isRustTransformAvailable, transformRust, transformWasm } from '../src/index.js';
+import {
+    isRustTransformAvailable,
+    type ModuleLinks,
+    type ModuleLinksFile,
+    scanModuleLinksRust,
+    scanModuleLinksWasm,
+    transformRust,
+    transformWasm,
+} from '../src/index.js';
 
 /** The result surface parity assertions read, common to both artifacts. */
 export interface EngineParityResult {
@@ -46,6 +54,15 @@ if (process.env.CI && !isRustTransformAvailable()) {
 export const ENGINES: ReadonlyArray<readonly [string, ParityEngine]> = [
     ['wasm', transformWasm as ParityEngine],
     ...(isRustTransformAvailable() ? ([['rust', transformRust as ParityEngine]] as const) : []),
+];
+
+/** One module-link scanner: the same question the transform table asks, for links. */
+export type LinkScanner = (files: readonly ModuleLinksFile[]) => ModuleLinks[];
+
+/** Both artifacts' module-link scan, native included whenever the binding is present. */
+export const LINK_SCANNERS: ReadonlyArray<readonly [string, LinkScanner]> = [
+    ['wasm', scanModuleLinksWasm],
+    ...(isRustTransformAvailable() ? ([['rust', scanModuleLinksRust]] as const) : []),
 ];
 
 /**

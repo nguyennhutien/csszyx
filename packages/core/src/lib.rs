@@ -173,6 +173,21 @@ pub fn transform_batch_json(files_json: &str, options_json: &str) -> Result<Stri
     serde_json::to_string(&results).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
+/// Module links across the WASM boundary: the stylesheets each module imports
+/// and the names it re-exports, one JSON array for the whole batch.
+///
+/// # Errors
+///
+/// Returns the decode or encode error message.
+#[cfg(feature = "native-engine")]
+#[wasm_bindgen]
+pub fn scan_module_links_json(files_json: &str) -> Result<String, JsValue> {
+    let files: Vec<transform::TransformFile> =
+        serde_json::from_str(files_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    serde_json::to_string(&transform::module_links::scan_module_links(&files))
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

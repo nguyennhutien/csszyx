@@ -17,6 +17,24 @@ export interface NativeTransformFile {
     source: string;
 }
 
+/** One name a module re-exports without declaring it. */
+export interface NativeModuleForward {
+    /** The name this module exports, and therefore the one an importer writes. */
+    exportName: string;
+    /** The name the provider exports it as; `default` for the default slot. */
+    importedName: string;
+    /** The provider specifier, exactly as this module spelled it. */
+    specifier: string;
+}
+
+/** The links one module carries. */
+export interface NativeModuleLinks {
+    /** Stylesheet specifiers, query suffix kept, in source order, each once. */
+    cssImports: string[];
+    /** Re-exported names, declaration order preserved. */
+    forwards: NativeModuleForward[];
+}
+
 /** Options passed to the native transform. */
 export interface NativeTransformOptions {
     /** Whether dynamic CSS custom properties should use tiered short names. */
@@ -232,6 +250,12 @@ export interface NativeBinding {
     migrateParseClass?(className: string): string;
 
     /**
+     * Reads the stylesheets each module imports and the names it re-exports.
+     * Absent on platform packages that predate the module-link scan.
+     */
+    scanModuleLinks?(files: NativeTransformFile[]): NativeModuleLinks[];
+
+    /**
      * Transforms source files with the native Rust core.
      *
      * @param files Source files to transform.
@@ -320,3 +344,12 @@ export function migrateClassName(className: string, customMapJson?: string): str
  * @throws CsszyxNativeUnavailableError when the platform package is missing or predates migrate.
  */
 export function migrateParseClass(className: string): string;
+
+/**
+ * Reads the stylesheets each module imports and the names it re-exports.
+ *
+ * @param files Modules to read.
+ * @returns One answer per module, in input order.
+ * @throws CsszyxNativeUnavailableError when the platform package is missing or predates the scan.
+ */
+export function scanModuleLinks(files: NativeTransformFile[]): NativeModuleLinks[];

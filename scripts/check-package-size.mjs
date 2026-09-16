@@ -143,11 +143,16 @@ export const SIZE_BUDGETS = [
     // wasm-opt pass only shrinks it). The ceiling exists to catch a debug
     // -profile build or dependency bloat slipping into the artifact — either
     // multiplies the size, a creep of +10% does not.
+    //
+    // Raised 2026-09-14 from 520,000: the module-link scan (stylesheet imports
+    // and re-export forwards read from the engine's own module record) moved
+    // off the JS parser, whose per-call arena leaked, and costs ~15 KB gzip in
+    // this artifact (507,792 without it, 522,327 with it, un-optimized).
     {
         name: '@csszyx/core parser wasm artifact',
         kind: 'file',
         target: 'packages/core/pkg-parser/csszyx_core_bg.wasm',
-        maxGzipBytes: 520_000,
+        maxGzipBytes: 530_000,
     },
 ];
 

@@ -36,6 +36,12 @@ export {
     type TokenData,
     validateManifest,
 } from './manifest.js';
+export {
+    type ModuleForward,
+    type ModuleLinks,
+    type ModuleLinksFile,
+    scanModuleLinks,
+} from './module-links.js';
 // Export property type system (for CSS Variable Auto-Compile)
 export {
     COLOR_PROPERTIES,
@@ -97,6 +103,7 @@ export {
     ensureRustTransformAvailable,
     isRustTransformAvailable,
     OxcRustNotImplementedError,
+    scanModuleLinksRust,
     type TransformRustFile,
     transformRust,
     transformRustBatch,
@@ -104,6 +111,7 @@ export {
 export { transformSource } from './transform-select.js';
 export {
     isWasmTransformAvailable,
+    scanModuleLinksWasm,
     transformWasm,
     transformWasmBatch,
     WasmTransformUnavailableError,

@@ -30,6 +30,9 @@ vi.mock('@csszyx/core/native', () => ({
     transformBatch: () => {
         throw new FakeUnavailable();
     },
+    scanModuleLinks: () => {
+        throw new FakeUnavailable();
+    },
 }));
 
 describe('the native transform on an install without it', () => {
@@ -59,6 +62,24 @@ describe('the native transform on an install without it', () => {
             // Named once. The wrapper used to append "; native package: ..."
             // after a message that had already named it.
             expect(message.match(/@csszyx\/core-darwin-arm64/g)).toHaveLength(1);
+        }
+    });
+
+    it('reports the module-link scan unavailable in the same words', async () => {
+        const { scanModuleLinksRust, OxcRustNotImplementedError } = await import(
+            '../src/transform-rust.js'
+        );
+        expect(() => scanModuleLinksRust([{ filename: '/p/a.ts', source: '' }])).toThrow(
+            OxcRustNotImplementedError,
+        );
+        try {
+            scanModuleLinksRust([{ filename: '/p/a.ts', source: '' }]);
+        } catch (error) {
+            expect((error as Error).message.split('\n')).toEqual([
+                'transformRust: native engine unavailable: @csszyx/core-darwin-arm64 is not installed',
+                LOADER_LINES[1],
+                LOADER_LINES[2],
+            ]);
         }
     });
 });
