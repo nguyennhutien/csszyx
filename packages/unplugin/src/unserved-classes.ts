@@ -27,11 +27,15 @@ import { classify, normalizeBase, stripVariant } from '@csszyx/runtime/split';
  *
  * @param authored - Class names as written in source, variants included.
  * @param findDead - Asks the design system; returns the names it serves nothing for.
+ * @param prefix - The prefix the project's Tailwind sets, or null. A prefixed
+ *        design system serves `tw:p-4` and nothing for `p-4`, so the question
+ *        carries the prefix and the answer is read back as the base.
  * @returns Base names, sorted, for the module the build emits.
  */
 export function unservedAuthoredClasses(
     authored: Iterable<string>,
     findDead: (classes: readonly string[]) => string[],
+    prefix: string | null = null,
 ): string[] {
     const bases = new Set<string>();
     for (const name of authored) {
@@ -47,7 +51,9 @@ export function unservedAuthoredClasses(
     if (bases.size === 0) return [];
     // Sorted so two builds of the same project emit a byte-identical module,
     // which keeps the bundle hash stable across rebuilds.
-    return sortStrings(findDead(sortStrings(bases)));
+    const asPrefixed = prefix === null ? '' : `${prefix}:`;
+    const dead = findDead(sortStrings([...bases].map(base => asPrefixed + base)));
+    return sortStrings(dead.map(name => name.slice(asPrefixed.length)));
 }
 
 /** Asks the project's design systems which of these names produce no CSS. */

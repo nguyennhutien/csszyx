@@ -29,6 +29,21 @@ describe('unservedAuthoredClasses', () => {
         expect(found).toEqual(['tab-items-wrapper']);
     });
 
+    it('asks a prefixed design system about the prefixed name and reports the base', () => {
+        // Under `prefix(tw)` Tailwind serves `tw:p-4` and nothing for `p-4`.
+        const asked: string[] = [];
+        const found = unservedAuthoredClasses(
+            ['tw:tab-items-wrapper', 'tw:p-4'],
+            classes => {
+                asked.push(...classes);
+                return deadOnly(['tw:tab-items-wrapper'])(classes);
+            },
+            'tw',
+        );
+        expect(asked).toEqual(['tw:p-4', 'tw:tab-items-wrapper']);
+        expect(found).toEqual(['tab-items-wrapper']);
+    });
+
     it('drops a name the toolkit does not recognise, which already falls back', () => {
         // `card` is placed by the fallback today, so listing it would be a
         // payload entry that changes nothing.

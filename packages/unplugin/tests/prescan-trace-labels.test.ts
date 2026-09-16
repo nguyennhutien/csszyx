@@ -13,7 +13,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type PrePlugin = {
-    configResolved?: (c: { root: string; command: string }) => void;
+    configResolved?: (c: { root: string; command: string }) => Promise<void>;
 };
 
 const tempDirs: string[] = [];
@@ -58,7 +58,7 @@ describe('prescan trace labels', () => {
         const { vitePlugin } = await import('../src/unplugin.js');
         const [pre] = vitePlugin({ build: { cache: false } }) as unknown as [PrePlugin];
 
-        pre.configResolved?.({ root, command: 'build' });
+        await pre.configResolved?.({ root, command: 'build' });
 
         expect(traceLine(logged, 'prescan:walk')).toMatch(
             /^\[csszyx:bench\] prescan:walk files=3 sz=1 [\d.]+ms /,

@@ -1,0 +1,200 @@
+/**
+ * Every lane lowers `sz` with the prefix the project's Tailwind entry sets.
+ *
+ * `@import "tailwindcss" prefix(tw)` makes `tw:p-4` the served class and `p-4`
+ * a class with no CSS. The engine can write the prefix, but only once the
+ * build has read the stylesheet, and on every lane that read is asynchronous
+ * while the transforms that need it are not. A lane that transforms first gets
+ * classes that style nothing and a green build.
+ *
+ * So the stylesheet is read at the start of every lane, and the engine refuses
+ * to run when a lane skipped that step: an unread prefix is a csszyx bug, and a
+ * loud one is found in a test run rather than on a customer's page.
+ */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { build } from 'esbuild';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import webpack from 'webpack';
+
+import { SAFELIST_FILE } from '../src/safelist-source.js';
+import {
+    esbuildPlugin,
+    unplugin as rawInstance,
+    rollupPlugin,
+    vitePlugin,
+    webpackPlugin,
+} from '../src/unplugin.js';
+import { callHooks, removeTailwindProjects, tailwindProject } from './tailwind-project.js';
+
+const APP = 'export const App = () => <div sz={{ p: 4 }} />;\n';
+const PREFIXED = '@import "tailwindcss" prefix(tw);\n';
+const OPTIONS = { build: { cache: false }, production: { mangle: false } };
+
+afterEach(() => {
+    removeTailwindProjects();
+    vi.restoreAllMocks();
+});
+
+/**
+ * A project with one component and the given entry stylesheet.
+ *
+ * @param css - The entry stylesheet's contents.
+ * @returns Absolute project root.
+ */
+function project(css: string): string {
+    return tailwindProject('csszyx-prefix-lowering-', {
+        'src/theme.css': css,
+        'src/App.tsx': APP,
+        'src/index.js': 'export const ready = true;\n',
+    });
+}
+
+/**
+ * The classes a build wrote for Tailwind to scan.
+ *
+ * @param root - Project root.
+ * @returns One class per entry.
+ */
+function safelistOf(root: string): string[] {
+    return readFileSync(join(root, SAFELIST_FILE), 'utf8').split('\n');
+}
+
+describe('the vite lane', () => {
+    it('lowers `sz` with the prefix and writes the prefixed safelist', async () => {
+        const root = project(PREFIXED);
+        const call = callHooks(vitePlugin(OPTIONS) as unknown as Record<string, unknown>[]);
+
+        await call('configResolved', { root, command: 'build' });
+        const result = (await call('transform', APP, join(root, 'src/App.tsx'))) as {
+            code: string;
+        };
+
+        expect(result.code).toContain('tw:p-4');
+        expect(result.code).not.toMatch(/["\s]p-4/);
+        // The prescan lowers every source before the first transform; the
+        // safelist it writes is what Tailwind scans for the classes to emit.
+        expect(safelistOf(root)).toContain('tw:p-4');
+        expect(safelistOf(root)).not.toContain('p-4');
+    }, 60_000);
+
+    it('lowers `sz` as before for a stock entry', async () => {
+        const root = project('@import "tailwindcss";\n');
+        const call = callHooks(vitePlugin(OPTIONS) as unknown as Record<string, unknown>[]);
+
+        await call('configResolved', { root, command: 'build' });
+        const result = (await call('transform', APP, join(root, 'src/App.tsx'))) as {
+            code: string;
+        };
+
+        expect(result.code).toContain('p-4');
+        expect(result.code).not.toContain('tw:');
+    }, 60_000);
+});
+
+describe('the lanes without a prescan', () => {
+    it('rollup reads the prefix at build start', async () => {
+        const root = project(PREFIXED);
+        // The plugin takes its root from the working directory on this lane.
+        vi.spyOn(process, 'cwd').mockReturnValue(root);
+        const [pre] = rollupPlugin(OPTIONS) as unknown as Array<{
+            buildStart: (this: unknown) => Promise<void>;
+            transform: (this: unknown, code: string, id: string) => { code: string };
+        }>;
+        const ctx = { warn() {}, meta: {} };
+
+        await pre?.buildStart.call(ctx);
+        const result = pre?.transform.call(ctx, APP, join(root, 'src/App.tsx'));
+
+        expect(result?.code).toContain('tw:p-4');
+    }, 60_000);
+
+    it('esbuild reads the prefix at build start', async () => {
+        const root = project(PREFIXED);
+        vi.spyOn(process, 'cwd').mockReturnValue(root);
+
+        const output = await build({
+            absWorkingDir: root,
+            entryPoints: ['src/App.tsx'],
+            write: false,
+            bundle: false,
+            jsx: 'preserve',
+            logLevel: 'silent',
+            plugins: [esbuildPlugin(OPTIONS)],
+        });
+
+        expect(output.outputFiles[0]?.text).toContain('tw:p-4');
+    }, 60_000);
+});
+
+describe('the webpack lane', () => {
+    it('reads the prefix before the prescan lowers anything', async () => {
+        const root = project(PREFIXED);
+        const compiler = webpack({
+            mode: 'production',
+            devtool: false,
+            context: root,
+            entry: './src/index.js',
+            output: { path: join(root, 'dist'), filename: 'bundle.js' },
+            optimization: { minimize: false },
+            externals: [
+                ({ request }, callback) =>
+                    request?.startsWith('@csszyx/runtime')
+                        ? callback(undefined, `commonjs ${request}`)
+                        : callback(),
+            ],
+            plugins: [webpackPlugin(OPTIONS)],
+        });
+
+        await new Promise<void>((res, rej) => {
+            compiler.run((error, stats) => {
+                compiler.close(() => {
+                    if (error) rej(error);
+                    else if (stats?.hasErrors()) rej(new Error(stats.toString('errors-only')));
+                    else res();
+                });
+            });
+        });
+
+        // The prescan walked `App.tsx` although the entry never imports it.
+        expect(safelistOf(root)).toContain('tw:p-4');
+        expect(safelistOf(root)).not.toContain('p-4');
+    }, 60_000);
+});
+
+describe('an unserved-class list asked for before the stylesheet was read', () => {
+    // An empty list would read as "Tailwind serves every class", and each name
+    // would silently keep a placement it should not: the same lane bug the
+    // engine refuses, reported the same way.
+    it('fails loudly instead of reporting nothing', async () => {
+        const call = callHooks(vitePlugin(OPTIONS) as unknown as Record<string, unknown>[]);
+
+        await expect(call('renderStart')).rejects.toThrow(/internal error.*csszyx bug/s);
+    });
+});
+
+describe('a transform that reaches the engine before the stylesheet was read', () => {
+    // The shared instance, which nothing else in this file starts: every
+    // bundler adapter hands its transforms to the same hook, so the refusal has
+    // to hold whichever one calls it.
+    it.each([
+        'vite',
+        'rollup',
+        'rolldown',
+        'webpack',
+        'rspack',
+        'esbuild',
+        'farm',
+        'unloader',
+        'bun',
+    ])('fails loudly on %s', framework => {
+        const plugin = rawInstance.raw(OPTIONS, { framework } as never) as unknown as {
+            transform: (this: unknown, code: string, id: string) => unknown;
+        };
+
+        expect(() =>
+            plugin.transform.call({ warn() {} }, APP, '/never-started/src/App.tsx'),
+        ).toThrow(/internal error.*csszyx bug/s);
+    });
+});

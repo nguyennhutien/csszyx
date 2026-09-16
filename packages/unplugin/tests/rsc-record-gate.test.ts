@@ -24,7 +24,12 @@ vi.mock('../src/rsc-boundary.js', async importOriginal => {
 });
 
 type PrePlugin = {
-    configResolved?: (c: { root: string; command: string; build?: { watch?: unknown } }) => void;
+    buildStart?: () => Promise<void>;
+    configResolved?: (c: {
+        root: string;
+        command: string;
+        build?: { watch?: unknown };
+    }) => Promise<void>;
     transform(this: { warn(m: string): void }, code: string, id: string): unknown;
 };
 
@@ -52,9 +57,9 @@ function project(files: Record<string, string>): string {
  * @param build - The build section of the resolved config.
  * @param build.watch - Set for a watch build, which keeps building records.
  */
-function buildThenTransform(root: string, build: { watch?: unknown } = {}): void {
+async function buildThenTransform(root: string, build: { watch?: unknown } = {}): Promise<void> {
     const [pre] = vitePlugin({ build: { cache: false } }) as unknown as [PrePlugin];
-    pre.configResolved?.({ root, command: 'build', build });
+    await pre.configResolved?.({ root, command: 'build', build });
     pre.transform.call({ warn() {} }, CLIENT_MODULE, path.join(root, 'src/Card.tsx'));
 }
 
@@ -64,52 +69,57 @@ afterEach(() => {
 });
 
 describe('a one-shot build whose walk saw no server module', () => {
-    it('builds no records', () => {
+    it('builds no records', async () => {
         const root = project({ 'src/Card.tsx': CLIENT_MODULE, 'src/Other.tsx': CLIENT_MODULE });
 
-        buildThenTransform(root);
+        await buildThenTransform(root);
 
         expect(createRSCModuleRecord).not.toHaveBeenCalled();
     });
 });
 
 describe('a one-shot build whose walk saw a server module', () => {
-    it('builds records when a file carries `use server`', () => {
+    it('builds records when a file carries `use server`', async () => {
         const root = project({
             'src/Card.tsx': CLIENT_MODULE,
             'src/actions.ts': "'use server';\nexport async function save() {}\n",
         });
 
-        buildThenTransform(root);
+        await buildThenTransform(root);
 
         expect(createRSCModuleRecord).toHaveBeenCalledTimes(1);
     });
 
-    it('builds records when an App Router entry is present', () => {
+    it('builds records when an App Router entry is present', async () => {
         const root = project({
             'src/Card.tsx': CLIENT_MODULE,
             'app/page.tsx': 'export default function Page() { return <div />; }\n',
         });
 
-        buildThenTransform(root);
+        await buildThenTransform(root);
 
         expect(createRSCModuleRecord).toHaveBeenCalledTimes(1);
     });
 });
 
 describe('builds where a server module can still appear after the walk', () => {
-    it('keeps building records in a watch build', () => {
+    it('keeps building records in a watch build', async () => {
         const root = project({ 'src/Card.tsx': CLIENT_MODULE });
 
-        buildThenTransform(root, { watch: {} });
+        await buildThenTransform(root, { watch: {} });
 
         expect(createRSCModuleRecord).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps building records when no config hook ran at all', () => {
+    it('keeps building records when no config hook ran at all', async () => {
         // The rollup and esbuild lanes reach the transform hook with no walk
-        // before it, so nothing has answered the question yet.
+        // before it, so nothing has answered the question yet. They do read
+        // the stylesheets at build start, from the working directory.
+        const root = project({});
+        const cwd = vi.spyOn(process, 'cwd').mockReturnValue(root);
         const [pre] = vitePlugin({ build: { cache: false } }) as unknown as [PrePlugin];
+        cwd.mockRestore();
+        await pre.buildStart?.();
 
         pre.transform.call({ warn() {} }, CLIENT_MODULE, '/repo/src/Card.tsx');
 

@@ -70,6 +70,31 @@ describe('vite lane', () => {
         expect(rendered?.code).not.toContain(UNSERVED_PLACEHOLDER);
     }, 60_000);
 
+    it('asks a prefixed design system about the prefixed name', async () => {
+        const root = project('csszyx-unserved-prefix-');
+        // `prefix(tw)` serves `tw:p-4` and nothing for a bare `p-4`. The list
+        // carries base names, so asking about the base would report every
+        // utility the project does serve.
+        writeFileSync(join(root, 'src/theme.css'), '@import "tailwindcss" prefix(tw);\n', 'utf8');
+        const plugins = vitePlugin({ production: { mangle: false } }) as unknown as Record<
+            string,
+            unknown
+        >[];
+        const call = callHooks(plugins);
+
+        await call('configResolved', { root, command: 'build' });
+        await call(
+            'transform',
+            'export const A = () => <div className="tw:tab-items-wrapper tw:card tw:p-4" />;',
+            `${root}/src/A.tsx`,
+        );
+        const module_ = (await call('load', RESOLVED_UNSERVED_VIRTUAL_ID)) as string;
+        await call('renderStart');
+        const rendered = (await call('renderChunk', module_)) as { code: string } | null;
+
+        expect(rendered?.code).toContain('registerUnservedClasses(["tab-items-wrapper"])');
+    }, 60_000);
+
     it('registers nothing for a project with no design system to ask', async () => {
         const root = project('csszyx-unserved-nots-');
         // Plain CSS: no `@import "tailwindcss"`, so no design system compiles

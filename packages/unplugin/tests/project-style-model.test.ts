@@ -46,6 +46,22 @@ function writeStylesheets(files: Record<string, string>): string[] {
 }
 
 describe('openProjectStyleModel', () => {
+    it('follows a bundler alias to the stylesheet that sets the prefix', async () => {
+        const [app, tokens] = writeStylesheets({
+            'app.css': '@import "@ds/tailwind.css";\n',
+            'tailwind.css': '@import "tailwindcss" prefix(tw);\n',
+        });
+        const alias = {
+            find: '@ds/',
+            replacement: `${path.dirname(tokens as string)}/`,
+            exact: false,
+        };
+
+        const model = await openProjectStyleModel(REPO, [app as string], [alias]);
+
+        expect(model.facts).toEqual({ prefix: 'tw', important: false });
+    });
+
     it('answers both questions from one compile', async () => {
         const files = writeStylesheets({
             'app.css': '@import "tailwindcss";\n@theme { --color-brand: #123; }',

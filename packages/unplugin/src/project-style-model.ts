@@ -25,6 +25,7 @@ import {
     createEmittedClassOracle,
     type OracleSkipKind,
     readStylesheetRole,
+    type StylesheetAlias,
     type StylesheetFacts,
 } from '@csszyx/tailwind-oracle';
 
@@ -81,29 +82,19 @@ export interface ProjectStyleModel {
  * What the build must say when the project's Tailwind is configured in a way
  * csszyx does not emit for yet.
  *
- * A prefix renames every utility, so `p-4` — what the lowering emits — is not a
- * class the project serves; `important` makes every declaration `!important`,
- * so a `sz` class loses to the library class it is meant to override. Neither
- * is supported yet, and both fail the same way: a green build whose emitted
- * classes style nothing, with nothing in the log to search for.
+ * `important` makes every declaration `!important`, so a `sz` class loses to the
+ * library class it is meant to override: a green build whose overrides silently
+ * lose, with nothing in the log to search for. A prefix is not on this list —
+ * the build reads it and the engine writes it before every class.
  *
  * @param facts - What the project's import line settled.
  * @returns The message, or null when nothing is unsupported.
  */
 export function unsupportedStylesheetFactsMessage(facts: StylesheetFacts): string | null {
-    const settings: string[] = [];
-    if (facts.prefix !== null) settings.push(`prefix(${facts.prefix})`);
-    if (facts.important) settings.push('important');
-    if (settings.length === 0) return null;
-
-    const what = settings.join(' and ');
-    const consequence =
-        facts.prefix === null
-            ? 'every utility is `!important`, so a class csszyx emits cannot override one the project already applies'
-            : `every utility is renamed, so the classes csszyx emits (\`p-4\`, not \`${facts.prefix}:p-4\`) produce no CSS`;
+    if (!facts.important) return null;
     return (
-        `[csszyx] your Tailwind entry sets ${what}, which csszyx does not emit for yet: ${consequence}.\n` +
-        `  help: drop ${what} from the \`@import "tailwindcss"\` line, or keep it and style those elements with \`className\` until csszyx supports it.`
+        '[csszyx] your Tailwind entry sets important, which csszyx does not emit for yet: every utility is `!important`, so a class csszyx emits cannot override one the project already applies.\n' +
+        '  help: drop important from the `@import "tailwindcss"` line, or keep it and style those elements with `className` until csszyx supports it.'
     );
 }
 
@@ -166,11 +157,14 @@ function realPath(file: string): string {
  *
  * @param resolveFrom - Project directory whose `package.json` anchors resolution.
  * @param cssFiles - Stylesheet paths the caller already walked.
+ * @param aliases - The bundler's aliases, tsconfig paths included, so an
+ *        `@import` written the way the app's own code imports resolves.
  * @returns The model, with every stylesheet accounted for.
  */
 export async function openProjectStyleModel(
     resolveFrom: string,
     cssFiles: readonly string[],
+    aliases: readonly StylesheetAlias[] = [],
 ): Promise<ProjectStyleModel> {
     const entries: StyleEntry[] = [];
     const roots: Array<{ index: number; css: string }> = [];
@@ -189,7 +183,12 @@ export async function openProjectStyleModel(
             entries.push({ file, role: 'not-root' });
             continue;
         }
-        const role = await readStylesheetRole({ resolveFrom, css, cssBase: path.dirname(file) });
+        const role = await readStylesheetRole({
+            resolveFrom,
+            css,
+            cssBase: path.dirname(file),
+            aliases,
+        });
         if (!role.ok) {
             failed.push(
                 entries.push({
@@ -217,6 +216,7 @@ export async function openProjectStyleModel(
             resolveFrom,
             css,
             cssBase: path.dirname(file),
+            aliases,
         });
         if (!oracle.ok) {
             entries[index] = {

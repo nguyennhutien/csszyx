@@ -112,7 +112,10 @@ describe('the webpack lane writes the theme-group registration up front', () => 
             options: { mode: 'production' },
             // A tap that runs its callback, which is what a compilation does.
             hooks: {
-                beforeCompile: { tap: (_name: string, run: () => void) => run() },
+                beforeCompile: {
+                    tap: (_name: string, run: () => void) => run(),
+                    tapPromise: (_name: string, run: () => Promise<void>) => void run(),
+                },
                 thisCompilation: { tap: () => undefined },
             },
         });

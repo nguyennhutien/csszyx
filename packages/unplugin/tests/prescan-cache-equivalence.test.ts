@@ -19,7 +19,7 @@ import { SAFELIST_HEADER } from '../src/safelist-format.js';
 import { vitePlugin } from '../src/unplugin.js';
 
 type ViteConfigHook = {
-    configResolved?: (config: { root: string }) => void;
+    configResolved?: (config: { root: string }) => Promise<void>;
 };
 
 const FIXTURE_FILES: Record<string, string> = {
@@ -58,12 +58,16 @@ afterAll(() => {
  * @param cache - transform-cache toggle for this run.
  * @returns sorted safelist tokens.
  */
-function runPrescan(root: string, parser: 'rust' | 'wasm', cache: boolean): string[] {
+async function runPrescan(
+    root: string,
+    parser: 'rust' | 'wasm',
+    cache: boolean,
+): Promise<string[]> {
     // Each run must observe only its own scan: the safelist writer merges with
     // an existing file, which would mask a run that discovered fewer classes.
     rmSync(join(root, '.csszyx/csszyx-classes.txt'), { force: true });
     const [prePlugin] = vitePlugin({ build: { parser, cache } }) as ViteConfigHook[];
-    prePlugin?.configResolved?.({ root });
+    await prePlugin?.configResolved?.({ root });
     const html = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
     return [...new Set(html.slice(SAFELIST_HEADER.length).split(/\s+/).filter(Boolean))].sort();
 }
@@ -74,7 +78,7 @@ describe('prescan cache equivalence (off == cold == warm)', () => {
     });
 
     for (const parser of ['rust', 'wasm'] as const) {
-        it(`${parser}: cache-off, cache-cold and cache-warm scans agree`, () => {
+        it(`${parser}: cache-off, cache-cold and cache-warm scans agree`, async () => {
             const root = mkdtempSync(join(tmpdir(), `csszyx-cache-eq-${parser}-`));
             tempDirs.push(root);
             mkdirSync(join(root, 'src'), { recursive: true });
@@ -82,9 +86,9 @@ describe('prescan cache equivalence (off == cold == warm)', () => {
                 writeFileSync(join(root, file), source, 'utf8');
             }
 
-            const off = runPrescan(root, parser, false);
-            const cold = runPrescan(root, parser, true); // populates the disk cache
-            const warm = runPrescan(root, parser, true); // must be served from it
+            const off = await runPrescan(root, parser, false);
+            const cold = await runPrescan(root, parser, true); // populates the disk cache
+            const warm = await runPrescan(root, parser, true); // must be served from it
 
             expect(off.length).toBeGreaterThan(0);
             expect(cold).toEqual(off);
@@ -92,7 +96,7 @@ describe('prescan cache equivalence (off == cold == warm)', () => {
         });
     }
 
-    it('a source edit after a warm cache is picked up (no stale serve)', () => {
+    it('a source edit after a warm cache is picked up (no stale serve)', async () => {
         const root = mkdtempSync(join(tmpdir(), 'csszyx-cache-eq-edit-'));
         tempDirs.push(root);
         mkdirSync(join(root, 'src'), { recursive: true });
@@ -100,7 +104,7 @@ describe('prescan cache equivalence (off == cold == warm)', () => {
             writeFileSync(join(root, file), source, 'utf8');
         }
 
-        const warm = runPrescan(root, 'rust', true);
+        const warm = await runPrescan(root, 'rust', true);
         expect(warm).not.toContain('indent-8');
 
         writeFileSync(
@@ -108,7 +112,7 @@ describe('prescan cache equivalence (off == cold == warm)', () => {
             'export const App = () => <div sz={{ p: 4, indent: 8 }} />;',
             'utf8',
         );
-        const afterEdit = runPrescan(root, 'rust', true);
+        const afterEdit = await runPrescan(root, 'rust', true);
         expect(afterEdit).toContain('indent-8');
     });
 });
@@ -135,7 +139,7 @@ describe('prescan → transform-hook result handoff (1× cold transform)', () =>
                     | ((code: string, id: string) => unknown);
             }
         >;
-        prePlugin?.configResolved?.({ root });
+        await prePlugin?.configResolved?.({ root });
 
         const cacheDir = join(root, '.csszyx/cache/transform');
         const entriesAfterPrescan = countJsonFiles(cacheDir);

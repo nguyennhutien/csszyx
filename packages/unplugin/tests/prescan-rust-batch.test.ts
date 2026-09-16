@@ -21,7 +21,7 @@ vi.mock('@csszyx/compiler', async importOriginal => {
 const { vitePlugin } = await import('../src/unplugin.js');
 
 type ViteConfigHook = {
-    configResolved?: (config: { root: string }) => void;
+    configResolved?: (config: { root: string }) => Promise<void>;
 };
 
 const tempDirs: string[] = [];
@@ -41,7 +41,7 @@ describe('rust prescan batching', () => {
         return dir;
     }
 
-    it('batches rust prescan cache misses in one native call', () => {
+    it('batches rust prescan cache misses in one native call', async () => {
         const root = tempRoot();
         const appPath = join(root, 'src/App.tsx');
         const cardPath = join(root, 'src/Card.tsx');
@@ -86,7 +86,7 @@ describe('rust prescan batching', () => {
         const [prePlugin] = vitePlugin({
             build: { parser: 'rust', cache: false },
         }) as ViteConfigHook[];
-        prePlugin.configResolved?.({ root });
+        await prePlugin.configResolved?.({ root });
 
         expect(compilerMock.transformRustBatch).toHaveBeenCalledTimes(1);
         expect(compilerMock.transformRustBatch.mock.calls[0]?.[0]).toEqual([

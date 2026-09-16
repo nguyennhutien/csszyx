@@ -21,6 +21,7 @@ import { vitePlugin } from '../src/unplugin.js';
 const SERVER_FILE = '/app/actions.tsx';
 
 type TransformHook = {
+    buildStart?: () => Promise<void>;
     transform: (this: { warn: (message: string) => void }, code: string, id: string) => unknown;
 };
 
@@ -168,10 +169,15 @@ describe('RSC boundary guard', () => {
         }).toThrow('csszyxRSCViolation: _sz imported in Server Component /repo/app/page.tsx');
     });
 
-    it('keeps generated runtime imports after leading-comment server directives', () => {
+    it('keeps generated runtime imports after leading-comment server directives', async () => {
+        // An empty root, so the stylesheets read at build start are none.
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-rsc-hook-'));
+        const cwd = vi.spyOn(process, 'cwd').mockReturnValue(root);
         const [prePlugin] = vitePlugin({
             build: { cache: false },
         }) as TransformHook[];
+        cwd.mockRestore();
+        await prePlugin?.buildStart?.();
         const source = `
             // comments before directives are legal directive prologue trivia
             'use server';
@@ -183,6 +189,7 @@ describe('RSC boundary guard', () => {
         expect(() =>
             prePlugin.transform.call({ warn: () => undefined }, source, '/repo/actions.tsx'),
         ).toThrow('csszyxRSCViolation: _sz imported in Server Component /repo/actions.tsx');
+        fs.rmSync(root, { recursive: true, force: true });
     });
 
     it('ignores type-only runtime imports', () => {

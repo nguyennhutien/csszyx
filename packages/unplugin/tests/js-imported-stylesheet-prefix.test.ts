@@ -8,20 +8,17 @@
  */
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { vitePlugin } from '../src/unplugin.js';
 import { callHooks, removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
-afterEach(() => {
-    removeTailwindProjects();
-    vi.restoreAllMocks();
-});
+afterEach(removeTailwindProjects);
 
 describe('a stylesheet imported only from JavaScript', () => {
     it('reaches the style model, so its prefix is read', async () => {
         const main =
-            'import \'@fixture/ui/globals.css\';\nexport const A = () => <div className="card" />;\n';
+            "import '@fixture/ui/globals.css';\nexport const A = () => <div sz={{ p: 4 }} />;\n";
         const root = tailwindProject('csszyx-js-css-prefix-', {
             'src/main.tsx': main,
             'node_modules/@fixture/ui/package.json': JSON.stringify({
@@ -31,7 +28,6 @@ describe('a stylesheet imported only from JavaScript', () => {
             'node_modules/@fixture/ui/globals.css': '@import "tailwindcss" prefix(tw);\n',
         });
 
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const plugins = vitePlugin({ production: { mangle: false } }) as unknown as Record<
             string,
             unknown
@@ -39,10 +35,11 @@ describe('a stylesheet imported only from JavaScript', () => {
         const call = callHooks(plugins);
 
         await call('configResolved', { root, command: 'build' });
-        await call('transform', main, join(root, 'src/main.tsx'));
-        await call('renderStart');
+        const result = (await call('transform', main, join(root, 'src/main.tsx'))) as {
+            code: string;
+        };
 
-        expect(warn.mock.calls.map(args => args.join(' ')).join('\n')).toContain('prefix(tw)');
+        expect(result.code).toContain('tw:p-4');
     }, 60_000);
 
     it('reads the prefix when the JavaScript specifier escapes its dot', async () => {

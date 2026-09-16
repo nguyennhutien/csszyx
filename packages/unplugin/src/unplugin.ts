@@ -148,7 +148,11 @@ export {
     SAFELIST_FILE,
 } from './safelist-source.js';
 
-import { openProjectStyleModel, unsupportedStylesheetFactsMessage } from './project-style-model.js';
+import {
+    openProjectStyleModel,
+    type ProjectStyleModel,
+    unsupportedStylesheetFactsMessage,
+} from './project-style-model.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { discoverProjectTheme } from './theme-discovery.js';
@@ -3129,6 +3133,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * walk cannot see when an app keeps no stylesheet of its own.
      */
     let jsImportedCssFiles: readonly string[] = [];
+    /**
+     * What the project's stylesheets say, read once before anything reaches the
+     * engine. Undefined until a lane has read them: `createCompilerOptions`
+     * refuses to run without it, because an unread prefix lowers every class
+     * to a name the project serves no CSS for.
+     */
+    let styleModel: ProjectStyleModel | undefined;
     // Ownership evidence gathered while CSS modules were rewritten, reported
     // once from the output hook where the whole picture exists.
     const transformMangledSources = new Set<string>();
@@ -3761,7 +3772,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     function createCompilerOptions(
         astBudget: number | undefined = astBudgetOverride,
     ): TransformSourceCodeOptions {
+        if (styleModel === undefined) throw unreadStylesheetsError();
         return {
+            // Null, not undefined, when no stylesheet sets one: the engine
+            // then emits exactly what it emitted before prefixes existed.
+            classPrefix: styleModel.facts?.prefix ?? null,
             astBudget,
             mangleVars: options.production?.mangleVars === true,
             mangleVarHoistMaxDepth: options.production?.mangleVarHoistMaxDepth,
@@ -3798,6 +3813,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             mangleVars: compilerOptions.mangleVars,
             mangleVarHoistMaxDepth: compilerOptions.mangleVarHoistMaxDepth,
             globalVarAliases: normalizeGlobalVarAliasesForCache(compilerOptions.globalVarAliases),
+            // A transform made under one Tailwind prefix emits classes a build
+            // under another does not serve.
+            classPrefix: compilerOptions.classPrefix,
             // The registry entries fed to this file are part of its identity:
             // module A's config change must miss B's cached transform, or the
             // cache serves a stale table.
@@ -4450,7 +4468,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * by the csszyx transform (e.g. `sz={{ hover: { bg: 'gray-700' } }}` → `hover:bg-gray-700`).
      * This writes a manifest file with all discovered class names so Tailwind can scan it.
      */
-    function prescanAndWriteClasses(): void {
+    async function prescanAndWriteClasses(): Promise<void> {
         refreshCompileSourceDirs();
         // A registry entry outlives its file otherwise: a module that stops
         // exporting a qualifying factory would keep its old table through any
@@ -4597,6 +4615,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         );
 
         jsImportedCssFiles = stylesheetsImportedBy(cssImportingSources, specifierAliases);
+        // The walk has now met every stylesheet the app reaches, and the prefix
+        // they set must be known before the first file below is lowered.
+        await openStyleModel();
 
         const demandStarted = performance.now();
         recordDemandedSzObjectProviders(seenSourcePaths, szObjectDemand);
@@ -4865,6 +4886,54 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     let unservedClasses: string[] = [];
 
     /**
+     * The error for a lane that asked a question the style model answers before
+     * it read the project's stylesheets.
+     *
+     * Only a lane csszyx forgot to wire can get here, so the message says so
+     * rather than guessing a prefix and shipping classes that style nothing.
+     *
+     * @returns The error to throw.
+     */
+    function unreadStylesheetsError(): Error {
+        return new Error(
+            "[csszyx] internal error: the build asked for the project's Tailwind prefix before it read the project's stylesheets. This is a csszyx bug; please report it with the bundler you build with.",
+        );
+    }
+
+    /**
+     * Read the project's stylesheets into the style model.
+     *
+     * Every lane calls this before its first transform: the model carries the
+     * prefix the engine writes, and reading it is asynchronous where the
+     * transforms that need it are not.
+     *
+     * @returns Nothing; the model lands in `styleModel`.
+     */
+    async function openStyleModel(): Promise<void> {
+        styleModel = await openProjectStyleModel(
+            state.rootDir,
+            [...new Set([...projectCssFiles, ...jsImportedCssFiles])],
+            specifierAliases,
+        );
+    }
+
+    /**
+     * Read the stylesheets on a lane with no prescan of its own.
+     *
+     * Those lanes never walk the project for its theme, so the walk that lists
+     * the stylesheets runs here, without merging a theme those lanes have never
+     * used. A lane whose own hook already opened the model is left alone.
+     *
+     * @returns Nothing; the model lands in `styleModel`.
+     */
+    async function openStyleModelAtBuildStart(): Promise<void> {
+        if (styleModel !== undefined) return;
+        refreshCompileSourceDirs();
+        projectCssFiles = discoverProjectTheme(state.rootDir, [...compileSourceDirs]).scanned;
+        await openStyleModel();
+    }
+
+    /**
      * Ask the project's design systems which authored names produce no CSS.
      *
      * Runs once, at `renderStart`: every module has been transformed by then, so
@@ -4874,9 +4943,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Nothing; the result lands in `unservedClasses`.
      */
     async function computeUnservedClasses(): Promise<void> {
-        const model = await openProjectStyleModel(state.rootDir, [
-            ...new Set([...projectCssFiles, ...jsImportedCssFiles]),
-        ]);
+        // Every lane opened the model before its first transform. Without it
+        // the list would come back empty, which reads as "Tailwind serves every
+        // class" and places each name wrong without a word.
+        const model = styleModel;
+        if (model === undefined) throw unreadStylesheetsError();
         // Said before the early return below: a project whose Tailwind renames
         // or forces every utility gets classes that style nothing, whether or
         // not it authored any className of its own.
@@ -4888,8 +4959,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // No design system is no answer. Reporting nothing is right: every
         // token then keeps the placement it has today.
         if (model.facts === null) return;
-        unservedClasses = unservedAuthoredClasses(state.authoredClasses, classes =>
-            model.unserved(classes),
+        unservedClasses = unservedAuthoredClasses(
+            state.authoredClasses,
+            classes => model.unserved(classes),
+            model.facts.prefix,
         );
     }
 
@@ -6124,6 +6197,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 return collectPreTransformClasses(output);
             },
 
+            /**
+             * Read the project's stylesheets before the first transform, on the
+             * lanes whose own hooks do not.
+             *
+             * @returns Nothing once the style model is open.
+             */
+            async buildStart() {
+                await openStyleModelAtBuildStart();
+            },
+
             /** Finalizes the mangle map after all source modules have been processed. */
             buildEnd() {
                 finalizeMangleMap();
@@ -6278,7 +6361,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     applyWebpackMangleRuntimeEntry(compiler);
                 }
                 applyWebpackUnservedEntry(compiler);
-                compiler.hooks.beforeCompile.tap('csszyx:prescan', () => {
+                compiler.hooks.beforeCompile.tapPromise('csszyx:prescan', async () => {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
                     state.rootDir = root;
@@ -6291,8 +6374,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         compiler.options?.resolve?.alias,
                     );
                     evictTransformCacheOnce();
+                    // Generate theme type augmentation from @theme CSS blocks
+                    state.scanCssTheme =
+                        runThemeScan(root, options.build?.scanCss) ?? state.scanCssTheme;
+                    // Always: project-wide @theme discovery feeds merge groups.
+                    // Before the prescan: its stylesheet list is what the style
+                    // model reads the prefix from.
+                    runAutoThemeScan(root);
                     if (state.classes.size === 0) {
-                        prescanAndWriteClasses();
+                        await prescanAndWriteClasses();
                     }
                     // A rebuild skips the prescan above, so an edited factory
                     // would keep serving importers its startup table. webpack
@@ -6304,11 +6394,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     for (const removed of compiler.removedFiles ?? []) {
                         refreshSzvRegistryEntry(removed, null);
                     }
-                    // Generate theme type augmentation from @theme CSS blocks
-                    state.scanCssTheme =
-                        runThemeScan(root, options.build?.scanCss) ?? state.scanCssTheme;
-                    // Always: project-wide @theme discovery feeds merge groups.
-                    runAutoThemeScan(root);
                 });
                 // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes
                 if (options.build?.scanCss) {
@@ -6322,8 +6407,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             },
 
             rollup: {
-                /** Records the rollup lane for the mangle-runtime gate. */
-                buildStart() {
+                /**
+                 * Records the rollup lane for the mangle-runtime gate, and reads
+                 * the project's stylesheets before the first transform.
+                 *
+                 * @returns Nothing once the style model is open.
+                 */
+                async buildStart() {
                     // A watch rebuild reuses the one prescan registry forever:
                     // an edited factory module would keep serving its OLD
                     // variant table to every importer, and the transform cache
@@ -6332,6 +6422,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // watch mode — `rollup -w` here, and vite build --watch
                     // through the same rollup context.
                     activeFramework = 'rollup';
+                    await openStyleModelAtBuildStart();
                 },
             },
 
@@ -6340,8 +6431,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                  * Vite hook: pre-scans source files when config is resolved.
                  * Also runs theme scan to generate .csszyx/theme.d.ts if scanCss is configured.
                  * @param config - the resolved Vite configuration object
+                 * @returns Nothing once the prescan has lowered every source.
                  */
-                configResolved(config) {
+                async configResolved(config) {
                     activeFramework = 'vite';
                     announceActiveParser();
                     const root = config.root || process.cwd();
@@ -6367,17 +6459,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         emitWarning(watchModeMangleMessage());
                     }
                     evictTransformCacheOnce();
-                    // Pre-scan source files so Tailwind can discover classes
-                    prescanAndWriteClasses();
-                    skipRscRecords =
-                        config.command === 'build' &&
-                        !config.build?.watch &&
-                        !prescanSawServerModule;
                     // Generate theme type augmentation from @theme CSS blocks
                     state.scanCssTheme =
                         runThemeScan(root, options.build?.scanCss) ?? state.scanCssTheme;
                     // Always: project-wide @theme discovery feeds merge groups.
+                    // Before the prescan: its stylesheet list is what the style
+                    // model reads the prefix from.
                     runAutoThemeScan(root);
+                    // Pre-scan source files so Tailwind can discover classes
+                    await prescanAndWriteClasses();
+                    skipRscRecords =
+                        config.command === 'build' &&
+                        !config.build?.watch &&
+                        !prescanSawServerModule;
                     // Everything the CSS rewrite reads has to be settled before
                     // the first stylesheet is transformed, because that is where
                     // its bytes are hashed. Both halves come from the same walk

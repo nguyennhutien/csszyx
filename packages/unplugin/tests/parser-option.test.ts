@@ -59,6 +59,27 @@ afterEach(() => {
     }
 });
 
+/**
+ * Create plugins and start them the way a bundler does before its first
+ * transform: the build reads the project's stylesheets at build start, and the
+ * engine refuses a transform that came first.
+ *
+ * The root is an empty directory, so no stylesheet on disk changes what these
+ * tests measure.
+ *
+ * @param create - Builds the plugin array under test.
+ * @returns The same plugins, started.
+ */
+async function started<T>(create: () => T): Promise<T> {
+    const root = mkdtempSync(join(tmpdir(), 'csszyx-parser-option-'));
+    tempDirs.push(root);
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(root);
+    const plugins = create();
+    cwd.mockRestore();
+    await (plugins as unknown as Array<{ buildStart?: () => Promise<void> }>)[0]?.buildStart?.();
+    return plugins;
+}
+
 describe('csszyx parser selection', () => {
     it('rejects unsupported global variable alias modes before transform', () => {
         expect(() =>
@@ -101,16 +122,18 @@ describe('csszyx parser selection', () => {
         ).toThrow('production.mangleGlobalVars.autoPrefix is not available');
     });
 
-    it('threads explicit global variable aliases into source transforms', () => {
-        const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false },
-            production: {
-                mangleGlobalVars: {
-                    enabled: true,
-                    tokens: ['--brand-primary'],
+    it('threads explicit global variable aliases into source transforms', async () => {
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'wasm', cache: false },
+                production: {
+                    mangleGlobalVars: {
+                        enabled: true,
+                        tokens: ['--brand-primary'],
+                    },
                 },
-            },
-        }) as TransformHook[];
+            }),
+        )) as TransformHook[];
 
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
@@ -122,16 +145,18 @@ describe('csszyx parser selection', () => {
         expect(result.code).not.toContain('bg-(--brand-primary)');
     });
 
-    it('rewrites CSS assets with the validated explicit global variable alias plan', () => {
-        const [prePlugin, , postPlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false },
-            production: {
-                mangleGlobalVars: {
-                    enabled: true,
-                    tokens: ['--brand-primary'],
+    it('rewrites CSS assets with the validated explicit global variable alias plan', async () => {
+        const [prePlugin, , postPlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'wasm', cache: false },
+                production: {
+                    mangleGlobalVars: {
+                        enabled: true,
+                        tokens: ['--brand-primary'],
+                    },
                 },
-            },
-        }) as [TransformHook, unknown, GenerateBundleHook];
+            }),
+        )) as [TransformHook, unknown, GenerateBundleHook];
         prePlugin.transform.call(
             { warn: vi.fn() },
             "const App = () => <div sz={{ bg: '--brand-primary' }} />;",
@@ -152,16 +177,18 @@ describe('csszyx parser selection', () => {
         expect(css).toContain('color:var(---gz)');
     });
 
-    it('fails closed when explicit global variable tokens are missing from emitted CSS', () => {
-        const [, , postPlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false },
-            production: {
-                mangleGlobalVars: {
-                    enabled: true,
-                    tokens: ['--brand-primary'],
+    it('fails closed when explicit global variable tokens are missing from emitted CSS', async () => {
+        const [, , postPlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'wasm', cache: false },
+                production: {
+                    mangleGlobalVars: {
+                        enabled: true,
+                        tokens: ['--brand-primary'],
+                    },
                 },
-            },
-        }) as [TransformHook, unknown, GenerateBundleHook];
+            }),
+        )) as [TransformHook, unknown, GenerateBundleHook];
 
         expect(() =>
             postPlugin.generateBundle.call(
@@ -178,20 +205,22 @@ describe('csszyx parser selection', () => {
         ).toThrow('Global variable token --brand-primary is not defined in scanned CSS');
     });
 
-    it('accepts explicit tokens defined by configured scanCss sources', () => {
+    it('accepts explicit tokens defined by configured scanCss sources', async () => {
         const root = mkdtempSync(join(tmpdir(), 'csszyx-global-var-scan-css-'));
         tempDirs.push(root);
         const cssPath = join(root, 'tokens.css');
         writeFileSync(cssPath, ':root{--brand-primary:red}.card{color:var(--brand-primary)}');
-        const [, , postPlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false, scanCss: cssPath },
-            production: {
-                mangleGlobalVars: {
-                    enabled: true,
-                    tokens: ['--brand-primary'],
+        const [, , postPlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'wasm', cache: false, scanCss: cssPath },
+                production: {
+                    mangleGlobalVars: {
+                        enabled: true,
+                        tokens: ['--brand-primary'],
+                    },
                 },
-            },
-        }) as [TransformHook, unknown, GenerateBundleHook];
+            }),
+        )) as [TransformHook, unknown, GenerateBundleHook];
         const emitFile = vi.fn();
 
         expect(() =>
@@ -216,7 +245,7 @@ describe('csszyx parser selection', () => {
         );
     });
 
-    it('reads a stylesheet listed in scanCss and emitted by the bundle only once', () => {
+    it('reads a stylesheet listed in scanCss and emitted by the bundle only once', async () => {
         // The configured sources and the bundle's assets are concatenated
         // before validation, so a stylesheet that is both is present twice.
         // Reading it twice would let a single definition satisfy a duplicate
@@ -226,12 +255,14 @@ describe('csszyx parser selection', () => {
         const cssPath = join(root, 'assets/app.css');
         mkdirSync(dirname(cssPath), { recursive: true });
         writeFileSync(cssPath, ':root{--brand-primary:red}.card{color:var(--brand-primary)}');
-        const [, , postPlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false, scanCss: cssPath },
-            production: {
-                mangleGlobalVars: { enabled: true, tokens: ['--brand-primary'] },
-            },
-        }) as [TransformHook, unknown, GenerateBundleHook];
+        const [, , postPlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'wasm', cache: false, scanCss: cssPath },
+                production: {
+                    mangleGlobalVars: { enabled: true, tokens: ['--brand-primary'] },
+                },
+            }),
+        )) as [TransformHook, unknown, GenerateBundleHook];
         const emitFile = vi.fn();
 
         expect(() =>
@@ -256,17 +287,19 @@ describe('csszyx parser selection', () => {
         );
     });
 
-    it('can skip the standalone global variable map asset', () => {
-        const [prePlugin, , postPlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false },
-            production: {
-                mangleGlobalVars: {
-                    enabled: true,
-                    emitMap: false,
-                    tokens: ['--brand-primary'],
+    it('can skip the standalone global variable map asset', async () => {
+        const [prePlugin, , postPlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'wasm', cache: false },
+                production: {
+                    mangleGlobalVars: {
+                        enabled: true,
+                        emitMap: false,
+                        tokens: ['--brand-primary'],
+                    },
                 },
-            },
-        }) as [TransformHook, unknown, GenerateBundleHook];
+            }),
+        )) as [TransformHook, unknown, GenerateBundleHook];
         prePlugin.transform.call(
             { warn: vi.fn() },
             "const App = () => <div sz={{ bg: '--brand-primary' }} />;",
@@ -410,8 +443,8 @@ describe('csszyx parser selection', () => {
         );
     });
 
-    it('uses the native engine by default', () => {
-        const [prePlugin] = vitePlugin() as TransformHook[];
+    it('uses the native engine by default', async () => {
+        const [prePlugin] = (await started(() => vitePlugin())) as TransformHook[];
         const warn = vi.fn();
         const result = prePlugin.transform.call(
             { warn },
@@ -425,10 +458,12 @@ describe('csszyx parser selection', () => {
         expect(warn).not.toHaveBeenCalled();
     });
 
-    it('lets build.parser opt into the wasm build explicitly', () => {
-        const [prePlugin] = vitePlugin({
-            build: { parser: 'wasm' },
-        }) as TransformHook[];
+    it('lets build.parser opt into the wasm build explicitly', async () => {
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { parser: 'wasm' },
+            }),
+        )) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
             'const App=()=> <div sz={{ p: 4 }} />;',
@@ -440,11 +475,13 @@ describe('csszyx parser selection', () => {
         expect(result.code).not.toContain(' sz=');
     });
 
-    it('lets CSSZYX_PARSER=wasm override build.parser=rust', () => {
+    it('lets CSSZYX_PARSER=wasm override build.parser=rust', async () => {
         process.env.CSSZYX_PARSER = 'wasm';
-        const [prePlugin] = vitePlugin({
-            build: { parser: 'rust' },
-        }) as TransformHook[];
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { parser: 'rust' },
+            }),
+        )) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
             'const App=()=> <div sz={{ p: 4 }} />;',
@@ -455,11 +492,13 @@ describe('csszyx parser selection', () => {
         expect(result.code).toContain('className="p-4"');
     });
 
-    it('passes production.mangleVars into the wasm compiler path', () => {
-        const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false },
-            production: { mangleVars: true },
-        }) as TransformHook[];
+    it('passes production.mangleVars into the wasm compiler path', async () => {
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'wasm', cache: false },
+                production: { mangleVars: true },
+            }),
+        )) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
             'const App = ({ pad }) => <section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section>;',
@@ -471,11 +510,13 @@ describe('csszyx parser selection', () => {
         expect(result.code).toContain('<span className="p-(--cz)" />');
     });
 
-    it('passes production.mangleVarHoistMaxDepth into the wasm compiler path', () => {
-        const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false },
-            production: { mangleVars: true, mangleVarHoistMaxDepth: 1 },
-        }) as TransformHook[];
+    it('passes production.mangleVarHoistMaxDepth into the wasm compiler path', async () => {
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'wasm', cache: false },
+                production: { mangleVars: true, mangleVarHoistMaxDepth: 1 },
+            }),
+        )) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
             'const App = ({ pad }) => <section><div><span sz={{ p: pad }} /></div><button sz={{ p: pad }} /></section>;',
@@ -491,11 +532,13 @@ describe('csszyx parser selection', () => {
         );
     });
 
-    it('preserves mixed scoped and hoisted CSS variable tiers in runtime metadata', () => {
-        const [prePlugin, , postPlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false },
-            production: { mangleVars: true },
-        }) as [TransformHook, unknown, GenerateBundleHook];
+    it('preserves mixed scoped and hoisted CSS variable tiers in runtime metadata', async () => {
+        const [prePlugin, , postPlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'wasm', cache: false },
+                production: { mangleVars: true },
+            }),
+        )) as [TransformHook, unknown, GenerateBundleHook];
         const source =
             'const App = ({ pad, gap }) => <main><section><div sz={{ p: pad }} /><span sz={{ p: pad }} /></section><aside sz={{ p: gap }} /></main>;';
 
@@ -521,11 +564,13 @@ describe('csszyx parser selection', () => {
         expect(manifest.cssVarMetrics?.scopedClassUses).toBe(1);
     });
 
-    it('replaces per-file CSS variable metadata instead of append-only accumulation', () => {
-        const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false },
-            production: { mangleVars: true },
-        }) as TransformHook[];
+    it('replaces per-file CSS variable metadata instead of append-only accumulation', async () => {
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'wasm', cache: false },
+                production: { mangleVars: true },
+            }),
+        )) as TransformHook[];
 
         prePlugin.transform.call(
             { warn: vi.fn() },
@@ -552,12 +597,14 @@ describe('csszyx parser selection', () => {
         expect(moduleSource).toContain('"--_sz-gap": "--sz"');
     });
 
-    it('fails loudly when CSS variable metadata exceeds the safety cap', () => {
+    it('fails loudly when CSS variable metadata exceeds the safety cap', async () => {
         process.env.CSSZYX_VAR_MANGLE_MAP_MAX_BYTES = '16';
-        const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false },
-            production: { mangleVars: true },
-        }) as TransformHook[];
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'wasm', cache: false },
+                production: { mangleVars: true },
+            }),
+        )) as TransformHook[];
 
         prePlugin.transform.call(
             { warn: vi.fn() },
@@ -570,11 +617,13 @@ describe('csszyx parser selection', () => {
         );
     });
 
-    it('exposes CSS variable hoisting efficacy metrics', () => {
-        const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'wasm', cache: false },
-            production: { mangleVars: true },
-        }) as TransformHook[];
+    it('exposes CSS variable hoisting efficacy metrics', async () => {
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'wasm', cache: false },
+                production: { mangleVars: true },
+            }),
+        )) as TransformHook[];
 
         prePlugin.transform.call(
             { warn: vi.fn() },
@@ -588,11 +637,13 @@ describe('csszyx parser selection', () => {
         expect(moduleSource).toContain('"estimatedHoistedDeclarationsSaved": 1');
     });
 
-    it('passes production.mangleVars into the Rust compiler path', () => {
-        const [prePlugin] = vitePlugin({
-            build: { emitManifest: true, parser: 'rust', cache: false },
-            production: { mangleVars: true },
-        }) as TransformHook[];
+    it('passes production.mangleVars into the Rust compiler path', async () => {
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { emitManifest: true, parser: 'rust', cache: false },
+                production: { mangleVars: true },
+            }),
+        )) as TransformHook[];
 
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
@@ -605,14 +656,16 @@ describe('csszyx parser selection', () => {
         expect(result.code).toContain('<span className="p-(--cz)" />');
     });
 
-    it('lets build.parser opt into the Rust engine explicitly', () => {
+    it('lets build.parser opt into the Rust engine explicitly', async () => {
         if (!nativeRustAvailable) {
             // No host addon present — assert the explicit unavailable-error
             // contract so users hitting this path know the parser flipped on
             // but the binding is missing for their platform.
-            const [prePlugin] = vitePlugin({
-                build: { parser: 'rust' },
-            }) as TransformHook[];
+            const [prePlugin] = (await started(() =>
+                vitePlugin({
+                    build: { parser: 'rust' },
+                }),
+            )) as TransformHook[];
             expect(() =>
                 prePlugin.transform.call(
                     { warn: vi.fn() },
@@ -623,9 +676,11 @@ describe('csszyx parser selection', () => {
             return;
         }
 
-        const [prePlugin] = vitePlugin({
-            build: { parser: 'rust' },
-        }) as TransformHook[];
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { parser: 'rust' },
+            }),
+        )) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
             'const App=()=> <div sz={{ p: 4 }} />;',
@@ -636,11 +691,13 @@ describe('csszyx parser selection', () => {
         expect(result.code).not.toContain(' sz=');
     });
 
-    it('injects runtime imports when the rust engine emits fallback helpers', () => {
+    it('injects runtime imports when the rust engine emits fallback helpers', async () => {
         if (!nativeRustAvailable) {
-            const [prePlugin] = vitePlugin({
-                build: { parser: 'rust' },
-            }) as TransformHook[];
+            const [prePlugin] = (await started(() =>
+                vitePlugin({
+                    build: { parser: 'rust' },
+                }),
+            )) as TransformHook[];
             expect(() =>
                 prePlugin.transform.call(
                     { warn: vi.fn() },
@@ -666,9 +723,11 @@ describe('csszyx parser selection', () => {
             'export const MergeRuntime = ({ styles }) => <div className="existing" sz={styles} />;',
             'export const MergeDynamic = ({ styles }) => <div className={getClass()} sz={styles} />;',
         ].join('\n');
-        const [prePlugin] = vitePlugin({
-            build: { parser: 'rust' },
-        }) as TransformHook[];
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { parser: 'rust' },
+            }),
+        )) as TransformHook[];
 
         const result = prePlugin.transform.call({ warn: vi.fn() }, source, '/repo/src/App.tsx') as {
             code: string;
@@ -686,13 +745,15 @@ describe('csszyx parser selection', () => {
         );
     });
 
-    it('lets CSSZYX_PARSER=rust override build.parser=wasm', () => {
+    it('lets CSSZYX_PARSER=rust override build.parser=wasm', async () => {
         process.env.CSSZYX_PARSER = 'rust';
 
         if (!nativeRustAvailable) {
-            const [prePlugin] = vitePlugin({
-                build: { parser: 'wasm' },
-            }) as TransformHook[];
+            const [prePlugin] = (await started(() =>
+                vitePlugin({
+                    build: { parser: 'wasm' },
+                }),
+            )) as TransformHook[];
             expect(() =>
                 prePlugin.transform.call(
                     { warn: vi.fn() },
@@ -703,9 +764,11 @@ describe('csszyx parser selection', () => {
             return;
         }
 
-        const [prePlugin] = vitePlugin({
-            build: { parser: 'wasm' },
-        }) as TransformHook[];
+        const [prePlugin] = (await started(() =>
+            vitePlugin({
+                build: { parser: 'wasm' },
+            }),
+        )) as TransformHook[];
         const result = prePlugin.transform.call(
             { warn: vi.fn() },
             'const App=()=> <div sz={{ p: 4 }} />;',
