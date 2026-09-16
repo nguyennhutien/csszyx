@@ -62,7 +62,7 @@
     "build": "pnpm run gen:llms && turbo run build",
     "dev": "turbo run dev --parallel",
     "test": "turbo run test",
-    "test:scripts": "node --import tsx/esm --test scripts/*.test.ts",
+    "test:scripts": "node --import tsx/esm --test scripts/*.test.{ts,mjs}",
     "test:coverage": "vitest run --coverage",
     "cov:rust": "cargo llvm-cov --manifest-path packages/core/Cargo.toml --features native-engine,migrate --lcov --output-path coverage/rust-lcov.info && node scripts/filter-rust-lcov.mjs",
     "cov:rust:summary": "pnpm cov:rust",

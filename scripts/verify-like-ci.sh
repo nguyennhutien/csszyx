@@ -78,8 +78,6 @@ pnpm lint:fast
 echo "[verify-like-ci] Repository tooling suites (generators, release config, workflow helpers)..."
 pnpm test:scripts
 node .github/scripts/validate-release-please-config.mjs
-node --test scripts/validate-commit-message-policy.test.mjs
-node --test scripts/napi-pin.test.mjs
 # The gate itself needs the network and lives in the Security workflow; its
 # classification rule is pure and is checked here, where a wrong one would
 # otherwise only show up during an outage.
