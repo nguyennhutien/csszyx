@@ -3142,6 +3142,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * to a name the project serves no CSS for.
      */
     let styleModel: ProjectStyleModel | undefined;
+    // The stylesheets the last opened model read, and those its roots import.
+    // A webpack build depends on them, so an edit to one rebuilds even when no
+    // module imports it.
+    let styleModelFiles: readonly string[] = [];
+    // The size and time of each of those files when they were last read, so a
+    // rebuild on a lane with no watcher of its own can tell one changed.
+    let styleModelStamps = new Map<string, string>();
+    // Set when a watch rebuild finds the prefix changed under modules it
+    // keeps; reported on every rebuild until the prefix is back.
+    let styleModelRebuildError: string | null = null;
     // Ownership evidence gathered while CSS modules were rewritten, reported
     // once from the output hook where the whole picture exists.
     const transformMangledSources = new Set<string>();
@@ -4935,28 +4945,77 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 ? listed.map(entry => entry.absolute)
                 : [...new Set([...projectCssFiles, ...jsImportedCssFiles])];
         const opened = await openProjectStyleModel(state.rootDir, candidates, specifierAliases);
-        styleModel = opened;
         const problem = styleModelError(opened, state.rootDir);
+        // Thrown before the model is kept: a build started again after this
+        // error has to read the stylesheets again, not lower with this model.
         if (problem !== null) throw new Error(problem);
+        styleModel = opened;
+        styleModelFiles = [
+            ...new Set([...opened.entries.map(entry => entry.file), ...opened.imports]),
+        ];
+        styleModelStamps = stylesheetStamps(styleModelFiles);
         const skipped = styleModelWarning(opened, state.rootDir);
         if (skipped !== null) emitWarning(skipped);
         return opened;
     }
 
     /**
-     * Read the stylesheets on a lane with no prescan of its own.
+     * The size and time of each file, or `gone` for one that is not there.
+     *
+     * @param files - Absolute paths.
+     * @returns A stamp per file.
+     */
+    function stylesheetStamps(files: readonly string[]): Map<string, string> {
+        return new Map(
+            files.map(file => {
+                try {
+                    const stat = fs.statSync(file);
+                    return [file, `${stat.mtimeMs}:${stat.size}`];
+                } catch {
+                    return [file, 'gone'];
+                }
+            }),
+        );
+    }
+
+    /**
+     * The stylesheets the model read that changed since it read them.
+     *
+     * @returns Their absolute paths.
+     */
+    function changedStyleModelFiles(): string[] {
+        const now = stylesheetStamps([...styleModelStamps.keys()]);
+        return [...styleModelStamps]
+            .filter(([file, stamp]) => now.get(file) !== stamp)
+            .map(([file]) => file);
+    }
+
+    /**
+     * Read the stylesheets on a lane with no prescan of its own, and follow
+     * them on every rebuild after.
      *
      * Those lanes never walk the project for its theme, so the walk that lists
      * the stylesheets runs here, without merging a theme those lanes have never
-     * used. A lane whose own hook already opened the model is left alone.
+     * used. A lane whose own hook already opened the model is not walked again.
+     *
+     * `rollup -w`, `vite build --watch`, an esbuild context and rspack call
+     * this again for every rebuild and keep the modules that did not change,
+     * so a changed prefix fails the rebuild the way a webpack watch rebuild
+     * fails. webpack follows from its own compile hook, which runs first.
      *
      * @returns Nothing; the model lands in `styleModel`.
      */
     async function openStyleModelAtBuildStart(): Promise<void> {
-        if (styleModel !== undefined) return;
-        refreshCompileSourceDirs();
-        projectCssFiles = discoverProjectTheme(state.rootDir, [...compileSourceDirs]).scanned;
-        await openStyleModel();
+        if (styleModel === undefined) {
+            refreshCompileSourceDirs();
+            projectCssFiles = discoverProjectTheme(state.rootDir, [...compileSourceDirs]).scanned;
+            await openStyleModel();
+            return;
+        }
+        if (activeFramework === 'webpack') return;
+        const changed = changedStyleModelFiles();
+        if (changed.length > 0) await followStyleModelRebuild(styleModel, changed);
+        if (styleModelRebuildError !== null) throw new Error(styleModelRebuildError);
     }
 
     /**
@@ -5430,7 +5489,39 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns `none`, or the prefix in backticks.
      */
     function describePrefix(prefix: string | null): string {
-        return prefix === null ? 'none' : `\`${prefix}\``;
+        return prefix === null ? 'no prefix' : `\`${prefix}\``;
+    }
+
+    /**
+     * A file path the way the author writes it: relative to the project root,
+     * with forward slashes.
+     *
+     * @param file - Absolute path.
+     * @returns The relative name.
+     */
+    function projectRelative(file: string): string {
+        return path.relative(state.rootDir, file).split(path.sep).join('/');
+    }
+
+    /**
+     * What a running session says when an edit leaves the stylesheets
+     * unreadable, and it keeps the prefix it had.
+     *
+     * The build-time message ends with a note that nothing was written, which
+     * is not true of a session that is still serving, so that line is replaced.
+     *
+     * @param error - What opening the model threw.
+     * @param previous - The model the session keeps.
+     * @param session - Who keeps it, as the message names it.
+     * @returns The warning.
+     */
+    function keptPrefixWarning(
+        error: unknown,
+        previous: ProjectStyleModel,
+        session: string,
+    ): string {
+        const message = (error as Error).message.replace(/\n {2}note: .*$/, '');
+        return `${message}\n  note: ${session} keeps the prefix it last read (${describePrefix(prefixOf(previous))}) until the stylesheets agree again.`;
     }
 
     /**
@@ -5462,13 +5553,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         try {
             current = await openStyleModel();
         } catch (error) {
-            styleModel = previous;
-            // The build-time note says nothing was written, which is not true
-            // of a server that is still serving.
-            const message = (error as Error).message.replace(/\n {2}note: .*$/, '');
-            emitWarning(
-                `${message}\n  note: the dev server keeps the prefix it last read (${describePrefix(prefixOf(previous))}) until the stylesheets agree again.`,
-            );
+            emitWarning(keptPrefixWarning(error, previous, 'the dev server'));
             return;
         }
         const before = prefixOf(previous);
@@ -5488,8 +5573,49 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Ungated, like the active-parser line: a reload that drops the page's
         // state with no explanation would be its own surprise.
         console.warn(
-            `[csszyx] ${path.relative(state.rootDir, ctx.file).split(path.sep).join('/')} changed the Tailwind prefix from ${describePrefix(before)} to ${describePrefix(after)}: recompiled every module and reloaded the page.`,
+            `[csszyx] ${projectRelative(ctx.file)} changed the Tailwind prefix from ${describePrefix(before)} to ${describePrefix(after)}: recompiled every module and reloaded the page.`,
         );
+    }
+
+    /**
+     * Read the stylesheets again on a watch rebuild whose changes include a
+     * stylesheet.
+     *
+     * A watching bundler keeps the modules it compiled, and a plugin cannot
+     * make it recompile them all. A changed prefix therefore keeps the model the
+     * session had, so a rebuilt module still matches the ones webpack kept,
+     * and fails every rebuild with an error that says to restart until the
+     * prefix is back.
+     *
+     * @param previous - The model the session compiled its modules with.
+     * @param changed - The stylesheets the watcher reported.
+     * @returns Nothing once the rebuild knows what to report.
+     */
+    async function followStyleModelRebuild(
+        previous: ProjectStyleModel,
+        changed: readonly string[],
+    ): Promise<void> {
+        let current: ProjectStyleModel;
+        try {
+            current = await openStyleModel();
+        } catch (error) {
+            // Stamped as read, so the broken stylesheet warns once, not on
+            // every rebuild until it is fixed.
+            styleModelStamps = stylesheetStamps(styleModelFiles);
+            emitWarning(keptPrefixWarning(error, previous, 'this watch session'));
+            return;
+        }
+        const before = prefixOf(previous);
+        const after = prefixOf(current);
+        if (after === before) {
+            styleModelRebuildError = null;
+            return;
+        }
+        styleModel = previous;
+        styleModelRebuildError =
+            `[csszyx] ${changed.map(projectRelative).join(', ')} changed the Tailwind prefix from ${describePrefix(before)} to ${describePrefix(after)}, but this watch session compiled its modules under the old one, so their classes would style nothing.\n` +
+            '  help: stop the watch and start it again.\n' +
+            '  note: modules keep the classes they were compiled with until the restart.';
     }
 
     /**
@@ -6511,8 +6637,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // Before the prescan: its stylesheet list is what the style
                     // model reads the prefix from.
                     runAutoThemeScan(root);
+                    const changedStylesheets = [
+                        ...(compiler.modifiedFiles ?? []),
+                        ...(compiler.removedFiles ?? []),
+                    ].filter(file => file.endsWith('.css'));
                     if (state.classes.size === 0) {
                         await prescanAndWriteClasses();
+                    } else if (styleModel !== undefined && changedStylesheets.length > 0) {
+                        // A rebuild skips the prescan, so a stylesheet edit is
+                        // the one moment the prefix can have changed under it.
+                        await followStyleModelRebuild(styleModel, changedStylesheets);
                     }
                     // A rebuild skips the prescan above, so an edited factory
                     // would keep serving importers its startup table. webpack
@@ -6523,6 +6657,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     }
                     for (const removed of compiler.removedFiles ?? []) {
                         refreshSzvRegistryEntry(removed, null);
+                    }
+                });
+                compiler.hooks.thisCompilation.tap('csszyx:style-model', compilation => {
+                    for (const file of styleModelFiles) compilation.fileDependencies.add(file);
+                    if (styleModelRebuildError !== null) {
+                        compilation.errors.push(
+                            new compiler.webpack.WebpackError(styleModelRebuildError),
+                        );
                     }
                 });
                 // Register scanned CSS files as Webpack file dependencies so HMR triggers on changes

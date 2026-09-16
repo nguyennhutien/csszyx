@@ -91,7 +91,7 @@ describe('a Tailwind prefix that changes during a dev session', () => {
         expect(dev.sent).toContainEqual({ type: 'full-reload' });
         expect(dev.invalidated()).toBeGreaterThan(0);
         expect(dev.warnings.join('\n')).toContain(
-            'src/index.css changed the Tailwind prefix from none to `tw`',
+            'src/index.css changed the Tailwind prefix from no prefix to `tw`',
         );
         expect(await dev.transformApp()).toContain('tw:p-4');
         expect(readFileSync(join(dev.root, SAFELIST_FILE), 'utf8').split('\n')).toContain('tw:p-4');
