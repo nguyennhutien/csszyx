@@ -109,7 +109,7 @@
   },
   "dependencies": {
     "@csszyx/core": "workspace:*",
-    "oxc-parser": "0.148.0"
+    "oxc-parser": "0.149.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
