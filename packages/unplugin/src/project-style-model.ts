@@ -98,14 +98,23 @@ export function unsupportedStylesheetFactsMessage(facts: StylesheetFacts): strin
     );
 }
 
+/** What a message calls the setting that names the stylesheets an app loads, by default. */
+export const TAILWIND_STYLESHEET_OPTION = 'the csszyx `tailwindStylesheet` option';
+
 /**
  * What stops the build when the project's stylesheets give no single answer.
  *
  * @param model - The opened style model.
  * @param root - Project root, so the message names files the way the author does.
+ * @param setting - What the help calls the setting that names the stylesheets:
+ *        a command-line lane takes a flag where a bundler takes an option.
  * @returns The message, or null when the stylesheets agree.
  */
-export function styleModelError(model: ProjectStyleModel, root: string): string | null {
+export function styleModelError(
+    model: ProjectStyleModel,
+    root: string,
+    setting: string = TAILWIND_STYLESHEET_OPTION,
+): string | null {
     // First: a broken entry leaves the facts of the others unreliable, so a
     // disagreement between those is not the thing to fix.
     const broken = failedStylesheets(model, root, true);
@@ -113,7 +122,7 @@ export function styleModelError(model: ProjectStyleModel, root: string): string 
         return [
             '[csszyx] stylesheets that reach Tailwind did not compile, so csszyx cannot read the prefix its classes need:',
             ...broken,
-            '  help: fix the stylesheet; if this build does not load it, list the stylesheets it does load in the csszyx `tailwindStylesheet` option.',
+            `  help: fix the stylesheet; if this build does not load it, list the stylesheets it does load in ${setting}.`,
             '  note: no module was transformed; without the prefix every emitted class could style nothing.',
         ].join('\n');
     }
@@ -136,7 +145,7 @@ export function styleModelError(model: ProjectStyleModel, root: string): string 
     return [
         '[csszyx] your Tailwind entries set different prefixes, so no class name csszyx emits can be served by all of them:',
         ...named.map(entry => `  ${entry.file.padEnd(width)}   ${entry.prefix}`),
-        '  help: give every entry the same `@import "tailwindcss"` line, or list the stylesheets this build loads in the csszyx `tailwindStylesheet` option.',
+        `  help: give every entry the same \`@import "tailwindcss"\` line, or list the stylesheets this build loads in ${setting}.`,
         '  note: the build stopped before transforming any module; nothing was written.',
     ].join('\n');
 }
@@ -147,15 +156,20 @@ export function styleModelError(model: ProjectStyleModel, root: string): string 
  *
  * @param model - The opened style model.
  * @param root - Project root, so the message names files the way the author does.
+ * @param setting - What the help calls the setting that names the stylesheets.
  * @returns The message, or null when there is nothing to say.
  */
-export function styleModelWarning(model: ProjectStyleModel, root: string): string | null {
+export function styleModelWarning(
+    model: ProjectStyleModel,
+    root: string,
+    setting: string = TAILWIND_STYLESHEET_OPTION,
+): string | null {
     const skipped = failedStylesheets(model, root, false);
     if (skipped.length === 0) return null;
     return [
         '[csszyx] these stylesheets did not compile and never reached Tailwind, so csszyx read the prefix without them:',
         ...skipped,
-        '  help: if the app loads one of them, fix its import; otherwise list the stylesheets the app loads in the csszyx `tailwindStylesheet` option.',
+        `  help: if the app loads one of them, fix its import; otherwise list the stylesheets the app loads in ${setting}.`,
     ].join('\n');
 }
 
@@ -213,11 +227,16 @@ function relativeName(root: string, file: string): string {
  *
  * @param missing - The listed paths that do not exist, as the author wrote them.
  * @param root - The project root they were resolved against.
+ * @param setting - What the message calls the setting that listed them.
  * @returns The message.
  */
-export function missingTailwindStylesheetMessage(missing: readonly string[], root: string): string {
+export function missingTailwindStylesheetMessage(
+    missing: readonly string[],
+    root: string,
+    setting: string = TAILWIND_STYLESHEET_OPTION,
+): string {
     return (
-        `[csszyx] the csszyx \`tailwindStylesheet\` option lists stylesheets that are not there: ${missing.join(', ')} (relative to ${root}).\n` +
+        `[csszyx] ${setting} lists stylesheets that are not there: ${missing.join(', ')} (relative to ${root}).\n` +
         '  help: list the stylesheet that imports Tailwind for this build, relative to the project root.'
     );
 }

@@ -20,6 +20,7 @@ import path from 'node:path';
 import type { StylesheetFacts } from '@csszyx/tailwind-oracle';
 
 import { type AtomicWriteOptions, atomicWriteFileSync } from './atomic-write.js';
+import { resolveNextAppCacheDir, resolveNextAppRoot } from './next-root-resolver.js';
 import {
     mayReachTailwind,
     missingTailwindStylesheetMessage,
@@ -234,4 +235,29 @@ export function unreadNextPrefixMessage(root: string, reason: string, lane: stri
         '  help: run `csszyx next prebuild` before `next build`, and `csszyx next watch` beside `next dev`; both read the stylesheets first.\n' +
         '  note: without the prefix every class this lane emits could style nothing.'
     );
+}
+
+/**
+ * Record the facts for a Next app, resolving its root and cache directory the
+ * way the prebuild and the loader do.
+ *
+ * @param input - How the command was pointed at the app.
+ * @param input.explicitRoot - The app root, when given.
+ * @param input.cwd - The working directory, used when no root is given.
+ * @param input.cacheDir - The csszyx cache directory, relative to the root.
+ * @param input.tailwindStylesheet - The stylesheets the app loads, when named.
+ * @returns The record, where it lives, and any warning to print.
+ */
+export async function prepareNextStylesheetFacts(input: {
+    explicitRoot?: string;
+    cwd?: string;
+    cacheDir?: string;
+    tailwindStylesheet?: readonly string[];
+}): Promise<{ record: NextStylesheetFactsRecord; path: string; warning: string | null }> {
+    const { root } = resolveNextAppRoot({ explicitRoot: input.explicitRoot, cwd: input.cwd });
+    return writeNextStylesheetFacts({
+        root,
+        cacheDir: resolveNextAppCacheDir(root, input.cacheDir),
+        tailwindStylesheet: input.tailwindStylesheet,
+    });
 }

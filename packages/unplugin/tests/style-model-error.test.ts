@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    missingTailwindStylesheetMessage,
     type ProjectStyleModel,
     type StyleEntry,
     styleModelError,
@@ -181,5 +182,39 @@ describe('styleModelWarning — stylesheets that did not compile and never reach
         expect(
             styleModelWarning(modelOf([failed('/app/src/b.css', false, 'environment')]), ROOT),
         ).toBeNull();
+    });
+});
+
+describe('the setting a message names, for a lane that is not configured through the plugin', () => {
+    const FLAG = 'the `--tailwind-stylesheet` flag';
+
+    it('names it in the help for entries that disagree', () => {
+        const message = styleModelError(
+            modelOf([root('/app/src/index.css', 'tw'), root('/app/legacy/old.css', null)]),
+            ROOT,
+            FLAG,
+        );
+
+        expect(message).toContain(`list the stylesheets this build loads in ${FLAG}`);
+        expect(message).not.toContain('`tailwindStylesheet` option');
+    });
+
+    it('names it in the help for an entry that did not compile, and for one that never reached Tailwind', () => {
+        const failed = (file: string, reachedTailwind: boolean): StyleEntry => ({
+            file,
+            role: 'failed',
+            failure: { kind: 'stylesheet', reason: 'boom', reachedTailwind },
+        });
+
+        expect(styleModelError(modelOf([failed('/app/a.css', true)]), ROOT, FLAG)).toContain(FLAG);
+        expect(styleModelWarning(modelOf([failed('/app/b.css', false)]), ROOT, FLAG)).toContain(
+            FLAG,
+        );
+    });
+
+    it('names it as what lists a stylesheet that is not there', () => {
+        expect(missingTailwindStylesheetMessage(['app/gone.css'], ROOT, FLAG)).toContain(
+            `${FLAG} lists stylesheets that are not there`,
+        );
     });
 });

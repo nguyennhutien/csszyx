@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
     NEXT_STYLESHEET_FACTS_FILE,
+    prepareNextStylesheetFacts,
     readNextStylesheetFacts,
     resolveNextClassPrefix,
     writeNextStylesheetFacts,
@@ -174,4 +175,23 @@ describe('resolveNextClassPrefix without recorded facts', () => {
 
         expect(answer.ok).toBe(false);
     });
+});
+
+describe('prepareNextStylesheetFacts', () => {
+    it('writes where the prebuild and the loader look for it', async () => {
+        const { root } = app({
+            'package.json': '{ "name": "app" }\n',
+            'app/globals.css': PREFIXED,
+        });
+
+        const { path, record } = await prepareNextStylesheetFacts({
+            explicitRoot: root,
+            cwd: root,
+            cacheDir: 'build/csszyx-cache',
+        });
+
+        expect(path).toBe(join(root, 'build/csszyx-cache', NEXT_STYLESHEET_FACTS_FILE));
+        expect(record.facts?.prefix).toBe('tw');
+        expect(readNextStylesheetFacts(join(root, 'build/csszyx-cache')).ok).toBe(true);
+    }, 60_000);
 });

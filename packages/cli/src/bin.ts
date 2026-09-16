@@ -85,6 +85,7 @@ interface CacNextPrebuildOptions {
     cacheDir?: string;
     ignore?: string;
     importedStaticSz?: boolean;
+    tailwindStylesheet?: string;
     json?: boolean;
 }
 
@@ -96,7 +97,22 @@ interface CacNextWatchOptions {
     cacheDir?: string;
     ignore?: string;
     importedStaticSz?: boolean;
+    tailwindStylesheet?: string;
     debounceMs?: number | string;
+}
+
+/**
+ * A comma-separated option as a list.
+ *
+ * @param value - The option as given, if at all.
+ * @returns The entries, or undefined when the option was not given.
+ */
+function splitList(value: string | undefined): string[] | undefined {
+    if (!value) return undefined;
+    return String(value)
+        .split(',')
+        .map(entry => entry.trim())
+        .filter(entry => entry !== '');
 }
 
 async function runNextPrebuildCommand(
@@ -113,6 +129,7 @@ async function runNextPrebuildCommand(
         pattern,
         extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
         importedStaticSz: options.importedStaticSz,
+        tailwindStylesheet: splitList(options.tailwindStylesheet),
         json: options.json,
     });
     if (code !== 0) {
@@ -133,6 +150,7 @@ async function runNextWatchCommand(
         pattern,
         extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
         importedStaticSz: options.importedStaticSz,
+        tailwindStylesheet: splitList(options.tailwindStylesheet),
         debounceMs: options.debounceMs,
     });
     process.exitCode = code;
@@ -297,6 +315,10 @@ const NEXT_SAFELIST_OPTIONS: ReadonlyArray<readonly [flag: string, description: 
         'Tailwind @source safelist output (default: .csszyx/csszyx-classes.txt)',
     ],
     ['--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)'],
+    [
+        '--tailwind-stylesheet <paths>',
+        'Stylesheets the app loads, relative to --root and comma-separated, when the project also holds others',
+    ],
     ['--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)'],
     [
         '--imported-static-sz',

@@ -10,7 +10,7 @@
 
 import path from 'node:path';
 
-import { runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
+import { prepareNextStylesheetFacts, runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
 import fg from 'fast-glob';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import { colors, icons } from '../utils/terminal-ui.js';
@@ -27,6 +27,8 @@ export interface NextPrebuildCommandOptions {
     pattern?: string;
     extraIgnore?: readonly string[];
     importedStaticSz?: boolean;
+    /** The stylesheets the app loads, when the project also holds others. */
+    tailwindStylesheet?: readonly string[];
     json?: boolean;
 }
 
@@ -57,6 +59,16 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             return 1;
         }
 
+        // The loader and this prebuild lower with the prefix the stylesheets
+        // set, so they are read first, the way a bundler build reads them.
+        const facts = await prepareNextStylesheetFacts({
+            explicitRoot: root,
+            cwd,
+            cacheDir: options.cacheDir,
+            tailwindStylesheet: options.tailwindStylesheet,
+        });
+        if (facts.warning !== null) console.warn(facts.warning);
+
         const result = runNextPrebuild({
             files: matches,
             explicitRoot: root,
@@ -66,6 +78,7 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             safelistOutputFile: options.outputFile,
             cacheDir: options.cacheDir,
             importedStaticSz: options.importedStaticSz,
+            tailwindStylesheet: options.tailwindStylesheet && [...options.tailwindStylesheet],
             config: { mangleVars: false },
             // Versions intentionally omitted: runNextPrebuild's package.json
             // fallback reads the real installed @csszyx/unplugin and

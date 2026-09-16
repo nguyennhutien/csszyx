@@ -2,26 +2,23 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import type { TransformSourceCodeOptions } from '@csszyx/compiler';
 import type { JsonLike } from './next-cache-identity.js';
 import {
     configWithImportedStaticSz,
     resolveNextCrossModule,
     withCrossModuleStatics,
 } from './next-cross-module.js';
+import type { NextLaneOptions } from './next-lane-options.js';
 import { readPackageVersion } from './next-package-version.js';
-import {
-    type AtomicWriteOptions,
-    NEXT_PREBUILD_LOCK_COMMAND,
-    writeNextSafelistShard,
-} from './next-safelist-state.js';
-import {
-    type NextSourceParserMode,
-    type NextSourceTransformOutput,
-    transformNextSource,
-} from './next-source-transformer.js';
+import { NEXT_PREBUILD_LOCK_COMMAND, writeNextSafelistShard } from './next-safelist-state.js';
+import { type NextSourceTransformOutput, transformNextSource } from './next-source-transformer.js';
 import { createNextStateContext, type NextStateContext } from './next-state-context.js';
 import { resolveNextClassPrefix, unreadNextPrefixMessage } from './next-stylesheet-facts.js';
+
+// The CLI records the stylesheet facts before it calls the prebuild, through the
+// same entry it already imports the prebuild from.
+export { prepareNextStylesheetFacts } from './next-stylesheet-facts.js';
+
 import {
     collectNextTransformMetadata,
     createNextSafelistShardFromMetadata,
@@ -33,7 +30,7 @@ import { findPostcssConfigWithoutCsszyx, missingPostcssPluginMessage } from './s
 import { resolveTransformCacheDir } from './transform-cache.js';
 
 /** Serializable options accepted by the Next Turbopack csszyx prebuild core. */
-export interface NextPrebuildOptions {
+export interface NextPrebuildOptions extends NextLaneOptions {
     files: readonly string[];
     /** Receives the one-line notices a prebuild has for the maintainer; `console.warn` by default. */
     warn?: (message: string) => void;
@@ -41,10 +38,6 @@ export interface NextPrebuildOptions {
     loaderRootContext?: string;
     loaderContext?: string;
     cwd?: string;
-    cacheDir?: string;
-    safelistOutputFile?: string;
-    parserMode?: NextSourceParserMode;
-    compilerOptions?: TransformSourceCodeOptions;
     /**
      * Whether a plain exported sz object may be compiled into its importers.
      *
@@ -52,19 +45,6 @@ export interface NextPrebuildOptions {
      * safelist the loader's emitted classes rely on.
      */
     importedStaticSz?: boolean;
-    /** The stylesheets the app loads, when the project also holds others. */
-    tailwindStylesheet?: string | string[];
-    config?: JsonLike;
-    env?: Record<string, string | undefined>;
-    envKeys?: readonly string[];
-    nextVersion?: string;
-    csszyxVersion?: string;
-    compilerVersion?: string;
-    nativeVersion?: string;
-    mode?: 'development' | 'production';
-    astBudget?: number;
-    allowProductionMangling?: boolean;
-    writeOptions?: AtomicWriteOptions;
     createdAt?: string;
     /**
      * What this pass records on the state lock; `csszyx next prebuild` by
