@@ -363,13 +363,12 @@ export default function nextTurboLoader(
             this.async
         ) {
             const done = this.async();
-            readStylesheetsOnce(error.input).then(
-                () => {
-                    const result = runNextTurboLoader(source, this);
-                    done(null, result.code, result.map);
-                },
-                (failure: unknown) => done(failure as Error),
-            );
+            // A rejection reaches `done` as its error argument; the loader
+            // runner reports whatever the read threw.
+            readStylesheetsOnce(error.input).then(() => {
+                const result = runNextTurboLoader(source, this);
+                done(null, result.code, result.map);
+            }, done);
             return;
         }
         if (this.callback) {

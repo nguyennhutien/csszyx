@@ -3018,6 +3018,31 @@ function assertGlobalVarMangleConfig(options: PartialCsszyxConfig): void {
 }
 
 /**
+ * The error for a lane that asked a question the style model answers before
+ * it read the project's stylesheets.
+ *
+ * Only a lane csszyx forgot to wire can get here, so the message says so
+ * rather than guessing a prefix and shipping classes that style nothing.
+ *
+ * @returns The error to throw.
+ */
+function unreadStylesheetsError(): Error {
+    return new Error(
+        "[csszyx] internal error: the build asked for the project's Tailwind prefix before it read the project's stylesheets. This is a csszyx bug; please report it with the bundler you build with.",
+    );
+}
+
+/**
+ * A prefix as a message names it.
+ *
+ * @param prefix - A prefix, or null.
+ * @returns `no prefix`, or the prefix in backticks.
+ */
+function describePrefix(prefix: string | null): string {
+    return prefix === null ? 'no prefix' : `\`${prefix}\``;
+}
+
+/**
  * Core factory that creates the shared state and both pre/post plugins.
  * @param options configuration options
  * @returns pre and post plugins
@@ -4906,21 +4931,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     let unservedClasses: string[] = [];
 
     /**
-     * The error for a lane that asked a question the style model answers before
-     * it read the project's stylesheets.
-     *
-     * Only a lane csszyx forgot to wire can get here, so the message says so
-     * rather than guessing a prefix and shipping classes that style nothing.
-     *
-     * @returns The error to throw.
-     */
-    function unreadStylesheetsError(): Error {
-        return new Error(
-            "[csszyx] internal error: the build asked for the project's Tailwind prefix before it read the project's stylesheets. This is a csszyx bug; please report it with the bundler you build with.",
-        );
-    }
-
-    /**
      * Read the project's stylesheets into the style model.
      *
      * Every lane calls this before its first transform: the model carries the
@@ -5493,16 +5503,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function prefixOf(model: ProjectStyleModel): string | null {
         return model.facts?.prefix ?? null;
-    }
-
-    /**
-     * A prefix as a message names it.
-     *
-     * @param prefix - A prefix, or null.
-     * @returns `none`, or the prefix in backticks.
-     */
-    function describePrefix(prefix: string | null): string {
-        return prefix === null ? 'no prefix' : `\`${prefix}\``;
     }
 
     /**
