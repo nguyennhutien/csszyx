@@ -442,7 +442,13 @@ function tailwindPackageStylesheet(id: string, tailwindRoot: string): string {
     return path.join(tailwindRoot, relative.endsWith('.css') ? relative : `${relative}.css`);
 }
 
-/** Directories a project's own stylesheets never live in. */
+/**
+ * Directories a project's own stylesheets never live in.
+ *
+ * The build output here carries copies of the app's stylesheets. The bundler
+ * plugin's walk skips the same ones, so `csszyx check` does not stop over a
+ * stale copy with an older prefix that the build never reads.
+ */
 const IGNORED_CSS_DIRS = [
     '**/node_modules/**',
     '**/dist/**',
@@ -450,6 +456,10 @@ const IGNORED_CSS_DIRS = [
     '**/.next/**',
     '**/.nuxt/**',
     '**/.astro/**',
+    '**/.turbo/**',
+    '**/target/**',
+    '**/coverage/**',
+    '**/storybook-static/**',
 ];
 
 /**

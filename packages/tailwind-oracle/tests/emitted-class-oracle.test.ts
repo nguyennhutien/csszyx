@@ -637,6 +637,16 @@ describe('findTailwindCssEntry — locating the stylesheet to compile', () => {
         expect(await findTailwindCssEntry(root)).toBeNull();
     });
 
+    it('ignores copies of a stylesheet in build output, as the build walk does', async () => {
+        const root = tempRoot();
+        write(root, {
+            'target/debug/app.css': '@import "tailwindcss";',
+            'coverage/app.css': '@import "tailwindcss";',
+            'storybook-static/app.css': '@import "tailwindcss";',
+        });
+        expect(await findTailwindCssEntry(root)).toBeNull();
+    });
+
     it('prefers the shallowest entry so the result does not depend on scan order', async () => {
         const root = tempRoot();
         write(root, {
