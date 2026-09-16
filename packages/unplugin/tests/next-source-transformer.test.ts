@@ -32,8 +32,37 @@ describe('Next source transformer', () => {
             pluginVersion: PLUGIN_VERSION,
             compilerVersion: COMPILER_VERSION,
             ...overrides,
+            // Every Next lane resolves the prefix before it transforms.
+            compilerOptions: { classPrefix: null, ...overrides.compilerOptions },
         };
     }
+
+    it("refuses to lower a module without the project's Tailwind prefix", () => {
+        // Every Next lane resolves the prefix before it gets here; a caller that
+        // did not is a lane csszyx forgot to wire, and a quiet default would
+        // ship classes that style nothing.
+        expect(() =>
+            transformNextSource({
+                source: 'const App=()=> <div sz={{ p: 4 }} />;',
+                filename: '/repo/src/App.tsx',
+                parserMode: 'wasm',
+                pluginVersion: PLUGIN_VERSION,
+                compilerVersion: COMPILER_VERSION,
+            }),
+        ).toThrow(/internal error[\s\S]*csszyx bug/);
+    });
+
+    it('keys its cache on the prefix, so a prefix change is not served the old classes', () => {
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        const plain = transformNextSource(input({ cacheRoot }));
+        const prefixed = transformNextSource(
+            input({ cacheRoot, compilerOptions: { classPrefix: 'tw' } }),
+        );
+
+        expect(plain.result.code).not.toContain('tw:');
+        expect(prefixed.cacheStatus).not.toBe('hit');
+        expect(prefixed.result.code).toContain('tw:p-4');
+    });
 
     it('transforms static sz source and reuses cache entries', () => {
         const root = tempRoot();
@@ -173,7 +202,7 @@ describe('Next source transformer', () => {
         const against = (table: unknown) => ({
             ...input({ source }),
             cacheRoot,
-            compilerOptions: { crossModuleStatics: table },
+            compilerOptions: { classPrefix: null, crossModuleStatics: table },
         });
         const table = { './styles': { rowSz: { base: { p: 1 } } } };
 

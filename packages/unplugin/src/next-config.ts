@@ -44,6 +44,13 @@ export interface CsszyxTurbopackOptions {
      * `csszyx next prebuild` and `csszyx next watch`.
      */
     importedStaticSz?: boolean;
+    /**
+     * The stylesheets the app loads, relative to the app root, when the
+     * project also holds others: a fixture or an old copy that sets another
+     * Tailwind prefix. Pass the same list to `csszyx next prebuild` and
+     * `csszyx next watch` as `--tailwind-stylesheet`.
+     */
+    tailwindStylesheet?: string | string[];
 }
 
 /** Minimal shape of a Next.js `turbopack` config block (only what we touch). */
@@ -85,6 +92,9 @@ export function csszyxTurbopack(
     }
     if (safelistOutputFile !== undefined) {
         loaderOptions.safelistOutputFile = safelistOutputFile;
+    }
+    if (options.tailwindStylesheet !== undefined) {
+        loaderOptions.tailwindStylesheet = options.tailwindStylesheet;
     }
 
     // `...existing` preserves the caller's own `resolveAlias` (e.g. maplibre).

@@ -49,6 +49,20 @@ describe('csszyxTurbopack', () => {
         expect(rule.loaders[0].options.config).toEqual({ mangleVars: false });
     });
 
+    it('forwards the stylesheets the app loads to the loader', () => {
+        const rule = csszyxTurbopack({}, { tailwindStylesheet: ['app/globals.css'] }).rules?.[
+            '*.tsx'
+        ] as { loaders: Array<{ options: Record<string, unknown> }> };
+        expect(rule.loaders[0].options.tailwindStylesheet).toEqual(['app/globals.css']);
+    });
+
+    it('omits tailwindStylesheet when nothing names one', () => {
+        const rule = csszyxTurbopack().rules?.['*.tsx'] as {
+            loaders: Array<{ options: Record<string, unknown> }>;
+        };
+        expect('tailwindStylesheet' in rule.loaders[0].options).toBe(false);
+    });
+
     it('honors a custom glob', () => {
         const tp = csszyxTurbopack({}, { glob: 'app/**/*.tsx' });
         expect(tp.rules?.['app/**/*.tsx']).toBeDefined();

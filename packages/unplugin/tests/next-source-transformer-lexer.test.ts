@@ -42,6 +42,8 @@ function base(overrides: Partial<Parameters<typeof transformNextSource>[0]> = {}
         pluginVersion: PLUGIN_VERSION,
         compilerVersion: COMPILER_VERSION,
         ...overrides,
+        // Every Next lane resolves the prefix before it transforms.
+        compilerOptions: { classPrefix: null, ...overrides.compilerOptions },
     };
 }
 

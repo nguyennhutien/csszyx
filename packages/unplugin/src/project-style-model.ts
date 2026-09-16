@@ -206,6 +206,22 @@ function relativeName(root: string, file: string): string {
     return path.relative(root, file).split(path.sep).join('/');
 }
 
+/**
+ * What stops the build when `tailwindStylesheet` names a file that is not there.
+ *
+ * A mistyped path would otherwise leave nothing to read the prefix from.
+ *
+ * @param missing - The listed paths that do not exist, as the author wrote them.
+ * @param root - The project root they were resolved against.
+ * @returns The message.
+ */
+export function missingTailwindStylesheetMessage(missing: readonly string[], root: string): string {
+    return (
+        `[csszyx] the csszyx \`tailwindStylesheet\` option lists stylesheets that are not there: ${missing.join(', ')} (relative to ${root}).\n` +
+        '  help: list the stylesheet that imports Tailwind for this build, relative to the project root.'
+    );
+}
+
 /** One entry's compiled answers. */
 interface CompiledEntry {
     facts: StylesheetFacts;
@@ -236,6 +252,20 @@ function agreedFacts(first: CompiledEntry, rest: readonly CompiledEntry[]): Styl
 const MAY_REACH_TAILWIND = /@(?:import|tailwind)\b/;
 
 /**
+ * Whether a stylesheet could reach Tailwind, read from its text alone.
+ *
+ * A stylesheet without an `@import` or an `@tailwind` directive cannot, so a
+ * caller that has only such stylesheets knows there is no prefix without
+ * compiling anything.
+ *
+ * @param css - Stylesheet text.
+ * @returns False only when the stylesheet cannot reach Tailwind.
+ */
+export function mayReachTailwind(css: string): boolean {
+    return MAY_REACH_TAILWIND.test(css);
+}
+
+/**
  * The path a stylesheet resolves to on disk, so one reached through a symlink
  * and one named directly compare equal.
  *
@@ -248,6 +278,141 @@ function realPath(file: string): string {
     } catch {
         return file;
     }
+}
+
+/** What one stylesheet is before any root is compiled. */
+type ClassifiedStylesheet =
+    | { role: 'not-root' }
+    | { role: 'failed'; failure: NonNullable<StyleEntry['failure']> }
+    | { role: 'root'; css: string; imports: readonly string[] };
+
+/**
+ * Read one stylesheet and decide whether it is a root, from its text and a
+ * compile that reports features only.
+ *
+ * @param file - Stylesheet path.
+ * @param resolveFrom - Project directory whose `package.json` anchors resolution.
+ * @param aliases - The bundler's aliases, tsconfig paths included.
+ * @returns What the stylesheet is, with the text and imports of a root.
+ */
+async function classifyStylesheet(
+    file: string,
+    resolveFrom: string,
+    aliases: readonly StylesheetAlias[],
+): Promise<ClassifiedStylesheet> {
+    let css: string;
+    try {
+        css = await readFile(file, 'utf8');
+    } catch {
+        // A stylesheet that cannot be read cannot be an entry point.
+        return { role: 'not-root' };
+    }
+    if (!mayReachTailwind(css)) return { role: 'not-root' };
+    const role = await readStylesheetRole({
+        resolveFrom,
+        css,
+        cssBase: path.dirname(file),
+        aliases,
+    });
+    if (!role.ok) {
+        return {
+            role: 'failed',
+            failure: {
+                kind: role.kind,
+                reason: role.reason,
+                reachedTailwind: role.reachedTailwind,
+            },
+        };
+    }
+    return role.utilities ? { role: 'root', css, imports: role.imports } : { role: 'not-root' };
+}
+
+/** Every stylesheet classified, with where its roots and failures sit. */
+interface ClassifiedStylesheets {
+    /** One entry per stylesheet, in the order given; roots not compiled yet. */
+    entries: StyleEntry[];
+    /** Each root's index in `entries`, with its text. */
+    roots: Array<{ index: number; css: string }>;
+    /** The index in `entries` of each stylesheet that did not compile. */
+    failed: number[];
+    /** Real paths of every stylesheet a root imports. */
+    importedByRoots: Set<string>;
+}
+
+/**
+ * Classify every stylesheet the caller walked.
+ *
+ * @param cssFiles - Stylesheet paths the caller already walked.
+ * @param resolveFrom - Project directory whose `package.json` anchors resolution.
+ * @param aliases - The bundler's aliases, tsconfig paths included.
+ * @returns The entries, and where the roots and failures among them are.
+ */
+async function classifyStylesheets(
+    cssFiles: readonly string[],
+    resolveFrom: string,
+    aliases: readonly StylesheetAlias[],
+): Promise<ClassifiedStylesheets> {
+    const classified: ClassifiedStylesheets = {
+        entries: [],
+        roots: [],
+        failed: [],
+        importedByRoots: new Set<string>(),
+    };
+    for (const file of cssFiles) {
+        const stylesheet = await classifyStylesheet(file, resolveFrom, aliases);
+        if (stylesheet.role === 'root') {
+            const index = classified.entries.push({ file, role: 'root' }) - 1;
+            classified.roots.push({ index, css: stylesheet.css });
+            for (const imported of stylesheet.imports) {
+                classified.importedByRoots.add(realPath(imported));
+            }
+        } else if (stylesheet.role === 'failed') {
+            const index =
+                classified.entries.push({ file, role: 'failed', failure: stylesheet.failure }) - 1;
+            classified.failed.push(index);
+        } else {
+            classified.entries.push({ file, role: 'not-root' });
+        }
+    }
+    return classified;
+}
+
+/**
+ * Build the design system for one root nothing else imports.
+ *
+ * @param file - Stylesheet path.
+ * @param css - Its text.
+ * @param resolveFrom - Project directory whose `package.json` anchors resolution.
+ * @param aliases - The bundler's aliases, tsconfig paths included.
+ * @returns The root's entry, and its compiled answers unless it failed.
+ */
+async function compileRoot(
+    file: string,
+    css: string,
+    resolveFrom: string,
+    aliases: readonly StylesheetAlias[],
+): Promise<{ entry: StyleEntry; compiled: CompiledEntry | null }> {
+    const oracle = await createEmittedClassOracle({
+        resolveFrom,
+        css,
+        cssBase: path.dirname(file),
+        aliases,
+    });
+    if (!oracle.ok) {
+        return {
+            entry: {
+                file,
+                role: 'failed',
+                // It compiled as a root a moment ago, so it had reached Tailwind.
+                failure: { kind: oracle.kind, reason: oracle.reason, reachedTailwind: true },
+            },
+            compiled: null,
+        };
+    }
+    return {
+        entry: { file, role: 'root', facts: oracle.facts },
+        compiled: { facts: oracle.facts, findDead: classes => oracle.findDead(classes) },
+    };
 }
 
 /**
@@ -274,48 +439,11 @@ export async function openProjectStyleModel(
     cssFiles: readonly string[],
     aliases: readonly StylesheetAlias[] = [],
 ): Promise<ProjectStyleModel> {
-    const entries: StyleEntry[] = [];
-    const roots: Array<{ index: number; css: string }> = [];
-    const failed: number[] = [];
-    const importedByRoots = new Set<string>();
-    for (const file of cssFiles) {
-        let css: string;
-        try {
-            css = await readFile(file, 'utf8');
-        } catch {
-            // A stylesheet that cannot be read cannot be an entry point.
-            entries.push({ file, role: 'not-root' });
-            continue;
-        }
-        if (!MAY_REACH_TAILWIND.test(css)) {
-            entries.push({ file, role: 'not-root' });
-            continue;
-        }
-        const role = await readStylesheetRole({
-            resolveFrom,
-            css,
-            cssBase: path.dirname(file),
-            aliases,
-        });
-        if (!role.ok) {
-            failed.push(
-                entries.push({
-                    file,
-                    role: 'failed',
-                    failure: {
-                        kind: role.kind,
-                        reason: role.reason,
-                        reachedTailwind: role.reachedTailwind,
-                    },
-                }) - 1,
-            );
-        } else if (!role.utilities) {
-            entries.push({ file, role: 'not-root' });
-        } else {
-            roots.push({ index: entries.push({ file, role: 'root' }) - 1, css });
-            for (const imported of role.imports) importedByRoots.add(realPath(imported));
-        }
-    }
+    const { entries, roots, failed, importedByRoots } = await classifyStylesheets(
+        cssFiles,
+        resolveFrom,
+        aliases,
+    );
 
     const compiled: CompiledEntry[] = [];
     for (const { index, css } of roots) {
@@ -324,23 +452,9 @@ export async function openProjectStyleModel(
             entries[index] = { file, role: 'imported' };
             continue;
         }
-        const oracle = await createEmittedClassOracle({
-            resolveFrom,
-            css,
-            cssBase: path.dirname(file),
-            aliases,
-        });
-        if (!oracle.ok) {
-            entries[index] = {
-                file,
-                role: 'failed',
-                // It compiled as a root a moment ago, so it had reached Tailwind.
-                failure: { kind: oracle.kind, reason: oracle.reason, reachedTailwind: true },
-            };
-            continue;
-        }
-        entries[index] = { file, role: 'root', facts: oracle.facts };
-        compiled.push({ facts: oracle.facts, findDead: classes => oracle.findDead(classes) });
+        const root = await compileRoot(file, css, resolveFrom, aliases);
+        entries[index] = root.entry;
+        if (root.compiled !== null) compiled.push(root.compiled);
     }
     // A partial that fails on its own compiles as part of the root that imports
     // it, which is how the build reads it.

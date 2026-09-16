@@ -149,6 +149,7 @@ export {
 } from './safelist-source.js';
 
 import {
+    missingTailwindStylesheetMessage,
     openProjectStyleModel,
     type ProjectStyleModel,
     styleModelError,
@@ -4933,10 +4934,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             .filter(entry => !fs.existsSync(entry.absolute))
             .map(entry => entry.file);
         if (missing.length > 0) {
-            throw new Error(
-                `[csszyx] the csszyx \`tailwindStylesheet\` option lists stylesheets that are not there: ${missing.join(', ')} (relative to ${state.rootDir}).\n` +
-                    '  help: list the stylesheet that imports Tailwind for this build, relative to the project root.',
-            );
+            throw new Error(missingTailwindStylesheetMessage(missing, state.rootDir));
         }
         // A named list is the whole answer. The walk also meets fixtures and
         // old copies, which is exactly why an author names the real ones.

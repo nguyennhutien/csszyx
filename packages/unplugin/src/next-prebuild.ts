@@ -21,6 +21,7 @@ import {
     transformNextSource,
 } from './next-source-transformer.js';
 import { createNextStateContext, type NextStateContext } from './next-state-context.js';
+import { resolveNextClassPrefix, unreadNextPrefixMessage } from './next-stylesheet-facts.js';
 import {
     collectNextTransformMetadata,
     createNextSafelistShardFromMetadata,
@@ -51,6 +52,8 @@ export interface NextPrebuildOptions {
      * safelist the loader's emitted classes rely on.
      */
     importedStaticSz?: boolean;
+    /** The stylesheets the app loads, when the project also holds others. */
+    tailwindStylesheet?: string | string[];
     config?: JsonLike;
     env?: Record<string, string | undefined>;
     envKeys?: readonly string[];
@@ -147,6 +150,14 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
         context.root,
         path.relative(context.root, context.cacheDir),
     );
+    const prefix = resolveNextClassPrefix({
+        root: context.root,
+        cacheDir: context.cacheDir,
+        tailwindStylesheet: [options.tailwindStylesheet ?? []].flat(),
+    });
+    if (!prefix.ok) {
+        throw new Error(unreadNextPrefixMessage(context.root, prefix.reason, 'the Next prebuild'));
+    }
 
     const files: NextPrebuildFileResult[] = [];
     let scannedCount = 0;
@@ -175,7 +186,10 @@ export function runNextPrebuild(options: NextPrebuildOptions): NextPrebuildResul
             source,
             filename,
             parserMode: options.parserMode ?? 'rust',
-            compilerOptions: withCrossModuleStatics(options.compilerOptions, crossModule.statics),
+            compilerOptions: {
+                ...withCrossModuleStatics(options.compilerOptions, crossModule.statics),
+                classPrefix: prefix.prefix,
+            },
             cacheRoot,
             pluginVersion: csszyxVersion,
             compilerVersion,

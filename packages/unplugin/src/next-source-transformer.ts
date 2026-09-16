@@ -48,6 +48,13 @@ export interface NextSourceTransformOutput {
  * @returns Transform result and cache metadata.
  */
 export function transformNextSource(input: NextSourceTransformInput): NextSourceTransformOutput {
+    // Null is a real answer: no stylesheet sets a prefix. Undefined means the
+    // lane never asked, which only a lane csszyx forgot to wire can do.
+    if (input.compilerOptions?.classPrefix === undefined) {
+        throw new Error(
+            "[csszyx] internal error: a Next lane asked the engine to lower a module before it read the project's Tailwind prefix. This is a csszyx bug; please report it with the Next.js version you build with.",
+        );
+    }
     const filename = normalizeSourceFilename(input.filename);
     const producer: TransformCacheProducer = input.parserMode;
     const cacheInput = createNextSourceTransformCacheInput(input, filename, producer);
@@ -277,6 +284,9 @@ function createNextSourceTransformCacheInput(
         producer,
         astBudget: input.astBudget ?? input.compilerOptions?.astBudget,
         mangleVars: input.compilerOptions?.mangleVars,
+        // A transform made under one Tailwind prefix emits classes a build under
+        // another does not serve.
+        classPrefix: input.compilerOptions?.classPrefix,
         mangleVarHoistMaxDepth: input.compilerOptions?.mangleVarHoistMaxDepth,
         globalVarAliases: normalizeGlobalVarAliasesForCache(
             input.compilerOptions?.globalVarAliases,
