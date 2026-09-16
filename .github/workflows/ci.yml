@@ -283,7 +283,7 @@ jobs:
 
       # Reads the built CLI chunks, so it can only run once dist exists.
       - name: CLI reaches tailwindcss only through a dynamic import
-        run: node --test scripts/cli-tailwind-import.test.mjs
+        run: node --test scripts/build-tests/cli-tailwind-import.test.mjs
 
       - name: Type check
         run: pnpm type-check

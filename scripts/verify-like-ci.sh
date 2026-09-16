@@ -78,8 +78,6 @@ pnpm lint:fast
 echo "[verify-like-ci] Repository tooling suites (generators, release config, workflow helpers)..."
 pnpm test:scripts
 node .github/scripts/validate-release-please-config.mjs
-node --test scripts/validate-commit-message-policy.test.mjs
-node --test scripts/napi-pin.test.mjs
 # The gate itself needs the network and lives in the Security workflow; its
 # classification rule is pure and is checked here, where a wrong one would
 # otherwise only show up during an outage.
@@ -205,7 +203,7 @@ pnpm build
 # Reads packages/cli/dist, which the wipe above removed and the build just
 # wrote; placed before the build it skipped on the missing input and passed.
 echo "[verify-like-ci] CLI must reach tailwindcss only through a dynamic import (optional peer)..."
-node --test scripts/cli-tailwind-import.test.mjs
+node --test scripts/build-tests/cli-tailwind-import.test.mjs
 
 # After the build for the same reason the size gate is: several suites spawn
 # the CLI from `dist`, and without it they fail to import and the run reports

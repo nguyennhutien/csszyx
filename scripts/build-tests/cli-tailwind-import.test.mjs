@@ -18,7 +18,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-const DIST = path.resolve(import.meta.dirname, '../packages/cli/dist');
+const DIST = path.resolve(import.meta.dirname, '../../packages/cli/dist');
 
 /**
  * Every `.mjs` file below a directory.
