@@ -701,6 +701,29 @@ A build **error**. A mistyped path would otherwise leave nothing to read the
 prefix from. Fix the path.
 
 ```text
+[csszyx] stylesheets that reach Tailwind did not compile, so csszyx cannot read the prefix its classes need:
+  {file}: {reason}
+  help: fix the stylesheet; if this build does not load it, list the stylesheets it does load in the csszyx `tailwindStylesheet` option.
+  note: no module was transformed; without the prefix every emitted class could style nothing.
+```
+
+A build **error**. The stylesheet imports Tailwind, directly or through another
+stylesheet, and something it imports could not be loaded, so the prefix it sets
+is unknown. `{reason}` is the first line of what the compile reported, usually a
+path that does not resolve. Fix the import. If the file is a leftover the app no
+longer loads, name the stylesheets it does load in `tailwindStylesheet`.
+
+```text
+[csszyx] these stylesheets did not compile and never reached Tailwind, so csszyx read the prefix without them:
+  {file}: {reason}
+  help: if the app loads one of them, fix its import; otherwise list the stylesheets the app loads in the csszyx `tailwindStylesheet` option.
+```
+
+A warning; the build carries on. A stylesheet that never reaches Tailwind cannot
+set a prefix, so it does not change what csszyx emits. It is listed because a
+broken import in a file the app does load is still worth fixing.
+
+```text
 [csszyx] your Tailwind entry sets important, which csszyx does not emit for yet: every utility is `!important`, so a class csszyx emits cannot override one the project already applies.
   help: drop important from the `@import "tailwindcss"` line, or keep it and style those elements with `className` until csszyx supports it.
 ```

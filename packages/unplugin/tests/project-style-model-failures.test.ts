@@ -66,6 +66,8 @@ describe('openProjectStyleModel failures', () => {
                 failure: {
                     kind: 'environment',
                     reason: 'tailwindcss no longer reports an unservable class as null',
+                    // It compiled as a root first, so it had reached Tailwind.
+                    reachedTailwind: true,
                 },
             },
         ]);

@@ -155,6 +155,44 @@ describe('stylesheets that give no single prefix', () => {
     }, 60_000);
 });
 
+describe('stylesheets that did not compile', () => {
+    it('stops the build when one that reaches Tailwind is broken', async () => {
+        const root = tailwindProject('csszyx-prefix-broken-', {
+            'src/index.css': '@import "tailwindcss" prefix(tw);\n@import "./gone.css";\n',
+            'src/App.tsx': APP,
+        });
+        const call = callHooks(vitePlugin(OPTIONS) as unknown as Record<string, unknown>[]);
+
+        const message = await call('configResolved', { root, command: 'build' }).then(
+            () => '',
+            (error: Error) => error.message,
+        );
+
+        expect(message).toContain('did not compile');
+        expect(message).toMatch(/src\/index\.css: /);
+    }, 60_000);
+
+    it('warns about a stray one that never reaches Tailwind, and builds', async () => {
+        const root = tailwindProject('csszyx-prefix-stray-', {
+            'src/index.css': PREFIXED,
+            'legacy/old.css': '@import "./gone.css";\n.card { color: red; }\n',
+            'src/App.tsx': APP,
+        });
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const call = callHooks(vitePlugin(OPTIONS) as unknown as Record<string, unknown>[]);
+
+        await call('configResolved', { root, command: 'build' });
+        const result = (await call('transform', APP, join(root, 'src/App.tsx'))) as {
+            code: string;
+        };
+
+        expect(result.code).toContain('tw:p-4');
+        expect(warn.mock.calls.map(args => args.join(' ')).join('\n')).toMatch(
+            /never reached Tailwind[\s\S]*legacy\/old\.css: /,
+        );
+    }, 60_000);
+});
+
 describe('the lanes without a prescan', () => {
     it('rollup reads the prefix at build start', async () => {
         const root = project(PREFIXED);

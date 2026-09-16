@@ -198,6 +198,13 @@ export interface OracleSkip {
     ok: false;
     kind: OracleSkipKind;
     reason: string;
+    /**
+     * For a stylesheet that did not compile: whether the compile had reached
+     * Tailwind before it failed. A broken Tailwind entry had; a plain
+     * stylesheet with a stale `@import` never did, and so it cannot set a
+     * prefix. Absent where no compile ran.
+     */
+    reachedTailwind?: boolean;
 }
 
 /**
@@ -587,10 +594,15 @@ export async function readStylesheetRole(
         resolver: await projectResolver(options.resolveFrom),
     };
     const imports: string[] = [];
+    let reachedTailwind = false;
     try {
         const compiled = await compile(options.css, {
             base: options.cssBase,
             loadStylesheet: async (id, base) => {
+                // Noted on the request, not after the read: Tailwind asks for
+                // every import at once, and a failing sibling rejects the
+                // compile while this read is still pending.
+                if (id === 'tailwindcss' || id.startsWith('tailwindcss/')) reachedTailwind = true;
                 const loaded = await loadStylesheet(
                     id,
                     base,
@@ -606,9 +618,12 @@ export async function readStylesheetRole(
         const utilities = tailwind.utilitiesFeature ?? UTILITIES_FEATURE;
         return { ok: true, utilities: (compiled.features & utilities) !== 0, imports };
     } catch (error) {
-        return stylesheetSkip(
-            `the stylesheet did not compile: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        return {
+            ...stylesheetSkip(
+                `the stylesheet did not compile: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+            reachedTailwind,
+        };
     }
 }
 

@@ -152,6 +152,7 @@ import {
     openProjectStyleModel,
     type ProjectStyleModel,
     styleModelError,
+    styleModelWarning,
     unsupportedStylesheetFactsMessage,
 } from './project-style-model.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
@@ -4936,6 +4937,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         styleModel = await openProjectStyleModel(state.rootDir, candidates, specifierAliases);
         const problem = styleModelError(styleModel, state.rootDir);
         if (problem !== null) throw new Error(problem);
+        const skipped = styleModelWarning(styleModel, state.rootDir);
+        if (skipped !== null) emitWarning(skipped);
     }
 
     /**

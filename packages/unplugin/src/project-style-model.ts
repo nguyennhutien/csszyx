@@ -49,7 +49,7 @@ export interface StyleEntry {
     /** What its `@import "tailwindcss"` line settled, for a root. */
     facts?: StylesheetFacts;
     /** Why it could not be compiled, for a failed entry. */
-    failure?: { kind: OracleSkipKind; reason: string };
+    failure?: { kind: OracleSkipKind; reason: string; reachedTailwind?: boolean };
 }
 
 /** What the project's stylesheets say, from one compile of each root. */
@@ -106,6 +106,17 @@ export function unsupportedStylesheetFactsMessage(facts: StylesheetFacts): strin
  * @returns The message, or null when the stylesheets agree.
  */
 export function styleModelError(model: ProjectStyleModel, root: string): string | null {
+    // First: a broken entry leaves the facts of the others unreliable, so a
+    // disagreement between those is not the thing to fix.
+    const broken = failedStylesheets(model, root, true);
+    if (broken.length > 0) {
+        return [
+            '[csszyx] stylesheets that reach Tailwind did not compile, so csszyx cannot read the prefix its classes need:',
+            ...broken,
+            '  help: fix the stylesheet; if this build does not load it, list the stylesheets it does load in the csszyx `tailwindStylesheet` option.',
+            '  note: no module was transformed; without the prefix every emitted class could style nothing.',
+        ].join('\n');
+    }
     const roots: Array<{ file: string; facts: StylesheetFacts }> = [];
     for (const entry of model.entries) {
         // Only a root decides: one another root imports is served by that
@@ -118,7 +129,7 @@ export function styleModelError(model: ProjectStyleModel, root: string): string 
     // no class, so a disagreement over it cannot make one of them dead.
     if (new Set(roots.map(entry => entry.facts.prefix)).size <= 1) return null;
     const named = roots.map(entry => ({
-        file: path.relative(root, entry.file).split(path.sep).join('/'),
+        file: relativeName(root, entry.file),
         prefix: entry.facts.prefix === null ? 'no prefix' : `prefix(${entry.facts.prefix})`,
     }));
     const width = Math.max(...named.map(entry => entry.file.length));
@@ -128,6 +139,71 @@ export function styleModelError(model: ProjectStyleModel, root: string): string 
         '  help: give every entry the same `@import "tailwindcss"` line, or list the stylesheets this build loads in the csszyx `tailwindStylesheet` option.',
         '  note: the build stopped before transforming any module; nothing was written.',
     ].join('\n');
+}
+
+/**
+ * What the build should say, without stopping, about stylesheets it could not
+ * read.
+ *
+ * @param model - The opened style model.
+ * @param root - Project root, so the message names files the way the author does.
+ * @returns The message, or null when there is nothing to say.
+ */
+export function styleModelWarning(model: ProjectStyleModel, root: string): string | null {
+    const skipped = failedStylesheets(model, root, false);
+    if (skipped.length === 0) return null;
+    return [
+        '[csszyx] these stylesheets did not compile and never reached Tailwind, so csszyx read the prefix without them:',
+        ...skipped,
+        '  help: if the app loads one of them, fix its import; otherwise list the stylesheets the app loads in the csszyx `tailwindStylesheet` option.',
+    ].join('\n');
+}
+
+/**
+ * The stylesheets that did not compile, split by whether they reached Tailwind.
+ *
+ * An `environment` skip is left out: with no Tailwind 4 to ask there is no
+ * prefix to lose, and a project that does not build with Tailwind must not
+ * hear about it.
+ *
+ * @param model - The opened style model.
+ * @param root - Project root, for the names.
+ * @param reachedTailwind - Which half to return.
+ * @returns One indented `file: reason` line per stylesheet.
+ */
+function failedStylesheets(
+    model: ProjectStyleModel,
+    root: string,
+    reachedTailwind: boolean,
+): string[] {
+    const lines: string[] = [];
+    for (const entry of model.entries) {
+        const failure = entry.failure;
+        if (
+            failure?.kind !== 'stylesheet' ||
+            (failure.reachedTailwind === true) !== reachedTailwind
+        ) {
+            continue;
+        }
+        // The oracle's reason restates what the heading already says, and a
+        // resolver appends a require stack no author needs to read here.
+        const [first = ''] = failure.reason
+            .replace(/^the stylesheet did not compile: /, '')
+            .split('\n');
+        lines.push(`  ${relativeName(root, entry.file)}: ${first}`);
+    }
+    return lines;
+}
+
+/**
+ * A stylesheet path the way the author writes it: relative, with forward slashes.
+ *
+ * @param root - Project root.
+ * @param file - Absolute stylesheet path.
+ * @returns The relative name.
+ */
+function relativeName(root: string, file: string): string {
+    return path.relative(root, file).split(path.sep).join('/');
 }
 
 /** One entry's compiled answers. */
@@ -226,7 +302,11 @@ export async function openProjectStyleModel(
                 entries.push({
                     file,
                     role: 'failed',
-                    failure: { kind: role.kind, reason: role.reason },
+                    failure: {
+                        kind: role.kind,
+                        reason: role.reason,
+                        reachedTailwind: role.reachedTailwind,
+                    },
                 }) - 1,
             );
         } else if (!role.utilities) {
@@ -254,7 +334,8 @@ export async function openProjectStyleModel(
             entries[index] = {
                 file,
                 role: 'failed',
-                failure: { kind: oracle.kind, reason: oracle.reason },
+                // It compiled as a root a moment ago, so it had reached Tailwind.
+                failure: { kind: oracle.kind, reason: oracle.reason, reachedTailwind: true },
             };
             continue;
         }
