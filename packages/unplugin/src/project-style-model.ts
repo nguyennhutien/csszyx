@@ -98,6 +98,38 @@ export function unsupportedStylesheetFactsMessage(facts: StylesheetFacts): strin
     );
 }
 
+/**
+ * What stops the build when the project's stylesheets give no single answer.
+ *
+ * @param model - The opened style model.
+ * @param root - Project root, so the message names files the way the author does.
+ * @returns The message, or null when the stylesheets agree.
+ */
+export function styleModelError(model: ProjectStyleModel, root: string): string | null {
+    const roots: Array<{ file: string; facts: StylesheetFacts }> = [];
+    for (const entry of model.entries) {
+        // Only a root decides: one another root imports is served by that
+        // root's import line, and everything else generates no utility.
+        if (entry.role === 'root' && entry.facts !== undefined) {
+            roots.push({ file: entry.file, facts: entry.facts });
+        }
+    }
+    // `important` is left out on purpose: it forces declarations, it renames
+    // no class, so a disagreement over it cannot make one of them dead.
+    if (new Set(roots.map(entry => entry.facts.prefix)).size <= 1) return null;
+    const named = roots.map(entry => ({
+        file: path.relative(root, entry.file).split(path.sep).join('/'),
+        prefix: entry.facts.prefix === null ? 'no prefix' : `prefix(${entry.facts.prefix})`,
+    }));
+    const width = Math.max(...named.map(entry => entry.file.length));
+    return [
+        '[csszyx] your Tailwind entries set different prefixes, so no class name csszyx emits can be served by all of them:',
+        ...named.map(entry => `  ${entry.file.padEnd(width)}   ${entry.prefix}`),
+        '  help: give every entry the same `@import "tailwindcss"` line, or list the stylesheets this build loads in the csszyx `tailwindStylesheet` option.',
+        '  note: the build stopped before transforming any module; nothing was written.',
+    ].join('\n');
+}
+
 /** One entry's compiled answers. */
 interface CompiledEntry {
     facts: StylesheetFacts;

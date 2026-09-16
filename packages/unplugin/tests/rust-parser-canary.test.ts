@@ -50,6 +50,10 @@ describe('rust parser real-source canary', () => {
     } = {}): Promise<TransformHook> {
         const [prePlugin] = vitePlugin({
             build: { parser: 'rust', cache },
+            // The repository holds many apps and a prefixed oracle fixture, so its
+            // stylesheets disagree on the prefix; name the one app this reads.
+            tailwindStylesheet:
+                root === REPO_ROOT ? 'playground/vite-react/src/index.css' : undefined,
         }) as TransformHook[];
         await prePlugin.configResolved?.({ root });
         return prePlugin;

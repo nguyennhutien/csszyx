@@ -151,6 +151,7 @@ export {
 import {
     openProjectStyleModel,
     type ProjectStyleModel,
+    styleModelError,
     unsupportedStylesheetFactsMessage,
 } from './project-style-model.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
@@ -3206,6 +3207,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // lazily once the project root is known (configResolved / beforeCompile),
     // because the entries resolve relative to that root.
     const compileSources = options.compileSources ?? [];
+    // The stylesheets this build loads, when the author named them. Resolved
+    // against the project root once it is known, like `compileSources`.
+    const tailwindStylesheets = [options.tailwindStylesheet ?? []].flat();
     // `quiet` mutes csszyx build warnings (e.g. to focus on another tool's
     // output). Errors that throw are unaffected — only warnings are silenced.
     // `'nudges'` keeps the reports that say output is missing.
@@ -4910,11 +4914,28 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Nothing; the model lands in `styleModel`.
      */
     async function openStyleModel(): Promise<void> {
-        styleModel = await openProjectStyleModel(
-            state.rootDir,
-            [...new Set([...projectCssFiles, ...jsImportedCssFiles])],
-            specifierAliases,
-        );
+        const listed = tailwindStylesheets.map(file => ({
+            file,
+            absolute: path.resolve(state.rootDir, file),
+        }));
+        const missing = listed
+            .filter(entry => !fs.existsSync(entry.absolute))
+            .map(entry => entry.file);
+        if (missing.length > 0) {
+            throw new Error(
+                `[csszyx] the csszyx \`tailwindStylesheet\` option lists stylesheets that are not there: ${missing.join(', ')} (relative to ${state.rootDir}).\n` +
+                    '  help: list the stylesheet that imports Tailwind for this build, relative to the project root.',
+            );
+        }
+        // A named list is the whole answer. The walk also meets fixtures and
+        // old copies, which is exactly why an author names the real ones.
+        const candidates =
+            listed.length > 0
+                ? listed.map(entry => entry.absolute)
+                : [...new Set([...projectCssFiles, ...jsImportedCssFiles])];
+        styleModel = await openProjectStyleModel(state.rootDir, candidates, specifierAliases);
+        const problem = styleModelError(styleModel, state.rootDir);
+        if (problem !== null) throw new Error(problem);
     }
 
     /**

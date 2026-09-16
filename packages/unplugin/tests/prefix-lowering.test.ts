@@ -93,6 +93,68 @@ describe('the vite lane', () => {
     }, 60_000);
 });
 
+describe('stylesheets that give no single prefix', () => {
+    /**
+     * A project whose app entry sets \`prefix(tw)\` beside a stray stylesheet that
+     * sets none, which the build walk finds as well.
+     *
+     * @returns Absolute project root.
+     */
+    function mixedProject(): string {
+        return tailwindProject('csszyx-prefix-mixed-', {
+            'src/index.css': PREFIXED,
+            'legacy/old.css': '@import "tailwindcss";\n',
+            'src/App.tsx': APP,
+        });
+    }
+
+    it('stops the build and names each entry', async () => {
+        const root = mixedProject();
+        const call = callHooks(vitePlugin(OPTIONS) as unknown as Record<string, unknown>[]);
+
+        const message = await call('configResolved', { root, command: 'build' }).then(
+            () => '',
+            (error: Error) => error.message,
+        );
+
+        expect(message).toContain('set different prefixes');
+        // In walk order, which is the filesystem's, so each line on its own.
+        expect(message).toMatch(/src\/index\.css\s+prefix\(tw\)/);
+        expect(message).toMatch(/legacy\/old\.css\s+no prefix/);
+    }, 60_000);
+
+    it('reads only the stylesheets `tailwindStylesheet` lists', async () => {
+        const root = mixedProject();
+        const call = callHooks(
+            vitePlugin({ ...OPTIONS, tailwindStylesheet: 'src/index.css' }) as unknown as Record<
+                string,
+                unknown
+            >[],
+        );
+
+        await call('configResolved', { root, command: 'build' });
+        const result = (await call('transform', APP, join(root, 'src/App.tsx'))) as {
+            code: string;
+        };
+
+        expect(result.code).toContain('tw:p-4');
+    }, 60_000);
+
+    it('stops the build when `tailwindStylesheet` lists a file that is not there', async () => {
+        const root = mixedProject();
+        const call = callHooks(
+            vitePlugin({ ...OPTIONS, tailwindStylesheet: ['src/gone.css'] }) as unknown as Record<
+                string,
+                unknown
+            >[],
+        );
+
+        await expect(call('configResolved', { root, command: 'build' })).rejects.toThrow(
+            /tailwindStylesheet[\s\S]*src\/gone\.css/,
+        );
+    }, 60_000);
+});
+
 describe('the lanes without a prescan', () => {
     it('rollup reads the prefix at build start', async () => {
         const root = project(PREFIXED);

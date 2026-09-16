@@ -653,6 +653,24 @@ export type PartialCsszyxConfig = {
     compileSources?: string[];
 
     /**
+     * The stylesheets this build loads, when the project also holds others.
+     *
+     * csszyx writes the Tailwind prefix before every class it emits, so it has
+     * to read that prefix first: it compiles the project's stylesheets and
+     * takes the one their `@import "tailwindcss"` line sets. It finds them by
+     * walking the project, which also finds a fixture, a Storybook copy or an
+     * old stylesheet the app no longer loads. When those set a different prefix
+     * the build stops rather than guess which one is real.
+     *
+     * Listing the stylesheets here makes them the whole answer: nothing else is
+     * read for the prefix. Paths are relative to the project root; a listed
+     * path that does not exist stops the build.
+     *
+     * @example 'src/index.css'
+     */
+    tailwindStylesheet?: string | string[];
+
+    /**
      * Warn when, inside a monorepo, the Tailwind entry imports `tailwindcss`
      * without scoping its content detection (no `source(none)` / `source(...)` /
      * `@source not`). Unscoped, Tailwind v4 climbs to the workspace root and
