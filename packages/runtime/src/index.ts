@@ -50,6 +50,8 @@ export {
 } from './hydration.js';
 // Re-export lite helpers so consumers can import everything from @csszyx/runtime
 export { __szBoolClass, __szColorVar, __szSpacingVar, __szUnitVar } from './lite.js';
+// The Tailwind prefix the build registers for objects lowered at runtime
+export { registerSzClassPrefix, setSzClassPrefix } from './lowering-slot.js';
 // Runtime mangle registry — installed by the bundled registration module
 export {
     clearMangleRegistry,

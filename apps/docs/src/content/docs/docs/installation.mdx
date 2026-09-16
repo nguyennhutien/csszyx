@@ -251,6 +251,31 @@ Import this in your app entry point:
 import './index.css';
 ```
 
+### A Tailwind prefix
+
+A prefix on the import line needs no csszyx setting:
+
+```css
+@import "tailwindcss" prefix(tw);
+```
+
+csszyx reads it from the stylesheet and writes it before every class it emits,
+so `sz={{ p: 4, hover: { bg: 'red-500' } }}` becomes
+`tw:p-4 tw:hover:bg-red-500`. That holds on the bundler plugins, the Next.js
+Turbopack loader, `csszyx next prebuild`, the Jest transformer, `csszyx check`,
+and objects lowered at runtime in an app one of those builds. The CDN build
+(`csszyx/browser`) does not read a prefix yet.
+
+The build stops when the stylesheets it finds set different prefixes, or when a
+stylesheet that imports Tailwind does not compile, because either way some of
+the classes it emits would style nothing. When the project also holds
+stylesheets the app does not load (fixtures, old copies), list the real ones in
+[`tailwindStylesheet`](/docs/reference/config/): `--tailwind-stylesheet` for
+`csszyx next prebuild` and `csszyx next watch`, and
+`csszyxTurbopack({}, { tailwindStylesheet })` for the Turbopack loader.
+
+`important` on the import line is not supported yet, and the build warns about it.
+
 ## Plugin Options
 
 ```ts

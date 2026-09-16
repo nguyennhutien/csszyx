@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { injectNextRuntimeImports } from '../src/next-runtime-injection.js';
 
+const NO_PREFIX_REGISTRATION =
+    "import { registerSzClassPrefix as __szRegisterClassPrefix } from '@csszyx/runtime';\n" +
+    '__szRegisterClassPrefix(null);\n';
+
 describe('Next runtime import injection', () => {
     it('does nothing when no runtime helpers are used', () => {
         expect(injectNextRuntimeImports('export const x = 1;', {})).toEqual({
@@ -16,7 +20,9 @@ describe('Next runtime import injection', () => {
                 usesRuntime: true,
             }),
         ).toEqual({
-            code: "import { _sz } from '@csszyx/runtime';\nexport const App = () => _sz({ p: 4 });",
+            code:
+                NO_PREFIX_REGISTRATION +
+                "import { _sz } from '@csszyx/runtime';\nexport const App = () => _sz({ p: 4 });",
             injected: ['_sz'],
         });
     });
@@ -31,7 +37,9 @@ describe('Next runtime import injection', () => {
 
         expect(result.injected).toEqual(['_szMerge']);
         expect(result.code).toBe(
-            "'use client';\nimport { _szMerge } from '@csszyx/runtime';\nexport const App = () => _szMerge('p-4');",
+            "'use client';\n" +
+                NO_PREFIX_REGISTRATION +
+                "import { _szMerge } from '@csszyx/runtime';\nexport const App = () => _szMerge('p-4');",
         );
     });
 
@@ -42,6 +50,7 @@ describe('Next runtime import injection', () => {
 
         expect(result.code).toBe(
             '/* license */\n// server action\n\n"use server";\n' +
+                NO_PREFIX_REGISTRATION +
                 "import { _sz } from '@csszyx/runtime';\n" +
                 'export const run = () => _sz({});',
         );
@@ -59,7 +68,8 @@ describe('Next runtime import injection', () => {
 
         expect(result.injected).toEqual(['_szMerge', '__szColorVar']);
         expect(result.code).toBe(
-            "import { _szMerge, __szColorVar } from '@csszyx/runtime';\nimport { _sz } from '@csszyx/runtime';\nexport const App = () => _szMerge('p-4');",
+            NO_PREFIX_REGISTRATION +
+                "import { _szMerge, __szColorVar } from '@csszyx/runtime';\nimport { _sz } from '@csszyx/runtime';\nexport const App = () => _szMerge('p-4');",
         );
     });
 

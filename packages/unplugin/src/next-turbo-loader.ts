@@ -170,7 +170,11 @@ export function runNextTurboLoader(
             readPackageVersion('../../compiler/package.json', import.meta.url),
         astBudget: options.astBudget,
     });
-    const injected = injectNextRuntimeImports(transform.result.code, transform.result);
+    const injected = injectNextRuntimeImports(
+        transform.result.code,
+        transform.result,
+        prefix.prefix,
+    );
     // szcn theme groups. The other lanes import a virtual module the plugin
     // resolves; a loader cannot, so a real file is written once per project and
     // imported by path. Only modules that can call szcn pay for it, and the

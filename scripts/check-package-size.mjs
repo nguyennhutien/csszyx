@@ -120,10 +120,17 @@ export const SIZE_BUDGETS = [
         // pulling the compiler's property tables in through
         // `@csszyx/compiler/browser`. Budget set the usual ~300 above the
         // measurement.
+        //
+        // Raised again from 27,750 for conflict-safe Tailwind prefix
+        // registration, measured 2026-09-15 at 27,984 (+574 from the prior
+        // 27,410 measurement). The runtime now records no-prefix explicitly
+        // and rejects a second build with a different prefix instead of
+        // silently emitting classes for the wrong stylesheet. Budget set the
+        // usual ~300 above the measurement.
         name: '@csszyx/runtime export closure',
         kind: 'package-exports',
         target: 'packages/runtime',
-        maxGzipBytes: 27_750,
+        maxGzipBytes: 28_300,
     },
     {
         name: '@csszyx/dynamic export closure',

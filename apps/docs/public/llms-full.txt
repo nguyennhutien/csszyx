@@ -4244,6 +4244,7 @@ Result: `{ bg: 'brand-500' }` gets autocomplete and type-checking.
 - CSS variables: `{ p: '--my-var' }` → `p-(--my-var)` (auto-wrapped)
 - Build-time functions: `{ text: '--spacing(4)' }` → `text-[--spacing(4)]`
 - Grid auto-track spacing: `{ autoCols: 12, autoRows: 16 }` → `auto-cols-12 auto-rows-16`
+- Tailwind prefix: with `@import "tailwindcss" prefix(tw)` the build writes it for you — keep writing `sz={{ p: 4 }}`, never `tw:` inside `sz`; it emits `tw:p-4`. Write `tw:` only in hand-written `className` strings
 
 ## Migrate CLI
 

@@ -116,7 +116,10 @@ import {
     recordCssPair,
     resetMangleSizeAccount,
 } from './mangle-size-report.js';
-import { runtimeHelperGroupsFromUsage } from './next-runtime-injection.js';
+import {
+    registerRuntimeClassPrefix,
+    runtimeHelperGroupsFromUsage,
+} from './next-runtime-injection.js';
 import { resolveParserMode } from './parser-mode.js';
 import { normalizePathSeparators } from './path-normalization.js';
 import { isReadableProviderFile } from './provider-file.js';
@@ -6004,6 +6007,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Rewritten source when imports were added, otherwise null.
      */
     function injectRuntimeHelpers(code: string, output: PreTransformOutput): string | null {
+        const injected = injectRuntimeHelperImports(code, output);
+        const current = injected ?? code;
+        // A module no stylesheet was read for lowers nothing through the engine,
+        // so it has no prefix to register.
+        const registered = registerRuntimeClassPrefix(
+            current,
+            requiredRuntimeHelpers(output),
+            styleModel === undefined ? null : prefixOf(styleModel),
+        );
+        return registered === current ? injected : registered;
+    }
+
+    /**
+     * Inject the compiler runtime helper imports a module is missing.
+     *
+     * @param code Transformed source module.
+     * @param output Pre-transform helper usage.
+     * @returns Rewritten source when imports were added, otherwise null.
+     */
+    function injectRuntimeHelperImports(code: string, output: PreTransformOutput): string | null {
         const groups = requiredRuntimeHelpers(output);
         let result: string | null = null;
         let current = code;

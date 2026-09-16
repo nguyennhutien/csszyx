@@ -518,6 +518,7 @@ wrap it: `className={szr(someSzv({ … }))}`.
 | --- | --- |
 | **Thrown.** `[csszyx] {fn}() received a plain object — the compiler could not resolve this sz prop at build time.` followed by `Common cause:   sz={{ ...(cond ? varA : varB), key: 'val' }}` / `Fix:            sz={[cond ? varA : varB, { key: 'val' }]}` / `Received: {json}` | A spread the compiler could not fold reached the runtime. |
 | **Thrown.** `[csszyx] a string helper received an sz OBJECT but the object-lowering module is not loaded, so it cannot be turned into class names.` … `add once at startup:` / `    import '@csszyx/runtime/lowering';` | Running outside the bundler plugin — unit tests, scripts. |
+| **Thrown.** `[csszyx] two builds sharing one JavaScript runtime registered different Tailwind prefixes: {before} and {after}. Keep independently configured applications on separate @csszyx/runtime instances or align their Tailwind prefix.` | Two independently built applications share a runtime realm but their stylesheets use different prefixes. csszyx stops before runtime lowering can emit a class owned by the wrong stylesheet. |
 
 An unreadable `szr()` argument is reported at build time as `szr fallback at …`
 and is **always missing output**.
@@ -690,7 +691,10 @@ class, so with two prefixes in play part of the app would get classes that style
 nothing. A stylesheet another entry imports has no say of its own, and entries
 that differ only in `important` do not stop the build. Usually one of the listed
 files is a fixture or an old copy: name the real one in the `tailwindStylesheet`
-option ([configuration](/docs/reference/config/)).
+option ([configuration](/docs/reference/config/)). `csszyx next prebuild` and
+`csszyx next watch` print the same messages naming the `--tailwind-stylesheet`
+flag in place of the option, and the Turbopack loader takes the list as
+`csszyxTurbopack({}, { tailwindStylesheet })`.
 
 ```text
 [csszyx] the csszyx `tailwindStylesheet` option lists stylesheets that are not there: {paths} (relative to {rootDir}).
@@ -740,7 +744,7 @@ loses to the class it was meant to override.
 Printed by a Vite dev server, once per change, whatever `quiet` says. Every
 module compiled before the edit carried classes under the old prefix, so the
 server lowered every source again and reloaded the page. `{before}` and
-`{after}` read `none` when no prefix is set. Nothing to do.
+`{after}` read `no prefix` when none is set. Nothing to do.
 
 ```text
 [csszyx] {files} changed the Tailwind prefix from {before} to {after}, but this watch session compiled its modules under the old one, so their classes would style nothing.
@@ -748,9 +752,10 @@ server lowered every source again and reloaded the page. `{before}` and
   note: modules keep the classes they were compiled with until the restart.
 ```
 
-A webpack watch **rebuild error**. webpack keeps the modules it already
-compiled and a plugin cannot make it compile them all again, so every rebuild
-fails with this until the prefix is back or the watch restarts.
+A watch **rebuild error** on webpack, `rollup -w`, `vite build --watch`, an
+esbuild context and rspack. Those bundlers keep the modules they already
+compiled and a plugin cannot make them compile everything again, so every
+rebuild fails with this until the prefix is back or the watch restarts.
 
 ```text
   note: {session} keeps the prefix it last read ({prefix}) until the stylesheets agree again.
@@ -758,8 +763,17 @@ fails with this until the prefix is back or the watch restarts.
 
 Closes a [prefix disagreement](#tailwind-entries-set-different-prefixes) or a
 stylesheet that did not compile when either happens during a Vite dev server
-(`the dev server`) or a webpack watch (`this watch session`). It is a warning
+(`the dev server`) or a watch rebuild (`this watch session`). It is a warning
 there, not an error: the author is mid-edit, and the next save usually fixes it.
+
+```text
+  note: `csszyx next watch` keeps watching; the loader stops on this error until the stylesheets agree again.
+```
+
+Closes the same two messages when `csszyx next watch` reads them after a
+stylesheet edit. The watch goes on, but the stylesheet facts it records are not
+rewritten, so the Turbopack loader stops on the same error until the edit is
+fixed.
 
 ```text
 [csszyx] internal error: the build asked for the project's Tailwind prefix before it read the project's stylesheets. This is a csszyx bug; please report it with the bundler you build with.
@@ -821,7 +835,7 @@ the loader was killed while holding the lock. The wait ends on its own when that
 lock goes stale. If it lasts more than a minute, the watcher stops and reports the
 lock instead.
 
-### The Tailwind prefix on the Next.js and Jest lanes
+### The Tailwind prefix on the Next.js lanes
 
 ```text
 [csszyx] {lane} has not read the Tailwind prefix for {root}: {reason}.
@@ -1253,6 +1267,21 @@ rule nor a kind fails the run rather than selecting nothing:
 
 ```text
 [csszyx] ✖ {given} is not a rule or a diagnostic kind, so it would select nothing. Known ids: {ids}.
+```
+
+```text
+✖ The Tailwind entries in this project set different prefixes ({file}: {prefix(name) or no prefix}; …), so sz cannot be checked against all of them. Give every entry the same @import "tailwindcss" line.
+```
+
+A `dead-class` finding of kind `prefix-disagreement`, and exit code 1: every
+class is dead under one of the prefixes, so there is no answer to report. The
+check skips the same build output the build walk does (`dist`, `build`,
+`target`, `coverage`, `storybook-static` and the framework caches), so a stale
+copy there does not cause it. `--ignore-rule prefix-disagreement` leaves the
+finding out, and the dead-class pass is skipped instead of run under a guess:
+
+```text
+Dead-class check skipped: the Tailwind entries set different prefixes, and --ignore-rule prefix-disagreement left that finding out.
 ```
 
 `npx @csszyx/cli scan-collisions` finds class names that would collide with a
