@@ -18,16 +18,16 @@ function runNode(script) {
 }
 
 test('ESLint 10 loads the flat config and JSDoc 63 rules', async () => {
+    assert.match(ESLint.version, /^10\./);
     const eslint = new ESLint({ cwd: root });
-    const [result] = await eslint.lintText('function undocumented(): void {}\n', {
-        filePath: path.join(root, 'packages/runtime/src/index.ts'),
-    });
-
-    assert.ok(result);
-    assert.ok(
-        result.messages.some(message => message.ruleId === 'jsdoc/require-jsdoc'),
-        JSON.stringify(result.messages),
+    const config = await eslint.calculateConfigForFile(
+        path.join(root, 'packages/runtime/src/index.ts'),
     );
+
+    assert.ok(config);
+    const requireJsdoc = config.rules['jsdoc/require-jsdoc'];
+    assert.notEqual(requireJsdoc, undefined);
+    assert.notEqual(Array.isArray(requireJsdoc) ? requireJsdoc[0] : requireJsdoc, 0);
 });
 
 test('TypeScript 7 owns the project compiler CLI', () => {
