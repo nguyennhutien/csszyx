@@ -1,5 +1,16 @@
 # csszyx
 
+## [0.18.0](https://github.com/nguyennhutien/csszyx/compare/v0.17.2...v0.18.0) (2026-09-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* lower sz with the prefix the project's Tailwind sets ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+
+### Features
+
+* lower sz with the prefix the project's Tailwind sets ([#324](https://github.com/nguyennhutien/csszyx/issues/324)) ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
+
 ## [0.17.2](https://github.com/nguyennhutien/csszyx/compare/v0.17.1...v0.17.2) (2026-09-14)
 
 ### Features
