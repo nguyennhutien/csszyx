@@ -1,17 +1,15 @@
 /**
  * Value-set-aware conflict groups for the ambiguous utility prefixes.
  *
- * `szcn` merges by utility prefix, but eight prefixes span MORE than one CSS
- * property (`text-sm` is font-size, `text-red-500` is color), so they used to
- * be excluded from dedup entirely — a consumer's `text-sm` override after a
- * `text-base` default kept BOTH classes and the stylesheet order, not the
- * className order, picked the winner. This module classifies a token's VALUE
- * into a property group (closed keyword sets + shape validators), so same-group
- * tokens dedupe last-wins while different properties keep co-existing.
+ * Several prefixes span MORE than one CSS property (`text-sm` is font-size,
+ * `text-red-500` is color). This module classifies a token's VALUE into a
+ * property group (closed keyword sets + shape validators), which is what
+ * `classify` reports as `property`. `szcn` used to merge by these groups; it
+ * now merges on a table settled from the compiled CSS and reads nothing here.
  *
- * Fail-safe contract (inherited from szcn): classification may only ever err
- * toward `null` = keep-both. A value that matches no group — or matches more
- * than one — is never merged away.
+ * Fail-safe contract: classification may only ever err toward `null`. A value
+ * that matches no group — or matches more than one — is never given a
+ * property it may not have.
  *
  * Custom `@theme` tokens: the build plugin declares theme token names through
  * `setSzcnGroups` (see `virtual:csszyx/theme-groups`); apps can register their
@@ -19,7 +17,7 @@
  * rebuild can replace its own set — a token deleted from a stylesheet has to
  * stop grouping — without touching what the app registered by hand.
  *
- * Both are guarded, and both guard rails fall back to keep-both rather than
+ * Both are guarded, and both guard rails fall back to no answer rather than
  * guessing: a name that collides with a static value keyword of an affected
  * prefix (e.g. a color token named `cover` — `bg-cover` is background-size) is
  * rejected, and a name declared in two conflicting categories is dropped from
@@ -198,7 +196,7 @@ type ThemeCategory = (typeof CATEGORIES)[number];
 interface AmbiguityPair {
     first: ThemeCategory;
     second: ThemeCategory;
-    /** Builds the keep-both warning for a name in this pair. */
+    /** Builds the warning for a name in this pair. */
     message: (name: string) => string;
 }
 
@@ -216,14 +214,16 @@ const AMBIGUITY_PAIRS: readonly AmbiguityPair[] = [
         second: 'textSizes',
         message: name =>
             `theme token "${name}" is defined as BOTH a color and a text size — ` +
-            `szcn cannot classify \`text-${name}\` and will keep-both instead of merging.`,
+            `\`classify\` cannot name the property of \`text-${name}\`, and Tailwind ` +
+            'compiles that class for one of the two only. Rename one of the tokens.',
     },
     {
         first: 'fontFamilies',
         second: 'fontWeights',
         message: name =>
             `theme token "${name}" is defined as BOTH a font family and a font weight — ` +
-            `szcn cannot classify \`font-${name}\` and will keep-both instead of merging.`,
+            `\`classify\` cannot name the property of \`font-${name}\`, and Tailwind ` +
+            'compiles that class for one of the two only. Rename one of the tokens.',
     },
 ];
 
@@ -524,10 +524,12 @@ function shadowsBuiltIn(category: ThemeCategory, name: string): boolean {
     const builtInKind = category === 'colors' ? 'utility keyword' : 'value';
     warnOnce(
         `theme token "${name}" shadows a built-in ${builtInKind} — ` +
-            'szcn cannot tell the two apart, so it keeps both classes instead of merging. ' +
-            'Both then apply, and stylesheet order decides which wins rather than the order ' +
-            'you passed them: a later argument no longer overrides an earlier one. ' +
-            'Rename the token — no spelling of the merge can fix this while the name is shared.',
+            "Tailwind compiles both meanings into one class, so it sets the token's " +
+            "property and the built-in's. A later class that sets only one of them does " +
+            'not replace it in `szcn`: both then apply, and stylesheet order decides which ' +
+            'wins rather than the order you passed them. `classify` reports the built-in ' +
+            'meaning only. Rename the token — no spelling of the merge can fix this while ' +
+            'the name is shared.',
     );
     return true;
 }

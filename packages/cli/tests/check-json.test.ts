@@ -119,6 +119,11 @@ describe('csszyx check --json', () => {
 
         expect(finding?.file).toBe('src/app.css');
         expect(finding?.line).toBe(3);
+        // szcn reads the class for both meanings and merges a colour written
+        // before it; what it cannot do is drop it for a colour written after,
+        // which covers only one of the two. The finding says that case.
+        expect(finding?.message).toContain('a later class that sets only one of them');
+        expect(finding?.message).not.toContain('keeps the classes apart');
     });
 
     it('carries an sz diagnostic, which already knew its own position', async () => {

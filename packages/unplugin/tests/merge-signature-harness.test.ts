@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createEmittedClassOracle } from '@csszyx/tailwind-oracle';
 import { describe, expect, it } from 'vitest';
 
-import { measureMergeBaseline, signatureFromCss } from './merge-signature-harness.js';
+import { measureMergeSafety, signatureFromCss } from './merge-signature-harness.js';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
 
@@ -30,8 +30,10 @@ async function signaturesFor(requested?: readonly string[]) {
     });
 }
 
-describe('merge signature baseline', () => {
-    it('distinguishes the three known genuine false-delete families', async () => {
+describe('merge safety against compiled CSS', () => {
+    // The hand-written classifier dropped the earlier class of each pair, and
+    // with it a declaration the later class never sets.
+    it('keeps both classes of the three families that used to lose a declaration', async () => {
         const candidates = [
             'text-2xl',
             'text-[0.8rem]',
@@ -54,8 +56,8 @@ describe('merge signature baseline', () => {
             if (previousSignature === undefined || laterSignature === undefined) {
                 throw new Error(`missing signature for ${previous} → ${later}`);
             }
-            const result = measureMergeBaseline([previousSignature, laterSignature]);
-            expect(result.falseDeletes, `${previous} → ${later}`).toBeGreaterThan(0);
+            const result = measureMergeSafety([previousSignature, laterSignature]);
+            expect(result.falseDeletes, `${previous} → ${later}`).toBe(0);
         }
     });
 
@@ -66,14 +68,14 @@ describe('merge signature baseline', () => {
                 'outline-hidden',
                 '.outline-hidden { outline-style: none; @media (forced-colors: active) { outline: 2px solid transparent; outline-offset: 2px; } }',
             ),
-        ).toEqual({
+        ).toMatchObject({
             candidate: 'outline-hidden',
             properties: ['outline-color', 'outline-offset', 'outline-style', 'outline-width'],
         });
     });
 
     it('separates horizontal equivalence from writing-mode safety', () => {
-        const result = measureMergeBaseline([
+        const result = measureMergeSafety([
             { candidate: 'bottom-0', properties: ['bottom'] },
             {
                 candidate: 'inset-y-0',
@@ -84,16 +86,18 @@ describe('merge signature baseline', () => {
         expect(result.writingModeOnlyDeletes).toBe(1);
     });
 
-    it('is deterministic and total at three corpus sizes', async () => {
+    it('never drops a declaration at three corpus sizes, deterministically', async () => {
         const signatures = await signaturesFor();
         const baselines = [];
         for (const size of [64, 256, 1024]) {
             const sample = evenlySpaced(signatures, size);
-            const first = measureMergeBaseline(sample);
+            const first = measureMergeSafety(sample);
             baselines.push(first);
             expect(first.orderedPairs).toBe(sample.length ** 2);
+            expect(first.falseDeleteExamples).toEqual([]);
+            expect(first.falseDeletes).toBe(0);
         }
-        expect(measureMergeBaseline(evenlySpaced(signatures, 64))).toEqual(baselines[0]);
+        expect(measureMergeSafety(evenlySpaced(signatures, 64))).toEqual(baselines[0]);
         expect(
             baselines.map(
                 ({ falseDeleteExamples: _false, missExamples: _miss, ...counts }) => counts,
@@ -102,24 +106,24 @@ describe('merge signature baseline', () => {
           [
             {
               "candidates": 64,
-              "falseDeletes": 5,
-              "misses": 31,
+              "falseDeletes": 0,
+              "misses": 15,
               "orderedPairs": 4096,
-              "writingModeOnlyDeletes": 2,
+              "writingModeOnlyDeletes": 12,
             },
             {
               "candidates": 256,
-              "falseDeletes": 167,
-              "misses": 413,
+              "falseDeletes": 0,
+              "misses": 141,
               "orderedPairs": 65536,
-              "writingModeOnlyDeletes": 52,
+              "writingModeOnlyDeletes": 221,
             },
             {
               "candidates": 1024,
-              "falseDeletes": 2585,
-              "misses": 6531,
+              "falseDeletes": 0,
+              "misses": 2385,
               "orderedPairs": 1048576,
-              "writingModeOnlyDeletes": 663,
+              "writingModeOnlyDeletes": 3190,
             },
           ]
         `);

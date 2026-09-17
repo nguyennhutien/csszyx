@@ -2,6 +2,10 @@ import { transform } from '@csszyx/compiler';
 import { describe, expect, it } from 'vitest';
 import { szcn } from '../src/merge-classes.js';
 
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
+
 // szcn's unit tests assert behaviour on hand-written class strings. This file
 // closes the loop: it feeds szcn the className strings the COMPILER actually
 // emits for the corresponding `sz` props, proving the token shapes the unit
@@ -25,9 +29,9 @@ describe('szcn — round-trip with real compiler output', () => {
         expect(szcn(cn({ peer: { checked: { p: 2 } } }), cn({ peer: { checked: { p: 8 } } }))).toBe(
             'peer-checked:p-8',
         );
-        expect(szcn(cn({ md: { hover: { gap: 2 } } }), cn({ md: { hover: { gap: 8 } } }))).toBe(
-            'md:hover:gap-8',
-        );
+        const stacked = cn({ md: { hover: { gap: 2 } } });
+        expect(stacked).toBe('md:hover:gap-2');
+        expect(szcn(stacked, cn({ md: { hover: { gap: 8 } } }))).toBe('md:hover:gap-8');
     });
 
     it('handles arbitrary data / supports / container / selector variants as emitted', () => {

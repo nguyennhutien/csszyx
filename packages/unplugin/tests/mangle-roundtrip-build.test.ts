@@ -17,10 +17,19 @@
  *   5. szcn dedupes mangled tokens through the real `__csszyx.decode` bridge
  *      built from the extracted map (the field acceptance for merge parity).
  */
-import { clearMangleRegistry, installMangleRuntime, szcn } from '@csszyx/runtime';
+import { join } from 'node:path';
+import {
+    clearMangleRegistry,
+    installMangleRuntime,
+    registerMergeSignatures,
+    szcn,
+} from '@csszyx/runtime';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { loadNativeBinding } from '../../core/native/index.js';
 import { escapeJsonForInlineScript } from '../src/inline-script-escape.js';
+import { createMergeSignatureTable } from '../src/merge-signature.js';
+import { openProjectStyleModel } from '../src/project-style-model.js';
+import { removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 import { buildViteApp, cleanupViteAppBuilds } from './vite-app-build.js';
 
 const FIXTURE_FILES: Record<string, string> = {
@@ -210,8 +219,20 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
         );
     });
 
-    it('szcn dedupes mangled tokens through the registry built from the map', () => {
-        // Install exactly what the bundled module installs at runtime.
+    it('szcn dedupes mangled tokens through the registry built from the map', async () => {
+        // Install exactly what the bundled module installs at runtime: the
+        // mangle map, and the merge table the build compiled from the
+        // project's CSS. The table is keyed by the original names, so the
+        // merge has to decode each token before it can look anything up.
+        const root = tailwindProject('csszyx-mangle-merge-', {
+            'app.css': '@import "tailwindcss";',
+        });
+        const model = await openProjectStyleModel(root, [join(root, 'app.css')]);
+        registerMergeSignatures(
+            createMergeSignatureTable(['mx-0', 'mx-4', 'text-red-500'], candidate =>
+                model.signature(candidate),
+            ),
+        );
         installMangleRuntime({ mangleMap: rust.map, checksum: 'round-trip' });
         try {
             const mx0 = rust.map['mx-0'] as string;
@@ -224,6 +245,8 @@ describe('production mangle — real-build round-trip (all parsers)', () => {
             expect(szcn(mx0, red)).toBe(`${mx0} ${red}`);
         } finally {
             clearMangleRegistry();
+            registerMergeSignatures([{}, []]);
+            removeTailwindProjects();
         }
-    });
+    }, 60_000);
 });

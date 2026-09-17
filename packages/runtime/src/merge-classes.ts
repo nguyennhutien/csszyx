@@ -9,332 +9,32 @@
  * `gap-8` → `q7`), and tailwind-merge can't tell `q3`/`q7` are the same utility.
  *
  * csszyx owns the reverse mangle map, registered at runtime by the bundled
- * module (`getMangleRegistry().decode(mangled) → original`). So this merge decodes each token
- * to its original name, derives a conflict key (variant prefix + utility prefix),
- * keeps the LAST token per key, and returns the survivors (still in their
- * original — possibly mangled — token form, so the DOM matches the built CSS).
+ * module (`getMangleRegistry().decode(mangled) → original`). So this merge
+ * decodes each token to its original name, looks its signature up in the table
+ * the build generated from the project's compiled CSS, drops every earlier
+ * token whose signature the new one covers, and returns the survivors (still
+ * in their original — possibly mangled — token form, so the DOM matches the
+ * built CSS).
  *
- * Fail-safe: a token whose conflict group cannot be determined confidently is
- * NEVER merged away — it keys by itself, so at worst two classes coexist (the
- * pre-merge status quo), never a wrongly-dropped class.
+ * A later class covers an earlier one only when, in every selector and at-rule
+ * context the earlier one declares something, it declares all of the same
+ * properties. `text-2xl` sets `line-height` as well as `font-size`, so a later
+ * `text-[0.8rem]` does not cover it and both stay.
  *
- * Single-property prefixes (gap, p, m, w, h, rounded, …) merge by prefix.
- * Prefixes that span multiple CSS properties (`text` covers font-size AND
- * color; `font` covers family AND weight; `bg`, `border`, `divide`, `ring`,
- * `outline`, `flex`) classify the token VALUE into a property group (see
- * `merge-groups.ts`): same group → last wins (`text-base` + `text-sm` →
- * `text-sm`), different group → co-exist, unclassifiable → keep-both.
- * Custom `@theme` tokens join their groups via `registerSzcnGroups` (the build
- * plugin injects this automatically from the theme scan).
+ * Fail-safe: a class with no signature — one the build never saw, or every
+ * class before a build has registered a table — is only ever its own
+ * duplicate. At worst two classes coexist (the pre-merge status quo); a class
+ * is never dropped on the strength of how it is spelled.
  *
  * @module
  */
-import { BOX_ROLE_TOKENS } from './box-role-map.generated.js';
 import { decodeToken, encodeToken, type MangleBridge, mangleBridge } from './class-codec.js';
-import { classifyAmbiguousValue, getSzcnGroupsGeneration } from './merge-groups.js';
-import { getBoxRolePrefixesByFirstSegment, normalizeBase, stripVariant } from './split-box.js';
+import { getMergeSignatureGeneration, getMergeSignatureTable } from './merge-signatures.js';
 
 /** Class string accepted by the public and generated merge helpers. */
 type ClassInput = string | false | null | undefined;
 
-/**
- * Utility prefixes that map to more than one CSS property. These route through
- * value-set classification (`merge-groups.ts`) instead of prefix-keyed merging
- * — merging by the prefix alone deleted a legitimate class of the OTHER
- * property (`font-sans` + `font-bold` → only `font-bold` survived).
- */
-const AMBIGUOUS_PREFIXES: ReadonlySet<string> = new Set([
-    'flex', // flex-1 (flex shorthand) vs flex-row (flex-direction)
-    'text', // text-sm (font-size) vs text-red-500 (color)
-    'bg', // bg-red-500 (color) vs bg-cover (size) vs bg-center (position)
-    'border', // border-2 (width) vs border-red-500 (color) vs border-solid (style)
-    'divide', // divide-x (width) vs divide-red-500 (color)
-    'ring', // ring-2 (width) vs ring-red-500 (color)
-    'outline', // outline-2 (width) vs outline-red-500 (color)
-    'font', // font-sans (font-family) vs font-bold (font-weight)
-    'shadow', // shadow-lg (size) vs shadow-red-500 (shadow colour)
-    'drop-shadow', // drop-shadow-lg (size) vs drop-shadow-red-500 (colour)
-    'inset-shadow', // inset-shadow-sm (size) vs inset-shadow-red-500 (colour)
-    'decoration', // decoration-2 (thickness) vs -solid (style) vs -red-500 (colour)
-    'stroke', // stroke-2 (width) vs stroke-red-500 (paint)
-    'from', // from-10% (stop position) vs from-red-500 (stop colour)
-    'via', // via-40% (stop position) vs via-red-500 (stop colour)
-    'to', // to-90% (stop position) vs to-red-500 (stop colour)
-    'snap', // snap-x (axis) vs snap-mandatory (strictness) vs snap-center (align)
-    'list', // list-disc (marker) vs list-inside (position) vs list-item (display)
-    'object', // object-cover (fit) vs object-center (position)
-    'content', // content-none (content) vs content-center (align-content)
-    'touch', // touch-pan-x / touch-pan-y / touch-pinch-zoom write three variables
-]);
-
-/**
- * Directional shorthand → longhand coverage. A shorthand appearing LATER
- * overrides earlier longhands it subsumes (CSS-cascade-correct): a later `p-8`
- * removes an earlier `pb-4` (p covers bottom), while a later `pb-8` keeps an
- * earlier `p-4` (it only refines the bottom). Each entry includes itself.
- *
- * Covers padding, margin, inset (position), and border-radius. Logical sides
- * (`ps/pe`, `ms/me`) are subsumed by their padding/margin shorthand, but for
- * inset and rounded the coverage is PHYSICAL-only: `inset`/`rounded` do not
- * subsume the logical `start`/`end` / `rounded-s*`/`rounded-e*` tokens, which
- * are a different CSS longhand and could flip under RTL — leaving those as
- * keep-both (still cascade-correct, never wrongly dropped).
- *
- * Deferred for v2: `border-<width>` is directional too, but the `border` prefix is
- * ambiguous (width vs color vs style), so it needs value-aware classification
- * (the same work as collapsing two `text-<size>` / two `bg-<color>`); deferred.
- */
-/**
- * The coverage of a box shorthand: its two axes and every side, logical sides
- * included — what `p`, `m`, `scroll-m` and `scroll-p` each write over.
- *
- * @param prefix - The shorthand's utility prefix.
- * @returns Its entries: the shorthand, then the `x` and `y` axes.
- */
-function boxCoverage(prefix: string): Record<string, readonly string[]> {
-    const side = (name: string): string => `${prefix}${name}`;
-    return {
-        [prefix]: [prefix, side('x'), side('y'), ...['t', 'r', 'b', 'l', 's', 'e'].map(side)],
-        [side('x')]: [side('x'), side('l'), side('r'), side('s'), side('e')],
-        [side('y')]: [side('y'), side('t'), side('b')],
-    };
-}
-
-let shorthandCoverage: Record<string, readonly string[]> | undefined;
-
-/**
- * The coverage table, built on first use.
- *
- * @returns Shorthand prefix → the prefixes it writes over.
- */
-function getShorthandCoverage(): Record<string, readonly string[]> {
-    shorthandCoverage ??= {
-        // `size-*` writes width and height together. Not `min-*`/`max-*`: those
-        // are separate properties that clamp rather than set.
-        size: ['size', 'w', 'h'],
-        ...boxCoverage('p'),
-        ...boxCoverage('m'),
-        // `gap-4` writes `gap`, which is `row-gap` and `column-gap` together, so it
-        // leaves nothing of an earlier axis gap.
-        gap: ['gap', 'gap-x', 'gap-y'],
-        // Scroll margin and padding mirror their box counterparts, logical sides
-        // included: `scroll-mx-*` writes `scroll-margin-inline`, which is what
-        // `scroll-ms`/`scroll-me` write one side of.
-        ...boxCoverage('scroll-m'),
-        ...boxCoverage('scroll-p'),
-        // inset (position) — physical sides only.
-        inset: ['inset', 'inset-x', 'inset-y', 'top', 'right', 'bottom', 'left'],
-        'inset-x': ['inset-x', 'left', 'right'],
-        'inset-y': ['inset-y', 'top', 'bottom'],
-        // border-radius — physical corners only (logical rounded-s*/e* stay keep-both).
-        rounded: [
-            'rounded',
-            'rounded-t',
-            'rounded-r',
-            'rounded-b',
-            'rounded-l',
-            'rounded-tl',
-            'rounded-tr',
-            'rounded-br',
-            'rounded-bl',
-        ],
-        'rounded-t': ['rounded-t', 'rounded-tl', 'rounded-tr'],
-        'rounded-r': ['rounded-r', 'rounded-tr', 'rounded-br'],
-        'rounded-b': ['rounded-b', 'rounded-bl', 'rounded-br'],
-        'rounded-l': ['rounded-l', 'rounded-tl', 'rounded-bl'],
-    };
-    return shorthandCoverage;
-}
-
-/**
- * Classify a normalized token after its utility prefix has matched.
- *
- * @param norm Normalized utility token.
- * @param variant Variant prefix removed from the token.
- * @param prefix Matched utility prefix.
- * @returns Conflict classification or null when the value is ambiguous.
- */
-function classifyMatchedPrefix(
-    norm: string,
-    variant: string,
-    prefix: string,
-): { key: string; covers: string[] } | null {
-    if (AMBIGUOUS_PREFIXES.has(prefix)) {
-        const value = norm === prefix ? '' : norm.slice(prefix.length + 1);
-        const group = classifyAmbiguousValue(prefix, value);
-        if (group === null) {
-            return null;
-        }
-        const key = `${variant} ${group}`;
-        return { key, covers: [key] };
-    }
-
-    const coveredPrefixes = getShorthandCoverage()[prefix] ?? [prefix];
-    return {
-        key: `${variant} ${prefix}`,
-        covers: coveredPrefixes.map(covered => `${variant} ${covered}`),
-    };
-}
-
-/**
- * The conflict group for a token under an ambiguous prefix, or `null`.
- *
- * A token that belongs to an ambiguous prefix AND classifies to a concrete
- * value group (`text-ellipsis` / `text-clip` → `text:overflow`, or a
- * data-type-hinted variable like `text-(color:--x)` → `text:color`) is a single
- * mutually-exclusive property, so it must last-win even when it also appears in
- * the box-role map or contains `--` — the hinted-variable forms do. The caller
- * asks this BEFORE the BEM `--` guard and the box-role under-merge, which would
- * otherwise keep both. A BEM name under an ambiguous prefix
- * (`text-foo--active`) classifies to null here and falls through to that guard.
- *
- * Measured: only `text-ellipsis` and `text-clip` sit in both the classifier and
- * the box-role map; every other box-role token is null here.
- *
- * @param norm - Normalized utility token.
- * @param variant - Variant prefix removed from the token.
- * @param firstSegment - The token's first dash-segment.
- * @returns The conflict classification, or `null` when this is not that shape.
- */
-function classifyAmbiguousToken(
-    norm: string,
-    variant: string,
-    firstSegment: string,
-): { key: string; covers: string[] } | null {
-    if (!AMBIGUOUS_PREFIXES.has(firstSegment)) return null;
-    const value = norm === firstSegment ? '' : norm.slice(firstSegment.length + 1);
-    const group = classifyAmbiguousValue(firstSegment, value);
-    if (group === null) return null;
-    const key = `${variant} ${group}`;
-    return { key, covers: [key] };
-}
-
-/**
- * Mask utilities key by the `--tw-mask-*` custom property they write, not by
- * the `mask` prefix they share. Tailwind composites mask-image from three
- * layer variables, and inside the linear layer every side owns another, so
- * `mask-t-from-0%` and `mask-b-from-60%` are different declarations that must
- * BOTH survive — keying them together dropped one silently.
- */
-const MASK_SIDES: ReadonlySet<string> = new Set(['t', 'r', 'b', 'l', 'x', 'y']);
-
-/** Layers of `mask-image`; each owns its own variable and never conflicts. */
-const MASK_LAYERS: ReadonlySet<string> = new Set(['linear', 'radial', 'conic']);
-
-/** Radial extent keywords, which share `--tw-mask-radial-size`. */
-const MASK_RADIAL_SIZES: ReadonlySet<string> = new Set([
-    'closest-side',
-    'closest-corner',
-    'farthest-side',
-    'farthest-corner',
-]);
-
-/** `x` and `y` write two sides each, so they cover those sides' keys. */
-const MASK_SIDE_COVERAGE: Readonly<Record<string, readonly string[]>> = {
-    x: ['x', 'l', 'r'],
-    y: ['y', 't', 'b'],
-};
-
-/**
- * Classify a `mask-*` token by the custom property it writes.
- *
- * @param norm - Normalized token, `mask-` prefix included.
- * @param variant - Variant prefix removed from the token.
- * @returns `{ key, covers }`, or null to fall through to the shared tables.
- */
-function classifyMaskToken(
-    norm: string,
-    variant: string,
-): { key: string; covers: string[] } | null {
-    if (norm === 'mask-circle' || norm === 'mask-ellipse') {
-        const key = `${variant} mask-radial-shape`;
-        return { key, covers: [key] };
-    }
-    const rest = norm.slice('mask-'.length);
-    const [head, second] = rest.split('-', 2);
-
-    if (MASK_SIDES.has(head) && (second === 'from' || second === 'to')) {
-        const sides = MASK_SIDE_COVERAGE[head] ?? [head];
-        return {
-            key: `${variant} mask-${head}-${second}`,
-            covers: sides.map(side => `${variant} mask-${side}-${second}`),
-        };
-    }
-    if (!MASK_LAYERS.has(head)) return null;
-    if (second === 'from' || second === 'to') {
-        const key = `${variant} mask-${head}-${second}`;
-        return { key, covers: [key] };
-    }
-    if (head === 'radial') {
-        if (second === 'at') {
-            const key = `${variant} mask-radial-position`;
-            return { key, covers: [key] };
-        }
-        if (MASK_RADIAL_SIZES.has(rest.slice('radial-'.length))) {
-            const key = `${variant} mask-radial-size`;
-            return { key, covers: [key] };
-        }
-    }
-    // Bare `mask-linear-45` / `mask-conic-90`: the layer's own gradient.
-    const key = `${variant} mask-${head}`;
-    return { key, covers: [key] };
-}
-
-/**
- * Classify a token for merging: its conflict `key` plus the `covers` keys it
- * removes when it appears (the key itself, and — for a spacing shorthand — the
- * longhand keys it subsumes). Returns `null` when the token can't be confidently
- * grouped, so the caller keys it by itself (never merged away).
- *
- * @param token - A class token (already decoded to its original name).
- * @returns `{ key, covers }`, or `null` to key by the token itself.
- */
-function mergeClassify(token: string): { key: string; covers: string[] } | null {
-    const base = stripVariant(token);
-    // The variant prefix is whatever stripVariant removed (e.g. `md:`, `hover:`).
-    const variant = token.slice(0, token.length - base.length);
-    const norm = normalizeBase(base);
-    if (!norm) {
-        return null;
-    }
-    const firstSegment = norm.split('-', 1)[0] as string;
-    if (firstSegment === 'mask' && norm.length > 'mask-'.length) {
-        const masked = classifyMaskToken(norm, variant);
-        if (masked !== null) return masked;
-    }
-    const grouped = classifyAmbiguousToken(norm, variant, firstSegment);
-    if (grouped !== null) return grouped;
-    // A BEM-style modifier (`tab-item-header--active`) is a DISTINCT class from its
-    // base (`tab-item-header`), not a value-pair of the same utility — collapsing
-    // them last-wins would drop the base (e.g. `tab-item-header` happens to start
-    // with the real `tab` utility prefix). `--` never appears in a PLAIN Tailwind
-    // utility class, so a token containing one — other than a leading CSS-variable
-    // class or a classified hinted variable above — keys by itself and is never
-    // merged away.
-    if (base.indexOf('--') > 0) {
-        return null;
-    }
-    // Exact value-keyed tokens (flex/block/italic/underline …) span several CSS
-    // properties under one category, so under-merge to avoid dropping a sibling.
-    //
-    // A token that is one CLOSED VALUE of a prefixed key is a different animal:
-    // it sits in the same map only so the box-role split can read its value, and
-    // it is a single mutually-exclusive property (`overflow-hidden` against
-    // `overflow-auto`). Those keep merging by their prefix, exactly as they did
-    // before the map learned them.
-    const exact = BOX_ROLE_TOKENS.get(norm);
-    if (exact !== undefined) {
-        if (exact.prefix === undefined) return null;
-        return classifyMatchedPrefix(norm, variant, exact.prefix);
-    }
-    const bucket = getBoxRolePrefixesByFirstSegment().get(firstSegment) ?? [];
-    for (const [prefix] of bucket) {
-        if (norm === prefix || norm.startsWith(`${prefix}-`)) {
-            return classifyMatchedPrefix(norm, variant, prefix);
-        }
-    }
-    return null;
-}
+const hasOwn = Object.prototype.hasOwnProperty;
 
 /**
  * One memoized argument position. The memo is a TRIE over the input strings,
@@ -358,9 +58,9 @@ interface MergeMemoNode {
  * Memo for repeated merges. Layered components call szcn with IDENTICAL inputs
  * every render (component defaults are constants), so the trie turns the
  * per-render cost into one Map lookup per argument. The cache self-invalidates
- * when either classification input changes: the custom-group registration
- * generation, or the identity of the runtime decode bridge (both normally
- * settle at startup, before render loops, so steady-state renders never clear).
+ * when either merge input changes: the registered signature table, or the
+ * identity of the runtime decode bridge (both normally settle at startup,
+ * before render loops, so steady-state renders never clear).
  *
  * Over the cap the trie STOPS ADMITTING new paths rather than evicting — the
  * same policy `splitBox`'s token memo uses. Per-entry LRU recency needs a
@@ -374,7 +74,7 @@ interface MergeMemoNode {
 const MEMO_MAX_NODES = 500;
 const memoRoot: MergeMemoNode = {};
 let memoNodes = 0;
-let memoGroupsGeneration = -1;
+let memoSignatureGeneration = -1;
 let memoDecodeRef: unknown;
 
 /**
@@ -391,7 +91,7 @@ let memoDecodeRef: unknown;
  * @example szcn('gap-2 p-4', 'gap-8') // → 'p-4 gap-8'  (gap-8 overrides gap-2)
  */
 export function szcn(...inputs: ClassInput[]): string {
-    const generation = getSzcnGroupsGeneration();
+    const signatureGeneration = getMergeSignatureGeneration();
     // Compare the runtime OBJECT IDENTITY, not mere presence: a swapped bridge
     // (tests, or an exotic host replacing the inline script's object) must not
     // serve merges memoized under the previous map. The object carries both
@@ -399,11 +99,11 @@ export function szcn(...inputs: ClassInput[]): string {
     // lookups. In production it is installed once for the page lifetime, so
     // this never clears.
     const runtimeRef = mangleBridge();
-    if (generation !== memoGroupsGeneration || runtimeRef !== memoDecodeRef) {
+    if (signatureGeneration !== memoSignatureGeneration || runtimeRef !== memoDecodeRef) {
         memoRoot.result = undefined;
         memoRoot.next = undefined;
         memoNodes = 0;
-        memoGroupsGeneration = generation;
+        memoSignatureGeneration = signatureGeneration;
         memoDecodeRef = runtimeRef;
     }
     // Falsy inputs are skipped here exactly as `mergeUncached` skips them, so
@@ -464,8 +164,8 @@ export function _szcn(...inputs: ClassInput[]): string {
  * @returns The merged className string.
  */
 function mergeUncached(inputs: readonly ClassInput[], bridge: MangleBridge | undefined): string {
-    const order: string[] = [];
-    const byKey = new Map<string, string>();
+    const order: (string | number)[] = [];
+    const byKey = new Map<string | number, string>();
 
     for (const input of inputs) {
         if (!input || typeof input !== 'string') {
@@ -488,16 +188,29 @@ function mergeUncached(inputs: readonly ClassInput[], bridge: MangleBridge | und
  */
 function mergeClassToken(
     token: string,
-    order: string[],
-    byKey: Map<string, string>,
+    order: (string | number)[],
+    byKey: Map<string | number, string>,
     bridge: MangleBridge | undefined,
 ): void {
     const original = decodeToken(token, bridge);
-    const info = mergeClassify(original);
-    const key = info ? info.key : original;
-    for (const covered of info ? info.covers : [key]) {
-        if (!byKey.delete(covered)) continue;
-        const index = order.indexOf(covered);
+    const signatureTable = getMergeSignatureTable();
+    // A class the build gave no signature — every class, before a build has
+    // registered a table — is only ever its own duplicate: nothing compiled
+    // has proved it sets what another class sets.
+    const signature =
+        signatureTable !== undefined && hasOwn.call(signatureTable[0], original)
+            ? signatureTable[0][original]
+            : undefined;
+    const key = signature === undefined ? original : signature;
+    // An id with no coverage row covers itself: a table cut short must still
+    // drop an exact repeat, the one merge that needs no evidence.
+    const covered =
+        signatureTable === undefined || signature === undefined
+            ? [key]
+            : (signatureTable[1][signature] ?? [key]);
+    for (const coveredKey of covered) {
+        if (!byKey.delete(coveredKey)) continue;
+        const index = order.indexOf(coveredKey);
         if (index !== -1) order.splice(index, 1);
     }
     byKey.set(key, encodeToken(token, bridge));

@@ -11,6 +11,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { clearMangleRegistry } from '../src/mangle-registry.js';
 import { szcn } from '../src/merge-classes.js';
 
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
+
 beforeEach(() => clearMangleRegistry());
 
 describe('size as a shorthand over w and h', () => {

@@ -266,13 +266,20 @@ function lexicalRegionEnd(source: string, start: number): number {
 }
 
 /**
- * Find the exclusive end of a balanced JavaScript brace expression.
+ * Find the exclusive end of a balanced JavaScript-delimited expression.
  *
  * @param source Complete source text.
- * @param bodyStart Offset immediately after the opening brace.
- * @returns Offset of the matching closing brace, or source length.
+ * @param bodyStart Offset immediately after the opening delimiter.
+ * @param opening Opening delimiter.
+ * @param closing Closing delimiter.
+ * @returns Offset of the matching closing delimiter, or source length.
  */
-export function findBalancedCodeEnd(source: string, bodyStart: number): number {
+export function findBalancedCodeEnd(
+    source: string,
+    bodyStart: number,
+    opening = '{',
+    closing = '}',
+): number {
     let depth = 1;
     let cursor = bodyStart;
     while (cursor < source.length) {
@@ -281,8 +288,8 @@ export function findBalancedCodeEnd(source: string, bodyStart: number): number {
             cursor = regionEnd;
             continue;
         }
-        if (source[cursor] === '{') depth++;
-        else if (source[cursor] === '}' && --depth === 0) return cursor;
+        if (source[cursor] === opening) depth++;
+        else if (source[cursor] === closing && --depth === 0) return cursor;
         cursor++;
     }
     return source.length;

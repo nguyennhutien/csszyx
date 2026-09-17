@@ -1,10 +1,23 @@
 import { szcn } from '../../runtime/src/merge-classes.js';
-import { mergeSignatureFromCss } from '../src/merge-signature.js';
-
+import {
+    __resetMergeSignaturesForTests,
+    registerMergeSignatures,
+} from '../../runtime/src/merge-signatures.js';
+import {
+    createMergeSignatureTable,
+    horizontalProperty,
+    type MergeSignature,
+    mergeSignatureFromCss,
+} from '../src/merge-signature.js';
 /** One class and the leaf CSS properties Tailwind emits for it. */
 export interface CandidateSignature {
     candidate: string;
     properties: readonly string[];
+    /**
+     * What the build reads from the compiled CSS. A hand-written sample leaves
+     * it out and is treated as one unconditional rule.
+     */
+    signature?: MergeSignature;
 }
 
 /** Deterministic measurements from one ordered-pair corpus. */
@@ -33,7 +46,7 @@ export function signatureFromCss(candidate: string, css: string | null): Candida
     const signature = mergeSignatureFromCss(candidate, css);
     if (signature === null) return null;
     const properties = new Set(signature.rules.flatMap(rule => rule.properties));
-    return { candidate, properties: [...properties].sort() };
+    return { candidate, properties: [...properties].sort(), signature };
 }
 
 /**
@@ -45,35 +58,6 @@ export function signatureFromCss(candidate: string, css: string | null): Candida
  */
 function isSubset(left: readonly string[], right: ReadonlySet<string>): boolean {
     return left.every(property => right.has(property));
-}
-
-/**
- * Map logical properties to horizontal-writing-mode physical properties.
- *
- * @param property - Leaf CSS property.
- * @param direction - Inline text direction.
- * @returns Equivalent physical property for horizontal writing mode.
- */
-function horizontalProperty(property: string, direction: 'ltr' | 'rtl'): string {
-    const inlineStart = direction === 'ltr' ? 'left' : 'right';
-    const inlineEnd = direction === 'ltr' ? 'right' : 'left';
-    const corner = /^border-(start|end)-(start|end)-radius$/u.exec(property);
-    if (corner !== null) {
-        const block = corner[1] === 'start' ? 'top' : 'bottom';
-        const inline = corner[2] === 'start' ? inlineStart : inlineEnd;
-        return `border-${block}-${inline}-radius`;
-    }
-    if (property === 'inset-block-start') return 'top';
-    if (property === 'inset-block-end') return 'bottom';
-    if (property === 'inset-inline-start') return inlineStart;
-    if (property === 'inset-inline-end') return inlineEnd;
-    return property
-        .replace('inline-size', 'width')
-        .replace('block-size', 'height')
-        .replace('block-start', 'top')
-        .replace('block-end', 'bottom')
-        .replace('inline-start', inlineStart)
-        .replace('inline-end', inlineEnd);
 }
 
 /**
@@ -96,12 +80,43 @@ function isHorizontalSubset(
 }
 
 /**
- * Compare the current runtime merger with full property-set subset semantics.
+ * Hold the runtime merger, fed the table a build would generate for these
+ * classes, against the reference rule: a later class may replace an earlier one
+ * only if it sets every property the earlier one set, left to right and right
+ * to left.
+ *
+ * The reference compares flat property sets; the build also keeps selector
+ * context and importance apart, so it may keep a class the reference would let
+ * go (a miss, harmless) but must never drop one the reference keeps (a false
+ * delete). O(n²) szcn calls for n classes.
  *
  * @param signatures - Served candidates and their emitted property sets.
  * @returns Deterministic ordered-pair counts.
  */
-export function measureMergeBaseline(signatures: readonly CandidateSignature[]): MergeBaseline {
+export function measureMergeSafety(signatures: readonly CandidateSignature[]): MergeBaseline {
+    const built = new Map(
+        signatures.map(({ candidate, properties, signature }) => [
+            candidate,
+            signature ?? { important: false, rules: [{ context: '["&"]', properties }] },
+        ]),
+    );
+    registerMergeSignatures(
+        createMergeSignatureTable([...built.keys()], candidate => built.get(candidate) ?? null),
+    );
+    try {
+        return countPairs(signatures);
+    } finally {
+        __resetMergeSignaturesForTests();
+    }
+}
+
+/**
+ * Count what the registered merger does to every ordered pair.
+ *
+ * @param signatures - Served candidates and their emitted property sets.
+ * @returns Deterministic ordered-pair counts.
+ */
+function countPairs(signatures: readonly CandidateSignature[]): MergeBaseline {
     let falseDeletes = 0;
     let writingModeOnlyDeletes = 0;
     let misses = 0;

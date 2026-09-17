@@ -161,17 +161,17 @@ describe('runtime split size contract', () => {
         expect(probe.gzipBytes).toBeGreaterThan(minGzipBytes);
     });
 
-    it('the merge entry carries the group tables but no compiler', async () => {
+    it('the merge entry carries neither the compiler nor a class vocabulary', async () => {
         const probe = await bundleProbe(
             "import { _szPart, _szcn } from '@csszyx/runtime/merge'; console.log(_szPart, _szcn);",
         );
         expect(probe.hasCompiler).toBe(false);
         expect(probe.code).not.toContain(COMPILER_TABLES_MARKER);
-        // The box-role tables are the merge family's data — ~5 KB is its
-        // honest cost. The barrel _szPart was 17 KB WITH the compiler.
-        expect(probe.gzipBytes).toBeLessThan(7_000);
-        // Measured 5 358 B gz when the band was set.
-        expect(probe.gzipBytes).toBeGreaterThan(2_500);
+        // Merging reads the table the build generates from the project's CSS,
+        // so the entry ships the lookup and no hand-written vocabulary: 1,047 B
+        // gzip, where the classifier and its box-role tables made it 5,358.
+        expect(probe.gzipBytes).toBeLessThan(1_600);
+        expect(probe.gzipBytes).toBeGreaterThan(700);
     });
 
     it('the bare /lowering import survives bundling and restores the compiler', async () => {

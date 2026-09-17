@@ -8,6 +8,10 @@ import { describe, expect, it } from 'vitest';
 
 import { szcn } from '../src/merge-classes.js';
 
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
+
 describe('mergeClassify: a token that normalizes to the empty string', () => {
     it('keys a bare "!" (important marker with no utility) by itself, never merged away', () => {
         // normalizeBase('!') strips the leading '!' and leaves '' — mergeClassify

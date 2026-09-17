@@ -151,6 +151,7 @@ export {
     SAFELIST_FILE,
 } from './safelist-source.js';
 
+import { createMergeSignatureTable, type MergeSignatureTable } from './merge-signature.js';
 import { recordStylesheetFacts } from './next-stylesheet-facts.js';
 import {
     missingTailwindStylesheetMessage,
@@ -197,12 +198,14 @@ import {
     isVirtualModule,
     MANGLE_MAP_PLACEHOLDER,
     MANGLE_RUNTIME_VIRTUAL_ID,
+    MERGE_SIGNATURES_PLACEHOLDER,
     RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID,
     RESOLVED_THEME_GROUPS_VIRTUAL_ID,
     RESOLVED_UNSERVED_VIRTUAL_ID,
     RESOLVED_VIRTUAL_CHECKSUM_ID,
     RESOLVED_VIRTUAL_MODULE_ID,
     resolveVirtualModule,
+    serializeMergeSignatures,
     THEME_GROUPS_VIRTUAL_ID,
     type ThemeGroupTokens,
     UNSERVED_PLACEHOLDER,
@@ -4895,6 +4898,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Collect literal class strings passed directly to the merge helpers.
+     * Dynamic values deliberately stay absent: without a build-time spelling
+     * they cannot have a trustworthy signature and runtime must keep them.
+     *
+     * @param code Source code before transforms.
+     */
+    function collectMergeCallClasses(code: string): void {
+        for (const match of code.matchAll(/\b_?szcn\s*\(/g)) {
+            const bodyStart = (match.index ?? 0) + match[0].length;
+            const body = code.slice(bodyStart, findBalancedCodeEnd(code, bodyStart, '(', ')'));
+            for (const stringMatch of body.matchAll(/"([^"]+)"|'([^']+)'/g)) {
+                addSafelistClasses(stringMatch[1] ?? stringMatch[2] ?? '');
+            }
+        }
+    }
+
+    /**
      * Extracts classes from source code into the safelist (state.classes) so
      * Tailwind generates their CSS. This is the regex fallback for files the
      * Babel sz pass did not handle (non-sz files, Vue/Svelte adapter output),
@@ -4907,6 +4927,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     function extractClasses(code: string): void {
         collectQuotedAttributeClasses(code);
         collectExpressionClasses(code);
+        collectMergeCallClasses(code);
     }
 
     /**
@@ -4915,6 +4936,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param code Source text before csszyx transforms it.
      */
     function recordAuthoredClasses(code: string): void {
+        collectMergeCallClasses(code);
         for (const className of collectAuthoredClassNames(code)) {
             addSafelistClass(className);
             state.authoredClasses.add(className);
@@ -4929,6 +4951,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * token keeps the placement it has today.
      */
     let unservedClasses: string[] = [];
+    let mergeSignatureTable: MergeSignatureTable = [{}, []];
 
     /**
      * Read the project's stylesheets into the style model.
@@ -5063,10 +5086,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             const unsupported = unsupportedStylesheetFactsMessage(model.facts);
             if (unsupported !== null) emitWarning(unsupported);
         }
-        if (state.authoredClasses.size === 0) return;
         // No design system is no answer. Reporting nothing is right: every
         // token then keeps the placement it has today.
         if (model.facts === null) return;
+        mergeSignatureTable = createMergeSignatureTable(
+            [...state.classes, ...state.authoredClasses, ...state.ownedClasses],
+            candidate => model.signature(candidate),
+        );
+        if (state.authoredClasses.size === 0) return;
         unservedClasses = unservedAuthoredClasses(
             state.authoredClasses,
             classes => model.unserved(classes),
@@ -5262,6 +5289,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         if (result.includes(UNSERVED_PLACEHOLDER)) {
             result = result.split(UNSERVED_PLACEHOLDER).join(JSON.stringify(unservedClasses));
+        }
+        if (result.includes(MERGE_SIGNATURES_PLACEHOLDER)) {
+            const expression = serializeMergeSignatures(mergeSignatureTable);
+            result = result
+                .split(MERGE_SIGNATURES_PLACEHOLDER)
+                .join(isEvalWrapped ? escapeForDoubleQuotedString(expression) : expression);
         }
         if (result.includes(MANGLE_MAP_PLACEHOLDER)) {
             // Map keys are class names, and arbitrary-value classes can carry
@@ -6097,6 +6130,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         ) {
             return null;
         }
+        collectMergeCallClasses(code);
         // webpack reads the colon in `virtual:` as a URI scheme and fails the
         // build before any resolve plugin runs — the same reason the
         // mangle-runtime injection is lane-gated. Gating this one off instead
@@ -6389,7 +6423,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // available and only this branch waits for it.
                     if (!serving) return createUnservedRuntimeModule();
                     return computeUnservedClasses().then(() =>
-                        createUnservedRuntimeModule(unservedClasses),
+                        createUnservedRuntimeModule(unservedClasses, mergeSignatureTable),
                     );
                 }
                 if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {

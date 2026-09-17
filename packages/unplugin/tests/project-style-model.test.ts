@@ -120,7 +120,7 @@ describe('openProjectStyleModel', () => {
             ]),
         );
         expect(signature?.rules.map(rule => rule.context)).toContain(
-            '@media (forced-colors: active)|&',
+            '[[["selector","&"],["at-rule","media","(forced-colors: active)"]],false]',
         );
     });
 
@@ -145,7 +145,7 @@ describe('openProjectStyleModel', () => {
 
         expect(model.signature('card')?.rules).toEqual([
             {
-                context: '&',
+                context: '[[["selector","&"]],false]',
                 properties: ['padding-bottom', 'padding-left', 'padding-right', 'padding-top'],
             },
         ]);

@@ -14,12 +14,17 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { runInNewContext } from 'node:vm';
 
 import { afterEach, describe, expect, it } from 'vitest';
 import webpack from 'webpack';
 
 import { vitePlugin, webpackPlugin } from '../src/unplugin.js';
-import { RESOLVED_UNSERVED_VIRTUAL_ID, UNSERVED_PLACEHOLDER } from '../src/virtual-modules.js';
+import {
+    MERGE_SIGNATURES_PLACEHOLDER,
+    RESOLVED_UNSERVED_VIRTUAL_ID,
+    UNSERVED_PLACEHOLDER,
+} from '../src/virtual-modules.js';
 import { callHooks, removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
 /**
@@ -44,6 +49,34 @@ function project(prefix: string): string {
 }
 
 describe('vite lane', () => {
+    it('preserves signature data inside a webpack eval wrapper', async () => {
+        const root = project('csszyx-signature-eval-');
+        const plugins = vitePlugin({ production: { mangle: false } }) as unknown as Record<
+            string,
+            unknown
+        >[];
+        const call = callHooks(plugins);
+        await call('configResolved', { root, command: 'build' });
+        await call(
+            'transform',
+            'export const A = () => <div className="p-4" />;',
+            `${root}/src/A.tsx`,
+        );
+        const module = (await call('load', RESOLVED_UNSERVED_VIRTUAL_ID)) as string;
+        await call('renderStart');
+        const body = `${module.replace(/^import .*;$/m, '')}\n//# sourceURL=webpack-signatures`;
+        const code = `eval(${JSON.stringify(body)});`;
+        const rendered = (await call('renderChunk', code)) as { code: string };
+        let received: unknown;
+        runInNewContext(rendered.code, {
+            registerUnservedClasses() {},
+            registerMergeSignatures(value: unknown) {
+                received = value;
+            },
+        });
+        expect(received).toEqual([{ 'p-4': 0 }, [[0]]]);
+    });
+
     it('substitutes the names the project design system serves nothing for', async () => {
         const root = project('csszyx-unserved-vite-');
         const plugins = vitePlugin({ production: { mangle: false } }) as unknown as Record<
@@ -67,6 +100,8 @@ describe('vite lane', () => {
         const rendered = (await call('renderChunk', module_)) as { code: string } | null;
 
         expect(rendered?.code).toContain('registerUnservedClasses(["tab-items-wrapper"])');
+        expect(rendered?.code).toContain('registerMergeSignatures(');
+        expect(rendered?.code).not.toContain(MERGE_SIGNATURES_PLACEHOLDER);
         expect(rendered?.code).not.toContain(UNSERVED_PLACEHOLDER);
     }, 60_000);
 

@@ -17,6 +17,10 @@ import { describe, expect, it } from 'vitest';
 
 import { _szcn } from '../src/merge-classes.js';
 
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
+
 describe('an offset utility is not the thing it offsets', () => {
     it('keeps a ring colour beside a ring-offset colour', () => {
         expect(_szcn('ring-blue-500', 'ring-offset-gray-800')).toBe(

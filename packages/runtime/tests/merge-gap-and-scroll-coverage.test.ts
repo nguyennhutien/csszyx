@@ -17,6 +17,10 @@ import { describe, expect, it } from 'vitest';
 
 import { _szcn } from '../src/merge-classes.js';
 
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
+
 describe('gap', () => {
     it('lets a later gap replace an axis gap', () => {
         expect(_szcn('gap-x-1', 'gap-4')).toBe('gap-4');
