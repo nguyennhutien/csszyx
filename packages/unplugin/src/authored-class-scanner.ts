@@ -580,3 +580,33 @@ export function collectAuthoredClassNames(source: string): Set<string> {
     }
     return classes;
 }
+
+/**
+ * Every string literal written inside a `szcn(...)` or `_szcn(...)` call.
+ *
+ * The arguments are what the merge will see at runtime, so a build that
+ * records them can hand the runtime a table that covers them. Scan disjoint
+ * outer call bodies, then resume after their closing parenthesis. Nested
+ * calls already contributed their literals, so neither balanced nor unfinished
+ * nesting rescans a suffix: O(n) traversal for n source UTF-16 units, plus the
+ * retained candidates. Delimiter handling is shared with the authored scanner.
+ *
+ * @param source - Source text before csszyx transforms it.
+ * @returns The literals, split on whitespace, as written.
+ */
+export function collectMergeCallClassNames(source: string): Set<string> {
+    const names = new Set<string>();
+    const calls = /\b_?szcn\s*\(/g;
+    for (let match = calls.exec(source); match !== null; match = calls.exec(source)) {
+        const bodyStart = match.index + match[0].length;
+        const bodyEnd = findBalancedCodeEnd(source, bodyStart, '(', ')');
+        calls.lastIndex = bodyEnd + 1;
+        const body = source.slice(bodyStart, bodyEnd);
+        for (const literal of body.matchAll(/"[^"]*"|'[^']*'/g)) {
+            // The whole match minus its quotes; `match` drops the empty
+            // strings a padded literal would leave behind.
+            for (const name of literal[0].slice(1, -1).match(/\S+/g) ?? []) names.add(name);
+        }
+    }
+    return names;
+}

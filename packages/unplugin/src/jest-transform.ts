@@ -44,6 +44,11 @@ import {
     transformSource,
 } from '@csszyx/compiler';
 
+import {
+    importMergeRegistration,
+    loadsCsszyxRuntime,
+    mergeRegistrationPath,
+} from './merge-registration.js';
 import { injectNextRuntimeImports, type NextRuntimeImportUsage } from './next-runtime-injection.js';
 import {
     failedNextClassPrefixInputsStamp,
@@ -305,6 +310,8 @@ export interface JestTransformOptions {
 export interface JestProcessOptions {
     /** The jest project the file belongs to. */
     config?: { rootDir?: string };
+    /** True when jest runs native ES modules rather than CommonJS. */
+    supportsStaticESM?: boolean;
 }
 
 /** The options jest hands `getCacheKey`; only the fields this lane folds in. */
@@ -433,6 +440,56 @@ function finish(code: string, usage: NextRuntimeImportUsage, classPrefix: string
 }
 
 /**
+ * Import the merge registration the last build settled, from a module that
+ * loads the csszyx runtime.
+ *
+ * A test run has no bundler to settle the table under, and `szcn` merges
+ * nothing without one. A build, or `csszyx next prebuild`, writes the settled
+ * module beside the cache; importing it is what makes the suite merge the way
+ * the browser does. Before a build has written it the module is left alone.
+ *
+ * @param code - The code jest would execute.
+ * @param sourcePath - Absolute path of the file.
+ * @param root - The project root.
+ * @param format - The twin this jest can load.
+ * @returns The code, importing the module when it exists.
+ */
+function withMergeRegistration(
+    code: string,
+    sourcePath: string,
+    root: string,
+    format: 'esm' | 'cjs',
+): string {
+    if (!loadsCsszyxRuntime(code)) return code;
+    return importMergeRegistration(code, sourcePath, root, format).code;
+}
+
+/**
+ * The twin of the settled module a jest run can load.
+ *
+ * @param jestOptions - What jest says about the run.
+ * @returns `esm` for a jest running native ES modules, `cjs` otherwise.
+ */
+function formatOf(jestOptions: JestProcessOptions | undefined): 'esm' | 'cjs' {
+    return jestOptions?.supportsStaticESM === true ? 'esm' : 'cjs';
+}
+
+/**
+ * The settled module's text, for the cache key.
+ *
+ * @param root - The project root.
+ * @param format - The twin this jest imports.
+ * @returns The text, or empty when no build has written it.
+ */
+function mergeRegistrationText(root: string, format: 'esm' | 'cjs'): string {
+    try {
+        return fs.readFileSync(mergeRegistrationPath(root, format), 'utf8');
+    } catch {
+        return '';
+    }
+}
+
+/**
  * Build the transformer jest calls for every file it loads.
  *
  * @param options - Cache location and which extensions to compile.
@@ -457,19 +514,25 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
     return {
         process(sourceText, sourcePath, jestOptions) {
             if (!compiles(sourcePath)) return { code: sourceText };
-            const { cached, classPrefix } = projectOf(jestOptions);
+            const { cached, classPrefix, root } = projectOf(jestOptions);
             const prefix = classPrefix();
+            // jest in its default mode cannot load an ES module, and one that
+            // runs native ESM imports the runtime's ES build, which a CommonJS
+            // twin would not register into.
+            const format = formatOf(jestOptions);
+            const merges = (code: string): string =>
+                withMergeRegistration(code, sourcePath, root, format);
             // The build's answer first: it is the only one that resolves an
             // `sz` object or `szv` factory imported from another module.
             const built = cached(sourceText, sourcePath, prefix);
             if (built !== null && typeof built.code === 'string') {
                 reportDeadClasses(sourcePath, built.diagnostics);
-                return { code: finish(built.code, built, prefix) };
+                return { code: merges(finish(built.code, built, prefix)) };
             }
             const result = transformSource(sourceText, sourcePath, { classPrefix: prefix });
             reportDeadClasses(sourcePath, result.diagnostics);
             return {
-                code: result.transformed ? finish(result.code, result, prefix) : sourceText,
+                code: merges(result.transformed ? finish(result.code, result, prefix) : sourceText),
             };
         },
         getCacheKey(sourceText, sourcePath, cacheKeyOptions) {
@@ -491,6 +554,14 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
                     .update('\0')
                     // Output lowered under one prefix is wrong under another.
                     .update(project === null ? '' : JSON.stringify(prefix))
+                    .update('\0')
+                    // A build that settled a different table must reach the
+                    // suite, and the file it wrote is imported by path.
+                    .update(
+                        project === null
+                            ? ''
+                            : mergeRegistrationText(project.root, formatOf(cacheKeyOptions)),
+                    )
                     .digest('hex')
             );
         },
@@ -499,6 +570,8 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
 
 /** What the transformer knows about one project root. */
 interface JestProject {
+    /** The project root, where the build writes what a test run reads. */
+    root: string;
     /**
      * The build's output for a file, when it saw these contents.
      *
@@ -563,6 +636,7 @@ function openJestProject(root: string, options: JestTransformOptions): JestProje
         }
     };
     return {
+        root,
         cached: (sourceText, sourcePath, prefix) =>
             index.find(normalizePathSeparators(sourcePath), sourceText, prefix),
         classPrefix,

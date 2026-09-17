@@ -70,7 +70,11 @@ export {
     type SzcnThemeGroups,
     setSzcnGroups,
 } from './merge-groups.js';
-export { type MergeSignatureTable, registerMergeSignatures } from './merge-signatures.js';
+export {
+    MERGE_TABLE_FORMAT,
+    type MergeSignatureTable,
+    registerMergeSignatures,
+} from './merge-signatures.js';
 // Box-model class routing + category-aware toolkit
 export {
     type BoxRole,

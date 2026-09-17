@@ -26,6 +26,7 @@ import { VERSION as compilerVersion } from '@csszyx/compiler';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createTransformer, findCachedTransform } from '../src/jest-transform.js';
+import { MERGE_REGISTRATION_CJS_FILE, MERGE_REGISTRATION_FILE } from '../src/merge-registration.js';
 
 const roots: string[] = [];
 afterEach(() => {
@@ -527,5 +528,114 @@ describe('picking between entries with a damaged timestamp', () => {
             name: 'good.json',
         });
         expect(findCachedTransform(root, FILE, SOURCE)).toBe(NEW);
+    });
+});
+
+describe('the merge registration the build wrote', () => {
+    // A test run has no bundler to settle the merge table, and `szcn` merges
+    // nothing without one. A build, or `csszyx next prebuild`, writes the
+    // settled module beside the cache; a module that calls `szcn` imports it,
+    // so the suite merges the way the browser does.
+    const MERGES = [
+        "import { szcn } from '@csszyx/runtime';",
+        'export const A = () => <div className={szcn("p-2", "p-4")} />;',
+    ].join('\n');
+    const REGISTRATION = '// written by a build\n';
+
+    /**
+     * A project root, with the registration module when asked.
+     *
+     * @param registration - The module's text, or null for no module.
+     * @returns The root and the file the transformer looks for.
+     */
+    function projectWith(registration: string | null): { root: string; file: string } {
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-jest-registration-'));
+        roots.push(root);
+        // The CommonJS twin: what jest imports unless it runs native ESM.
+        const file = join(root, '.csszyx', MERGE_REGISTRATION_CJS_FILE);
+        if (registration !== null) {
+            mkdirSync(join(root, '.csszyx'), { recursive: true });
+            writeFileSync(file, registration, 'utf8');
+            writeFileSync(join(root, '.csszyx', MERGE_REGISTRATION_FILE), registration, 'utf8');
+        }
+        return { root, file };
+    }
+
+    it('is imported by a module that calls szcn', () => {
+        const { root } = projectWith(REGISTRATION);
+
+        const code = createTransformer({ root }).process(MERGES, join(root, 'src/a.tsx')).code;
+
+        expect(code).toContain(`import '../.csszyx/${MERGE_REGISTRATION_CJS_FILE}';`);
+    });
+
+    it('is imported as an ES module by a jest that runs native ESM', () => {
+        // There the runtime the suite imports is the ES build, and a CommonJS
+        // twin would register into a second copy of it.
+        const { root } = projectWith(REGISTRATION);
+
+        const code = createTransformer({ root }).process(MERGES, join(root, 'src/a.tsx'), {
+            supportsStaticESM: true,
+        }).code;
+
+        expect(code).toContain(`import '../.csszyx/${MERGE_REGISTRATION_FILE}';`);
+    });
+
+    it.each([
+        ['re-exports it under another name', "export { szcn as cn } from '@csszyx/runtime';\n"],
+        [
+            'imports the merge entry only',
+            "import { _szcn } from '@csszyx/runtime/merge';\nexport const c = _szcn('p-2', 'p-4');\n",
+        ],
+    ])('is imported by a module that %s', (_case, source) => {
+        // A `cn` helper that re-exports `szcn` is the only module that names
+        // it; every caller writes `cn(...)`. Registering from the module that
+        // loads the runtime reaches every caller.
+        const { root } = projectWith(REGISTRATION);
+
+        const code = createTransformer({ root }).process(source, join(root, 'src/cn.ts')).code;
+
+        expect(code).toContain(`import '../.csszyx/${MERGE_REGISTRATION_CJS_FILE}';`);
+    });
+
+    it('is not imported by a module that only spells the runtime in a string', () => {
+        const { root } = projectWith(REGISTRATION);
+        const source = "export const name = '@csszyx/runtime';\n";
+
+        const code = createTransformer({ root }).process(source, join(root, 'src/a.ts')).code;
+
+        expect(code).not.toContain('merge-registration');
+    });
+
+    it('is not imported by a module that never merges', () => {
+        const { root } = projectWith(REGISTRATION);
+        const source = 'export const A = () => <div sz={{ p: 4 }} />;';
+
+        const code = createTransformer({ root }).process(source, join(root, 'src/a.tsx')).code;
+
+        expect(code).not.toContain('merge-registration');
+    });
+
+    it('is not imported before a build has written it', () => {
+        const { root } = projectWith(null);
+
+        const code = createTransformer({ root }).process(MERGES, join(root, 'src/a.tsx')).code;
+
+        expect(code).not.toContain('merge-registration');
+    });
+
+    it('changes the cache key when a build rewrites it', () => {
+        // jest keeps the transformed output under the key: a table that
+        // changed without the file changing must still reach the suite.
+        const { root, file } = projectWith(REGISTRATION);
+        const keyOf = (): string =>
+            createTransformer({ root }).getCacheKey(MERGES, join(root, 'src/a.tsx'), {
+                configString: '{}',
+            });
+        const before = keyOf();
+
+        writeFileSync(file, '// rewritten by a later build\n', 'utf8');
+
+        expect(keyOf()).not.toBe(before);
     });
 });

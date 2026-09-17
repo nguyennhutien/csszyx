@@ -398,6 +398,15 @@ const _warned = new Set<string>();
  * @param source - Owner these names belong to.
  */
 export function registerSzcnGroups(groups: SzcnThemeGroups, source: string = DEFAULT_SOURCE): void {
+    // On 0.17 this was how a class written in plain CSS joined a merge group.
+    // The build calls `setSzcnGroups`, so this reaches only an app's own call.
+    warnOnce(
+        '`registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the ' +
+            'CSS your Tailwind compiles, and this registry now only names the property ' +
+            '`classify` and `splitBox` read.\n  help: declare plain-CSS classes with `@utility` ' +
+            'and use a csszyx integration that supplies a merge table.\n' +
+            '  note: without a table, `szcn` removes only exact repeats.',
+    );
     writeDeclarations(source, groups, false);
 }
 

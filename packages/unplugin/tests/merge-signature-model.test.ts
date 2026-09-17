@@ -15,6 +15,34 @@ afterEach(() => {
 });
 
 describe('project CSS to runtime merge', () => {
+    it.each([szcn, _szcn])(
+        'keeps distinct custom variables but merges writes to the same variable (helper %#)',
+        async merge => {
+            const root = tailwindProject('csszyx-merge-custom-identity-', {
+                'app.css': `@import "tailwindcss";
+                @utility card-inline { --card-inline-size: 1rem; }
+                @utility card-width { --card-width: 2rem; }
+                @utility card-inline-large { --card-inline-size: 3rem; }
+                .card { width: var(--card-inline-size); height: var(--card-width); }`,
+            });
+            const model = await openProjectStyleModel(root, [join(root, 'app.css')]);
+            const candidates = ['card-inline', 'card-width', 'card-inline-large'];
+            for (const prune of [false, true]) {
+                registerMergeSignatures(
+                    createMergeSignatureTable(candidates, candidate => model.signature(candidate), {
+                        prune,
+                    }),
+                );
+                expect.soft(merge('card-inline', 'card-width')).toBe('card-inline card-width');
+                expect.soft(merge('card-width', 'card-inline')).toBe('card-width card-inline');
+                expect.soft(merge('card-inline', 'card-inline-large')).toBe('card-inline-large');
+                expect
+                    .soft(merge('card-inline', 'card-width', 'card-inline-large'))
+                    .toBe('card-width card-inline-large');
+            }
+        },
+    );
+
     it('preserves every declaration in the three false-delete regression families', async () => {
         const root = tailwindProject('csszyx-merge-model-', {
             'app.css': '@import "tailwindcss";',
@@ -125,6 +153,78 @@ describe('logical and physical sides of one box', () => {
         },
         60_000,
     );
+});
+
+describe('a class whose compiled selector does not parse', () => {
+    // Tailwind's scan finds `group-[/x]:p-4` in any file that spells it, and
+    // the selector it compiles to is one postcss-selector-parser 7.1.5
+    // rejects. Reading it must not stop the build: a class with no signature
+    // keeps both classes, the answer the merge gives whenever it cannot prove.
+    it('keeps both classes instead of failing', async () => {
+        expect(await merged(['group-[/x]:p-4', 'p-8'])).toBe('group-[/x]:p-4 p-8');
+    }, 60_000);
+});
+
+describe('utilities that only set a variable another utility reads', () => {
+    // `space-x-reverse` sets `--tw-space-x-reverse: 1` and nothing else;
+    // `space-x-4` resets it to 0 as a default and reads it. By property sets the
+    // later class covers the earlier one, but the reverse utility exists to be
+    // written beside the spacing one, and the stylesheet emits it after, so
+    // together the element renders reversed. Dropping it loses the reversal.
+    it.each([
+        ['space-x-reverse', 'space-x-4'],
+        ['space-y-reverse', 'space-y-4'],
+        ['divide-x-reverse', 'divide-x-2'],
+        ['divide-y-reverse', 'divide-y-2'],
+        ['ring-inset', 'ring-2'],
+    ] as const)(
+        '%s then %s keeps both classes',
+        async (earlier, later) => {
+            expect(await merged([earlier, later])).toBe(`${earlier} ${later}`);
+        },
+        60_000,
+    );
+
+    // A utility that also sets a real property still loses to one that covers
+    // it, and a modifier still loses to another modifier of the same variables.
+    it.each([
+        ['shadow-red-500', 'shadow-blue-500'],
+        ['ring-red-500', 'ring-blue-500'],
+        ['from-red-500', 'from-blue-500'],
+        ['space-x-2', 'space-x-4'],
+        ['divide-x-2', 'divide-x-4'],
+        ['ring-2', 'ring-4'],
+    ] as const)(
+        '%s then %s keeps only the later class',
+        async (earlier, later) => {
+            expect(await merged([earlier, later])).toBe(later);
+        },
+        60_000,
+    );
+});
+
+describe('the grid shorthand', () => {
+    // `grid` resets the explicit and implicit grid properties and, since CSS
+    // Grid Level 2, not the gutters. A class that sets `grid:` therefore covers
+    // `grid-rows-*` and leaves `gap-*` alone.
+    const STACK =
+        '@import "tailwindcss";\n@utility stack { display: grid; grid: auto-flow / 1fr; }\n';
+
+    it.each([
+        ['gap-4', 'stack'],
+        ['gap-x-4', 'stack'],
+        ['gap-y-4', 'stack'],
+    ] as const)(
+        '%s then %s keeps both classes',
+        async (earlier, later) => {
+            expect(await merged([earlier, later], STACK)).toBe(`${earlier} ${later}`);
+        },
+        60_000,
+    );
+
+    it('still covers what it resets', async () => {
+        expect(await merged(['grid-rows-2', 'stack'], STACK)).toBe('stack');
+    }, 60_000);
 });
 
 describe('tokens a project declares in @theme', () => {

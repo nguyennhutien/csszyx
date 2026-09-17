@@ -21,6 +21,8 @@ import { gzipSync } from 'node:zlib';
 import { build } from 'esbuild';
 import { describe, expect, it } from 'vitest';
 
+import { createUnservedRuntimeModule } from '../src/virtual-modules.js';
+
 const require = createRequire(import.meta.url);
 
 /**
@@ -172,6 +174,32 @@ describe('runtime split size contract', () => {
         // gzip, where the classifier and its box-role tables made it 5,358.
         expect(probe.gzipBytes).toBeLessThan(1_600);
         expect(probe.gzipBytes).toBeGreaterThan(700);
+    });
+
+    it('the merge registration a build injects stays as light as the merge entry', async () => {
+        // A module the compiler routed to `/merge` gets this registration too,
+        // and a registration read from the main entry would pull the whole
+        // runtime into an app that otherwise ships 1 kB of it.
+        const probe = await bundleProbe(
+            `${createUnservedRuntimeModule(['tab-items-wrapper'], [{ 'p-4': 0, 'pb-2': 1 }, [[0, 1], [1]]])}\n` +
+                "import { _szcn } from '@csszyx/runtime/merge'; console.log(_szcn);",
+        );
+        expect(probe.hasCompiler).toBe(false);
+        // Measured at 713 B gzip, the merge entry included.
+        expect(probe.gzipBytes).toBeLessThan(2_000);
+    });
+
+    it('registers into the same table the merge entry reads', async () => {
+        // Two entries, one state: a registration through either has to reach
+        // `_szcn` from the other, or the table goes nowhere.
+        const barrel = (await import(require.resolve('@csszyx/runtime'))) as {
+            registerMergeSignatures(table: unknown): void;
+        };
+        const merge = (await import(require.resolve('@csszyx/runtime/merge'))) as {
+            _szcn(...classes: string[]): string;
+        };
+        barrel.registerMergeSignatures([{ 'p-4': 0, 'pb-2': 1 }, [[0, 1], [1]]]);
+        expect(merge._szcn('pb-2', 'p-4')).toBe('p-4');
     });
 
     it('the bare /lowering import survives bundling and restores the compiler', async () => {

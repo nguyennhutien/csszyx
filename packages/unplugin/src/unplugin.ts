@@ -40,7 +40,11 @@ import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } fro
 import type { EnvironmentModuleNode, FSWatcher, PluginOption, ViteDevServer } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { atomicWriteFileSync } from './atomic-write.js';
-import { collectAuthoredClassNames, findBalancedCodeEnd } from './authored-class-scanner.js';
+import {
+    collectAuthoredClassNames,
+    collectMergeCallClassNames,
+    findBalancedCodeEnd,
+} from './authored-class-scanner.js';
 import { findClassNameAuthorConflicts } from './class-name-authors.js';
 import { findUnknownConfigKeys, unknownConfigKeysMessage } from './config-keys.js';
 import {
@@ -151,7 +155,13 @@ export {
     SAFELIST_FILE,
 } from './safelist-source.js';
 
-import { createMergeSignatureTable, type MergeSignatureTable } from './merge-signature.js';
+import { loadsCsszyxRuntime, writeMergeRegistrationModule } from './merge-registration.js';
+import {
+    createMergeSignatureTable,
+    MERGE_TABLE_FORMAT,
+    type MergeSignatureTable,
+} from './merge-signature.js';
+import { isMonorepoPackage } from './monorepo.js';
 import { recordStylesheetFacts } from './next-stylesheet-facts.js';
 import {
     missingTailwindStylesheetMessage,
@@ -199,6 +209,7 @@ import {
     MANGLE_MAP_PLACEHOLDER,
     MANGLE_RUNTIME_VIRTUAL_ID,
     MERGE_SIGNATURES_PLACEHOLDER,
+    MERGE_TABLE_UPDATE_EVENT,
     RESOLVED_MANGLE_RUNTIME_VIRTUAL_ID,
     RESOLVED_THEME_GROUPS_VIRTUAL_ID,
     RESOLVED_UNSERVED_VIRTUAL_ID,
@@ -984,42 +995,7 @@ export function cssHasContentScope(code: string): boolean {
     return tailwindImportScopesContent(s) || /@source\s+not\b/.test(s);
 }
 
-/**
- * Whether `root` is a package INSIDE a monorepo — an ancestor directory is a
- * workspace root (`pnpm-workspace.yaml`, a `package.json` with a `workspaces`
- * field, or an nx/lerna marker). In that case Tailwind v4 automatic content
- * detection would otherwise climb to the workspace root. Synchronous and cheap
- * (a handful of stat calls up the tree); intended to be memoized per build.
- * Mirrors `isInsideWorkspace` in the CLI's `init` command.
- *
- * @param root - the project/package root directory.
- * @returns true when an ancestor is a workspace root.
- */
-export function isMonorepoPackage(root: string): boolean {
-    let dir = path.dirname(path.resolve(root));
-    const { root: fsRoot } = path.parse(dir);
-    while (dir !== fsRoot) {
-        if (
-            fs.existsSync(path.join(dir, 'pnpm-workspace.yaml')) ||
-            fs.existsSync(path.join(dir, 'nx.json')) ||
-            fs.existsSync(path.join(dir, 'lerna.json'))
-        ) {
-            return true;
-        }
-        const pkgPath = path.join(dir, 'package.json');
-        if (fs.existsSync(pkgPath)) {
-            try {
-                if ('workspaces' in (JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as object)) {
-                    return true;
-                }
-            } catch {
-                // Malformed package.json — ignore and keep walking up.
-            }
-        }
-        dir = path.dirname(dir);
-    }
-    return false;
-}
+export { isMonorepoPackage };
 
 /**
  * Whether to warn that Tailwind content detection is unscoped in a monorepo.
@@ -4905,13 +4881,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param code Source code before transforms.
      */
     function collectMergeCallClasses(code: string): void {
-        for (const match of code.matchAll(/\b_?szcn\s*\(/g)) {
-            const bodyStart = (match.index ?? 0) + match[0].length;
-            const body = code.slice(bodyStart, findBalancedCodeEnd(code, bodyStart, '(', ')'));
-            for (const stringMatch of body.matchAll(/"([^"]+)"|'([^']+)'/g)) {
-                addSafelistClasses(stringMatch[1] ?? stringMatch[2] ?? '');
-            }
-        }
+        for (const name of collectMergeCallClassNames(code)) addSafelistClass(name);
     }
 
     /**
@@ -4952,6 +4922,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     let unservedClasses: string[] = [];
     let mergeSignatureTable: MergeSignatureTable = [{}, []];
+    /** Whether a page can hold the table: it has been settled at least once. */
+    let mergeTableSettled = false;
 
     /**
      * Read the project's stylesheets into the style model.
@@ -5074,6 +5046,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Nothing; the result lands in `unservedClasses`.
      */
     async function computeUnservedClasses(): Promise<void> {
+        await settleUnservedClasses();
+        mergeTableSettled = true;
+        // The same module the chunk embeds, as a file: jest has no bundler to
+        // settle the table under and imports what the last build settled. An
+        // unwritable directory must not fail the build; without the file the
+        // suite keeps every class, the answer it had before this existed.
+        try {
+            writeMergeRegistrationModule(state.rootDir, unservedClasses, mergeSignatureTable);
+        } catch {
+            // Nothing to do: the build's own delivery is unaffected.
+        }
+    }
+
+    /**
+     * Settle the unserved list and the merge table from the census.
+     *
+     * @returns Nothing; the results land in `unservedClasses` and
+     *          `mergeSignatureTable`.
+     */
+    async function settleUnservedClasses(): Promise<void> {
         // Every lane opened the model before its first transform. Without it
         // the list would come back empty, which reads as "Tailwind serves every
         // class" and places each name wrong without a word.
@@ -5086,11 +5078,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             const unsupported = unsupportedStylesheetFactsMessage(model.facts);
             if (unsupported !== null) emitWarning(unsupported);
         }
+        // Settled from scratch every time: a rebuild or a stylesheet edit that
+        // leaves no design system must not keep serving the last good answer.
+        mergeSignatureTable = [{}, []];
+        unservedClasses = [];
         // No design system is no answer. Reporting nothing is right: every
         // token then keeps the placement it has today.
         if (model.facts === null) return;
+        // Tailwind's own scan as well as what the build saw: a map of variants
+        // reaches `szcn` through a variable, and a package the plugin never
+        // transforms still has its classes generated.
         mergeSignatureTable = createMergeSignatureTable(
-            [...state.classes, ...state.authoredClasses, ...state.ownedClasses],
+            [
+                ...state.classes,
+                ...state.authoredClasses,
+                ...state.ownedClasses,
+                ...model.candidates(),
+            ],
             candidate => model.signature(candidate),
         );
         if (state.authoredClasses.size === 0) return;
@@ -5390,6 +5394,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param content - Its current contents.
      */
     function recordUntransformedHotFile(file: string, content: string): void {
+        // Plain merge calls need a fresh registration even without sz props.
+        recordAuthoredClasses(content);
         trackGlobalVarSourceFile(file, content);
         recordFileVarMangleEntries(state, file, []);
         recordFileCSSVariableMetrics(state, file, null);
@@ -5476,6 +5482,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         watcher: Pick<FSWatcher, 'emit'>,
     ): void {
         const sizeBefore = state.classes.size;
+        // Capture the previous size first: authored and lowered classes can
+        // overlap, but discovering either must still grow the safelist.
+        recordAuthoredClasses(fileContent);
         trackGlobalVarSourceFile(file, fileContent);
         for (const cls of result.classes) {
             addSafelistClass(cls);
@@ -5609,7 +5618,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         const before = prefixOf(previous);
         const after = prefixOf(current);
-        if (after === before) return;
+        if (after === before) {
+            await followMergeTableEdit({ server: ctx.server, sourceEdit: false });
+            return;
+        }
         await prescanAndWriteClasses();
         ctx.server.moduleGraph.invalidateAll();
         // Vite 5 has no per-environment graphs; Vite 6 and later answer each
@@ -5626,6 +5638,74 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         console.warn(
             `[csszyx] ${projectRelative(ctx.file)} changed the Tailwind prefix from ${describePrefix(before)} to ${describePrefix(after)}: recompiled every module and reloaded the page.`,
         );
+    }
+
+    /**
+     * Settle the merge table again after a source or stylesheet edit on a dev server,
+     * and hand the page the new one when it changed.
+     *
+     * A stylesheet edit is a CSS hot update: Vite swaps the styles and
+     * re-executes no JavaScript, so replacing the table alone cannot recompute
+     * class names already rendered from it. Invalidate registration and reload
+     * when the table changes to recompute those names; an ordinary CSS edit
+     * that leaves it unchanged keeps the hot update it should. Source
+     * edits can add candidates before their next transform; the cached module
+     * must register those as well, before the framework runs its hot update,
+     * without dropping the page's state. A synchronous custom-event listener
+     * replaces the registry before Vite delivers the following JS update.
+     * The dev server pays one census scan and the existing table construction
+     * per eligible edit, not per environment.
+     *
+     * @param options - Dev server and the kind of edit being delivered.
+     * @param options.server - The dev server.
+     * @param options.sourceEdit - Preserve page state for ordinary source HMR.
+     * @returns Nothing once the page has been told.
+     */
+    async function followMergeTableEdit({
+        server,
+        sourceEdit,
+    }: {
+        server: ViteDevServer;
+        sourceEdit: boolean;
+    }): Promise<void> {
+        // No page has loaded the module yet; the first load settles it fresh.
+        if (!mergeTableSettled) return;
+        const before = createUnservedRuntimeModule(unservedClasses, mergeSignatureTable);
+        await computeUnservedClasses();
+        if (createUnservedRuntimeModule(unservedClasses, mergeSignatureTable) === before) return;
+        /**
+         * The two calls every Vite module graph shares. Vite 5 has no
+         * per-environment graphs; Vite 6 and later answer each environment
+         * from its own, under a different nominal type.
+         */
+        interface ModuleGraphLike {
+            getModuleById(id: string): object | undefined | null;
+            invalidateModule(module_: never): void;
+        }
+        const { environments } = server as unknown as {
+            environments?: Record<string, { moduleGraph: ModuleGraphLike }>;
+        };
+        const graphs: ModuleGraphLike[] = [
+            server.moduleGraph as unknown as ModuleGraphLike,
+            ...Object.values(environments ?? {}).map(environment => environment.moduleGraph),
+        ];
+        for (const graph of graphs) {
+            const module_ = graph.getModuleById(RESOLVED_UNSERVED_VIRTUAL_ID);
+            if (module_) graph.invalidateModule(module_ as never);
+        }
+        if (sourceEdit) {
+            server.ws.send({
+                type: 'custom',
+                event: MERGE_TABLE_UPDATE_EVENT,
+                data: {
+                    classes: unservedClasses,
+                    table: mergeSignatureTable,
+                    format: MERGE_TABLE_FORMAT,
+                },
+            });
+        } else {
+            server.ws.send({ type: 'full-reload' });
+        }
     }
 
     /**
@@ -5670,7 +5750,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Answer a hot update, and follow a Tailwind prefix a stylesheet edit changed.
+     * Answer a hot update, following changed stylesheet facts or source candidates.
      *
      * @param pass - Which pass this is and the graph its answer belongs to.
      * @param pass.isClientPass - True for the pass that owns the page.
@@ -5690,8 +5770,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         ctx: { file: string; server: ViteDevServer },
     ): TModule[] | undefined | Promise<TModule[] | undefined> {
         const answer = handleHotFile(pass, ctx);
-        if (!pass.isClientPass || !ctx.file.endsWith('.css')) return answer;
-        return followStyleModelEdit(ctx).then(() => answer);
+        if (!pass.isClientPass) return answer;
+        if (ctx.file.endsWith('.css')) return followStyleModelEdit(ctx).then(() => answer);
+        if (shouldProcessSource(ctx.file)) {
+            return followMergeTableEdit({ server: ctx.server, sourceEdit: true }).then(
+                () => answer,
+            );
+        }
+        return answer;
     }
 
     /**
@@ -6226,28 +6312,38 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * the colon in `virtual:` as a URI scheme and fails before any resolve
      * plugin runs.
      *
-     * The generated module reads the runtime's main entry rather than the light
-     * `/core` one the mangle module uses. The test above already restricts this
-     * to modules importing that entry, so it is present either way, and `/core`
-     * would add a subpath that has to resolve in every build.
+     * The generated module reads the runtime's main entry. It is injected into
+     * modules importing any entry, `/merge` included, and still costs a
+     * `/merge`-only app nothing to speak of: the main entry tree-shakes, and
+     * the registration plus the merge entry measured 713 B gzip.
      *
      * @param transformedCode - Current transformed source.
      * @param id - Bundler module identifier.
      * @returns Rewritten source when the import is needed, otherwise null.
      */
     function injectUnservedRuntime(transformedCode: string, id: string): string | null {
-        if (activeFramework !== 'vite' && activeFramework !== 'rollup') {
-            return null;
+        // Any entry, not only the main one: a module the compiler routed to
+        // `/merge` merges through `_szcn` and needs the table as much.
+        if (!shouldProcessSource(id) || !loadsCsszyxRuntime(transformedCode)) return null;
+        if (activeFramework === 'webpack') {
+            // Next compiles a page in several layers, each with its own copy of
+            // the runtime, and adds its entries itself, so the registration
+            // prepended to the configured entries reaches none of them. Imported
+            // here it lands in the layer of the module importing it, and
+            // `processAssets` fills it in every chunk.
+            if (webpackUnservedFile === null) return null;
+            const [from] = id.split('?');
+            const specifier = themeGroupsSpecifier(from, webpackUnservedFile);
+            if (transformedCode.includes(specifier)) return null;
+            return insertRuntimeImport(transformedCode, `import '${specifier}';\n`);
         }
-        if (
-            !shouldProcessSource(id) ||
-            !MANGLE_RUNTIME_CONSUMER_RE.test(transformedCode) ||
-            transformedCode.includes(UNSERVED_VIRTUAL_ID)
-        ) {
-            return null;
-        }
+        if (activeFramework !== 'vite' && activeFramework !== 'rollup') return null;
+        if (transformedCode.includes(UNSERVED_VIRTUAL_ID)) return null;
         return insertRuntimeImport(transformedCode, `import '${UNSERVED_VIRTUAL_ID}';\n`);
     }
+
+    /** The webpack lane's registration file, once its compiler has written it. */
+    let webpackUnservedFile: string | null = null;
 
     /**
      * Prepend the unserved-class registration to every webpack entrypoint.
@@ -6273,6 +6369,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // An unwritable output directory must not fail the build: without the
         // file every token keeps the placement it had before this existed.
         if (file === null) return;
+        webpackUnservedFile = file;
         applyMangleRuntimeEntry(compiler, root, file, () => {});
         // `renderStart` is a Rollup hook and webpack never calls it, so the
         // list would stay empty on this lane and the file would register
@@ -6433,7 +6530,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     // available and only this branch waits for it.
                     if (!serving) return createUnservedRuntimeModule();
                     return computeUnservedClasses().then(() =>
-                        createUnservedRuntimeModule(unservedClasses, mergeSignatureTable),
+                        createUnservedRuntimeModule(unservedClasses, mergeSignatureTable, 'vite'),
                     );
                 }
                 if (id === RESOLVED_THEME_GROUPS_VIRTUAL_ID) {

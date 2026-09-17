@@ -32,6 +32,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import fg from 'fast-glob';
+import { type CompiledSources, type ScanSource, scanSourcesOf } from './candidate-scanner.js';
 import {
     type CollisionDesignSystem,
     collisionOracleFrom,
@@ -580,6 +581,8 @@ export type StylesheetRole =
           utilities: boolean;
           /** Every stylesheet the compile loaded, as resolved paths. */
           imports: string[];
+          /** Where Tailwind's Scanner looks for this stylesheet's classes. */
+          scanSources: ScanSource[];
       }
     | OracleSkip;
 
@@ -615,7 +618,7 @@ export async function readStylesheetRole(
     const compile = tailwind.compile as (
         css: string,
         options: LoadDesignSystemOptions,
-    ) => Promise<{ features: number }>;
+    ) => Promise<{ features: number } & Partial<CompiledSources>>;
     const context: StylesheetResolution = {
         aliases: options.aliases ?? [],
         resolver: await projectResolver(options.resolveFrom),
@@ -643,7 +646,17 @@ export async function readStylesheetRole(
             loadModule: (id, base) => loadModule(id, base, options.resolveFrom, context),
         });
         const utilities = tailwind.utilitiesFeature ?? UTILITIES_FEATURE;
-        return { ok: true, utilities: (compiled.features & utilities) !== 0, imports };
+        return {
+            ok: true,
+            utilities: (compiled.features & utilities) !== 0,
+            imports,
+            // Automatic detection starts where the integration runs: the
+            // project root, which is where the model resolves from.
+            scanSources: scanSourcesOf(
+                { root: compiled.root ?? null, sources: compiled.sources ?? [] },
+                options.resolveFrom,
+            ),
+        };
     } catch (error) {
         return {
             ...stylesheetSkip(

@@ -176,7 +176,31 @@ function mergeUncached(inputs: readonly ClassInput[], bridge: MangleBridge | und
         }
     }
 
+    if (process.env.NODE_ENV !== 'production' && order.length > 1) warnIfNoTable();
     return order.map(key => byKey.get(key) as string).join(' ');
+}
+
+/** Whether the missing-table warning has been printed this session. */
+let warnedNoTable = false;
+
+/**
+ * Say once, in development, that two classes met with no merge table.
+ *
+ * A jest suite run before any build, a lane that ships no table and the
+ * runtime used on its own all merge only exact repeats, and each of them
+ * merged by name before 0.18. A registered table, even an empty one, means a
+ * build answered, so this stays quiet.
+ */
+function warnIfNoTable(): void {
+    if (warnedNoTable || getMergeSignatureTable() !== undefined) return;
+    warnedNoTable = true;
+    console.warn(
+        '[csszyx] `szcn` has no merge table in this run, so it removes only exact repeats: ' +
+            "`szcn('p-2', 'p-4')` keeps both classes.\n" +
+            '  help: the csszyx plugin for Vite, Rollup, webpack or Next.js registers one; ' +
+            'for jest, run the build or `csszyx next prebuild` first.\n' +
+            '  note: esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun ship no table.',
+    );
 }
 
 /**
@@ -202,12 +226,15 @@ function mergeClassToken(
             ? signatureTable[0][original]
             : undefined;
     const key = signature === undefined ? original : signature;
-    // An id with no coverage row covers itself: a table cut short must still
-    // drop an exact repeat, the one merge that needs no evidence.
-    const covered =
+    const row =
         signatureTable === undefined || signature === undefined
-            ? [key]
-            : (signatureTable[1][signature] ?? [key]);
+            ? undefined
+            : signatureTable[1][signature];
+    // The class's own key comes first whatever the row says: the same class,
+    // or one of the same signature, always replaces the earlier one. A missing
+    // row, or one that left its own id out, would otherwise keep an exact
+    // repeat or print the later token twice.
+    const covered: readonly (string | number)[] = [key, ...(row ?? [])];
     for (const coveredKey of covered) {
         if (!byKey.delete(coveredKey)) continue;
         const index = order.indexOf(coveredKey);

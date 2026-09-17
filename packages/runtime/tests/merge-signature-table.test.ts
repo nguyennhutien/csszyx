@@ -49,6 +49,12 @@ describe('szcn — build-generated merge signatures', () => {
         expect(szcn('p-4', 'p-8')).toBe('p-4 p-8');
     });
 
+    it('replaces a class of the same signature when its row leaves itself out', () => {
+        registerMergeSignatures([{ 'shadow-brand': 0, 'shadow-danger': 0 }, [[]]]);
+
+        expect(szcn('shadow-brand', 'shadow-danger')).toBe('shadow-danger');
+    });
+
     it('keeps unknown class spellings separate from numeric signature ids', () => {
         registerMergeSignatures([{ 'p-4': 0 }, [[0]]]);
         expect(szcn('#0', 'p-4')).toBe('#0 p-4');

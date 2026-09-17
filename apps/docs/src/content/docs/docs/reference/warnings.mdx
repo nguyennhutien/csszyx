@@ -550,8 +550,34 @@ and the theme group registry — which `classify` reads — says so once.
 | ``[csszyx] theme token "{name}" shadows a built-in {kind} — Tailwind compiles both meanings into one class, so it sets the token's property and the built-in's. A later class that sets only one of them does not replace it in `szcn`: both then apply, and stylesheet order decides which wins rather than the order you passed them. `classify` reports the built-in meaning only. Rename the token — no spelling of the merge can fix this while the name is shared.`` |
 | ``[csszyx] theme token "{name}" is defined as BOTH a color and a text size — `classify` cannot name the property of `text-{name}`, and Tailwind compiles that class for one of the two only. Rename one of the tokens.`` |
 | ``[csszyx] theme token "{name}" is defined as BOTH a font family and a font weight — `classify` cannot name the property of `font-{name}`, and Tailwind compiles that class for one of the two only. Rename one of the tokens.`` |
+| ``[csszyx] `registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the CSS your Tailwind compiles, and this registry now only names the property `classify` and `splitBox` read.`` + ``help: declare plain-CSS classes with `@utility` and use a csszyx integration that supplies a merge table.`` + ``note: without a table, `szcn` removes only exact repeats.`` |
 
-The fix in all three cases is renaming the token in your `@theme` block. With
+One more is not about a token at all. It is printed once, in development, the
+first time `szcn` meets two classes with no merge table registered:
+
+| Message |
+| --- |
+| ``[csszyx] `szcn` has no merge table in this run, so it removes only exact repeats: `szcn('p-2', 'p-4')` keeps both classes.`` + ``help: the csszyx plugin for Vite, Rollup, webpack or Next.js registers one; for jest, run the build or `csszyx next prebuild` first.`` + ``note: esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun ship no table.`` |
+
+A table the build wrote in a format this runtime does not read is refused the
+same way, which is what a stale `.csszyx/merge-registration.*` from another
+csszyx release looks like to a jest run. Rejection clears the previous table
+and cached merges. The regeneration warning appears once per session in both
+development and production:
+
+| Message |
+| --- |
+| ``[csszyx] the merge table was written in format {n} and this runtime reads format {m}, so `szcn` keeps every class until it is rebuilt.`` + ``help: run the build, or `csszyx next prebuild` on Next.js, with the csszyx versions now installed.`` |
+
+See [Where the table comes from](/docs/reference/runtime/#where-the-table-comes-from).
+
+The `registerSzcnGroups` message is printed once, in development, on the first
+hand-written call to `registerSzcnGroups`. On 0.17 that call was how a class
+written in plain CSS joined a merge group. The migration requires both an
+`@utility` declaration and an integration that supplies the merge table.
+Without that table, `szcn` removes only exact repeats.
+
+The fix in the three theme-token cases is renaming the token in your `@theme` block. With
 `--color-balance` declared, `szcn('text-red-500', 'text-balance')` is
 `'text-balance'` — that class now sets `color` too — while
 `szcn('text-balance', 'text-red-500')` keeps both, because the colour class does

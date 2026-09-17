@@ -11,6 +11,16 @@ import { LONGHANDS } from './longhand-table.generated.js';
 
 export type { MergeSignatureTable } from '@csszyx/runtime';
 
+/**
+ * The table format this plugin writes, carried beside the table.
+ *
+ * Its own number rather than the runtime's: a plugin and a runtime from
+ * different releases can meet in one install, and the runtime refuses a table
+ * written in a format it does not read. Change it with the table's shape, and
+ * the runtime's `MERGE_TABLE_FORMAT` with it.
+ */
+export const MERGE_TABLE_FORMAT = 1;
+
 /** The CSS evidence used to decide whether one class can replace another. */
 export interface MergeSignature {
     /** Leaf properties grouped by the selector and at-rule context that writes them. */
@@ -39,6 +49,8 @@ const DIRECTIONS = ['ltr', 'rtl'] as const;
  * @returns The physical property it resolves to.
  */
 export function horizontalProperty(property: string, direction: 'ltr' | 'rtl'): string {
+    // Custom identifiers are opaque, even when they contain logical CSS names.
+    if (property.startsWith('--')) return property;
     const inlineStart = direction === 'ltr' ? 'left' : 'right';
     const inlineEnd = direction === 'ltr' ? 'right' : 'left';
     const corner = /^border-(start|end)-(start|end)-radius$/u.exec(property);
@@ -63,6 +75,8 @@ export function horizontalProperty(property: string, direction: 'ltr' | 'rtl'): 
 /** One signature with its properties resolved for each text direction. */
 interface ResolvedSignature {
     important: MergeSignature['important'];
+    /** Every property it sets is a custom property (`--*`). */
+    customOnly: boolean;
     /** Per direction: the physical properties each context declares. */
     sides: ReadonlyArray<ReadonlyMap<string, ReadonlySet<string>>>;
 }
@@ -78,6 +92,9 @@ interface ResolvedSignature {
 function resolveSides(signature: MergeSignature): ResolvedSignature {
     return {
         important: signature.important,
+        customOnly: signature.rules.every(rule =>
+            rule.properties.every(name => name.startsWith('--')),
+        ),
         sides: DIRECTIONS.map(
             direction =>
                 new Map(
@@ -99,6 +116,13 @@ function resolveSides(signature: MergeSignature): ResolvedSignature {
  */
 function signatureCovers(later: ResolvedSignature, earlier: ResolvedSignature): boolean {
     if (later.important !== earlier.important) return false;
+    // A class that sets nothing but custom properties is a modifier another
+    // utility reads (`space-x-reverse` sets `--tw-space-x-reverse`), written to
+    // sit beside it. The utility it modifies resets the variable as a default,
+    // so by property sets it covers the modifier, and dropping the modifier
+    // loses what the author wrote it for. Another modifier of the same
+    // variables still replaces it: `shadow-red-500 shadow-blue-500`.
+    if (earlier.customOnly && !later.customOnly) return false;
     return DIRECTIONS.every((_, direction) => {
         const laterRules = later.sides[direction] as ReadonlyMap<string, ReadonlySet<string>>;
         for (const [context, properties] of earlier.sides[direction] as ReadonlyMap<
@@ -117,11 +141,15 @@ function signatureCovers(later: ResolvedSignature, earlier: ResolvedSignature): 
  * Build deterministic app-scoped merge data from the project's style model.
  * @param candidates - Class candidates observed in the application.
  * @param signatureOf - Project style-model signature lookup.
+ * @param options - How to build it.
+ * @param options.prune - False keeps ids no merge can use, for comparing the
+ *        pruned table against the full one.
  * @returns Compact class ids and directional signature coverage.
  */
 export function createMergeSignatureTable(
     candidates: readonly string[],
     signatureOf: (candidate: string) => MergeSignature | null,
+    options: { prune?: boolean } = {},
 ): MergeSignatureTable {
     const byCandidate: Record<string, number> = Object.create(null);
     const signatures: MergeSignature[] = [];
@@ -143,7 +171,51 @@ export function createMergeSignatureTable(
     const coverage = resolved.map(later =>
         resolved.flatMap((earlier, id) => (signatureCovers(later, earlier) ? [id] : [])),
     );
-    return [byCandidate, coverage];
+    return options.prune === false ? [byCandidate, coverage] : prune(byCandidate, coverage);
+}
+
+/**
+ * Leave out every id no merge can use, and number the rest densely.
+ *
+ * An id held by one class, covering only itself and covered by no other, merges
+ * exactly as a class with no entry does: both drop an exact repeat and nothing
+ * else. With a census as wide as Tailwind's own scan that is most classes, so
+ * shipping them only costs bytes. O(i + e) for i ids and e coverage pairs.
+ *
+ * @param byCandidate - Class → id.
+ * @param coverage - Id → the ids it covers.
+ * @returns The same merges, from a smaller table.
+ */
+function prune(
+    byCandidate: Record<string, number>,
+    coverage: readonly (readonly number[])[],
+): MergeSignatureTable {
+    const holders = new Array<number>(coverage.length).fill(0);
+    for (const id of Object.values(byCandidate)) holders[id] = (holders[id] as number) + 1;
+    const usable = new Array<boolean>(coverage.length).fill(false);
+    coverage.forEach((row, id) => {
+        for (const covered of row) {
+            if (covered !== id) {
+                usable[id] = true;
+                usable[covered] = true;
+            }
+        }
+    });
+    const renumbered = new Map<number, number>();
+    coverage.forEach((_, id) => {
+        if (usable[id] || (holders[id] as number) > 1) renumbered.set(id, renumbered.size);
+    });
+    const kept: Record<string, number> = Object.create(null);
+    for (const [candidate, id] of Object.entries(byCandidate)) {
+        const next = renumbered.get(id);
+        if (next !== undefined) kept[candidate] = next;
+    }
+    // A kept id covers only kept ids: whatever it covers besides itself was
+    // marked usable above.
+    const rows = [...renumbered.keys()].map(id =>
+        (coverage[id] as readonly number[]).map(covered => renumbered.get(covered) as number),
+    );
+    return [kept, rows];
 }
 
 /**
@@ -168,22 +240,39 @@ function compareStrings(left: string, right: string): number {
 }
 
 /**
- * Normalize the candidate class in a selector to `&`.
+ * Propose one positive candidate anchor and count every named reference.
+ * The caller only uses the proposal when the entire declaration path has one
+ * reference. Repeated names stay literal, including across ancestor rules.
+ * `:is`/`:where` can wrap that anchor (Tailwind's space/divide utilities).
+ * One tree walk and one ancestor walk; at most one replacement per selector.
  *
  * @param selector - Selector Tailwind emitted.
  * @param candidate - Candidate class name, already unescaped by the parser.
- * @returns Normalized selector, or null when the selector does not target the candidate.
+ * @returns Proposed selector and reference count, or null when none occurs.
  */
-function normalizeSelector(selector: string, candidate: string): string | null {
-    let matched = false;
+function normalizeSelector(
+    selector: string,
+    candidate: string,
+): { value: string; references: number } | null {
+    let references = 0;
     const normalized = selectorParser(selectors => {
         selectors.walkClasses(node => {
             if (node.value !== candidate) return;
-            matched = true;
+            references++;
+            if (references > 1) return;
+            for (let parent = node.parent; parent !== undefined; parent = parent.parent) {
+                if (
+                    parent.type === 'pseudo' &&
+                    parent.value !== ':is' &&
+                    parent.value !== ':where'
+                ) {
+                    return;
+                }
+            }
             node.replaceWith(selectorParser.nesting({ value: '&' }));
         });
     }).processSync(selector);
-    return matched ? normalized : null;
+    return references === 0 ? null : { value: normalized, references };
 }
 
 /**
@@ -197,14 +286,20 @@ function normalizeSelector(selector: string, candidate: string): string | null {
  */
 function declarationContext(declaration: Declaration, candidate: string): string | null {
     const path: unknown[] = [];
-    let matched = false;
+    let references = 0;
+    let anchorIndex = 0;
+    let anchorSelector = '';
     let parent: Node | undefined = declaration.parent;
     while (parent !== undefined) {
         if (parent.type === 'rule') {
             const rule = parent as Rule;
             const selector = normalizeSelector(rule.selector, candidate);
-            if (selector !== null) matched = true;
-            path.push(['selector', selector ?? rule.selector]);
+            if (selector !== null) {
+                references += selector.references;
+                anchorIndex = path.length;
+                anchorSelector = selector.value;
+            }
+            path.push(['selector', rule.selector]);
         }
         if (parent.type === 'atrule') {
             const atRule = parent as AtRule;
@@ -213,7 +308,11 @@ function declarationContext(declaration: Declaration, candidate: string): string
         }
         parent = parent.parent;
     }
-    return matched ? JSON.stringify([path.reverse(), Boolean(declaration.important)]) : null;
+    if (references === 0) return null;
+    // Normalizing even one of several references could alias `.a .a` with
+    // `.b .a`; removing `a` from the descendant then breaks both selectors.
+    if (references === 1) path[anchorIndex] = ['selector', anchorSelector];
+    return JSON.stringify([path.reverse(), Boolean(declaration.important)]);
 }
 
 /**
@@ -231,14 +330,21 @@ export function mergeSignatureFromCss(
     const propertiesByContext = new Map<string, Set<string>>();
     let important = false;
 
-    postcss.parse(css).walkDecls(declaration => {
-        const context = declarationContext(declaration, candidate);
-        if (context === null) return;
-        const properties = propertiesByContext.get(context) ?? new Set<string>();
-        for (const property of expandCssProperty(declaration.prop)) properties.add(property);
-        propertiesByContext.set(context, properties);
-        if (declaration.important) important = true;
-    });
+    try {
+        postcss.parse(css).walkDecls(declaration => {
+            const context = declarationContext(declaration, candidate);
+            if (context === null) return;
+            const properties = propertiesByContext.get(context) ?? new Set<string>();
+            for (const property of expandCssProperty(declaration.prop)) properties.add(property);
+            propertiesByContext.set(context, properties);
+            if (declaration.important) important = true;
+        });
+    } catch {
+        // CSS Tailwind emits that postcss or its selector parser cannot read,
+        // `group-[/x]:p-4` among them. No signature is the answer the merge
+        // gives whenever it cannot prove: both classes stay.
+        return null;
+    }
 
     if (propertiesByContext.size === 0) return null;
     const rules = [...propertiesByContext].map(([context, properties]) => ({

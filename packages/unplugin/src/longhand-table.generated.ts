@@ -59,7 +59,7 @@ export const LONGHANDS: ReadonlyMap<string, readonly string[]> = new Map([
     ['flex-flow', ['flex-direction', 'flex-wrap']],
     ['font', ['font-family', 'font-size', 'font-stretch', 'font-style', 'font-variant', 'font-weight', 'line-height']],
     ['gap', ['column-gap', 'row-gap']],
-    ['grid', ['column-gap', 'grid-auto-columns', 'grid-auto-flow', 'grid-auto-rows', 'grid-column-gap', 'grid-row-gap', 'grid-template-areas', 'grid-template-columns', 'grid-template-rows', 'row-gap']],
+    ['grid', ['grid-auto-columns', 'grid-auto-flow', 'grid-auto-rows', 'grid-template-areas', 'grid-template-columns', 'grid-template-rows']],
     ['grid-area', ['grid-column-end', 'grid-column-start', 'grid-row-end', 'grid-row-start']],
     ['grid-column', ['grid-column-end', 'grid-column-start']],
     ['grid-gap', ['grid-column-gap', 'grid-row-gap']],

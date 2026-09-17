@@ -66,13 +66,23 @@ describe('readStylesheetRole', () => {
 
         const answer = await role(root, 'theme.css');
 
-        expect(answer).toEqual({ ok: true, utilities: false, imports: [] });
+        expect(answer).toEqual({
+            ok: true,
+            utilities: false,
+            imports: [],
+            scanSources: expect.any(Array),
+        });
     });
 
     it('does not call an import inside a comment a root', async () => {
         const root = dir({ 'old.css': '/* @import "tailwindcss"; */\n.card { padding: 1rem }\n' });
 
-        expect(await role(root, 'old.css')).toEqual({ ok: true, utilities: false, imports: [] });
+        expect(await role(root, 'old.css')).toEqual({
+            ok: true,
+            utilities: false,
+            imports: [],
+            scanSources: expect.any(Array),
+        });
     });
 
     it('skips as the environment when the project has no Tailwind', async () => {

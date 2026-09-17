@@ -61,25 +61,6 @@ function isSubset(left: readonly string[], right: ReadonlySet<string>): boolean 
 }
 
 /**
- * Compare sets after resolving logical properties in horizontal writing mode.
- *
- * @param left - Properties that must be covered.
- * @param right - Properties available to cover them.
- * @param direction - Inline text direction.
- * @returns True when right covers left after logical-property resolution.
- */
-function isHorizontalSubset(
-    left: readonly string[],
-    right: readonly string[],
-    direction: 'ltr' | 'rtl',
-): boolean {
-    return isSubset(
-        left.map(property => horizontalProperty(property, direction)),
-        new Set(right.map(property => horizontalProperty(property, direction))),
-    );
-}
-
-/**
  * Hold the runtime merger, fed the table a build would generate for these
  * classes, against the reference rule: a later class may replace an earlier one
  * only if it sets every property the earlier one set, left to right and right
@@ -111,39 +92,102 @@ export function measureMergeSafety(signatures: readonly CandidateSignature[]): M
 }
 
 /**
+ * The rules a sample sets: its own signature's, or one unconditional rule.
+ *
+ * @param sample - One class and what it sets.
+ * @returns Importance, and the properties set under each context.
+ */
+function rulesOf(sample: CandidateSignature): {
+    important: boolean;
+    rules: ReadonlyMap<string, readonly string[]>;
+} {
+    const signature = sample.signature;
+    if (signature === undefined) {
+        return { important: false, rules: new Map([['["&"]', sample.properties]]) };
+    }
+    return {
+        important: signature.important,
+        rules: new Map(signature.rules.map(rule => [rule.context, rule.properties])),
+    };
+}
+
+/**
+ * Whether the later class writes everything the earlier one wrote, under the
+ * same selector and at-rule context and with the same importance.
+ *
+ * Context is part of the reference, not only of the build: a merger that let
+ * `hover:p-8` replace `p-2` would drop a declaration that still applies, and a
+ * reference that compared flat property sets would call that correct.
+ *
+ * @param earlier - The class that may be dropped.
+ * @param later - The class that may replace it.
+ * @param side - Maps a property to the side it lands on, or leaves it.
+ * @returns True when the later class covers the earlier one.
+ */
+function coversInContext(
+    earlier: CandidateSignature,
+    later: CandidateSignature,
+    side: (property: string) => string,
+): boolean {
+    const before = rulesOf(earlier);
+    const after = rulesOf(later);
+    if (before.important !== after.important) return false;
+    for (const [context, properties] of before.rules) {
+        const covering = after.rules.get(context);
+        if (covering === undefined) return false;
+        if (!isSubset(properties.map(side), new Set(covering.map(side)))) return false;
+    }
+    return true;
+}
+
+/** What the merger did to one ordered pair, against the reference. */
+type PairOutcome = 'falseDelete' | 'writingModeOnlyDelete' | 'miss' | 'agree';
+
+/**
+ * Judge one ordered pair: what the registered merger did against what the
+ * reference allows.
+ *
+ * @param previous - The earlier class.
+ * @param later - The later class.
+ * @returns How the merger's answer compares with the reference.
+ */
+function judgePair(previous: CandidateSignature, later: CandidateSignature): PairOutcome {
+    const shouldDelete =
+        coversInContext(previous, later, property => horizontalProperty(property, 'ltr')) &&
+        coversInContext(previous, later, property => horizontalProperty(property, 'rtl'));
+    const didDelete = szcn(previous.candidate, later.candidate) === later.candidate;
+    if (didDelete && !shouldDelete) return 'falseDelete';
+    if (!didDelete && shouldDelete) return 'miss';
+    if (didDelete && !coversInContext(previous, later, property => property)) {
+        return 'writingModeOnlyDelete';
+    }
+    return 'agree';
+}
+
+/**
  * Count what the registered merger does to every ordered pair.
  *
  * @param signatures - Served candidates and their emitted property sets.
  * @returns Deterministic ordered-pair counts.
  */
 function countPairs(signatures: readonly CandidateSignature[]): MergeBaseline {
-    let falseDeletes = 0;
-    let writingModeOnlyDeletes = 0;
-    let misses = 0;
+    const counts = { falseDelete: 0, writingModeOnlyDelete: 0, miss: 0, agree: 0 };
     const falseDeleteExamples: string[] = [];
     const missExamples: string[] = [];
     for (const previous of signatures) {
         for (const later of signatures) {
-            const rawSubset = isSubset(previous.properties, new Set(later.properties));
-            const ltrSubset = isHorizontalSubset(previous.properties, later.properties, 'ltr');
-            const rtlSubset = isHorizontalSubset(previous.properties, later.properties, 'rtl');
-            const shouldDelete = ltrSubset && rtlSubset;
-            const didDelete = szcn(previous.candidate, later.candidate) === later.candidate;
-            if (didDelete && !shouldDelete) {
-                falseDeletes += 1;
-                if (falseDeleteExamples.length < 8) {
-                    falseDeleteExamples.push(`${previous.candidate} → ${later.candidate}`);
-                }
+            const outcome = judgePair(previous, later);
+            counts[outcome] += 1;
+            const pair = `${previous.candidate} → ${later.candidate}`;
+            if (outcome === 'falseDelete' && falseDeleteExamples.length < 8) {
+                falseDeleteExamples.push(pair);
             }
-            if (didDelete && !rawSubset && shouldDelete) writingModeOnlyDeletes += 1;
-            if (!didDelete && shouldDelete) {
-                misses += 1;
-                if (missExamples.length < 8) {
-                    missExamples.push(`${previous.candidate} → ${later.candidate}`);
-                }
-            }
+            if (outcome === 'miss' && missExamples.length < 8) missExamples.push(pair);
         }
     }
+    const falseDeletes = counts.falseDelete;
+    const writingModeOnlyDeletes = counts.writingModeOnlyDelete;
+    const misses = counts.miss;
     return {
         candidates: signatures.length,
         orderedPairs: signatures.length ** 2,

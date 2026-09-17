@@ -9,8 +9,8 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
 import { afterEach, describe, expect, it } from 'vitest';
+import { mergeRegistrationPath } from '../src/merge-registration.js';
 import { readNextGenerationManifest } from '../src/next-generation-manifest.js';
 import { acquireNextSafelistStateLock } from '../src/next-safelist-state.js';
 import {
@@ -114,9 +114,12 @@ describe('Next Turbopack loader core', () => {
         // classes carry comes from them, and they are rewritten only when
         // their content changes, so declaring them cascades nothing.
         expect(result.dependencies).toEqual([]);
+        // The merge table is an input too: the watch rewrites it only when its
+        // content changes, and the module imports it.
         expect(ctx.dependencies).toEqual([
             // The fixture has no package.json, so the app root is src/.
             resolveNextStylesheetFactsPath(result.context.cacheDir),
+            mergeRegistrationPath(result.context.root),
         ]);
     });
 

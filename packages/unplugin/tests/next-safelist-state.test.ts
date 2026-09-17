@@ -68,6 +68,9 @@ describe('Next safelist state', () => {
         const result = materializeNextSafelist(paths, { retryDelayMs: 0 });
 
         expect(result).toEqual({
+            classes: ['[&_.tab-item-header]:py-0!', 'bg-red-500', 'p-8'],
+            authoredClasses: [],
+            mergeLiterals: [],
             classCount: 3,
             sourceCount: 1,
             tombstonedSourceCount: 0,

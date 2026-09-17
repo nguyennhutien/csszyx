@@ -3,6 +3,13 @@ import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 
 import { insertAfterUseDirective } from './directive-prologue.js';
+import {
+    callsSzcn as callsMergeHelper,
+    ensureMergeRegistration,
+    importMergeRegistration,
+    loadsCsszyxRuntime,
+    mergeRegistrationPath,
+} from './merge-registration.js';
 import type { JsonLike } from './next-cache-identity.js';
 import {
     configWithImportedStaticSz,
@@ -179,7 +186,7 @@ export function runNextTurboLoader(
     // resolves; a loader cannot, so a real file is written once per project and
     // imported by path. Only modules that can call szcn pay for it, and the
     // import goes AFTER any `use client` directive, which must stay first.
-    const callsSzcn = transform.result.usesSzcn || /\bszcn\s*\(/.test(source);
+    const callsSzcn = callsMergeHelper(source, transform.result);
     const themeGroups = callsSzcn
         ? ensureThemeGroupsFile(context.root, path.join(context.root, '.csszyx'))
         : { file: null, watch: [] };
@@ -196,13 +203,31 @@ export function runNextTurboLoader(
     for (const provider of normalizeProviderPaths(crossModule.providers)) {
         loaderContext.addDependency?.(provider);
     }
-    const code =
+    let code =
         themeGroups.file === null
             ? injected.code
             : insertAfterUseDirective(
                   injected.code,
                   `import '${themeGroupsSpecifier(loaderContext.resourcePath, themeGroups.file)}';\n`,
               );
+    // The merge table and the unserved list, settled by `csszyx next prebuild`
+    // or `csszyx next watch`, since only they can compile the project's CSS. A
+    // module that loads the runtime imports the file by path and depends on
+    // it, so a rewrite by the watcher re-runs the loader here. Not only one
+    // that calls `szcn`: a `cn` helper re-exporting it is the only module that
+    // names it.
+    if (loadsCsszyxRuntime(code)) {
+        ensureMergeRegistration(context.root);
+        const registration = importMergeRegistration(
+            code,
+            loaderContext.resourcePath,
+            context.root,
+        );
+        code = registration.code;
+        // On the path, not on what was imported: a module whose table could not
+        // be written yet still re-runs when a Next command writes it.
+        loaderContext.addDependency?.(mergeRegistrationPath(context.root));
+    }
     const metadata = collectNextTransformMetadata(
         transform.result,
         source,

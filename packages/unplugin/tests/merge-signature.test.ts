@@ -1,6 +1,34 @@
 import { describe, expect, it } from 'vitest';
 
-import { mergeSignatureFromCss } from '../src/merge-signature.js';
+import { horizontalProperty, mergeSignatureFromCss } from '../src/merge-signature.js';
+
+describe('custom-property identity', () => {
+    it.each(['ltr', 'rtl'] as const)('preserves opaque names in %s text', direction => {
+        // Exhaust the logical fragments and positions rather than sampling one
+        // spelling. CSS custom identifiers have no physical/logical semantics.
+        for (const fragment of [
+            'inline-size',
+            'block-size',
+            'inline-start',
+            'inline-end',
+            'block-start',
+            'block-end',
+            'border-start-start-radius',
+        ]) {
+            for (const length of [0, 32, 4096]) {
+                for (const [prefix, suffix] of [
+                    ['', ''],
+                    ['Card-', '-value'],
+                    ['é-', '-e\u0301'],
+                    ['x'.repeat(length), 'y'.repeat(length)],
+                ]) {
+                    const property = `--${prefix}${fragment}${suffix}`;
+                    expect(horizontalProperty(property, direction)).toBe(property);
+                }
+            }
+        }
+    });
+});
 
 describe('mergeSignatureFromCss', () => {
     it('does not normalize another class resembling an internal placeholder', () => {

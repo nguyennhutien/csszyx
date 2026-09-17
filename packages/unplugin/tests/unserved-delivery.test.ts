@@ -19,13 +19,20 @@ import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it } from 'vitest';
 import webpack from 'webpack';
 
+import { MERGE_REGISTRATION_FILE } from '../src/merge-registration.js';
 import { vitePlugin, webpackPlugin } from '../src/unplugin.js';
 import {
     MERGE_SIGNATURES_PLACEHOLDER,
     RESOLVED_UNSERVED_VIRTUAL_ID,
     UNSERVED_PLACEHOLDER,
+    UNSERVED_VIRTUAL_ID,
 } from '../src/virtual-modules.js';
-import { callHooks, removeTailwindProjects, tailwindProject } from './tailwind-project.js';
+import {
+    callHooks,
+    linkTailwindIntegration,
+    removeTailwindProjects,
+    tailwindProject,
+} from './tailwind-project.js';
 
 /**
  * Classes covering the three outcomes, so a stub answer cannot satisfy a case.
@@ -59,9 +66,11 @@ describe('vite lane', () => {
         await call('configResolved', { root, command: 'build' });
         await call(
             'transform',
-            // A class Tailwind serves nothing for, so the unserved list is not
-            // empty: its quotes sit inside the same eval string.
-            `export const A = () => <div className="${AUTHORED}" />;`,
+            // Two classes one of which covers the other: a class that shares
+            // nothing with another is left out of the table. And one Tailwind
+            // serves nothing for, so the unserved list is not empty: its quotes
+            // sit inside the same eval string.
+            `export const A = () => <div className="pb-2 p-4 ${AUTHORED}" />;`,
             `${root}/src/A.tsx`,
         );
         const module = (await call('load', RESOLVED_UNSERVED_VIRTUAL_ID)) as string;
@@ -80,8 +89,74 @@ describe('vite lane', () => {
             },
         });
         expect(unserved).toEqual(['tab-items-wrapper']);
-        expect(received).toEqual([{ 'p-4': 0 }, [[0]]]);
+        expect(received).toEqual([{ 'p-4': 0, 'pb-2': 1 }, [[0, 1], [1]]]);
     });
+
+    it.each([
+        // A map of variants reaches `szcn` through a variable, so no census the
+        // build keeps of `className` or `szcn()` literals ever sees its strings.
+        ['a map of variants', 'src/sizes.ts', '@import "tailwindcss";\n'],
+        // A design-system package the plugin never transforms, which Tailwind
+        // still reaches through `@source`.
+        [
+            'a package the plugin does not transform',
+            'packages/ui/src/sizes.ts',
+            '@import "tailwindcss";\n@source "../packages/ui/src";\n',
+        ],
+    ])(
+        'carries the classes Tailwind scans in %s',
+        async (_case, file, css) => {
+            const root = tailwindProject('csszyx-census-scan-', {
+                'src/theme.css': css,
+                [file]: "export const sizes = { sm: 'px-2 text-sm', lg: 'px-6 text-lg' };\n",
+            });
+            linkTailwindIntegration(root);
+            const plugins = vitePlugin({ production: { mangle: false } }) as unknown as Record<
+                string,
+                unknown
+            >[];
+            const call = callHooks(plugins);
+
+            await call('configResolved', { root, command: 'build' });
+            const module_ = (await call('load', RESOLVED_UNSERVED_VIRTUAL_ID)) as string;
+            await call('renderStart');
+            const rendered = (await call('renderChunk', module_)) as { code: string };
+            let table: [Record<string, number>, number[][]] | undefined;
+            runInNewContext(rendered.code.replace(/^import .*;$/m, ''), {
+                registerUnservedClasses() {},
+                registerMergeSignatures(value: [Record<string, number>, number[][]]) {
+                    table = value;
+                },
+            });
+
+            expect(Object.keys(table?.[0] ?? {})).toEqual(
+                expect.arrayContaining(['px-2', 'px-6', 'text-sm', 'text-lg']),
+            );
+        },
+        60_000,
+    );
+
+    it('reaches a module the compiler routed to the merge entry only', async () => {
+        // A provable dynamic part lowers to `_szcn` from `@csszyx/runtime/merge`
+        // and nothing from the main entry. That module merges, so it has to
+        // load the table like any other.
+        const root = project('csszyx-unserved-slim-');
+        const plugins = vitePlugin({ production: { mangle: false } }) as unknown as Record<
+            string,
+            unknown
+        >[];
+        const call = callHooks(plugins);
+        await call('configResolved', { root, command: 'build' });
+
+        const output = (await call(
+            'transform',
+            'export const A = ({ n }: { n: number }) => <div sz={[{ p: 4 }, `col-${n}`]} />;\n',
+            `${root}/src/A.tsx`,
+        )) as { code: string };
+
+        expect(output.code).toContain("from '@csszyx/runtime/merge'");
+        expect(output.code).toContain(`import '${UNSERVED_VIRTUAL_ID}';`);
+    }, 60_000);
 
     it('substitutes the names the project design system serves nothing for', async () => {
         const root = project('csszyx-unserved-vite-');
@@ -109,6 +184,31 @@ describe('vite lane', () => {
         expect(rendered?.code).toContain('registerMergeSignatures(');
         expect(rendered?.code).not.toContain(MERGE_SIGNATURES_PLACEHOLDER);
         expect(rendered?.code).not.toContain(UNSERVED_PLACEHOLDER);
+    }, 60_000);
+
+    it('writes the settled module beside the cache for the runners without a bundler', async () => {
+        // jest has no bundler to settle the table under, so it imports what
+        // the last build settled: the same module, as a file.
+        const root = project('csszyx-unserved-vite-file-');
+        const plugins = vitePlugin({ production: { mangle: false } }) as unknown as Record<
+            string,
+            unknown
+        >[];
+        const call = callHooks(plugins);
+
+        await call('configResolved', { root, command: 'build' });
+        await call(
+            'transform',
+            `export const A = () => <div className="${AUTHORED}" />;`,
+            `${root}/src/A.tsx`,
+        );
+        await call('renderStart');
+
+        const written = readFileSync(join(root, '.csszyx', MERGE_REGISTRATION_FILE), 'utf8');
+        expect(written).toContain('registerUnservedClasses(["tab-items-wrapper"])');
+        expect(written).toContain('registerMergeSignatures(');
+        expect(written).not.toContain(MERGE_SIGNATURES_PLACEHOLDER);
+        expect(written).not.toContain(UNSERVED_PLACEHOLDER);
     }, 60_000);
 
     it('asks a prefixed design system about the prefixed name', async () => {
@@ -241,6 +341,10 @@ describe('webpack lane', () => {
         expect(bundle).toContain('registerUnservedClasses');
         expect(bundle).toContain('["tab-items-wrapper"]');
         expect(bundle).not.toContain(UNSERVED_PLACEHOLDER);
+        // The settled module, for the runners without a bundler.
+        expect(readFileSync(join(root, '.csszyx', MERGE_REGISTRATION_FILE), 'utf8')).toContain(
+            'registerUnservedClasses(["tab-items-wrapper"])',
+        );
     }, 120_000);
 
     it('builds without the registration when the generated directory is a file', async () => {

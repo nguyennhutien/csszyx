@@ -12,6 +12,12 @@
  * @module
  */
 export {
+    type CandidateScanner,
+    loadCandidateScanner,
+    type ScanSource,
+    scanSourcesOf,
+} from './candidate-scanner.js';
+export {
     createEmittedClassOracle,
     type EmittedClassOracle,
     findTailwindCssEntries,
