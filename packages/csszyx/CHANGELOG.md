@@ -1,5 +1,40 @@
 # csszyx
 
+## [0.18.0](https://github.com/nguyennhutien/csszyx/compare/v0.17.2...v0.18.0) (2026-09-17)
+
+### ⚠ BREAKING CHANGES
+
+* lower sz with the prefix the project's Tailwind sets ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+
+### Features
+
+* lower sz with the prefix the project's Tailwind sets ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* let the engine write a Tailwind prefix before every class ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* stop the build when Tailwind entries set different prefixes ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* stop the build when a Tailwind entry does not compile ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* follow a Tailwind prefix that changes on a running dev server ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* fail a watch rebuild when the Tailwind prefix changes ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* lower sz with the Tailwind prefix on the Next Turbopack lane ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* record the Tailwind prefix from next prebuild and next watch ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* let the MCP compile preview take the Tailwind prefix ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* record the stylesheet facts from every bundler build ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* lower sz objects with the Tailwind prefix at runtime ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* lower sz with the Tailwind prefix under jest ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+
+### Bug Fixes
+
+* free the parse behind cross-module forwards ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* resolve stylesheet imports the way the project's Tailwind does ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* decide Tailwind entry stylesheets the way Tailwind's build does ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* read the stylesheets an app imports from JavaScript ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* judge markers and opacity under a Tailwind prefix ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* check a prefixed project against the classes it serves ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* **unplugin:** retain important across style roots ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+
+### Performance
+
+* **unplugin:** bound concurrent style root inspection ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+
 ## [0.17.2](https://github.com/nguyennhutien/csszyx/compare/v0.17.1...v0.17.2) (2026-09-14)
 
 ### Features
