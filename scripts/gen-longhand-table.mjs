@@ -30,7 +30,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
-const outPath = join(repoRoot, 'packages/runtime/src/longhand-table.generated.ts');
+const outPath = join(repoRoot, 'packages/unplugin/src/longhand-table.generated.ts');
 
 /**
  * Properties whose mdn-data `computed` list is a real shorthand expansion.

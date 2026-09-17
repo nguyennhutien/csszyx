@@ -28,6 +28,7 @@ import {
     type StylesheetAlias,
     type StylesheetFacts,
 } from '@csszyx/tailwind-oracle';
+import { type MergeSignature, mergeSignatureFromCss } from './merge-signature.js';
 
 /** What one stylesheet is to the project. */
 export type StyleEntryRole =
@@ -81,6 +82,13 @@ export interface ProjectStyleModel {
      * @returns The subset that styles nothing, in the given order.
      */
     unserved(classes: readonly string[]): string[];
+    /**
+     * Merge signature agreed by every compiled root.
+     *
+     * @param candidate - Tailwind candidate class.
+     * @returns The shared signature, or null when missing or disputed.
+     */
+    signature(candidate: string): MergeSignature | null;
 }
 
 /**
@@ -250,6 +258,7 @@ export function missingTailwindStylesheetMessage(
 interface CompiledEntry {
     facts: StylesheetFacts;
     findDead(classes: readonly string[]): string[];
+    signature(candidate: string): MergeSignature | null;
 }
 
 /**
@@ -484,9 +493,22 @@ async function compileRoot(
             compiled: null,
         };
     }
+    const signatures = new Map<string, MergeSignature | null>();
     return {
         entry: { file, role: 'root', facts: oracle.facts },
-        compiled: { facts: oracle.facts, findDead: classes => oracle.findDead(classes) },
+        compiled: {
+            facts: oracle.facts,
+            findDead: classes => oracle.findDead(classes),
+            signature(candidate) {
+                if (!signatures.has(candidate)) {
+                    signatures.set(
+                        candidate,
+                        mergeSignatureFromCss(candidate, oracle.cssFor([candidate])[0] ?? null),
+                    );
+                }
+                return signatures.get(candidate) ?? null;
+            },
+        },
     };
 }
 
@@ -556,6 +578,16 @@ export async function openProjectStyleModel(
             if (compiled.length === 0) return [];
             const perEntry = compiled.map(entry => new Set(entry.findDead(classes)));
             return classes.filter(token => perEntry.every(dead => dead.has(token)));
+        },
+        signature(candidate) {
+            if (compiled.length === 0) return null;
+            const signatures = compiled.map(entry => entry.signature(candidate));
+            const [firstSignature, ...otherSignatures] = signatures;
+            if (firstSignature === null || firstSignature === undefined) return null;
+            const canonical = JSON.stringify(firstSignature);
+            return otherSignatures.every(signature => JSON.stringify(signature) === canonical)
+                ? firstSignature
+                : null;
         },
     };
 }

@@ -1,7 +1,5 @@
-import postcss, { type Container, type Node } from 'postcss';
-
-import { LONGHANDS } from '../../runtime/src/longhand-table.generated.js';
 import { szcn } from '../../runtime/src/merge-classes.js';
+import { mergeSignatureFromCss } from '../src/merge-signature.js';
 
 /** One class and the leaf CSS properties Tailwind emits for it. */
 export interface CandidateSignature {
@@ -21,31 +19,6 @@ export interface MergeBaseline {
 }
 
 /**
- * Expand one CSS property to the leaf properties it writes.
- *
- * @param property - CSS declaration property.
- * @returns Sorted leaf properties, retaining custom properties.
- */
-function leavesOf(property: string): readonly string[] {
-    return LONGHANDS.get(property) ?? [property];
-}
-
-/**
- * Whether a node sits inside a keyframes rule rather than the candidate rule.
- *
- * @param node - PostCSS node whose ancestors are inspected.
- * @returns True when a keyframes at-rule owns the node.
- */
-function isInsideKeyframes(node: Node): boolean {
-    let parent: Container | undefined = node.parent;
-    while (parent !== undefined) {
-        if (parent.type === 'atrule' && /keyframes$/u.test(parent.name)) return true;
-        parent = parent.parent;
-    }
-    return false;
-}
-
-/**
  * Derive the property-set half of a merge signature from Tailwind CSS.
  *
  * Candidate declarations live under selector rules. Global `@property` and
@@ -57,15 +30,10 @@ function isInsideKeyframes(node: Node): boolean {
  * @returns Deterministic signature, or null when the candidate emits no CSS.
  */
 export function signatureFromCss(candidate: string, css: string | null): CandidateSignature | null {
-    if (css === null) return null;
-    const properties = new Set<string>();
-    postcss.parse(css).walkRules(rule => {
-        if (isInsideKeyframes(rule)) return;
-        rule.walkDecls(node => {
-            for (const property of leavesOf(node.prop)) properties.add(property);
-        });
-    });
-    return properties.size === 0 ? null : { candidate, properties: [...properties].sort() };
+    const signature = mergeSignatureFromCss(candidate, css);
+    if (signature === null) return null;
+    const properties = new Set(signature.rules.flatMap(rule => rule.properties));
+    return { candidate, properties: [...properties].sort() };
 }
 
 /**
