@@ -73,6 +73,32 @@ describe('createEmittedClassOracle — what Tailwind actually serves', () => {
         expect(oracle.findDead(['dems-panel', 'zz-probe'])).toEqual(['zz-probe']);
     });
 
+    it('returns emitted CSS in candidate order for signature analysis', async () => {
+        const oracle = await readyOracle();
+        const candidates = ['text-2xl', 'text-[0.8rem]', 'zz-not-a-class'] as const;
+
+        const first = oracle.cssFor(candidates);
+        const second = oracle.cssFor(candidates);
+
+        expect(first).toEqual(second);
+        expect(first).toHaveLength(candidates.length);
+        expect(first[0]).toContain('font-size:');
+        expect(first[0]).toContain('line-height:');
+        expect(first[1]).toContain('font-size:');
+        expect(first[1]).not.toContain('line-height:');
+        expect(first[2]).toBeNull();
+    });
+
+    it('returns a deterministic sorted candidate corpus', async () => {
+        const oracle = await readyOracle();
+        const candidates = oracle.candidates();
+
+        expect(candidates).toEqual([...new Set(candidates)].sort());
+        expect(candidates).toContain('text-2xl');
+        expect(candidates).toContain('transition');
+        expect(candidates).toContain('outline-hidden');
+    });
+
     it('resolves a stylesheet the project imports by relative path', async () => {
         const base = path.join(REPO, 'packages/cli/tests/fixtures/oracle');
         const oracle = await createEmittedClassOracle({
