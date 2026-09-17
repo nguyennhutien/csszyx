@@ -102,12 +102,16 @@ describe('injectNextRuntimeImports remaining helpers', () => {
         expect(result.code).toContain("import { __szBoolClass } from '@csszyx/runtime';");
     });
 
-    it('returns the code untouched when every helper is already imported', async () => {
+    it('only registers the prefix when every requested helper is already imported', async () => {
         const { injectNextRuntimeImports } = await import('../src/next-runtime-injection');
         const code = "import { _sz } from '@csszyx/runtime';\nexport const x = 1;\n";
         const result = injectNextRuntimeImports(code, { usesRuntime: true });
         expect(result.injected).toEqual([]);
-        expect(result.code).toBe(code);
+        expect(result.code).toBe(
+            "import { registerSzClassPrefix as __szRegisterClassPrefix } from '@csszyx/runtime';\n" +
+                '__szRegisterClassPrefix(null);\n' +
+                code,
+        );
     });
 });
 

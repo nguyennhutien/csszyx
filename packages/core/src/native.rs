@@ -21,6 +21,59 @@ pub struct NativeTransformFile {
     pub source: String,
 }
 
+/// One name a module re-exports, as JavaScript receives it.
+#[cfg(feature = "native-engine")]
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeModuleForward {
+    /// The name this module exports, and therefore the one an importer writes.
+    pub export_name: String,
+    /// The name the provider exports it as; `default` for the default slot.
+    pub imported_name: String,
+    /// The provider specifier, exactly as this module spelled it.
+    pub specifier: String,
+}
+
+/// The links one module carries, as JavaScript receives them.
+#[cfg(feature = "native-engine")]
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeModuleLinks {
+    /// Stylesheet specifiers, query suffix kept, in source order, each once.
+    pub css_imports: Vec<String>,
+    /// Re-exported names, declaration order preserved.
+    pub forwards: Vec<NativeModuleForward>,
+}
+
+/// Reads the stylesheets each module imports and the names it re-exports.
+#[cfg(feature = "native-engine")]
+#[napi(js_name = "scanModuleLinks")]
+#[must_use]
+pub fn scan_module_links_native(files: Vec<NativeTransformFile>) -> Vec<NativeModuleLinks> {
+    let files: Vec<TransformFile> = files
+        .into_iter()
+        .map(|file| TransformFile {
+            filename: file.filename,
+            source: file.source,
+        })
+        .collect();
+    crate::transform::module_links::scan_module_links(&files)
+        .into_iter()
+        .map(|links| NativeModuleLinks {
+            css_imports: links.css_imports,
+            forwards: links
+                .forwards
+                .into_iter()
+                .map(|forward| NativeModuleForward {
+                    export_name: forward.export_name,
+                    imported_name: forward.imported_name,
+                    specifier: forward.specifier,
+                })
+                .collect(),
+        })
+        .collect()
+}
+
 /// Options passed from JavaScript to the native transform.
 #[derive(Debug, Default)]
 #[napi(object)]
@@ -39,6 +92,8 @@ pub struct NativeTransformOptions {
     pub cross_module_statics_json: Option<String>,
     /// Cross-module static sz OBJECT registry payload (ordered-pair JSON).
     pub cross_module_sz_objects_json: Option<String>,
+    /// The Tailwind `prefix()` written before every class the engine emits.
+    pub class_prefix: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -200,6 +255,7 @@ pub fn transform_batch_native(
             ast_budget: options.ast_budget.map(|budget| budget as usize),
             cross_module_statics_json: options.cross_module_statics_json,
             cross_module_sz_objects_json: options.cross_module_sz_objects_json,
+            class_prefix: options.class_prefix,
         },
     )
     .map(|results| {

@@ -134,6 +134,9 @@ describe('when the safelist cannot be written', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         try {
             const { root } = await runHotUpdate(projectRoot => {
+                // The build has made the directory by now (its stylesheet facts live
+                // there), so it goes before a file takes its place.
+                fs.rmSync(path.join(projectRoot, '.csszyx'), { recursive: true, force: true });
                 fs.writeFileSync(path.join(projectRoot, '.csszyx'), 'not a directory');
             });
 
@@ -154,6 +157,9 @@ describe('when the safelist cannot be written', () => {
             // the branch that suppresses the repeat never ran while the
             // assertion still passed.
             await runHotUpdate(projectRoot => {
+                // The build has made the directory by now (its stylesheet facts live
+                // there), so it goes before a file takes its place.
+                fs.rmSync(path.join(projectRoot, '.csszyx'), { recursive: true, force: true });
                 fs.writeFileSync(path.join(projectRoot, '.csszyx'), 'not a directory');
             }, 2);
 

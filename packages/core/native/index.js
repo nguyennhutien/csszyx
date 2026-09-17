@@ -18,6 +18,8 @@ const MIGRATE_HELP =
 const INSTALL_HELP =
     'it is an optional dependency of @csszyx/core; reinstall without skipping optional packages, or set build.parser: "wasm"';
 const WASM_HELP = 'set build.parser: "wasm"; the wasm engine ships inside @csszyx/core';
+const LINKS_HELP =
+    'update @csszyx/core and its platform package together, to a version that carries scanModuleLinks';
 
 /** @param {string | undefined} what @param {string | null} packageName @returns {string} What is missing. */
 function missingText(what, packageName) {
@@ -120,16 +122,40 @@ export function transformBatch(_files, options) {
  * @returns {Function} The binding's function.
  */
 function migrateExport(name) {
+    return laterExport(name, 'migrate', MIGRATE_HELP, MIGRATE_NOTE);
+}
+
+/**
+ * An entry point a platform package may predate: the binding loads, and the
+ * function the caller needs is not on it.
+ *
+ * @param {string} name - The export the caller needs.
+ * @param {string} feature - What the export belongs to, as the reader knows it.
+ * @param {string} help - What to do.
+ * @param {string} note - What still holds.
+ * @returns {Function} The binding's function.
+ */
+function laterExport(name, feature, help, note) {
     const binding = loadNativeBinding();
     if (typeof binding[name] !== 'function') {
         throw new CsszyxNativeUnavailableError(
-            `csszyx native package ${cachedPackageName} predates migrate and does not export ${name}()`,
+            `csszyx native package ${cachedPackageName} predates ${feature} and does not export ${name}()`,
             cachedPackageName,
-            MIGRATE_HELP,
-            MIGRATE_NOTE,
+            help,
+            note,
         );
     }
     return binding[name];
+}
+
+/**
+ * Reads the stylesheets each module imports and the names it re-exports.
+ *
+ * @param {Array<{filename: string, source: string}>} files - Modules to read.
+ * @returns {Array<{cssImports: string[], forwards: Array<{exportName: string, importedName: string, specifier: string}>}>} One answer per module.
+ */
+export function scanModuleLinks(files) {
+    return laterExport('scanModuleLinks', 'the module-link scan', LINKS_HELP, NOTE)(files);
 }
 
 export function migrateBatch(files, options) {

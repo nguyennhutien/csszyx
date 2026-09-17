@@ -9,7 +9,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
+import { prepareNextStylesheetFacts, runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
 import {
     NEXT_WATCH_LOCK_COMMAND,
     type NextSafelistWatchEvent,
@@ -35,6 +35,8 @@ export interface NextWatchCommandOptions {
     pattern?: string;
     extraIgnore?: readonly string[];
     importedStaticSz?: boolean;
+    /** The stylesheets the app loads, when the project also holds others. */
+    tailwindStylesheet?: readonly string[];
     debounceMs?: number | string;
     silent?: boolean;
 }
@@ -173,6 +175,21 @@ export async function startNextWatch(
         throw new Error(`No source files matched pattern \`${pattern}\` under ${root}.`);
     }
 
+    const recordStylesheetFacts = async (): Promise<void> => {
+        const { warning } = await prepareNextStylesheetFacts({
+            explicitRoot: root,
+            cwd,
+            cacheDir: options.cacheDir,
+            tailwindStylesheet: options.tailwindStylesheet,
+            files,
+            setting: 'the `--tailwind-stylesheet` flag',
+        });
+        if (warning !== null) printWatcherNotice(warning);
+    };
+    // The loader lowers with the prefix these record, so they are read before
+    // the first cycle, the way a bundler build reads them.
+    await recordStylesheetFacts();
+
     const prebuild = runNextPrebuild({
         files,
         explicitRoot: root,
@@ -182,6 +199,7 @@ export async function startNextWatch(
         safelistOutputFile: options.outputFile,
         cacheDir: options.cacheDir,
         importedStaticSz: options.importedStaticSz,
+        tailwindStylesheet: options.tailwindStylesheet && [...options.tailwindStylesheet],
         config: { mangleVars: false },
         // The Turbopack loader steps aside only for a watcher. This pass is the
         // watcher's own startup, and the initial cycle below reads every shard
@@ -226,9 +244,25 @@ export async function startNextWatch(
         DELIVERY_PROBE_NAME,
     );
 
+    let factsWrites: Promise<void> = Promise.resolve();
     fsWatcher.on('all', (event, filePath) => {
         const absolutePath = path.resolve(filePath);
         if (absolutePath === probePath) {
+            return;
+        }
+        if (absolutePath.endsWith('.css')) {
+            // A stylesheet edit can change the prefix. Rewriting the facts file
+            // re-runs the loader for every module that depends on it. An edit
+            // that leaves the stylesheets unreadable is reported, and the
+            // session goes on: the author is mid-edit.
+            factsWrites = factsWrites.then(recordStylesheetFacts).catch((error: unknown) => {
+                // The build's note says nothing was written, which a watch
+                // that goes on is not; say what it goes on with instead.
+                const message = (error as Error).message.replace(/\n {2}note: .*$/, '');
+                printWatcherNotice(
+                    `${message}\n  note: \`csszyx next watch\` keeps watching; the loader stops on this error until the stylesheets agree again.`,
+                );
+            });
             return;
         }
         // A directory that appears after the watch is running may already hold
@@ -281,6 +315,7 @@ export async function startNextWatch(
                 return;
             }
             closed = true;
+            await factsWrites;
             await fsWatcher.close();
             controller.close();
         },

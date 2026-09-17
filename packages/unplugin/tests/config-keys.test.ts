@@ -22,6 +22,7 @@ describe('findUnknownConfigKeys', () => {
                 include: ['src/**'],
                 exclude: [/generated/],
                 compileSources: ['../packages/vui'],
+                tailwindStylesheet: 'src/index.css',
                 contentScopeCheck: false,
                 quiet: 'nudges',
                 mode: 'production',

@@ -28,6 +28,12 @@ export const THEME_SCAN_IGNORE_DIRS: ReadonlySet<string> = new Set([
     'dist',
     'build',
     '.turbo',
+    // Build output that carries copies of the app's stylesheets: a Rust
+    // `target/`, a coverage report, a built Storybook. A copy from an older
+    // build can set an older prefix and stop the build over a file no app loads.
+    'target',
+    'coverage',
+    'storybook-static',
 ]);
 
 /** What a project-wide scan found. */

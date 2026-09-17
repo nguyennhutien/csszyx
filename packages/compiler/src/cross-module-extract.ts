@@ -15,16 +15,9 @@
  * the lane removal existed to kill. Porting it onto the native engine would
  * let the dependency go too — a separate piece of work, not assumed here.
  */
-import {
-    type EcmaScriptModule,
-    type ExportExportName,
-    type ExportImportName,
-    type ParserOptions,
-    parseSync,
-    rawTransferSupported,
-    type StaticExportEntry,
-} from 'oxc-parser';
+import { type ParserOptions, parseSync, rawTransferSupported } from 'oxc-parser';
 
+import { scanModuleLinks } from './module-links.js';
 import { qualifyStaticSzvConfig, SZV_RESERVED_FACTORY_NAMES } from './szv-precompile.js';
 
 /** Minimal structural shape of an oxc AST node. */
@@ -465,9 +458,6 @@ function asEntries(entry: CrossModuleRegistryEntry | null): CrossModuleRegistryE
     return entry === null ? [] : [entry];
 }
 
-/** The provider name standing for a module's default slot. */
-const DEFAULT_IMPORT_NAME = 'default';
-
 /**
  * Read the two identifier names one export clause carries.
  *
@@ -493,61 +483,6 @@ function exportClauseNames(specifier: OxcNode): { local: string; exported: strin
 }
 
 /**
- * Whether the text holds an `export {` clause - the one shape a forward can
- * take, with or without `from`.
- *
- * The gate before the parse. Its predecessor admitted any module containing
- * both the words `export` and `from`, which is nearly every TypeScript module
- * (an import supplies the `from`), so a build over 18 000 files spent 8.9 s
- * parsing modules that declared every value they exported. A clause is what
- * the parse can find: `export function`, `export const`, `export default`
- * declare their value here, and `export *` names nothing.
- *
- * Whitespace and comments may sit between the keyword and the brace, so a
- * plain substring search is not enough; the scan skips both. A false positive
- * (the text inside a string or comment) only costs a parse; the scan never
- * refuses a real clause.
- *
- * @param source - Module source text.
- * @returns True when an `export` keyword is followed by `{`.
- */
-function hasExportClause(source: string): boolean {
-    let cursor = source.indexOf('export');
-    while (cursor !== -1) {
-        const position = skipTrivia(source, cursor + 'export'.length);
-        if (source[position] === '{') return true;
-        // Resume past what was scanned, so a comment is never read twice.
-        cursor = source.indexOf('export', Math.max(position, cursor + 1));
-    }
-    return false;
-}
-
-/**
- * Skip whitespace and comments.
- *
- * @param source - Module source text.
- * @param start - Where to start.
- * @returns The first offset at or after `start` holding neither.
- */
-function skipTrivia(source: string, start: number): number {
-    let position = start;
-    for (;;) {
-        while (position < source.length && /\s/.test(source[position] as string)) position++;
-        if (source.startsWith('/*', position)) {
-            const close = source.indexOf('*/', position + 2);
-            position = close === -1 ? source.length : close + 2;
-            continue;
-        }
-        if (source.startsWith('//', position)) {
-            const newline = source.indexOf('\n', position + 2);
-            position = newline === -1 ? source.length : newline + 1;
-            continue;
-        }
-        return position;
-    }
-}
-
-/**
  * Extract every re-exported name in one module, with the module it points at.
  *
  * Separate from {@link extractCrossModuleRegistryEntries} because the answers
@@ -565,154 +500,10 @@ function skipTrivia(source: string, start: number): number {
  * @returns The forwards, declaration order preserved.
  */
 export function extractCrossModuleForwards(source: string, filename: string): CrossModuleForward[] {
-    if (!hasExportClause(source)) return [];
-    let module: EcmaScriptModule;
-    try {
-        // The module record, not the AST: oxc computes it while parsing and
-        // hands it over without materialising the tree, and it already links
-        // `import { X } from './y'; export { X }` to `./y` the way the two-
-        // statement walk here used to.
-        module = parseSync(filename, source, { lang: 'tsx' }).module;
-    } catch {
-        /* v8 ignore next -- oxc reports syntax errors in-band; only native/parser failures throw. */
-        return [];
-    }
-    const defaultImports = defaultImportBindings(module);
-    const forwards: CrossModuleForward[] = [];
-    for (const statement of module.staticExports) {
-        for (const entry of statement.entries) {
-            const forward = readForward(entry, source, defaultImports);
-            if (forward !== null) forwards.push(forward);
-        }
-    }
-    return forwards;
+    // The engine reads the module record, frees its parse before it returns,
+    // and skips the parse for a module with no `export {` clause.
+    return scanModuleLinks([{ filename, source }]).flatMap(links => links.forwards);
 }
-
-/**
- * How the export clause around one entry is written.
- *
- * The record's statement span is the IMPORT an entry was linked through, so
- * the clause itself is read around the entry: a parsed clause always opens and
- * closes around its entries, and a clause is arbitrarily long, so the braces
- * are found rather than windowed.
- *
- * @param entry - One export entry.
- * @param source - Module source text.
- * @returns Whether the entry is spelled by a local binding rather than a
- *   `from` clause, and whether its clause is `export type {`.
- */
-function readExportClause(
-    entry: Pick<StaticExportEntry, 'start' | 'end'>,
-    source: string,
-): { throughImport: boolean; typeStatement: boolean } {
-    const clauseClose = source.indexOf('}', entry.end);
-    const afterClause = source.slice(clauseClose + 1, clauseClose + 64).trimStart();
-    const throughImport = !(
-        afterClause.startsWith('from') && /^["']/.test(afterClause.slice(4).trimStart())
-    );
-    const clauseOpen = source.lastIndexOf('{', entry.start);
-    const typeStatement = /\bexport\s+type$/.test(
-        source.slice(Math.max(0, clauseOpen - 48), clauseOpen).trimEnd(),
-    );
-    return { throughImport, typeStatement };
-}
-
-/**
- * The forward one export entry carries, if it carries one.
- *
- * @param entry - One export entry from the module record.
- * @param source - Module source text.
- * @param defaultImports - Keys for every default import binding in the module.
- * @returns The forward, or null when the entry is a type, a value this module
- *   declares, or a name a forward cannot carry.
- */
-function readForward(
-    entry: StaticExportEntry,
-    source: string,
-    defaultImports: Set<string>,
-): CrossModuleForward | null {
-    // A type-only export carries nothing at runtime; an entry with no module
-    // request is a value this module declares, which the value extractor owns.
-    if (entry.isType || entry.moduleRequest === null) return null;
-    const specifier = entry.moduleRequest.value;
-    const exportName = recordedName(entry.exportName);
-    const importedName = recordedName(entry.importName);
-    if (exportName === null || importedName === null) return null;
-    const { throughImport, typeStatement } = readExportClause(entry, source);
-    if (throughImport) {
-        // A type-only IMPORT re-exported by name already reaches here with
-        // `isType` set; the two marks the record does not carry are on the
-        // export clause: `export type {` and an inline `type X`, which sits
-        // inside the entry's own span.
-        if (typeStatement) return null;
-        if (/^type\s/.test(source.slice(entry.start, entry.end))) return null;
-    }
-    return {
-        exportName,
-        // The record spells a re-exported default import by its LOCAL name;
-        // the provider exports it as `default`, and that is the name a
-        // resolver must look up.
-        importedName:
-            throughImport && defaultImports.has(bindingKey(specifier, importedName))
-                ? DEFAULT_IMPORT_NAME
-                : importedName,
-        specifier,
-    };
-}
-
-/**
- * The local names bound by default imports, keyed with their provider.
- *
- * @param module - The module record.
- * @returns Keys for every `import X from './p'` binding.
- */
-function defaultImportBindings(module: EcmaScriptModule): Set<string> {
-    const keys = new Set<string>();
-    for (const statement of module.staticImports) {
-        for (const entry of statement.entries) {
-            if (entry.importName.kind === 'Default' && !entry.isType) {
-                keys.add(bindingKey(statement.moduleRequest.value, entry.localName.value));
-            }
-        }
-    }
-    return keys;
-}
-
-/**
- * One key for a binding and the module it came from.
- *
- * @param specifier - Provider specifier as written.
- * @param local - Local binding name.
- * @returns The key.
- */
-function bindingKey(specifier: string, local: string): string {
-    return `${specifier}\0${local}`;
-}
-
-/**
- * The identifier a module-record name stands for, or null when a forward
- * cannot carry it.
- *
- * A namespace (`All`, `AllButDefault`) names no single binding, and a
- * string-literal name is legal syntax that no importer of a token module
- * writes, so recording one would key the registry by a value the consumer
- * never asks for.
- *
- * @param name - An import or export name from the module record.
- * @returns The name a forward records, or null.
- */
-function recordedName(name: ExportExportName | ExportImportName): string | null {
-    // `default` arrives as a `Name` entry spelled "default", so only the
-    // namespace kinds (`All`, `AllButDefault`) and `None` are refused here.
-    if (name.kind !== 'Name') return null;
-    const value = name.name;
-    /* v8 ignore next -- narrowing only: a `Name` entry always carries its name. */
-    if (value === null) return null;
-    return IDENTIFIER_NAME.test(value) ? value : null;
-}
-
-/** An ECMAScript identifier, which is what a string-literal export name is not. */
-const IDENTIFIER_NAME = /^[\p{ID_Start}$_][\p{ID_Continue}$\u200c\u200d]*$/u;
 
 /**
  * Whether the parser can hand the AST over as a buffer on this host.

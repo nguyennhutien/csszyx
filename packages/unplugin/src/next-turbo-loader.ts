@@ -2,8 +2,6 @@
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 
-import type { TransformSourceCodeOptions } from '@csszyx/compiler';
-
 import { insertAfterUseDirective } from './directive-prologue.js';
 import type { JsonLike } from './next-cache-identity.js';
 import {
@@ -16,21 +14,24 @@ import {
     readNextGenerationManifest,
     validateNextGenerationManifest,
 } from './next-generation-manifest.js';
+import type { NextLaneOptions } from './next-lane-options.js';
 import { readPackageVersion } from './next-package-version.js';
 import { injectNextRuntimeImports } from './next-runtime-injection.js';
 import {
-    type AtomicWriteOptions,
     NEXT_TURBO_LOADER_LOCK_COMMAND,
     NEXT_WATCH_LOCK_COMMAND,
     NextSafelistStateLockedError,
     writeNextSafelistShard,
 } from './next-safelist-state.js';
-import {
-    type NextSourceParserMode,
-    type NextSourceTransformOutput,
-    transformNextSource,
-} from './next-source-transformer.js';
+import { type NextSourceTransformOutput, transformNextSource } from './next-source-transformer.js';
 import { createNextStateContext, type NextStateContext } from './next-state-context.js';
+import {
+    type NextClassPrefix,
+    projectStylesheetCandidates,
+    resolveNextClassPrefix,
+    unreadNextPrefixMessage,
+    writeNextStylesheetFacts,
+} from './next-stylesheet-facts.js';
 import {
     collectNextTransformMetadata,
     createNextSafelistShardFromMetadata,
@@ -41,24 +42,9 @@ import { ensureThemeGroupsFile, themeGroupsSpecifier } from './theme-groups-file
 import { resolveTransformCacheDir } from './transform-cache.js';
 
 /** Serializable options accepted by the Next Turbopack csszyx loader. */
-export interface NextTurboLoaderOptions {
+export interface NextTurboLoaderOptions extends NextLaneOptions {
     root?: string;
-    cacheDir?: string;
-    safelistOutputFile?: string;
-    parserMode?: NextSourceParserMode;
-    compilerOptions?: TransformSourceCodeOptions;
-    config?: JsonLike;
-    env?: Record<string, string | undefined>;
-    envKeys?: readonly string[];
-    nextVersion?: string;
-    csszyxVersion?: string;
-    compilerVersion?: string;
-    nativeVersion?: string;
-    mode?: 'development' | 'production';
-    astBudget?: number;
-    allowProductionMangling?: boolean;
     materializeSafelist?: boolean;
-    writeOptions?: AtomicWriteOptions;
     /**
      * Whether a plain exported sz object may be compiled into its importers.
      *
@@ -80,8 +66,15 @@ export interface NextTurboLoaderContext {
     query?: unknown;
     getOptions?: () => NextTurboLoaderOptions;
     addDependency?: (file: string) => void;
+    /** Loader-runner compilation identity; changes when an input invalidates the build. */
+    _compilation?: object;
+    /** Turns the call asynchronous and returns the callback that completes it. */
+    async?: () => (error: Error | null, code?: string, map?: unknown) => void;
     callback?: (error: Error | null, code?: string, map?: unknown) => void;
 }
+
+/** Prefix answers already validated inside one loader-runner compilation. */
+const prefixesByCompilation = new WeakMap<object, Map<string, NextClassPrefix>>();
 
 /** Testable result produced by the loader core before callback adaptation. */
 export interface NextTurboLoaderResult {
@@ -131,6 +124,23 @@ export function runNextTurboLoader(
 
     assertProductionManifestReady(context, options);
 
+    const tailwindStylesheet = [options.tailwindStylesheet ?? []].flat();
+    const prefix = prefixForCompilation(context, tailwindStylesheet, loaderContext._compilation);
+    if (!prefix.ok) {
+        throw new NextStylesheetFactsPending(
+            unreadNextPrefixMessage(context.root, prefix.reason, 'the Next Turbopack loader'),
+            {
+                root: context.root,
+                cacheDir: context.cacheDir,
+                tailwindStylesheet,
+                mode: context.manifestExpectation.mode,
+            },
+        );
+    }
+    // The facts file and every stylesheet it records: an edit to any of them
+    // re-runs this loader, which is how a prefix change reaches a dev session.
+    for (const file of prefix.dependencies) loaderContext.addDependency?.(file);
+
     // Cross-module resolution, inverted for this lane: no prescan hands the
     // loader a registry, so it reads each provider from disk itself. Every one
     // it read is declared below — an edited style module has to invalidate its
@@ -145,7 +155,10 @@ export function runNextTurboLoader(
         source,
         filename: loaderContext.resourcePath,
         parserMode: options.parserMode ?? 'rust',
-        compilerOptions: withCrossModuleStatics(options.compilerOptions, crossModule.statics),
+        compilerOptions: {
+            ...withCrossModuleStatics(options.compilerOptions, crossModule.statics),
+            classPrefix: prefix.prefix,
+        },
         cacheRoot: resolveTransformCacheDir(
             context.root,
             path.relative(context.root, context.cacheDir),
@@ -157,7 +170,11 @@ export function runNextTurboLoader(
             readPackageVersion('../../compiler/package.json', import.meta.url),
         astBudget: options.astBudget,
     });
-    const injected = injectNextRuntimeImports(transform.result.code, transform.result);
+    const injected = injectNextRuntimeImports(
+        transform.result.code,
+        transform.result,
+        prefix.prefix,
+    );
     // szcn theme groups. The other lanes import a virtual module the plugin
     // resolves; a loader cannot, so a real file is written once per project and
     // imported by path. Only modules that can call szcn pay for it, and the
@@ -268,6 +285,57 @@ export function runNextTurboLoader(
 }
 
 /**
+ * Resolve stylesheet facts once inside a loader-runner compilation.
+ *
+ * The compilation object is the invalidation epoch: every recorded dependency
+ * is still registered for every module, and an edit creates a new compilation
+ * whose first module validates the record again. Contexts without that object
+ * take the uncached path so an unknown loader runner cannot retain stale facts.
+ * Failed answers are never cached, allowing the async development fallback to
+ * write facts and retry in the same compilation.
+ *
+ * For M modules and S recorded stylesheets, a supported compilation pays O(S)
+ * synchronous validation once and O(1) lookup per later module, for O(S + M)
+ * work and O(P) cached answers for P stylesheet selections. Build startup pays
+ * this cost; each compilation object owns and releases its map through WeakMap.
+ *
+ * @param context - The resolved Next project paths.
+ * @param tailwindStylesheet - Explicit roots, or none for project discovery.
+ * @param compilation - The loader-runner invalidation epoch, when available.
+ * @returns The prefix answer and dependencies for this project selection.
+ */
+function prefixForCompilation(
+    context: NextStateContext,
+    tailwindStylesheet: readonly string[],
+    compilation: object | undefined,
+): NextClassPrefix {
+    const resolve = (): NextClassPrefix =>
+        resolveNextClassPrefix({
+            root: context.root,
+            cacheDir: context.cacheDir,
+            tailwindStylesheet,
+            candidates:
+                tailwindStylesheet.length > 0
+                    ? undefined
+                    : projectStylesheetCandidates(context.root, context.cacheDir),
+        });
+    if (compilation === undefined) return resolve();
+
+    let cached = prefixesByCompilation.get(compilation);
+    if (cached === undefined) {
+        cached = new Map();
+        prefixesByCompilation.set(compilation, cached);
+    }
+    const key = JSON.stringify([context.root, context.cacheDir, tailwindStylesheet]);
+    const known = cached.get(key);
+    if (known !== undefined) return known;
+
+    const answer = resolve();
+    if (answer.ok) cached.set(key, answer);
+    return answer;
+}
+
+/**
  * Webpack-compatible loader entry consumed by Next `turbopack.rules`.
  *
  * @param this Loader context.
@@ -286,6 +354,23 @@ export default function nextTurboLoader(
         }
         return result.code;
     } catch (error) {
+        // `next dev` without `csszyx next watch`: nothing has read the stylesheets,
+        // and a dev loader may wait while it reads them itself. A production
+        // build may not, because its prebuild owns the answer.
+        if (
+            error instanceof NextStylesheetFactsPending &&
+            error.input.mode === 'development' &&
+            this.async
+        ) {
+            const done = this.async();
+            // A rejection reaches `done` as its error argument; the loader
+            // runner reports whatever the read threw.
+            readStylesheetsOnce(error.input).then(() => {
+                const result = runNextTurboLoader(source, this);
+                done(null, result.code, result.map);
+            }, done);
+            return;
+        }
         if (this.callback) {
             this.callback(error instanceof Error ? error : new Error(String(error)));
             return;
@@ -410,4 +495,48 @@ function createShardCacheKey(
         .update('\0')
         .update(normalizePathSeparators(path.relative(context.root, metadata.sourcePath)))
         .digest('hex');
+}
+
+/** What a loader that found no usable facts needs in order to read the stylesheets. */
+interface NextStylesheetFactsInput {
+    root: string;
+    cacheDir: string;
+    tailwindStylesheet: string[];
+    mode: 'development' | 'production';
+}
+
+/** A loader run that has no Tailwind prefix to lower with yet. */
+class NextStylesheetFactsPending extends Error {
+    readonly input: NextStylesheetFactsInput;
+
+    /**
+     * @param message - What the loader would report if nobody can wait.
+     * @param input - What reading the stylesheets needs.
+     */
+    constructor(message: string, input: NextStylesheetFactsInput) {
+        super(message);
+        this.input = input;
+    }
+}
+
+/** Reads in flight per cache directory, so modules loaded together share one compile. */
+const stylesheetReads = new Map<string, Promise<void>>();
+
+/**
+ * Read the app's stylesheets and record the facts, once for every module that
+ * asks at the same time.
+ *
+ * @param input - Where the app is and which stylesheets it loads.
+ * @returns Nothing once the facts are written.
+ */
+function readStylesheetsOnce(input: NextStylesheetFactsInput): Promise<void> {
+    const inFlight = stylesheetReads.get(input.cacheDir);
+    if (inFlight !== undefined) return inFlight;
+    const read = writeNextStylesheetFacts(input)
+        .then(({ warning }) => {
+            if (warning !== null) console.warn(warning);
+        })
+        .finally(() => stylesheetReads.delete(input.cacheDir));
+    stylesheetReads.set(input.cacheDir, read);
+    return read;
 }

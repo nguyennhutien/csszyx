@@ -13,7 +13,7 @@ import {
 import { resolveNativeCacheIdentity, vitePlugin } from '../src/unplugin.js';
 
 type TransformHook = {
-    configResolved?: (config: { root: string }) => void;
+    configResolved?: (config: { root: string }) => Promise<void>;
     transform: (this: { warn: (message: string) => void }, code: string, id: string) => unknown;
 };
 
@@ -41,17 +41,21 @@ function packageVersion(packageJsonPath: string): string {
 }
 
 describe('rust parser real-source canary', () => {
-    function createRustTransform({
+    async function createRustTransform({
         cache = false,
         root = REPO_ROOT,
     }: {
         cache?: boolean;
         root?: string;
-    } = {}): TransformHook {
+    } = {}): Promise<TransformHook> {
         const [prePlugin] = vitePlugin({
             build: { parser: 'rust', cache },
+            // The repository holds many apps and a prefixed oracle fixture, so its
+            // stylesheets disagree on the prefix; name the one app this reads.
+            tailwindStylesheet:
+                root === REPO_ROOT ? 'playground/vite-react/src/index.css' : undefined,
         }) as TransformHook[];
-        prePlugin.configResolved?.({ root });
+        await prePlugin.configResolved?.({ root });
         return prePlugin;
     }
 
@@ -68,8 +72,8 @@ describe('rust parser real-source canary', () => {
         };
     }
 
-    it('runs representative playground and docs files through the unplugin rust path', () => {
-        const prePlugin = createRustTransform();
+    it('runs representative playground and docs files through the unplugin rust path', async () => {
+        const prePlugin = await createRustTransform();
 
         if (!nativeRustAvailable) {
             expect(() =>
@@ -111,8 +115,8 @@ describe('rust parser real-source canary', () => {
         }
     });
 
-    it('keeps Rust runtime helper output blocked in server components', () => {
-        const prePlugin = createRustTransform();
+    it('keeps Rust runtime helper output blocked in server components', async () => {
+        const prePlugin = await createRustTransform();
         const source = `
             // leading comment before directive should not hide the server boundary
             'use server';
@@ -134,12 +138,12 @@ describe('rust parser real-source canary', () => {
         );
     });
 
-    it('round-trips Rust parser output through the transform cache when native is available', () => {
+    it('round-trips Rust parser output through the transform cache when native is available', async () => {
         const root = mkdtempSync(join(tmpdir(), 'csszyx-rust-cache-'));
         try {
             const source = 'const App=()=> <div sz={{ p: 4, bg: "red-500" }} />;';
             const id = join(root, 'src/App.tsx');
-            const prePlugin = createRustTransform({ cache: true, root });
+            const prePlugin = await createRustTransform({ cache: true, root });
 
             if (!nativeRustAvailable) {
                 expect(() => prePlugin.transform.call({ warn: vi.fn() }, source, id)).toThrow(
@@ -159,7 +163,7 @@ describe('rust parser real-source canary', () => {
             expect(cached?.code).toBe(first.code);
             expect(cached?.classes).toEqual(new Set(['p-4', 'bg-red-500']));
 
-            const nextPlugin = createRustTransform({ cache: true, root });
+            const nextPlugin = await createRustTransform({ cache: true, root });
             const second = nextPlugin.transform.call({ warn: vi.fn() }, source, id) as {
                 code: string;
             };

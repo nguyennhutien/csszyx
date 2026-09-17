@@ -579,6 +579,28 @@ build root needs no config — it is compiled and scanned automatically;
 `compileSources` is only needed for `/packages/` or for sources **outside** the
 build root.
 
+#### Tailwind Stylesheets (`tailwindStylesheet`)
+
+csszyx writes your Tailwind prefix before every class it emits, so
+`sz={{ p: 4 }}` becomes `tw:p-4` under `@import "tailwindcss" prefix(tw)`. To learn
+the prefix it compiles the stylesheets in your project that reach Tailwind. It
+finds them by walking the project root, which also finds test fixtures, copied
+stylesheets and ones the app no longer loads. When two of them set different
+prefixes, the build stops and lists each one with its prefix.
+
+List the stylesheets your app loads, and nothing else is read for the prefix:
+
+```ts
+csszyx({
+  tailwindStylesheet: "src/index.css",
+});
+```
+
+Accepts a path or an array of paths, relative to the project root. A listed path
+that does not exist stops the build. Without the option, the walk skips
+`node_modules`, `dist`, `build`, `target`, `coverage`, `storybook-static`
+and every dot-directory.
+
 #### Content Scope Check (`contentScopeCheck`)
 
 Default `true`. Tailwind v4's automatic content detection scans every file under its
@@ -684,8 +706,9 @@ carrying `@theme` and feeds their tokens to the szcn groups, so last-wins
 merging works with zero config. All `@theme` option keywords (`inline`,
 `static`, `reference`) are recognized. The auto-scan covers **runtime merging
 only** — `.csszyx/theme.d.ts` type generation still requires an explicit
-`scanCss`, and setting one turns the auto-scan off in favor of exactly the
-files you listed.
+`scanCss`. Setting one does not turn the auto-scan off: the merge groups keep
+coming from every stylesheet in the project, and the files you listed add
+the types on top.
 
 #### Dynamic manifest (`emitManifest`)
 

@@ -16,7 +16,7 @@ import {
 import { vitePlugin } from '../src/unplugin.js';
 
 type TransformHook = {
-    configResolved?: (config: { root: string }) => void;
+    configResolved?: (config: { root: string }) => Promise<void>;
     transform: (this: { warn: (message: string) => void }, code: string, id: string) => unknown;
 };
 
@@ -202,6 +202,39 @@ describe('transform cache', () => {
         expect(readTransformCache(cacheRoot, rustInput(undefined))).toBeNull();
     });
 
+    it('keys entries on the Tailwind prefix, reading no prefix and null as the same', () => {
+        const bare = createTransformCacheKey(input());
+        expect(createTransformCacheKey(input({ classPrefix: 'tw' })).key).not.toBe(bare.key);
+        expect(createTransformCacheKey(input({ classPrefix: 'ui' })).key).not.toBe(
+            createTransformCacheKey(input({ classPrefix: 'tw' })).key,
+        );
+        expect(createTransformCacheKey(input({ classPrefix: null })).key).toBe(bare.key);
+    });
+
+    it('serves an entry only to a transform asking for the same prefix', () => {
+        const cacheRoot = tempRoot();
+        writeTransformCache(cacheRoot, input({ classPrefix: 'tw' }), result());
+
+        expect(readTransformCache(cacheRoot, input({ classPrefix: 'tw' }))).not.toBeNull();
+        expect(readTransformCache(cacheRoot, input())).toBeNull();
+        expect(readTransformCache(cacheRoot, input({ classPrefix: 'ui' }))).toBeNull();
+    });
+
+    it('rejects an entry whose recorded prefix is not the one asked for', () => {
+        // The file name is derived from the prefix, so only a hand-edited or
+        // colliding entry reaches this check; it still has to refuse.
+        const cacheRoot = tempRoot();
+        const asked = input({ classPrefix: 'tw' });
+        writeTransformCache(cacheRoot, asked, result());
+        const { key } = createTransformCacheKey(asked);
+        const file = join(cacheRoot, key.slice(0, 2), `${key.slice(2)}.json`);
+        const entry = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+        entry.classPrefix = 'ui';
+        writeFileSync(file, JSON.stringify(entry));
+
+        expect(readTransformCache(cacheRoot, asked)).toBeNull();
+    });
+
     it('evicts old or corrupt entries', () => {
         const cacheRoot = resolveTransformCacheDir(tempRoot());
         writeTransformCache(cacheRoot, input(), result());
@@ -258,13 +291,13 @@ describe('transform cache', () => {
         ).not.toBeNull();
     });
 
-    it('plugin wiring writes cache entries by default', () => {
+    it('plugin wiring writes cache entries by default', async () => {
         const root = tempRoot();
         // Pinned to wasm so this test stays valid in environments without the
         // optional Rust native addon. The cache-wiring assertion does not
         // depend on which parser produced the entry.
         const [prePlugin] = vitePlugin({ build: { parser: 'wasm' } }) as TransformHook[];
-        prePlugin.configResolved?.({ root });
+        await prePlugin.configResolved?.({ root });
 
         const id = join(root, 'src/App.tsx');
         prePlugin.transform.call(
@@ -278,10 +311,10 @@ describe('transform cache', () => {
         ).not.toBeNull();
     });
 
-    it('plugin wiring bypasses cache when build.cache is false', () => {
+    it('plugin wiring bypasses cache when build.cache is false', async () => {
         const root = tempRoot();
         const [prePlugin] = vitePlugin({ build: { cache: false } }) as TransformHook[];
-        prePlugin.configResolved?.({ root });
+        await prePlugin.configResolved?.({ root });
 
         prePlugin.transform.call(
             { warn: () => undefined },
@@ -292,10 +325,10 @@ describe('transform cache', () => {
         expect(existsSync(resolveTransformCacheDir(root))).toBe(false);
     });
 
-    it('plugin wiring reuses the in-memory transform cache before disk reads', () => {
+    it('plugin wiring reuses the in-memory transform cache before disk reads', async () => {
         const root = tempRoot();
         const [prePlugin] = vitePlugin() as TransformHook[];
-        prePlugin.configResolved?.({ root });
+        await prePlugin.configResolved?.({ root });
 
         const source = 'const App=()=> <div sz={{ p: 4 }} />;';
         const id = join(root, 'src/App.tsx');

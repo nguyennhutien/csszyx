@@ -25,6 +25,7 @@ const KNOWN_TOP_LEVEL_KEYS: ReadonlySet<string> = new Set([
     'include',
     'exclude',
     'compileSources',
+    'tailwindStylesheet',
     'contentScopeCheck',
     'quiet',
     'mode',

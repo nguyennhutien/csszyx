@@ -1,6 +1,7 @@
 /**
  * bin.ts next-prebuild action end-to-end: dispatching `next-prebuild <pattern>
- * --ignore x,y` through cac exercises the comma-split of --ignore into extraIgnore
+ * --ignore x,y --tailwind-stylesheet a` through cac exercises the comma-split of
+ * --ignore into extraIgnore and of --tailwind-stylesheet into tailwindStylesheet,
  * and the success (exit code 0, no process.exit) path of runNextPrebuildCommand.
  * One bin dispatch per file (see bin-dispatch-migrate.test.ts for why).
  */
@@ -45,6 +46,8 @@ describe('bin next-prebuild dispatch (real command)', () => {
         writeFileSync(join(cwd, 'package.json'), '{"name":"app","private":true}\n');
         mkdirSync(join(cwd, 'app'));
         writeFileSync(join(cwd, 'app/page.tsx'), 'export default () => <div sz={{ p: 4 }} />;');
+        // Named with --tailwind-stylesheet below; no Tailwind to reach, so no prefix.
+        writeFileSync(join(cwd, 'app/globals.css'), '.card { color: red; }\n');
         mkdirSync(join(cwd, 'app/vendor'));
         writeFileSync(
             join(cwd, 'app/vendor/Skip.tsx'),
@@ -64,6 +67,9 @@ describe('bin next-prebuild dispatch (real command)', () => {
             'wasm',
             '--ignore',
             '**/vendor/**,**/__x__/**',
+            '--tailwind-stylesheet',
+            // Spaces after a comma, and a trailing comma, as a shell user types them.
+            ' app/globals.css ,',
         ];
         await import('../src/bin.js?scenario=prebuild-ignore');
         // Wait for the summary, not for a duration. The action is async and

@@ -138,6 +138,17 @@ that styles nothing.
 Pass `filename` when the parser matters — the extension selects it, so JSX needs
 a `.tsx` name. It defaults to `preview.tsx`.
 
+Pass `classPrefix` when the project's stylesheet sets one. With
+`@import "tailwindcss" prefix(tw)` the project serves `tw:p-4` and nothing for
+`p-4`, so a preview without the prefix shows classes that style nothing there:
+
+```json
+{ "source": "export const A = () => <div sz={{ p: 4 }} />;", "classPrefix": "tw" }
+```
+
+The result echoes the `classPrefix` it used. When none was given it says so in a
+`note`, since the classes are then in the unprefixed vocabulary.
+
 ## Resources
 
 The server also exposes read-only resources that AI agents can load for context:

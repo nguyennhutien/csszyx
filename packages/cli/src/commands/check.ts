@@ -222,6 +222,8 @@ interface OpenedOracles {
     stylesheetFailed: boolean;
     /** False when nothing in the project imports Tailwind at all. */
     hadEntries: boolean;
+    /** The prefix each compiled entry's `@import "tailwindcss"` line set, by entry. */
+    prefixes: Array<{ entry: string; prefix: string | null }>;
 }
 
 /**
@@ -238,6 +240,7 @@ async function openOracles(cwd: string): Promise<OpenedOracles> {
     const entries = await findTailwindCssEntries(cwd);
     const oracles: Array<Extract<EmittedClassOracle, { ok: true }>> = [];
     const skipped: string[] = [];
+    const prefixes: OpenedOracles['prefixes'] = [];
     let stylesheetFailed = false;
     for (const entry of entries) {
         const oracle = await createEmittedClassOracle({
@@ -247,12 +250,51 @@ async function openOracles(cwd: string): Promise<OpenedOracles> {
         });
         if (oracle.ok) {
             oracles.push(oracle);
+            prefixes.push({ entry: relativePosix(cwd, entry), prefix: oracle.facts.prefix });
         } else {
             skipped.push(oracle.reason);
             stylesheetFailed ||= oracle.kind === 'stylesheet';
         }
     }
-    return { oracles, skipped, stylesheetFailed, hadEntries: entries.length > 0 };
+    return { oracles, skipped, stylesheetFailed, hadEntries: entries.length > 0, prefixes };
+}
+
+/**
+ * A prefix the way an `@import "tailwindcss"` line spells it.
+ *
+ * @param prefix - A prefix, or null.
+ * @returns `prefix(tw)`, or `no prefix`.
+ */
+function prefixLabel(prefix: string | null): string {
+    return prefix === null ? 'no prefix' : `prefix(${prefix})`;
+}
+
+/**
+ * The Tailwind prefix every compiled entry agrees on.
+ *
+ * csszyx writes one prefix before every class, so a project whose entries set
+ * different ones has classes that are dead under one of them whichever prefix
+ * is used. Checking against a guess would report the half it did not guess, or
+ * pass the half it did, so the disagreement is the finding.
+ *
+ * @param opened - The project's compiled design systems.
+ * @returns The agreed prefix, or null with the message naming each entry.
+ */
+function agreedPrefix(opened: OpenedOracles): {
+    prefix: string | null;
+    disagreement: string | null;
+} {
+    const [first, ...rest] = opened.prefixes;
+    if (rest.every(entry => entry.prefix === first?.prefix)) {
+        return { prefix: first?.prefix ?? null, disagreement: null };
+    }
+    const listed = opened.prefixes
+        .map(entry => `${entry.entry}: ${prefixLabel(entry.prefix)}`)
+        .join('; ');
+    return {
+        prefix: null,
+        disagreement: `The Tailwind entries in this project set different prefixes (${listed}), so sz cannot be checked against all of them. Give every entry the same @import "tailwindcss" line.`,
+    };
 }
 
 /**
@@ -272,6 +314,7 @@ async function openOracles(cwd: string): Promise<OpenedOracles> {
  * @param origins - Emitted class mapped to the file that first emitted it.
  * @param allow - Classes the project vouched for.
  * @param wants - Whether the run reports findings of a rule.
+ * @param disagreement - Why the entries give no single prefix, or null.
  * @returns Whether anything dead was found.
  */
 async function reportDeadClasses(
@@ -280,6 +323,7 @@ async function reportDeadClasses(
     origins: Map<string, string>,
     allow: readonly string[],
     wants: (rule: CheckRule) => boolean,
+    disagreement: string | null,
 ): Promise<boolean> {
     if (origins.size === 0) return false;
 
@@ -290,6 +334,11 @@ async function reportDeadClasses(
                 'there is no design system to ask which classes are real.',
         );
         return false;
+    }
+    if (disagreement !== null) {
+        out.warn(`\n✖ ${disagreement}`);
+        out.push({ rule: 'dead-class', kind: PREFIX_DISAGREEMENT, message: disagreement });
+        return true;
     }
     if (oracles.length === 0) {
         // Every reason, not the first: there was at least one entry and none of
@@ -490,9 +539,14 @@ interface SzDiagnostics {
  *
  * @param files - Absolute paths to scan.
  * @param cwd - Project root, for relative reporting.
+ * @param classPrefix - The Tailwind prefix to lower with, or null.
  * @returns The diagnostics and the class origins found.
  */
-async function collectSzDiagnostics(files: string[], cwd: string): Promise<SzDiagnostics> {
+async function collectSzDiagnostics(
+    files: string[],
+    cwd: string,
+    classPrefix: string | null,
+): Promise<SzDiagnostics> {
     const issues: SzIssue[] = [];
     // One origin per class is enough to point at: the report answers "where did
     // this come from", not "everywhere it appears".
@@ -507,7 +561,14 @@ async function collectSzDiagnostics(files: string[], cwd: string): Promise<SzDia
         const currentFile = relativePosix(cwd, file);
         const pairs = szValuePairs(source);
         if (pairs.length > 0) pairsByFile.set(currentFile, pairs);
-        for (const message of recordFileClasses(source, file, cwd, currentFile, classOrigins)) {
+        for (const message of recordFileClasses(
+            source,
+            file,
+            cwd,
+            currentFile,
+            classOrigins,
+            classPrefix,
+        )) {
             if (message.startsWith('[csszyx]')) {
                 issues.push({
                     file: currentFile,
@@ -531,6 +592,7 @@ async function collectSzDiagnostics(files: string[], cwd: string): Promise<SzDia
  * @param cwd - Project root.
  * @param relativePath - Path as reported to the user.
  * @param classOrigins - Origins map, extended in place.
+ * @param classPrefix - The Tailwind prefix to lower with, or null.
  * @returns The file's compiler diagnostics (empty when unreadable).
  */
 function recordFileClasses(
@@ -539,9 +601,10 @@ function recordFileClasses(
     cwd: string,
     relativePath: string,
     classOrigins: Map<string, string>,
+    classPrefix: string | null,
 ): string[] {
     try {
-        const result = transformSource(source, file, { rootDir: cwd });
+        const result = transformSource(source, file, { rootDir: cwd, classPrefix });
         for (const token of result.classes) {
             if (!classOrigins.has(token)) classOrigins.set(token, relativePath);
         }
@@ -787,6 +850,13 @@ async function resolveScanFiles(
 type RuleSelection = (rule: CheckRule, kind: string) => boolean;
 
 /**
+ * The finding for entries that set different prefixes. It can be left out by
+ * id like a diagnostic kind, which skips the dead-class pass: that pass needs
+ * one prefix to ask about.
+ */
+const PREFIX_DISAGREEMENT = 'prefix-disagreement';
+
+/**
  * Read `--rule` and `--ignore-rule` into one predicate, or fail the run.
  *
  * An id is either a pass (`dead-class`) or a diagnostic kind (`unknown-key`),
@@ -801,7 +871,7 @@ type RuleSelection = (rule: CheckRule, kind: string) => boolean;
 function ruleSelection(options: CheckOptions, out: Reporter): RuleSelection | null {
     const include = options.rule ?? [];
     const exclude = options.ignoreRule ?? [];
-    const known = new Set<string>([...CHECK_RULES, ...SZ_DIAGNOSTIC_KIND_IDS]);
+    const known = new Set<string>([...CHECK_RULES, ...SZ_DIAGNOSTIC_KIND_IDS, PREFIX_DISAGREEMENT]);
     const unknown = [...include, ...exclude].filter(id => !known.has(id));
     if (unknown.length > 0) {
         const given = unknown.map(id => `"${id}"`).join(', ');
@@ -894,23 +964,50 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     const files = await resolveScanFiles(options, out, cwd, patterns, ignore);
     if (!files) return;
 
-    const { issues, classOrigins, pairsByFile } = await collectSzDiagnostics(files, cwd);
+    const unprefixed = await collectSzDiagnostics(files, cwd, null);
     // Compiling a stylesheet is the expensive part of this command, so it is
     // skipped when no pass that reads it has anything to ask. The className
     // pass counts here too: a component that writes only class strings has no
     // sz signal at all, and it is exactly the file that pass exists for.
     const opened =
-        classOrigins.size > 0 || pairsByFile.size > 0
+        unprefixed.classOrigins.size > 0 || unprefixed.pairsByFile.size > 0
             ? await openOracles(cwd)
-            : { oracles: [], skipped: [], stylesheetFailed: false, hadEntries: false };
+            : {
+                  oracles: [],
+                  skipped: [],
+                  stylesheetFailed: false,
+                  hadEntries: false,
+                  prefixes: [],
+              };
+    // Lowered without a prefix above, which is right only when no entry sets
+    // one: a prefixed project serves `tw:p-4`, and asking about `p-4` would
+    // call every class dead. Only a prefixed project pays for the second pass.
+    const { prefix, disagreement } = agreedPrefix(opened);
+    const { issues, classOrigins, pairsByFile } =
+        prefix === null ? unprefixed : await collectSzDiagnostics(files, cwd, prefix);
 
     reportSelectedIssues(out, issues, files.length, wants);
 
     // Runs whichever way the key pass went: a canonical key can still lower to
     // a class this project's Tailwind does not serve.
+    const deadClassPass = wantsRule('dead-class') || wantsRule('broken-opacity');
+    const disagreementLeftOut = disagreement !== null && !wants('dead-class', PREFIX_DISAGREEMENT);
+    if (deadClassPass && disagreementLeftOut) {
+        out.info(
+            `Dead-class check skipped: the Tailwind entries set different prefixes, and --ignore-rule ${PREFIX_DISAGREEMENT} left that finding out.`,
+        );
+    }
     if (
-        (wantsRule('dead-class') || wantsRule('broken-opacity')) &&
-        (await reportDeadClasses(out, opened, classOrigins, options.allow ?? [], wantsRule))
+        deadClassPass &&
+        !disagreementLeftOut &&
+        (await reportDeadClasses(
+            out,
+            opened,
+            classOrigins,
+            options.allow ?? [],
+            wantsRule,
+            disagreement,
+        ))
     ) {
         process.exitCode = 1;
     }

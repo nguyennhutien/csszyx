@@ -1,9 +1,11 @@
 import {
     CsszyxNativeUnavailableError,
     type NativeTransformResult,
+    scanModuleLinks,
     transformBatch,
 } from '@csszyx/core/native';
 
+import type { ModuleLinks, ModuleLinksFile } from './module-links.js';
 import type {
     CssVariableMangleValue,
     GlobalVarAliasTableInput,
@@ -149,17 +151,39 @@ export function transformRustBatch(
                 // registries share a transport but not a meaning, and the
                 // native side picks different machinery for each.
                 crossModuleSzObjectsJson: encodeCrossModuleStatics(options?.crossModuleSzObjects),
+                classPrefix: options?.classPrefix ?? undefined,
             },
         ).map(fromNativeResult);
     } catch (err) {
-        if (err instanceof OxcRustNotImplementedError) {
-            throw err;
-        }
-        if (err instanceof CsszyxNativeUnavailableError) {
-            throw new OxcRustNotImplementedError(err.detail);
-        }
-        throw err;
+        throw asRustUnavailable(err);
     }
+}
+
+/**
+ * Read module links through the native addon.
+ *
+ * @param files - Modules to read.
+ * @returns One answer per module, in input order.
+ * @throws {OxcRustNotImplementedError} when the native addon is unavailable.
+ */
+export function scanModuleLinksRust(files: readonly ModuleLinksFile[]): ModuleLinks[] {
+    try {
+        return scanModuleLinks(files.map(({ filename, source }) => ({ filename, source })));
+    } catch (err) {
+        throw asRustUnavailable(err);
+    }
+}
+
+/**
+ * Name a native loader failure the way every rust-lane caller reports it.
+ *
+ * @param err - What the native call threw.
+ * @returns The error to throw: loader failures renamed, anything else as is.
+ */
+function asRustUnavailable(err: unknown): unknown {
+    return err instanceof CsszyxNativeUnavailableError
+        ? new OxcRustNotImplementedError(err.detail)
+        : err;
 }
 
 /**

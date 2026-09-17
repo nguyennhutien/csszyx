@@ -21,7 +21,7 @@ import {
     type SzObject,
 } from '@csszyx/compiler/browser';
 
-import { setSzLowering } from './lowering-slot.js';
+import { getSzClassPrefix, setSzLowering } from './lowering-slot.js';
 import { getMangleRegistry } from './mangle-registry.js';
 
 /** A frozen map of original class names to their mangled SSR equivalents. */
@@ -64,10 +64,22 @@ export function lowerSz(szProp: object | readonly object[]): string {
               deepMergeSzObjects(a as SzObject, b as SzObject),
           )
         : szProp;
-    const className = rawTransform(merged as SzObject).className;
-    if (!className) {
-        return className;
+    const unprefixed = rawTransform(merged as SzObject).className;
+    if (!unprefixed) {
+        return unprefixed;
     }
+    // Written the way the compiler writes it, before every class with the
+    // variants after it: under `prefix(tw)` the project serves `tw:hover:p-4`.
+    // Before the mangle lookup, because the map names the classes the build emitted.
+    const prefix = getSzClassPrefix();
+    const className =
+        prefix === null
+            ? unprefixed
+            : unprefixed
+                  .split(/\s+/)
+                  .filter(Boolean)
+                  .map(name => `${prefix}:${name}`)
+                  .join(' ');
 
     const globals = globalThis as typeof globalThis & CsszyxMangleGlobals;
     // SSR first (the plugin sets it in the build process), then the registry

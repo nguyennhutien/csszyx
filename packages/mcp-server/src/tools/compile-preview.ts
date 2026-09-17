@@ -26,6 +26,12 @@ export const compilePreviewSchema = z.object({
         .describe(
             'Filename to attribute diagnostics to. The extension selects the parser, so use .tsx for JSX. Defaults to preview.tsx.',
         ),
+    classPrefix: z
+        .string()
+        .optional()
+        .describe(
+            'The Tailwind prefix the project sets, e.g. "tw" for `@import "tailwindcss" prefix(tw)`. csszyx writes it before every class, so a preview without it shows classes that project does not serve.',
+        ),
 });
 
 /** Validated input type for the csszyx_compile_preview tool. */
@@ -90,11 +96,13 @@ function restoreEnv(name: string, value: string | undefined): void {
  *
  * @param source - Source module to compile.
  * @param filename - Filename to attribute diagnostics to.
+ * @param classPrefix - The Tailwind prefix to write before every class, or null.
  * @returns The compiler result plus the messages it wrote to the console.
  */
 function compileWithDiagnostics(
     source: string,
     filename: string,
+    classPrefix: string | null,
 ): { result: ReturnType<typeof transformSource>; warnings: string[] } {
     const warnings: string[] = [];
     const originalWarn = console.warn;
@@ -106,7 +114,7 @@ function compileWithDiagnostics(
     process.env.NODE_ENV = 'development';
     delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
     try {
-        return { result: transformSource(source, filename), warnings };
+        return { result: transformSource(source, filename, { classPrefix }), warnings };
     } finally {
         console.warn = originalWarn;
         restoreEnv('NODE_ENV', originalNodeEnv);
@@ -123,9 +131,11 @@ function compileWithDiagnostics(
 export function handleCompilePreview(input: CompilePreviewInput): {
     content: Array<{ type: 'text'; text: string }>;
 } {
+    const classPrefix = input.classPrefix ?? null;
     const { result, warnings } = compileWithDiagnostics(
         input.source,
         input.filename ?? 'preview.tsx',
+        classPrefix,
     );
     return {
         content: [
@@ -143,6 +153,13 @@ export function handleCompilePreview(input: CompilePreviewInput): {
                         runtimeHelpers: RUNTIME_HELPERS.filter(
                             ([, flag]) => result[flag] === true,
                         ).map(([name]) => name),
+                        // Echoed so the reader knows which vocabulary the classes are in.
+                        classPrefix,
+                        ...(classPrefix === null
+                            ? {
+                                  note: 'No classPrefix was given, so the classes carry none. If the project stylesheet sets one, such as `@import "tailwindcss" prefix(tw)`, pass it as classPrefix to see the classes that project serves.',
+                              }
+                            : {}),
                     },
                     null,
                     2,

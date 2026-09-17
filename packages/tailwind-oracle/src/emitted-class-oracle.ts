@@ -39,6 +39,12 @@ import {
 } from './collision-oracle.js';
 import { keywordOracleFrom } from './keyword-oracle.js';
 import { brokenOpacityValue, collectCustomProperties } from './opacity-verdict.js';
+import {
+    expandAlias,
+    type ProjectResolver,
+    projectResolver,
+    type StylesheetAlias,
+} from './project-resolver.js';
 import type { KeywordOracle } from './sibling-keyword.js';
 import type { CollisionOracle } from './theme-collision.js';
 
@@ -88,6 +94,10 @@ export interface TailwindModule {
     root: string;
     /** `__unstable__loadDesignSystem`, absent on versions that lack it. */
     loadDesignSystem?: unknown;
+    /** `compile`, which reports the features a stylesheet uses. */
+    compile?: unknown;
+    /** The bit `compile` sets when a stylesheet generates utilities. */
+    utilitiesFeature?: number;
 }
 
 /** Resolves the Tailwind a project would use. Injected in tests. */
@@ -101,6 +111,11 @@ export interface OracleOptions {
     css: string;
     /** Directory the stylesheet lives in, for its relative imports. */
     cssBase: string;
+    /**
+     * The bundler's aliases, tsconfig paths included, applied to `@import`
+     * specifiers before anything else resolves them.
+     */
+    aliases?: readonly StylesheetAlias[];
 }
 
 /**
@@ -178,13 +193,27 @@ export interface StylesheetFacts {
  */
 export type OracleSkipKind = 'environment' | 'stylesheet';
 
+/** Why a question about a stylesheet could not be answered. */
+export interface OracleSkip {
+    ok: false;
+    kind: OracleSkipKind;
+    reason: string;
+    /**
+     * For a stylesheet that did not compile: whether the compile had reached
+     * Tailwind before it failed. A broken Tailwind entry had; a plain
+     * stylesheet with a stale `@import` never did, and so it cannot set a
+     * prefix. Absent where no compile ran.
+     */
+    reachedTailwind?: boolean;
+}
+
 /**
  * A skip nobody needs to act on.
  *
  * @param reason - Human-readable cause.
  * @returns The skip.
  */
-function environmentSkip(reason: string): EmittedClassOracle {
+function environmentSkip(reason: string): OracleSkip {
     return { ok: false, kind: 'environment', reason };
 }
 
@@ -194,7 +223,7 @@ function environmentSkip(reason: string): EmittedClassOracle {
  * @param reason - Human-readable cause.
  * @returns The skip.
  */
-function stylesheetSkip(reason: string): EmittedClassOracle {
+function stylesheetSkip(reason: string): OracleSkip {
     return { ok: false, kind: 'stylesheet', reason };
 }
 
@@ -213,7 +242,7 @@ const SELF_PROOF = 'zz-csszyx-not-a-class';
  * These carry no styles of their own: they mark an element so that `group-*`
  * and `peer-*` variants on its descendants have something to match. Tailwind
  * reports them as producing no CSS, which is true and is not a defect, so they
- * can never be dead. The scope name must be non-empty, which keeps `group/`
+ * can never be dead. Under a prefix the marker carries it too. The scope name must be non-empty, which keeps `group/`
  * and every misspelling reportable.
  */
 const MARKER = /^(?:group|peer)(?:\/[^/\s]+)?$/;
@@ -221,7 +250,13 @@ const MARKER = /^(?:group|peer)(?:\/[^/\s]+)?$/;
 /** An imported Tailwind, in either of the shapes one can arrive in. */
 export interface ImportedTailwind {
     __unstable__loadDesignSystem?: unknown;
-    default?: { __unstable__loadDesignSystem?: unknown };
+    compile?: unknown;
+    Features?: { Utilities?: number };
+    default?: {
+        __unstable__loadDesignSystem?: unknown;
+        compile?: unknown;
+        Features?: { Utilities?: number };
+    };
 }
 
 /**
@@ -264,7 +299,13 @@ const defaultLoader: TailwindLoader = async resolveFrom => {
         const entry = (await import(
             pathToFileURL(require.resolve('tailwindcss')).href
         )) as ImportedTailwind;
-        return { version, root, loadDesignSystem: designSystemEntry(entry) };
+        return {
+            version,
+            root,
+            loadDesignSystem: designSystemEntry(entry),
+            compile: entry.compile ?? entry.default?.compile,
+            utilitiesFeature: (entry.Features ?? entry.default?.Features)?.Utilities,
+        };
     } catch {
         return null;
     }
@@ -289,6 +330,7 @@ const defaultLoader: TailwindLoader = async resolveFrom => {
  * @param base - Directory the importing stylesheet lives in.
  * @param tailwindRoot - Root of the resolved Tailwind package.
  * @param resolveFrom - Project directory whose `package.json` anchors packages.
+ * @param context - The aliases and the project resolver this compile uses.
  * @returns Absolute path to the stylesheet.
  */
 function resolveStylesheetPath(
@@ -296,6 +338,7 @@ function resolveStylesheetPath(
     base: string,
     tailwindRoot: string,
     resolveFrom: string,
+    context: StylesheetResolution,
 ): string {
     // Anchored rather than a prefix test: `tailwindcss-animate` is a package of
     // its own, and routing it into the Tailwind package would look for a file
@@ -303,7 +346,17 @@ function resolveStylesheetPath(
     if (id === 'tailwindcss' || id.startsWith('tailwindcss/')) {
         return tailwindPackageStylesheet(id, tailwindRoot);
     }
+    const aliased = expandAlias(id, context.aliases);
+    if (aliased !== null) return aliased;
     if (id.startsWith('.') || path.isAbsolute(id)) return path.resolve(base, id);
+    if (context.resolver !== null) {
+        try {
+            return context.resolver.resolveStylesheet(id, base);
+        } catch {
+            // Fall through to the resolution every host has, which names the
+            // specifier when it fails too.
+        }
+    }
     // A bare specifier is ambiguous: CSS reads `@import "theme.css"` as a
     // sibling file, node reads it as a package. Prefer the file when one is
     // actually there, so stylesheets that relied on the old behaviour keep
@@ -313,6 +366,12 @@ function resolveStylesheetPath(
     return createRequire(path.join(resolveFrom, 'package.json')).resolve(id);
 }
 
+/** What resolution needs beyond the specifier: the aliases and the project's resolver. */
+interface StylesheetResolution {
+    aliases: readonly StylesheetAlias[];
+    resolver: ProjectResolver | null;
+}
+
 /**
  * Read one stylesheet Tailwind asked for, from the package or from the project.
  *
@@ -320,6 +379,7 @@ function resolveStylesheetPath(
  * @param base - Directory the importing stylesheet lives in.
  * @param tailwindRoot - Root of the resolved Tailwind package.
  * @param resolveFrom - Project directory whose `package.json` anchors packages.
+ * @param context - The aliases and the project resolver this compile uses.
  * @returns The stylesheet Tailwind expects back.
  */
 async function loadStylesheet(
@@ -327,8 +387,9 @@ async function loadStylesheet(
     base: string,
     tailwindRoot: string,
     resolveFrom: string,
+    context: StylesheetResolution,
 ): Promise<LoadedStylesheet> {
-    const file = resolveStylesheetPath(id, base, tailwindRoot, resolveFrom);
+    const file = resolveStylesheetPath(id, base, tailwindRoot, resolveFrom, context);
     return { path: file, base: path.dirname(file), content: await readFile(file, 'utf8') };
 }
 
@@ -344,9 +405,24 @@ async function loadStylesheet(
  * @param id - Specifier as written in `@plugin`.
  * @param base - Directory the importing stylesheet lives in.
  * @param resolveFrom - Project directory whose `package.json` anchors packages.
+ * @param context - The aliases and the project resolver this compile uses.
  * @returns The module Tailwind expects back.
  */
-async function loadModule(id: string, base: string, resolveFrom: string): Promise<LoadedModule> {
+async function loadModule(
+    id: string,
+    base: string,
+    resolveFrom: string,
+    context: StylesheetResolution,
+): Promise<LoadedModule> {
+    if (context.resolver !== null) {
+        try {
+            // Through jiti, as Tailwind loads it: a TypeScript plugin with
+            // extensionless imports loads here and not through `import()`.
+            return await context.resolver.loadModule(id, base);
+        } catch {
+            // Fall through to the loader every host has, which names the module.
+        }
+    }
     const file = id.startsWith('.')
         ? path.resolve(base, id)
         : createRequire(path.join(resolveFrom, 'package.json')).resolve(id);
@@ -366,7 +442,13 @@ function tailwindPackageStylesheet(id: string, tailwindRoot: string): string {
     return path.join(tailwindRoot, relative.endsWith('.css') ? relative : `${relative}.css`);
 }
 
-/** Directories a project's own stylesheets never live in. */
+/**
+ * Directories a project's own stylesheets never live in.
+ *
+ * The build output here carries copies of the app's stylesheets. The bundler
+ * plugin's walk skips the same ones, so `csszyx check` does not stop over a
+ * stale copy with an older prefix that the build never reads.
+ */
 const IGNORED_CSS_DIRS = [
     '**/node_modules/**',
     '**/dist/**',
@@ -374,6 +456,10 @@ const IGNORED_CSS_DIRS = [
     '**/.next/**',
     '**/.nuxt/**',
     '**/.astro/**',
+    '**/.turbo/**',
+    '**/target/**',
+    '**/coverage/**',
+    '**/storybook-static/**',
 ];
 
 /**
@@ -466,6 +552,91 @@ export async function tailwindEntriesAmong(files: readonly string[]): Promise<st
 /** `@import "tailwindcss"` in either quoting style, with optional layer parts. */
 const IMPORTS_TAILWIND = /@import\s+["']tailwindcss["' /]/;
 
+/** What one stylesheet is to the project, from a compile by its own Tailwind. */
+export type StylesheetRole =
+    | {
+          ok: true;
+          /**
+           * Whether it generates utilities, the rule Tailwind's own bundler
+           * integrations use to decide a stylesheet is a root.
+           */
+          utilities: boolean;
+          /** Every stylesheet the compile loaded, as resolved paths. */
+          imports: string[];
+      }
+    | OracleSkip;
+
+/** `Features.Utilities` in every Tailwind 4 release, for a module that does not export the enum. */
+const UTILITIES_FEATURE = 16;
+
+/**
+ * Compile a stylesheet only far enough to learn whether it is a root and what
+ * it imports.
+ *
+ * A literal `@import "tailwindcss"` in the text is not the test: an entry may
+ * reach Tailwind through a package stylesheet, a commented-out line matches
+ * text, and a stylesheet that only declares `@theme` generates nothing. The
+ * compile answers all three the way the project's build does.
+ *
+ * @param options - What to compile and where to resolve it from.
+ * @param loadTailwind - Resolver override, for tests.
+ * @returns The role, or a skip carrying the reason there is none.
+ */
+export async function readStylesheetRole(
+    options: OracleOptions,
+    loadTailwind: TailwindLoader = defaultLoader,
+): Promise<StylesheetRole> {
+    const tailwind = await loadTailwind(options.resolveFrom);
+    if (tailwind === null) {
+        return environmentSkip(`could not resolve tailwindcss from ${options.resolveFrom}`);
+    }
+    if (!tailwind.version.startsWith('4.') || typeof tailwind.compile !== 'function') {
+        return environmentSkip(
+            `tailwindcss ${tailwind.version} has no compile to ask; the check needs 4.x`,
+        );
+    }
+    const compile = tailwind.compile as (
+        css: string,
+        options: LoadDesignSystemOptions,
+    ) => Promise<{ features: number }>;
+    const context: StylesheetResolution = {
+        aliases: options.aliases ?? [],
+        resolver: await projectResolver(options.resolveFrom),
+    };
+    const imports: string[] = [];
+    let reachedTailwind = false;
+    try {
+        const compiled = await compile(options.css, {
+            base: options.cssBase,
+            loadStylesheet: async (id, base) => {
+                // Noted on the request, not after the read: Tailwind asks for
+                // every import at once, and a failing sibling rejects the
+                // compile while this read is still pending.
+                if (id === 'tailwindcss' || id.startsWith('tailwindcss/')) reachedTailwind = true;
+                const loaded = await loadStylesheet(
+                    id,
+                    base,
+                    tailwind.root,
+                    options.resolveFrom,
+                    context,
+                );
+                imports.push(loaded.path);
+                return loaded;
+            },
+            loadModule: (id, base) => loadModule(id, base, options.resolveFrom, context),
+        });
+        const utilities = tailwind.utilitiesFeature ?? UTILITIES_FEATURE;
+        return { ok: true, utilities: (compiled.features & utilities) !== 0, imports };
+    } catch (error) {
+        return {
+            ...stylesheetSkip(
+                `the stylesheet did not compile: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+            reachedTailwind,
+        };
+    }
+}
+
 /**
  * Build an oracle over the project's own Tailwind and stylesheet.
  *
@@ -497,10 +668,15 @@ export async function createEmittedClassOracle(
         options: LoadDesignSystemOptions,
     ) => Promise<DesignSystem>;
 
+    const context: StylesheetResolution = {
+        aliases: options.aliases ?? [],
+        resolver: await projectResolver(options.resolveFrom),
+    };
     const loadOptions: LoadDesignSystemOptions = {
         base: options.cssBase,
-        loadStylesheet: (id, base) => loadStylesheet(id, base, tailwind.root, options.resolveFrom),
-        loadModule: (id, base) => loadModule(id, base, options.resolveFrom),
+        loadStylesheet: (id, base) =>
+            loadStylesheet(id, base, tailwind.root, options.resolveFrom, context),
+        loadModule: (id, base) => loadModule(id, base, options.resolveFrom, context),
     };
 
     let design: DesignSystem;
@@ -524,8 +700,6 @@ export async function createEmittedClassOracle(
         );
     }
 
-    const customProperties = collectCustomProperties(options.css);
-
     // Built on first use, from a SECOND compile of the same stylesheet with
     // probe tokens appended. Kept out of the main design system because that
     // one answers the dead-class question, and injecting tokens into it to save
@@ -533,18 +707,38 @@ export async function createEmittedClassOracle(
     // diagnostic's evidence.
     let collisions: CollisionOracle | null | undefined;
 
+    const facts: StylesheetFacts = {
+        // Normalised to null: Tailwind reports an absent prefix as null
+        // today, and an empty string would read as a prefix that is there.
+        prefix:
+            typeof design.theme?.prefix === 'string' && design.theme.prefix !== ''
+                ? design.theme.prefix
+                : null,
+        important: design.important === true,
+    };
+    // A prefixed build selects `.tw\:group`, so the marker an element carries
+    // there is `tw:group`, and a bare `group` marks nothing at all.
+    const markerPrefix = facts.prefix === null ? '' : `${facts.prefix}:`;
+    const isMarker = (token: string): boolean =>
+        token.startsWith(markerPrefix) && MARKER.test(token.slice(markerPrefix.length));
+
+    const authoredProperties = collectCustomProperties(options.css);
+    // A prefixed build renames every theme variable as well: `--color-x` is
+    // emitted as `--tw-color-x`, and the rule for `tw:bg-x/30` reads that name.
+    const customProperties =
+        facts.prefix === null
+            ? authoredProperties
+            : new Map([
+                  ...authoredProperties,
+                  ...[...authoredProperties].map(
+                      ([name, value]) => [`--${facts.prefix}-${name.slice(2)}`, value] as const,
+                  ),
+              ]);
+
     return {
         ok: true,
         keywords: keywordOracleFrom(design),
-        facts: {
-            // Normalised to null: Tailwind reports an absent prefix as null
-            // today, and an empty string would read as a prefix that is there.
-            prefix:
-                typeof design.theme?.prefix === 'string' && design.theme.prefix !== ''
-                    ? design.theme.prefix
-                    : null,
-            important: design.important === true,
-        },
+        facts,
         async loadCollisionOracle() {
             if (collisions !== undefined) return collisions;
             try {
@@ -566,13 +760,13 @@ export async function createEmittedClassOracle(
             // Markers are excluded before the question is asked, not filtered
             // out of the answer: Tailwind's verdict on them is "no CSS", which
             // is correct and means something different from dead.
-            const asked = classes.filter(token => !MARKER.test(token));
+            const asked = classes.filter(token => !isMarker(token));
             if (asked.length === 0) return [];
             const css = design.candidatesToCss(asked);
             return asked.filter((_, index) => css[index] === null);
         },
         findBrokenOpacity(classes) {
-            const asked = classes.filter(token => token.includes('/') && !MARKER.test(token));
+            const asked = classes.filter(token => token.includes('/') && !isMarker(token));
             if (asked.length === 0) return [];
             const css = design.candidatesToCss(asked);
             const broken: Array<{ token: string; value: string }> = [];

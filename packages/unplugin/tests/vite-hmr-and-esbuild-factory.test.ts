@@ -19,8 +19,9 @@ afterEach(() => {
 });
 
 /** Boot the real vite plugin in serve mode rooted at a temp project.
+ * @param options - Plugin options; the root is the temp project whatever they say.
  * @returns The project root plus hook invokers. */
-async function bootedPlugin(): Promise<{
+async function bootedPlugin(options: Parameters<typeof vitePlugin>[0] = {}): Promise<{
     root: string;
     call: (hook: string, ...args: unknown[]) => Promise<unknown>;
     hotUpdate: (file: string, extra?: Record<string, unknown>) => Promise<unknown>;
@@ -28,7 +29,7 @@ async function bootedPlugin(): Promise<{
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-hmr-real-'));
     tempDirs.push(root);
     fs.mkdirSync(path.join(root, 'src'), { recursive: true });
-    const plugins = vitePlugin({});
+    const plugins = vitePlugin(options);
     const ctx = { warn() {}, error() {}, emitFile() {}, addWatchFile() {} };
     const call = async (hookName: string, ...args: unknown[]): Promise<unknown> => {
         const plugin = plugins.find(p => p && hookName in (p as Record<string, unknown>));
@@ -240,9 +241,15 @@ describe('the safelist file must not full-reload the page', () => {
      * separator is injected at the one seam left: the root. The mismatch
      * under test is the same one — a joined path carrying `\` against a
      * Vite path carrying `/`.
+     *
+     * That root is not a directory on the host, and relative to the working
+     * directory it would be one: the stylesheet facts the plugin records
+     * under the cache directory are sent to a real temp directory instead.
      */
     it('matches the safelist when Vite reports it with forward slashes', async () => {
-        const { call } = await bootedPlugin();
+        const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-hmr-cache-'));
+        tempDirs.push(cacheDir);
+        const { call } = await bootedPlugin({ build: { cacheDir } });
         const root = 'C:\\app';
         await call('configResolved', { root, command: 'serve' });
         const entry = 'C:/app/src/app.css';

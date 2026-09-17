@@ -15,6 +15,7 @@
  * encoding is exactly the drift the parity gates exist to catch.
  */
 import { createRequire } from 'node:module';
+import type { ModuleLinks, ModuleLinksFile } from './module-links.js';
 import type { SourceTransformResult, TransformSourceCodeOptions } from './transform-core.js';
 import {
     aggregateCssVariableMap,
@@ -55,6 +56,7 @@ interface WasmResultJson {
 /** The two exports the lane consumes from `@csszyx/core/parser-wasm`. */
 interface ParserWasmModule {
     transform_batch_json(filesJson: string, optionsJson: string): string;
+    scan_module_links_json(filesJson: string): string;
 }
 
 /**
@@ -91,6 +93,33 @@ function loadParserWasm(): ParserWasmModule | null {
         wasmModule = null;
     }
     return wasmModule;
+}
+
+/**
+ * The wasm module, or the error that says why it is missing.
+ *
+ * @returns The loaded wasm module.
+ * @throws {WasmTransformUnavailableError} when the wasm artifact is missing.
+ */
+function requireParserWasm(): ParserWasmModule {
+    const wasm = loadParserWasm();
+    if (!wasm) {
+        // `loadParserWasm` records why whenever it has no module to return.
+        throw new WasmTransformUnavailableError(wasmLoadError);
+    }
+    return wasm;
+}
+
+/**
+ * Read module links through the wasm build of the engine.
+ *
+ * @param files - Modules to read.
+ * @returns One answer per module, in input order.
+ * @throws {WasmTransformUnavailableError} when the wasm artifact is missing.
+ */
+export function scanModuleLinksWasm(files: readonly ModuleLinksFile[]): ModuleLinks[] {
+    const filesJson = JSON.stringify(files.map(({ filename, source }) => ({ filename, source })));
+    return JSON.parse(requireParserWasm().scan_module_links_json(filesJson)) as ModuleLinks[];
 }
 
 /**
@@ -136,10 +165,7 @@ export function transformWasmBatch(
     files: readonly TransformRustFile[],
     options?: TransformSourceCodeOptions,
 ): SourceTransformResult[] {
-    const wasm = loadParserWasm();
-    if (!wasm) {
-        throw new WasmTransformUnavailableError(wasmLoadError || 'artifact not found');
-    }
+    const wasm = requireParserWasm();
 
     const filesJson = JSON.stringify(
         files.map((file, index) => ({
@@ -156,6 +182,7 @@ export function transformWasmBatch(
         cross_module_statics_json: encodeCrossModuleStatics(options?.crossModuleStatics) ?? null,
         cross_module_sz_objects_json:
             encodeCrossModuleStatics(options?.crossModuleSzObjects) ?? null,
+        class_prefix: options?.classPrefix ?? null,
     });
 
     const results = JSON.parse(

@@ -136,12 +136,33 @@ matter to a bundler.
 ```js
 require('@csszyx/unplugin/jest').createTransformer({
     // Where the plugin wrote its transform cache. Default: `.csszyx/cache/transform`
-    // under the directory Jest runs from; set it when `build.cacheDir` is configured.
+    // under `root`; set it when `build.cacheDir` is configured.
     cacheRoot: '.csszyx/cache/transform',
     // Which files carry `sz`. Anything else is handed back untouched.
     extensions: ['.tsx', '.jsx', '.ts', '.js', '.mts', '.mjs'],
+    // Where the project's stylesheets are read from. Default: the `rootDir` of the
+    // Jest project the file belongs to, so each app under `projects` reads its own.
+    root: __dirname,
+    // The stylesheets the app loads, when the project also holds others.
+    tailwindStylesheet: 'src/index.css',
 });
 ```
+
+### A Tailwind prefix
+
+With `@import "tailwindcss" prefix(tw)` the transformer emits `tw:p-4`, the
+class the project serves. It reads the prefix from
+`.csszyx/cache/stylesheet-facts.json`, which the bundler build and
+`csszyx next prebuild` write. When that file is missing or older than the
+stylesheets, it compiles them once per Jest worker in a child process and writes
+the file itself, so a suite run before any build still gets the prefix. The
+prefix is part of the cache key, and build output lowered under a different
+prefix is not reused.
+
+Stylesheets that set different prefixes, or a Tailwind entry that does not
+compile, fail the transform with the same message the build prints. Name the
+stylesheets the app loads in `tailwindStylesheet` when a fixture or an old copy
+is the cause.
 
 <Aside type="tip" title="A whole-project pass, without a test runner">
 `npx @csszyx/cli check` runs the same lowering over every source file and

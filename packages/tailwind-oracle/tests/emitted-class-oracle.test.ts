@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -332,6 +333,34 @@ describe('createEmittedClassOracle — markers are not dead classes', () => {
             oracle.findDead(['group-hover:bg-red-500', 'peer-checked:flex', 'zz-probe']),
         ).toEqual(['zz-probe']);
     });
+
+    // Under `prefix(tw)` Tailwind selects `.tw\\:group`, so the marker an element
+    // must carry is `tw:group` and a bare `group` marks nothing.
+    it('keeps the markers a prefixed build selects', async () => {
+        const oracle = await readyOracle('@import "tailwindcss" prefix(tw);');
+        expect(oracle.findDead(['tw:group', 'tw:peer/search', 'tw:zz-probe'])).toEqual([
+            'tw:zz-probe',
+        ]);
+    });
+
+    it('reports an unprefixed marker in a prefixed build', async () => {
+        const oracle = await readyOracle('@import "tailwindcss" prefix(tw);');
+        expect(oracle.findDead(['group', 'peer/search'])).toEqual(['group', 'peer/search']);
+    });
+
+    it('asks the opacity question of prefixed classes and skips a prefixed marker', async () => {
+        const oracle = await readyOracle(
+            '@import "tailwindcss" prefix(tw);\n@theme { --color-broken: var(--v-broken); }\n:root { --v-broken: 17, 119, 224; }',
+        );
+        const broken = oracle.findBrokenOpacity([
+            'tw:group/sidebar',
+            'tw:bg-broken/30',
+            'bg-broken/30',
+        ]);
+        // The unprefixed class is the dead pass's finding: a prefixed build
+        // serves no rule for it, so there is no opacity to judge.
+        expect(broken.map(entry => entry.token)).toEqual(['tw:bg-broken/30']);
+    });
 });
 
 describe('createEmittedClassOracle — degrading instead of failing', () => {
@@ -608,6 +637,16 @@ describe('findTailwindCssEntry — locating the stylesheet to compile', () => {
         expect(await findTailwindCssEntry(root)).toBeNull();
     });
 
+    it('ignores copies of a stylesheet in build output, as the build walk does', async () => {
+        const root = tempRoot();
+        write(root, {
+            'target/debug/app.css': '@import "tailwindcss";',
+            'coverage/app.css': '@import "tailwindcss";',
+            'storybook-static/app.css': '@import "tailwindcss";',
+        });
+        expect(await findTailwindCssEntry(root)).toBeNull();
+    });
+
     it('prefers the shallowest entry so the result does not depend on scan order', async () => {
         const root = tempRoot();
         write(root, {
@@ -782,5 +821,114 @@ describe('tailwindEntriesAmong', () => {
             path.join(root, 'plain.css'),
         ]);
         expect(handed).toEqual(globbed);
+    });
+});
+
+// A project's Tailwind resolves `@import` the way its bundler does: with the
+// `style` export condition, through the bundler's aliases, and loading
+// `@plugin` modules through jiti. An oracle that resolves any narrower fails
+// on stylesheets the build compiles, and the check then skips a project whose
+// CSS is perfectly fine.
+describe('createEmittedClassOracle — resolving the way Tailwind does', () => {
+    const created: string[] = [];
+
+    afterEach(() => {
+        for (const dir of created.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    /**
+     * A throwaway project at the repository root, where `tailwindcss` resolves
+     * to v4, hidden from the entry scan by its leading dot.
+     *
+     * @param files - Relative path to file content.
+     * @returns The project directory.
+     */
+    function project(files: Record<string, string>): string {
+        const root = fs.mkdtempSync(path.join(REPO, '.tmp-oracle-resolve-'));
+        created.push(root);
+        fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'proj' }));
+        for (const [relative, content] of Object.entries(files)) {
+            fs.mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });
+            fs.writeFileSync(path.join(root, relative), content);
+        }
+        return root;
+    }
+
+    it('reads a package that exports its stylesheet only under the style condition', async () => {
+        const root = project({
+            'node_modules/@fixture/style-only/package.json': JSON.stringify({
+                name: '@fixture/style-only',
+                exports: { '.': { style: './theme.css' } },
+            }),
+            'node_modules/@fixture/style-only/theme.css': '@theme { --color-style-only: #102030; }',
+            'app.css': '@import "tailwindcss";\n@import "@fixture/style-only";',
+        });
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: root,
+            css: await readFile(path.join(root, 'app.css'), 'utf8'),
+            cssBase: root,
+        });
+
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+        expect(oracle.findDead(['bg-style-only', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
+    it('resolves an import through an alias the bundler declares', async () => {
+        const root = project({
+            'src/ui/theme.css': '@theme { --color-aliased: #203040; }',
+            'app.css': '@import "tailwindcss";\n@import "@ui/theme.css";',
+        });
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: root,
+            css: await readFile(path.join(root, 'app.css'), 'utf8'),
+            cssBase: root,
+            aliases: [{ find: '@ui/', replacement: `${root}/src/ui/`, exact: false }],
+        });
+
+        if (!oracle.ok) throw new Error(`expected a ready oracle, got skip: ${oracle.reason}`);
+        expect(oracle.findDead(['bg-aliased', 'zz-probe'])).toEqual(['zz-probe']);
+    });
+
+    it('loads a TypeScript plugin whose own imports leave out the extension, in plain Node', async () => {
+        // Vitest resolves dynamic imports through Vite, which accepts an
+        // extensionless import; the build loads the oracle in plain Node,
+        // which does not. So the oracle is bundled and run where it runs.
+        const root = project({
+            'plugin/util.ts': "export const utilityName = 'ts-plugin-utility';\n",
+            'plugin/index.ts':
+                "import { utilityName } from './util';\nexport default function plugin({ addUtilities }: { addUtilities(u: Record<string, Record<string, string>>): void }) {\n    addUtilities({ [`.${utilityName}`]: { color: 'red' } });\n}\n",
+            'app.css': '@import "tailwindcss";\n@plugin "./plugin/index.ts";',
+        });
+        const { build } = await import('esbuild');
+        const bundle = path.join(
+            import.meta.dirname,
+            '..',
+            `.tmp-oracle-bundle-${path.basename(root)}.mjs`,
+        );
+        created.push(bundle);
+        await build({
+            // The oracle module alone: the package barrel also re-exports passes that
+            // reach the engine's wasm, which has nothing to do with loading a plugin.
+            entryPoints: [path.join(import.meta.dirname, '..', 'src', 'emitted-class-oracle.ts')],
+            bundle: true,
+            platform: 'node',
+            format: 'esm',
+            packages: 'external',
+            outfile: bundle,
+            logLevel: 'silent',
+        });
+        const probe = `
+const { readFile } = await import('node:fs/promises');
+const { createEmittedClassOracle } = await import(${JSON.stringify(bundle)});
+const root = ${JSON.stringify(root)};
+const oracle = await createEmittedClassOracle({ resolveFrom: root, css: await readFile(root + '/app.css', 'utf8'), cssBase: root });
+process.stdout.write(JSON.stringify(oracle.ok ? { dead: oracle.findDead(['ts-plugin-utility', 'zz-probe']) } : { skip: oracle.reason }));
+`;
+        const run = spawnSync(process.execPath, ['--input-type=module', '--eval', probe], {
+            encoding: 'utf8',
+            timeout: 60_000,
+        });
+        expect(run.status, run.stderr).toBe(0);
+        expect(JSON.parse(run.stdout)).toEqual({ dead: ['zz-probe'] });
     });
 });

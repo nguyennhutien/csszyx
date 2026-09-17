@@ -1,10 +1,11 @@
 /**
  * The options `next-prebuild` and `next-watch` accept, read off the built
- * binary's `--help` output. They share the eight that say where the Next app
- * is, how it is parsed and where the safelist goes; each adds its own on top.
+ * binary's `--help` output. They share the nine that say where the Next app
+ * is, which stylesheets it loads, how it is parsed and where the safelist goes;
+ * each adds its own on top.
  *
  * This pins the flags and their descriptions, not their order: the two
- * commands register the shared eight from one table, and where that table
+ * commands register the shared nine from one table, and where that table
  * sits in the chain is presentation, not contract.
  */
 import { execFileSync } from 'node:child_process';
@@ -44,6 +45,10 @@ const SHARED: ReadonlyArray<readonly [string, string]> = [
         'Tailwind @source safelist output (default: .csszyx/csszyx-classes.txt)',
     ],
     ['--cache-dir <dir>', 'Cache directory relative to root (default: .csszyx/cache)'],
+    [
+        '--tailwind-stylesheet <paths>',
+        'Stylesheets the app loads, relative to --root and comma-separated, when the project also holds others',
+    ],
     ['--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)'],
     [
         '--imported-static-sz',

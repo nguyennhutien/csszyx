@@ -16,12 +16,16 @@ export {
     type EmittedClassOracle,
     findTailwindCssEntries,
     type OracleOptions,
+    type OracleSkip,
     type OracleSkipKind,
+    readStylesheetRole,
     type StylesheetFacts,
+    type StylesheetRole,
     type TailwindLoader,
     type TailwindModule,
     tailwindEntriesAmong,
 } from './emitted-class-oracle.js';
+export type { StylesheetAlias } from './project-resolver.js';
 export {
     findSiblingKeywordValues,
     type KeywordOracle,

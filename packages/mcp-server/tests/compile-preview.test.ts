@@ -50,6 +50,25 @@ describe('csszyx_compile_preview', () => {
         expect(data.classes).toContain('p-8');
     });
 
+    // A project whose stylesheet sets `prefix(tw)` serves `tw:p-4`; a preview
+    // without the prefix would show classes that style nothing there.
+    it('writes the Tailwind prefix it is given before every class, and says which it used', () => {
+        const data = JSON.parse(
+            handleCompilePreview({
+                source: 'export const A = () => <div sz={{ p: 4, bg: "blue-500" }} />;',
+                classPrefix: 'tw',
+            }).content[0].text,
+        );
+        expect(data.classes).toEqual(['tw:p-4', 'tw:bg-blue-500']);
+        expect(data.classPrefix).toBe('tw');
+    });
+
+    it('says when no prefix was given, since the project may set one', () => {
+        const data = preview('export const A = () => <div sz={{ p: 4 }} />;');
+        expect(data.classPrefix).toBeNull();
+        expect(String(data.note)).toContain('classPrefix');
+    });
+
     it('reports the runtime helper a dynamic spacing value falls back to', () => {
         const data = preview('export const A = ({ p }) => <div sz={{ p }} />;');
         expect(data.runtimeHelpers).toEqual(['__szSpacingVar']);

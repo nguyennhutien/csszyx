@@ -18,6 +18,8 @@ pub(crate) mod global_var_aliases;
 mod ir;
 pub mod lower;
 #[cfg(feature = "native-engine")]
+pub mod module_links;
+#[cfg(feature = "native-engine")]
 #[allow(dead_code)]
 pub(crate) mod parser;
 #[cfg(feature = "native-engine")]

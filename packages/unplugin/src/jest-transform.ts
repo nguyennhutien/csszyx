@@ -33,6 +33,7 @@
  * @module jest-transform
  */
 
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,6 +45,10 @@ import {
 } from '@csszyx/compiler';
 
 import { injectNextRuntimeImports, type NextRuntimeImportUsage } from './next-runtime-injection.js';
+import {
+    failedNextClassPrefixInputsStamp,
+    resolveNextClassPrefix,
+} from './next-stylesheet-facts.js';
 import { normalizePathSeparators } from './path-normalization.js';
 
 /** The compiled output and what it needs, as both sources shape it. */
@@ -59,6 +64,7 @@ interface CacheEntry {
     inputSha256?: unknown;
     compilerVersion?: unknown;
     mangleVars?: unknown;
+    classPrefix?: unknown;
     timestamp?: unknown;
     result?: CompiledFile | null;
 }
@@ -207,14 +213,15 @@ class TransformCacheIndex {
      *
      * @param filename - Path of the file under test, as the plugin records it.
      * @param source - Its current contents.
+     * @param classPrefix - The Tailwind prefix the project sets, or null.
      * @returns The matching entry's result, or null.
      */
-    find(filename: string, source: string): CompiledFile | null {
+    find(filename: string, source: string, classPrefix: string | null): CompiledFile | null {
         const wanted = createHash('sha256').update(source).digest('hex');
-        const hit = this.pick(filename, wanted);
+        const hit = this.pick(filename, wanted, classPrefix);
         if (hit !== null) return hit;
         this.refresh();
-        return this.pick(filename, wanted);
+        return this.pick(filename, wanted, classPrefix);
     }
 
     /**
@@ -228,13 +235,21 @@ class TransformCacheIndex {
      *
      * @param filename - Path as the plugin records it.
      * @param sha256 - Hash of the current contents.
+     * @param classPrefix - The Tailwind prefix the project sets, or null.
      * @returns The chosen entry's result, or null when none qualifies.
      */
-    private pick(filename: string, sha256: string): CompiledFile | null {
+    private pick(
+        filename: string,
+        sha256: string,
+        classPrefix: string | null,
+    ): CompiledFile | null {
         let best: CacheEntry | null = null;
         for (const entry of this.byFilename.get(filename) ?? []) {
             if (entry.inputSha256 !== sha256) continue;
             if (entry.compilerVersion !== compilerVersion || entry.mangleVars === true) continue;
+            // Output lowered under another prefix names classes this project
+            // does not serve. An entry older than the field was lowered with none.
+            if ((entry.classPrefix ?? null) !== classPrefix) continue;
             if (typeof entry.result?.code !== 'string') continue;
             if (best === null || writtenAt(entry) > writtenAt(best)) {
                 best = entry;
@@ -252,16 +267,18 @@ class TransformCacheIndex {
  * @param cacheRoot - The transform cache directory, `.csszyx/cache/transform`.
  * @param filename - Path of the file under test.
  * @param source - Its current contents.
+ * @param classPrefix - The Tailwind prefix the project sets, or null.
  * @returns The compiled code, or null when the build has no matching entry.
  */
 export function findCachedTransform(
     cacheRoot: string,
     filename: string,
     source: string,
+    classPrefix: string | null = null,
 ): string | null {
     const index = new TransformCacheIndex(cacheRoot);
     index.refresh();
-    const code = index.find(normalizePathSeparators(filename), source)?.code;
+    const code = index.find(normalizePathSeparators(filename), source, classPrefix)?.code;
     return typeof code === 'string' ? code : null;
 }
 
@@ -269,16 +286,29 @@ export function findCachedTransform(
 export interface JestTransformOptions {
     /**
      * The transform cache directory. Defaults to `.csszyx/cache/transform`
-     * under the current working directory, which is where the plugin writes
-     * it and where jest runs from.
+     * under the project root, which is where the plugin writes it.
      */
     cacheRoot?: string;
     /** Extensions this lane compiles; anything else is returned unchanged. */
     extensions?: readonly string[];
+    /**
+     * The project root the stylesheets are read from. Defaults to the
+     * `rootDir` of the jest project the file belongs to, so each app under
+     * `projects` reads its own; the directory jest runs from when jest gives none.
+     */
+    root?: string;
+    /** The stylesheets the app loads, when the project also holds others. */
+    tailwindStylesheet?: string | string[];
 }
 
-/** The options jest hands `getCacheKey`; only the field this lane folds in. */
-export interface JestCacheKeyOptions {
+/** The slice of the options jest hands `process` that this lane reads. */
+export interface JestProcessOptions {
+    /** The jest project the file belongs to. */
+    config?: { rootDir?: string };
+}
+
+/** The options jest hands `getCacheKey`; only the fields this lane folds in. */
+export interface JestCacheKeyOptions extends JestProcessOptions {
     /** jest's serialised config, which its default key includes. */
     configString?: string;
 }
@@ -290,9 +320,10 @@ export interface JestTransformer {
      *
      * @param sourceText - File contents.
      * @param sourcePath - Absolute path of the file.
+     * @param options - What jest says about the project the file belongs to.
      * @returns The code jest executes.
      */
-    process(sourceText: string, sourcePath: string): { code: string };
+    process(sourceText: string, sourcePath: string, options?: JestProcessOptions): { code: string };
     /**
      * The key jest caches the output under.
      *
@@ -307,6 +338,64 @@ export interface JestTransformer {
      * @returns A hex digest.
      */
     getCacheKey(sourceText: string, sourcePath: string, options?: JestCacheKeyOptions): string;
+}
+
+/**
+ * The program a child process runs to read the stylesheets.
+ *
+ * Reading the prefix means compiling the stylesheets, which is asynchronous,
+ * and jest calls a transformer synchronously. A child process can take as long
+ * as the compile needs while this one waits for it. It records the facts file
+ * the build writes, so the next jest run reads the file instead.
+ */
+const READ_STYLESHEETS = `
+const [, entry, input] = process.argv;
+try {
+    const { prepareNextStylesheetFacts } = await import(entry);
+    const { record, warning } = await prepareNextStylesheetFacts(JSON.parse(input));
+    if (warning !== null) process.stderr.write(warning);
+    process.stdout.write(JSON.stringify(record.facts?.prefix ?? null));
+} catch (error) {
+    process.stderr.write(error.message);
+    process.exit(1);
+}
+`;
+
+/**
+ * Read the stylesheets in a child process and record what they settled.
+ *
+ * @param input - Where the project is and which stylesheets it loads.
+ * @param input.root - The project root.
+ * @param input.cacheDir - The csszyx cache directory.
+ * @param input.tailwindStylesheet - The stylesheets the app loads, when named.
+ * @returns The prefix they set, or null.
+ */
+function readStylesheetsInChild(input: {
+    root: string;
+    cacheDir: string;
+    tailwindStylesheet: readonly string[];
+}): string | null {
+    // One path from both builds of this file: `src/` and `dist/` sit side by
+    // side, so the prebuild entry is found the same way from either.
+    const entry = new URL('../dist/next-prebuild.mjs', import.meta.url).href;
+    const result = spawnSync(
+        process.execPath,
+        [
+            '--input-type=module',
+            '-e',
+            READ_STYLESHEETS,
+            entry,
+            JSON.stringify({
+                explicitRoot: input.root,
+                cacheDir: input.cacheDir,
+                tailwindStylesheet: input.tailwindStylesheet,
+            }),
+        ],
+        { encoding: 'utf8' },
+    );
+    if (result.status !== 0) throw new Error(result.stderr);
+    if (result.stderr !== '') console.warn(result.stderr);
+    return JSON.parse(result.stdout) as string | null;
 }
 
 /** Files carrying an `sz` prop; others are handed back untouched. */
@@ -336,10 +425,11 @@ function reportDeadClasses(sourcePath: string, diagnostics: unknown): void {
  *
  * @param code - The compiled module.
  * @param usage - Which runtime helpers it calls.
+ * @param classPrefix - The Tailwind prefix to register for runtime lowering, or null.
  * @returns The module with those helpers imported.
  */
-function finish(code: string, usage: NextRuntimeImportUsage): string {
-    return injectNextRuntimeImports(code, usage).code;
+function finish(code: string, usage: NextRuntimeImportUsage, classPrefix: string | null): string {
+    return injectNextRuntimeImports(code, usage, classPrefix).code;
 }
 
 /**
@@ -350,42 +440,132 @@ function finish(code: string, usage: NextRuntimeImportUsage): string {
  */
 export function createTransformer(options: JestTransformOptions = {}): JestTransformer {
     const extensions = options.extensions ?? DEFAULT_EXTENSIONS;
-    const cacheRoot =
-        options.cacheRoot ?? path.resolve(process.cwd(), '.csszyx/cache', 'transform');
-    const index = new TransformCacheIndex(cacheRoot);
-    index.refresh();
+    // One per project root: jest started at a monorepo root runs each app
+    // under `projects` with its own rootDir, in the same worker.
+    const projects = new Map<string, JestProject>();
+    const projectOf = (jestOptions?: JestProcessOptions): JestProject => {
+        const root = options.root ?? jestOptions?.config?.rootDir ?? process.cwd();
+        let project = projects.get(root);
+        if (project === undefined) {
+            project = openJestProject(root, options);
+            projects.set(root, project);
+        }
+        return project;
+    };
     const compiles = (sourcePath: string): boolean =>
         extensions.some(extension => sourcePath.endsWith(extension));
-    const cached = (sourceText: string, sourcePath: string): CompiledFile | null =>
-        index.find(normalizePathSeparators(sourcePath), sourceText);
     return {
-        process(sourceText, sourcePath) {
+        process(sourceText, sourcePath, jestOptions) {
             if (!compiles(sourcePath)) return { code: sourceText };
+            const { cached, classPrefix } = projectOf(jestOptions);
+            const prefix = classPrefix();
             // The build's answer first: it is the only one that resolves an
             // `sz` object or `szv` factory imported from another module.
-            const built = cached(sourceText, sourcePath);
+            const built = cached(sourceText, sourcePath, prefix);
             if (built !== null && typeof built.code === 'string') {
                 reportDeadClasses(sourcePath, built.diagnostics);
-                return { code: finish(built.code, built) };
+                return { code: finish(built.code, built, prefix) };
             }
-            const result = transformSource(sourceText, sourcePath);
+            const result = transformSource(sourceText, sourcePath, { classPrefix: prefix });
             reportDeadClasses(sourcePath, result.diagnostics);
-            return { code: result.transformed ? finish(result.code, result) : sourceText };
+            return {
+                code: result.transformed ? finish(result.code, result, prefix) : sourceText,
+            };
         },
         getCacheKey(sourceText, sourcePath, cacheKeyOptions) {
-            const built = compiles(sourcePath) ? cached(sourceText, sourcePath) : null;
-            return createHash('sha256')
-                .update(sourceText)
-                .update('\0')
-                .update(sourcePath)
-                .update('\0')
-                .update(typeof built?.code === 'string' ? built.code : '')
-                .update('\0')
-                .update(cacheKeyOptions?.configString ?? '')
-                .update('\0')
-                .update(compilerVersion)
-                .digest('hex');
+            const compiled = compiles(sourcePath);
+            const project = compiled ? projectOf(cacheKeyOptions) : null;
+            const prefix = project?.classPrefix() ?? null;
+            const built = project === null ? null : project.cached(sourceText, sourcePath, prefix);
+            return (
+                createHash('sha256')
+                    .update(sourceText)
+                    .update('\0')
+                    .update(sourcePath)
+                    .update('\0')
+                    .update(typeof built?.code === 'string' ? built.code : '')
+                    .update('\0')
+                    .update(cacheKeyOptions?.configString ?? '')
+                    .update('\0')
+                    .update(compilerVersion)
+                    .update('\0')
+                    // Output lowered under one prefix is wrong under another.
+                    .update(project === null ? '' : JSON.stringify(prefix))
+                    .digest('hex')
+            );
         },
+    };
+}
+
+/** What the transformer knows about one project root. */
+interface JestProject {
+    /**
+     * The build's output for a file, when it saw these contents.
+     *
+     * @param sourceText - File contents.
+     * @param sourcePath - Absolute path of the file.
+     * @param classPrefix - The freshly resolved Tailwind prefix.
+     * @returns The cached output, or null.
+     */
+    cached(sourceText: string, sourcePath: string, classPrefix: string | null): CompiledFile | null;
+    /**
+     * The Tailwind prefix the project's stylesheets set.
+     *
+     * @returns The prefix, or null for none.
+     */
+    classPrefix(): string | null;
+}
+
+/**
+ * Open the transform cache and the prefix of one project root.
+ *
+ * @param root - The project root.
+ * @param options - The transformer's options.
+ * @returns The project.
+ */
+function openJestProject(root: string, options: JestTransformOptions): JestProject {
+    const cacheRoot = options.cacheRoot ?? path.resolve(root, '.csszyx/cache', 'transform');
+    // The facts file lives beside the transform cache, as the build writes it.
+    const cacheDir = path.dirname(cacheRoot);
+    const tailwindStylesheet = [options.tailwindStylesheet ?? []].flat();
+    const index = new TransformCacheIndex(cacheRoot);
+    index.refresh();
+    // A failure is reused only while its inputs are byte-for-byte unchanged:
+    // every file would otherwise pay for the same child process. Successful
+    // answers are cheap to validate and must observe edits during watch mode.
+    let failedPrefix: { stamp: string; error: Error } | undefined;
+    const classPrefix = (): string | null => {
+        if (failedPrefix !== undefined) {
+            const stamp = failedNextClassPrefixInputsStamp({
+                root,
+                cacheDir,
+                tailwindStylesheet,
+            });
+            if (stamp === failedPrefix.stamp) throw failedPrefix.error;
+            failedPrefix = undefined;
+        }
+        const recorded = resolveNextClassPrefix({ root, cacheDir, tailwindStylesheet });
+        try {
+            return recorded.ok
+                ? recorded.prefix
+                : readStylesheetsInChild({ root, cacheDir, tailwindStylesheet });
+        } catch (error) {
+            const settled = error as Error;
+            failedPrefix = {
+                stamp: failedNextClassPrefixInputsStamp({
+                    root,
+                    cacheDir,
+                    tailwindStylesheet,
+                }),
+                error: settled,
+            };
+            throw settled;
+        }
+    };
+    return {
+        cached: (sourceText, sourcePath, prefix) =>
+            index.find(normalizePathSeparators(sourcePath), sourceText, prefix),
+        classPrefix,
     };
 }
 

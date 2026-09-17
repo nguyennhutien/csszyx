@@ -186,7 +186,7 @@ export const slotOverride = szcn('text-sub', 'text-danger');
 });
 
 describe('HMR: editing @theme reloads the generated registration module', () => {
-    it('invalidates the virtual module when a scanned CSS file changes', () => {
+    it('invalidates the virtual module when a scanned CSS file changes', async () => {
         const root = mkdtempSync(join(tmpdir(), 'csszyx-theme-hmr-'));
         tempDirs.push(root);
         mkdirSync(join(root, 'src'), { recursive: true });
@@ -198,13 +198,13 @@ describe('HMR: editing @theme reloads the generated registration module', () => 
         );
 
         type HotUpdateHook = {
-            configResolved?: (config: { root: string }) => void;
+            configResolved?: (config: { root: string }) => Promise<void>;
             hotUpdate?: (ctx: unknown) => void;
         };
         const [prePlugin] = vitePlugin({
             build: { cache: false, scanCss: ['src/theme.css'] },
         }) as HotUpdateHook[];
-        prePlugin?.configResolved?.({ root });
+        await prePlugin?.configResolved?.({ root });
 
         const invalidated: string[] = [];
         const fakeModule = { id: '\0virtual:csszyx/theme-groups' };

@@ -24,7 +24,7 @@ import { SAFELIST_HEADER } from '../src/safelist-format.js';
 import { vitePlugin } from '../src/unplugin.js';
 
 type ViteConfigHook = {
-    configResolved?: (config: { root: string }) => void;
+    configResolved?: (config: { root: string }) => Promise<void>;
 };
 
 /**
@@ -170,10 +170,10 @@ afterEach(() => {
  * @param parser - engine under test.
  * @returns sorted safelist tokens + everything console.warn'd during the run.
  */
-function runPrescan(parser: 'rust' | 'wasm'): {
+async function runPrescan(parser: 'rust' | 'wasm'): Promise<{
     tokens: string[];
     warnings: string[];
-} {
+}> {
     const root = mkdtempSync(join(tmpdir(), `csszyx-parity-${parser}-`));
     tempDirs.push(root);
     mkdirSync(join(root, 'src'), { recursive: true });
@@ -199,7 +199,7 @@ function runPrescan(parser: 'rust' | 'wasm'): {
             build: { parser, cache: false },
             compileSources: ['design-system'],
         }) as ViteConfigHook[];
-        prePlugin?.configResolved?.({ root });
+        await prePlugin?.configResolved?.({ root });
     } finally {
         warnSpy.mockRestore();
     }
@@ -224,9 +224,9 @@ describe('prescan engine parity (real pipeline, no mocks)', () => {
 
     // Computed once; every assertion below reuses the same two runs.
     const runs = {} as Record<'rust' | 'wasm', ReturnType<typeof runPrescan>>;
-    beforeAll(() => {
-        runs.rust = runPrescan('rust');
-        runs.wasm = runPrescan('wasm');
+    beforeAll(async () => {
+        runs.rust = await runPrescan('rust');
+        runs.wasm = await runPrescan('wasm');
     });
 
     it('the native and wasm scans produce the identical token set', () => {

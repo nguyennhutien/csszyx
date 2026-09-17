@@ -51,6 +51,8 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
     discoverProjectTheme: [
         'packages/unplugin/src/theme-discovery.ts',
         'packages/unplugin/src/theme-groups-file.ts',
+        // The Next lane's facts file: the same walk, read ahead of the loader.
+        'packages/unplugin/src/next-stylesheet-facts.ts',
         'packages/unplugin/src/unplugin.ts',
     ],
     // The compiled design system: the source of truth.
@@ -71,6 +73,11 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
         'packages/cli/src/commands/check.ts',
     ],
     tailwindEntriesAmong: [
+        'packages/tailwind-oracle/src/emitted-class-oracle.ts',
+        'packages/tailwind-oracle/src/index.ts',
+    ],
+    // Root detection by Tailwind's own compile. The model decides roots from it.
+    readStylesheetRole: [
         'packages/tailwind-oracle/src/emitted-class-oracle.ts',
         'packages/tailwind-oracle/src/index.ts',
         'packages/unplugin/src/project-style-model.ts',

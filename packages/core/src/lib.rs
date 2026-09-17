@@ -173,9 +173,35 @@ pub fn transform_batch_json(files_json: &str, options_json: &str) -> Result<Stri
     serde_json::to_string(&results).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
+/// Module links across the WASM boundary: the stylesheets each module imports
+/// and the names it re-exports, one JSON array for the whole batch.
+///
+/// # Errors
+///
+/// Returns the decode or encode error message.
+#[cfg(feature = "native-engine")]
+#[wasm_bindgen]
+pub fn scan_module_links_json(files_json: &str) -> Result<String, JsValue> {
+    let files: Vec<transform::TransformFile> =
+        serde_json::from_str(files_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    serde_json::to_string(&transform::module_links::scan_module_links(&files))
+        .map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn scan_module_links_crosses_the_boundary_as_json() {
+        // The wasm lane reads module links through this export; the native
+        // lane has its own binding, so nothing else runs this one.
+        let files = r#"[{"filename":"/app/main.tsx","source":"import './app.css';\nexport { cardSz } from './styles';"}]"#;
+        let json = scan_module_links_json(files).expect("module links encode");
+        assert!(json.contains("./app.css"), "css import missing from {json}");
+        assert!(json.contains("cardSz"), "forward missing from {json}");
+    }
 
     #[test]
     fn test_version() {

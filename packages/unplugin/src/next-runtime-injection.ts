@@ -75,20 +75,79 @@ export function runtimeHelperGroupsFromUsage(usage: NextRuntimeImportUsage): Run
     return groups;
 }
 
+/** Helpers that lower an sz object in the browser, and so need the prefix. */
+const OBJECT_LOWERING_HELPERS: ReadonlySet<string> = new Set<NextRuntimeHelper>([
+    '_sz',
+    '_szMerge',
+    '_szPart',
+]);
+
+/** The local name the registration is imported under, clear of any author binding. */
+const CLASS_PREFIX_REGISTRATION = '__szRegisterClassPrefix';
+
+/**
+ * Register the Tailwind prefix in a module that lowers an sz object at runtime.
+ *
+ * The browser cannot read the project's stylesheet, so the build writes the
+ * prefix into the module beside the runtime import every lane already adds. A
+ * module whose helpers only join class strings lowers nothing and registers
+ * nothing, and a project with no prefix gets exactly the code it got before.
+ *
+ * @param code Module code with its runtime imports in place.
+ * @param groups The runtime helpers the module imports from the barrel entry.
+ * @param groups.barrel Helper names imported from `@csszyx/runtime` itself.
+ * @param classPrefix The prefix the project's stylesheet sets, or null.
+ * @returns The code, with the registration when one is needed.
+ */
+export function registerRuntimeClassPrefix(
+    code: string,
+    groups: { readonly barrel: readonly string[] },
+    classPrefix: string | null,
+): string {
+    if (
+        !groups.barrel.some(helper => OBJECT_LOWERING_HELPERS.has(helper)) ||
+        code.includes(`${CLASS_PREFIX_REGISTRATION}(`)
+    ) {
+        return code;
+    }
+    // Imports hoist, so a call placed with them still runs after every one.
+    return insertRuntimeImport(
+        code,
+        `import { registerSzClassPrefix as ${CLASS_PREFIX_REGISTRATION} } from '@csszyx/runtime';\n${CLASS_PREFIX_REGISTRATION}(${JSON.stringify(classPrefix)});\n`,
+    );
+}
+
 /**
  * Inject missing `@csszyx/runtime` helper imports while preserving directives.
  *
  * @param code Transformed source code.
  * @param usage Runtime helper usage flags.
+ * @param classPrefix The Tailwind prefix to register for runtime lowering, or null.
  * @returns Code plus the helper names injected by this pass.
  */
 export function injectNextRuntimeImports(
     code: string,
     usage: NextRuntimeImportUsage,
+    classPrefix: string | null = null,
 ): NextRuntimeImportInjectionResult {
     // Same slim rule as the vite/webpack hook: provably string-only _szPart
     // arguments route the merge helpers through the compiler-free entry.
     const groups = runtimeHelperGroupsFromUsage(usage);
+    const injected = injectHelperImports(code, groups);
+    return { ...injected, code: registerRuntimeClassPrefix(injected.code, groups, classPrefix) };
+}
+
+/**
+ * Inject the helper imports a module is missing.
+ *
+ * @param code Transformed source code.
+ * @param groups The runtime helpers the module uses.
+ * @returns Code plus the helper names injected by this pass.
+ */
+function injectHelperImports(
+    code: string,
+    groups: RuntimeHelperGroups,
+): NextRuntimeImportInjectionResult {
     const helpers = groups.all;
     if (helpers.length === 0) {
         return { code, injected: [] };

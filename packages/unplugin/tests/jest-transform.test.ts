@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { VERSION as compilerVersion } from '@csszyx/compiler';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createTransformer, findCachedTransform } from '../src/jest-transform.js';
 
@@ -31,6 +31,15 @@ const roots: string[] = [];
 afterEach(() => {
     for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true });
     vi.restoreAllMocks();
+});
+
+beforeEach(() => {
+    // The transformer reads the stylesheets under the directory jest runs from.
+    // vitest may be started from the repository root, whose stylesheets set
+    // different prefixes, so every test runs from an empty directory instead.
+    const empty = mkdtempSync(join(tmpdir(), 'csszyx-jest-cwd-'));
+    roots.push(empty);
+    vi.spyOn(process, 'cwd').mockReturnValue(empty);
 });
 
 /** The fields of one entry a test may vary; the rest is what the plugin writes. */

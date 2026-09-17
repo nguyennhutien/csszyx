@@ -1,11 +1,20 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { watch } from 'chokidar';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { type NextWatchFactory, startNextWatch } from '../src/commands/next-watch.js';
+import { linkTailwind } from './link-tailwind.js';
 
 const tempDirs: string[] = [];
 
@@ -146,6 +155,84 @@ describe('waitFor reports what it saw', () => {
 });
 
 describe('csszyx next-watch command', () => {
+    it('records the stylesheet facts again when a stylesheet changes', async () => {
+        const root = realpathSync(tempRoot());
+        linkTailwind(root);
+        mkdirSync(join(root, 'app'), { recursive: true });
+        writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
+        // A leftover that no longer compiles and never reaches Tailwind: said,
+        // at startup and after the edit, and never a reason to stop.
+        mkdirSync(join(root, 'legacy'), { recursive: true });
+        writeFileSync(join(root, 'legacy/broken.css'), '@import "./gone.css";\n');
+        writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
+        const facts = join(root, '.csszyx/cache/stylesheet-facts.json');
+        const warnings: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+            warnings.push(args.map(String).join(' '));
+        });
+
+        const events: string[] = [];
+        const session = await startNextWatch(
+            {
+                root,
+                cwd: root,
+                parserMode: 'wasm',
+                debounceMs: 10,
+                silent: true,
+                // Named, and still read: the leftover is listed on purpose.
+                tailwindStylesheet: ['app/globals.css', 'legacy/broken.css'],
+            },
+            { watch: recordingWatch(events) },
+        );
+        try {
+            expect(readFileSync(facts, 'utf8')).toContain('"prefix": null');
+            expect(warnings.join('\n')).toContain('legacy/broken.css');
+
+            writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss" prefix(tw);\n');
+            await waitFor(() => readFileSync(facts, 'utf8').includes('"prefix": "tw"'), {
+                describe: () =>
+                    describeWatchState(events, [{ label: 'facts', path: facts, content: true }]),
+            });
+        } finally {
+            await session.close();
+            vi.restoreAllMocks();
+        }
+    }, 60_000);
+
+    it('reports a stylesheet edit that stops the facts, and keeps watching', async () => {
+        const root = realpathSync(tempRoot());
+        linkTailwind(root);
+        mkdirSync(join(root, 'app'), { recursive: true });
+        writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
+        writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
+        const warnings: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+            warnings.push(args.map(String).join(' '));
+        });
+
+        const events: string[] = [];
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            { watch: recordingWatch(events) },
+        );
+        try {
+            writeFileSync(
+                join(root, 'app/globals.css'),
+                '@import "tailwindcss";\n@import "./gone.css";\n',
+            );
+            await waitFor(() => warnings.join('\n').includes('did not compile'), {
+                describe: () => describeWatchState(events, []),
+            });
+            // The build's note says nothing was written; a watch that goes on
+            // says what it goes on with instead.
+            expect(warnings.join('\n')).not.toContain('nothing was written');
+            expect(warnings.join('\n')).toContain('`csszyx next watch` keeps watching');
+        } finally {
+            await session.close();
+            vi.restoreAllMocks();
+        }
+    }, 60_000);
+
     it('materializes a new shard and removes it when its source is deleted', async () => {
         const root = tempRoot();
         const initialSource = join(root, 'src/App.tsx');

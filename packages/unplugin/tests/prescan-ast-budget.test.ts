@@ -22,7 +22,7 @@ vi.mock('@csszyx/compiler', async importOriginal => {
 const { vitePlugin } = await import('../src/unplugin.js');
 
 type ViteConfigHook = {
-    configResolved?: (config: { root: string }) => void;
+    configResolved?: (config: { root: string }) => Promise<void>;
     transform?: (this: { warn(message: string): void }, code: string, id: string) => unknown;
 };
 
@@ -75,7 +75,7 @@ function emptyBatchResult(): {
 }
 
 describe('prescan AST budget', () => {
-    it('runs the rust prescan batch with the larger safelist budget by default', () => {
+    it('runs the rust prescan batch with the larger safelist budget by default', async () => {
         const root = tempRoot();
         writeFileSync(join(root, 'src/A.tsx'), 'export const A = () => <div sz={{ p: 4 }} />;');
         writeFileSync(join(root, 'src/B.tsx'), 'export const B = () => <div sz={{ m: 2 }} />;');
@@ -86,7 +86,7 @@ describe('prescan AST budget', () => {
         const [prePlugin] = vitePlugin({
             build: { parser: 'rust', cache: false },
         }) as ViteConfigHook[];
-        prePlugin.configResolved?.({ root });
+        await prePlugin.configResolved?.({ root });
 
         expect(compilerMock.transformRustBatch).toHaveBeenCalledTimes(1);
         expect(compilerMock.transformRustBatch.mock.calls[0]?.[1]).toMatchObject({
@@ -94,7 +94,7 @@ describe('prescan AST budget', () => {
         });
     });
 
-    it('build.astBudgetLimit overrides the prescan budget too', () => {
+    it('build.astBudgetLimit overrides the prescan budget too', async () => {
         const root = tempRoot();
         writeFileSync(join(root, 'src/A.tsx'), 'export const A = () => <div sz={{ p: 4 }} />;');
         writeFileSync(join(root, 'src/B.tsx'), 'export const B = () => <div sz={{ m: 2 }} />;');
@@ -105,14 +105,14 @@ describe('prescan AST budget', () => {
         const [prePlugin] = vitePlugin({
             build: { parser: 'rust', cache: false, astBudgetLimit: 111_111 },
         }) as ViteConfigHook[];
-        prePlugin.configResolved?.({ root });
+        await prePlugin.configResolved?.({ root });
 
         expect(compilerMock.transformRustBatch.mock.calls[0]?.[1]).toMatchObject({
             astBudget: 111_111,
         });
     });
 
-    it('warns loudly (with the fix attached) when a rust result carries the budget diagnostic', () => {
+    it('warns loudly (with the fix attached) when a rust result carries the budget diagnostic', async () => {
         const root = tempRoot();
         const bigPath = join(root, 'src/Big.tsx');
         writeFileSync(bigPath, 'export const Big = () => <div sz={{ p: 4 }} />;');
@@ -141,7 +141,7 @@ describe('prescan AST budget', () => {
         const [prePlugin] = vitePlugin({
             build: { parser: 'rust', cache: false },
         }) as ViteConfigHook[];
-        prePlugin.configResolved?.({ root });
+        await prePlugin.configResolved?.({ root });
 
         const budgetWarnings = warn.mock.calls
             .map(call => String(call[0]))
@@ -153,7 +153,7 @@ describe('prescan AST budget', () => {
         expect(readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8')).toContain('m-2');
     });
 
-    it('surfaces a transform-time AST budget diagnostic in production mode', () => {
+    it('surfaces a transform-time AST budget diagnostic in production mode', async () => {
         const root = tempRoot();
         const source = 'export const Big = () => <div sz={{ p: 4 }} />;';
         const file = join(root, 'src/Big.tsx');
@@ -170,7 +170,7 @@ describe('prescan AST budget', () => {
         const [prePlugin] = vitePlugin({
             build: { parser: 'rust', cache: false },
         }) as ViteConfigHook[];
-        prePlugin.configResolved?.({ root });
+        await prePlugin.configResolved?.({ root });
         prePlugin.transform?.call({ warn() {} }, source, file);
 
         expect(warn.mock.calls.map(call => String(call[0])).join('\n')).toContain(
@@ -178,7 +178,7 @@ describe('prescan AST budget', () => {
         );
     });
 
-    it('wasm prescan extracts a real page file the transform-hook budget would reject', () => {
+    it('wasm prescan extracts a real page file the transform-hook budget would reject', async () => {
         const root = tempRoot();
         // >50k AST nodes for the removed JavaScript lanes (the compiler-level default throws
         // ASTBudgetExceededError on this shape), yet well under the prescan cap.
@@ -192,7 +192,7 @@ export const Page = () => (<div>${'<span className="cell">x</span>'.repeat(30_00
         const [prePlugin] = vitePlugin({
             build: { parser: 'wasm', cache: false },
         }) as ViteConfigHook[];
-        prePlugin.configResolved?.({ root });
+        await prePlugin.configResolved?.({ root });
 
         const safelist = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
         expect(safelist).toContain('mx-0');

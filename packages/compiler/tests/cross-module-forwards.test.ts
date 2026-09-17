@@ -12,19 +12,10 @@
  * A forward is deliberately not a "kind of value". It carries no object, and a
  * consumer that mistook one for a value would compile against nothing.
  */
-import { parseSync } from 'oxc-parser';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { extractCrossModuleForwards } from '../src/cross-module-extract.js';
 import { VAR_HOSTILE_NO_VAR_FORM, VAR_HOSTILE_WRONG_PROPERTY } from '../src/var-hostile-keys.js';
-
-// The parser is wrapped, not replaced: the tests below count how often the
-// extractor reaches it, because a parse per module was 8.9 s of a build over
-// 18 000 files, and only a module with an `export {` clause can carry a forward.
-vi.mock('oxc-parser', async importOriginal => {
-    const actual = await importOriginal<typeof import('oxc-parser')>();
-    return { ...actual, parseSync: vi.fn(actual.parseSync) };
-});
 
 /**
  * Extract forwards from one module.
@@ -192,30 +183,20 @@ describe('what is not a forward', () => {
     });
 });
 
-describe('which modules are parsed at all', () => {
-    // A forward is always an `export { ... }` clause - with or without `from`,
-    // since the two-statement form re-exports an imported binding by name.
-    // Every other export shape declares its value here, and `export *` names
-    // nothing. So a module with no `export {` in its text cannot carry one and
-    // is not worth a parse, whatever else it imports.
-    it('does not parse a module whose exports all declare their value', () => {
-        vi.mocked(parseSync).mockClear();
-
+describe('the export-clause gate', () => {
+    // A forward is always an `export { ... }` clause, so the engine skips the
+    // parse for a module without one; its Rust unit tests pin that the gate
+    // refuses no real clause. These pin that the answers stay right either side.
+    it('finds no forward in a module whose exports all declare their value', () => {
         expect(
             forwards(
                 "import { cardSz } from './styles';\nexport function Card() { return cardSz; }\nexport const x = 1;\nexport default Card;\n",
             ),
         ).toEqual([]);
-
-        expect(parseSync).not.toHaveBeenCalled();
     });
 
-    it('does not parse a module that only re-exports a namespace', () => {
-        vi.mocked(parseSync).mockClear();
-
+    it('finds no forward in a module that only re-exports a namespace', () => {
         expect(forwards("export * from './styles';\nexport * as ns from './more';\n")).toEqual([]);
-
-        expect(parseSync).not.toHaveBeenCalled();
     });
 
     it('still reads a clause separated from `export` by a comment', () => {
@@ -237,12 +218,8 @@ describe('which modules are parsed at all', () => {
     });
 
     it('treats a comment the file never closes as reaching the end', () => {
-        vi.mocked(parseSync).mockClear();
-
         expect(forwards('export /* never closed')).toEqual([]);
         expect(forwards('export // trailing line comment with no newline')).toEqual([]);
-
-        expect(parseSync).not.toHaveBeenCalled();
     });
 
     it('reads the clauses of a barrel that also re-exports namespaces', () => {

@@ -38,7 +38,7 @@ function makeTempRoot(prefix: string): string {
 }
 
 type PrePlugin = {
-    configResolved?: (c: { root: string; command: string }) => void;
+    configResolved?: (c: { root: string; command: string }) => Promise<void>;
     transformInclude(id: string): boolean;
     transform(this: { warn(m: string): void }, code: string, id: string): unknown;
 };
@@ -69,7 +69,7 @@ describe('production option validation', () => {
 });
 
 describe('compileSources resolution warning', () => {
-    it('warns once about entries that do not resolve to a directory', () => {
+    it('warns once about entries that do not resolve to a directory', async () => {
         const root = makeTempRoot('csszyx-compilesrc-');
         fs.mkdirSync(path.join(root, 'src'), { recursive: true });
 
@@ -77,7 +77,7 @@ describe('compileSources resolution warning', () => {
         const [pre] = vitePlugin({
             compileSources: ['does-not-exist', 'also-missing'],
         }) as unknown as [PrePlugin];
-        pre.configResolved?.({ root, command: 'build' });
+        await pre.configResolved?.({ root, command: 'build' });
 
         // Any transform triggers the lazy compileSources resolution + warning.
         pre.transform.call(

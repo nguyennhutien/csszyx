@@ -120,10 +120,17 @@ export const SIZE_BUDGETS = [
         // pulling the compiler's property tables in through
         // `@csszyx/compiler/browser`. Budget set the usual ~300 above the
         // measurement.
+        //
+        // Raised again from 27,750 for conflict-safe Tailwind prefix
+        // registration, measured 2026-09-15 at 27,984 (+574 from the prior
+        // 27,410 measurement). The runtime now records no-prefix explicitly
+        // and rejects a second build with a different prefix instead of
+        // silently emitting classes for the wrong stylesheet. Budget set the
+        // usual ~300 above the measurement.
         name: '@csszyx/runtime export closure',
         kind: 'package-exports',
         target: 'packages/runtime',
-        maxGzipBytes: 27_750,
+        maxGzipBytes: 28_300,
     },
     {
         name: '@csszyx/dynamic export closure',
@@ -143,11 +150,16 @@ export const SIZE_BUDGETS = [
     // wasm-opt pass only shrinks it). The ceiling exists to catch a debug
     // -profile build or dependency bloat slipping into the artifact — either
     // multiplies the size, a creep of +10% does not.
+    //
+    // Raised 2026-09-14 from 520,000: the module-link scan (stylesheet imports
+    // and re-export forwards read from the engine's own module record) moved
+    // off the JS parser, whose per-call arena leaked, and costs ~15 KB gzip in
+    // this artifact (507,792 without it, 522,327 with it, un-optimized).
     {
         name: '@csszyx/core parser wasm artifact',
         kind: 'file',
         target: 'packages/core/pkg-parser/csszyx_core_bg.wasm',
-        maxGzipBytes: 520_000,
+        maxGzipBytes: 530_000,
     },
 ];
 

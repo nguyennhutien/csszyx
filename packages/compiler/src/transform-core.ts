@@ -4258,6 +4258,15 @@ export interface TransformSourceCodeOptions {
     crossModuleSzObjects?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 
     /**
+     * The Tailwind `prefix()` of the project's stylesheet, written before every
+     * class the engine lowers: `tw` turns `p-4` into `tw:p-4`, the only name
+     * Tailwind serves once the stylesheet sets `prefix(tw)`. `null` means the
+     * stylesheet was read and sets no prefix. Classes the author wrote as
+     * strings are left as written.
+     */
+    classPrefix?: string | null;
+
+    /**
      * Opt into tiered CSS custom property names for parser paths that support
      * the CSS variable system. Unsupported parser paths must preserve existing
      * `--_sz-*` output until they explicitly port this option.

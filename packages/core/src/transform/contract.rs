@@ -36,6 +36,11 @@ pub struct TransformOptions {
     /// which machinery applies.
     #[serde(default)]
     pub cross_module_sz_objects_json: Option<String>,
+    /// The Tailwind `prefix()` of the project's stylesheet, written before
+    /// every class the engine emits (`tw` gives `tw:p-4`). Classes the author
+    /// wrote as strings are left as written.
+    #[serde(default)]
+    pub class_prefix: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.

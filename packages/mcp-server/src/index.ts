@@ -208,6 +208,11 @@ export const TOOLS = [
                     description:
                         'Filename to attribute diagnostics to. The extension selects the parser, so use .tsx for JSX. Defaults to preview.tsx.',
                 },
+                classPrefix: {
+                    type: 'string' as const,
+                    description:
+                        'The Tailwind prefix the project sets, e.g. "tw" for @import "tailwindcss" prefix(tw). csszyx writes it before every class, so a preview without it shows classes that project does not serve.',
+                },
             },
             required: ['source'],
         },

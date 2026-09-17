@@ -13,6 +13,10 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { readNextGenerationManifest } from '../src/next-generation-manifest.js';
 import { acquireNextSafelistStateLock } from '../src/next-safelist-state.js';
+import {
+    resolveNextStylesheetFactsPath,
+    writeNextStylesheetFacts,
+} from '../src/next-stylesheet-facts.js';
 import { type NextTurboLoaderContext, runNextTurboLoader } from '../src/next-turbo-loader.js';
 import { SAFELIST_HEADER } from '../src/safelist-format.js';
 import { _resetThemeGroupsFileCache } from '../src/theme-groups-file.js';
@@ -103,14 +107,17 @@ describe('Next Turbopack loader core', () => {
         expect(result.materialized).toBe(true);
         expect(readFileSync(result.context.safelist.outputPath, 'utf8')).toContain('p-4');
         expect(readNextGenerationManifest(result.context.manifestPath)?.completed).toBe(true);
-        // The loader intentionally registers no Turbopack dependencies. The
-        // transformed code is a pure function of the source plus the resolved
-        // csszyx config; the safelist output, snapshot, and generation
-        // manifest are side-effect outputs of the cycle, not inputs of the
-        // transform, so registering them would force a self-invalidation
-        // cascade across loader calls.
+        // The safelist output, snapshot, and generation manifest are
+        // side-effect outputs of the cycle, not inputs of the transform, so
+        // registering them would force a self-invalidation cascade across
+        // loader calls. The stylesheet facts ARE an input: the prefix the
+        // classes carry comes from them, and they are rewritten only when
+        // their content changes, so declaring them cascades nothing.
         expect(result.dependencies).toEqual([]);
-        expect(ctx.dependencies).toEqual([]);
+        expect(ctx.dependencies).toEqual([
+            // The fixture has no package.json, so the app root is src/.
+            resolveNextStylesheetFactsPath(result.context.cacheDir),
+        ]);
     });
 
     it('skips the materialization cycle on a repeated invocation with the same source content', () => {
@@ -249,11 +256,11 @@ describe('szcn theme groups on the Turbopack lane', () => {
      * @param options.source - Module source to transform.
      * @returns The project root, the module path, and a loader context.
      */
-    function project(options: { theme?: boolean; source: string }): {
+    async function project(options: { theme?: boolean; source: string }): Promise<{
         root: string;
         filename: string;
         ctx: NextTurboLoaderContext & { watched: string[] };
-    } {
+    }> {
         const watched: string[] = [];
         const root = mkdtempSync(join(tmpdir(), 'csszyx-next-theme-'));
         roots.push(root);
@@ -271,6 +278,7 @@ describe('szcn theme groups on the Turbopack lane', () => {
         );
         const filename = join(root, 'src/App.tsx');
         writeFileSync(filename, options.source, 'utf8');
+        await readStylesheets(root);
         return {
             root,
             filename,
@@ -289,6 +297,16 @@ describe('szcn theme groups on the Turbopack lane', () => {
         };
     }
 
+    /**
+     * Record the stylesheet facts, as `csszyx next watch` does before the
+     * loader runs and again after a stylesheet changes.
+     *
+     * @param root - Project root.
+     */
+    async function readStylesheets(root: string): Promise<void> {
+        await writeNextStylesheetFacts({ root, cacheDir: join(root, '.csszyx/cache') });
+    }
+
     /** Loader options every case in this block shares. */
     const OPTIONS = {
         parserMode: 'auto',
@@ -300,11 +318,11 @@ describe('szcn theme groups on the Turbopack lane', () => {
         writeOptions: { retryDelayMs: 0 },
     } as const;
 
-    it('writes a real registration module and imports it from a szcn caller', () => {
+    it('writes a real registration module and imports it from a szcn caller', async () => {
         // Turbopack cannot resolve the `virtual:` specifier every other lane
         // uses, so without a real file the app's custom tokens never register
         // and szcn keeps both classes with the stylesheet picking the winner.
-        const { root, filename, ctx } = project({
+        const { root, filename, ctx } = await project({
             source: `"use client";\nimport { szcn } from '@csszyx/runtime';\nexport const A = (p) => szcn('text-brand', p.className);\n`,
         });
 
@@ -320,8 +338,8 @@ describe('szcn theme groups on the Turbopack lane', () => {
         );
     });
 
-    it('leaves a module that cannot call szcn untouched', () => {
-        const { root, filename, ctx } = project({
+    it('leaves a module that cannot call szcn untouched', async () => {
+        const { root, filename, ctx } = await project({
             source: 'export const A = () => <div sz={{ p: 4 }} />;',
         });
 
@@ -331,10 +349,10 @@ describe('szcn theme groups on the Turbopack lane', () => {
         expect(existsSync(join(root, '.csszyx/theme-groups.mjs'))).toBe(false);
     });
 
-    it('writes nothing when the project declares no groupable tokens', () => {
+    it('writes nothing when the project declares no groupable tokens', async () => {
         // An empty registration would be a module every szcn caller imports
         // for no change in behaviour.
-        const { root, filename, ctx } = project({
+        const { root, filename, ctx } = await project({
             theme: false,
             source: `import { szcn } from '@csszyx/runtime';\nexport const A = (p) => szcn('p-4', p.className);\n`,
         });
@@ -345,11 +363,11 @@ describe('szcn theme groups on the Turbopack lane', () => {
         expect(existsSync(join(root, '.csszyx/theme-groups.mjs'))).toBe(false);
     });
 
-    it('regenerates when a watched stylesheet changes, without restarting', () => {
+    it('regenerates when a watched stylesheet changes, without restarting', async () => {
         // Turbopack forwards a loader's file dependencies to its watcher, so an
         // edit re-runs the loader. The generated module must follow the edit
         // rather than stay at whatever the first compile saw.
-        const { root, filename, ctx } = project({
+        const { root, filename, ctx } = await project({
             source: `import { szcn } from '@csszyx/runtime';\nexport const A = (p) => szcn('text-brand', p.className);\n`,
         });
         const generated = join(root, '.csszyx/theme-groups.mjs');
@@ -363,6 +381,7 @@ describe('szcn theme groups on the Turbopack lane', () => {
             '@import "tailwindcss";\n@theme { --color-accent: #3f0fa6; }\n',
             'utf8',
         );
+        await readStylesheets(root);
         runNextTurboLoader(readFileSync(filename, 'utf8'), ctx, OPTIONS);
 
         const after = readFileSync(generated, 'utf8');
@@ -370,10 +389,10 @@ describe('szcn theme groups on the Turbopack lane', () => {
         expect(after).not.toContain('brand');
     });
 
-    it('watches a stylesheet that carries no tokens yet', () => {
+    it('watches a stylesheet that carries no tokens yet', async () => {
         // The edit that matters most is the one ADDING the first @theme block:
         // watching only token-carrying files would miss exactly that.
-        const { root, filename, ctx } = project({
+        const { root, filename, ctx } = await project({
             theme: false,
             source: `import { szcn } from '@csszyx/runtime';\nexport const A = (p) => szcn('p-4', p.className);\n`,
         });
@@ -386,6 +405,7 @@ describe('szcn theme groups on the Turbopack lane', () => {
             '@import "tailwindcss";\n@theme { --color-late: #123456; }\n',
             'utf8',
         );
+        await readStylesheets(root);
         const result = runNextTurboLoader(readFileSync(filename, 'utf8'), ctx, OPTIONS);
 
         expect(readFileSync(join(root, '.csszyx/theme-groups.mjs'), 'utf8')).toContain('"late"');
