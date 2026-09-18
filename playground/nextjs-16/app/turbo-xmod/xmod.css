@@ -12,4 +12,5 @@
    base resolves up to the monorepo root and scans docs that carry `url(...)`
    examples as text. */
 @import "tailwindcss" source(none);
+@import "../theme.css";
 @source "./";
