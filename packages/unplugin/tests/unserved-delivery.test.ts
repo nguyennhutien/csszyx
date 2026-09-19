@@ -59,7 +59,9 @@ describe('vite lane', () => {
         await call('configResolved', { root, command: 'build' });
         await call(
             'transform',
-            'export const A = () => <div className="p-4" />;',
+            // A class Tailwind serves nothing for, so the unserved list is not
+            // empty: its quotes sit inside the same eval string.
+            `export const A = () => <div className="${AUTHORED}" />;`,
             `${root}/src/A.tsx`,
         );
         const module = (await call('load', RESOLVED_UNSERVED_VIRTUAL_ID)) as string;
@@ -68,12 +70,16 @@ describe('vite lane', () => {
         const code = `eval(${JSON.stringify(body)});`;
         const rendered = (await call('renderChunk', code)) as { code: string };
         let received: unknown;
+        let unserved: unknown;
         runInNewContext(rendered.code, {
-            registerUnservedClasses() {},
+            registerUnservedClasses(value: unknown) {
+                unserved = value;
+            },
             registerMergeSignatures(value: unknown) {
                 received = value;
             },
         });
+        expect(unserved).toEqual(['tab-items-wrapper']);
         expect(received).toEqual([{ 'p-4': 0 }, [[0]]]);
     });
 

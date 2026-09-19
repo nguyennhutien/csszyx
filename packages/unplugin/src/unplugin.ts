@@ -5288,7 +5288,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             result = result.split(CENSUS_PLACEHOLDER).join(escapeJsonForStringLiteral(census));
         }
         if (result.includes(UNSERVED_PLACEHOLDER)) {
-            result = result.split(UNSERVED_PLACEHOLDER).join(JSON.stringify(unservedClasses));
+            // Escaped like the table below: inside a webpack `eval` wrapper the
+            // list's quotes would otherwise end the string it sits in.
+            const list = JSON.stringify(unservedClasses);
+            result = result
+                .split(UNSERVED_PLACEHOLDER)
+                .join(isEvalWrapped ? escapeForDoubleQuotedString(list) : list);
         }
         if (result.includes(MERGE_SIGNATURES_PLACEHOLDER)) {
             const expression = serializeMergeSignatures(mergeSignatureTable);
