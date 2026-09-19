@@ -6145,9 +6145,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // `split` always yields a first element, so there is nothing to
             // fall back to: an id with no query answers with the whole id.
             const [from] = id.split('?');
-            return `import '${themeGroupsSpecifier(from, groups.file)}';\n${transformedCode}`;
+            // After any directive prologue: Next rejects a module whose
+            // `'use client'` is not its first statement.
+            return insertRuntimeImport(
+                transformedCode,
+                `import '${themeGroupsSpecifier(from, groups.file)}';\n`,
+            );
         }
-        return `import '${THEME_GROUPS_VIRTUAL_ID}';\n${transformedCode}`;
+        return insertRuntimeImport(transformedCode, `import '${THEME_GROUPS_VIRTUAL_ID}';\n`);
     }
 
     /** Matches an import/re-export from a package whose runtime helpers read the mangle map. */
