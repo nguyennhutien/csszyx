@@ -760,14 +760,15 @@ Build it as a plain React compound component; each part forwards `sz` (already
 rewritten to `className` by the transform) onto a host element. Type each part with
 `ComponentProps<'div'>` (or the relevant tag) to get `sz` + `className` for free.
 Merge a part's own defaults with the consumer's override via `szcn` (mangle-aware,
-last-wins) — the RECOMMENDED pattern for slot defaults. Multi-property prefixes
-(`text`, `bg`, `border`, `font`, `flex`, `divide`, `ring`, `outline`) are
-value-classified into property groups: same property → later wins
-(`szcn('text-base','text-sm')` → `text-sm`); different properties co-exist
-(`text-red-500` never removes `text-sm`); unclassifiable values are always kept
-(fail-safe). Custom `@theme` tokens join their groups automatically when the CSS
-is scanned (`build.scanCss`); classes written in plain CSS register via
-`registerSzcnGroups({ colors: [...], textSizes: [...] })` from `@csszyx/runtime`.
+last-wins) — the RECOMMENDED pattern for slot defaults. `szcn` merges on a table
+the build settles from the project's compiled Tailwind CSS: a later class
+removes an earlier one when it sets every CSS property the earlier one sets, in
+the same variant context (`szcn('text-base','text-sm')` → `text-sm`,
+`szcn('pb-4','p-8')` → `p-8`); different properties co-exist (`text-red-500`
+never removes `text-sm`); a class the table has no entry for is always kept
+(fail-safe), and only an exact repeat of it is dropped. Custom `@theme` tokens,
+`@utility` classes and plugin utilities merge with nothing to register.
+`registerSzcnGroups(...)` feeds `classify`'s `property` only, not `szcn`.
 
 On a production-mangled build, `szcn` also ENCODES its output: a class name a
 component resolves at runtime as a plain string (a prop mapped to `'flex-col'`,
@@ -3854,20 +3855,31 @@ are compiler-injected, do not hand-author them):
 - **`szcn(...)`** — merge className STRINGS with last-wins override on a
   same-utility conflict, mangle-aware (the Box-level merge). Contract:
   - Variants isolate: `szcn('md:gap-2','gap-8')` keeps both; same variant+utility → last wins.
-  - Directional shorthand coverage (padding/margin/inset/rounded): a LATER
-    shorthand removes the longhands it subsumes (`szcn('pb-4','p-8')` → `p-8`);
-    a later longhand only refines (`szcn('p-4','pb-8')` → `p-4 pb-8`). Physical
-    only for inset/rounded — logical `start`/`end` stay keep-both (RTL-safe).
-  - Ambiguous prefixes (`text` `font` `bg` `border` `divide` `ring` `outline`
-    `flex`) classify the token VALUE into a property group: same property →
-    last wins (`szcn('text-base','text-sm')` → `text-sm`), different → co-exist
-    (`text-red-500` never removes `text-sm`), unclassifiable → keep-both.
-  - Custom `@theme` tokens join their groups automatically via `build.scanCss`;
-    plain-CSS utility names register once via
-    `registerSzcnGroups({ colors: [...], textSizes: [...] })` (guard-railed:
-    names shadowing built-in keywords, or defined in two conflicting
-    categories, are rejected to keep-both — never a wrong merge).
-  - Fail-safe: a token szcn cannot confidently group is NEVER dropped.
+  - Decided by a table the build settles from the project's COMPILED Tailwind
+    CSS, never by class name: a LATER class removes an EARLIER one when it sets
+    every CSS property the earlier one sets, in the same context.
+  - Shorthand coverage: `szcn('pb-4','p-8')` → `p-8`; a later longhand only
+    refines (`szcn('p-4','pb-8')` → `p-4 pb-8`). Logical sides resolve to
+    physical ones and must be covered in BOTH ltr and rtl:
+    `szcn('ps-4','px-4')` → `px-4`, but `szcn('ps-4','pl-4')` keeps both.
+  - Same properties → last wins (`szcn('text-base','text-sm')` → `text-sm`);
+    different → co-exist (`text-red-500` never removes `text-sm`,
+    `shadow-lg shadow-red-500` keeps both).
+  - `!important` is its own context: `szcn('p-4','p-4!')` keeps both;
+    `szcn('p-4!','p-8!')` → `p-8!`.
+  - Custom `@theme` tokens, `@utility` classes and plugin utilities merge with
+    nothing to register. `registerSzcnGroups(...)` feeds `classify`'s
+    `property` only — `szcn` does not read it.
+  - The table covers every class the project's Tailwind generates CSS for:
+    its own source scan (maps of variants, constants, `@source` packages)
+    plus `sz` output.
+  - Fail-safe: a class the table has no entry for is NEVER dropped (only an
+    exact repeat is). That covers classes built only at runtime
+    (`` `gap-${n}` ``) and every class on a lane with no table: esbuild,
+    Rspack, Rsbuild, Rolldown, Farm, Bun. Turbopack gets the table from
+    `csszyx next prebuild` / `csszyx next watch`; jest reads the file the last
+    build wrote (`.csszyx/merge-registration.cjs`, `.mjs` for native-ESM jest).
+  - Several Tailwind entries: a pair merges only when EVERY entry agrees.
 - Compiler-injected `_szMerge(existingClassName, compiledSz)` in the full
   runtime uses the same uncached, mangle-aware utility merge engine as `szcn`,
   so the compiled `sz` argument wins same-utility conflicts. The intentionally

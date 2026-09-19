@@ -131,6 +131,21 @@ Either way, a dead key or value is printed to the console with the file it was
 found in — the same lines the build prints, minus the usage nudges that only
 matter to a bundler.
 
+### What `szcn` merges in a suite
+
+`szcn` merges on a table the build settles from your compiled Tailwind CSS
+(see [How it decides](/docs/reference/runtime/#how-it-decides)), and a test run
+has no bundler to settle one. A build — or `csszyx next prebuild` on Next.js —
+also writes the table to `.csszyx/merge-registration.cjs` (and an `.mjs` twin
+for a Jest that runs native ES modules); the transformer imports it from every
+module that loads the csszyx runtime, and its cache key follows the file, so a
+rebuild reaches the suite. The table holds the classes your Tailwind generates
+CSS for, so a class a test spells but no source of the app uses has no entry.
+
+Before a build has written it, `szcn` keeps every class: `szcn('p-2', 'p-4')`
+is `'p-2 p-4'`, and a development warning names the cause once. Assert with `toHaveClass('p-4')` rather than on the whole
+string, or run the build before the suite, the same as for cross-module styles.
+
 ### Options
 
 ```js

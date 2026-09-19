@@ -25,11 +25,10 @@ Keep it a **direct** dependency: the build transform injects bare
 > the build transform emits calls to them. Don't hand-author them; use the
 > public names below.
 
-The full-runtime `_szMerge` uses the same mangle-aware, utility-group last-wins
-engine as `szcn`; generated `className + sz` merges therefore follow the same
-override contract. The deliberately tiny `@csszyx/runtime/lite` compatibility
-helper only removes exact duplicate tokens—it avoids the classification graph
-that would grow the built lite entry from about 1.7 kB to about 59 kB.
+The full-runtime `_szMerge` uses the same mangle-aware last-wins merge as
+`szcn`; generated `className + sz` merges therefore follow the same override
+contract. The deliberately tiny `@csszyx/runtime/lite` compatibility
+helper only removes exact duplicate tokens.
 
 ### `szr(...inputs)` — resolve to a className
 
@@ -56,18 +55,24 @@ import { szcn } from "@csszyx/runtime";
 
 szcn("gap-2 p-4", "gap-8"); // → 'p-4 gap-8'   (gap-8 wins)
 szcn("pb-4", "p-8"); // → 'p-8'         (shorthand covers the longhand)
-szcn("text-base", "text-sm"); // → 'text-sm'     (same property group)
+szcn("text-base", "text-sm"); // → 'text-sm'     (same CSS properties)
 szcn("text-red-500", "text-sm"); // → 'text-red-500 text-sm' (color vs size co-exist)
 ```
 
+These results need the table a csszyx build registers. The runtime used on its
+own, with no build, removes only exact repeats and says so once in development.
+
 Unlike `tailwind-merge`, `szcn` keeps working in production builds where CSSzyx
 **mangles** class names — it decodes tokens through the runtime mangle map
-before grouping. Fail-safe contract: a class it cannot confidently group is
-kept, never dropped.
+before merging.
 
-Custom `@theme` tokens join the merge groups automatically when the build
-plugin scans your CSS (`build.scanCss`); for utility-shaped classes written in
-plain CSS, register them once with `registerSzcnGroups({ colors: [...] })`.
+It merges on a table the build settles from your compiled Tailwind CSS, not on
+class names: a later class removes an earlier one when it sets every CSS
+property the earlier one sets, in the same variant context. Custom `@theme`
+tokens, `@utility` classes and plugin utilities therefore merge with nothing to
+register. Fail-safe contract: a class the table has no entry for is kept, never
+dropped — including every class on a build lane that ships no table (the
+esbuild family), where `szcn` only drops exact repeats.
 
 ### `szv(config)` — variant authoring
 

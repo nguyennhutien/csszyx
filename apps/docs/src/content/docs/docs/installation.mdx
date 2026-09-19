@@ -144,7 +144,7 @@ the csszyx playground pins and CI runs.
 | --- | --- | --- |
 | `turbopack` config key | Named `turbopack` from **15.3**; was `experimental.turbo` in **13.0.0–15.2.x**, removed in **16** | `csszyxTurbopack()` writes this block |
 | `turbopack.rules` loaders | Supported | Runs the `sz` transform |
-| File dependencies (`this.addDependency`) | Supported — Turbopack reports a loader's file dependencies back to its watcher | Watches your `@theme` stylesheets so `szcn` groups refresh live |
+| File dependencies (`this.addDependency`) | Supported — Turbopack reports a loader's file dependencies back to its watcher | Watches your `@theme` stylesheets so the theme groups refresh live, and the merge table `csszyx next watch` rewrites so `szcn` follows a stylesheet edit |
 | `resolveAlias` | Supported | Not used — the theme registration imports a real relative path, so no app config is needed |
 | `this.emitFile` | **Not supported** | Why the generated registration is written to `.csszyx/` directly instead of emitted |
 | `this.mode` | **Not supported** | csszyx falls back to `NODE_ENV`, so dev/production detection is unaffected |
