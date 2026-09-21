@@ -102,17 +102,23 @@ export function resolveNextStylesheetFactsPath(cacheDir: string): string {
  * @param input.root - The project root.
  * @param input.cacheDir - The directory containing recorded stylesheet facts.
  * @param input.tailwindStylesheet - Explicit stylesheet paths, when configured.
+ * @param input.ignore - The caller's own ignore patterns; the recorded ones
+ *        when it has none.
  * @returns A deterministic content hash of the facts file and candidates.
  */
 export function failedNextClassPrefixInputsStamp(input: {
     root: string;
     cacheDir: string;
     tailwindStylesheet: readonly string[];
+    ignore?: readonly string[];
 }): string {
     const candidates =
         input.tailwindStylesheet.length > 0
             ? input.tailwindStylesheet.map(file => path.resolve(input.root, file))
-            : walkedStylesheets(input.root, recordedIgnore(input.cacheDir, input.root));
+            : walkedStylesheets(
+                  input.root,
+                  input.ignore ?? recordedIgnore(input.cacheDir, input.root),
+              );
     const files = sortStrings([resolveNextStylesheetFactsPath(input.cacheDir), ...candidates]);
     const hash = createHash('sha256');
     for (const file of files) {
@@ -309,7 +315,7 @@ export async function writeNextStylesheetFacts(input: {
     // A writer with no patterns of its own, such as the jest lane, keeps the
     // ones the command recorded: writing none would bring the ignored entries
     // back into the vote on the next read.
-    const ignore = [...(input.ignore ?? recordedIgnore(input.cacheDir, input.root))];
+    const ignore = canonicalIgnore(input.ignore ?? recordedIgnore(input.cacheDir, input.root));
     const { ignoresFile } = createRootIgnoreMatcher(input.root, ignore);
     // A bundler build reaches stylesheets through JavaScript imports that a
     // walk cannot see. The ones it recorded are kept while they exist, or this
@@ -350,6 +356,20 @@ export async function writeNextStylesheetFacts(input: {
         warning: styleModelWarning(model, input.root, input.setting),
         model,
     };
+}
+
+/**
+ * An ignore list in the one form it is recorded and compared in.
+ *
+ * Negated patterns are refused, so every pattern only adds paths and the order
+ * they were given in means nothing. Recorded as given, `a,b` and `b,a` would
+ * read as two configurations and each reader would refuse the other's facts.
+ *
+ * @param ignore - The patterns as a caller gave them.
+ * @returns The distinct patterns, sorted.
+ */
+function canonicalIgnore(ignore: readonly string[]): string[] {
+    return sortStrings(new Set(ignore));
 }
 
 /**
@@ -436,7 +456,7 @@ export function recordStylesheetFacts(
     const record: NextStylesheetFactsRecord = {
         schema: 3,
         root,
-        ignore: [...(ignore ?? recordedIgnore(cacheDir, root))],
+        ignore: canonicalIgnore(ignore ?? recordedIgnore(cacheDir, root)),
         facts: model.facts,
         candidates: [...candidates],
         entries,
@@ -457,11 +477,13 @@ export function recordStylesheetFacts(
  *        see; facts written for another root, or without one of these, are stale.
  * @param expected.root - The reader's project root.
  * @param expected.candidates - The stylesheets the reader would read.
+ * @param expected.ignore - The reader's own ignore patterns, when it was
+ *        configured with them; facts written under other patterns are stale.
  * @returns The record, or why it cannot be used.
  */
 export function readNextStylesheetFacts(
     cacheDir: string,
-    expected?: { root: string; candidates: readonly string[] },
+    expected?: { root: string; candidates: readonly string[]; ignore?: readonly string[] },
 ): { ok: true; record: NextStylesheetFactsRecord } | { ok: false; reason: string } {
     const read = readFactsRecord(cacheDir);
     if (!read.ok) return read;
@@ -471,6 +493,16 @@ export function readNextStylesheetFacts(
             return {
                 ok: false,
                 reason: `the stylesheet facts were written for ${record.root}, not this project`,
+            };
+        }
+        if (
+            expected.ignore !== undefined &&
+            canonicalIgnore(expected.ignore).join('\0') !==
+                canonicalIgnore(record.ignore).join('\0')
+        ) {
+            return {
+                ok: false,
+                reason: 'the stylesheet facts were written under other ignore patterns',
             };
         }
         const recorded = new Set(record.candidates);
@@ -572,6 +604,8 @@ export type NextClassPrefix =
  * @param input.candidates - The stylesheets a walk found, when the caller has
  *        walked already; the project is walked when neither these nor
  *        `tailwindStylesheet` are given.
+ * @param input.ignore - The caller's own ignore patterns, for a lane
+ *        configured with them; the recorded ones otherwise.
  * @returns The prefix and its dependencies, or why it is not known yet.
  */
 export function resolveNextClassPrefix(input: {
@@ -579,6 +613,7 @@ export function resolveNextClassPrefix(input: {
     cacheDir: string;
     tailwindStylesheet: readonly string[];
     candidates?: readonly string[];
+    ignore?: readonly string[];
 }): NextClassPrefix {
     const factsPath = resolveNextStylesheetFactsPath(input.cacheDir);
     const listed = input.tailwindStylesheet.map(file => path.resolve(input.root, file));
@@ -586,8 +621,15 @@ export function resolveNextClassPrefix(input: {
         listed.length > 0
             ? listed
             : (input.candidates ??
-              walkedStylesheets(input.root, recordedIgnore(input.cacheDir, input.root)));
-    const read = readNextStylesheetFacts(input.cacheDir, { root: input.root, candidates });
+              walkedStylesheets(
+                  input.root,
+                  input.ignore ?? recordedIgnore(input.cacheDir, input.root),
+              ));
+    const read = readNextStylesheetFacts(input.cacheDir, {
+        root: input.root,
+        candidates,
+        ignore: input.ignore,
+    });
     if (read.ok) {
         const decided = read.record.entries.filter(entry => entry.dependency);
         return {

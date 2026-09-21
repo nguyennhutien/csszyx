@@ -725,15 +725,16 @@ option ([configuration](/docs/reference/config/)). `csszyx next prebuild` and
 flag in place of the option, and the Turbopack loader takes the list as
 `csszyxTurbopack({}, { tailwindStylesheet })`. When the other entry belongs to
 another app under the same root, `--ignore <patterns>` on those two commands
-leaves its directory out for the loader too.
+leaves its directory out for the loader too, and the Jest transformer takes the
+same patterns in its `ignore` option.
 
 ```text
 [csszyx] the ignore pattern `{pattern}` is negated, and an ignore list cannot take one: each pattern only adds paths to leave out.
   help: narrow the pattern that covers too much, so that nothing has to be taken back out.
 ```
 
-An **error** from `csszyx next prebuild` and `csszyx next watch`. Each `--ignore`
-pattern is matched on its own, so `!legacy/keep.css` would not take one file
+An **error** from `csszyx next prebuild`, `csszyx next watch` and the Jest
+transformer's `ignore` option. Each pattern is matched on its own, so `!legacy/keep.css` would not take one file
 back out of `legacy/**`: it would match every path except that file, the app's
 real Tailwind entry included.
 

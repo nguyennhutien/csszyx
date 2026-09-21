@@ -160,6 +160,9 @@ require('@csszyx/unplugin/jest').createTransformer({
     root: __dirname,
     // The stylesheets the app loads, when the project also holds others.
     tailwindStylesheet: 'src/index.css',
+    // Directories that hold another app, left out of the prefix vote. One glob
+    // per entry: the comma of `csszyx next prebuild --ignore` separates nothing here.
+    ignore: ['legacy/**'],
 });
 ```
 
@@ -177,10 +180,16 @@ prefix is not reused.
 Stylesheets that set different prefixes, or a Tailwind entry that does not
 compile, fail the transform with the same message the build prints. Name the
 stylesheets the app loads in `tailwindStylesheet` when a fixture or an old copy
-is the cause. On Next.js the transformer follows the `--ignore` patterns that
-`csszyx next prebuild` or `csszyx next watch` recorded; a suite that runs before
-either, as on a fresh CI checkout, has no record to follow and needs
-`tailwindStylesheet`.
+is the cause, or leave another app's directory out with `ignore`. On Next.js
+the transformer follows the `--ignore` patterns that `csszyx next prebuild` or
+`csszyx next watch` recorded; a suite that runs before either, as on a fresh CI
+checkout, has no record to follow, so give `ignore` the same patterns.
+
+The option replaces the recorded patterns; it does not add to them. Give it
+every pattern the command has: a shorter list lets the stylesheets it drops vote
+again, and Jest stops on a prefix the build accepted. A transformer with the
+option keeps its own facts under `.csszyx/cache/jest/`, so a suite cannot change
+what `next dev` reads.
 
 <Aside type="tip" title="A whole-project pass, without a test runner">
 `npx @csszyx/cli check` runs the same lowering over every source file and

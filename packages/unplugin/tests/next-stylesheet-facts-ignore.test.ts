@@ -224,6 +224,66 @@ describe('the loader walks with the recorded patterns', () => {
     }, 60_000);
 });
 
+describe('the order the patterns were given in', () => {
+    it('is not recorded, so the same list in another order writes the same file', async () => {
+        const { root, cacheDir } = appBesideAnother();
+
+        const { record } = await writeNextStylesheetFacts({
+            root,
+            cacheDir,
+            ignore: ['vendor/**', 'legacy/**', 'vendor/**'],
+        });
+
+        expect(record.ignore).toEqual(['legacy/**', 'vendor/**']);
+    }, 60_000);
+
+    it('does not make a reader with the same patterns refuse the facts', async () => {
+        const { root, cacheDir } = appBesideAnother();
+        await writeNextStylesheetFacts({ root, cacheDir, ignore: ['legacy/**', 'vendor/**'] });
+
+        expect(
+            resolveNextClassPrefix({
+                root,
+                cacheDir,
+                tailwindStylesheet: [],
+                ignore: ['vendor/**', 'legacy/**'],
+            }),
+        ).toMatchObject({ ok: true, prefix: 'tw' });
+    }, 60_000);
+});
+
+describe('a reader configured with its own patterns', () => {
+    it('reads facts written under other patterns as stale', async () => {
+        // Same prefix on both entries, so nothing else tells the two apart.
+        const { root, cacheDir } = appBesideAnother();
+        writeFileSync(join(root, 'legacy/old.css'), PREFIXED);
+        await writeNextStylesheetFacts({ root, cacheDir, ignore: [] });
+
+        const read = resolveNextClassPrefix({
+            root,
+            cacheDir,
+            tailwindStylesheet: [],
+            ignore: ['legacy/**'],
+        });
+
+        expect(read.ok ? '' : read.reason).toContain('other ignore patterns');
+    }, 60_000);
+
+    it('reads facts written under the same patterns', async () => {
+        const { root, cacheDir } = appBesideAnother();
+        await writeNextStylesheetFacts({ root, cacheDir, ignore: ['legacy/**'] });
+
+        expect(
+            resolveNextClassPrefix({
+                root,
+                cacheDir,
+                tailwindStylesheet: [],
+                ignore: ['legacy/**'],
+            }),
+        ).toMatchObject({ ok: true, prefix: 'tw' });
+    }, 60_000);
+});
+
 describe('a record from before the patterns were recorded', () => {
     it('reads as unusable, so the loader asks for a new one', async () => {
         const { root, cacheDir } = appBesideAnother();

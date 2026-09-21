@@ -304,6 +304,15 @@ export interface JestTransformOptions {
     root?: string;
     /** The stylesheets the app loads, when the project also holds others. */
     tailwindStylesheet?: string | string[];
+    /**
+     * Glob patterns, relative to the root, for directories that hold another
+     * app; their stylesheets do not vote on the Tailwind prefix. One pattern
+     * per entry, not a comma-separated text. On Next.js, the patterns given to
+     * `csszyx next prebuild --ignore`: this option replaces the recorded ones,
+     * and without it the recorded ones are followed. Set it where the suite
+     * runs before any command has recorded them.
+     */
+    ignore?: string | string[];
 }
 
 /** The slice of the options jest hands `process` that this lane reads. */
@@ -375,12 +384,14 @@ try {
  * @param input.root - The project root.
  * @param input.cacheDir - The csszyx cache directory.
  * @param input.tailwindStylesheet - The stylesheets the app loads, when named.
+ * @param input.ignore - The transformer's own ignore patterns, when it has any.
  * @returns The prefix they set, or null.
  */
 function readStylesheetsInChild(input: {
     root: string;
     cacheDir: string;
     tailwindStylesheet: readonly string[];
+    ignore: readonly string[] | undefined;
 }): string | null {
     // One path from both builds of this file: `src/` and `dist/` sit side by
     // side, so the prebuild entry is found the same way from either.
@@ -396,6 +407,8 @@ function readStylesheetsInChild(input: {
                 explicitRoot: input.root,
                 cacheDir: input.cacheDir,
                 tailwindStylesheet: input.tailwindStylesheet,
+                ignore: input.ignore,
+                ignoreSetting: 'the csszyx `ignore` option',
             }),
         ],
         { encoding: 'utf8' },
@@ -601,6 +614,13 @@ function openJestProject(root: string, options: JestTransformOptions): JestProje
     // The facts file lives beside the transform cache, as the build writes it.
     const cacheDir = path.dirname(cacheRoot);
     const tailwindStylesheet = [options.tailwindStylesheet ?? []].flat();
+    // Undefined, not empty, when the option is absent: the recorded patterns
+    // are followed then, and an empty list says to follow none.
+    const ignore = options.ignore === undefined ? undefined : [options.ignore].flat();
+    // The Turbopack loader follows whatever patterns the shared facts hold. A
+    // suite with patterns of its own keeps its own facts, so running it cannot
+    // change which stylesheets `next dev` lets vote.
+    const factsDir = ignore === undefined ? cacheDir : path.join(cacheDir, 'jest');
     const index = new TransformCacheIndex(cacheRoot);
     index.refresh();
     // A failure is reused only while its inputs are byte-for-byte unchanged:
@@ -608,30 +628,27 @@ function openJestProject(root: string, options: JestTransformOptions): JestProje
     // answers are cheap to validate and must observe edits during watch mode.
     let failedPrefix: { stamp: string; error: Error } | undefined;
     const classPrefix = (): string | null => {
+        const inputs = { root, cacheDir: factsDir, tailwindStylesheet, ignore };
+        // Stamping walks with the same patterns, so a pattern that cannot be
+        // honoured fails here too. The options never change within a worker,
+        // which makes one fixed stamp the right memo for that failure.
+        const stampOf = (): string => {
+            try {
+                return failedNextClassPrefixInputsStamp(inputs);
+            } catch {
+                return 'inputs cannot be read';
+            }
+        };
         if (failedPrefix !== undefined) {
-            const stamp = failedNextClassPrefixInputsStamp({
-                root,
-                cacheDir,
-                tailwindStylesheet,
-            });
-            if (stamp === failedPrefix.stamp) throw failedPrefix.error;
+            if (stampOf() === failedPrefix.stamp) throw failedPrefix.error;
             failedPrefix = undefined;
         }
-        const recorded = resolveNextClassPrefix({ root, cacheDir, tailwindStylesheet });
         try {
-            return recorded.ok
-                ? recorded.prefix
-                : readStylesheetsInChild({ root, cacheDir, tailwindStylesheet });
+            const recorded = resolveNextClassPrefix(inputs);
+            return recorded.ok ? recorded.prefix : readStylesheetsInChild(inputs);
         } catch (error) {
             const settled = error as Error;
-            failedPrefix = {
-                stamp: failedNextClassPrefixInputsStamp({
-                    root,
-                    cacheDir,
-                    tailwindStylesheet,
-                }),
-                error: settled,
-            };
+            failedPrefix = { stamp: stampOf(), error: settled };
             throw settled;
         }
     };
