@@ -34,6 +34,7 @@ import fg from 'fast-glob';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { startNextWatch } from '../src/commands/next-watch.js';
+import { withPosixSeparators } from '../src/utils/posix-path.js';
 
 const FILES = [
     'legacy/a.css',
@@ -155,7 +156,9 @@ describe('the shared ignore matcher against fast-glob', () => {
                 ignore: [pattern],
             });
 
-            expect(record.candidates.map(file => relative(root, file)).sort()).toEqual(kept.sort());
+            const walked = record.candidates.map(file => withPosixSeparators(relative(root, file)));
+
+            expect(walked.sort()).toEqual(kept.sort());
         } finally {
             rmSync(cacheDir, { recursive: true, force: true });
         }
@@ -171,7 +174,7 @@ describe('the watcher against fast-glob', () => {
      */
     async function watcherPredicate(
         pattern: string,
-    ): Promise<(path: string, stats?: Stats) => boolean> {
+    ): Promise<{ ignored: (path: string, stats?: Stats) => boolean; watched: string }> {
         let ignored: unknown;
         const emitter = new EventEmitter();
         const watcher = Object.assign(emitter, {
@@ -197,18 +200,27 @@ describe('the watcher against fast-glob', () => {
             },
         );
         await session.close();
-        return ignored as (path: string, stats?: Stats) => boolean;
+        // On Windows the session watches the canonical name of the root, and a
+        // path under another spelling of it sits outside the tree it prunes.
+        return {
+            ignored: ignored as (path: string, stats?: Stats) => boolean,
+            watched: session.root,
+        };
     }
 
     it.each(PATTERNS)(
         'prunes no directory that holds a kept file: %s',
         async pattern => {
-            const ignored = await watcherPredicate(pattern);
+            const { ignored, watched } = await watcherPredicate(pattern);
             const kept = keptByFastGlob(pattern);
+            const prunes = (stat: boolean) => (directory: string) => {
+                const asked = join(watched, relative(root, directory));
+                return ignored(asked, stat ? statSync(asked) : undefined);
+            };
 
             // chokidar asks first with no stats, and again with them while it crawls.
-            expect(wrongPrunes(dir => ignored(dir), kept)).toEqual([]);
-            expect(wrongPrunes(dir => ignored(dir, statSync(dir)), kept)).toEqual([]);
+            expect(wrongPrunes(prunes(false), kept)).toEqual([]);
+            expect(wrongPrunes(prunes(true), kept)).toEqual([]);
         },
         60_000,
     );
@@ -216,13 +228,14 @@ describe('the watcher against fast-glob', () => {
     it.each(PATTERNS)(
         'leaves out the same files once it knows they are files: %s',
         async pattern => {
-            const ignored = await watcherPredicate(pattern);
+            const { ignored, watched } = await watcherPredicate(pattern);
             const kept = keptByFastGlob(pattern);
 
             const byFastGlob = FILES.filter(file => !kept.has(file));
-            const byWatcher = FILES.filter(file =>
-                ignored(join(root, file), statSync(join(root, file))),
-            );
+            const byWatcher = FILES.filter(file => {
+                const asked = join(watched, file);
+                return ignored(asked, statSync(asked));
+            });
 
             expect(byWatcher).toEqual(byFastGlob);
         },
