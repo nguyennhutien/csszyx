@@ -35,6 +35,7 @@ import { createNextStateContext, type NextStateContext } from './next-state-cont
 import {
     type NextClassPrefix,
     projectStylesheetCandidates,
+    recordedStylesheetIgnore,
     resolveNextClassPrefix,
     unreadNextPrefixMessage,
     writeNextStylesheetFacts,
@@ -188,7 +189,11 @@ export function runNextTurboLoader(
     // import goes AFTER any `use client` directive, which must stay first.
     const callsSzcn = callsMergeHelper(source, transform.result);
     const themeGroups = callsSzcn
-        ? ensureThemeGroupsFile(context.root, path.join(context.root, '.csszyx'))
+        ? ensureThemeGroupsFile(
+              context.root,
+              path.join(context.root, '.csszyx'),
+              recordedStylesheetIgnore(context.root, context.cacheDir),
+          )
         : { file: null, watch: [] };
     // Turbopack forwards a loader's file dependencies to its watcher (its
     // webpack-loader bridge reports `fileDependencies` back over IPC), so

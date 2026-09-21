@@ -319,7 +319,10 @@ const NEXT_SAFELIST_OPTIONS: ReadonlyArray<readonly [flag: string, description: 
         '--tailwind-stylesheet <paths>',
         'Stylesheets the app loads, relative to --root and comma-separated, when the project also holds others',
     ],
-    ['--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)'],
+    [
+        '--ignore <patterns>',
+        'Glob patterns to leave out of the source scan and the Tailwind prefix vote (comma-separated)',
+    ],
     [
         '--imported-static-sz',
         'Compile a plain exported sz object into the modules that import it (default)',

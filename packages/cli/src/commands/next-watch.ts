@@ -9,7 +9,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { prepareNextStylesheetFacts, runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
+import {
+    createRootIgnoreMatcher,
+    prepareNextStylesheetFacts,
+    runNextPrebuild,
+} from '@csszyx/unplugin/next-prebuild';
 import {
     NEXT_WATCH_LOCK_COMMAND,
     type NextSafelistMaterializeResult,
@@ -18,14 +22,12 @@ import {
 } from '@csszyx/unplugin/next-watcher';
 import { type ChokidarOptions, type FSWatcher, watch } from 'chokidar';
 import fg from 'fast-glob';
-import { Minimatch } from 'minimatch';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import { colors, icons } from '../utils/terminal-ui.js';
 import { tryWriteMergeRegistration } from './next-merge-registration.js';
 import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
 const SOURCE_EXTENSION = /\.[cm]?[jt]sx?$/i;
-const WINDOWS_PATH_SEPARATOR = String.fromCodePoint(92);
 
 /** Options accepted by the `next-watch` CLI command. */
 export interface NextWatchCommandOptions {
@@ -185,7 +187,11 @@ export async function startNextWatch(
             cacheDir: options.cacheDir,
             tailwindStylesheet: options.tailwindStylesheet,
             files,
+            // Only the user's patterns: the built-in ones cover `node_modules`,
+            // where a package stylesheet that a source file imports lives.
+            ignore: options.extraIgnore ?? [],
             setting: 'the `--tailwind-stylesheet` flag',
+            ignoreSetting: 'the `--ignore` flag',
         });
         model = facts.model;
         if (facts.warning !== null) printWatcherNotice(facts.warning);
@@ -525,7 +531,7 @@ function waitForShutdown(failure: Promise<Error>): Promise<Error | undefined> {
 function watchSourcesAlreadyInside(
     watcher: FSWatcher,
     directory: string,
-    isIgnored: (candidate: string) => boolean,
+    isIgnored: (candidate: string, entry?: KnownEntry) => boolean,
 ): void {
     if (isIgnored(directory)) {
         return;
@@ -541,35 +547,39 @@ function watchSourcesAlreadyInside(
             continue;
         }
         const candidate = path.join(directory, entry.name);
-        if (isIgnored(candidate)) {
+        if (isIgnored(candidate, entry)) {
             continue;
         }
         watcher.add(candidate);
     }
 }
 
+/** What chokidar knows about a path it asks about, when it knows anything. */
+type KnownEntry = Pick<fs.Stats, 'isFile'>;
+
 /**
+ * Build chokidar's `ignored` predicate from the ignore list.
+ *
+ * chokidar asks about a path before it has stat'ed it and again once it has.
+ * Without stats the path may be a directory, and `legacy/*` matches the
+ * directory `legacy/deep` while the source glob still reads what is inside, so
+ * only a path whose whole tree is left out is pruned then. A file is left out
+ * on the second question, when chokidar says it is one.
  *
  * @param root Resolved Next app root.
  * @param shardsDir Resolved safelist shard directory.
  * @param ignore Fast-glob ignore patterns.
- * @returns Chokidar path predicate for directories that can be pruned safely.
+ * @returns Chokidar path predicate.
  */
 function createIgnoredMatcher(
     root: string,
     shardsDir: string,
     ignore: readonly string[],
-): (candidate: string) => boolean {
+): (candidate: string, entry?: KnownEntry) => boolean {
     const normalizedShardsDir = path.resolve(shardsDir);
-    const matchers = ignore.flatMap(pattern => {
-        const normalized = normalizeGlobPath(pattern);
-        const variants = normalized.endsWith('/**')
-            ? [normalized, normalized.slice(0, -3)]
-            : [normalized];
-        return variants.map(variant => new Minimatch(variant, { dot: true }));
-    });
+    const matcher = createRootIgnoreMatcher(root, ignore);
 
-    return candidate => {
+    return (candidate, entry) => {
         const absolute = path.resolve(candidate);
         const relativeToShards = path.relative(absolute, normalizedShardsDir);
         if (
@@ -581,22 +591,11 @@ function createIgnoredMatcher(
         ) {
             return false;
         }
-        const relative = normalizeGlobPath(path.relative(root, absolute));
-        if (!relative || relative.startsWith('../') || path.isAbsolute(relative)) {
-            return false;
-        }
-        return matchers.some(matcher => matcher.match(relative));
+        return (
+            matcher.coversTree(absolute) ||
+            (entry?.isFile() === true && matcher.ignoresFile(absolute))
+        );
     };
-}
-
-/**
- * Normalize platform path separators for glob matching.
- *
- * @param value Path or glob pattern to normalize.
- * @returns Path using forward slashes.
- */
-function normalizeGlobPath(value: string): string {
-    return value.split(WINDOWS_PATH_SEPARATOR).join('/');
 }
 
 /**

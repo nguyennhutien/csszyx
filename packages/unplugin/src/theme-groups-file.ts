@@ -47,6 +47,8 @@ export interface ThemeGroupsFile {
 interface CachedGroups extends ThemeGroupsFile {
     /** Size and mtime of every watched stylesheet, in `watch` order. */
     signature: string;
+    /** The ignore patterns the scan ran under; other patterns find other files. */
+    ignore: string;
 }
 
 const cacheByRoot = new Map<string, CachedGroups>();
@@ -82,10 +84,11 @@ function signatureOf(files: readonly string[]): string {
  * the second one costs a filesystem read.
  *
  * @param cached - Entry for this root, if one was stored.
+ * @param ignore - The patterns this call scans under, as the cache keys them.
  * @returns True when the entry may be returned as is.
  */
-function isCacheUsable(cached: CachedGroups | undefined): cached is CachedGroups {
-    if (cached === undefined) return false;
+function isCacheUsable(cached: CachedGroups | undefined, ignore: string): cached is CachedGroups {
+    if (cached?.ignore !== ignore) return false;
     return signatureOf(cached.watch) === cached.signature;
 }
 
@@ -100,15 +103,22 @@ function isCacheUsable(cached: CachedGroups | undefined): cached is CachedGroups
  *
  * @param root - Project root the loader is running under.
  * @param outputDir - Directory generated csszyx files live in.
+ * @param ignore - Glob patterns, relative to the root, whose stylesheets are
+ * left out; the Next lane passes the ones its command recorded.
  * @returns The module to import and the stylesheets to watch.
  */
-export function ensureThemeGroupsFile(root: string, outputDir: string): ThemeGroupsFile {
+export function ensureThemeGroupsFile(
+    root: string,
+    outputDir: string,
+    ignore: readonly string[] = [],
+): ThemeGroupsFile {
+    const ignoreKey = JSON.stringify(ignore);
     const cached = cacheByRoot.get(root);
-    if (isCacheUsable(cached)) {
+    if (isCacheUsable(cached, ignoreKey)) {
         return { file: cached.file, watch: cached.watch };
     }
 
-    const { theme, scanned } = discoverProjectTheme(root);
+    const { theme, scanned } = discoverProjectTheme(root, [], ignore);
     const tokens = {
         colors: theme?.colors ?? [],
         textSizes: theme?.textSizes ?? [],
@@ -136,7 +146,12 @@ export function ensureThemeGroupsFile(root: string, outputDir: string): ThemeGro
     // generated module is never in the watch set. Watching a file this function
     // writes would invalidate the modules that import it on every regeneration,
     // which is the re-run cascade the loader avoids everywhere else.
-    const result: CachedGroups = { file, watch: scanned, signature: signatureOf(scanned) };
+    const result: CachedGroups = {
+        file,
+        watch: scanned,
+        signature: signatureOf(scanned),
+        ignore: ignoreKey,
+    };
     cacheByRoot.set(root, result);
     return { file, watch: scanned };
 }

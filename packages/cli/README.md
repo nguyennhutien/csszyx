@@ -110,6 +110,9 @@ npx csszyx next-prebuild
 npx csszyx next-watch
 ```
 
+`--tailwind-stylesheet` names the stylesheets the app loads; `--ignore` leaves a
+directory out of the source scan and of the Tailwind prefix vote.
+
 ### `audit`
 
 Lists what the build left in `dist/`: the first HTML and CSS file, each at its

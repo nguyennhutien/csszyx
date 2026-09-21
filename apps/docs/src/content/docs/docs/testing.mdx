@@ -177,7 +177,10 @@ prefix is not reused.
 Stylesheets that set different prefixes, or a Tailwind entry that does not
 compile, fail the transform with the same message the build prints. Name the
 stylesheets the app loads in `tailwindStylesheet` when a fixture or an old copy
-is the cause.
+is the cause. On Next.js the transformer follows the `--ignore` patterns that
+`csszyx next prebuild` or `csszyx next watch` recorded; a suite that runs before
+either, as on a fresh CI checkout, has no record to follow and needs
+`tailwindStylesheet`.
 
 <Aside type="tip" title="A whole-project pass, without a test runner">
 `npx @csszyx/cli check` runs the same lowering over every source file and

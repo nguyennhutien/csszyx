@@ -31,6 +31,21 @@ directory instead of the shell's.
 | `audit` | Reports the built asset sizes of a `dist/` directory. | [Below](#audit) |
 | `scan-collisions` | Finds class names in the project's own CSS that a mangled token could collide with. | [Below](#scan-collisions) |
 
+## `next-prebuild` and `next-watch`
+
+Both take the same options; `next-watch` adds `--debounce-ms`. Setup is in
+[Installation](/docs/installation/#nextjs-turbopack-setup).
+
+| Option | Effect |
+| --- | --- |
+| `--root <dir>` | The Next.js app root. Defaults to the working directory. |
+| `--tailwind-stylesheet <paths>` | The stylesheets the app loads, relative to `--root` and comma-separated, when the project also holds others. |
+| `--ignore <patterns>` | Comma-separated globs, relative to `--root`, left out of the source scan and of the Tailwind prefix vote. A pattern that matches a directory covers everything under it, so `legacy` and `legacy/**` read the same. A negated pattern (`!…`) is refused. |
+| `--cache-dir <dir>` | Cache directory relative to the root. Defaults to `.csszyx/cache`. |
+
+The Turbopack loader reads the `--ignore` patterns the command recorded, so
+they are not repeated in `next.config`.
+
 ## `audit`
 
 `csszyx audit` reads the `dist/` directory under the working directory and
