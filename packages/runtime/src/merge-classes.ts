@@ -225,7 +225,7 @@ function mergeClassToken(
         signatureTable !== undefined && hasOwn.call(signatureTable[0], original)
             ? signatureTable[0][original]
             : undefined;
-    const key = signature === undefined ? original : signature;
+    const key = signature ?? original;
     const row =
         signatureTable === undefined || signature === undefined
             ? undefined

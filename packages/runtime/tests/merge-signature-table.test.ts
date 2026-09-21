@@ -61,6 +61,14 @@ describe('szcn — build-generated merge signatures', () => {
         expect(szcn('p-4', '#0')).toBe('p-4 #0');
     });
 
+    it('uses signature zero for aliases without swallowing a numeric-looking unknown', () => {
+        registerMergeSignatures([{ first: 0, last: 0 }, [[0]]]);
+        for (const merge of [szcn, _szcn]) {
+            expect(merge('first', '0', 'last')).toBe('0 last');
+            expect(merge('unknown', 'first', 'unknown', 'last')).toBe('unknown last');
+        }
+    });
+
     it('treats inherited object names as unknown classes', () => {
         registerMergeSignatures([{ 'p-4': 0 }, [[0]]]);
         expect(szcn('constructor toString __proto__')).toBe('constructor toString __proto__');

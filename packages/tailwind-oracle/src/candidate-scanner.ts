@@ -42,7 +42,7 @@ export type CandidateScanner = (sources: readonly ScanSource[]) => string[];
 export function scanSourcesOf(compiled: CompiledSources, base: string): ScanSource[] {
     const { root } = compiled;
     if (root === 'none') return [...compiled.sources];
-    const start = root === null ? { base, pattern: '**/*' } : root;
+    const start = root ?? { base, pattern: '**/*' };
     return [{ ...start, negated: false }, ...compiled.sources];
 }
 

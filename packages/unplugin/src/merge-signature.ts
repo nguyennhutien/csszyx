@@ -312,7 +312,8 @@ function declarationContext(declaration: Declaration, candidate: string): string
     // Normalizing even one of several references could alias `.a .a` with
     // `.b .a`; removing `a` from the descendant then breaks both selectors.
     if (references === 1) path[anchorIndex] = ['selector', anchorSelector];
-    return JSON.stringify([path.reverse(), Boolean(declaration.important)]);
+    path.reverse();
+    return JSON.stringify([path, Boolean(declaration.important)]);
 }
 
 /**

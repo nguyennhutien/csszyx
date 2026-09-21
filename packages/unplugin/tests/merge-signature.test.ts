@@ -31,6 +31,19 @@ describe('custom-property identity', () => {
 });
 
 describe('mergeSignatureFromCss', () => {
+    it.each([1, 16, 128])('serializes %i ancestor contexts from outermost to innermost', depth => {
+        const ancestors = Array.from({ length: depth }, (_, index) => `parent-${index}`);
+        const opening = ancestors.map(name => `.${name} {`).join('');
+        const css = `${opening} .card { color: red; } ${'}'.repeat(depth)}`;
+        const expected = JSON.stringify([
+            [...ancestors.map(name => ['selector', `.${name}`]), ['selector', '&']],
+            false,
+        ]);
+        for (let repeat = 0; repeat < 3; repeat += 1) {
+            expect(mergeSignatureFromCss('card', css)?.rules[0]?.context).toBe(expected);
+        }
+    });
+
     it('does not normalize another class resembling an internal placeholder', () => {
         const direct = mergeSignatureFromCss('a', '.a.a { color: red; }');
         const nested = mergeSignatureFromCss('a', '.a.__csszyx_candidate__ { color: red; }');

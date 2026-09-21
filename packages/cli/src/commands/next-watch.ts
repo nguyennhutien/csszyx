@@ -10,9 +10,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { prepareNextStylesheetFacts, runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
-import type { NextSafelistMaterializeResult } from '@csszyx/unplugin/next-watcher';
 import {
     NEXT_WATCH_LOCK_COMMAND,
+    type NextSafelistMaterializeResult,
     type NextSafelistWatchEvent,
     NextSafelistWatcher,
 } from '@csszyx/unplugin/next-watcher';

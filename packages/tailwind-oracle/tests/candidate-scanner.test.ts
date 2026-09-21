@@ -42,6 +42,16 @@ describe('scanSourcesOf', () => {
             ),
         ).toEqual([{ base: '/app/styles', pattern: '../src', negated: false }, negated]);
     });
+
+    it('preserves an explicitly empty source path without mutating the compiled input', () => {
+        const root = Object.freeze({ base: '', pattern: '' });
+        const compiled = Object.freeze({ root, sources: Object.freeze([rule]) });
+        expect(scanSourcesOf(compiled, '/fallback')).toEqual([
+            { base: '', pattern: '', negated: false },
+            rule,
+        ]);
+        expect(compiled.root).toEqual({ base: '', pattern: '' });
+    });
 });
 
 describe('loadCandidateScanner', () => {
