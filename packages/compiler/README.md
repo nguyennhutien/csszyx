@@ -23,15 +23,15 @@ pnpm add @csszyx/compiler
 import { transform } from "@csszyx/compiler";
 
 // Transform sz object to className string
-const className = transform({ p: 4, bg: "red-500" });
-// Returns: "p-4 bg-red-500"
+const { className } = transform({ p: 4, bg: "red-500" });
+// className: "p-4 bg-red-500"
 
 // With variants
-const classNameWithVariants = transform({
+const { className: classNameWithVariants } = transform({
   p: 4,
   hover: { bg: "blue-500" },
 });
-// Returns: "p-4 hover:bg-blue-500"
+// classNameWithVariants: "p-4 hover:bg-blue-500"
 ```
 
 ### Recovery Token Generation
@@ -86,11 +86,23 @@ transform of the ONE engine, reachable as `transformRust` (native addon),
 `transformWasm` (the same engine compiled to WebAssembly) or
 `transformSource` (picks whichever this host can run).
 
-#### `transform(szProp: SzObject, prefix?: string, mangleMap?: Record<string, string>): TransformResult`
+#### `transform(szProp: SzObject, options?: TransformOptions): TransformResult`
 
 Pure compile from a sz object to `{ className, attributes }`. Browser-safe
 (no parser dependency); also exposed at `@csszyx/compiler/browser` for
 runtime consumers like `@csszyx/dynamic`.
+
+Pass `prefix` and `mangleMap` in the options object; both are optional. The
+previous positional calls now throw. For example, replace
+`transform(sz, "", map)` with `transform(sz, { mangleMap: map })`.
+
+```typescript
+import { transform, type TransformOptions } from "@csszyx/compiler";
+
+const options: TransformOptions = { prefix: "hover:" };
+transform({ p: 4 }, options).className; // "hover:p-4"
+transform({ p: 4 }, { mangleMap: { "p-4": "x" } }).className; // "x"
+```
 
 #### `transformSource(source: string, filename?: string, options?: TransformSourceCodeOptions): SourceTransformResult`
 

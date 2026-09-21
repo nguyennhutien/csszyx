@@ -1922,7 +1922,7 @@ function collectNamedGroupPeer(
 
 /** Appends transformed classes for one variant value. */
 function appendVariantClasses(value: SzValue, prefix: string, classes: string[]): void {
-    const result = transform(value as SzObject, prefix);
+    const result = transformNested(value as SzObject, prefix);
     if (result.className) classes.push(result.className);
 }
 
@@ -2030,7 +2030,7 @@ function handleHas(hasObj: SzObject, prefix: string): string[] {
         }
 
         const variantPrefix = `${prefix}has-[${selectorStr}]:`;
-        const result = transform(value as SzObject, variantPrefix);
+        const result = transformNested(value as SzObject, variantPrefix);
         if (result.className) {
             classes.push(result.className);
         }
@@ -2050,7 +2050,7 @@ function handleHas(hasObj: SzObject, prefix: string): string[] {
 function transformNotEntry(key: string, value: SzValue, prefix: string): string[] {
     if (key === 'supports' && typeof value === 'object') {
         return Object.entries(value as SzObject).flatMap(([condition, condValue]) => {
-            const result = transform(
+            const result = transformNested(
                 condValue as SzObject,
                 `${prefix}not-supports-[${condition}]:`,
             );
@@ -2058,7 +2058,7 @@ function transformNotEntry(key: string, value: SzValue, prefix: string): string[
         });
     }
 
-    const result = transform(value as SzObject, `${prefix}not-${getVariantPrefix(key)}:`);
+    const result = transformNested(value as SzObject, `${prefix}not-${getVariantPrefix(key)}:`);
     return result.className ? [result.className] : [];
 }
 
@@ -2099,7 +2099,7 @@ function handleData(dataObj: SzObject, prefix: string): string[] {
         }
 
         const variantPrefix = `${prefix}data-[${key}]:`;
-        const result = transform(value as SzObject, variantPrefix);
+        const result = transformNested(value as SzObject, variantPrefix);
         if (result.className) {
             classes.push(result.className);
         }
@@ -2133,7 +2133,7 @@ function handleAria(ariaObj: SzObject, prefix: string): string[] {
             variantPrefix = `${prefix}aria-[${key}]:`;
         }
 
-        const result = transform(value as SzObject, variantPrefix);
+        const result = transformNested(value as SzObject, variantPrefix);
         if (result.className) {
             classes.push(result.className);
         }
@@ -2158,7 +2158,7 @@ function handleSupports(supportsObj: SzObject, prefix: string): string[] {
         }
 
         const variantPrefix = `${prefix}supports-[${condition}]:`;
-        const result = transform(value as SzObject, variantPrefix);
+        const result = transformNested(value as SzObject, variantPrefix);
         if (result.className) {
             classes.push(result.className);
         }
@@ -2358,16 +2358,56 @@ export function formatSzWarnLocation(
     return line === undefined ? rel : `${rel}:${line}`;
 }
 
+/** What a caller can ask of {@link transform} besides the object itself. */
+export interface TransformOptions {
+    /** Variant prefix to prepend to emitted classes. */
+    prefix?: string;
+    /** Original→mangled class-name map. */
+    mangleMap?: Record<string, string>;
+}
+
+/** What `transform` says when it is called the way the previous shape took. */
+const POSITIONAL_CALL_MESSAGE = [
+    '[csszyx] transform takes options: the prefix and the mangle map are keys in one object.',
+    "  help: transform(sz, { prefix: 'hover:', mangleMap }) — a second argument that is not an options object is no longer read.",
+].join('\n');
+
 /**
- * Transform an sz object into a className string, bounding recursion depth
- * via {@link szTransformDepth}.
+ * Transform an sz object into a className string.
+ *
+ * The prefix and the mangle map were positional, so reaching the map meant
+ * writing the prefix it does not need: `transform(sz, '', map)`.
+ *
+ * @param szProp - the sz object to transform.
+ * @param options - the prefix to prepend and the mangle map to apply.
+ * @param rest - nothing; a third argument is what the previous shape took.
+ * @returns the emitted className.
+ * @throws {Error} When called the way the positional shape took.
+ */
+export function transform(
+    szProp: SzObject,
+    options: TransformOptions = {},
+    ...rest: never[]
+): TransformResult {
+    if (rest.length > 0 || typeof options !== 'object' || options === null) {
+        throw new Error(POSITIONAL_CALL_MESSAGE);
+    }
+    return transformNested(szProp, options.prefix ?? '', options.mangleMap);
+}
+
+/**
+ * Transform an sz object, bounding recursion depth via {@link szTransformDepth}.
+ *
+ * The lowering calls itself through this rather than through {@link transform}:
+ * the options object is what a caller writes, not what a recursion allocates
+ * per nested value.
  *
  * @param szProp - the sz object to transform.
  * @param prefix - variant prefix to prepend to emitted classes.
  * @param mangleMap - optional original→mangled class-name map.
  * @returns the emitted className.
  */
-export function transform(
+function transformNested(
     szProp: SzObject,
     prefix = '',
     mangleMap?: Record<string, string>,
@@ -4037,7 +4077,7 @@ function collectNestedVariant(
     const variantName = isArbitraryVariant(rawKey)
         ? normalizeArbitraryVariant(rawKey)
         : getVariantPrefix(rawKey);
-    const nestedResult = transform(value, `${prefix}${variantName}:`);
+    const nestedResult = transformNested(value, `${prefix}${variantName}:`);
     if (nestedResult.className) classes.push(nestedResult.className);
 }
 

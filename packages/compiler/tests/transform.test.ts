@@ -75,7 +75,7 @@ describe('transform', () => {
     });
 
     it('should preserve custom prefixes', () => {
-        const result = transform({ bg: 'blue-500' }, 'hover:');
+        const result = transform({ bg: 'blue-500' }, { prefix: 'hover:' });
         expect(result.className).toBe('hover:bg-blue-500');
     });
 });
@@ -177,5 +177,20 @@ describe('unknown property warnings', () => {
         });
         expect(warnSpy).not.toHaveBeenCalled();
         warnSpy.mockRestore();
+    });
+
+    it('mangles with the map it is given', () => {
+        const result = transform({ p: 4 }, { mangleMap: { 'p-4': 'x' } });
+
+        expect(result.className).toBe('x');
+    });
+
+    it('stops on a call written for the positional shape', () => {
+        // `transform(sz, '', map)` was the only way to reach the map, and a
+        // call that keeps it would otherwise read the prefix as options.
+        const call = transform as unknown as (a: unknown, b: unknown, c?: unknown) => unknown;
+
+        expect(() => call({ p: 4 }, 'hover:')).toThrow(/takes options.*prefix:/s);
+        expect(() => call({ p: 4 }, '', { 'p-4': 'x' })).toThrow(/takes options/);
     });
 });

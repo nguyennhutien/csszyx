@@ -204,7 +204,7 @@ function processElement(el: Element): void {
     try {
         const parsed = parseSzAttribute(rawValue) as SzObject;
         const mangleMap = window.__SZ_MANGLE_MAP__;
-        const { className } = transform(parsed, '', mangleMap);
+        const { className } = transform(parsed, { mangleMap });
 
         if (className) {
             className.split(' ').forEach(c => {
