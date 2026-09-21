@@ -54,9 +54,15 @@ export interface NextWatchCommandOptions {
  * as registered, long-paths every event it receives, and then asserts that
  * the event's name starts with the registered one — an assert, not an error,
  * so the first deleted folder under the watcher aborts the process with
- * nothing in any log (Node 24.16+ / libuv 1.52; the upstream fix is merged
- * and not yet in a Node release). Registering the canonical name is what
- * removes the mismatch, and it is what Vite does for the same reason.
+ * nothing in any log. Registering the canonical name is what removes the
+ * mismatch, and it is what Vite does for the same reason.
+ *
+ * Node 24.21.0 and 26.8.0 carry the upstream fix, which falls back to the
+ * name the event reported instead of aborting. They report `1.52.1` like the
+ * releases that abort, because the patch was taken without a libuv version
+ * bump, so the bundled version tells you nothing about it. Every other
+ * release this package supports still aborts: Node 22, 25, and 24.16 through
+ * 24.20.
  *
  * Windows only: on macOS the canonical name differs for the temp directory
  * (`/var` is a link to `/private/var`), and nothing there asserts, so the
