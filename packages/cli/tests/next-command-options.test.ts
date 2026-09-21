@@ -51,7 +51,7 @@ const SHARED: ReadonlyArray<readonly [string, string]> = [
     ],
     [
         '--ignore <patterns>',
-        'Glob patterns to leave out of the source scan and the Tailwind prefix vote (comma-separated)',
+        'Glob patterns to leave out of the source scan and the Tailwind prefix vote (comma-separated, repeatable)',
     ],
     [
         '--imported-static-sz',

@@ -40,7 +40,7 @@ Both take the same options; `next-watch` adds `--debounce-ms`. Setup is in
 | --- | --- |
 | `--root <dir>` | The Next.js app root. Defaults to the working directory. |
 | `--tailwind-stylesheet <paths>` | The stylesheets the app loads, relative to `--root` and comma-separated, when the project also holds others. |
-| `--ignore <patterns>` | Comma-separated globs, relative to `--root`, left out of the source scan and of the Tailwind prefix vote. A pattern that matches a directory covers everything under it, so `legacy` and `legacy/**` read the same. A negated pattern (`!…`) is refused. |
+| `--ignore <patterns>` | Comma-separated globs, relative to `--root`, left out of the source scan and of the Tailwind prefix vote. Repeatable. `legacy` and `legacy/**` both cover everything under the directory; `legacy/*` covers only what sits directly in it. A comma inside braces, brackets or parentheses belongs to the glob, as in `{legacy,old}/**`. A negated pattern (`!…`) is refused. |
 | `--cache-dir <dir>` | Cache directory relative to the root. Defaults to `.csszyx/cache`. |
 
 The Turbopack loader reads the `--ignore` patterns the command recorded, so
