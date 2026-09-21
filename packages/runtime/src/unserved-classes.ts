@@ -37,6 +37,10 @@ let _generation = 0;
  * re-running an unchanged build should not flush anyone's memo.
  *
  * @param names - Base class names, as written in source.
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function registerUnservedClasses(names: readonly string[]): void {
     const next = new Set(names);

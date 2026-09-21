@@ -151,6 +151,10 @@ export function szcn(...inputs: ClassInput[]): string {
  *
  * @param inputs - Class strings; falsy inputs (`false`/`null`/`undefined`/`''`) are skipped.
  * @returns The merged className string.
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function _szcn(...inputs: ClassInput[]): string {
     return mergeUncached(inputs, mangleBridge());

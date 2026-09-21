@@ -33,6 +33,10 @@ export { _szcn } from './merge-classes.js';
  * _szMerge({ p: 4 }, { p: 2, m: 4 })
  * // Returns: "p-2 m-4" (needs the lowering module for objects)
  * ```
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function _szMerge(...classes: SzInput[]): string {
     return _szcn(_sz(...classes));
@@ -59,6 +63,10 @@ export function _szMerge(...classes: SzInput[]): string {
  * _szPart({ p: 4 })           // "p-4"      (compiled; needs lowering)
  * _szPart(undefined)          // ""
  * ```
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function _szPart(value: unknown): string {
     return typeof value === 'string' ? value : _szMerge(value as SzInput);

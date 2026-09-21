@@ -59,6 +59,10 @@ function assertNotObject(cls: unknown, fnName: string): void {
  * _sz('p-4 bg-red-500') // passthrough
  * _sz('base', isActive && 'active') // conditional
  * ```
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function _sz(...classes: SzStringInput[]): string {
     if (classes.length === 1) {
@@ -101,6 +105,10 @@ export function _sz(...classes: SzStringInput[]): string {
  *
  * @param {...SzStringInput[]} classes - Pre-compiled class strings to merge
  * @returns {string} Merged className string with duplicate tokens removed
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function _szMerge(...classes: SzStringInput[]): string {
     const seen = new Set<string>();
@@ -129,6 +137,10 @@ export function _szMerge(...classes: SzStringInput[]): string {
  * @param a - first class string
  * @param b - second class string
  * @returns concatenated class string
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function _sz2(a: string, b: string): string {
     if (!a) {

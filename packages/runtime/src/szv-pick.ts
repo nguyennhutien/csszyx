@@ -44,6 +44,10 @@ export type SzvPickSelection = Readonly<Record<string, unknown>> | undefined;
  * @param table - Build-emitted table for one szv factory.
  * @param selection - Runtime variant selection (optional, like the factory's).
  * @returns The joined className string.
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function __szvPick(table: SzvCompiledTable, selection?: SzvPickSelection): string {
     if (process.env.NODE_ENV !== 'production') {
@@ -99,6 +103,10 @@ export function __szvPick(table: SzvCompiledTable, selection?: SzvPickSelection)
  * @param dimension - The single variant dimension being selected.
  * @param value - Runtime value for that dimension.
  * @returns The joined className string.
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function __szvPick1(table: SzvCompiledTable, dimension: string, value: unknown): string {
     if (process.env.NODE_ENV !== 'production') {

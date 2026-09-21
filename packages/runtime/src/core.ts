@@ -80,6 +80,10 @@ export type SzInput = string | object | SzInput[] | null | undefined | false;
  * _sz({ p: 4, bg: 'red-500' })
  * // Returns: "p-4 bg-red-500"
  * ```
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function _sz(...classes: SzInput[]): string {
     return szJoin(classes, 0);
@@ -247,6 +251,10 @@ function appendClassName(current: string, next: string): string {
  * _sz2('a', 'b')
  * // Returns: "a b"
  * ```
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function _sz2(a: string, b: string): string {
     if (!a) {
@@ -265,6 +273,10 @@ export function _sz2(a: string, b: string): string {
  * @param {string} b - Second className
  * @param {string} c - Third className
  * @returns {string} Combined className string
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function _sz3(a: string, b: string, c: string): string {
     let result = '';

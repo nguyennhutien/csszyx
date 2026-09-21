@@ -33,6 +33,10 @@ let warnedFormat = false;
  * @param options - What the build says about the table.
  * @param options.format - The format it was written in; omitted by a hand
  *        registration, which is read as this runtime's own.
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function registerMergeSignatures(
     next: MergeSignatureTable,
