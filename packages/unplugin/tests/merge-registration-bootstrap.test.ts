@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+    closeSync,
+    existsSync,
+    fstatSync,
+    mkdirSync,
+    openSync,
+    readFileSync,
+    symlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ensureMergeRegistration, mergeRegistrationPath } from '../src/merge-registration.js';
@@ -14,6 +23,16 @@ afterEach(() => {
     vi.mocked(existsSync).mockReset();
     removeTailwindProjects();
 });
+
+function registrationSnapshot(target: string) {
+    const fd = openSync(target, 'r');
+    try {
+        const { mtimeMs, ino } = fstatSync(fd);
+        return { source: readFileSync(fd, 'utf8'), mtimeMs, ino };
+    } finally {
+        closeSync(fd);
+    }
+}
 
 describe('merge registration bootstrap', () => {
     it('creates a missing registration despite a stale positive existence probe', () => {
@@ -33,11 +52,13 @@ describe('merge registration bootstrap', () => {
         });
         vi.mocked(existsSync).mockReturnValue(false);
         const target = mergeRegistrationPath(root);
-        const before = statSync(target);
+        const before = registrationSnapshot(target);
         for (let attempt = 0; attempt < count; attempt += 1) ensureMergeRegistration(root);
-        expect(readFileSync(target, 'utf8')).toBe('settled by prebuild');
-        expect(statSync(target).mtimeMs).toBe(before.mtimeMs);
-        expect(statSync(target).ino).toBe(before.ino);
+        // Reopen the path after bootstrap so replacement of the file is visible.
+        const after = registrationSnapshot(target);
+        expect(after.source).toBe('settled by prebuild');
+        expect(after.mtimeMs).toBe(before.mtimeMs);
+        expect(after.ino).toBe(before.ino);
     });
 
     it('does not follow a registration symlink to overwrite its destination', () => {
