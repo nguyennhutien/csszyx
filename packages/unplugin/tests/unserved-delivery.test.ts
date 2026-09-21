@@ -19,6 +19,7 @@ import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it } from 'vitest';
 import webpack from 'webpack';
 
+import { escapeJsonForInlineScript } from '../src/inline-script-escape.js';
 import { MERGE_REGISTRATION_FILE } from '../src/merge-registration.js';
 import { vitePlugin, webpackPlugin } from '../src/unplugin.js';
 import {
@@ -56,41 +57,45 @@ function project(prefix: string): string {
 }
 
 describe('vite lane', () => {
-    it('preserves signature data inside a webpack eval wrapper', async () => {
-        const root = project('csszyx-signature-eval-');
-        const plugins = vitePlugin({ production: { mangle: false } }) as unknown as Record<
-            string,
-            unknown
-        >[];
-        const call = callHooks(plugins);
-        await call('configResolved', { root, command: 'build' });
-        await call(
-            'transform',
-            // Two classes one of which covers the other: a class that shares
-            // nothing with another is left out of the table. And one Tailwind
-            // serves nothing for, so the unserved list is not empty: its quotes
-            // sit inside the same eval string.
-            `export const A = () => <div className="pb-2 p-4 ${AUTHORED}" />;`,
-            `${root}/src/A.tsx`,
-        );
-        const module = (await call('load', RESOLVED_UNSERVED_VIRTUAL_ID)) as string;
-        await call('renderStart');
-        const body = `${module.replace(/^import .*;$/m, '')}\n//# sourceURL=webpack-signatures`;
-        const code = `eval(${JSON.stringify(body)});`;
-        const rendered = (await call('renderChunk', code)) as { code: string };
-        let received: unknown;
-        let unserved: unknown;
-        runInNewContext(rendered.code, {
-            registerUnservedClasses(value: unknown) {
-                unserved = value;
-            },
-            registerMergeSignatures(value: unknown) {
-                received = value;
-            },
-        });
-        expect(unserved).toEqual(['tab-items-wrapper']);
-        expect(received).toEqual([{ 'p-4': 0, 'pb-2': 1 }, [[0, 1], [1]]]);
-    });
+    it.each(['webpack-signatures', '</script><script>bad()</script>'])(
+        'preserves signature data inside an eval wrapper with source URL %s',
+        async sourceUrl => {
+            const root = project('csszyx-signature-eval-');
+            const plugins = vitePlugin({ production: { mangle: false } }) as unknown as Record<
+                string,
+                unknown
+            >[];
+            const call = callHooks(plugins);
+            await call('configResolved', { root, command: 'build' });
+            await call(
+                'transform',
+                // Two classes one of which covers the other: a class that shares
+                // nothing with another is left out of the table. And one Tailwind
+                // serves nothing for, so the unserved list is not empty: its quotes
+                // sit inside the same eval string.
+                `export const A = () => <div className="pb-2 p-4 ${AUTHORED}" />;`,
+                `${root}/src/A.tsx`,
+            );
+            const module = (await call('load', RESOLVED_UNSERVED_VIRTUAL_ID)) as string;
+            await call('renderStart');
+            const body = `${module.replace(/^import .*;$/m, '')}\n//# sourceURL=webpack-${sourceUrl}`;
+            const code = `eval(${escapeJsonForInlineScript(JSON.stringify(body))});`;
+            expect(code).not.toContain('</script>');
+            const rendered = (await call('renderChunk', code)) as { code: string };
+            let received: unknown;
+            let unserved: unknown;
+            runInNewContext(rendered.code, {
+                registerUnservedClasses(value: unknown) {
+                    unserved = value;
+                },
+                registerMergeSignatures(value: unknown) {
+                    received = value;
+                },
+            });
+            expect(unserved).toEqual(['tab-items-wrapper']);
+            expect(received).toEqual([{ 'p-4': 0, 'pb-2': 1 }, [[0, 1], [1]]]);
+        },
+    );
 
     it.each([
         // A map of variants reaches `szcn` through a variable, so no census the

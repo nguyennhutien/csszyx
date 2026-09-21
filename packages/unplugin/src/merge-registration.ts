@@ -214,12 +214,13 @@ export function importMergeRegistration(
  * never re-run when the table appears; one that imports this file and
  * depends on it re-runs when the watch writes it. The write is exclusive, so
  * it never replaces a table a Next command wrote first.
+ * One exclusive create attempt, with constant empty-module bytes; the loader
+ * pays the filesystem calls even when another writer already owns the file.
  *
  * @param root - The project root.
  */
 export function ensureMergeRegistration(root: string): void {
     const target = mergeRegistrationPath(root, 'esm');
-    if (existsSync(target)) return;
     try {
         mkdirSync(path.dirname(target), { recursive: true });
         writeFileSync(target, createUnservedRuntimeModule([], [{}, []], 'esm'), {
