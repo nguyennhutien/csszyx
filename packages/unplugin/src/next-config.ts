@@ -51,7 +51,31 @@ export interface CsszyxTurbopackOptions {
      * `csszyx next watch` as `--tailwind-stylesheet`.
      */
     tailwindStylesheet?: string | string[];
+    /**
+     * The `turbopack` config this one extends: the caller's own `rules` and
+     * `resolveAlias` are kept and csszyx's are merged in beside them.
+     */
+    turbopack?: TurbopackConfig;
 }
+
+/** Keep runtime key validation exhaustive when the typed options change. */
+const OPTION_KEYS = new Set(
+    Object.keys({
+        parserMode: true,
+        safelistOutputFile: true,
+        config: true,
+        glob: true,
+        importedStaticSz: true,
+        tailwindStylesheet: true,
+        turbopack: true,
+    } satisfies Record<keyof CsszyxTurbopackOptions, true>),
+);
+
+/** What the helper says when Turbopack settings are outside the options object. */
+const LEGACY_CALL_MESSAGE = [
+    '[csszyx] csszyxTurbopack takes one object: the config to extend goes in it, under `turbopack`.',
+    '  help: csszyxTurbopack({ turbopack: <your config>, ...options }) — put loader options beside `turbopack`.',
+].join('\n');
 
 /** Minimal shape of a Next.js `turbopack` config block (only what we touch). */
 export interface TurbopackConfig {
@@ -64,23 +88,40 @@ export interface TurbopackConfig {
  * Merge csszyx's Turbopack loader rule + runtime alias into an existing
  * `turbopack` config, preserving the caller's own `rules` / `resolveAlias`.
  *
- * @param existing - the caller's current `turbopack` config (preserved + merged).
- * @param options - csszyx loader options.
+ * Everything is one object, loader options and the config to extend alike.
+ * With the config first and the options second, `TurbopackConfig` has an index
+ * signature, so `csszyxTurbopack({ tailwindStylesheet })` type-checked, mixed
+ * the option into the Turbopack config and left the loader without it.
+ * Validation visits only top-level option keys, O(k) for k keys; it never
+ * traverses nested config. This cost is paid once while evaluating Next config.
+ *
+ * @param options - csszyx loader options, and the config to extend.
+ * @param rest - nothing; a second argument is what the previous shape took.
  * @returns a `turbopack` config to assign to `next.config`'s `turbopack` field.
+ * @throws {Error} When passed extra arguments or unrecognized top-level options.
  *
  * @example
  * // next.config.mjs
  * import { csszyxTurbopack } from '@csszyx/unplugin/next';
  * export default {
- *   turbopack: csszyxTurbopack(
- *     { resolveAlias: { 'maplibre-gl': 'maplibre-gl/dist/maplibre-gl.js' } },
- *   ),
+ *   turbopack: csszyxTurbopack({
+ *     turbopack: { resolveAlias: { 'maplibre-gl': 'maplibre-gl/dist/maplibre-gl.js' } },
+ *     tailwindStylesheet: 'app/globals.css',
+ *   }),
  * };
  */
 export function csszyxTurbopack(
-    existing: TurbopackConfig = {},
     options: CsszyxTurbopackOptions = {},
+    // `never[]` rejects a second argument where the types are read, and the
+    // throw catches the call that reaches here anyway: a config written in
+    // plain JavaScript would otherwise lose that argument in silence, which
+    // is the failure this shape exists to remove.
+    ...rest: never[]
 ): TurbopackConfig {
+    if (rest.length > 0 || Object.keys(options).some(key => !OPTION_KEYS.has(key))) {
+        throw new Error(LEGACY_CALL_MESSAGE);
+    }
+    const existing = options.turbopack ?? {};
     const { glob = '*.tsx', parserMode = 'rust', safelistOutputFile } = options;
     // Must match `csszyx next prebuild`'s default (it bakes { mangleVars: false }
     // into the production manifest hash) or the loader's config-hash gate fails.
