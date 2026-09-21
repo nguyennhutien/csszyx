@@ -23,6 +23,9 @@ export {
 // The CLI records the stylesheet facts before it calls the prebuild, through the
 // same entry it already imports the prebuild from.
 export { prepareNextStylesheetFacts } from './next-stylesheet-facts.js';
+// The CLI prunes its source watcher with the matcher the loader filters its
+// stylesheet walk with, so one pattern reads the same in both.
+export { createRootIgnoreMatcher, type RootIgnoreMatcher } from './root-ignore-matcher.js';
 
 import {
     collectNextTransformMetadata,

@@ -1179,7 +1179,7 @@ Convert `className=` (JSX/TSX) or `class=` (HTML) to `sz=` props:
 ```bash
 npx @csszyx/cli migrate src/           # migrate all JSX/TSX/HTML under src/
 npx @csszyx/cli migrate --dry-run      # preview changes without writing files
-npx @csszyx/cli migrate --ignore "**/*.test.tsx,**/fixtures/**"
+npx @csszyx/cli migrate --ignore "**/*.test.tsx,**/{fixtures,mocks}/**"
 npx @csszyx/cli migrate --pattern "src/components/**/*.tsx"
 npx @csszyx/cli migrate --keys-only    # upgrade existing csszyx code: normalize sz KEYS only, leave className untouched
 ```

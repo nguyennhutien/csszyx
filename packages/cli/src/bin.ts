@@ -23,6 +23,8 @@ import { readFileSync } from 'node:fs';
 
 import cac, { type Command } from 'cac';
 
+import { splitGlobList } from './glob-list.js';
+
 /**
  * Normalize a repeatable CLI option to its array representation.
  *
@@ -83,7 +85,8 @@ interface CacNextPrebuildOptions {
     parserMode?: 'rust' | 'wasm';
     outputFile?: string;
     cacheDir?: string;
-    ignore?: string;
+    /** One text, or one per occurrence when the flag is repeated. */
+    ignore?: string | string[];
     importedStaticSz?: boolean;
     tailwindStylesheet?: string;
     json?: boolean;
@@ -95,7 +98,8 @@ interface CacNextWatchOptions {
     parserMode?: 'rust' | 'wasm';
     outputFile?: string;
     cacheDir?: string;
-    ignore?: string;
+    /** One text, or one per occurrence when the flag is repeated. */
+    ignore?: string | string[];
     importedStaticSz?: boolean;
     tailwindStylesheet?: string;
     debounceMs?: number | string;
@@ -127,7 +131,7 @@ async function runNextPrebuildCommand(
         outputFile: options.outputFile,
         cacheDir: options.cacheDir,
         pattern,
-        extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
+        extraIgnore: splitGlobList(options.ignore),
         importedStaticSz: options.importedStaticSz,
         tailwindStylesheet: splitList(options.tailwindStylesheet),
         json: options.json,
@@ -148,7 +152,7 @@ async function runNextWatchCommand(
         outputFile: options.outputFile,
         cacheDir: options.cacheDir,
         pattern,
-        extraIgnore: options.ignore ? String(options.ignore).split(',') : undefined,
+        extraIgnore: splitGlobList(options.ignore),
         importedStaticSz: options.importedStaticSz,
         tailwindStylesheet: splitList(options.tailwindStylesheet),
         debounceMs: options.debounceMs,
@@ -285,7 +289,7 @@ cli.command('migrate [dir]', 'Convert Tailwind className to sz prop')
     .action(async (dir, options) => {
         await (await import('./commands/migrate.js')).migrate({
             dryRun: options.dryRun,
-            ignore: options.ignore ? options.ignore.split(',') : undefined,
+            ignore: splitGlobList(options.ignore),
             pattern: options.pattern,
             cwd: dir || options.cwd,
             braces: options.braces,
@@ -319,7 +323,10 @@ const NEXT_SAFELIST_OPTIONS: ReadonlyArray<readonly [flag: string, description: 
         '--tailwind-stylesheet <paths>',
         'Stylesheets the app loads, relative to --root and comma-separated, when the project also holds others',
     ],
-    ['--ignore <patterns>', 'Extra glob patterns to ignore (comma-separated)'],
+    [
+        '--ignore <patterns>',
+        'Glob patterns to leave out of the source scan and the Tailwind prefix vote (comma-separated, repeatable)',
+    ],
     [
         '--imported-static-sz',
         'Compile a plain exported sz object into the modules that import it (default)',

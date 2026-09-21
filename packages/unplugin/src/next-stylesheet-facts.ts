@@ -40,6 +40,7 @@ import {
     styleModelError,
     styleModelWarning,
 } from './project-style-model.js';
+import { createRootIgnoreMatcher } from './root-ignore-matcher.js';
 import { sortStrings } from './sort.js';
 import { collectSpecifierAliases } from './specifier-aliases.js';
 import { discoverProjectTheme } from './theme-discovery.js';
@@ -58,9 +59,15 @@ export interface NextStylesheetFactsEntry {
 
 /** What `csszyx next prebuild` and `next watch` record for the loader. */
 export interface NextStylesheetFactsRecord {
-    schema: 2;
+    schema: 3;
     /** The app root the stylesheets were read from. */
     root: string;
+    /**
+     * The patterns the command was told to ignore, relative to the root. A
+     * reader walks the project itself and leaves the same paths out, or it
+     * would find a stylesheet the record was not written with and refuse it.
+     */
+    ignore: string[];
     /** What the stylesheets settled, or null when none reaches Tailwind. */
     facts: StylesheetFacts | null;
     /** Every stylesheet looked at, so a reader can tell when one was added. */
@@ -95,17 +102,23 @@ export function resolveNextStylesheetFactsPath(cacheDir: string): string {
  * @param input.root - The project root.
  * @param input.cacheDir - The directory containing recorded stylesheet facts.
  * @param input.tailwindStylesheet - Explicit stylesheet paths, when configured.
+ * @param input.ignore - The caller's own ignore patterns; the recorded ones
+ *        when it has none.
  * @returns A deterministic content hash of the facts file and candidates.
  */
 export function failedNextClassPrefixInputsStamp(input: {
     root: string;
     cacheDir: string;
     tailwindStylesheet: readonly string[];
+    ignore?: readonly string[];
 }): string {
     const candidates =
         input.tailwindStylesheet.length > 0
             ? input.tailwindStylesheet.map(file => path.resolve(input.root, file))
-            : discoverProjectTheme(input.root).scanned;
+            : walkedStylesheets(
+                  input.root,
+                  input.ignore ?? recordedIgnore(input.cacheDir, input.root),
+              );
     const files = sortStrings([resolveNextStylesheetFactsPath(input.cacheDir), ...candidates]);
     const hash = createHash('sha256');
     for (const file of files) {
@@ -200,8 +213,10 @@ function isFactsRecord(value: unknown): value is NextStylesheetFactsRecord {
     if (typeof value !== 'object' || value === null) return false;
     const record = value as Partial<Record<keyof NextStylesheetFactsRecord, unknown>>;
     return (
-        record.schema === 2 &&
+        record.schema === 3 &&
         typeof record.root === 'string' &&
+        Array.isArray(record.ignore) &&
+        record.ignore.every(pattern => typeof pattern === 'string') &&
         Array.isArray(record.candidates) &&
         record.candidates.every(file => typeof file === 'string') &&
         Array.isArray(record.entries) &&
@@ -266,7 +281,11 @@ function readText(file: string): string | null {
  * @param input.tailwindStylesheet - The stylesheets the app loads, when named.
  * @param input.extraCandidates - Stylesheets the walk cannot find, such as one
  *        a source file imports from a package.
+ * @param input.ignore - Glob patterns, relative to the root, whose stylesheets
+ *        are left out of the walk; the recorded ones when not given.
  * @param input.setting - What messages call the setting that names the stylesheets.
+ * @param input.ignoreSetting - What messages call the setting that carries
+ *        `ignore`, on a lane that has one.
  * @param input.writeOptions - Atomic write options.
  * @returns The record, where it lives, and any warning to print.
  */
@@ -275,7 +294,9 @@ export async function writeNextStylesheetFacts(input: {
     cacheDir: string;
     tailwindStylesheet?: readonly string[];
     extraCandidates?: readonly string[];
+    ignore?: readonly string[];
     setting?: string;
+    ignoreSetting?: string;
     writeOptions?: AtomicWriteOptions;
 }): Promise<{
     record: NextStylesheetFactsRecord;
@@ -291,17 +312,26 @@ export async function writeNextStylesheetFacts(input: {
     if (missing.length > 0) {
         throw new Error(missingTailwindStylesheetMessage(missing, input.root, input.setting));
     }
+    // A writer with no patterns of its own, such as the jest lane, keeps the
+    // ones the command recorded: writing none would bring the ignored entries
+    // back into the vote on the next read.
+    const ignore = canonicalIgnore(input.ignore ?? recordedIgnore(input.cacheDir, input.root));
+    const { ignoresFile } = createRootIgnoreMatcher(input.root, ignore);
     // A bundler build reaches stylesheets through JavaScript imports that a
     // walk cannot see. The ones it recorded are kept while they exist, or this
-    // writer would drop them and record the prefix they set as none.
+    // writer would drop them and record the prefix they set as none. A
+    // stylesheet this run's sources import stays even under an ignored path:
+    // the import is evidence the app loads it.
     const candidates =
         listed.length > 0
             ? listed.map(entry => entry.absolute)
             : [
                   ...new Set([
-                      ...discoverProjectTheme(input.root).scanned,
+                      ...walkedStylesheets(input.root, ignore),
                       ...(input.extraCandidates ?? []),
-                      ...recordedCandidates(input.cacheDir, input.root),
+                      ...recordedCandidates(input.cacheDir, input.root).filter(
+                          file => !ignoresFile(file),
+                      ),
                   ]),
               ];
     const model = await openProjectStyleModel(
@@ -309,7 +339,7 @@ export async function writeNextStylesheetFacts(input: {
         candidates,
         collectSpecifierAliases(input.root),
     );
-    const problem = styleModelError(model, input.root, input.setting);
+    const problem = styleModelError(model, input.root, input.setting, input.ignoreSetting);
     if (problem !== null) throw new Error(problem);
 
     const { record, path: file } = recordStylesheetFacts(
@@ -318,6 +348,7 @@ export async function writeNextStylesheetFacts(input: {
         input.cacheDir,
         candidates,
         input.writeOptions,
+        ignore,
     );
     return {
         record,
@@ -325,6 +356,47 @@ export async function writeNextStylesheetFacts(input: {
         warning: styleModelWarning(model, input.root, input.setting),
         model,
     };
+}
+
+/**
+ * An ignore list in the one form it is recorded and compared in.
+ *
+ * Negated patterns are refused, so every pattern only adds paths and the order
+ * they were given in means nothing. Recorded as given, `a,b` and `b,a` would
+ * read as two configurations and each reader would refuse the other's facts.
+ *
+ * @param ignore - The patterns as a caller gave them.
+ * @returns The distinct patterns, sorted.
+ */
+function canonicalIgnore(ignore: readonly string[]): string[] {
+    return sortStrings(new Set(ignore));
+}
+
+/**
+ * The ignore patterns an earlier write for this project recorded.
+ *
+ * They describe the command, not the stylesheets, so a record whose
+ * stylesheets have since changed still answers.
+ *
+ * @param cacheDir - The csszyx cache directory for the app.
+ * @param root - The Next app root.
+ * @returns The patterns; empty when no record for this root is there.
+ */
+function recordedIgnore(cacheDir: string, root: string): string[] {
+    const read = readFactsRecord(cacheDir);
+    if (!read.ok || path.resolve(read.record.root) !== path.resolve(root)) return [];
+    return read.record.ignore;
+}
+
+/**
+ * The stylesheets a walk of the project finds outside the ignored paths.
+ *
+ * @param root - The Next app root.
+ * @param ignore - Patterns to leave out, relative to the root.
+ * @returns Absolute stylesheet paths.
+ */
+function walkedStylesheets(root: string, ignore: readonly string[]): string[] {
+    return discoverProjectTheme(root, [], ignore).scanned;
 }
 
 /**
@@ -352,6 +424,8 @@ function recordedCandidates(cacheDir: string, root: string): string[] {
  * @param cacheDir - The csszyx cache directory for that project.
  * @param candidates - Every stylesheet the model was opened over.
  * @param writeOptions - Atomic write options.
+ * @param ignore - The patterns the writer walked with; the ones already
+ *        recorded for this project when the writer has none of its own.
  * @returns The record and where it lives.
  */
 export function recordStylesheetFacts(
@@ -360,6 +434,7 @@ export function recordStylesheetFacts(
     cacheDir: string,
     candidates: readonly string[],
     writeOptions?: AtomicWriteOptions,
+    ignore?: readonly string[],
 ): { record: NextStylesheetFactsRecord; path: string } {
     const entries = model.entries.map(entry => {
         const text = readFileSync(entry.file, 'utf8');
@@ -379,8 +454,9 @@ export function recordStylesheetFacts(
         entries.push({ file, sha256: sha256Of(readFileSync(file, 'utf8')), dependency: true });
     }
     const record: NextStylesheetFactsRecord = {
-        schema: 2,
+        schema: 3,
         root,
+        ignore: canonicalIgnore(ignore ?? recordedIgnore(cacheDir, root)),
         facts: model.facts,
         candidates: [...candidates],
         entries,
@@ -401,11 +477,13 @@ export function recordStylesheetFacts(
  *        see; facts written for another root, or without one of these, are stale.
  * @param expected.root - The reader's project root.
  * @param expected.candidates - The stylesheets the reader would read.
+ * @param expected.ignore - The reader's own ignore patterns, when it was
+ *        configured with them; facts written under other patterns are stale.
  * @returns The record, or why it cannot be used.
  */
 export function readNextStylesheetFacts(
     cacheDir: string,
-    expected?: { root: string; candidates: readonly string[] },
+    expected?: { root: string; candidates: readonly string[]; ignore?: readonly string[] },
 ): { ok: true; record: NextStylesheetFactsRecord } | { ok: false; reason: string } {
     const read = readFactsRecord(cacheDir);
     if (!read.ok) return read;
@@ -415,6 +493,16 @@ export function readNextStylesheetFacts(
             return {
                 ok: false,
                 reason: `the stylesheet facts were written for ${record.root}, not this project`,
+            };
+        }
+        if (
+            expected.ignore !== undefined &&
+            canonicalIgnore(expected.ignore).join('\0') !==
+                canonicalIgnore(record.ignore).join('\0')
+        ) {
+            return {
+                ok: false,
+                reason: 'the stylesheet facts were written under other ignore patterns',
             };
         }
         const recorded = new Set(record.candidates);
@@ -438,7 +526,10 @@ export function readNextStylesheetFacts(
 }
 
 /** The walk each root was last given, and the facts file it was taken against. */
-const walkedCandidates = new Map<string, { stamp: string | null; files: string[] }>();
+const walkedCandidates = new Map<
+    string,
+    { stamp: string | null; files: string[]; ignore: string[] }
+>();
 
 /**
  * The stylesheets a walk of the project finds, walked again only when the
@@ -453,6 +544,32 @@ const walkedCandidates = new Map<string, { stamp: string | null; files: string[]
  * @returns Absolute stylesheet paths.
  */
 export function projectStylesheetCandidates(root: string, cacheDir: string): string[] {
+    return projectStylesheetWalk(root, cacheDir).files;
+}
+
+/**
+ * The ignore patterns recorded for a project, read again only when the facts
+ * file changes.
+ *
+ * @param root - The Next app root.
+ * @param cacheDir - The csszyx cache directory for that app.
+ * @returns The patterns; empty when no record for this root is there.
+ */
+export function recordedStylesheetIgnore(root: string, cacheDir: string): string[] {
+    return projectStylesheetWalk(root, cacheDir).ignore;
+}
+
+/**
+ * The walk a root was last given, taken again only when the facts file changes.
+ *
+ * @param root - The Next app root.
+ * @param cacheDir - The csszyx cache directory for that app.
+ * @returns The stylesheets found and the patterns they were found under.
+ */
+function projectStylesheetWalk(
+    root: string,
+    cacheDir: string,
+): { files: string[]; ignore: string[] } {
     let stamp: string | null;
     try {
         const stat = statSync(resolveNextStylesheetFactsPath(cacheDir));
@@ -461,10 +578,11 @@ export function projectStylesheetCandidates(root: string, cacheDir: string): str
         stamp = null;
     }
     const walked = walkedCandidates.get(root);
-    if (walked?.stamp === stamp) return walked.files;
-    const files = discoverProjectTheme(root).scanned;
-    walkedCandidates.set(root, { stamp, files });
-    return files;
+    if (walked?.stamp === stamp) return walked;
+    const ignore = recordedIgnore(cacheDir, root);
+    const entry = { stamp, files: walkedStylesheets(root, ignore), ignore };
+    walkedCandidates.set(root, entry);
+    return entry;
 }
 
 /** The prefix a Next lane lowers with, and the files that decided it. */
@@ -486,6 +604,8 @@ export type NextClassPrefix =
  * @param input.candidates - The stylesheets a walk found, when the caller has
  *        walked already; the project is walked when neither these nor
  *        `tailwindStylesheet` are given.
+ * @param input.ignore - The caller's own ignore patterns, for a lane
+ *        configured with them; the recorded ones otherwise.
  * @returns The prefix and its dependencies, or why it is not known yet.
  */
 export function resolveNextClassPrefix(input: {
@@ -493,12 +613,23 @@ export function resolveNextClassPrefix(input: {
     cacheDir: string;
     tailwindStylesheet: readonly string[];
     candidates?: readonly string[];
+    ignore?: readonly string[];
 }): NextClassPrefix {
     const factsPath = resolveNextStylesheetFactsPath(input.cacheDir);
     const listed = input.tailwindStylesheet.map(file => path.resolve(input.root, file));
     const candidates =
-        listed.length > 0 ? listed : (input.candidates ?? discoverProjectTheme(input.root).scanned);
-    const read = readNextStylesheetFacts(input.cacheDir, { root: input.root, candidates });
+        listed.length > 0
+            ? listed
+            : (input.candidates ??
+              walkedStylesheets(
+                  input.root,
+                  input.ignore ?? recordedIgnore(input.cacheDir, input.root),
+              ));
+    const read = readNextStylesheetFacts(input.cacheDir, {
+        root: input.root,
+        candidates,
+        ignore: input.ignore,
+    });
     if (read.ok) {
         const decided = read.record.entries.filter(entry => entry.dependency);
         return {
@@ -542,7 +673,11 @@ export function unreadNextPrefixMessage(root: string, reason: string, lane: stri
  * @param input.tailwindStylesheet - The stylesheets the app loads, when named.
  * @param input.files - The app's source files, whose stylesheet imports are
  *        read too: a stylesheet imported from a package is not on the walk.
+ * @param input.ignore - Glob patterns the command was told to ignore, relative
+ *        to the root; the recorded ones when not given.
  * @param input.setting - What messages call the setting that names the stylesheets.
+ * @param input.ignoreSetting - What messages call the setting that carries
+ *        `ignore`, on a lane that has one.
  * @returns The record, where it lives, and any warning to print.
  */
 export async function prepareNextStylesheetFacts(input: {
@@ -551,7 +686,9 @@ export async function prepareNextStylesheetFacts(input: {
     cacheDir?: string;
     tailwindStylesheet?: readonly string[];
     files?: readonly string[];
+    ignore?: readonly string[];
     setting?: string;
+    ignoreSetting?: string;
 }): Promise<{
     record: NextStylesheetFactsRecord;
     path: string;
@@ -569,6 +706,8 @@ export async function prepareNextStylesheetFacts(input: {
         cacheDir: resolveNextAppCacheDir(root, input.cacheDir),
         tailwindStylesheet: input.tailwindStylesheet,
         extraCandidates: stylesheetsImportedBy(sources, collectSpecifierAliases(root)),
+        ignore: input.ignore,
         setting: input.setting,
+        ignoreSetting: input.ignoreSetting,
     });
 }

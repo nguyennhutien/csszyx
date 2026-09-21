@@ -274,6 +274,14 @@ stylesheets the app does not load (fixtures, old copies), list the real ones in
 `csszyx next prebuild` and `csszyx next watch`, and
 `csszyxTurbopack({}, { tailwindStylesheet })` for the Turbopack loader.
 
+On Next.js the other app's directory can be left out instead:
+`--ignore <patterns>` on `csszyx next prebuild` and `csszyx next watch` leaves
+the stylesheets under it out of the prefix vote as well as its sources. The
+command writes the patterns into `.csszyx/cache/stylesheet-facts.json` and the
+Turbopack loader reads them from there, so `next.config` repeats nothing. A
+stylesheet under an ignored directory still votes when one of the scanned
+sources imports it: the import is evidence the app loads it.
+
 `important` on the import line is not supported yet, and the build warns about it.
 
 ## Plugin Options

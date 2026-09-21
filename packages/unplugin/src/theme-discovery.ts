@@ -13,6 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { createRootIgnoreMatcher, type RootIgnoreMatcher } from './root-ignore-matcher.js';
 import { mergeThemes, type ParsedTheme, parseThemeBlocks } from './theme-scanner.js';
 
 /**
@@ -68,8 +69,10 @@ function normalize(value: string): string {
  *
  * @param dir - Directory to walk.
  * @param out - Accumulator for absolute file paths.
+ * @param ignore - What the caller left out. A directory it covers is never
+ * opened: skipping another app should cost nothing.
  */
-function walkCss(dir: string, out: string[]): void {
+function walkCss(dir: string, out: string[], ignore: RootIgnoreMatcher): void {
     let entries: fs.Dirent[];
     try {
         entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -77,14 +80,19 @@ function walkCss(dir: string, out: string[]): void {
         return;
     }
     for (const entry of entries) {
+        const entryPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-            if (!THEME_SCAN_IGNORE_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
-                walkCss(path.join(dir, entry.name), out);
+            if (
+                !THEME_SCAN_IGNORE_DIRS.has(entry.name) &&
+                !entry.name.startsWith('.') &&
+                !ignore.coversTree(entryPath)
+            ) {
+                walkCss(entryPath, out, ignore);
             }
             continue;
         }
-        if (entry.name.endsWith('.css')) {
-            out.push(path.join(dir, entry.name));
+        if (entry.name.endsWith('.css') && !ignore.ignoresFile(entryPath)) {
+            out.push(entryPath);
         }
     }
 }
@@ -95,19 +103,23 @@ function walkCss(dir: string, out: string[]): void {
  * @param rootDir - Project root to walk.
  * @param extraDirs - Directories outside the root to include as well; ones
  * already inside the root are skipped so their files are not read twice.
+ * @param ignore - Glob patterns, relative to the root, for paths whose
+ * stylesheets are another app's and are left out.
  * @returns The merged tokens and the files they came from.
  */
 export function discoverProjectTheme(
     rootDir: string,
     extraDirs: readonly string[] = [],
+    ignore: readonly string[] = [],
 ): ThemeDiscovery {
     const cssFiles: string[] = [];
-    walkCss(rootDir, cssFiles);
+    const matcher = createRootIgnoreMatcher(rootDir, ignore);
+    walkCss(rootDir, cssFiles, matcher);
     const normalizedRoot = normalize(rootDir);
     for (const dir of extraDirs) {
         const normalized = normalize(dir);
         if (normalized === normalizedRoot || normalized.startsWith(`${normalizedRoot}/`)) continue;
-        walkCss(dir, cssFiles);
+        walkCss(dir, cssFiles, matcher);
     }
 
     const themes: ParsedTheme[] = [];

@@ -144,6 +144,7 @@
     "@csszyx/svelte-adapter": "workspace:*",
     "@csszyx/types": "workspace:*",
     "@csszyx/vue-adapter": "workspace:*",
+    "minimatch": "^10.2.6",
     "postcss": "^8.5.28",
     "postcss-selector-parser": "^7.1.6",
     "postcss-value-parser": "^4.2.0",

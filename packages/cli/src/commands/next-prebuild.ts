@@ -68,7 +68,11 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             cacheDir: options.cacheDir,
             tailwindStylesheet: options.tailwindStylesheet,
             files: matches,
+            // Only the user's patterns: the built-in ones cover `node_modules`,
+            // where a package stylesheet that a source file imports lives.
+            ignore: options.extraIgnore ?? [],
             setting: 'the `--tailwind-stylesheet` flag',
+            ignoreSetting: 'the `--ignore` flag',
         });
         if (facts.warning !== null) console.warn(facts.warning);
 

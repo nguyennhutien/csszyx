@@ -131,12 +131,15 @@ export const TAILWIND_STYLESHEET_OPTION = 'the csszyx `tailwindStylesheet` optio
  * @param root - Project root, so the message names files the way the author does.
  * @param setting - What the help calls the setting that names the stylesheets:
  *        a command-line lane takes a flag where a bundler takes an option.
+ * @param ignoreSetting - What the help calls the setting that leaves a
+ *        directory out, on a lane that has one; other lanes are not told of it.
  * @returns The message, or null when the stylesheets agree.
  */
 export function styleModelError(
     model: ProjectStyleModel,
     root: string,
     setting: string = TAILWIND_STYLESHEET_OPTION,
+    ignoreSetting?: string,
 ): string | null {
     // First: a broken entry leaves the facts of the others unreliable, so a
     // disagreement between those is not the thing to fix.
@@ -168,7 +171,9 @@ export function styleModelError(
     return [
         '[csszyx] your Tailwind entries set different prefixes, so no class name csszyx emits can be served by all of them:',
         ...named.map(entry => `  ${entry.file.padEnd(width)}   ${entry.prefix}`),
-        `  help: give every entry the same \`@import "tailwindcss"\` line, or list the stylesheets this build loads in ${setting}.`,
+        ignoreSetting === undefined
+            ? `  help: give every entry the same \`@import "tailwindcss"\` line, or list the stylesheets this build loads in ${setting}.`
+            : `  help: give every entry the same \`@import "tailwindcss"\` line, list the stylesheets this build loads in ${setting}, or leave another app's directory out with ${ignoreSetting}.`,
         '  note: the build stopped before transforming any module; nothing was written.',
     ].join('\n');
 }
