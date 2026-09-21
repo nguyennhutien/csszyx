@@ -63,7 +63,6 @@ export {
 } from './mangle-registry.js';
 // Mangle-aware className merge (last-wins override) for layered components
 export { _szcn, szcn, szDecode } from './merge-classes.js';
-
 export {
     clearSzcnGroups,
     getSzcnGroups,
@@ -71,6 +70,11 @@ export {
     type SzcnThemeGroups,
     setSzcnGroups,
 } from './merge-groups.js';
+export {
+    MERGE_TABLE_FORMAT,
+    type MergeSignatureTable,
+    registerMergeSignatures,
+} from './merge-signatures.js';
 // Box-model class routing + category-aware toolkit
 export {
     type BoxRole,

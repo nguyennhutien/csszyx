@@ -2,15 +2,17 @@
 import { createHash } from 'node:crypto';
 
 import { type SourceTransformResult, transform } from '@csszyx/compiler';
+import { collectMergeCallClassNames } from './authored-class-scanner.js';
 import type { NextSafelistShardInput } from './next-safelist-state.js';
 import { sortStrings } from './sort.js';
-
 /** Metadata extracted from one compiler source transform result. */
 export interface NextTransformMetadata {
     sourcePath: string;
     sourceHash: string;
     classes: string[];
     rawClassNames: string[];
+    /** String literals written inside `szcn(...)` calls, as the merge will see them. */
+    mergeLiterals: string[];
     recoveryTokenCount: number;
     cssVariableCount: number;
 }
@@ -35,6 +37,7 @@ export function collectNextTransformMetadata(
         sourceHash: createHash('sha256').update(source).digest('hex'),
         classes: sortStrings(classes),
         rawClassNames: sortStrings(result.rawClassNames),
+        mergeLiterals: sortStrings(collectMergeCallClassNames(source)),
         recoveryTokenCount: result.recoveryTokens.size,
         cssVariableCount: result.cssVariableMap.size,
     };
@@ -56,6 +59,8 @@ export function createNextSafelistShardFromMetadata(
         sourcePath: metadata.sourcePath,
         sourceHash: metadata.sourceHash,
         classes: metadata.classes,
+        authoredClasses: metadata.rawClassNames,
+        mergeLiterals: metadata.mergeLiterals,
     };
 }
 

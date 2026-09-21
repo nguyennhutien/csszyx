@@ -76,6 +76,9 @@ describe('materializeNextSafelist over a polluted shards directory', () => {
         const paths = resolveNextSafelistStatePaths(tempRoot());
         const result = materializeNextSafelist(paths, { retryDelayMs: 0 });
         expect(result).toEqual({
+            classes: [],
+            authoredClasses: [],
+            mergeLiterals: [],
             classCount: 0,
             sourceCount: 0,
             tombstonedSourceCount: 0,

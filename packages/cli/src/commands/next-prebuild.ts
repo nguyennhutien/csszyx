@@ -14,6 +14,7 @@ import { prepareNextStylesheetFacts, runNextPrebuild } from '@csszyx/unplugin/ne
 import fg from 'fast-glob';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import { colors, icons } from '../utils/terminal-ui.js';
+import { tryWriteMergeRegistration } from './next-merge-registration.js';
 import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
 /** Options accepted by the `next-prebuild` CLI command. */
@@ -87,6 +88,18 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             // @csszyx/compiler versions so the manifest's generation identity
             // tracks the engine that actually runs the transform.
         });
+
+        // The Turbopack loader cannot compile the project's CSS, so the merge
+        // table and the unserved list it registers are written here, from the
+        // census the shards carry and the design system read above.
+        const registrationWarning = tryWriteMergeRegistration({
+            root,
+            model: facts.model,
+            classes: result.cycle.materialize.classes,
+            authoredClasses: result.cycle.materialize.authoredClasses,
+            mergeLiterals: result.cycle.materialize.mergeLiterals,
+        });
+        if (registrationWarning !== null) console.warn(registrationWarning);
 
         reportPrebuildSuccess(options.json, root, mode, result);
         return 0;

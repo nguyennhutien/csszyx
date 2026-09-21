@@ -17,6 +17,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { szcn } from '../src/merge-classes.js';
 import { _resetSzcnGroups, registerSzcnGroups } from '../src/merge-groups.js';
+import { sameGroup } from './helpers/same-group.js';
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
 
 afterEach(() => {
     _resetSzcnGroups();
@@ -82,23 +86,35 @@ describe('a colour never deletes a width on stroke', () => {
 });
 
 describe('a colour never deletes a gradient stop position', () => {
-    it.each(['from', 'via', 'to'])('keeps position and colour apart on %s-*', prefix => {
-        expect(szcn(`${prefix}-10%`, `${prefix}-red-500`)).toBe(`${prefix}-10% ${prefix}-red-500`);
+    // Spelled out rather than built from the prefix: the table these suites
+    // register is generated from the class names written in them.
+    it.each([
+        ['from-10%', 'from-red-500'],
+        ['via-10%', 'via-red-500'],
+        ['to-10%', 'to-red-500'],
+    ])('keeps position and colour apart: %s %s', (position, colour) => {
+        expect(szcn(position, colour)).toBe(`${position} ${colour}`);
     });
 
-    it.each(['from', 'via', 'to'])('merges within each group on %s-*', prefix => {
-        expect(szcn(`${prefix}-10%`, `${prefix}-90%`)).toBe(`${prefix}-90%`);
-        expect(szcn(`${prefix}-red-500`, `${prefix}-blue-500`)).toBe(`${prefix}-blue-500`);
+    it.each([
+        ['from-10%', 'from-90%'],
+        ['via-10%', 'via-90%'],
+        ['to-10%', 'to-90%'],
+        ['from-red-500', 'from-blue-500'],
+        ['via-red-500', 'via-blue-500'],
+        ['to-red-500', 'to-blue-500'],
+    ])('merges within each group: %s then %s', (earlier, later) => {
+        expect(szcn(earlier, later)).toBe(later);
     });
 });
 
 describe('custom theme tokens reach the new prefixes too', () => {
     it('treats a registered colour token as a colour, not a size', () => {
         registerSzcnGroups({ colors: ['brand'] });
-        expect(szcn('shadow-lg', 'shadow-brand')).toBe('shadow-lg shadow-brand');
-        expect(szcn('shadow-brand', 'shadow-accent')).toBe('shadow-brand shadow-accent');
+        expect(sameGroup('shadow', 'lg', 'brand')).toBe(false);
+        expect(sameGroup('shadow', 'brand', 'accent')).toBe(false);
         registerSzcnGroups({ colors: ['accent'] });
-        expect(szcn('shadow-brand', 'shadow-accent')).toBe('shadow-accent');
+        expect(sameGroup('shadow', 'brand', 'accent')).toBe(true);
     });
 
     it('refuses a colour token that shadows a shadow size keyword', () => {
@@ -106,7 +122,7 @@ describe('custom theme tokens reach the new prefixes too', () => {
         // merge away a real size — the same trap the blocklist already closes
         // for `bg-cover`.
         registerSzcnGroups({ colors: ['lg'] });
-        expect(szcn('shadow-lg', 'shadow-red-500')).toBe('shadow-lg shadow-red-500');
+        expect(sameGroup('shadow', 'lg', 'red-500')).toBe(false);
     });
 });
 

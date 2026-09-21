@@ -138,22 +138,21 @@ The `sz` array above is also the faster spelling: it lowers through one
 memoised `szcn` instead of an un-memoised `_szMerge` wrapping a memoised one.
 :::
 
-:::tip[szcn understands property groups]
-For prefixes that span several CSS properties (`text`, `bg`, `border`, `font`,
-`flex`, …), `szcn` classifies the token **value**: same property → the later
-class wins (`szcn('text-base', 'text-sm')` → `text-sm`), different properties
-co-exist (`text-red-500` never removes `text-sm`). So merging slot overrides
+:::tip[szcn merges by CSS property]
+`szcn` reads which CSS properties each class sets from your compiled Tailwind:
+same properties → the later class wins (`szcn('text-base', 'text-sm')` →
+`text-sm`), different properties co-exist (`text-red-500` never removes
+`text-sm`). So merging slot overrides
 with defaults (`sz={[{ text: 'base', weight: 'medium' }, szsc?.title]}` — the
 array composes with the same later-wins merge, applied for you at build or
 runtime) is the recommended pattern — replace semantics are no longer needed
 for text sizes or font weights.
 
-Custom `@theme` tokens join automatically: define `--color-brand` or
-`--text-huge` in a scanned CSS file (`build.scanCss`) and `szcn` dedupes
-`text-brand` / `text-huge` with zero extra wiring. For utility-shaped classes
-written in plain CSS (outside `@theme`), register them once with
-`registerSzcnGroups({ colors: ['...'] })` from `@csszyx/runtime`. A value csszyx
-cannot classify is always kept — never wrongly dropped.
+Custom `@theme` tokens need no wiring: define `--color-brand` or
+`--text-huge` and `szcn` merges `text-brand` / `text-huge` the way it merges
+built-in classes, because the table comes from the CSS Tailwind compiles for
+them. A class the build has no CSS for is always kept — never wrongly dropped.
+See [How it decides](/docs/reference/runtime/#how-it-decides).
 :::
 
 ## Typing

@@ -266,13 +266,20 @@ function lexicalRegionEnd(source: string, start: number): number {
 }
 
 /**
- * Find the exclusive end of a balanced JavaScript brace expression.
+ * Find the exclusive end of a balanced JavaScript-delimited expression.
  *
  * @param source Complete source text.
- * @param bodyStart Offset immediately after the opening brace.
- * @returns Offset of the matching closing brace, or source length.
+ * @param bodyStart Offset immediately after the opening delimiter.
+ * @param opening Opening delimiter.
+ * @param closing Closing delimiter.
+ * @returns Offset of the matching closing delimiter, or source length.
  */
-export function findBalancedCodeEnd(source: string, bodyStart: number): number {
+export function findBalancedCodeEnd(
+    source: string,
+    bodyStart: number,
+    opening = '{',
+    closing = '}',
+): number {
     let depth = 1;
     let cursor = bodyStart;
     while (cursor < source.length) {
@@ -281,8 +288,8 @@ export function findBalancedCodeEnd(source: string, bodyStart: number): number {
             cursor = regionEnd;
             continue;
         }
-        if (source[cursor] === '{') depth++;
-        else if (source[cursor] === '}' && --depth === 0) return cursor;
+        if (source[cursor] === opening) depth++;
+        else if (source[cursor] === closing && --depth === 0) return cursor;
         cursor++;
     }
     return source.length;
@@ -572,4 +579,34 @@ export function collectAuthoredClassNames(source: string): Set<string> {
             : nameEnd;
     }
     return classes;
+}
+
+/**
+ * Every string literal written inside a `szcn(...)` or `_szcn(...)` call.
+ *
+ * The arguments are what the merge will see at runtime, so a build that
+ * records them can hand the runtime a table that covers them. Scan disjoint
+ * outer call bodies, then resume after their closing parenthesis. Nested
+ * calls already contributed their literals, so neither balanced nor unfinished
+ * nesting rescans a suffix: O(n) traversal for n source UTF-16 units, plus the
+ * retained candidates. Delimiter handling is shared with the authored scanner.
+ *
+ * @param source - Source text before csszyx transforms it.
+ * @returns The literals, split on whitespace, as written.
+ */
+export function collectMergeCallClassNames(source: string): Set<string> {
+    const names = new Set<string>();
+    const calls = /\b_?szcn\s*\(/g;
+    for (let match = calls.exec(source); match !== null; match = calls.exec(source)) {
+        const bodyStart = match.index + match[0].length;
+        const bodyEnd = findBalancedCodeEnd(source, bodyStart, '(', ')');
+        calls.lastIndex = bodyEnd + 1;
+        const body = source.slice(bodyStart, bodyEnd);
+        for (const literal of body.matchAll(/"[^"]*"|'[^']*'/g)) {
+            // The whole match minus its quotes; `match` drops the empty
+            // strings a padded literal would leave behind.
+            for (const name of literal[0].slice(1, -1).match(/\S+/g) ?? []) names.add(name);
+        }
+    }
+    return names;
 }

@@ -9,10 +9,14 @@
  * The literal is part of the contract — the spec asserts it is present before
  * editing, so do not reflow or reformat this line.
  */
+import { _szcn, szcn } from '@csszyx/runtime';
+
 export function SafelistHmrFixture() {
   return (
     <div data-testid="safelist-hmr-target" sz={{ pt: 7, bg: 'slate-100' }}>
       safelist hmr fixture
+      <output data-testid="safelist-hmr-merge">{szcn('pt-7', 'pt-8')}</output>
+      <output data-testid="safelist-hmr-slim-merge">{_szcn('pt-7', 'pt-8')}</output>
     </div>
   );
 }

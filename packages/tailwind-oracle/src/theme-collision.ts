@@ -7,11 +7,11 @@
  * `color: var(--color-balance)`. It then competes on `color` with every other
  * colour class.
  *
- * szcn cannot tell the two apart, so it refuses to group and keeps both
- * classes. Stylesheet order decides from there — not the argument order szcn
- * promises. Measured: with `--color-balance` declared,
- * `szcn('text-red-500', 'text-balance')` renders RED, because `.text-red-500`
- * is emitted after `.text-balance`. The author gets the opposite colour.
+ * szcn reads the class for everything it sets, so a colour class written
+ * BEFORE it is covered and dropped. One written AFTER it covers `color` and not
+ * `text-wrap`, so both stay and stylesheet order decides from there — not the
+ * argument order szcn promises: `szcn('text-balance', 'text-red-500')` renders
+ * whichever of the two rules the stylesheet emits last.
  *
  * That is a correctness break rather than a missed optimisation, which is why
  * this fails the command rather than reporting and passing. `--allow-token`

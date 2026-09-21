@@ -26,6 +26,10 @@ export interface NextSafelistShardInput {
     sourcePath: string;
     sourceHash: string;
     classes: readonly string[];
+    /** Class names written in `className` attributes of the source. */
+    authoredClasses?: readonly string[];
+    /** String literals written inside `szcn(...)` calls of the source. */
+    mergeLiterals?: readonly string[];
     cacheKey?: string;
     timestamp?: number;
     pid?: number;
@@ -43,6 +47,12 @@ export interface NextSafelistStatePaths {
 
 /** Result returned after materializing shard records. */
 export interface NextSafelistMaterializeResult {
+    /** Every class lowering emitted, across the project, sorted. */
+    classes: string[];
+    /** Every `className` literal written across the project, sorted. */
+    authoredClasses: string[];
+    /** Every string written inside a `szcn(...)` call across the project, sorted. */
+    mergeLiterals: string[];
     classCount: number;
     sourceCount: number;
     tombstonedSourceCount: number;
@@ -106,6 +116,9 @@ interface ShardFile {
     sourcePath: string;
     sourceHash: string;
     classes: string[];
+    /** Absent in shards written before the merge table read them. */
+    authoredClasses?: string[];
+    mergeLiterals?: string[];
     timestamp: number;
     pid: number;
 }
@@ -199,6 +212,11 @@ export function materializeNextSafelist(
         .map(({ data }) => [data.sourcePath, sortStrings(new Set(data.classes))] as const)
         .sort(([left], [right]) => left.localeCompare(right));
     const classNames = sortStrings(new Set(sortedSources.flatMap(([, classSet]) => classSet)));
+    const records = [...recordsBySource.values()].map(({ data }) => data);
+    const authoredClasses = sortStrings(
+        new Set(records.flatMap(data => data.authoredClasses ?? [])),
+    );
+    const mergeLiterals = sortStrings(new Set(records.flatMap(data => data.mergeLiterals ?? [])));
 
     const snapshot: SnapshotFile = {
         version: 1,
@@ -210,6 +228,9 @@ export function materializeNextSafelist(
     atomicWriteFileSync(paths.snapshotPath, `${JSON.stringify(snapshot, null, 2)}\n`, options);
 
     return {
+        classes: classNames,
+        authoredClasses,
+        mergeLiterals,
         classCount: classNames.length,
         sourceCount: sortedSources.length,
         tombstonedSourceCount,
@@ -387,6 +408,12 @@ function normalizeShardInput(input: NextSafelistShardInput): ShardFile {
         sourcePath,
         sourceHash: input.sourceHash,
         classes,
+        ...(input.authoredClasses === undefined
+            ? {}
+            : { authoredClasses: sortStrings(new Set(input.authoredClasses)) }),
+        ...(input.mergeLiterals === undefined
+            ? {}
+            : { mergeLiterals: sortStrings(new Set(input.mergeLiterals)) }),
         timestamp:
             input.timestamp !== undefined && Number.isFinite(input.timestamp)
                 ? input.timestamp
@@ -453,6 +480,12 @@ function normalizeShardRecord(filePath: string, data: Partial<ShardFile>): Shard
             sourcePath: data.sourcePath,
             sourceHash: data.sourceHash,
             classes: data.classes,
+            // Absent in shards written before the merge table read them: a
+            // string array or nothing, never a field of another shape.
+            ...(Array.isArray(data.authoredClasses)
+                ? { authoredClasses: data.authoredClasses }
+                : {}),
+            ...(Array.isArray(data.mergeLiterals) ? { mergeLiterals: data.mergeLiterals } : {}),
             timestamp: data.timestamp,
             pid: data.pid,
         }),

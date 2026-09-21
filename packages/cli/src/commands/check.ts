@@ -685,8 +685,9 @@ function reportSiblingKeywords(
  *
  * Declaring a colour named after a keyword does not add a colour class: the
  * name is already a static utility, so Tailwind merges the readings and the
- * class carries both. szcn cannot tell them apart, keeps both classes, and the
- * stylesheet decides the winner instead of the order the author passed. That is
+ * class carries both. A later class that sets only one of the two does not
+ * cover it, so szcn keeps both and the stylesheet decides the winner instead
+ * of the order the author passed. That is
  * wrong output, which is why this fails rather than reporting and passing.
  *
  * @param out - Where this pass sends its prose and its findings.
@@ -725,22 +726,14 @@ async function reportThemeCollisions(
 
     out.warn('\nTheme tokens a built-in utility already claims:');
     for (const finding of found) {
-        out.push({
-            rule: 'theme-collision',
-            file: finding.file,
-            line: finding.line,
-            message:
-                `"${finding.name}" also names ${finding.classes.join(', ')}. Tailwind merges ` +
-                'both meanings into one rule, so szcn keeps the classes apart instead of ' +
-                'merging them and the stylesheet decides which wins — not the order you wrote.',
-        });
+        const message =
+            `"${finding.name}" also names ${finding.classes.join(', ')}. Tailwind merges ` +
+            'both meanings into one rule, so a later class that sets only one of them does ' +
+            'not replace it in szcn and the stylesheet decides which wins — not the order ' +
+            'you wrote.';
+        out.push({ rule: 'theme-collision', file: finding.file, line: finding.line, message });
         out.info(`  ${finding.file}:${finding.line}`);
-        out.info(
-            `    "${finding.name}" also names ${finding.classes.join(', ')}. Tailwind merges ` +
-                'both meanings into one rule, so szcn keeps the classes apart instead of ' +
-                'merging them and the stylesheet decides which wins — not the order you ' +
-                'wrote.',
-        );
+        out.info(`    ${message}`);
     }
     out.warn(
         `\n✖ ${found.length} theme token(s) shadow a built-in utility. Rename them; no ` +

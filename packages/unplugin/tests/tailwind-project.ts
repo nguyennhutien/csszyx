@@ -45,6 +45,23 @@ export function tailwindProject(prefix: string, files: Record<string, string>): 
     return root;
 }
 
+/**
+ * Install Tailwind's PostCSS integration into a {@link tailwindProject}, the
+ * way an app has it: the Scanner lives in `@tailwindcss/oxide`, which the app
+ * reaches only through the integration it depends on.
+ *
+ * @param root - A root {@link tailwindProject} created.
+ */
+export function linkTailwindIntegration(root: string): void {
+    const require_ = createRequire(join(REPO, 'package.json'));
+    mkdirSync(join(root, 'node_modules/@tailwindcss'), { recursive: true });
+    symlinkSync(
+        resolve(dirname(require_.resolve('@tailwindcss/postcss')), '..'),
+        join(root, 'node_modules/@tailwindcss/postcss'),
+        'dir',
+    );
+}
+
 /** Remove every root {@link tailwindProject} created; call from `afterEach`. */
 export function removeTailwindProjects(): void {
     for (const root of created.splice(0)) rmSync(root, { recursive: true, force: true });

@@ -15,6 +15,11 @@ import { type NextSourceTransformOutput, transformNextSource } from './next-sour
 import { createNextStateContext, type NextStateContext } from './next-state-context.js';
 import { resolveNextClassPrefix, unreadNextPrefixMessage } from './next-stylesheet-facts.js';
 
+export {
+    MERGE_REGISTRATION_FILE,
+    type MergeRegistrationInput,
+    writeMergeRegistration,
+} from './merge-registration.js';
 // The CLI records the stylesheet facts before it calls the prebuild, through the
 // same entry it already imports the prebuild from.
 export { prepareNextStylesheetFacts } from './next-stylesheet-facts.js';

@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { runInNewContext } from 'node:vm';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -46,6 +47,29 @@ function tailwindApp(css: string): string {
     return root;
 }
 
+/**
+ * Run the generated registration module the way a bundle would.
+ *
+ * @param file - Path of the module.
+ * @returns What it registers.
+ */
+function registrations(file: string): {
+    unserved: string[];
+    table: [Record<string, number>, number[][]];
+} {
+    let unserved: string[] = [];
+    let table: [Record<string, number>, number[][]] = [{}, []];
+    runInNewContext(readFileSync(file, 'utf8').replace(/^import .*;$/m, ''), {
+        registerUnservedClasses(value: string[]) {
+            unserved = value;
+        },
+        registerMergeSignatures(value: [Record<string, number>, number[][]]) {
+            table = value;
+        },
+    });
+    return { unserved, table };
+}
+
 describe('csszyx next-prebuild command', () => {
     it('records the stylesheet facts first and safelists the prefixed classes', async () => {
         const root = tailwindApp('@import "tailwindcss" prefix(tw);\n');
@@ -69,6 +93,72 @@ describe('csszyx next-prebuild command', () => {
             expect(existsSync(join(root, '.csszyx/cache/stylesheet-facts.json'))).toBe(true);
         } finally {
             logSpy.mockRestore();
+        }
+    }, 60_000);
+
+    it('writes the merge table and unserved list the Turbopack loader imports', async () => {
+        const root = tailwindApp(
+            '@import "tailwindcss";\n@theme { --color-brand: #00f; --color-accent: #f00; }\n',
+        );
+        writeFileSync(
+            join(root, 'app/page.tsx'),
+            [
+                "import { szcn } from '@csszyx/runtime';",
+                'export default () => (',
+                "    <div className={szcn('pb-2 mt-2 text-brand', 'p-4 text-accent')} sz={{ m: 4 }} />",
+                ');',
+            ].join('\n'),
+        );
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        try {
+            expect(
+                await nextPrebuild({
+                    root,
+                    cwd: root,
+                    mode: 'development',
+                    parserMode: 'wasm',
+                    json: true,
+                }),
+            ).toBe(0);
+            const { unserved, table } = registrations(join(root, '.csszyx/merge-registration.mjs'));
+            expect(unserved).toEqual([]);
+            const [ids, coverage] = table;
+            // The census: what lowering emitted, what className wrote, what szcn
+            // was handed. A class that shares nothing with another is left out
+            // of the table, so each one here pairs with another: `m-4` from
+            // lowering covers `mt-2`.
+            expect(Object.keys(ids)).toEqual(
+                expect.arrayContaining(['m-4', 'mt-2', 'pb-2', 'p-4', 'text-brand', 'text-accent']),
+            );
+            expect(coverage[ids['m-4'] as number]).toContain(ids['mt-2']);
+            // `p-4` covers `pb-2`, and the theme colours cover each other, with
+            // nothing registered by hand: the project's own Tailwind compiled them.
+            expect(coverage[ids['p-4'] as number]).toContain(ids['pb-2']);
+            expect(coverage[ids['text-accent'] as number]).toContain(ids['text-brand']);
+        } finally {
+            logSpy.mockRestore();
+        }
+    }, 60_000);
+
+    it('still succeeds, and says so, when the merge table cannot be written', async () => {
+        // The safelist the build needs is already written by then; the table
+        // only lets Turbopack and jest merge. Failing the prebuild over it
+        // would stop a build that has everything it needs.
+        const root = tailwindApp('@import "tailwindcss";\n');
+        mkdirSync(join(root, '.csszyx/merge-registration.mjs'), { recursive: true });
+        writeFileSync(join(root, '.csszyx/merge-registration.mjs/keep'), '');
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            expect(
+                await nextPrebuild({ root, cwd: root, mode: 'development', parserMode: 'wasm' }),
+            ).toBe(0);
+            expect(warnSpy.mock.calls.map(call => String(call[0])).join('\n')).toContain(
+                'merge-registration',
+            );
+        } finally {
+            logSpy.mockRestore();
+            warnSpy.mockRestore();
         }
     }, 60_000);
 

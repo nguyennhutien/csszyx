@@ -199,6 +199,65 @@ describe('csszyx next-watch command', () => {
         }
     }, 60_000);
 
+    it('rewrites the merge registration when a stylesheet drops a theme token', async () => {
+        const root = realpathSync(tempRoot());
+        linkTailwind(root);
+        mkdirSync(join(root, 'app'), { recursive: true });
+        const stylesheet = join(root, 'app/globals.css');
+        const themed =
+            '@import "tailwindcss";\n@theme { --color-brand: #00f; --color-accent: #f00; }\n';
+        writeFileSync(stylesheet, themed);
+        writeFileSync(
+            join(root, 'src/App.tsx'),
+            "import { szcn } from '@csszyx/runtime';\nexport const App=()=> <div className={szcn('text-brand', 'text-accent')} />;",
+        );
+        const registration = join(root, '.csszyx/merge-registration.mjs');
+        const events: string[] = [];
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            { watch: recordingWatch(events) },
+        );
+        try {
+            // The table travels as an escaped JSON string, so match the bare name.
+            expect(readFileSync(registration, 'utf8')).toContain('text-accent');
+
+            // The stylesheet lost `--color-accent`: the class compiles to nothing,
+            // so it must leave the table before the next merge reads it.
+            writeFileSync(stylesheet, themed.replace(' --color-accent: #f00;', ''));
+            await waitFor(() => !readFileSync(registration, 'utf8').includes('text-accent'), {
+                describe: () =>
+                    describeWatchState(events, [
+                        { label: 'registration', path: registration, content: true },
+                    ]),
+            });
+        } finally {
+            await session.close();
+        }
+    }, 60_000);
+
+    it('warns and keeps watching when the merge table cannot be written', async () => {
+        const root = realpathSync(tempRoot());
+        linkTailwind(root);
+        mkdirSync(join(root, 'app'), { recursive: true });
+        writeFileSync(join(root, 'app/globals.css'), '@import "tailwindcss";\n');
+        writeFileSync(join(root, 'src/App.tsx'), 'export const App=()=> <div sz={{ p: 4 }} />;');
+        // A directory where the file goes: the rename that writes it fails.
+        mkdirSync(join(root, '.csszyx/merge-registration.mjs/keep'), { recursive: true });
+        const warnings: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+            warnings.push(args.map(String).join(' '));
+        });
+        const session = await startNextWatch(
+            { root, cwd: root, parserMode: 'wasm', debounceMs: 10, silent: true },
+            { watch: recordingWatch([]) },
+        );
+        try {
+            expect(warnings.join('\n')).toContain('could not write .csszyx/merge-registration.mjs');
+        } finally {
+            await session.close();
+        }
+    }, 60_000);
+
     it('reports a stylesheet edit that stops the facts, and keeps watching', async () => {
         const root = realpathSync(tempRoot());
         linkTailwind(root);

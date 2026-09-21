@@ -157,9 +157,38 @@ szcn('gap-2 p-4', 'gap-8');   // → 'p-4 gap-8'        gap-8 overrides gap-2
 szcn('md:gap-2', 'gap-8');    // → 'md:gap-2 gap-8'   variants isolate — both kept
 ```
 
-**Fail-safe contract:** a token whose conflict group can't be determined
-confidently is NEVER merged away — it keys by itself, so the worst case is two
-classes co-existing (the pre-merge status quo), never a wrongly-dropped class.
+### How it decides
+
+`szcn` does not guess from a class name. The build compiles every class your
+project uses through your own Tailwind, records which CSS properties each one
+sets and under which selector or at-rule, and hands `szcn` that table. Two rules
+follow from it:
+
+- A **later** class removes an **earlier** one when it sets every property the
+  earlier one sets, in the same context — `p-8` after `pb-4`, `text-sm` after
+  `text-base`, `size-8` after `h-4`.
+- Anything else co-exists: a later longhand only refines (`p-4 pb-8`), a
+  different variant is a different context (`md:gap-2 gap-8`), and `!important`
+  is its own context (`p-4 p-4!` keeps both; `p-4! p-8!` → `p-8!`).
+
+Because the table comes from your compiled CSS, custom `@theme` tokens,
+`@utility` classes and plugin utilities merge the same way built-in ones do,
+with nothing to register.
+
+**Fail-safe contract:** a class the table has no entry for is NEVER merged
+away — only an exact repeat of it is dropped. The worst case is two classes
+co-existing (what plain string concatenation gives you), never a class deleted
+by mistake. That includes a class Tailwind generates no CSS for — one built
+only at runtime (`` `gap-${n}` ``), or one Tailwind's scan does not reach —
+and every class on a lane that has no table — see
+[Where the table comes from](#where-the-table-comes-from).
+
+<Aside type="caution" title="Changed in 0.18.0">
+Before 0.18.0 `szcn` classified tokens by name with a hand-written table, which
+merged without a build but deleted classes it misread. Now it merges only on
+evidence from compiled CSS. If a merge you relied on stopped happening, the
+build has no table for that class — check the lane table below.
+</Aside>
 
 ### Directional shorthand coverage
 
@@ -174,17 +203,20 @@ szcn('top-2', 'inset-4');            // → 'inset-4'
 szcn('rounded-tl-sm', 'rounded-lg'); // → 'rounded-lg'
 ```
 
-Logical sides (`ps`/`pe`, `ms`/`me`) are subsumed by their `p`/`m` shorthands.
-For inset and rounded the coverage is **physical-only**: `inset`/`rounded` do
-not subsume logical `start`/`end` / `rounded-s*` tokens, which could flip under
-RTL — those stay keep-both (still cascade-correct).
+Logical sides are resolved to the physical side they land on, and a class
+covers another only when it does so in **both** `ltr` and `rtl`. So a shorthand
+that spans both sides subsumes the logical longhand (`ps-4 px-4` → `px-4`,
+`start-2 inset-4` → `inset-4`, `rounded-s-lg rounded-lg` → `rounded-lg`), while
+a logical side and one physical side never subsume each other (`ps-4 pl-4`
+keeps both: they are the same side in `ltr` and opposite sides in `rtl`).
+Vertical writing modes are not modelled; under `writing-mode: vertical-*` a
+logical/physical pair that merged may not be the same side.
 
 ### Property groups for ambiguous prefixes
 
-Sixteen prefixes span more than one CSS property (`text-sm` is font-size,
-`text-red-500` is color). For these, `szcn` classifies the token **value** into
-a property group: same group → last wins, different group → co-exist,
-unclassifiable → keep-both.
+Some prefixes span more than one CSS property (`text-sm` is font-size,
+`text-red-500` is color). The compiled CSS tells them apart: same properties →
+last wins, different properties → co-exist.
 
 ```ts
 // text: size / color / align / wrap / overflow
@@ -225,28 +257,43 @@ Setting a shadow's size and its color together is the documented Tailwind way
 to write one, so those two never share a group — the same reasoning that keeps
 `border-2` and `border-red-500` apart.
 
-Still keep-both by design: directional/axis forms of border-family prefixes
-(`border-t-2` vs `border-2`, `divide-x-2` vs `divide-y-2`), CSS-variable values
-(`text-(--brand)` — the type is unknown), and any value csszyx cannot classify.
+Arbitrary and CSS-variable values follow what Tailwind compiles them to:
+`text-[14px]` is a font size and loses to a later `text-sm`; `text-(--brand)`
+compiles to `color` and co-exists with it. Axis forms stay apart
+(`divide-x-2 divide-y-2`), and a one-side width is covered by the all-sides one
+(`border-t-2 border-2` → `border-2`).
 
-:::tip[Custom `@theme` tokens join automatically]
-Tokens from your `@theme` blocks (`--color-brand`, `--text-huge`, …) are
-registered into their groups by the build plugin —
-`szcn('text-brand', 'text-accent')` → `'text-accent'` with zero wiring, updated
-on HMR. The plugin discovers every stylesheet in the project, so this does not
-depend on `build.scanCss`: that option chooses which CSS drives the generated
-*types*, and narrowing it never narrows merging. For utility-shaped classes
-written in plain CSS outside `@theme`, register them once with
-[the theme group registry](#theme-group-registry).
+### Where the table comes from
 
-**Next.js with Turbopack** reaches the same result by a different route: that
-lane compiles one file at a time and cannot resolve a virtual module, so csszyx
-writes the registration to `.csszyx/theme-groups.mjs` and imports it from the
-modules that call `szcn`. Your stylesheets are declared as loader dependencies,
-so editing a `@theme` block regenerates it during the dev session — same live
-behaviour as the other bundlers. See the
-[Turbopack capability table](/docs/installation/#what-the-turbopack-lane-can-and-cannot-use).
-:::
+The table is settled once per build, from every class the project's Tailwind
+generates CSS for: the class names its own scan finds in your sources — the
+files each Tailwind entry reaches, `@source` rules included — plus what `sz`
+compiles to. A class written in a map of variants, a constant or a design-system
+package is therefore in it, as long as Tailwind styles it. A class that shares
+its CSS properties with no other is left out, since it merges the same either
+way.
+
+Inside a monorepo, a Tailwind entry with no `source(...)` scans its whole
+package, linked packages under `node_modules` included, and the build already
+warns about it. The table skips that scan rather than pay for it a second time,
+so scope the entry — `@import "tailwindcss" source("./src")`, or
+`source(none)` with `@source` — for classes outside `className`, `sz` and
+`szcn(...)` literals to merge.
+
+How the table reaches the browser depends on the lane:
+
+| Lane | Where the table comes from |
+| --- | --- |
+| Vite, Rollup | bundled with the app. On the Vite dev server, source edits refresh the table before normal HMR without reloading the page. A stylesheet edit that changes the table reloads the page; edits that leave the table unchanged keep normal HMR. |
+| webpack, Next.js (webpack) | bundled with the app, settled again on every compilation |
+| Next.js (Turbopack) | `.csszyx/merge-registration.mjs`, written by `csszyx next prebuild` and kept current by `csszyx next watch`; the modules that call `szcn` import it |
+| jest | the same file (its `.cjs` twin), as the last build or `csszyx next prebuild` left it — run one before the suite. See [Testing](/docs/testing/#what-szcn-merges-in-a-suite). |
+| esbuild, Rspack, Rsbuild, Rolldown, Farm, Bun | none — `szcn` only drops exact repeats |
+
+A project with more than one Tailwind entry (several files that
+`@import "tailwindcss"`) merges a pair only when **every** entry agrees on what
+both classes do. A token declared in one entry alone therefore never merges;
+declare shared tokens in one file that every entry imports.
 
 ### Production encode of runtime-resolved classes
 
@@ -269,10 +316,14 @@ decode first — see [`szDecode`](#szdecodetoken).
 
 ## Theme group registry
 
-Custom token names have to be declared before `szcn` can classify classes built
-from them. The build plugin does this automatically from your `@theme` blocks —
-these functions are for hand-written CSS utilities, and for reading back what
-is in effect.
+The registry names which custom tokens are colors, text sizes, font families
+and font weights, so [`classify`](#classify--has--pick--omit--class-toolkit) can
+report a `property` for classes built from them. The build plugin fills it from
+your `@theme` blocks — these functions are for hand-written CSS utilities, and
+for reading back what is in effect.
+
+`szcn` does not read the registry: since 0.18.0 it merges on the compiled CSS
+(see [How it decides](#how-it-decides)), which already knows every token.
 
 ```ts
 interface SzcnThemeGroups {
@@ -317,8 +368,8 @@ Guard rails — both fall back to keep-both with a one-time dev warning, never a
 wrong merge:
 
 - A name that **shadows a built-in value keyword** of an affected prefix is
-  rejected: a color named `cover` would make `szcn` misread `bg-cover`
-  (background-size) as a color and merge it wrongly.
+  rejected: a color named `cover` would make `classify` misread `bg-cover`
+  (background-size) as a color.
 - A name declared in **two conflicting categories** (both a color and a text
   size — `text-huge` becomes unclassifiable) is dropped from both, for as long
   as both declarations exist. The effective sets are recomputed from every
@@ -621,10 +672,10 @@ function omit(classes: string, selector: BoxSelector): string
 
 `property` names the CSS property inside the category for the prefixes that
 cover several — `classify('text-red-500')` reports `color` and
-`classify('text-sm')` reports `size`, both in category `text`. It is the same
-classification `szcn` merges by, so a token name declared in the app's Tailwind
-`@theme` (see [Theme group registry](#theme-group-registry)) is read the way a
-built-in one is. The field is **absent** when the prefix means exactly one
+`classify('text-sm')` reports `size`, both in category `text`. A token name
+declared in the app's Tailwind `@theme` (see
+[Theme group registry](#theme-group-registry)) is read the way a built-in one
+is. The field is **absent** when the prefix means exactly one
 property (`p-4`) and when the value does not confidently name one
 (`border-t-2`) — never `null`, never empty — and it never changes which node
 `splitBox` routes a token to.

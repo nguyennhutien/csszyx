@@ -86,6 +86,71 @@ describe('openProjectStyleModel', () => {
         expect(model.unserved(['bg-brand', 'zz-not-a-class'])).toEqual(['zz-not-a-class']);
     });
 
+    it('derives merge signatures from the same compiled design system', async () => {
+        const files = writeStylesheets({ 'app.css': '@import "tailwindcss";' });
+
+        const model = await openProjectStyleModel(REPO, files);
+        const text = model.signature('text-2xl');
+        const arbitrary = model.signature('text-[0.8rem]');
+        const textProperties = text?.rules.flatMap(rule => rule.properties);
+        const arbitraryProperties = arbitrary?.rules.flatMap(rule => rule.properties);
+
+        expect(textProperties).toContain('font-size');
+        expect(textProperties).toContain('line-height');
+        expect(arbitraryProperties).toContain('font-size');
+        expect(arbitraryProperties).not.toContain('line-height');
+        expect(model.signature('text-2xl')).toBe(text);
+        expect(model.signature('zz-not-a-class')).toBeNull();
+    });
+
+    it('keeps nested selector context and expanded longhands in a signature', async () => {
+        const files = writeStylesheets({ 'app.css': '@import "tailwindcss";' });
+
+        const model = await openProjectStyleModel(REPO, files);
+        const signature = model.signature('outline-hidden');
+        const properties = signature?.rules.flatMap(rule => rule.properties);
+
+        expect(properties).toEqual(
+            expect.arrayContaining([
+                '--tw-outline-style',
+                'outline-color',
+                'outline-offset',
+                'outline-style',
+                'outline-width',
+            ]),
+        );
+        expect(signature?.rules.map(rule => rule.context)).toContain(
+            '[[["selector","&"],["at-rule","media","(forced-colors: active)"]],false]',
+        );
+    });
+
+    it('withholds a merge signature unless every root agrees', async () => {
+        const files = writeStylesheets({
+            'a.css': '@import "tailwindcss";\n@utility card { padding: 1rem; }',
+            'b.css': '@import "tailwindcss";\n@utility card { margin: 1rem; }',
+        });
+
+        const model = await openProjectStyleModel(REPO, files);
+
+        expect(model.signature('card')).toBeNull();
+    });
+
+    it('returns a merge signature when every root agrees', async () => {
+        const files = writeStylesheets({
+            'a.css': '@import "tailwindcss";\n@utility card { padding: 1rem; }',
+            'b.css': '@import "tailwindcss";\n@utility card { padding: 2rem; }',
+        });
+
+        const model = await openProjectStyleModel(REPO, files);
+
+        expect(model.signature('card')?.rules).toEqual([
+            {
+                context: '[[["selector","&"]],false]',
+                properties: ['padding-bottom', 'padding-left', 'padding-right', 'padding-top'],
+            },
+        ]);
+    });
+
     it('reports the prefix an imported stylesheet settled', async () => {
         const files = writeStylesheets({
             'lib.css': '@import "tailwindcss" prefix(tw);',
@@ -156,6 +221,7 @@ describe('openProjectStyleModel', () => {
         expect(model.facts).toBeNull();
         expect(model.entries).toEqual([{ file: files[0], role: 'not-root' }]);
         expect(model.unserved(['p-4'])).toEqual([]);
+        expect(model.signature('p-4')).toBeNull();
     });
 
     it('lists a stylesheet that cannot compile, with the reason, and reports no facts', async () => {

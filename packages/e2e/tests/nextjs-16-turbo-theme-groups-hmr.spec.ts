@@ -16,7 +16,7 @@ import { expect, test } from '@playwright/test';
  * this edits the stylesheet and reads the merge result back out of the page.
  */
 const stylesheetPath = fileURLToPath(
-    new URL('../../../playground/nextjs-16/app/globals.css', import.meta.url),
+    new URL('../../../playground/nextjs-16/app/theme.css', import.meta.url),
 );
 
 const LIVE_TOKEN = '--color-csszyx-live: #16a34a;';

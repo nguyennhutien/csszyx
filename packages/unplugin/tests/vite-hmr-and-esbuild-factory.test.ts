@@ -88,6 +88,16 @@ describe('hotUpdate incremental discovery (real hook)', () => {
         // A second update with the same content discovers nothing new.
         await expect(hotUpdate(file)).resolves.toBeUndefined();
     });
+
+    it('still writes a new lowered class also present in authored classes', async () => {
+        const { root, hotUpdate } = await bootedPlugin();
+        const file = path.join(root, 'src/App.tsx');
+        fs.writeFileSync(file, 'export const App = () => <div className="m-3" sz={{ m: 3 }} />;');
+        await hotUpdate(file);
+        expect(fs.readFileSync(path.join(root, '.csszyx/csszyx-classes.txt'), 'utf8')).toContain(
+            'm-3',
+        );
+    });
 });
 
 describe('esbuildPlugin factory', () => {

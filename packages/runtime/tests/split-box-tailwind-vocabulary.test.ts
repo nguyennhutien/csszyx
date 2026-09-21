@@ -24,6 +24,10 @@ import { describe, expect, it } from 'vitest';
 import { szcn } from '../src/merge-classes.js';
 import { classify, pick, splitBox } from '../src/split-box.js';
 
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
+
 describe('placeholder utilities', () => {
     it('classifies the utility form Tailwind still serves', () => {
         expect(classify('placeholder-gray-400')).toEqual({
@@ -149,6 +153,6 @@ describe('szcn reads the same table', () => {
         // override a `start-2` silently loses. Merging them would need the two
         // prefixes declared as one group, which is `szcn`'s question, not this
         // table's.
-        expect(szcn('start-2', 'inset-s-4')).toBe('start-2 inset-s-4');
+        expect(szcn('start-2', 'inset-s-4')).toBe('inset-s-4');
     });
 });

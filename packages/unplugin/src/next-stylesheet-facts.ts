@@ -277,7 +277,12 @@ export async function writeNextStylesheetFacts(input: {
     extraCandidates?: readonly string[];
     setting?: string;
     writeOptions?: AtomicWriteOptions;
-}): Promise<{ record: NextStylesheetFactsRecord; path: string; warning: string | null }> {
+}): Promise<{
+    record: NextStylesheetFactsRecord;
+    path: string;
+    warning: string | null;
+    model: ProjectStyleModel;
+}> {
     const listed = (input.tailwindStylesheet ?? []).map(file => ({
         file,
         absolute: path.resolve(input.root, file),
@@ -314,7 +319,12 @@ export async function writeNextStylesheetFacts(input: {
         candidates,
         input.writeOptions,
     );
-    return { record, path: file, warning: styleModelWarning(model, input.root, input.setting) };
+    return {
+        record,
+        path: file,
+        warning: styleModelWarning(model, input.root, input.setting),
+        model,
+    };
 }
 
 /**
@@ -542,7 +552,13 @@ export async function prepareNextStylesheetFacts(input: {
     tailwindStylesheet?: readonly string[];
     files?: readonly string[];
     setting?: string;
-}): Promise<{ record: NextStylesheetFactsRecord; path: string; warning: string | null }> {
+}): Promise<{
+    record: NextStylesheetFactsRecord;
+    path: string;
+    warning: string | null;
+    /** The compiled design system, for the registration the same command writes. */
+    model: ProjectStyleModel;
+}> {
     const { root } = resolveNextAppRoot({ explicitRoot: input.explicitRoot, cwd: input.cwd });
     const sources = (input.files ?? []).flatMap(filePath => {
         const content = readText(filePath);

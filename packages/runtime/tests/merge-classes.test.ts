@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { _szMerge } from '../src/concatenate.js';
 import { _szcn, szcn, szDecode } from '../src/merge-classes.js';
 
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
+
 // szcn is the single resolution point for a layered design-system
 // component (Box < Flex < Row/Col): combine default classes with the forwarded
 // override, last-wins per utility, while staying mangle-aware (unlike npm
@@ -77,10 +81,11 @@ describe('szcn — fail-safe: never drop an ambiguous/unknown class', () => {
         expect(szcn('font-bold', 'font-bold')).toBe('font-bold');
     });
 
-    it('under-merges exact value-keyed display tokens (flex vs block)', () => {
-        // both set `display`, but the box-role map keys them only by category,
-        // so they are under-merged rather than risk dropping a sibling.
-        expect(szcn('flex', 'block')).toBe('flex block');
+    it('lets a later display value replace an earlier one', () => {
+        // Both compile to a single `display` declaration, so the later covers
+        // the earlier. The hand-written classifier keyed them by category only
+        // and kept both, leaving stylesheet order to pick the winner.
+        expect(szcn('flex', 'block')).toBe('block');
     });
 });
 
@@ -135,11 +140,14 @@ describe('szcn — directional override (inset / rounded)', () => {
         expect(szcn('rounded-tl-sm', 'rounded-r-lg')).toBe('rounded-tl-sm rounded-r-lg'); // tl ∉ r
     });
 
-    it('keeps logical sides/corners separate from physical (RTL-safe under-merge)', () => {
-        // start/end (logical) and rounded-s/e are a different CSS longhand that can
-        // flip under RTL, so they are not crossed with physical — keep both.
-        expect(szcn('start-0', 'inset-0')).toBe('start-0 inset-0');
-        expect(szcn('rounded-s-lg', 'rounded-lg')).toBe('rounded-s-lg rounded-lg');
+    it('lets all four sides or corners cover a logical one', () => {
+        // `inset` names all four sides and `rounded-lg` all four corners, and a
+        // logical side or corner is one of them whichever way the text runs. A
+        // single physical side is another matter: `pl-4` and `ps-2` coincide
+        // only left to right, so that pair keeps both (see the unplugin's
+        // `merge-signature-model.test.ts`).
+        expect(szcn('start-0', 'inset-0')).toBe('inset-0');
+        expect(szcn('rounded-s-lg', 'rounded-lg')).toBe('rounded-lg');
     });
 
     it('does not let inset coverage touch rounded or spacing', () => {
@@ -167,9 +175,15 @@ describe('szcn — input handling', () => {
         expect(szcn('w-[337px]', 'w-[400px]')).toBe('w-[400px]');
     });
 
-    it('treats important / negative markers as the same utility for override', () => {
+    it('treats a negative marker as the same utility for override', () => {
         expect(szcn('mt-2', '-mt-4')).toBe('-mt-4');
-        expect(szcn('p-2', '!p-8')).toBe('!p-8');
+    });
+
+    it('keeps the class on either side of an important flag', () => {
+        // Importance is part of what a class declares. The important one wins
+        // in CSS wherever it stands, so keeping both costs nothing, while
+        // dropping across the flag is how `gap-2!` used to lose to `gap-8`.
+        expect(szcn('p-2', '!p-8')).toBe('p-2 !p-8');
     });
 });
 
@@ -423,9 +437,11 @@ describe('szcn — negative & important markers with directional coverage', () =
         expect(szcn('p-2!', 'p-8!')).toBe('p-8!');
     });
 
-    it('treats an important variant as the same utility regardless of marker side', () => {
-        expect(szcn('p-2', 'p-8!')).toBe('p-8!');
-        expect(szcn('gap-2!', 'gap-8')).toBe('gap-8');
+    it('never drops a class across an important flag, whichever side carries it', () => {
+        expect(szcn('p-2', 'p-8!')).toBe('p-2 p-8!');
+        // The false delete this rule ends: CSS lets `gap-2!` win, and the
+        // merge used to throw it away for the `gap-8` written after it.
+        expect(szcn('gap-2!', 'gap-8')).toBe('gap-2! gap-8');
     });
 });
 
@@ -449,8 +465,10 @@ describe('szcn — logical vs physical spacing (documented v1 behavior)', () => 
         expect(szcn('pe-2', 'p-4')).toBe('p-4');
     });
 
-    it('contrast: inset-x does NOT subsume the logical start/end', () => {
-        expect(szcn('start-0', 'inset-x-4')).toBe('start-0 inset-x-4');
+    it('inset-x covers the logical start it is made of', () => {
+        // `inset-x-4` compiles to `inset-inline`, whose longhands are the
+        // logical start and end: the later axis sets everything `start-0` set.
+        expect(szcn('start-0', 'inset-x-4')).toBe('inset-x-4');
     });
 });
 
@@ -769,7 +787,11 @@ describe('szcn — mask utilities key by the CSS variable they write', () => {
         expect(szcn('mask-radial-closest-side', 'mask-radial-farthest-corner')).toBe(
             'mask-radial-farthest-corner',
         );
-        expect(szcn('mask-radial-custom-a', 'mask-radial-custom-b')).toBe('mask-radial-custom-b');
+        // A made-up size compiles to nothing, so there is no evidence that the
+        // two are exclusive and neither is dropped.
+        expect(szcn('mask-radial-custom-a', 'mask-radial-custom-b')).toBe(
+            'mask-radial-custom-a mask-radial-custom-b',
+        );
     });
 
     it('leaves the non-gradient mask keys merging as before', () => {

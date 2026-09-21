@@ -30,7 +30,24 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
-const outPath = join(repoRoot, 'packages/runtime/src/longhand-table.generated.ts');
+const outPath = join(repoRoot, 'packages/unplugin/src/longhand-table.generated.ts');
+
+/**
+ * Longhands `mdn-data` lists for a shorthand that the current spec no longer
+ * lets it write.
+ *
+ * Only this direction is dangerous. A longhand missing from a list makes the
+ * merge keep a class it could have dropped; a longhand listed that the
+ * shorthand does not reset makes it drop a class that still applies. CSS Grid
+ * Level 2 took the gutters out of `grid` ("It does not reset the gutter
+ * properties"), and browsers follow it, while `mdn-data` still lists them, so
+ * `grid: auto-flow / 1fr` read as covering `gap-4` and deleted it.
+ *
+ * @type {Readonly<Record<string, readonly string[]>>}
+ */
+const NOT_RESET_BY = {
+    grid: ['column-gap', 'row-gap', 'grid-column-gap', 'grid-row-gap'],
+};
 
 /**
  * Properties whose mdn-data `computed` list is a real shorthand expansion.
@@ -53,7 +70,11 @@ function collectShorthands(properties) {
         const { computed } = entry;
         if (!Array.isArray(computed) || computed.length < 2) continue;
         if (computed.some(part => typeof part !== 'string' || !(part in properties))) continue;
-        shorthands.set(name, [...computed]);
+        const notReset = new Set(NOT_RESET_BY[name] ?? []);
+        shorthands.set(
+            name,
+            computed.filter(part => !notReset.has(part)),
+        );
     }
     return shorthands;
 }

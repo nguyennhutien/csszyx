@@ -2,7 +2,7 @@
  * Zero-wiring theme groups: a real vite build over an app that defines custom
  * tokens ONLY in `@theme` CSS and calls szcn — no import, no config. The build
  * must inject the generated registration module into the szcn-using code so
- * the runtime dedupes classes built from those tokens.
+ * the runtime receives those token groups without treating them as merge proof.
  *
  * Guards the whole auto-detect chain at once: theme scan (`--color-*`,
  * `--text-*`, `--font-weight-*`, `--font-*` with the weight-before-family
@@ -32,7 +32,7 @@ const FIXTURE_FILES: Record<string, string> = {
     // The ONLY wiring the app does: define tokens in @theme and call szcn.
     // The exports are computed INSIDE the built bundle, so importing the dist
     // file proves the whole chain executed: scan → generated registration →
-    // injected import → szcn actually deduping the custom tokens.
+    // injected imports → runtime registration is evaluated before szcn.
     'src/main.ts': `
 import { szcn } from '@csszyx/runtime';
 export const customColorOverride = szcn('text-brand', 'text-red-500');
@@ -101,6 +101,7 @@ describe('theme groups auto-wiring (real vite build, zero app wiring)', () => {
 
     it('the registration call ships inside the bundle', () => {
         expect(bundle).toContain('setSzcnGroups');
+        expect(bundle).toContain('registerMergeSignatures');
     });
 
     it('every theme category reaches its group, weights not mis-filed as families', () => {
@@ -113,17 +114,17 @@ describe('theme groups auto-wiring (real vite build, zero app wiring)', () => {
         expect(bundle).toMatch(entry('fontWeights', 'chunky'));
     });
 
-    it('EXECUTING the bundle proves szcn dedupes the custom tokens at runtime', () => {
+    it('keeps tokens when no compiled style model supplied merge signatures', () => {
         // Not just "the registration shipped" — the built code ran it and the
         // merge results below were computed inside the bundle.
-        expect(builtModule.customColorOverride).toBe('text-red-500');
-        expect(builtModule.customSizeOverride).toBe('text-huge');
+        expect(builtModule.customColorOverride).toBe('text-brand text-red-500');
+        expect(builtModule.customSizeOverride).toBe('text-base text-huge');
         expect(builtModule.customFamilyVsWeight).toBe('font-display font-chunky');
     });
 });
 
 describe('zero-config @theme auto-scan (no scanCss, real vite build)', () => {
-    it('discovers @theme static tokens without scanCss and dedupes at runtime', async () => {
+    it('discovers @theme static tokens without treating the text scan as merge proof', async () => {
         // vui finding 7, both halves at once: scanCss is UNSET (the plugin must
         // discover the theme CSS itself) and the block uses the `static` option
         // keyword (which the scanner used to skip). The bundle must still ship
@@ -181,7 +182,7 @@ export const slotOverride = szcn('text-sub', 'text-danger');
         const builtModule = (await import(
             pathToFileURL(join(distDir, entryFile as string)).href
         )) as { slotOverride: string };
-        expect(builtModule.slotOverride).toBe('text-danger');
+        expect(builtModule.slotOverride).toBe('text-sub text-danger');
     }, 60_000);
 });
 
@@ -297,6 +298,6 @@ export const acrossFiles = szcn('text-typed', 'text-unlisted');
         const builtModule = (await import(
             pathToFileURL(join(distDir, entryFile as string)).href
         )) as { acrossFiles: string };
-        expect(builtModule.acrossFiles).toBe('text-unlisted');
+        expect(builtModule.acrossFiles).toBe('text-typed text-unlisted');
     }, 60_000);
 });

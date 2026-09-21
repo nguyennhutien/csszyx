@@ -13,6 +13,7 @@
     },
     "references": [
         { "path": "../compiler" },
+        { "path": "../runtime" },
         { "path": "../svelte-adapter" },
         { "path": "../types" },
         { "path": "../vue-adapter" }

@@ -472,14 +472,15 @@ Build it as a plain React compound component; each part forwards `sz` (already
 rewritten to `className` by the transform) onto a host element. Type each part with
 `ComponentProps<'div'>` (or the relevant tag) to get `sz` + `className` for free.
 Merge a part's own defaults with the consumer's override via `szcn` (mangle-aware,
-last-wins) — the RECOMMENDED pattern for slot defaults. Multi-property prefixes
-(`text`, `bg`, `border`, `font`, `flex`, `divide`, `ring`, `outline`) are
-value-classified into property groups: same property → later wins
-(`szcn('text-base','text-sm')` → `text-sm`); different properties co-exist
-(`text-red-500` never removes `text-sm`); unclassifiable values are always kept
-(fail-safe). Custom `@theme` tokens join their groups automatically when the CSS
-is scanned (`build.scanCss`); classes written in plain CSS register via
-`registerSzcnGroups({ colors: [...], textSizes: [...] })` from `@csszyx/runtime`.
+last-wins) — the RECOMMENDED pattern for slot defaults. `szcn` merges on a table
+the build settles from the project's compiled Tailwind CSS: a later class
+removes an earlier one when it sets every CSS property the earlier one sets, in
+the same variant context (`szcn('text-base','text-sm')` → `text-sm`,
+`szcn('pb-4','p-8')` → `p-8`); different properties co-exist (`text-red-500`
+never removes `text-sm`); a class the table has no entry for is always kept
+(fail-safe), and only an exact repeat of it is dropped. Custom `@theme` tokens,
+`@utility` classes and plugin utilities merge with nothing to register.
+`registerSzcnGroups(...)` feeds `classify`'s `property` only, not `szcn`.
 
 On a production-mangled build, `szcn` also ENCODES its output: a class name a
 component resolves at runtime as a plain string (a prop mapped to `'flex-col'`,

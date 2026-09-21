@@ -6,12 +6,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { BOX_ROLE_TOKENS } from '../src/box-role-map.generated.js';
-import { _szcn, szcn } from '../src/merge-classes.js';
+import { szcn } from '../src/merge-classes.js';
 import {
     _resetSzcnGroups,
     getSzcnGroupsGeneration,
     registerSzcnGroups,
 } from '../src/merge-groups.js';
+import { sameGroup } from './helpers/same-group.js';
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
 
 afterEach(() => {
     _resetSzcnGroups();
@@ -121,8 +125,9 @@ describe('per-prefix classification', () => {
         expect(szcn('border-red-500', 'border-2', 'border-solid')).toBe(
             'border-red-500 border-2 border-solid',
         );
-        // border-t vs border shorthand coverage is the deferred part…
-        expect(szcn('border-t-2', 'border-2')).toBe('border-t-2 border-2');
+        // `border-2` compiles to `border-width` and `border-style` for all four
+        // sides, which covers what `border-t-2` set on the top one.
+        expect(szcn('border-t-2', 'border-2')).toBe('border-2');
         // …but border-t is its own single-property prefix, so same-side widths
         // merge by prefix as they always did.
         expect(szcn('border-t-2', 'border-t-4')).toBe('border-t-4');
@@ -155,23 +160,21 @@ describe('per-prefix classification', () => {
 });
 
 describe('custom theme registration', () => {
-    it('registered color tokens dedupe across every color prefix', () => {
+    it('registered color tokens join the color group of every color prefix', () => {
         registerSzcnGroups({ colors: ['brand', 'tag-blue-bg'] });
-        expect(szcn('text-brand', 'text-red-500')).toBe('text-red-500');
-        expect(szcn('bg-brand', 'bg-tag-blue-bg')).toBe('bg-tag-blue-bg');
-        expect(szcn('border-brand', 'border-2')).toBe('border-brand border-2');
+        expect(sameGroup('text', 'brand', 'red-500')).toBe(true);
+        expect(sameGroup('bg', 'brand', 'tag-blue-bg')).toBe(true);
+        expect(sameGroup('border', 'brand', '2')).toBe(false);
     });
 
-    it('a later custom color overrides an earlier one, including via the szs path', () => {
-        // vui finding 7: with --color-sub / --color-danger registered, the
-        // later argument must win — otherwise stylesheet order decides and an
-        // szs-slot override (`szs={{ content: { color: 'danger' } }}` over a
-        // `text-sub` default) silently loses. Compiled szs merges through the
-        // generated `_szcn` entry, so both entries are asserted.
+    it('two registered colors share a group on every color prefix', () => {
+        // vui finding 7 was about merging: a later `text-danger` has to beat an
+        // earlier `text-sub`. That now rests on the project's compiled `@theme`
+        // and is proved against real Tailwind in the unplugin's
+        // `merge-signature-model.test.ts`; here the registry's half remains.
         registerSzcnGroups({ colors: ['sub', 'danger'] });
-        expect(szcn('text-sub', 'text-danger')).toBe('text-danger');
-        expect(_szcn('text-sub', 'text-danger')).toBe('text-danger');
-        expect(szcn('bg-sub', 'bg-danger')).toBe('bg-danger');
+        expect(sameGroup('text', 'sub', 'danger')).toBe(true);
+        expect(sameGroup('bg', 'sub', 'danger')).toBe(true);
     });
 
     it('registered text sizes and font tokens dedupe', () => {
@@ -180,37 +183,37 @@ describe('custom theme registration', () => {
             fontFamilies: ['display'],
             fontWeights: ['chunky'],
         });
-        expect(szcn('text-huge', 'text-sm')).toBe('text-sm');
-        expect(szcn('text-huge', 'text-red-500')).toBe('text-huge text-red-500');
-        expect(szcn('font-display', 'font-sans')).toBe('font-sans');
-        expect(szcn('font-display', 'font-chunky')).toBe('font-display font-chunky');
+        expect(sameGroup('text', 'huge', 'sm')).toBe(true);
+        expect(sameGroup('text', 'huge', 'red-500')).toBe(false);
+        expect(sameGroup('font', 'display', 'sans')).toBe(true);
+        expect(sameGroup('font', 'display', 'chunky')).toBe(false);
     });
 
-    it('unregistered custom tokens keep the safe keep-both behaviour', () => {
-        expect(szcn('text-brand', 'text-accent')).toBe('text-brand text-accent');
+    it('unregistered custom tokens belong to no group', () => {
+        expect(sameGroup('text', 'brand', 'accent')).toBe(false);
     });
 
     it('guard rail: a token shadowing a static keyword is rejected with a warning', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         registerSzcnGroups({ colors: ['cover'] });
         // bg-cover must still classify as background-SIZE, never a color.
-        expect(szcn('bg-cover', 'bg-red-500')).toBe('bg-cover bg-red-500');
-        expect(szcn('bg-cover', 'bg-contain')).toBe('bg-contain');
+        expect(sameGroup('bg', 'cover', 'red-500')).toBe(false);
+        expect(sameGroup('bg', 'cover', 'contain')).toBe(true);
         expect(warn.mock.calls.some(c => String(c[0]).includes('"cover"'))).toBe(true);
     });
 
     it('guard rail: a token in two conflicting categories is dropped from both', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         registerSzcnGroups({ colors: ['huge'], textSizes: ['huge'] });
-        expect(szcn('text-huge', 'text-sm')).toBe('text-huge text-sm'); // keep-both
-        expect(szcn('text-huge', 'text-red-500')).toBe('text-huge text-red-500');
+        expect(sameGroup('text', 'huge', 'sm')).toBe(false);
+        expect(sameGroup('text', 'huge', 'red-500')).toBe(false);
         expect(warn.mock.calls.some(c => String(c[0]).includes('BOTH'))).toBe(true);
     });
 
     it('registration is additive and idempotent', () => {
         registerSzcnGroups({ colors: ['brand'] });
         registerSzcnGroups({ colors: ['brand', 'accent'] });
-        expect(szcn('text-brand', 'text-accent')).toBe('text-accent');
+        expect(sameGroup('text', 'brand', 'accent')).toBe(true);
     });
 });
 
@@ -233,20 +236,20 @@ describe('regression: previous under-merge behaviour that must stay', () => {
 describe('QA expansion — edge cases from review', () => {
     it('registered custom color with an opacity modifier stays in the color group', () => {
         registerSzcnGroups({ colors: ['brand'] });
-        expect(szcn('text-brand/50', 'text-blue-600')).toBe('text-blue-600');
-        expect(szcn('text-brand/50', 'text-sm')).toBe('text-brand/50 text-sm');
+        expect(sameGroup('text', 'brand/50', 'blue-600')).toBe(true);
+        expect(sameGroup('text', 'brand/50', 'sm')).toBe(false);
     });
 
     it('registered custom size with a line-height modifier stays in the size group', () => {
         registerSzcnGroups({ textSizes: ['huge'] });
-        expect(szcn('text-huge/8', 'text-sm')).toBe('text-sm');
+        expect(sameGroup('text', 'huge/8', 'sm')).toBe(true);
     });
 
     it('shaded custom colors classify by SHAPE with no registration at all', () => {
         // `--color-brand-*` produces classes like text-brand-500 — the
         // {name}-{shade} shape is recognized without any registration.
-        expect(szcn('text-brand-500', 'text-red-500')).toBe('text-red-500');
-        expect(szcn('bg-brand-500', 'bg-cover')).toBe('bg-brand-500 bg-cover');
+        expect(sameGroup('text', 'brand-500', 'red-500')).toBe(true);
+        expect(sameGroup('bg', 'brand-500', 'cover')).toBe(false);
     });
 
     it('stacked variants scope the group as one prefix', () => {
@@ -265,42 +268,22 @@ describe('QA expansion — edge cases from review', () => {
         // Passing a later class IS the override intent, so `!text-sm` earlier
         // loses to a later `text-base` — same semantics single-property
         // prefixes have always had (normalizeBase strips the marker).
-        expect(szcn('!text-sm', 'text-base')).toBe('text-base');
-        expect(szcn('text-base', '!text-sm')).toBe('!text-sm');
+        // Importance is part of what a class declares, so neither side covers
+        // the other; CSS lets the important one win wherever it stands.
+        expect(szcn('!text-sm', 'text-base')).toBe('!text-sm text-base');
+        expect(szcn('text-base', '!text-sm')).toBe('text-base !text-sm');
     });
 
     it('hostile registration input never throws and registers nothing wrong', () => {
         registerSzcnGroups({
             colors: [null as unknown as string, 42 as unknown as string, '', 'ok-token'],
         });
-        expect(szcn('text-ok-token', 'text-red-500')).toBe('text-red-500');
-        expect(szcn('text-42', 'text-red-500')).toBe('text-42 text-red-500');
-    });
-
-    it('mangled custom-token classes classify through decode + registration', () => {
-        registerSzcnGroups({ colors: ['brand'] });
-        const reverse = new Map([
-            ['z1', 'text-brand'],
-            ['z2', 'text-red-500'],
-            ['z3', 'text-sm'],
-        ]);
-        (globalThis as { __csszyx?: unknown }).__csszyx = {
-            decode: (token: string) => reverse.get(token),
-        };
-        expect(szcn('z1', 'z2')).toBe('z2'); // both colors → last wins, mangled output
-        expect(szcn('z1', 'z3')).toBe('z1 z3'); // color + size co-exist
+        expect(sameGroup('text', 'ok-token', 'red-500')).toBe(true);
+        expect(sameGroup('text', '42', 'red-500')).toBe(false);
     });
 });
 
 describe('szcn memo invalidation (perf layer must never change results)', () => {
-    it('a merge cached BEFORE registration is re-derived after it', () => {
-        // Cold call caches under generation N (unregistered → keep-both)…
-        expect(szcn('text-brand', 'text-accent')).toBe('text-brand text-accent');
-        // …registration bumps the generation, so the same key re-classifies.
-        registerSzcnGroups({ colors: ['brand', 'accent'] });
-        expect(szcn('text-brand', 'text-accent')).toBe('text-accent');
-    });
-
     it('a merge cached BEFORE the decode bridge appears is re-derived after it', () => {
         expect(szcn('q1', 'q2')).toBe('q1 q2'); // unknown tokens, cached
         const reverse = new Map([
@@ -377,8 +360,8 @@ describe('cross-category ambiguity memory', () => {
         // The theme still defines both meanings — re-registering one side in a
         // later batch (split manual calls, HMR replay) must stay keep-both.
         registerSzcnGroups({ colors: ['huge'] });
-        expect(szcn('text-huge', 'text-red-500')).toBe('text-huge text-red-500');
-        expect(szcn('text-huge', 'text-sm')).toBe('text-huge text-sm');
+        expect(sameGroup('text', 'huge', 'red-500')).toBe(false);
+        expect(sameGroup('text', 'huge', 'sm')).toBe(false);
         warn.mockRestore();
     });
 
@@ -399,8 +382,8 @@ describe('cross-category ambiguity memory', () => {
         registerSzcnGroups({ fontWeights: ['fancy'] }); // drops 'fancy' from both
 
         registerSzcnGroups({ fontWeights: ['fancy'] });
-        expect(szcn('font-fancy', 'font-bold')).toBe('font-fancy font-bold');
-        expect(szcn('font-fancy', 'font-sans')).toBe('font-fancy font-sans');
+        expect(sameGroup('font', 'fancy', 'bold')).toBe(false);
+        expect(sameGroup('font', 'fancy', 'sans')).toBe(false);
         warn.mockRestore();
     });
 
@@ -412,7 +395,7 @@ describe('cross-category ambiguity memory', () => {
 
         // A fresh registry has no record of the old theme's ambiguity.
         registerSzcnGroups({ colors: ['huge'] });
-        expect(szcn('text-huge', 'text-red-500')).toBe('text-red-500');
+        expect(sameGroup('text', 'huge', 'red-500')).toBe(true);
         warn.mockRestore();
     });
 });
@@ -460,6 +443,6 @@ describe('closed-value tokens keep merging as their prefix does', () => {
     // `display`, but the map holds tokens from several properties under that
     // one category, so collapsing them would drop a legitimate class.
     it('still under-merges display sugar', () => {
-        expect(szcn('block', 'flex')).toBe('block flex');
+        expect(szcn('block', 'flex')).toBe('flex');
     });
 });

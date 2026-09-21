@@ -86,6 +86,8 @@ export interface NextWatcherLoopOptions extends NextWatcherLoopTimerHooks {
     onError?: (error: unknown) => void;
     /** Receives a notice the watcher keeps running through; dropped by default. */
     onWarn?: (message: string) => void;
+    /** Called with every completed cycle, for work that reads what it materialized. */
+    onCycle?: (result: NextWatcherCycleResult) => void;
 }
 
 /**
@@ -105,6 +107,7 @@ export class NextWatcherLoop {
     private readonly nowFn: () => number;
     private readonly onError?: (error: unknown) => void;
     private readonly onWarn?: (message: string) => void;
+    private readonly onCycle?: (result: NextWatcherCycleResult) => void;
     private timer: WatcherTimer | undefined;
     private disposed = false;
     private readonly pendingReasons = new Set<string>();
@@ -129,6 +132,7 @@ export class NextWatcherLoop {
         this.nowFn = options.now ?? Date.now;
         this.onError = options.onError;
         this.onWarn = options.onWarn;
+        this.onCycle = options.onCycle;
     }
 
     /**
@@ -298,6 +302,7 @@ export class NextWatcherLoop {
         this.pendingReasons.clear();
         const result = this.runCycle(this.context, this.cycleOptions, reasons);
         this.lastResult = result;
+        this.onCycle?.(result);
         this.lastError = undefined;
         this.endLoaderWait();
         return result;

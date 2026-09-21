@@ -23,6 +23,10 @@ import { clearMangleRegistry, installMangleRuntime } from '../src/mangle-registr
 import { szcn } from '../src/merge-classes.js';
 import { classify, classifySzKey, has, pick, splitBox, splitBoxSz } from '../src/split-box.js';
 
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
+
 /** `[sz key, value that emits a real utility, expected token, expected role]`. */
 const MOVED: ReadonlyArray<readonly [string, string | number | boolean, string, string]> = [
     // Painted on the border box of the element that declares them: the frame.
@@ -235,11 +239,13 @@ describe('szcn is unchanged by the new exact tokens', () => {
     it.each([
         ['overflow-hidden', 'overflow-auto', 'overflow-auto'],
         ['overflow-x-hidden', 'overflow-x-auto', 'overflow-x-auto'],
-        ['overflow-[overlay]', 'overflow-auto', 'overflow-auto'],
+        // Tailwind compiles nothing for an arbitrary `overflow` value, so there
+        // is no evidence to merge on and the dead class is left where it is.
+        ['overflow-[overlay]', 'overflow-auto', 'overflow-[overlay] overflow-auto'],
         ['snap-start', 'snap-center', 'snap-center'],
         ['transform-3d', 'transform-flat', 'transform-flat'],
         ['align-top', 'align-middle', 'align-middle'],
-        ['block', 'flex', 'block flex'],
+        ['block', 'flex', 'flex'],
     ])('szcn(%s, %s) → %s', (a, b, expected) => {
         expect(szcn(a, b)).toBe(expected);
     });

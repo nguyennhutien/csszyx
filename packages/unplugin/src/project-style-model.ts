@@ -23,11 +23,16 @@ import path from 'node:path';
 
 import {
     createEmittedClassOracle,
+    loadCandidateScanner,
     type OracleSkipKind,
     readStylesheetRole,
+    type ScanSource,
     type StylesheetAlias,
     type StylesheetFacts,
 } from '@csszyx/tailwind-oracle';
+import { type MergeSignature, mergeSignatureFromCss } from './merge-signature.js';
+import { isMonorepoPackage } from './monorepo.js';
+import { sortStrings } from './sort.js';
 
 /** What one stylesheet is to the project. */
 export type StyleEntryRole =
@@ -81,6 +86,19 @@ export interface ProjectStyleModel {
      * @returns The subset that styles nothing, in the given order.
      */
     unserved(classes: readonly string[]): string[];
+    /**
+     * Merge signature agreed by every compiled root.
+     *
+     * @param candidate - Tailwind candidate class.
+     * @returns The shared signature, or null when missing or disputed.
+     */
+    signature(candidate: string): MergeSignature | null;
+    /**
+     * The class names the project's Tailwind finds in its sources.
+     *
+     * @returns Candidates, sorted; empty when no scanner could be loaded.
+     */
+    candidates(): string[];
 }
 
 /**
@@ -250,6 +268,7 @@ export function missingTailwindStylesheetMessage(
 interface CompiledEntry {
     facts: StylesheetFacts;
     findDead(classes: readonly string[]): string[];
+    signature(candidate: string): MergeSignature | null;
 }
 
 /**
@@ -320,7 +339,7 @@ function realPath(file: string): string {
 type ClassifiedStylesheet =
     | { role: 'not-root' }
     | { role: 'failed'; failure: NonNullable<StyleEntry['failure']> }
-    | { role: 'root'; css: string; imports: readonly string[] };
+    | { role: 'root'; css: string; imports: readonly string[]; scanSources: ScanSource[] };
 
 /**
  * Read one stylesheet and decide whether it is a root, from its text and a
@@ -360,7 +379,9 @@ async function classifyStylesheet(
             },
         };
     }
-    return role.utilities ? { role: 'root', css, imports: role.imports } : { role: 'not-root' };
+    return role.utilities
+        ? { role: 'root', css, imports: role.imports, scanSources: role.scanSources }
+        : { role: 'not-root' };
 }
 
 /** Every stylesheet classified, with where its roots and failures sit. */
@@ -368,7 +389,7 @@ interface ClassifiedStylesheets {
     /** One entry per stylesheet, in the order given; roots not compiled yet. */
     entries: StyleEntry[];
     /** Each root's index in `entries`, with its text. */
-    roots: Array<{ index: number; css: string }>;
+    roots: Array<{ index: number; css: string; scanSources: ScanSource[] }>;
     /** The index in `entries` of each stylesheet that did not compile. */
     failed: number[];
     /** Real paths of every stylesheet a root imports. */
@@ -437,7 +458,11 @@ async function classifyStylesheets(
         const file = cssFiles[candidateIndex] as string;
         if (stylesheet.role === 'root') {
             const index = classified.entries.push({ file, role: 'root' }) - 1;
-            classified.roots.push({ index, css: stylesheet.css });
+            classified.roots.push({
+                index,
+                css: stylesheet.css,
+                scanSources: stylesheet.scanSources,
+            });
             for (const imported of stylesheet.imports) {
                 classified.importedByRoots.add(realPath(imported));
             }
@@ -484,9 +509,22 @@ async function compileRoot(
             compiled: null,
         };
     }
+    const signatures = new Map<string, MergeSignature | null>();
     return {
         entry: { file, role: 'root', facts: oracle.facts },
-        compiled: { facts: oracle.facts, findDead: classes => oracle.findDead(classes) },
+        compiled: {
+            facts: oracle.facts,
+            findDead: classes => oracle.findDead(classes),
+            signature(candidate) {
+                if (!signatures.has(candidate)) {
+                    signatures.set(
+                        candidate,
+                        mergeSignatureFromCss(candidate, oracle.cssFor([candidate])[0] ?? null),
+                    );
+                }
+                return signatures.get(candidate) ?? null;
+            },
+        },
     };
 }
 
@@ -520,14 +558,19 @@ export async function openProjectStyleModel(
         aliases,
     );
 
-    const selectedRoots: Array<{ index: number; css: string; file: string }> = [];
-    for (const { index, css } of roots) {
+    const selectedRoots: Array<{
+        index: number;
+        css: string;
+        file: string;
+        scanSources: ScanSource[];
+    }> = [];
+    for (const { index, css, scanSources } of roots) {
         const { file } = entries[index] as StyleEntry;
         if (importedByRoots.has(realPath(file))) {
             entries[index] = { file, role: 'imported' };
             continue;
         }
-        selectedRoots.push({ index, css, file });
+        selectedRoots.push({ index, css, file, scanSources });
     }
     const openedRoots = await mapConcurrent(
         selectedRoots,
@@ -556,6 +599,42 @@ export async function openProjectStyleModel(
             if (compiled.length === 0) return [];
             const perEntry = compiled.map(entry => new Set(entry.findDead(classes)));
             return classes.filter(token => perEntry.every(dead => dead.has(token)));
+        },
+        candidates() {
+            // Every root's sources, once each: two roots that scan one tree
+            // would otherwise read it twice for the same answer.
+            // Automatic detection inside a workspace walks every linked package
+            // under node_modules: 26,942 files and 10 s measured on one
+            // playground. The build warns about that setup already; the table
+            // does not pay for it again, and keeps what it cannot prove.
+            const unscoped = (source: ScanSource): boolean =>
+                source.pattern === '**/*' && source.base === resolveFrom && !source.negated;
+            const inWorkspace = selectedRoots.some(root => root.scanSources.some(unscoped))
+                ? isMonorepoPackage(resolveFrom)
+                : false;
+            const sources = new Map<string, ScanSource>();
+            for (const root of selectedRoots) {
+                for (const source of root.scanSources) {
+                    if (inWorkspace && unscoped(source)) continue;
+                    sources.set(JSON.stringify(source), source);
+                }
+            }
+            if (sources.size === 0) return [];
+            const scan = loadCandidateScanner(resolveFrom);
+            // No scanner to load: the census stays what the build saw, and the
+            // merge keeps what it cannot prove.
+            if (scan === null) return [];
+            return sortStrings(new Set(scan([...sources.values()])));
+        },
+        signature(candidate) {
+            if (compiled.length === 0) return null;
+            const signatures = compiled.map(entry => entry.signature(candidate));
+            const [firstSignature, ...otherSignatures] = signatures;
+            if (firstSignature === null || firstSignature === undefined) return null;
+            const canonical = JSON.stringify(firstSignature);
+            return otherSignatures.every(signature => JSON.stringify(signature) === canonical)
+                ? firstSignature
+                : null;
         },
     };
 }

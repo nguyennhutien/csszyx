@@ -1,33 +1,26 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
 import * as path from 'node:path';
 
-import type { NextStateContext } from './next-state-context.js';
-import type { NextWatcherCycleOptions, NextWatcherCycleResult } from './next-watcher-cycle.js';
-import {
-    NextWatcherLoop,
-    type NextWatcherLoopCycleRunner,
-    type NextWatcherLoopTimerHooks,
-} from './next-watcher-loop.js';
+import type { NextWatcherCycleResult } from './next-watcher-cycle.js';
+import { NextWatcherLoop, type NextWatcherLoopOptions } from './next-watcher-loop.js';
 
 /**
  * Re-exported for the CLI: `next watch` records it on the lock for the prebuild
  * it runs at startup, so the Turbopack loader steps aside for that pass too.
  */
-export { NEXT_WATCH_LOCK_COMMAND } from './next-safelist-state.js';
+export {
+    NEXT_WATCH_LOCK_COMMAND,
+    type NextSafelistMaterializeResult,
+} from './next-safelist-state.js';
 
 /** Filesystem events that can change the materialized safelist. */
 export type NextSafelistWatchEvent = 'add' | 'change' | 'unlink';
 
-/** Options for the filesystem-independent Next safelist watcher controller. */
-export interface NextSafelistWatcherOptions extends NextWatcherLoopTimerHooks {
-    context: NextStateContext;
-    cycleOptions?: NextWatcherCycleOptions;
-    debounceMs?: number;
-    runCycle?: NextWatcherLoopCycleRunner;
-    onError?: (error: unknown) => void;
-    /** Receives a notice the watcher keeps running through; dropped by default. */
-    onWarn?: (message: string) => void;
-}
+/**
+ * Options for the filesystem-independent Next safelist watcher controller:
+ * the loop's own, since the controller hands every one of them to it.
+ */
+export type NextSafelistWatcherOptions = NextWatcherLoopOptions;
 
 /**
  * Validate one watcher event path against the flat safelist shard directory.

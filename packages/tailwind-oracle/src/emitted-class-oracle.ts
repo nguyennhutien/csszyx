@@ -32,6 +32,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import fg from 'fast-glob';
+import { type CompiledSources, type ScanSource, scanSourcesOf } from './candidate-scanner.js';
 import {
     type CollisionDesignSystem,
     collisionOracleFrom,
@@ -69,7 +70,7 @@ interface DesignSystem {
     parseCandidate(
         candidate: string,
     ): Iterable<{ kind: string; root: string; value?: { kind: string; value: string } | null }>;
-    getClassList(): Iterable<string | readonly [string, unknown]>;
+    getClassList(): Iterable<readonly [string, unknown]>;
 }
 
 /** A plugin or config module handed back to Tailwind's loader. */
@@ -134,6 +135,23 @@ export type EmittedClassOracle =
            * @returns The subset that styles nothing, in the given order.
            */
           findDead(classes: readonly string[]): string[];
+          /**
+           * CSS Tailwind emits for each candidate, preserving input order.
+           *
+           * This is the raw evidence used to derive merge signatures. Keeping
+           * it on the already-open design system prevents signature analysis
+           * from opening another CSS-reading path.
+           *
+           * @param classes - Candidate class names.
+           * @returns One rule per candidate, or null when it emits no CSS.
+           */
+          cssFor(classes: readonly string[]): Array<string | null>;
+          /**
+           * Concrete candidates known to the compiled design system.
+           *
+           * @returns Unique class names in deterministic code-unit order.
+           */
+          candidates(): string[];
           /**
            * Which of these classes carry a slash modifier that provably does
            * not survive this stylesheet — a color-mix() argument resolving to
@@ -563,6 +581,8 @@ export type StylesheetRole =
           utilities: boolean;
           /** Every stylesheet the compile loaded, as resolved paths. */
           imports: string[];
+          /** Where Tailwind's Scanner looks for this stylesheet's classes. */
+          scanSources: ScanSource[];
       }
     | OracleSkip;
 
@@ -598,7 +618,7 @@ export async function readStylesheetRole(
     const compile = tailwind.compile as (
         css: string,
         options: LoadDesignSystemOptions,
-    ) => Promise<{ features: number }>;
+    ) => Promise<{ features: number } & Partial<CompiledSources>>;
     const context: StylesheetResolution = {
         aliases: options.aliases ?? [],
         resolver: await projectResolver(options.resolveFrom),
@@ -626,7 +646,17 @@ export async function readStylesheetRole(
             loadModule: (id, base) => loadModule(id, base, options.resolveFrom, context),
         });
         const utilities = tailwind.utilitiesFeature ?? UTILITIES_FEATURE;
-        return { ok: true, utilities: (compiled.features & utilities) !== 0, imports };
+        return {
+            ok: true,
+            utilities: (compiled.features & utilities) !== 0,
+            imports,
+            // Automatic detection starts where the integration runs: the
+            // project root, which is where the model resolves from.
+            scanSources: scanSourcesOf(
+                { root: compiled.root ?? null, sources: compiled.sources ?? [] },
+                options.resolveFrom,
+            ),
+        };
     } catch (error) {
         return {
             ...stylesheetSkip(
@@ -764,6 +794,15 @@ export async function createEmittedClassOracle(
             if (asked.length === 0) return [];
             const css = design.candidatesToCss(asked);
             return asked.filter((_, index) => css[index] === null);
+        },
+        cssFor(classes) {
+            return design.candidatesToCss([...classes]);
+        },
+        candidates() {
+            // Distinct by construction, so the comparator never sees a tie.
+            return [...new Set([...design.getClassList()].map(entry => entry[0]))].sort((a, b) =>
+                a < b ? -1 : 1,
+            );
         },
         findBrokenOpacity(classes) {
             const asked = classes.filter(token => token.includes('/') && !isMarker(token));

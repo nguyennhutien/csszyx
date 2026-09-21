@@ -3,8 +3,8 @@
  *
  * `registerSzcnGroups` could only ever ADD. That is enough while a build runs
  * once, and wrong the moment a dev server re-runs it: deleting or renaming a
- * `@theme` token left the old name registered, so `szcn` kept merging classes
- * the stylesheet no longer defines. The build regenerated correctly and the
+ * `@theme` token left the old name registered, so `classify` and `splitBox`
+ * kept routing classes the stylesheet no longer defines. The build regenerated correctly and the
  * browser ignored it.
  *
  * Two producers write here — the build's scan and an app registering
@@ -13,7 +13,6 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { szcn } from '../src/merge-classes.js';
 import {
     _resetSzcnGroups,
     clearSzcnGroups,
@@ -23,6 +22,8 @@ import {
     setSzcnGroups,
 } from '../src/merge-groups.js';
 
+import { sameGroup } from './helpers/same-group.js';
+
 afterEach(() => {
     _resetSzcnGroups();
 });
@@ -30,21 +31,21 @@ afterEach(() => {
 describe('replacing a source', () => {
     it('drops a token the new set no longer declares', () => {
         setSzcnGroups({ colors: ['brand', 'accent'] }, 'build');
-        expect(szcn('text-brand', 'text-accent')).toBe('text-accent');
+        expect(sameGroup('text', 'brand', 'accent')).toBe(true);
 
-        // The stylesheet lost `--color-accent`; the classes must stop merging.
+        // The stylesheet lost `--color-accent`; the token must leave its group.
         setSzcnGroups({ colors: ['brand'] }, 'build');
-        expect(szcn('text-brand', 'text-accent')).toBe('text-brand text-accent');
+        expect(sameGroup('text', 'brand', 'accent')).toBe(false);
     });
 
     it('leaves another source alone', () => {
         registerSzcnGroups({ colors: ['handwritten'] });
         setSzcnGroups({ colors: ['scanned'] }, 'build');
-        expect(szcn('text-handwritten', 'text-scanned')).toBe('text-scanned');
+        expect(sameGroup('text', 'handwritten', 'scanned')).toBe(true);
 
         // A rebuild replaces only what the build owns.
         setSzcnGroups({ colors: [] }, 'build');
-        expect(szcn('text-handwritten', 'text-other')).toBe('text-handwritten text-other');
+        expect(sameGroup('text', 'handwritten', 'scanned')).toBe(false);
         expect(getSzcnGroups().colors).toEqual(['handwritten']);
     });
 });

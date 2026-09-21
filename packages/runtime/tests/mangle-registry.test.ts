@@ -16,6 +16,10 @@ import {
     installMangleRuntime,
 } from '../src/mangle-registry.js';
 
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
+
 type DebugWindow = Window & { __csszyx?: unknown };
 
 const MAP = { 'p-4': 'z', 'mx-0': 'y', 'mx-4': 'x' };

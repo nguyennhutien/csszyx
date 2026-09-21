@@ -86,6 +86,8 @@ test.describe
             await expect
                 .poll(async () => target.evaluate(node => getComputedStyle(node).paddingTop))
                 .toBe('28px');
+            await expect(page.getByTestId('safelist-hmr-merge')).toHaveText('pt-8');
+            await expect(page.getByTestId('safelist-hmr-slim-merge')).toHaveText('pt-8');
 
             const loadsBeforeEdit = loadCount;
             await page.evaluate(() => {
@@ -100,10 +102,9 @@ test.describe
             );
             await writeFile(
                 fixturePath,
-                originalSource.replace(
-                    BASELINE_LITERAL,
-                    `sz={{ pt: ${padding}, bg: 'slate-100' }}`,
-                ),
+                originalSource
+                    .replace(BASELINE_LITERAL, `sz={{ pt: ${padding}, bg: 'slate-100' }}`)
+                    .replaceAll("'pt-8'", `'pt-${padding}'`),
             );
 
             // The rule only exists once csszyx has written the safelist and
@@ -118,6 +119,9 @@ test.describe
             expect(await safelistHolds(padding), 'csszyx must have written the safelist').toBe(
                 true,
             );
+
+            await expect(page.getByTestId('safelist-hmr-merge')).toHaveText(`pt-${padding}`);
+            await expect(page.getByTestId('safelist-hmr-slim-merge')).toHaveText(`pt-${padding}`);
 
             const sentinel = await page.evaluate(
                 () =>

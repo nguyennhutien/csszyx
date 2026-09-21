@@ -353,8 +353,7 @@ case — a class the toolkit reads confidently that your Tailwind does not serve
 
 Some prefixes cover more than one CSS property: `text-red-500` is a colour and
 `text-sm` is a font size, yet both are the `text` category. For those, `classify`
-also names the property — the same answer `szcn` merges by, so the two halves of
-csszyx never disagree about a token:
+also names the property:
 
 ```ts
 classify('text-red-500'); // { role: 'inner', category: 'text', property: 'color' }
@@ -371,9 +370,8 @@ built-in one is, because the build registers them (see
 
 `property` is **absent** — never `null`, never empty — when the prefix means
 exactly one property (`p-4` is padding whatever the value) and when the value
-does not confidently name one (`border-t-2` sets a width on one side; szcn keeps
-both classes there rather than guess, and `classify` says nothing rather than
-guess). It never affects which node a token is routed to: it is extra
+does not confidently name one (`border-t-2` sets a width on one side, and
+`classify` says nothing rather than guess). It never affects which node a token is routed to: it is extra
 information about a class, not a vote on where the class goes.
 
 Any selector can be qualified with a property, so a rule can address text
@@ -450,8 +448,7 @@ Under a bundler that tree-shakes, this saves almost nothing — 7.2&nbsp;KB gz
 against the main entry's 7.3&nbsp;KB, because the main entry already shakes.
 It matters under `require()`, where nothing shakes at all: 25.2&nbsp;KB gz
 against 31.2&nbsp;KB. About 1.9&nbsp;KB of either number is the value
-classifier `property` reads — the tables `szcn` already ships, so an app that
-uses `szcn` pays nothing extra for it.
+classifier `property` reads.
 
 ### What counts as a class here
 

@@ -104,7 +104,7 @@ describe('readStylesheetRole — a Tailwind that does not export its feature fla
                 { resolveFrom: REPO, css: '.a{}', cssBase: dir },
                 reporting(16),
             ),
-        ).toEqual({ ok: true, utilities: true, imports: [] });
+        ).toEqual({ ok: true, utilities: true, imports: [], scanSources: expect.any(Array) });
     });
 
     it('reads a stylesheet without that bit as generating no utilities', async () => {
@@ -113,6 +113,6 @@ describe('readStylesheetRole — a Tailwind that does not export its feature fla
                 { resolveFrom: REPO, css: '.a{}', cssBase: dir },
                 reporting(1),
             ),
-        ).toEqual({ ok: true, utilities: false, imports: [] });
+        ).toEqual({ ok: true, utilities: false, imports: [], scanSources: expect.any(Array) });
     });
 });

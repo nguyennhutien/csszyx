@@ -21,6 +21,10 @@ import { describe, expect, it } from 'vitest';
 import { _szcn } from '../src/merge-classes.js';
 import { classifyAmbiguousValue } from '../src/merge-groups.js';
 
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
+
 describe('each keyword lands in its group, and nothing outside them does', () => {
     // The pairs below prove the groups matter. This table proves every literal
     // the classifiers name lands in the right one, so a keyword moved to the

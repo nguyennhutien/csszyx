@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { prepareNextStylesheetFacts, runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
 import {
     NEXT_WATCH_LOCK_COMMAND,
+    type NextSafelistMaterializeResult,
     type NextSafelistWatchEvent,
     NextSafelistWatcher,
 } from '@csszyx/unplugin/next-watcher';
@@ -20,6 +21,7 @@ import fg from 'fast-glob';
 import { Minimatch } from 'minimatch';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import { colors, icons } from '../utils/terminal-ui.js';
+import { tryWriteMergeRegistration } from './next-merge-registration.js';
 import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
 
 const SOURCE_EXTENSION = /\.[cm]?[jt]sx?$/i;
@@ -175,8 +177,9 @@ export async function startNextWatch(
         throw new Error(`No source files matched pattern \`${pattern}\` under ${root}.`);
     }
 
+    let model: Awaited<ReturnType<typeof prepareNextStylesheetFacts>>['model'] | null = null;
     const recordStylesheetFacts = async (): Promise<void> => {
-        const { warning } = await prepareNextStylesheetFacts({
+        const facts = await prepareNextStylesheetFacts({
             explicitRoot: root,
             cwd,
             cacheDir: options.cacheDir,
@@ -184,7 +187,8 @@ export async function startNextWatch(
             files,
             setting: 'the `--tailwind-stylesheet` flag',
         });
-        if (warning !== null) printWatcherNotice(warning);
+        model = facts.model;
+        if (facts.warning !== null) printWatcherNotice(facts.warning);
     };
     // The loader lowers with the prefix these record, so they are read before
     // the first cycle, the way a bundler build reads them.
@@ -220,11 +224,31 @@ export async function startNextWatch(
         resolveFailure(error instanceof Error ? error : new Error(String(error)));
     };
 
+    // The merge table and the unserved list the loader imports: rewritten
+    // after every cycle, since the shards carry the census, and after every
+    // stylesheet edit, since the design system signs the table.
+    let census: NextSafelistMaterializeResult = prebuild.cycle.materialize;
+    const writeRegistration = (): void => {
+        const warning = tryWriteMergeRegistration({
+            root,
+            model,
+            classes: census.classes,
+            authoredClasses: census.authoredClasses,
+            mergeLiterals: census.mergeLiterals,
+        });
+        if (warning !== null) printWatcherNotice(warning);
+    };
+    writeRegistration();
+
     const controller = new NextSafelistWatcher({
         context: prebuild.context,
         debounceMs,
         onError: reportFailure,
         onWarn: printWatcherNotice,
+        onCycle: result => {
+            census = result.materialize;
+            writeRegistration();
+        },
     });
     const isIgnored = createIgnoredMatcher(root, prebuild.context.safelist.shardsDir, ignore);
     const watchFactory = dependencies.watch ?? watch;
@@ -255,14 +279,17 @@ export async function startNextWatch(
             // re-runs the loader for every module that depends on it. An edit
             // that leaves the stylesheets unreadable is reported, and the
             // session goes on: the author is mid-edit.
-            factsWrites = factsWrites.then(recordStylesheetFacts).catch((error: unknown) => {
-                // The build's note says nothing was written, which a watch
-                // that goes on is not; say what it goes on with instead.
-                const message = (error as Error).message.replace(/\n {2}note: .*$/, '');
-                printWatcherNotice(
-                    `${message}\n  note: \`csszyx next watch\` keeps watching; the loader stops on this error until the stylesheets agree again.`,
-                );
-            });
+            factsWrites = factsWrites
+                .then(recordStylesheetFacts)
+                .then(writeRegistration)
+                .catch((error: unknown) => {
+                    // The build's note says nothing was written, which a watch
+                    // that goes on is not; say what it goes on with instead.
+                    const message = (error as Error).message.replace(/\n {2}note: .*$/, '');
+                    printWatcherNotice(
+                        `${message}\n  note: \`csszyx next watch\` keeps watching; the loader stops on this error until the stylesheets agree again.`,
+                    );
+                });
             return;
         }
         // A directory that appears after the watch is running may already hold

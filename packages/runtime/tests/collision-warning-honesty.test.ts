@@ -8,18 +8,26 @@
  * BOTH `text-wrap: balance` and `color: var(--color-balance)`, so it competes
  * with any other colour class on `color`.
  *
- * szcn's contract is that the last argument wins. With both classes kept, the
- * winner is decided by stylesheet order instead — and `.text-red-500` is
- * emitted after `.text-balance`, so `szcn('text-red-500', 'text-balance')`
- * renders red. The author gets the opposite colour, having been told the
- * fallback was safe.
+ * `szcn` merges on the compiled CSS, so it reads that class correctly: it sets
+ * `color` and the two `text-wrap` longhands. A colour class written AFTER it
+ * covers only one of those, so both classes stay, both set `color`, and the
+ * stylesheet's order picks the winner rather than the order of the arguments.
+ * Written BEFORE it, the colour class is covered and dropped, which is right.
  *
- * Keeping both is still the right FALLBACK — dropping one would guess. What
- * was wrong was calling it safe.
+ * The warning used to blame `szcn` for not telling the two meanings apart. It
+ * can; what it cannot do is make one class stop meaning two things. The
+ * registry the warning comes from now feeds `classify` only, and the message
+ * has to say what is true of both.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { clearSzcnGroups, registerSzcnGroups, szcn } from '../src/index.js';
+import {
+    clearSzcnGroups,
+    registerMergeSignatures,
+    registerSzcnGroups,
+    szcn,
+} from '../src/index.js';
+import { __resetMergeSignaturesForTests } from '../src/merge-signatures.js';
 
 // A DIFFERENT colliding token per case. The warning is emitted through
 // `warnOnce`, which keys on the message, so reusing one name would leave the
@@ -28,6 +36,7 @@ import { clearSzcnGroups, registerSzcnGroups, szcn } from '../src/index.js';
 describe('the warning for a token that shadows a built-in', () => {
     afterEach(() => {
         clearSzcnGroups();
+        __resetMergeSignaturesForTests();
         vi.restoreAllMocks();
     });
 
@@ -50,12 +59,46 @@ describe('the warning for a token that shadows a built-in', () => {
         expect(message).toContain('stylesheet order');
     });
 
-    it('still keeps both classes, which remains the right fallback', () => {
-        // Dropping one would be a guess. The fix is the wording, not the
-        // behaviour — this locks the behaviour so the next edit cannot
-        // "fix" the warning by changing what it warns about.
-        registerSzcnGroups({ colors: ['balance'] }, 'honesty-test-3');
+    it('names the helper the registry still feeds, not the one that no longer reads it', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-        expect(szcn('text-red-500', 'text-balance')).toBe('text-red-500 text-balance');
+        registerSzcnGroups({ colors: ['cover'] }, 'honesty-test-4');
+
+        const message = warn.mock.calls.map(call => String(call[0])).join('\n');
+        expect(message).toContain('`classify`');
+        expect(message).not.toContain('szcn cannot');
+    });
+
+    it('describes what szcn does with the class the token produces', () => {
+        // The signatures Tailwind 4.3.3 compiles with `--color-balance`
+        // declared: `text-balance` sets `color` and both `text-wrap` longhands,
+        // so it covers a colour class and a colour class does not cover it.
+        registerMergeSignatures([{ 'text-red-500': 0, 'text-balance': 1 }, [[0], [0, 1]]]);
+
+        expect(szcn('text-red-500', 'text-balance')).toBe('text-balance');
+        // Both set `color` here, and the stylesheet's order decides: the case
+        // the warning tells the author about.
+        expect(szcn('text-balance', 'text-red-500')).toBe('text-balance text-red-500');
+    });
+});
+
+describe('the warning for a token declared in two categories', () => {
+    afterEach(() => {
+        clearSzcnGroups();
+        vi.restoreAllMocks();
+    });
+
+    it.each([
+        [{ colors: ['honest-a'], textSizes: ['honest-a'] }, 'text-honest-a'],
+        [{ fontFamilies: ['honest-b'], fontWeights: ['honest-b'] }, 'font-honest-b'],
+    ])('says classify cannot name the property, and leaves szcn out of it', (groups, cls) => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        registerSzcnGroups(groups, 'honesty-test-5');
+
+        const message = warn.mock.calls.map(call => String(call[0])).join('\n');
+        expect(message).toContain(`\`${cls}\``);
+        expect(message).toContain('`classify`');
+        expect(message).not.toContain('szcn');
     });
 });

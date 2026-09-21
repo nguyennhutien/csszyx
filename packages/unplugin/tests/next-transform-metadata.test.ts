@@ -40,6 +40,8 @@ describe('Next transform metadata', () => {
             sourcePath: '/repo/src/App.tsx',
             sourceHash: createHash('sha256').update(source).digest('hex'),
             classes: ['p-2'],
+            authoredClasses: ['raw'],
+            mergeLiterals: [],
         });
     });
 });

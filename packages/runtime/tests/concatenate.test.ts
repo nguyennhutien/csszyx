@@ -7,6 +7,10 @@ import { describe, expect, it } from 'vitest';
 
 import { _sz, _sz2, _sz3, _szMerge, _szPart, szr } from '../src/concatenate.js';
 
+import { useTailwindMergeTable } from './helpers/tailwind-merge-table.js';
+
+useTailwindMergeTable();
+
 describe('_sz', () => {
     it('should concatenate multiple classes', () => {
         expect(_sz('a', 'b', 'c')).toBe('a b c');
