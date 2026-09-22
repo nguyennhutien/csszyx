@@ -68,7 +68,9 @@ describe('the object rule on each lane', () => {
         expect(classNames(result.code)).toEqual(['p-4', 'p-4 pb-2']);
     }, 60_000);
 
-    it('vite leaves the dropped class out of the safelist it writes', async () => {
+    // The safelist is what Tailwind generates, and a class the build's merge
+    // removed can still be emitted by a path that resolves at run time.
+    it('vite keeps the dropped class in the safelist it writes', async () => {
         const root = tailwindProject('csszyx-object-rule-safelist-', {
             'src/theme.css': '@import "tailwindcss";\n',
             'src/App.tsx': 'export const A = () => <div sz={{ pt: 2, p: 4 }} />;\n',
@@ -80,7 +82,7 @@ describe('the object rule on each lane', () => {
         const safelist = readFileSync(join(root, SAFELIST_FILE), 'utf8').split('\n');
 
         expect(safelist).toContain('p-4');
-        expect(safelist).not.toContain('pt-2');
+        expect(safelist).toContain('pt-2');
     }, 60_000);
 
     it('rollup merges from the model it opens at build start', async () => {

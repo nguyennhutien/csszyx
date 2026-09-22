@@ -1614,6 +1614,10 @@ fn collect_szv_catalog_classes(
     ctx: ResolveContext<'_>,
     catalog_objects: &mut Vec<StaticSzObject>,
 ) -> Option<Vec<String>> {
+    // `szv` resolves at run time with no merge table, so its catalog is every
+    // class it can emit, unmerged, and none of its objects is a merge group.
+    let _unmerged = super::merge::MergeTableScope::enter(None);
+    let _uncollected = super::merge::MergeGroupScope::enter(false);
     // TypeScript wrappers (`satisfies` / `as` / parens) around the config are
     // type-level only — unwrap so `szv({…} satisfies SzvConfig)` still extracts.
     // Only a `const` binding is followed (never a reassigned `let`), to match

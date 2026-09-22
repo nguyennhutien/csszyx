@@ -238,6 +238,7 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
         usesBoolClass: result.metadata.usesBoolClass ?? false,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),
+        mergeGroups: result.mergeGroups,
         diagnostics: result.diagnostics,
         recoveryTokens: new Map(
             result.recoveryTokens.map(({ token, ...data }) => [

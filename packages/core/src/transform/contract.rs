@@ -187,6 +187,10 @@ pub struct TransformResult {
     pub classes: Vec<String>,
     /// Static className/class strings discovered in the source.
     pub raw_class_names: Vec<String>,
+    /// The class list of each static object a merge would read, when the pass
+    /// had no merge table; lists of one class are left out.
+    #[serde(default)]
+    pub merge_groups: Vec<Vec<String>>,
     /// Non-fatal transform diagnostics.
     pub diagnostics: Vec<String>,
     /// Recovery token metadata emitted for hydration safety.

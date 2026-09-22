@@ -205,6 +205,8 @@ pub struct NativeTransformResult {
     pub classes: Vec<String>,
     /// Static className/class strings discovered in the source.
     pub raw_class_names: Vec<String>,
+    /// The class list of each static object a merge would read.
+    pub merge_groups: Vec<Vec<String>>,
     /// Non-fatal transform diagnostics.
     pub diagnostics: Vec<String>,
     /// Recovery token metadata emitted for hydration safety.
@@ -277,6 +279,7 @@ impl From<TransformResult> for NativeTransformResult {
             map: result.map.map(|map| map.to_string()),
             classes: result.classes,
             raw_class_names: result.raw_class_names,
+            merge_groups: result.merge_groups,
             diagnostics: result.diagnostics,
             recovery_tokens: result
                 .recovery_tokens

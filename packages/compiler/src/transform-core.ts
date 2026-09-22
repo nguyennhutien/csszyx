@@ -4412,6 +4412,12 @@ export interface SourceTransformResult {
     classes: Set<string>;
     /** Raw className/class strings collected for Tailwind discovery only. */
     rawClassNames: Set<string>;
+    /**
+     * The class list of each static object a merge would read, from a pass
+     * without a merge table. Absent from a result an older engine or cache
+     * entry produced; a reader then treats every class of the file as one list.
+     */
+    mergeGroups?: string[][];
     /** Compiler diagnostics to emit in development. */
     diagnostics: string[];
     /** Recovery tokens emitted by szRecover attributes. */

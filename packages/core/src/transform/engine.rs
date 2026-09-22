@@ -128,8 +128,25 @@ pub(super) fn transform_file_with_options(
         Some(Err(problem)) => (None, Some(problem)),
         None => (None, None),
     };
-    let _merge_table = super::merge::MergeTableScope::enter(table);
+    // A pass with a table has already been told which lists cover each other.
+    let groups = super::merge::MergeGroupScope::enter(table.is_none());
+    let merge_table = super::merge::MergeTableScope::enter(table);
     let mut result = transform_file_in_scopes(file, options);
+    let groups = groups.finish();
+    let removed = merge_table.take_removed();
+    // A file that emitted nothing, over the AST budget for one, merges nothing.
+    if !result.classes.is_empty() {
+        result.merge_groups = groups;
+        if !removed.is_empty() {
+            let mut reported: std::collections::HashSet<String> =
+                result.classes.iter().cloned().collect();
+            for class_name in removed {
+                if reported.insert(class_name.clone()) {
+                    result.classes.push(class_name);
+                }
+            }
+        }
+    }
     if let Some(problem) = table_problem {
         result.diagnostics.push(format!(
             "[csszyx] {}: {problem}, so no sz key was merged with a later one it covers.\n  help: install the same csszyx version of every @csszyx package, then rebuild.",
@@ -200,6 +217,7 @@ fn transform_fast_static_ir_with_options(
         map: None,
         classes: lowered.classes,
         raw_class_names: lowered.raw_class_names,
+        merge_groups: Vec::new(),
         diagnostics: {
             let mut diagnostics =
                 unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref());
@@ -447,6 +465,7 @@ fn transform_static_classes_with_options(
         map: None,
         classes,
         raw_class_names,
+        merge_groups: Vec::new(),
         diagnostics,
         recovery_tokens,
         css_variable_map: merge_variable_maps(
@@ -1284,6 +1303,7 @@ fn noop_result(file: &TransformFile) -> TransformResult {
         map: None,
         classes: Vec::new(),
         raw_class_names: Vec::new(),
+        merge_groups: Vec::new(),
         diagnostics: Vec::new(),
         recovery_tokens: Vec::new(),
         css_variable_map: Vec::new(),

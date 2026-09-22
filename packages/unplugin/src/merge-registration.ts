@@ -26,6 +26,7 @@ import {
     createMergeSignatureTable,
     ENGINE_MERGE_TABLE_FORMAT,
     type MergeSignatureTable,
+    tableRemovesFrom,
 } from './merge-signature.js';
 import type { ProjectStyleModel } from './project-style-model.js';
 import { themeGroupsSpecifier } from './theme-groups-file.js';
@@ -290,18 +291,25 @@ export function ensureMergeTable(root: string): void {
 }
 
 /**
- * The rows of the settled table that one module's classes can use.
+ * The rows of the settled table that one module's lists can use.
  *
  * Only the signatures are narrowed: the coverage rows are indexed by id, and
- * the engine ignores a row no class of the module maps to. For `c` classes
- * and the longest row `r`, `O(c · r)`.
+ * the engine ignores a row no class of the module maps to. After reading and
+ * parsing the table, groups of lengths `nᵢ`, `c` total classes, and longest row
+ * `r` cost `O(c + Σ nᵢ² · (1 + r))` worst-case time: checking whether a group
+ * merges scans earlier classes and performs a linear coverage-row lookup.
  *
  * @param root - The project root.
- * @param classes - The classes the module lowered to before any merge.
- * @returns The table to hand the engine, or null when no two of these classes
- *          cover each other, or no readable table exists.
+ * @param groups - The class lists a merge would read, from a pass without a
+ *        table.
+ * @returns The table to hand the engine, or null when merging no list would
+ *          remove a class, or no readable table exists.
  */
-export function mergeTableFor(root: string, classes: ReadonlySet<string>): EngineMergeTable | null {
+export function mergeTableFor(
+    root: string,
+    groups: ReadonlyArray<readonly string[]>,
+): EngineMergeTable | null {
+    if (groups.length === 0) return null;
     const text = readText(mergeTablePath(root));
     if (text === null) return null;
     let table: EngineMergeTable;
@@ -311,25 +319,15 @@ export function mergeTableFor(root: string, classes: ReadonlySet<string>): Engin
         return null;
     }
     if (typeof table?.signatures !== 'object' || !Array.isArray(table.coverage)) return null;
-    const signatures: Record<string, number> = {};
-    const ids = new Set<number>();
-    let signed = 0;
-    for (const className of classes) {
-        // A number, never an inherited `constructor` or `toString`.
-        const id: unknown = table.signatures[className];
-        if (typeof id !== 'number') continue;
-        signatures[className] = id;
-        ids.add(id);
-        signed++;
+    if (!groups.some(group => tableRemovesFrom(table.signatures, table.coverage, group))) {
+        return null;
     }
-    // Two classes of one signature replace each other; otherwise a pair needs
-    // a row naming another of these ids.
-    const pairs =
-        signed > ids.size ||
-        [...ids].some(id =>
-            (table.coverage[id] ?? []).some(other => other !== id && ids.has(other)),
-        );
-    return pairs ? { format: table.format, signatures, coverage: table.coverage } : null;
+    const signatures: Record<string, number> = {};
+    for (const className of new Set(groups.flat())) {
+        const id: unknown = table.signatures[className];
+        if (typeof id === 'number') signatures[className] = id;
+    }
+    return { format: table.format, signatures, coverage: table.coverage };
 }
 
 /**

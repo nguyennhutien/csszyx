@@ -164,9 +164,9 @@ describe('the rows one module reads from the table', () => {
         return root;
     }
 
-    it('keeps only the signatures of the classes given, and every row', () => {
+    it('keeps only the signatures of the classes listed, and every row', () => {
         const root = withTable(JSON.stringify(TABLE));
-        expect(mergeTableFor(root, new Set(['pb-2', 'p-4', 'flex']))).toEqual({
+        expect(mergeTableFor(root, [['pb-2', 'p-4', 'flex']])).toEqual({
             format: 1,
             signatures: { 'pb-2': 1, 'p-4': 0 },
             coverage: TABLE.coverage,
@@ -175,16 +175,21 @@ describe('the rows one module reads from the table', () => {
 
     it('answers for two classes of one signature', () => {
         const root = withTable(JSON.stringify(TABLE));
-        expect(mergeTableFor(root, new Set(['p-4', 'p-8']))).not.toBeNull();
+        expect(mergeTableFor(root, [['p-4', 'p-8']])).not.toBeNull();
     });
 
     it.each([
-        ['no two of them cover each other', ['p-4', 'm-2']],
-        ['a class covers only a class the module does not hold', ['p-4']],
-        ['a class name is an inherited property', ['constructor', 'p-4']],
+        ['no two of them cover each other', [['p-4', 'm-2']]],
+        ['a class covers only a class the module does not hold', [['p-4']]],
+        ['a class name is an inherited property', [['constructor', 'p-4']]],
+        // Two elements never merge, whatever their classes cover.
+        ['the pair spans two lists', [['p-4'], ['pb-2']]],
+        // A later refinement removes nothing.
+        ['the covering class comes first', [['p-4', 'pb-2']]],
+        ['the module has no list', []],
     ])('is null when %s', (_, classes) => {
         const root = withTable(JSON.stringify(TABLE));
-        expect(mergeTableFor(root, new Set(classes))).toBeNull();
+        expect(mergeTableFor(root, classes)).toBeNull();
     });
 
     it.each([
@@ -196,6 +201,6 @@ describe('the rows one module reads from the table', () => {
             text === null
                 ? tailwindProject('csszyx-object-rule-rows-', { 'package.json': '{}\n' })
                 : withTable(text);
-        expect(mergeTableFor(root, new Set(['pb-2', 'p-4']))).toBeNull();
+        expect(mergeTableFor(root, [['pb-2', 'p-4']])).toBeNull();
     });
 });

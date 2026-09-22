@@ -467,6 +467,7 @@ pub(crate) fn overlap_disqualify_path(config: &StaticSzvConfig) -> Option<String
 /// precompiled.
 pub(crate) fn compile_szv_table(config: &StaticSzvConfig) -> SzvTable {
     let _unmerged = super::merge::MergeTableScope::enter(None);
+    let _uncollected = super::merge::MergeGroupScope::enter(false);
     let base = config
         .base
         .as_ref()

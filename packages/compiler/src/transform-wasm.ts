@@ -29,6 +29,7 @@ interface WasmResultJson {
     code: string;
     classes: string[];
     raw_class_names: string[];
+    merge_groups: string[][];
     diagnostics: string[];
     recovery_tokens: Array<{
         token: string;
@@ -218,6 +219,7 @@ function fromWasmResult(result: WasmResultJson): SourceTransformResult {
         usesBoolClass: result.metadata.uses_bool_class,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.raw_class_names),
+        mergeGroups: result.merge_groups,
         diagnostics: result.diagnostics,
         recoveryTokens: new Map(
             result.recovery_tokens.map(({ token, ...data }) => [

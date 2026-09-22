@@ -72,6 +72,8 @@ export interface NativeTransformResult {
     classes: string[];
     /** Static className/class strings discovered in the source. */
     rawClassNames: string[];
+    /** The class list of each static object a merge would read. */
+    mergeGroups: string[][];
     /** Non-fatal transform diagnostics. */
     diagnostics: string[];
     /** Recovery token metadata emitted for hydration safety. */

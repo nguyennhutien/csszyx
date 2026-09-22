@@ -189,10 +189,11 @@ export function runNextTurboLoader(
     // from the classes before any merge, and one built from the merged ones
     // would lose the pair that removed a class.
     let lowered = transform.result;
-    if (lowered.classes.size > 1) {
+    const groups = lowered.mergeGroups ?? [[...lowered.classes]];
+    if (groups.length > 0) {
         ensureMergeTable(context.root);
         loaderContext.addDependency?.(mergeTablePath(context.root));
-        const mergeTable = mergeTableFor(context.root, lowered.classes);
+        const mergeTable = mergeTableFor(context.root, groups);
         if (mergeTable !== null) {
             lowered = transformNextSource({
                 ...transformInput,

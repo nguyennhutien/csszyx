@@ -160,7 +160,9 @@ import {
     createMergeSignatureTable,
     ENGINE_MERGE_TABLE_FORMAT,
     MERGE_TABLE_FORMAT,
+    type MergeSignature,
     type MergeSignatureTable,
+    mergeRemovesFrom,
 } from './merge-signature.js';
 import { isMonorepoPackage } from './monorepo.js';
 import { recordStylesheetFacts } from './next-stylesheet-facts.js';
@@ -3766,22 +3768,28 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         first: SourceTransformResult,
     ): SourceTransformResult {
         const model = styleModel;
-        if (model === undefined || objectRuleOutputs.has(first) || first.classes.size < 2) {
+        // A result an older engine or cache entry produced names no lists, and
+        // every class of the file is then read as one.
+        const groups = first.mergeGroups ?? [[...first.classes]];
+        if (model === undefined || objectRuleOutputs.has(first) || groups.length === 0) {
             return first;
         }
-        for (const className of first.classes) objectRuleClasses.add(className);
+        const grouped = new Set(groups.flat());
+        for (const className of grouped) objectRuleClasses.add(className);
         const known = objectRuleMerged.get(first);
         if (known?.model === model) return known.merged;
-        const [signatures, coverage] = createMergeSignatureTable([...first.classes], candidate =>
-            model.signature(candidate),
-        );
-        const merged =
-            Object.keys(signatures).length === 0
-                ? first
-                : runConfiguredParser(source, effectiveFilename, {
-                      ...compilerOptions,
-                      mergeTable: { format: ENGINE_MERGE_TABLE_FORMAT, signatures, coverage },
-                  }).result;
+        const signatureOf = (candidate: string): MergeSignature | null =>
+            model.signature(candidate);
+        let merged = first;
+        // Asked per list before any table is built: most files hold no list a
+        // merge would shorten, and they pay only these checks.
+        if (groups.some(group => mergeRemovesFrom(group, signatureOf))) {
+            const [signatures, coverage] = createMergeSignatureTable([...grouped], signatureOf);
+            merged = runConfiguredParser(source, effectiveFilename, {
+                ...compilerOptions,
+                mergeTable: { format: ENGINE_MERGE_TABLE_FORMAT, signatures, coverage },
+            }).result;
+        }
         objectRuleMerged.set(first, { model, merged });
         if (merged !== first) objectRuleOutputs.add(merged);
         return merged;

@@ -129,6 +129,26 @@ describe('what the table does not decide', () => {
         }
     });
 
+    it.each([
+        [
+            'an szv factory',
+            [
+                "import { szv, szr } from 'csszyx';",
+                'const F = szv({ base: { pb: 2, p: 4 }, variants: { s: { a: { m: 1 } } } });',
+                'export const A = ({ n }) => <div className={szr(F({ s: n }))} />;',
+            ].join('\n'),
+        ],
+        ['a static object', 'export const A = () => <div sz={{ pb: 2, p: 4 }} />;'],
+    ])('keeps every class it removed in the reported classes, for %s', (_, source) => {
+        // The reported classes are what Tailwind is asked to generate. A path
+        // that resolves at run time emits the class the merge removed, and a
+        // class generated for nothing costs less than one generated for no one.
+        for (const [name, transform] of ENGINES) {
+            const classes = transform(source, 'a.tsx', { mergeTable: TABLE }).classes;
+            expect([...classes], name).toEqual(expect.arrayContaining(['pb-2', 'p-4']));
+        }
+    });
+
     it('changes nothing when no table is given', () => {
         for (const [name, code] of emit('{ pb: 2, p: 4 }')) {
             expect(code, name).toContain('className="pb-2 p-4"');
@@ -141,6 +161,40 @@ describe('what the table does not decide', () => {
             const result = transform(source, 'a.tsx', { mergeTable: { ...TABLE, format: 99 } });
             expect(normalizeEmit(result.code ?? ''), name).toContain('className="pb-2 p-4"');
             expect((result.diagnostics ?? []).join('\n'), name).toMatch(/merge table.*format 99/);
+        }
+    });
+});
+
+describe('the groups a first pass reports', () => {
+    /**
+     * The groups every engine reports for one module.
+     *
+     * @param source - The module.
+     * @returns The engine name with its groups, per engine.
+     */
+    function groups(source: string): Array<[string, unknown]> {
+        return ENGINES.map(([name, transform]) => [name, transform(source, 'a.tsx').mergeGroups]);
+    }
+
+    it.each([
+        ['one object', '<div sz={{ pb: 2, p: 4 }} />', [['pb-2', 'p-4']]],
+        ['an array of objects', '<div sz={[{ pb: 2 }, { p: 4 }]} />', [['pb-2', 'p-4']]],
+        // Classes of two elements never meet, so they are no group.
+        ['two elements', '<><div sz={{ p: 4 }} /><b sz={{ pb: 2 }} /></>', []],
+    ])('names the classes one merge would read, for %s', (_, jsx, expected) => {
+        for (const [name, reported] of groups(`export const A = () => ${jsx};`)) {
+            expect(reported, name).toEqual(expected);
+        }
+    });
+
+    it('leaves out an szv branch, which is never merged', () => {
+        const source = [
+            "import { szv, szr } from 'csszyx';",
+            'const F = szv({ base: { pb: 2, p: 4 }, variants: { s: { a: { m: 1 } } } });',
+            "export const A = () => <div className={szr(F({ s: 'a' }))} />;",
+        ].join('\n');
+        for (const [name, reported] of groups(source)) {
+            expect(reported, name).toEqual([]);
         }
     });
 });
