@@ -109,6 +109,26 @@ describe('what the table does not decide', () => {
         expect(withTable).toEqual(without);
     });
 
+    it.each([
+        ['a static selection', "{ s: 'a' }"],
+        ['a runtime selection', '{ s: n }'],
+    ])('leaves an szv branch as the runtime szv resolves it, for %s', (_, selection) => {
+        // The precompiled table stands in for `szv` at run time, which lowers
+        // the selected object with no table: merging a branch at build would
+        // make the class list depend on whether the config precompiled.
+        const source = [
+            "import { szv, szr } from 'csszyx';",
+            'const F = szv({ base: { pb: 2, p: 4 }, variants: { s: { a: { m: 1 } } } });',
+            `export const A = ({ n }) => <div className={szr(F(${selection}))} />;`,
+        ].join('\n');
+        for (const [name, transform] of ENGINES) {
+            const withTable = transform(source, 'a.tsx', { mergeTable: TABLE }).code ?? '';
+            const without = transform(source, 'a.tsx').code ?? '';
+            expect(normalizeEmit(withTable), name).toBe(normalizeEmit(without));
+            expect(without, name).toContain('pb-2 p-4');
+        }
+    });
+
     it('changes nothing when no table is given', () => {
         for (const [name, code] of emit('{ pb: 2, p: 4 }')) {
             expect(code, name).toContain('className="pb-2 p-4"');
