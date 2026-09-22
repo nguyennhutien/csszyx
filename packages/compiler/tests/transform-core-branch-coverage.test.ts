@@ -22,7 +22,7 @@ import {
  * @param prefix - Optional variant prefix applied to every key.
  * @returns The compiled className string.
  */
-const cls = (sz: SzObject, prefix = ''): string => transform(sz, prefix).className;
+const cls = (sz: SzObject, prefix = ''): string => transform(sz, { prefix }).className;
 
 let warnSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
@@ -562,7 +562,7 @@ describe('text-size + leading merge post-processing', () => {
         expect(cls({ text: 'lg', hover: { leading: 7 } })).toBe('text-lg hover:leading-7');
     });
     it('mangleMap rewrites the emitted classes', () => {
-        expect(transform({ p: 4 }, '', { 'p-4': 'x' }).className).toBe('x');
+        expect(transform({ p: 4 }, { mangleMap: { 'p-4': 'x' } }).className).toBe('x');
     });
 });
 

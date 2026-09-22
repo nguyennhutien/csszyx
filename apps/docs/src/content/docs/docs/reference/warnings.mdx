@@ -723,7 +723,7 @@ files is a fixture or an old copy: name the real one in the `tailwindStylesheet`
 option ([configuration](/docs/reference/config/)). `csszyx next prebuild` and
 `csszyx next watch` print the same messages naming the `--tailwind-stylesheet`
 flag in place of the option, and the Turbopack loader takes the list as
-`csszyxTurbopack({}, { tailwindStylesheet })`. When the other entry belongs to
+`csszyxTurbopack({ tailwindStylesheet })`. When the other entry belongs to
 another app under the same root, `--ignore <patterns>` on those two commands
 leaves its directory out for the loader too, and the Jest transformer takes the
 same patterns in its `ignore` option.

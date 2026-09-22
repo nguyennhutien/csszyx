@@ -182,11 +182,16 @@ behaviour before relying on it.
    import { csszyxTurbopack } from '@csszyx/unplugin/next';
 
    export default {
-     turbopack: csszyxTurbopack(
-       {}, // your existing turbopack config (resolveAlias, other rules) is merged
-     ),
+     // Your own turbopack config goes under `turbopack`; its `resolveAlias`
+     // and rules are kept and csszyx's are merged in beside them.
+     turbopack: csszyxTurbopack(),
    };
    ```
+
+   To extend an existing config, call `csszyxTurbopack({ turbopack: existingConfig })`.
+   Put loader options such as `tailwindStylesheet` beside `turbopack`. The helper
+   rejects extra arguments and unrecognized top-level keys; `rules`, `resolveAlias`
+   and other Turbopack settings belong inside `turbopack`.
 
 3. **Let PostCSS point Tailwind at the safelist.** Turbopack gives csszyx no
    hook into your stylesheet, so the `@source` directive the other bundlers
@@ -272,7 +277,7 @@ the classes it emits would style nothing. When the project also holds
 stylesheets the app does not load (fixtures, old copies), list the real ones in
 [`tailwindStylesheet`](/docs/reference/config/): `--tailwind-stylesheet` for
 `csszyx next prebuild` and `csszyx next watch`, and
-`csszyxTurbopack({}, { tailwindStylesheet })` for the Turbopack loader.
+`csszyxTurbopack({ tailwindStylesheet })` for the Turbopack loader.
 
 On Next.js the other app's directory can be left out instead:
 `--ignore <patterns>` on `csszyx next prebuild` and `csszyx next watch` leaves

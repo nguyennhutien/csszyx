@@ -119,7 +119,8 @@ if (enableTurboBroad) {
     const { csszyxTurbopack } = require('@csszyx/unplugin/next');
     // Intentionally omit `config` so the suite exercises the helper's DEFAULT
     // (must match `csszyx next prebuild`'s hash — the 0.9.3 real-app failure).
-    turbopack = csszyxTurbopack(turbopack ?? {}, {
+    turbopack = csszyxTurbopack({
+        turbopack: turbopack ?? {},
         glob: './app/turbo-broad/*.tsx',
         safelistOutputFile: '.csszyx/next-loader-classes.txt',
     });

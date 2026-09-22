@@ -96,6 +96,7 @@ export {
     SUGGESTION_MAP,
     type SzObject,
     type SzValue,
+    type TransformOptions,
     type TransformSourceCodeOptions,
     transform,
 } from './transform-core.js';

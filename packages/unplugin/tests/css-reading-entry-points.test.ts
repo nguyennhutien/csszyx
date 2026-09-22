@@ -40,6 +40,9 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
         'packages/unplugin/src/theme-scanner.ts',
         'packages/unplugin/src/theme-discovery.ts',
         'packages/unplugin/src/unplugin.ts',
+        // The package entry names it because it lists what it exports rather
+        // than re-exporting the scanner wholesale. It reads no CSS itself.
+        'packages/unplugin/src/index.ts',
         'packages/cli/src/scanner/theme-declarations.ts',
         'packages/mcp-server/src/tools/theme.ts',
     ],

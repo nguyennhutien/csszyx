@@ -133,6 +133,10 @@ export function setSzClassPrefix(prefix: string | null): void {
  *
  * @param prefix - The build's prefix, or null when its stylesheet has none.
  * @throws When another module in the realm registered a different value.
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function registerSzClassPrefix(prefix: string | null): void {
     const value = prefix === '' ? null : prefix;

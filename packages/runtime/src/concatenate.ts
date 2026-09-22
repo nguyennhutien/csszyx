@@ -49,6 +49,10 @@ function ensureLowering(): void {
  * @param classes - Class strings, sz objects, arrays, or falsy values.
  * @returns The resolved className string.
  * @see {@link coreSz} for the full docblock, examples included.
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function _sz(...classes: SzInput[]): string {
     ensureLowering();
@@ -69,6 +73,10 @@ export const szr: (...classes: SzInput[]) => string = _sz;
  * @param classes - Class strings, sz objects, arrays, or falsy values.
  * @returns The merged className string, last utility winning.
  * @see {@link coreSzMerge} for the full docblock, examples included.
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function _szMerge(...classes: SzInput[]): string {
     ensureLowering();
@@ -85,6 +93,10 @@ export function _szMerge(...classes: SzInput[]): string {
  *
  * @param value - One compiled array element: a class string or an sz object.
  * @returns The element's className contribution.
+ * @internal Called by generated code, not written by hand. The three
+ * engines share these names as an ABI: a changed shape makes classes
+ * vanish where a build and a runtime differ in version, so a new shape
+ * gets a new name.
  */
 export function _szPart(value: unknown): string {
     return typeof value === 'string' ? value : _szMerge(value as SzInput);
