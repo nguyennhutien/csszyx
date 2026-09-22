@@ -155,11 +155,16 @@ export const SIZE_BUDGETS = [
     // and re-export forwards read from the engine's own module record) moved
     // off the JS parser, whose per-call arena leaked, and costs ~15 KB gzip in
     // this artifact (507,792 without it, 522,327 with it, un-optimized).
+    //
+    // Raised 2026-09-22 from 530,000: the object rule applies a per-file merge
+    // table inside the engine and reports each static object's class list,
+    // which costs 9,112 gzip bytes here (522,744 at the merge base, 531,856
+    // on the branch, both un-optimized, gzip -9 of the nodejs parser build).
     {
         name: '@csszyx/core parser wasm artifact',
         kind: 'file',
         target: 'packages/core/pkg-parser/csszyx_core_bg.wasm',
-        maxGzipBytes: 530_000,
+        maxGzipBytes: 542_000,
     },
 ];
 
