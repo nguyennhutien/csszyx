@@ -178,6 +178,16 @@ describe('the rows one module reads from the table', () => {
         expect(mergeTableFor(root, [['p-4', 'p-8']])).not.toBeNull();
     });
 
+    // A table written with fewer rows than ids: the signature is still the
+    // same for both classes, so the later one replaces the earlier.
+    it('answers for a signature whose row the table left out', () => {
+        const root = withTable(
+            JSON.stringify({ format: 1, signatures: { a: 7, b: 7, c: 0 }, coverage: [[]] }),
+        );
+        expect(mergeTableFor(root, [['a', 'b']])).not.toBeNull();
+        expect(mergeTableFor(root, [['a', 'c']])).toBeNull();
+    });
+
     it.each([
         ['no two of them cover each other', [['p-4', 'm-2']]],
         ['a class covers only a class the module does not hold', [['p-4']]],
