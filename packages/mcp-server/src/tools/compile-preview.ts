@@ -69,6 +69,10 @@ const RUNTIME_HELPERS: ReadonlyArray<readonly [string, keyof CompilerFlags]> = [
     ['__szBoolClass', 'usesBoolClass'],
 ];
 
+/** What the preview leaves out that a build with the project's stylesheet does. */
+const MERGE_NOTE =
+    'These classes are unmerged. A build reads the project stylesheet and drops a class that a later key in the same static sz object fully covers, so `{ pb: 2, p: 4 }` builds to `p-4`; write `{ p: 4, pb: 2 }` to keep both. An `szr` call or an `szv` factory is not merged at build.';
+
 /**
  * Put one environment variable back, including back to absent.
  *
@@ -155,6 +159,10 @@ export function handleCompilePreview(input: CompilePreviewInput): {
                         ).map(([name]) => name),
                         // Echoed so the reader knows which vocabulary the classes are in.
                         classPrefix,
+                        // The build merges from the project's stylesheet, which
+                        // the preview does not read; only a list of two or
+                        // more classes can lose one to it.
+                        ...(result.classes.size > 1 ? { mergeNote: MERGE_NOTE } : {}),
                         ...(classPrefix === null
                             ? {
                                   note: 'No classPrefix was given, so the classes carry none. If the project stylesheet sets one, such as `@import "tailwindcss" prefix(tw)`, pass it as classPrefix to see the classes that project serves.',

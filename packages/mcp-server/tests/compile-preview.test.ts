@@ -69,6 +69,20 @@ describe('csszyx_compile_preview', () => {
         expect(String(data.note)).toContain('classPrefix');
     });
 
+    // The build merges a later key over an earlier one it covers, from the
+    // project's stylesheet, which the preview does not have.
+    it('says the classes are unmerged when a build could drop one of them', () => {
+        const data = preview('export const A = () => <div sz={{ pb: 2, p: 4 }} />;');
+        expect(data.classes).toEqual(['pb-2', 'p-4']);
+        expect(String(data.mergeNote)).toContain('`p-4`');
+    });
+
+    it('adds no merge note for a single class', () => {
+        expect(preview('export const A = () => <div sz={{ p: 4 }} />;')).not.toHaveProperty(
+            'mergeNote',
+        );
+    });
+
     it('reports the runtime helper a dynamic spacing value falls back to', () => {
         const data = preview('export const A = ({ p }) => <div sz={{ p }} />;');
         expect(data.runtimeHelpers).toEqual(['__szSpacingVar']);
