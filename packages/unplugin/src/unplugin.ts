@@ -3741,19 +3741,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     /**
      * Merge a later sz key over an earlier one it covers, from the compiled CSS.
      *
-     * The first pass lowers the file as it always did, and its classes are the
-     * only ones any object in it can hold. The pairs among them that cover each
-     * other are read from the style model; when there are none the first pass
-     * is the answer, and otherwise the engine lowers the file again with that
-     * table. The rule only ever removes classes, so one more pass is enough.
+     * The first pass lowers the file as it always did and reports the class
+     * list of each static object in it. Each list is asked, in order, whether a
+     * later class covers an earlier one, from the style model; only a file
+     * where one does is lowered again with a table. The rule only ever removes
+     * classes, so one more pass is enough.
      *
      * The first pass is what the transform cache keeps: it depends on the
      * source and the options, not on the CSS, so a stylesheet edit that
      * changes a signature changes the merge without invalidating the cache.
      *
-     * For `c` classes in the file this reads `c` memoized signatures and
-     * compares the distinct ones pairwise; a second engine pass is paid only by
-     * files where two classes cover each other.
+     * The lists, not the file: on the docs app two classes of one file covered
+     * each other in 25 of 26 files and two of one object in none of them, so
+     * asking per file paid for a second pass that changed nothing.
      *
      * @param source Source module contents.
      * @param effectiveFilename Normalized source filename.
