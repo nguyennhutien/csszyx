@@ -77,6 +77,13 @@ describe('csszyx_compile_preview', () => {
         expect(String(data.mergeNote)).toContain('`p-4`');
     });
 
+    // Two elements never merge with each other, whatever their classes cover.
+    it('adds no merge note when no object holds two classes', () => {
+        expect(
+            preview('export const A = () => <><div sz={{ p: 4 }} /><b sz={{ pb: 2 }} /></>;'),
+        ).not.toHaveProperty('mergeNote');
+    });
+
     it('adds no merge note for a single class', () => {
         expect(preview('export const A = () => <div sz={{ p: 4 }} />;')).not.toHaveProperty(
             'mergeNote',
