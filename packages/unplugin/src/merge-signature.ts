@@ -373,6 +373,25 @@ export function mergeSignatureFromCss(
 const resolvedSignatures = new WeakMap<MergeSignature, ResolvedSignature>();
 
 /**
+ * The class lists a merge would read, for one transform result.
+ *
+ * A result an older engine produced, or a cache entry written before the
+ * engine reported them, names no lists; every class of the file is read as one
+ * list then, which is what the plugin did before the lists existed.
+ *
+ * @param result - What the first pass returned.
+ * @param result.mergeGroups - The lists the engine reported, when it did.
+ * @param result.classes - Every class the file lowered to.
+ * @returns The lists to ask about.
+ */
+export function mergeGroupsOf(result: {
+    mergeGroups?: readonly (readonly string[])[];
+    classes: ReadonlySet<string>;
+}): readonly (readonly string[])[] {
+    return result.mergeGroups ?? [[...result.classes]];
+}
+
+/**
  * Whether merging one list, in order, would remove a class from it.
  *
  * A class is removed when a later one covers it, its own signature included,

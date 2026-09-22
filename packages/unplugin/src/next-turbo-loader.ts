@@ -13,6 +13,7 @@ import {
     mergeTableFor,
     mergeTablePath,
 } from './merge-registration.js';
+import { mergeGroupsOf } from './merge-signature.js';
 import type { JsonLike } from './next-cache-identity.js';
 import {
     configWithImportedStaticSz,
@@ -189,7 +190,7 @@ export function runNextTurboLoader(
     // from the classes before any merge, and one built from the merged ones
     // would lose the pair that removed a class.
     let lowered = transform.result;
-    const groups = lowered.mergeGroups ?? [[...lowered.classes]];
+    const groups = mergeGroupsOf(lowered);
     if (groups.length > 0) {
         ensureMergeTable(context.root);
         loaderContext.addDependency?.(mergeTablePath(context.root));

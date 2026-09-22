@@ -21,6 +21,7 @@ import { _szcn } from '../../runtime/src/merge-classes.js';
 import { registerMergeSignatures } from '../../runtime/src/merge-signatures.js';
 import {
     createMergeSignatureTable,
+    mergeGroupsOf,
     mergeRemovesFrom,
     tableRemovesFrom,
 } from '../src/merge-signature.js';
@@ -94,4 +95,18 @@ describe('whether a merge would remove a class from a list', () => {
         expect(removing, `${removing} of ${CASES} remove a class`).toBeGreaterThan(CASES / 10);
         expect(removing).toBeLessThan(CASES - CASES / 10);
     }, 60_000);
+});
+
+describe('the lists a merge would read', () => {
+    it('are the ones the engine reported', () => {
+        expect(
+            mergeGroupsOf({ mergeGroups: [['pb-2', 'p-4']], classes: new Set(['m-2']) }),
+        ).toEqual([['pb-2', 'p-4']]);
+    });
+
+    // An older engine, or a cache entry written before the engine reported
+    // them: reading every class as one list is what the plugin did then.
+    it('fall back to every class of the file as one list', () => {
+        expect(mergeGroupsOf({ classes: new Set(['pb-2', 'p-4']) })).toEqual([['pb-2', 'p-4']]);
+    });
 });

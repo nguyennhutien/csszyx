@@ -162,6 +162,7 @@ import {
     MERGE_TABLE_FORMAT,
     type MergeSignature,
     type MergeSignatureTable,
+    mergeGroupsOf,
     mergeRemovesFrom,
 } from './merge-signature.js';
 import { isMonorepoPackage } from './monorepo.js';
@@ -3768,9 +3769,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         first: SourceTransformResult,
     ): SourceTransformResult {
         const model = styleModel;
-        // A result an older engine or cache entry produced names no lists, and
-        // every class of the file is then read as one.
-        const groups = first.mergeGroups ?? [[...first.classes]];
+        const groups = mergeGroupsOf(first);
         if (model === undefined || objectRuleOutputs.has(first) || groups.length === 0) {
             return first;
         }
@@ -3973,23 +3972,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 runRustPrescanFallback(misses, results);
             }
         }
-        const byPath = new Map(batchable.map(file => [file.filePath, file]));
-        return [
-            ...individual,
-            ...orderPrescanResults(batchable, results).map(entry => {
-                const file = byPath.get(entry.filePath);
-                if (!file) return entry;
-                return {
-                    ...entry,
-                    result: withObjectRule(
-                        file.content,
-                        normalizeSourceFilename(file.filePath),
-                        compilerOptions,
-                        entry.result,
-                    ),
-                };
-            }),
-        ];
+        return [...individual, ...orderPrescanResults(batchable, results, compilerOptions)];
     }
 
     /**
@@ -4124,15 +4107,25 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      *
      * @param files Source files in discovery order.
      * @param results Results keyed by authored file path.
+     * @param compilerOptions The options the results were produced with, which
+     *        the object rule's second pass runs with.
      * @returns Successful transforms in discovery order.
      */
     function orderPrescanResults(
         files: PrescanSourceFile[],
         results: Map<string, SourceTransformResult>,
+        compilerOptions: TransformSourceCodeOptions,
     ): PrescanTransformResult[] {
         return files.flatMap(file => {
             const result = results.get(file.filePath);
-            return result ? [{ filePath: file.filePath, result }] : [];
+            if (result === undefined) return [];
+            const filePath = normalizeSourceFilename(file.filePath);
+            return [
+                {
+                    filePath: file.filePath,
+                    result: withObjectRule(file.content, filePath, compilerOptions, result),
+                },
+            ];
         });
     }
 

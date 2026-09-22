@@ -39,9 +39,11 @@ function classNames(code: string): string[] {
  * A dev server that has transformed the component once, recording what it
  * tells the page.
  *
+ * @param options - How the server starts.
+ * @param options.loadTable - Whether a page has loaded the table module.
  * @returns The handles a case drives it with.
  */
-async function devServer() {
+async function devServer({ loadTable = true } = {}) {
     const root = tailwindProject('csszyx-object-rule-dev-', {
         'src/index.css': WITH_TOKEN,
         'src/App.tsx': APP,
@@ -78,8 +80,9 @@ async function devServer() {
         moduleGraph: graph,
         environments: { client: { moduleGraph: graph } },
     };
-    // The page has loaded the table module, as a running dev server's has.
-    await call('load', RESOLVED_UNSERVED_VIRTUAL_ID);
+    // A running dev server's page has loaded the table module; one whose first
+    // page has not yet asked for it has not.
+    if (loadTable) await call('load', RESOLVED_UNSERVED_VIRTUAL_ID);
     const edit = async (content: string) => {
         const css = join(root, 'src/index.css');
         writeFileSync(css, content, 'utf8');
@@ -96,6 +99,15 @@ describe('the object rule on a dev server', () => {
 
         expect(dev.counts.invalidatedAll).toBeGreaterThan(0);
         expect(dev.sent).toContainEqual({ type: 'full-reload' });
+        expect(await dev.transform()).toEqual(['pb-brand p-4']);
+    }, 120_000);
+
+    it('recompiles before any page has loaded the table module', async () => {
+        const dev = await devServer({ loadTable: false });
+
+        await dev.edit(WITHOUT_TOKEN);
+
+        expect(dev.counts.invalidatedAll).toBeGreaterThan(0);
         expect(await dev.transform()).toEqual(['pb-brand p-4']);
     }, 120_000);
 
