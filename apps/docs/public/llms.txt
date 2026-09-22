@@ -587,7 +587,13 @@ survive) into one className with zero runtime. Arrays containing class strings,
 — a compiler-injected helper (the `_` prefix marks generated code you never
 hand-author; it is the unmemoized twin of the authorable `szcn`), applying the
 same later-wins rule per property group, mangle-safe; dynamic elements (e.g. a
-forwarded `szsc` slot) pass through `_szPart`:
+forwarded `szsc` slot) pass through `_szPart`.
+
+Key ORDER matters across keys too: in a static `sz` object or array a later key
+replaces an earlier key whose CSS it fully covers, read from the project's
+compiled Tailwind — `{ pb: 2, p: 4 }` → `p-4`. Write the refinement last:
+`{ p: 4, pb: 2 }` → `p-4 pb-2`. A variant or `!important` class never covers a
+plain one; runtime values, `szr({…})` and `szv` factories keep every class:
 
 ```tsx
 <div sz={[{ text: "base", p: 4 }, { text: "lg" }]} />

@@ -122,6 +122,51 @@ flags (`ordinal`, `tabularNums`), default-or-value toggles (`grow`, `ring`,
 <div sz={{ truncate: true, tabularNums: true, grow: true, container: true }} />
 ```
 
+## A later key covers an earlier one
+
+Two keys can still set the same property: `p` sets all four paddings, `pb` only
+the bottom one. In a static `sz` object or array, a later key replaces an earlier
+key whose CSS it fully covers, so the order you write is the order that wins:
+
+```tsx
+<div sz={{ pb: 2, p: 4 }} />          // → className="p-4"
+<div sz={{ p: 4, pb: 2 }} />          // → className="p-4 pb-2"   (pb refines p)
+<div sz={[{ w: 4 }, { size: 8 }]} />  // → className="size-8"
+```
+
+Without this, both classes reach the element and the stylesheet decides.
+Tailwind writes the shorthand's rule first, so `{ pb: 2, p: 4 }` used to render
+a 0.5rem bottom padding whatever order you wrote.
+
+Which key covers which is read from your project's compiled Tailwind stylesheet,
+not from key names: `border: 2` sets a width and `border: 'red-500'` a colour. A
+key replaces another only when it sets every property the other sets:
+
+- in the same variant: `{ pb: 2, hover: { p: 4 } }` keeps both;
+- with the same `!important`: an important class and a plain one never replace
+  each other;
+- with CSS behind it: a class your stylesheet generates nothing for is never
+  removed.
+
+It applies where the build compiles the object. These keep every class:
+
+- a value only the runtime knows (`{ pb: 2, p: size }`) or a conditional value
+  (`{ pb: 2, p: big ? 8 : 4 }`);
+- an [`szv`](/docs/szv/) factory and an `szr({ … })` call, which resolve at
+  runtime;
+- a jest run, and a tool that compiles without your stylesheet, such as the
+  [MCP preview](/docs/mcp-server/#csszyx_compile_preview).
+
+Under Next.js with Turbopack the table comes from `csszyx next prebuild` or
+`csszyx next watch`; until one of them has run, both classes stay. After a
+stylesheet edit that changes which class covers which, a Vite dev server
+recompiles every module, and a watch build asks you to restart it.
+
+:::note[Upgrading from 0.17]
+An object that relied on the earlier key winning now renders the later one.
+Write the refining key last: `{ p: 4, pb: 2 }`.
+:::
+
 ## Type safety — unknown keys are caught by TypeScript
 
 The `sz` prop type is **closed**: a key that isn't a known sz prop or variant is a
@@ -562,6 +607,8 @@ a branch holding a value only the runtime knows (`cond ? { p: pad } : undefined`
 Pass an array to `sz` to compose styles with **later-wins** semantics: when two
 elements touch the same property, the later element's value overrides the
 earlier one's — like `Object.assign`, and like every class-merge tool you know.
+A later key that [covers an earlier one](#a-later-key-covers-an-earlier-one)
+replaces it too.
 Elements can be sz objects, class strings, `cond && …` guards, or runtime
 values (a forwarded [`szsc`](/docs/compound-components/#the-szs-prop--style-internal-parts-in-one-prop)
 slot).
