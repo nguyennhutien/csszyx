@@ -3050,6 +3050,50 @@ mod tests {
     /// original property name in its class while the emitted variable map
     /// still describes the alias, so the stylesheet and the markup would name
     /// two different custom properties and the colour would never apply.
+    /// The object rule's two outputs besides the code: the lists a merge would
+    /// read, from a pass without a table, and every class the table removed,
+    /// kept in the reported classes for a path that resolves at run time.
+    #[test]
+    fn a_pass_reports_its_merge_lists_and_keeps_what_the_table_removed() {
+        let file = TransformFile {
+            filename: "/repo/src/Merge.tsx".to_string(),
+            source: "const App = () => <div sz={{ pb: 2, p: 4 }} />;".to_string(),
+        };
+        let first = transform_file_with_options(&file, TransformOptions::default());
+        assert_eq!(first.merge_groups, [["pb-2", "p-4"]]);
+
+        let merged = transform_file_with_options(
+            &file,
+            TransformOptions {
+                merge_table_json: Some(
+                    r#"{"format":1,"signatures":{"p-4":0,"pb-2":1},"coverage":[[1],[]]}"#
+                        .to_string(),
+                ),
+                ..TransformOptions::default()
+            },
+        );
+        assert!(
+            merged.code.contains(r#"className="p-4""#),
+            "{}",
+            merged.code
+        );
+        assert!(merged.merge_groups.is_empty());
+        assert_eq!(merged.classes, ["p-4", "pb-2"]);
+    }
+
+    /// A file that emits no class reports no list, even when a lowering along
+    /// the way saw one.
+    #[test]
+    fn a_file_with_no_classes_reports_no_merge_list() {
+        let file = TransformFile {
+            filename: "/repo/src/None.tsx".to_string(),
+            source: "const App = () => <div className=\"a b\" />;".to_string(),
+        };
+        let result = transform_file_with_options(&file, TransformOptions::default());
+        assert!(result.classes.is_empty());
+        assert!(result.merge_groups.is_empty());
+    }
+
     #[test]
     fn global_var_aliases_apply_on_the_parser_lane() {
         let file = TransformFile {

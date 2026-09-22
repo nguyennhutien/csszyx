@@ -181,6 +181,15 @@ enum Key {
 /// nothing, and a class without a signature is never removed by another.
 #[must_use]
 pub fn apply(classes: Vec<String>, table: &MergeTable) -> Vec<String> {
+    apply_recording(classes, table, &mut Vec::new())
+}
+
+/// [`apply`], appending every class it removes to `removed`.
+fn apply_recording(
+    classes: Vec<String>,
+    table: &MergeTable,
+    removed: &mut Vec<String>,
+) -> Vec<String> {
     let mut survivors: Vec<(Key, String)> = Vec::with_capacity(classes.len());
     for class_name in classes {
         let signature = table.signatures.get(&class_name).copied();
@@ -188,8 +197,13 @@ pub fn apply(classes: Vec<String>, table: &MergeTable) -> Vec<String> {
             .and_then(|id| table.coverage.get(id as usize))
             .map_or(&[], Vec::as_slice);
         let key = signature.map_or_else(|| Key::Class(class_name.clone()), Key::Signature);
-        survivors.retain(|(survivor, _)| {
-            *survivor != key && !matches!(survivor, Key::Signature(id) if row.contains(id))
+        survivors.retain(|(survivor, survivor_class)| {
+            let kept =
+                *survivor != key && !matches!(survivor, Key::Signature(id) if row.contains(id));
+            if !kept {
+                removed.push(survivor_class.clone());
+            }
+            kept
         });
         survivors.push((key, class_name));
     }
@@ -204,14 +218,8 @@ pub fn apply(classes: Vec<String>, table: &MergeTable) -> Vec<String> {
 pub(crate) fn apply_active(classes: Vec<String>) -> Vec<String> {
     MERGE_TABLE.with(|cell| {
         if let Some(table) = cell.borrow().as_deref() {
-            let merged = apply(classes.clone(), table);
-            if merged.len() < classes.len() {
-                MERGE_REMOVED.with(|removed| {
-                    let mut removed = removed.borrow_mut();
-                    removed.extend(classes.into_iter().filter(|class| !merged.contains(class)));
-                });
-            }
-            return merged;
+            return MERGE_REMOVED
+                .with(|removed| apply_recording(classes, table, &mut removed.borrow_mut()));
         }
         // One class merges with nothing.
         if classes.len() > 1 {
