@@ -138,7 +138,7 @@ pub(crate) fn apply_active(classes: Vec<String>) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply, decode};
+    use super::{apply, apply_active, decode, MergeTableScope};
 
     fn table() -> std::sync::Arc<super::MergeTable> {
         decode(
@@ -187,6 +187,18 @@ mod tests {
         let table = decode(r#"{"format":1,"signatures":{"a":7,"b":1},"coverage":[[],[]]}"#)
             .expect("a valid table");
         assert_eq!(apply(classes(&["b", "a"]), &table), ["b", "a"]);
+    }
+
+    #[test]
+    fn a_scope_applies_its_table_only_while_it_lives() {
+        let outer = MergeTableScope::enter(Some(table()));
+        {
+            let _inner = MergeTableScope::enter(None);
+            assert_eq!(apply_active(classes(&["p-4", "p-8"])), ["p-4", "p-8"]);
+        }
+        assert_eq!(apply_active(classes(&["p-4", "p-8"])), ["p-8"]);
+        drop(outer);
+        assert_eq!(apply_active(classes(&["p-4", "p-8"])), ["p-4", "p-8"]);
     }
 
     #[test]
