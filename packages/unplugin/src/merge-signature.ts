@@ -21,6 +21,16 @@ export type { MergeSignatureTable } from '@csszyx/runtime';
  */
 export const MERGE_TABLE_FORMAT = 1;
 
+/**
+ * The format of the per-file table this plugin hands the transform engine.
+ *
+ * Not {@link MERGE_TABLE_FORMAT}: the runtime reads the table it is shipped and
+ * the engine the one it is handed per file, and the two can change apart. The
+ * engine keeps its own number and refuses any other, so a plugin and an engine
+ * from different releases keep every class rather than merge on a misread.
+ */
+export const ENGINE_MERGE_TABLE_FORMAT = 1;
+
 /** The CSS evidence used to decide whether one class can replace another. */
 export interface MergeSignature {
     /** Leaf properties grouped by the selector and at-rule context that writes them. */

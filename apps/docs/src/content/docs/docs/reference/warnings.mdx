@@ -826,6 +826,22 @@ A build **error** that should never reach you: a bundler lane reached the
 engine without reading the stylesheets first. Report it with the bundler and
 its version.
 
+### A stylesheet edit changed which sz keys cover each other
+
+```text
+[csszyx] {files} changed which sz keys cover each other, but this watch session merged its modules under the old stylesheet, so an sz object may keep a class a later key now covers, or leave out one it no longer covers.
+  help: stop the watch and start it again.
+```
+
+A later key in a static `sz` object replaces an earlier one whose CSS it
+covers, and the build works that out from your stylesheet when it compiles the
+module. A watch rebuild on webpack, `rollup -w`, `vite build --watch`, an
+esbuild context or rspack keeps the modules it already compiled, so after an
+edit such as removing a `@theme` token those modules still carry the old
+answer. The rebuild goes on, since only the objects whose keys changed are
+affected; restart the watch to compile them again. A Vite dev server needs no
+restart: it compiles every module again and reloads the page.
+
 ### Next.js with Turbopack
 
 Turbopack compiles each module on its own, so csszyx cannot hold the class set
