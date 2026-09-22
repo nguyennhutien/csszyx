@@ -3081,6 +3081,39 @@ mod tests {
         assert_eq!(merged.classes, ["p-4", "pb-2"]);
     }
 
+    /// A table this engine cannot read leaves every class in place and says
+    /// why, rather than lowering as if the build had asked for no merge.
+    #[test]
+    fn a_table_it_cannot_read_is_refused_with_a_diagnostic() {
+        let file = TransformFile {
+            filename: "/repo/src/Refused.tsx".to_string(),
+            source: "const App = () => <div sz={{ pb: 2, p: 4 }} />;".to_string(),
+        };
+        for table in [
+            r#"{"format":99,"signatures":{"p-4":0,"pb-2":1},"coverage":[[1],[]]}"#,
+            "[]",
+        ] {
+            let result = transform_file_with_options(
+                &file,
+                TransformOptions {
+                    merge_table_json: Some(table.to_string()),
+                    ..TransformOptions::default()
+                },
+            );
+            assert!(
+                result.code.contains(r#"className="pb-2 p-4""#),
+                "{}",
+                result.code
+            );
+            let diagnostics = result.diagnostics.join("\n");
+            assert!(
+                diagnostics.contains("/repo/src/Refused.tsx")
+                    && diagnostics.contains("no sz key was merged"),
+                "{diagnostics}"
+            );
+        }
+    }
+
     /// A file that emits no class reports no list, even when a lowering along
     /// the way saw one.
     #[test]
