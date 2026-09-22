@@ -20,8 +20,13 @@
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import type { EngineMergeTable } from '@csszyx/compiler';
 import { insertAfterUseDirective } from './directive-prologue.js';
-import { createMergeSignatureTable, type MergeSignatureTable } from './merge-signature.js';
+import {
+    createMergeSignatureTable,
+    ENGINE_MERGE_TABLE_FORMAT,
+    type MergeSignatureTable,
+} from './merge-signature.js';
 import type { ProjectStyleModel } from './project-style-model.js';
 import { themeGroupsSpecifier } from './theme-groups-file.js';
 import { unservedAuthoredClasses } from './unserved-classes.js';
@@ -42,6 +47,36 @@ export const MERGE_REGISTRATION_FILE = 'merge-registration.mjs';
  * data.
  */
 export const MERGE_REGISTRATION_CJS_FILE = 'merge-registration.cjs';
+
+/**
+ * The same table as JSON, for the Turbopack loader's engine pass.
+ *
+ * The loader cannot compile the project's CSS, so it cannot tell which class a
+ * later `sz` key covers; it reads the rows for its module's classes from here.
+ * JSON, not the module: the loader reads it, it does not import it.
+ */
+export const MERGE_TABLE_FILE = 'merge-table.json';
+
+/**
+ * Where the table the loader reads lives for a project.
+ *
+ * @param root - The project root.
+ * @returns Absolute path of the JSON file.
+ */
+export function mergeTablePath(root: string): string {
+    return path.join(root, '.csszyx', MERGE_TABLE_FILE);
+}
+
+/**
+ * The JSON the loader reads, in the format this plugin hands the engine.
+ *
+ * @param table - The settled merge table.
+ * @returns The file's text.
+ */
+function mergeTableJson(table: MergeSignatureTable): string {
+    const [signatures, coverage] = table;
+    return `${JSON.stringify({ format: ENGINE_MERGE_TABLE_FORMAT, signatures, coverage })}\n`;
+}
 
 /**
  * Where the settled module lives for a project.
@@ -112,7 +147,8 @@ export function writeMergeRegistrationModule(
         mergeRegistrationPath(root, 'cjs'),
         createUnservedRuntimeModule(unserved, table, 'cjs'),
     );
-    return { path: mergeRegistrationPath(root, 'esm'), changed: esm || cjs };
+    const json = writeWhenChanged(mergeTablePath(root), mergeTableJson(table));
+    return { path: mergeRegistrationPath(root, 'esm'), changed: esm || cjs || json };
 }
 
 /**
@@ -231,6 +267,69 @@ export function ensureMergeRegistration(root: string): void {
         // Written by a Next command in between, or not writable: either way
         // the import below reads what is there, or nothing, as before.
     }
+}
+
+/**
+ * Make sure the table the loader reads exists, writing an empty one only if
+ * none does.
+ *
+ * The same reason as {@link ensureMergeRegistration}: a module lowered before
+ * `csszyx next watch` has written the table depends on this file, so the
+ * write re-runs it. The write is exclusive and never replaces a table.
+ *
+ * @param root - The project root.
+ */
+export function ensureMergeTable(root: string): void {
+    const target = mergeTablePath(root);
+    try {
+        mkdirSync(path.dirname(target), { recursive: true });
+        writeFileSync(target, mergeTableJson([{}, []]), { encoding: 'utf8', flag: 'wx' });
+    } catch {
+        // Written by a Next command in between, or not writable.
+    }
+}
+
+/**
+ * The rows of the settled table that one module's classes can use.
+ *
+ * Only the signatures are narrowed: the coverage rows are indexed by id, and
+ * the engine ignores a row no class of the module maps to. For `c` classes
+ * and the longest row `r`, `O(c · r)`.
+ *
+ * @param root - The project root.
+ * @param classes - The classes the module lowered to before any merge.
+ * @returns The table to hand the engine, or null when no two of these classes
+ *          cover each other, or no readable table exists.
+ */
+export function mergeTableFor(root: string, classes: ReadonlySet<string>): EngineMergeTable | null {
+    const text = readText(mergeTablePath(root));
+    if (text === null) return null;
+    let table: EngineMergeTable;
+    try {
+        table = JSON.parse(text) as EngineMergeTable;
+    } catch {
+        return null;
+    }
+    if (typeof table?.signatures !== 'object' || !Array.isArray(table.coverage)) return null;
+    const signatures: Record<string, number> = {};
+    const ids = new Set<number>();
+    let signed = 0;
+    for (const className of classes) {
+        // A number, never an inherited `constructor` or `toString`.
+        const id: unknown = table.signatures[className];
+        if (typeof id !== 'number') continue;
+        signatures[className] = id;
+        ids.add(id);
+        signed++;
+    }
+    // Two classes of one signature replace each other; otherwise a pair needs
+    // a row naming another of these ids.
+    const pairs =
+        signed > ids.size ||
+        [...ids].some(id =>
+            (table.coverage[id] ?? []).some(other => other !== id && ids.has(other)),
+        );
+    return pairs ? { format: table.format, signatures, coverage: table.coverage } : null;
 }
 
 /**

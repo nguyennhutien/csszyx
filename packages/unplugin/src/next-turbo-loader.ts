@@ -6,9 +6,12 @@ import { insertAfterUseDirective } from './directive-prologue.js';
 import {
     callsSzcn as callsMergeHelper,
     ensureMergeRegistration,
+    ensureMergeTable,
     importMergeRegistration,
     loadsCsszyxRuntime,
     mergeRegistrationPath,
+    mergeTableFor,
+    mergeTablePath,
 } from './merge-registration.js';
 import type { JsonLike } from './next-cache-identity.js';
 import {
@@ -159,7 +162,7 @@ export function runNextTurboLoader(
         root: context.root,
         importedStaticSz: options.importedStaticSz,
     });
-    const transform = transformNextSource({
+    const transformInput = {
         source,
         filename: loaderContext.resourcePath,
         parserMode: options.parserMode ?? 'rust',
@@ -177,17 +180,33 @@ export function runNextTurboLoader(
             options.compilerVersion ??
             readPackageVersion('../../compiler/package.json', import.meta.url),
         astBudget: options.astBudget,
-    });
-    const injected = injectNextRuntimeImports(
-        transform.result.code,
-        transform.result,
-        prefix.prefix,
-    );
+    };
+    const transform = transformNextSource(transformInput);
+    // The object rule: a later sz key replaces an earlier one it covers. Which
+    // covers which is read from the table a Next command settled, and a module
+    // depends on that file whatever it holds, so a rewrite re-runs it. The
+    // first pass is what the cache and the shard keep: the next table is built
+    // from the classes before any merge, and one built from the merged ones
+    // would lose the pair that removed a class.
+    let lowered = transform.result;
+    if (lowered.classes.size > 1) {
+        ensureMergeTable(context.root);
+        loaderContext.addDependency?.(mergeTablePath(context.root));
+        const mergeTable = mergeTableFor(context.root, lowered.classes);
+        if (mergeTable !== null) {
+            lowered = transformNextSource({
+                ...transformInput,
+                compilerOptions: { ...transformInput.compilerOptions, mergeTable },
+                cacheRoot: undefined,
+            }).result;
+        }
+    }
+    const injected = injectNextRuntimeImports(lowered.code, lowered, prefix.prefix);
     // szcn theme groups. The other lanes import a virtual module the plugin
     // resolves; a loader cannot, so a real file is written once per project and
     // imported by path. Only modules that can call szcn pay for it, and the
     // import goes AFTER any `use client` directive, which must stay first.
-    const callsSzcn = callsMergeHelper(source, transform.result);
+    const callsSzcn = callsMergeHelper(source, lowered);
     const themeGroups = callsSzcn
         ? ensureThemeGroupsFile(
               context.root,
