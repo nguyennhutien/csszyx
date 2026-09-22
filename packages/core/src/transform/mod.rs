@@ -17,6 +17,7 @@ pub(crate) mod generated;
 pub(crate) mod global_var_aliases;
 mod ir;
 pub mod lower;
+pub mod merge;
 #[cfg(feature = "native-engine")]
 pub mod module_links;
 #[cfg(feature = "native-engine")]

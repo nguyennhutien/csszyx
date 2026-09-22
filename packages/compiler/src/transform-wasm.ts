@@ -183,6 +183,7 @@ export function transformWasmBatch(
         cross_module_sz_objects_json:
             encodeCrossModuleStatics(options?.crossModuleSzObjects) ?? null,
         class_prefix: options?.classPrefix ?? null,
+        merge_table_json: options?.mergeTable ? JSON.stringify(options.mergeTable) : null,
     });
 
     const results = JSON.parse(

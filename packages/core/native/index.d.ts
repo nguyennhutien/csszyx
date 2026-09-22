@@ -58,6 +58,8 @@ export interface NativeTransformOptions {
     crossModuleSzObjectsJson?: string;
     /** The Tailwind `prefix()` written before every class the engine emits. */
     classPrefix?: string;
+    /** Which of the file's classes cover which, from the compiled stylesheet. */
+    mergeTableJson?: string;
 }
 
 /** Native transform output shape returned per source file. */

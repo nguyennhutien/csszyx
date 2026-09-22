@@ -119,6 +119,28 @@ pub(super) fn transform_file_with_options(
     options: TransformOptions,
 ) -> TransformResult {
     let _class_prefix = super::lower::ClassPrefixScope::enter(options.class_prefix.as_deref());
+    let (table, table_problem) = match options
+        .merge_table_json
+        .as_deref()
+        .map(super::merge::decode)
+    {
+        Some(Ok(table)) => (Some(table), None),
+        Some(Err(problem)) => (None, Some(problem)),
+        None => (None, None),
+    };
+    let _merge_table = super::merge::MergeTableScope::enter(table);
+    let mut result = transform_file_in_scopes(file, options);
+    if let Some(problem) = table_problem {
+        result.diagnostics.push(format!(
+            "[csszyx] {}: {problem}, so no sz key was merged with a later one it covers.\n  help: install the same csszyx version of every @csszyx package, then rebuild.",
+            file.filename
+        ));
+    }
+    result
+}
+
+/// [`transform_file_with_options`] once the per-file scopes are open.
+fn transform_file_in_scopes(file: &TransformFile, options: TransformOptions) -> TransformResult {
     let total_start = Instant::now();
     let triage_start = Instant::now();
     // Bail before the parser on pathologically nested source: the recursive

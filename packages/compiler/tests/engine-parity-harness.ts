@@ -19,6 +19,7 @@ import {
     type ModuleLinksFile,
     scanModuleLinksRust,
     scanModuleLinksWasm,
+    type TransformSourceCodeOptions,
     transformRust,
     transformWasm,
 } from '../src/index.js';
@@ -36,7 +37,11 @@ export interface EngineParityResult {
 }
 
 /** One engine entry, narrowed to the shared result surface. */
-export type ParityEngine = (source: string, filename?: string) => EngineParityResult;
+export type ParityEngine = (
+    source: string,
+    filename?: string,
+    options?: TransformSourceCodeOptions,
+) => EngineParityResult;
 
 // In CI the native engine is built before the unit suites run; if that step
 // ever no-ops, every parity suite would silently degrade to two lanes and

@@ -152,6 +152,9 @@ export function transformRustBatch(
                 // native side picks different machinery for each.
                 crossModuleSzObjectsJson: encodeCrossModuleStatics(options?.crossModuleSzObjects),
                 classPrefix: options?.classPrefix ?? undefined,
+                mergeTableJson: options?.mergeTable
+                    ? JSON.stringify(options.mergeTable)
+                    : undefined,
             },
         ).map(fromNativeResult);
     } catch (err) {

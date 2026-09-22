@@ -41,6 +41,11 @@ pub struct TransformOptions {
     /// wrote as strings are left as written.
     #[serde(default)]
     pub class_prefix: Option<String>,
+    /// Which of this file's classes cover which, as the plugin read them from
+    /// the project's compiled stylesheet. A later key of a static object then
+    /// replaces an earlier one it covers. Absent means nothing is merged.
+    #[serde(default)]
+    pub merge_table_json: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.
