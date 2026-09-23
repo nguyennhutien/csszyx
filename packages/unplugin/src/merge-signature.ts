@@ -21,6 +21,16 @@ export type { MergeSignatureTable } from '@csszyx/runtime';
  */
 export const MERGE_TABLE_FORMAT = 1;
 
+/**
+ * The format of the per-file table this plugin hands the transform engine.
+ *
+ * Not {@link MERGE_TABLE_FORMAT}: the runtime reads the table it is shipped and
+ * the engine the one it is handed per file, and the two can change apart. The
+ * engine keeps its own number and refuses any other, so a plugin and an engine
+ * from different releases keep every class rather than merge on a misread.
+ */
+export const ENGINE_MERGE_TABLE_FORMAT = 1;
+
 /** The CSS evidence used to decide whether one class can replace another. */
 export interface MergeSignature {
     /** Leaf properties grouped by the selector and at-rule context that writes them. */
@@ -357,4 +367,87 @@ export function mergeSignatureFromCss(
         rules,
         important,
     };
+}
+
+/** Each signature's resolved sides, kept as long as the signature is. */
+const resolvedSignatures = new WeakMap<MergeSignature, ResolvedSignature>();
+
+/**
+ * The class lists a merge would read, for one transform result.
+ *
+ * A result an older engine produced, or a cache entry written before the
+ * engine reported them, names no lists; every class of the file is read as one
+ * list then, which is what the plugin did before the lists existed.
+ *
+ * @param result - What the first pass returned.
+ * @param result.mergeGroups - The lists the engine reported, when it did.
+ * @param result.classes - Every class the file lowered to.
+ * @returns The lists to ask about.
+ */
+export function mergeGroupsOf(result: {
+    mergeGroups?: readonly (readonly string[])[];
+    classes: ReadonlySet<string>;
+}): readonly (readonly string[])[] {
+    return result.mergeGroups ?? [[...result.classes]];
+}
+
+/**
+ * Whether merging one list, in order, would remove a class from it.
+ *
+ * A class is removed when a later one covers it, its own signature included,
+ * so this answers the question `_szcn` and the engine's merge answer, without
+ * building a table. The object rule asks it for every list of a file before
+ * it pays for a second engine pass. `n` classes: `O(n²)` coverage checks,
+ * each over the earlier class's properties; lists are one object's keys.
+ *
+ * @param classes - One list a merge would read, in order.
+ * @param signatureOf - The style model's signature lookup.
+ * @returns True when a later class covers an earlier one.
+ */
+export function mergeRemovesFrom(
+    classes: readonly string[],
+    signatureOf: (candidate: string) => MergeSignature | null,
+): boolean {
+    const earlier: ResolvedSignature[] = [];
+    for (const className of classes) {
+        const signature = signatureOf(className);
+        if (signature === null) continue;
+        let later = resolvedSignatures.get(signature);
+        if (later === undefined) {
+            later = resolveSides(signature);
+            resolvedSignatures.set(signature, later);
+        }
+        const resolved = later;
+        if (earlier.some(previous => signatureCovers(resolved, previous))) return true;
+        earlier.push(resolved);
+    }
+    return false;
+}
+
+/**
+ * {@link mergeRemovesFrom}, read from a settled table instead of the model.
+ *
+ * For `n` classes and longest row `r`, each earlier-class check can scan the
+ * entire row: `O(n² · (1 + r))` worst-case time and `O(n)` auxiliary space.
+ *
+ * @param signatures - Class name to signature id.
+ * @param coverage - For each id, the ids it covers.
+ * @param classes - One list a merge would read, in order.
+ * @returns True when a later class has an earlier one's signature or covers it.
+ */
+export function tableRemovesFrom(
+    signatures: Readonly<Record<string, number>>,
+    coverage: ReadonlyArray<readonly number[]>,
+    classes: readonly string[],
+): boolean {
+    const earlier: number[] = [];
+    for (const className of classes) {
+        // A number, never an inherited `constructor` or `toString`.
+        const id: unknown = signatures[className];
+        if (typeof id !== 'number') continue;
+        const row = coverage[id] ?? [];
+        if (earlier.some(previous => previous === id || row.includes(previous))) return true;
+        earlier.push(id);
+    }
+    return false;
 }

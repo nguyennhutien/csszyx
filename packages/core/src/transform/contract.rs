@@ -41,6 +41,11 @@ pub struct TransformOptions {
     /// wrote as strings are left as written.
     #[serde(default)]
     pub class_prefix: Option<String>,
+    /// Which of this file's classes cover which, as the plugin read them from
+    /// the project's compiled stylesheet. A later key of a static object then
+    /// replaces an earlier one it covers. Absent means nothing is merged.
+    #[serde(default)]
+    pub merge_table_json: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -182,6 +187,10 @@ pub struct TransformResult {
     pub classes: Vec<String>,
     /// Static className/class strings discovered in the source.
     pub raw_class_names: Vec<String>,
+    /// The class list of each static object a merge would read, when the pass
+    /// had no merge table; lists of one class are left out.
+    #[serde(default)]
+    pub merge_groups: Vec<Vec<String>>,
     /// Non-fatal transform diagnostics.
     pub diagnostics: Vec<String>,
     /// Recovery token metadata emitted for hydration safety.

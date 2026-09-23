@@ -18,6 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadNativeBinding } from '../../core/native/index.js';
 import { SAFELIST_HEADER } from '../src/safelist-format.js';
 import { vitePlugin } from '../src/unplugin.js';
+import { removeTailwindProjects, tailwindProject } from './tailwind-project.js';
 
 const FIXTURE_FILES: Record<string, string> = {
     // Field shape: className EXPRESSION + static sz — the expression must
@@ -66,15 +67,27 @@ const tempDirs: string[] = [];
 /**
  * vite-build the fixture app with one parser and collect the artifacts.
  *
- * @param parser - engine under test.
+ * @param options - Engine and optional real-Tailwind fixture under test.
+ * @param options.parser - Engine artifact used by the build.
+ * @param options.tailwindFixture - Files for a fixture with Tailwind installed.
  * @returns concatenated JS output + sorted safelist tokens.
  */
-async function buildWith(parser: 'rust' | 'wasm'): Promise<BuildArtifacts> {
-    const root = mkdtempSync(join(tmpdir(), `csszyx-build-diff-${parser}-`));
-    tempDirs.push(root);
-    mkdirSync(join(root, 'src'), { recursive: true });
-    for (const [file, source] of Object.entries(FIXTURE_FILES)) {
-        writeFileSync(join(root, file), source, 'utf8');
+async function buildWith({
+    parser,
+    tailwindFixture,
+}: {
+    parser: 'rust' | 'wasm';
+    tailwindFixture?: Record<string, string>;
+}): Promise<BuildArtifacts> {
+    const root = tailwindFixture
+        ? tailwindProject(`csszyx-build-diff-${parser}-`, tailwindFixture)
+        : mkdtempSync(join(tmpdir(), `csszyx-build-diff-${parser}-`));
+    if (!tailwindFixture) {
+        tempDirs.push(root);
+        mkdirSync(join(root, 'src'), { recursive: true });
+        for (const [file, source] of Object.entries(FIXTURE_FILES)) {
+            writeFileSync(join(root, file), source, 'utf8');
+        }
     }
 
     await build({
@@ -126,15 +139,35 @@ describe('vite production build — engine diff (native vs wasm)', () => {
 
     beforeAll(async () => {
         loadNativeBinding();
-        rust = await buildWith('rust');
-        wasm = await buildWith('wasm');
+        rust = await buildWith({ parser: 'rust' });
+        wasm = await buildWith({ parser: 'wasm' });
     }, 60_000);
 
     afterAll(() => {
+        removeTailwindProjects();
         for (const dir of tempDirs.splice(0)) {
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+    it.each(['rust', 'wasm'] as const)(
+        'safelists conditional runtime spreads in a real %s build',
+        async parser => {
+            const output = await buildWith({
+                parser,
+                tailwindFixture: {
+                    'src/theme.css': '@import "tailwindcss";\n',
+                    'src/main.ts': 'export { App } from "./App";\n',
+                    'src/App.tsx':
+                        'export const App=({c,width})=><><div sz={{pb:2,p:4}}/><div sz={{hover:{...(c?{pb:2,p:4}:{p:8})},w:width}}/></>;',
+                },
+            });
+            expect(output.bundle).toContain('className: "p-4"');
+            expect(output.bundle).toContain('_sz(');
+            expect(output.safelistTokens).toContain('hover:pb-2');
+        },
+        60_000,
+    );
 
     it('emits an identical bundle from both engines', () => {
         expect(rust.bundle).toBe(wasm.bundle);

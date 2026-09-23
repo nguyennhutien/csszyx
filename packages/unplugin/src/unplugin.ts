@@ -158,8 +158,12 @@ export {
 import { loadsCsszyxRuntime, writeMergeRegistrationModule } from './merge-registration.js';
 import {
     createMergeSignatureTable,
+    ENGINE_MERGE_TABLE_FORMAT,
     MERGE_TABLE_FORMAT,
+    type MergeSignature,
     type MergeSignatureTable,
+    mergeGroupsOf,
+    mergeRemovesFrom,
 } from './merge-signature.js';
 import { isMonorepoPackage } from './monorepo.js';
 import { recordStylesheetFacts } from './next-stylesheet-facts.js';
@@ -3705,7 +3709,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 effectiveFilename,
                 astBudget,
             );
-            if (cached) return cached;
+            if (cached) return withObjectRule(source, effectiveFilename, compilerOptions, cached);
         }
 
         lastPrescanCacheMisses++;
@@ -3714,7 +3718,83 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             writeTransformCache(cacheRoot, cacheInput, execution.result, cacheKey);
             rememberTransformCacheEntry(cacheKey.key, execution.result);
         }
-        return execution.result;
+        return withObjectRule(source, effectiveFilename, compilerOptions, execution.result);
+    }
+
+    /**
+     * The merged result of each first-pass result, and the style model it was
+     * merged under. A new model — a stylesheet edit in dev — merges again.
+     */
+    const objectRuleMerged = new WeakMap<
+        SourceTransformResult,
+        { model: ProjectStyleModel; merged: SourceTransformResult }
+    >();
+
+    /** Results a second pass produced, which no path should merge again. */
+    const objectRuleOutputs = new WeakSet<SourceTransformResult>();
+
+    /**
+     * Every class a first pass handed the object rule. The classes it removed
+     * reach no census, so a stylesheet edit is checked against these.
+     */
+    const objectRuleClasses = new Set<string>();
+
+    /**
+     * Merge a later sz key over an earlier one it covers, from the compiled CSS.
+     *
+     * The first pass lowers the file as it always did and reports the class
+     * list of each static object in it. Each list is asked, in order, whether a
+     * later class covers an earlier one, from the style model; only a file
+     * where one does is lowered again with a table. The rule only ever removes
+     * classes, so one more pass is enough.
+     *
+     * The first pass is what the transform cache keeps: it depends on the
+     * source and the options, not on the CSS, so a stylesheet edit that
+     * changes a signature changes the merge without invalidating the cache.
+     *
+     * The lists, not the file: on the docs app two classes of one file covered
+     * each other in 25 of 26 files and two of one object in none of them, so
+     * asking per file paid for a second pass that changed nothing.
+     *
+     * @param source Source module contents.
+     * @param effectiveFilename Normalized source filename.
+     * @param compilerOptions The options the first pass ran with.
+     * @param first The first pass's result.
+     * @returns The merged result, or the first pass when nothing covers.
+     */
+    function withObjectRule(
+        source: string,
+        effectiveFilename: string,
+        compilerOptions: TransformSourceCodeOptions,
+        first: SourceTransformResult,
+    ): SourceTransformResult {
+        // Off by configuration is the way back when a project's stylesheet
+        // is read wrong: the first pass is what every build emitted before.
+        if (options.build?.mergeCoveredKeys === false) return first;
+        const model = styleModel;
+        const groups = mergeGroupsOf(first);
+        if (model === undefined || objectRuleOutputs.has(first) || groups.length === 0) {
+            return first;
+        }
+        const grouped = new Set(groups.flat());
+        for (const className of grouped) objectRuleClasses.add(className);
+        const known = objectRuleMerged.get(first);
+        if (known?.model === model) return known.merged;
+        const signatureOf = (candidate: string): MergeSignature | null =>
+            model.signature(candidate);
+        let merged = first;
+        // Asked per list before any table is built: most files hold no list a
+        // merge would shorten, and they pay only these checks.
+        if (groups.some(group => mergeRemovesFrom(group, signatureOf))) {
+            const [signatures, coverage] = createMergeSignatureTable([...grouped], signatureOf);
+            merged = runConfiguredParser(source, effectiveFilename, {
+                ...compilerOptions,
+                mergeTable: { format: ENGINE_MERGE_TABLE_FORMAT, signatures, coverage },
+            }).result;
+        }
+        objectRuleMerged.set(first, { model, merged });
+        if (merged !== first) objectRuleOutputs.add(merged);
+        return merged;
     }
 
     /**
@@ -3895,7 +3975,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 runRustPrescanFallback(misses, results);
             }
         }
-        return [...individual, ...orderPrescanResults(batchable, results)];
+        return [...individual, ...orderPrescanResults(batchable, results, compilerOptions)];
     }
 
     /**
@@ -4030,15 +4110,25 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      *
      * @param files Source files in discovery order.
      * @param results Results keyed by authored file path.
+     * @param compilerOptions The options the results were produced with, which
+     *        the object rule's second pass runs with.
      * @returns Successful transforms in discovery order.
      */
     function orderPrescanResults(
         files: PrescanSourceFile[],
         results: Map<string, SourceTransformResult>,
+        compilerOptions: TransformSourceCodeOptions,
     ): PrescanTransformResult[] {
         return files.flatMap(file => {
             const result = results.get(file.filePath);
-            return result ? [{ filePath: file.filePath, result }] : [];
+            if (result === undefined) return [];
+            const filePath = normalizeSourceFilename(file.filePath);
+            return [
+                {
+                    filePath: file.filePath,
+                    result: withObjectRule(file.content, filePath, compilerOptions, result),
+                },
+            ];
         });
     }
 
@@ -5619,25 +5709,64 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const before = prefixOf(previous);
         const after = prefixOf(current);
         if (after === before) {
-            await followMergeTableEdit({ server: ctx.server, sourceEdit: false });
+            if (objectRuleTable(previous) === objectRuleTable(current)) {
+                await followMergeTableEdit({ server: ctx.server, sourceEdit: false });
+                return;
+            }
+            // Recompiling every module reloads the table module with them.
+            if (mergeTableSettled) await computeUnservedClasses();
+            recompileEveryModule(ctx.server);
+            // Ungated, like the prefix line below: a reload that drops the
+            // page's state with no explanation would be its own surprise.
+            console.warn(
+                `[csszyx] ${projectRelative(ctx.file)} changed which sz keys cover each other: recompiled every module and reloaded the page.`,
+            );
             return;
         }
         await prescanAndWriteClasses();
-        ctx.server.moduleGraph.invalidateAll();
-        // Vite 5 has no per-environment graphs; Vite 6 and later answer each
-        // environment from its own.
-        const { environments } = ctx.server as {
-            environments?: Record<string, { moduleGraph: { invalidateAll(): void } }>;
-        };
-        for (const environment of Object.values(environments ?? {})) {
-            environment.moduleGraph.invalidateAll();
-        }
-        ctx.server.ws.send({ type: 'full-reload' });
+        recompileEveryModule(ctx.server);
         // Ungated, like the active-parser line: a reload that drops the page's
         // state with no explanation would be its own surprise.
         console.warn(
             `[csszyx] ${projectRelative(ctx.file)} changed the Tailwind prefix from ${describePrefix(before)} to ${describePrefix(after)}: recompiled every module and reloaded the page.`,
         );
+    }
+
+    /**
+     * Which classes the object rule merged, under one style model.
+     *
+     * Each module merged its static `sz` objects under the model open when it
+     * was transformed, and Vite serves it until it is invalidated. A
+     * stylesheet edit that changes this answer changes those merges, which a
+     * reload alone would not redo.
+     *
+     * @param model - The style model to read signatures from.
+     * @returns The table, serialized for comparison.
+     */
+    function objectRuleTable(model: ProjectStyleModel): string {
+        return JSON.stringify(
+            createMergeSignatureTable([...objectRuleClasses], candidate =>
+                model.signature(candidate),
+            ),
+        );
+    }
+
+    /**
+     * Send every module through the transform again and reload the page.
+     *
+     * @param server - The dev server.
+     */
+    function recompileEveryModule(server: ViteDevServer): void {
+        server.moduleGraph.invalidateAll();
+        // Vite 5 has no per-environment graphs; Vite 6 and later answer each
+        // environment from its own.
+        const { environments } = server as {
+            environments?: Record<string, { moduleGraph: { invalidateAll(): void } }>;
+        };
+        for (const environment of Object.values(environments ?? {})) {
+            environment.moduleGraph.invalidateAll();
+        }
+        server.ws.send({ type: 'full-reload' });
     }
 
     /**
@@ -5740,6 +5869,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const after = prefixOf(current);
         if (after === before) {
             styleModelRebuildError = null;
+            // Warned, not failed: only the objects whose keys changed cover
+            // are stale, where a changed prefix leaves every class unstyled.
+            if (objectRuleTable(previous) !== objectRuleTable(current)) {
+                emitWarning(
+                    `[csszyx] ${changed.map(projectRelative).join(', ')} changed which sz keys cover each other, but this watch session merged its modules under the old stylesheet, so an sz object may keep a class a later key now covers, or leave out one it no longer covers.\n` +
+                        '  help: stop the watch and start it again.\n' +
+                        '  note: this rebuild finished; only the objects whose keys changed cover are stale until then.',
+                );
+            }
             return;
         }
         styleModel = previous;

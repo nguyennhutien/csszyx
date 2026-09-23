@@ -210,10 +210,14 @@ pub fn lower_static_sz_object_with_class_prefix(
 pub fn lower_static_sz_object(object: &StaticSzObject) -> Vec<String> {
     let mut classes = Vec::with_capacity(object.properties.len());
     lower_object_into(object, "", &mut classes);
-    merge_text_size_and_leading(classes)
-        .into_iter()
-        .map(with_class_prefix)
-        .collect()
+    // Merged last: the table names classes as they are emitted, prefix
+    // included, and the text-size/leading pair is one class by then.
+    super::merge::apply_active(
+        merge_text_size_and_leading(classes)
+            .into_iter()
+            .map(with_class_prefix)
+            .collect(),
+    )
 }
 
 /// Whether a key was removed from the authoring contract and has migration

@@ -45,6 +45,12 @@ export interface CsszyxTurbopackOptions {
      */
     importedStaticSz?: boolean;
     /**
+     * Merge a later `sz` key over an earlier one whose CSS it covers, as the
+     * other lanes spell `build.mergeCoveredKeys`. On unless set; `false`
+     * keeps every key, as before 0.18.
+     */
+    mergeCoveredKeys?: boolean;
+    /**
      * The stylesheets the app loads, relative to the app root, when the
      * project also holds others: a fixture or an old copy that sets another
      * Tailwind prefix. Pass the same list to `csszyx next prebuild` and
@@ -66,6 +72,7 @@ const OPTION_KEYS = new Set(
         config: true,
         glob: true,
         importedStaticSz: true,
+        mergeCoveredKeys: true,
         tailwindStylesheet: true,
         turbopack: true,
     } satisfies Record<keyof CsszyxTurbopackOptions, true>),
@@ -130,6 +137,9 @@ export function csszyxTurbopack(
     const loaderOptions: Record<string, unknown> = { parserMode, config };
     if (options.importedStaticSz !== undefined) {
         loaderOptions.importedStaticSz = options.importedStaticSz;
+    }
+    if (options.mergeCoveredKeys !== undefined) {
+        loaderOptions.mergeCoveredKeys = options.mergeCoveredKeys;
     }
     if (safelistOutputFile !== undefined) {
         loaderOptions.safelistOutputFile = safelistOutputFile;

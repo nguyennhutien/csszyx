@@ -2427,6 +2427,20 @@ function transformNested(
     }
 }
 
+/**
+ * The merge table the engine applies to each static object it lowers.
+ *
+ * `signatures` maps a class, as emitted and prefix included, to a signature
+ * id; `coverage[id]` lists the ids whose CSS that signature covers. `format`
+ * is the writer's: the engine refuses a format it does not read and keeps
+ * every class.
+ */
+export interface EngineMergeTable {
+    format: number;
+    signatures: Readonly<Record<string, number>>;
+    coverage: ReadonlyArray<readonly number[]>;
+}
+
 /** Structured background-gradient sz value. */
 interface BackgroundGradientValue {
     gradient?: string;
@@ -4307,6 +4321,15 @@ export interface TransformSourceCodeOptions {
     classPrefix?: string | null;
 
     /**
+     * Which of this file's classes cover which, as the plugin read them from
+     * the project's compiled stylesheet. A later key of a static object then
+     * replaces an earlier one it covers: `{ pb: 2, p: 4 }` lowers to `p-4`.
+     * Without it nothing is merged, which is what every lane that cannot read
+     * the stylesheet gets.
+     */
+    mergeTable?: EngineMergeTable;
+
+    /**
      * Opt into tiered CSS custom property names for parser paths that support
      * the CSS variable system. Unsupported parser paths must preserve existing
      * `--_sz-*` output until they explicitly port this option.
@@ -4389,6 +4412,12 @@ export interface SourceTransformResult {
     classes: Set<string>;
     /** Raw className/class strings collected for Tailwind discovery only. */
     rawClassNames: Set<string>;
+    /**
+     * The class list of each static object a merge would read, from a pass
+     * without a merge table. Absent from a result an older engine or cache
+     * entry produced; a reader then treats every class of the file as one list.
+     */
+    mergeGroups?: string[][];
     /** Compiler diagnostics to emit in development. */
     diagnostics: string[];
     /** Recovery tokens emitted by szRecover attributes. */

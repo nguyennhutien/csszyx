@@ -29,6 +29,7 @@ interface WasmResultJson {
     code: string;
     classes: string[];
     raw_class_names: string[];
+    merge_groups: string[][];
     diagnostics: string[];
     recovery_tokens: Array<{
         token: string;
@@ -183,6 +184,7 @@ export function transformWasmBatch(
         cross_module_sz_objects_json:
             encodeCrossModuleStatics(options?.crossModuleSzObjects) ?? null,
         class_prefix: options?.classPrefix ?? null,
+        merge_table_json: options?.mergeTable ? JSON.stringify(options.mergeTable) : null,
     });
 
     const results = JSON.parse(
@@ -217,6 +219,7 @@ function fromWasmResult(result: WasmResultJson): SourceTransformResult {
         usesBoolClass: result.metadata.uses_bool_class,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.raw_class_names),
+        mergeGroups: result.merge_groups,
         diagnostics: result.diagnostics,
         recoveryTokens: new Map(
             result.recovery_tokens.map(({ token, ...data }) => [

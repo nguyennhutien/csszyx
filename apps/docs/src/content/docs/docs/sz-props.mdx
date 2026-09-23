@@ -122,6 +122,82 @@ flags (`ordinal`, `tabularNums`), default-or-value toggles (`grow`, `ring`,
 <div sz={{ truncate: true, tabularNums: true, grow: true, container: true }} />
 ```
 
+## A later key covers an earlier one
+
+Two keys can still set the same property: `p` sets all four paddings, `pb` only
+the bottom one. In a static `sz` object or array, a later key replaces an earlier
+key whose CSS it fully covers, so a refinement written after the shorthand
+survives and one written before it does not:
+
+```tsx
+<div sz={{ pb: 2, p: 4 }} />          // → className="p-4"
+<div sz={{ p: 4, pb: 2 }} />          // → className="p-4 pb-2"   (pb refines p)
+<div sz={[{ w: 4 }, { size: 8 }]} />  // → className="size-8"
+```
+
+Without this, both classes reach the element and the stylesheet decides.
+Tailwind writes the shorthand's rule first, so `{ pb: 2, p: 4 }` used to render
+a 0.5rem bottom padding whatever order you wrote.
+
+"Later" is the key's place in the finished object, which is where it first
+appears. A spread, and a key repeated across array elements, keep that first
+place: with `const card = { p: 8 }`, `sz={{ ...card, pb: 2, p: 4 }}` is the
+object `{ p: 4, pb: 2 }` — `p` came in with the spread — so it emits `p-4 pb-2`
+and removes nothing, and `sz={[{ pb: 2 }, { p: 4 }, { pb: 3 }]}` is
+`{ pb: 3, p: 4 }` and emits `p-4`.
+
+Which key covers which is read from your project's compiled Tailwind stylesheet,
+not from key names: `border: 2` sets a width and `border: 'red-500'` a colour. A
+key replaces another only when it sets every property the other sets:
+
+- in the same variant: `{ pb: 2, hover: { p: 4 } }` keeps both;
+- with the same `!important`: an important class and a plain one never replace
+  each other;
+- with CSS behind it: a class your stylesheet generates nothing for is never
+  removed.
+
+It applies where the build compiles the object. In this release the build
+merges only the keys it lowers statically; these keep every class:
+
+- a value only the runtime knows (`{ pb: 2, p: size }`) or a conditional value
+  (`{ pb: 2, p: big ? 8 : 4 }`);
+- an [`szv`](/docs/szv/) factory and an `szr({ … })` call, which resolve at
+  runtime;
+- a `.svelte` or `.vue` file, which the adapters compile without the project's
+  stylesheet;
+- a [jest run](/docs/testing/#where-the-classes-come-from), and a tool that
+  compiles without your stylesheet, such as the
+  [MCP preview](/docs/mcp-server/#csszyx_compile_preview).
+
+Classes that can be resolved inside a runtime object stay in the safelist,
+including every branch of a conditional spread under a variant. For example,
+`{ hover: { ...(active ? { pb: 2, p: 4 } : { p: 8 }) }, w: width }` keeps
+`hover:pb-2` in the generated CSS even when a static object elsewhere in the
+file merges `pb-2` into `p-4`.
+
+Under Next.js with Turbopack the table comes from `csszyx next prebuild` or
+`csszyx next watch`; until one of them has run, both classes stay. After a
+stylesheet edit that changes which class covers which, a Vite dev server
+recompiles every module, and a watch build asks you to restart it.
+
+:::note[Upgrading from 0.17]
+An object that relied on the earlier key winning now renders the later one.
+Write the refining key last: `{ p: 4, pb: 2 }`. Nothing prints when a build
+merges, so the sites are found by reading, not by the log: search for an object
+where a shorthand key follows one of its own longhands (`p` after `pb` or `px`,
+`size` after `w` or `h`, `border` after `borderT`, `rounded` after `roundedT`,
+`inset` after `top` or `left`). A jest suite does not merge, so it keeps
+passing on the class list it always saw.
+
+Where something outside csszyx matches the class name — a CSS rule, a
+`[&_.pb-2]` variant, an E2E locator, a `toHaveClass` in a browser test — write
+the refining key last so the class survives. If your stylesheet is read wrong
+and a class you need is removed, set
+[`build.mergeCoveredKeys: false`](/docs/reference/config/#build) (on the
+Turbopack lane, `csszyxTurbopack({ mergeCoveredKeys: false })`) and the build
+keeps every class, as it did before 0.18.
+:::
+
 ## Type safety — unknown keys are caught by TypeScript
 
 The `sz` prop type is **closed**: a key that isn't a known sz prop or variant is a
@@ -562,6 +638,8 @@ a branch holding a value only the runtime knows (`cond ? { p: pad } : undefined`
 Pass an array to `sz` to compose styles with **later-wins** semantics: when two
 elements touch the same property, the later element's value overrides the
 earlier one's — like `Object.assign`, and like every class-merge tool you know.
+A later key that [covers an earlier one](#a-later-key-covers-an-earlier-one)
+replaces it too.
 Elements can be sz objects, class strings, `cond && …` guards, or runtime
 values (a forwarded [`szsc`](/docs/compound-components/#the-szs-prop--style-internal-parts-in-one-prop)
 slot).

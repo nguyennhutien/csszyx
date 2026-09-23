@@ -94,6 +94,8 @@ pub struct NativeTransformOptions {
     pub cross_module_sz_objects_json: Option<String>,
     /// The Tailwind `prefix()` written before every class the engine emits.
     pub class_prefix: Option<String>,
+    /// Which of the file's classes cover which, from the compiled stylesheet.
+    pub merge_table_json: Option<String>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -203,6 +205,8 @@ pub struct NativeTransformResult {
     pub classes: Vec<String>,
     /// Static className/class strings discovered in the source.
     pub raw_class_names: Vec<String>,
+    /// The class list of each static object a merge would read.
+    pub merge_groups: Vec<Vec<String>>,
     /// Non-fatal transform diagnostics.
     pub diagnostics: Vec<String>,
     /// Recovery token metadata emitted for hydration safety.
@@ -256,6 +260,7 @@ pub fn transform_batch_native(
             cross_module_statics_json: options.cross_module_statics_json,
             cross_module_sz_objects_json: options.cross_module_sz_objects_json,
             class_prefix: options.class_prefix,
+            merge_table_json: options.merge_table_json,
         },
     )
     .map(|results| {
@@ -274,6 +279,7 @@ impl From<TransformResult> for NativeTransformResult {
             map: result.map.map(|map| map.to_string()),
             classes: result.classes,
             raw_class_names: result.raw_class_names,
+            merge_groups: result.merge_groups,
             diagnostics: result.diagnostics,
             recovery_tokens: result
                 .recovery_tokens

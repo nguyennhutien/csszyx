@@ -1,15 +1,19 @@
 /* eslint-disable jsdoc/require-param-description, jsdoc/require-returns */
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
-
+import type { SourceTransformResult } from '@csszyx/compiler';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import {
     callsSzcn as callsMergeHelper,
     ensureMergeRegistration,
+    ensureMergeTable,
     importMergeRegistration,
     loadsCsszyxRuntime,
     mergeRegistrationPath,
+    mergeTableFor,
+    mergeTablePath,
 } from './merge-registration.js';
+import { mergeGroupsOf } from './merge-signature.js';
 import type { JsonLike } from './next-cache-identity.js';
 import {
     configWithImportedStaticSz,
@@ -30,7 +34,11 @@ import {
     NextSafelistStateLockedError,
     writeNextSafelistShard,
 } from './next-safelist-state.js';
-import { type NextSourceTransformOutput, transformNextSource } from './next-source-transformer.js';
+import {
+    type NextSourceTransformInput,
+    type NextSourceTransformOutput,
+    transformNextSource,
+} from './next-source-transformer.js';
 import { createNextStateContext, type NextStateContext } from './next-state-context.js';
 import {
     type NextClassPrefix,
@@ -63,6 +71,11 @@ export interface NextTurboLoaderOptions extends NextLaneOptions {
      * rule behind them.
      */
     importedStaticSz?: boolean;
+    /**
+     * Whether a later `sz` key replaces an earlier one whose CSS it covers,
+     * as the other lanes spell `build.mergeCoveredKeys`. On unless given.
+     */
+    mergeCoveredKeys?: boolean;
 }
 
 /** Minimal Webpack-compatible loader context used by Turbopack. */
@@ -93,6 +106,44 @@ export interface NextTurboLoaderResult {
     shardPath: string | null;
     materialized: boolean;
     dependencies: string[];
+}
+
+/**
+ * Merge a later `sz` key over an earlier one it covers, under Turbopack.
+ *
+ * A loader lowers one module at a time and cannot compile the project's CSS,
+ * so which class covers which is read from the table `csszyx next prebuild` or
+ * `csszyx next watch` settled. The module depends on that file whatever it
+ * holds, so the first write re-runs this loader.
+ *
+ * The first pass is what the cache and the shard keep: the next table is built
+ * from the classes before any merge, and one built from the merged classes
+ * would lose the pair that removed a class, so the run after it would keep
+ * both again.
+ *
+ * @param first - What the first pass returned.
+ * @param transformInput - The input that pass ran with.
+ * @param context - The resolved loader context of this project.
+ * @param loaderContext - Turbopack's loader context, for the dependency.
+ * @returns The merged result, or the first pass when nothing merges.
+ */
+function withNextObjectRule(
+    first: SourceTransformResult,
+    transformInput: NextSourceTransformInput,
+    context: NextStateContext,
+    loaderContext: NextTurboLoaderContext,
+): SourceTransformResult {
+    const groups = mergeGroupsOf(first);
+    if (groups.length === 0) return first;
+    ensureMergeTable(context.root);
+    loaderContext.addDependency?.(mergeTablePath(context.root));
+    const mergeTable = mergeTableFor(context.root, groups);
+    if (mergeTable === null) return first;
+    return transformNextSource({
+        ...transformInput,
+        compilerOptions: { ...transformInput.compilerOptions, mergeTable },
+        cacheRoot: undefined,
+    }).result;
 }
 
 /**
@@ -159,7 +210,7 @@ export function runNextTurboLoader(
         root: context.root,
         importedStaticSz: options.importedStaticSz,
     });
-    const transform = transformNextSource({
+    const transformInput = {
         source,
         filename: loaderContext.resourcePath,
         parserMode: options.parserMode ?? 'rust',
@@ -177,17 +228,18 @@ export function runNextTurboLoader(
             options.compilerVersion ??
             readPackageVersion('../../compiler/package.json', import.meta.url),
         astBudget: options.astBudget,
-    });
-    const injected = injectNextRuntimeImports(
-        transform.result.code,
-        transform.result,
-        prefix.prefix,
-    );
+    };
+    const transform = transformNextSource(transformInput);
+    const lowered =
+        options.mergeCoveredKeys === false
+            ? transform.result
+            : withNextObjectRule(transform.result, transformInput, context, loaderContext);
+    const injected = injectNextRuntimeImports(lowered.code, lowered, prefix.prefix);
     // szcn theme groups. The other lanes import a virtual module the plugin
     // resolves; a loader cannot, so a real file is written once per project and
     // imported by path. Only modules that can call szcn pay for it, and the
     // import goes AFTER any `use client` directive, which must stay first.
-    const callsSzcn = callsMergeHelper(source, transform.result);
+    const callsSzcn = callsMergeHelper(source, lowered);
     const themeGroups = callsSzcn
         ? ensureThemeGroupsFile(
               context.root,

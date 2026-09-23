@@ -149,6 +149,13 @@ Pass `classPrefix` when the project's stylesheet sets one. With
 The result echoes the `classPrefix` it used. When none was given it says so in a
 `note`, since the classes are then in the unprefixed vocabulary.
 
+The preview does not read the project's stylesheet, so it cannot tell which
+class covers which. A build can: it drops a class that a later key in the same
+static `sz` object fully covers, so `{ pb: 2, p: 4 }` builds to `p-4` while the
+preview lists both. Whenever one static `sz` object in the result holds two or
+more classes, a `mergeNote` says so; two elements never merge with each other,
+so a file of one-key objects gets none.
+
 ## Resources
 
 The server also exposes read-only resources that AI agents can load for context:

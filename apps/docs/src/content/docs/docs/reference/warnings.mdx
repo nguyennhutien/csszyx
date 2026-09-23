@@ -178,6 +178,11 @@ barrel is followed and does not report. The other cause is
 | `[csszyx] szRecover at {filename}: unknown mode "{value}" — expected "csr" or "dev-only". Token emission skipped.` | nudge | Use `"csr"` or `"dev-only"`. |
 | `[csszyx] "sz" takes precedence over the runtime "className" on this element at {filename}:{line}, whatever order the attributes are written. If the className carries overrides from a caller, they are dropped.` — suggestion: `state the order in one sz array — sz={[{ … }, className]} for the caller to win, sz={[className, { … }]} for these styles to win.` | nudge | State the order in one `sz` array. Either rewrite silences it. |
 | ``[csszyx] <{tag}> at {filename}:{line}:{col} carries {n} `sz` attributes; they were merged as sz={[first, …, last]}, later wins per property.`` — suggestion: `fold them into one sz array so the order is written down.` | nudge | Write one `sz` array. Nothing was dropped: every `sz` compiled, later wins per property, an authored `className` stays first. |
+| `[csszyx] {filename}: the merge table is in format {n}, and this engine reads format {m}, so no sz key was merged with a later one it covers.` — or `…the merge table is not one this engine reads ({error})…` when the file itself is unreadable — + `help: install the same csszyx version of every @csszyx package, then rebuild; under Turbopack, delete .csszyx/merge-table.json and run csszyx next prebuild.` + ``note: every class is kept, as before 0.18, so `{ pb: 2, p: 4 }` emits both and the stylesheet order decides.`` | correctness | The plugin and the engine come from different csszyx releases, or `.csszyx/merge-table.json` was truncated or hand-edited. Align the `@csszyx/*` versions; under Turbopack, write the table again with `csszyx next prebuild`. |
+
+`correctness` is a third class beside the two above: every class is present, but
+they are not the ones a correct build emits. Like missing output it prints in
+every mode except `quiet: true`.
 
 `{filename}` is `<anonymous>` when the compiler was called without one.
 
@@ -789,6 +794,15 @@ server lowered every source again and reloaded the page. `{before}` and
 `{after}` read `no prefix` when none is set. Nothing to do.
 
 ```text
+[csszyx] {file} changed which sz keys cover each other: recompiled every module and reloaded the page.
+```
+
+The same reload for a stylesheet edit that changed which class a later `sz`
+key covers — a `@theme` token added or removed, an `@utility` rewritten. Each
+module merged its static `sz` objects under the stylesheet it was compiled
+with, so the server compiled every module again. Nothing to do.
+
+```text
 [csszyx] {files} changed the Tailwind prefix from {before} to {after}, but this watch session compiled its modules under the old one, so their classes would style nothing.
   help: stop the watch and start it again.
   note: modules keep the classes they were compiled with until the restart.
@@ -824,6 +838,23 @@ fixed.
 A build **error** that should never reach you: a bundler lane reached the
 engine without reading the stylesheets first. Report it with the bundler and
 its version.
+
+### A stylesheet edit changed which sz keys cover each other
+
+```text
+[csszyx] {files} changed which sz keys cover each other, but this watch session merged its modules under the old stylesheet, so an sz object may keep a class a later key now covers, or leave out one it no longer covers.
+  help: stop the watch and start it again.
+  note: this rebuild finished; only the objects whose keys changed cover are stale until then.
+```
+
+A later key in a static `sz` object replaces an earlier one whose CSS it
+covers, and the build works that out from your stylesheet when it compiles the
+module. A watch rebuild on webpack, `rollup -w`, `vite build --watch`, an
+esbuild context or rspack keeps the modules it already compiled, so after an
+edit such as removing a `@theme` token those modules still carry the old
+answer. The rebuild goes on, since only the objects whose keys changed are
+affected; restart the watch to compile them again. A Vite dev server needs no
+restart: it compiles every module again and reloads the page.
 
 ### Next.js with Turbopack
 

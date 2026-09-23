@@ -20,8 +20,14 @@
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import type { EngineMergeTable } from '@csszyx/compiler';
 import { insertAfterUseDirective } from './directive-prologue.js';
-import { createMergeSignatureTable, type MergeSignatureTable } from './merge-signature.js';
+import {
+    createMergeSignatureTable,
+    ENGINE_MERGE_TABLE_FORMAT,
+    type MergeSignatureTable,
+    tableRemovesFrom,
+} from './merge-signature.js';
 import type { ProjectStyleModel } from './project-style-model.js';
 import { themeGroupsSpecifier } from './theme-groups-file.js';
 import { unservedAuthoredClasses } from './unserved-classes.js';
@@ -42,6 +48,36 @@ export const MERGE_REGISTRATION_FILE = 'merge-registration.mjs';
  * data.
  */
 export const MERGE_REGISTRATION_CJS_FILE = 'merge-registration.cjs';
+
+/**
+ * The same table as JSON, for the Turbopack loader's engine pass.
+ *
+ * The loader cannot compile the project's CSS, so it cannot tell which class a
+ * later `sz` key covers; it reads the rows for its module's classes from here.
+ * JSON, not the module: the loader reads it, it does not import it.
+ */
+export const MERGE_TABLE_FILE = 'merge-table.json';
+
+/**
+ * Where the table the loader reads lives for a project.
+ *
+ * @param root - The project root.
+ * @returns Absolute path of the JSON file.
+ */
+export function mergeTablePath(root: string): string {
+    return path.join(root, '.csszyx', MERGE_TABLE_FILE);
+}
+
+/**
+ * The JSON the loader reads, in the format this plugin hands the engine.
+ *
+ * @param table - The settled merge table.
+ * @returns The file's text.
+ */
+function mergeTableJson(table: MergeSignatureTable): string {
+    const [signatures, coverage] = table;
+    return `${JSON.stringify({ format: ENGINE_MERGE_TABLE_FORMAT, signatures, coverage })}\n`;
+}
 
 /**
  * Where the settled module lives for a project.
@@ -112,7 +148,8 @@ export function writeMergeRegistrationModule(
         mergeRegistrationPath(root, 'cjs'),
         createUnservedRuntimeModule(unserved, table, 'cjs'),
     );
-    return { path: mergeRegistrationPath(root, 'esm'), changed: esm || cjs };
+    const json = writeWhenChanged(mergeTablePath(root), mergeTableJson(table));
+    return { path: mergeRegistrationPath(root, 'esm'), changed: esm || cjs || json };
 }
 
 /**
@@ -231,6 +268,66 @@ export function ensureMergeRegistration(root: string): void {
         // Written by a Next command in between, or not writable: either way
         // the import below reads what is there, or nothing, as before.
     }
+}
+
+/**
+ * Make sure the table the loader reads exists, writing an empty one only if
+ * none does.
+ *
+ * The same reason as {@link ensureMergeRegistration}: a module lowered before
+ * `csszyx next watch` has written the table depends on this file, so the
+ * write re-runs it. The write is exclusive and never replaces a table.
+ *
+ * @param root - The project root.
+ */
+export function ensureMergeTable(root: string): void {
+    const target = mergeTablePath(root);
+    try {
+        mkdirSync(path.dirname(target), { recursive: true });
+        writeFileSync(target, mergeTableJson([{}, []]), { encoding: 'utf8', flag: 'wx' });
+    } catch {
+        // Written by a Next command in between, or not writable.
+    }
+}
+
+/**
+ * The rows of the settled table that one module's lists can use.
+ *
+ * Only the signatures are narrowed: the coverage rows are indexed by id, and
+ * the engine ignores a row no class of the module maps to. After reading and
+ * parsing the table, groups of lengths `nᵢ`, `c` total classes, and longest row
+ * `r` cost `O(c + Σ nᵢ² · (1 + r))` worst-case time: checking whether a group
+ * merges scans earlier classes and performs a linear coverage-row lookup.
+ *
+ * @param root - The project root.
+ * @param groups - The class lists a merge would read, from a pass without a
+ *        table.
+ * @returns The table to hand the engine, or null when merging no list would
+ *          remove a class, or no readable table exists.
+ */
+export function mergeTableFor(
+    root: string,
+    groups: ReadonlyArray<readonly string[]>,
+): EngineMergeTable | null {
+    if (groups.length === 0) return null;
+    const text = readText(mergeTablePath(root));
+    if (text === null) return null;
+    let table: EngineMergeTable;
+    try {
+        table = JSON.parse(text) as EngineMergeTable;
+    } catch {
+        return null;
+    }
+    if (typeof table?.signatures !== 'object' || !Array.isArray(table.coverage)) return null;
+    if (!groups.some(group => tableRemovesFrom(table.signatures, table.coverage, group))) {
+        return null;
+    }
+    const signatures: Record<string, number> = {};
+    for (const className of new Set(groups.flat())) {
+        const id: unknown = table.signatures[className];
+        if (typeof id === 'number') signatures[className] = id;
+    }
+    return { format: table.format, signatures, coverage: table.coverage };
 }
 
 /**

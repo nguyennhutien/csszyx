@@ -58,6 +58,8 @@ export interface NativeTransformOptions {
     crossModuleSzObjectsJson?: string;
     /** The Tailwind `prefix()` written before every class the engine emits. */
     classPrefix?: string;
+    /** Which of the file's classes cover which, from the compiled stylesheet. */
+    mergeTableJson?: string;
 }
 
 /** Native transform output shape returned per source file. */
@@ -70,6 +72,8 @@ export interface NativeTransformResult {
     classes: string[];
     /** Static className/class strings discovered in the source. */
     rawClassNames: string[];
+    /** The class list of each static object a merge would read. */
+    mergeGroups: string[][];
     /** Non-fatal transform diagnostics. */
     diagnostics: string[];
     /** Recovery token metadata emitted for hydration safety. */

@@ -120,7 +120,12 @@ Two sources answer, in order.
    them. An entry is used only when the file's contents match what the build
    saw, and only when this csszyx version wrote it without variable mangling.
    Run your build (or dev server) before the suite when a component's styles
-   live in another module.
+   live in another module. The entry holds the pass before the
+   [object rule](/docs/sz-props/#a-later-key-covers-an-earlier-one), and a
+   per-file compile has no stylesheet either, so where a build merged a later
+   `sz` key over an earlier one it covers (`{ pb: 2, p: 4 }` → `p-4`) a test
+   still sees both classes. Assert `toHaveClass` on the class you rely on, not
+   on the whole string, and read a class list from a suite as the unmerged one.
 2. **A per-file compile**, for everything else. This is the complete answer
    for an inline `sz` and for one built from a `const` in the same file. A
    shape it cannot resolve keeps the runtime path, exactly as the plugin

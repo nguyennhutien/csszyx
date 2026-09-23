@@ -84,6 +84,7 @@ export { nearestName, suggestSzKey, szKeySuggestionFor } from './sz-key-suggesti
 export {
     BOOLEAN_SHORTHANDS,
     type CssVariableMangleValue,
+    type EngineMergeTable,
     type GlobalVarAliasTableInput,
     isValidSzProp,
     KNOWN_SPECIAL_PROPERTIES,

@@ -119,6 +119,45 @@ pub(super) fn transform_file_with_options(
     options: TransformOptions,
 ) -> TransformResult {
     let _class_prefix = super::lower::ClassPrefixScope::enter(options.class_prefix.as_deref());
+    let (table, table_problem) = match options
+        .merge_table_json
+        .as_deref()
+        .map(super::merge::decode)
+    {
+        Some(Ok(table)) => (Some(table), None),
+        Some(Err(problem)) => (None, Some(problem)),
+        None => (None, None),
+    };
+    // A pass with a table has already been told which lists cover each other.
+    let groups = super::merge::MergeGroupScope::enter(table.is_none());
+    let merge_table = super::merge::MergeTableScope::enter(table);
+    let mut result = transform_file_in_scopes(file, options);
+    let groups = groups.finish();
+    let removed = merge_table.take_removed();
+    // A file that emitted nothing, over the AST budget for one, merges nothing.
+    if !result.classes.is_empty() {
+        result.merge_groups = groups;
+        if !removed.is_empty() {
+            let mut reported: std::collections::HashSet<String> =
+                result.classes.iter().cloned().collect();
+            for class_name in removed {
+                if reported.insert(class_name.clone()) {
+                    result.classes.push(class_name);
+                }
+            }
+        }
+    }
+    if let Some(problem) = table_problem {
+        result.diagnostics.push(format!(
+            "[csszyx] {}: {problem}, so no sz key was merged with a later one it covers.\n  help: install the same csszyx version of every @csszyx package, then rebuild; under Turbopack, delete .csszyx/merge-table.json and run `csszyx next prebuild`.\n  note: every class is kept, as before 0.18, so `{{ pb: 2, p: 4 }}` emits both and the stylesheet order decides.",
+            file.filename
+        ));
+    }
+    result
+}
+
+/// [`transform_file_with_options`] once the per-file scopes are open.
+fn transform_file_in_scopes(file: &TransformFile, options: TransformOptions) -> TransformResult {
     let total_start = Instant::now();
     let triage_start = Instant::now();
     // Bail before the parser on pathologically nested source: the recursive
@@ -178,6 +217,7 @@ fn transform_fast_static_ir_with_options(
         map: None,
         classes: lowered.classes,
         raw_class_names: lowered.raw_class_names,
+        merge_groups: Vec::new(),
         diagnostics: {
             let mut diagnostics =
                 unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref());
@@ -425,6 +465,7 @@ fn transform_static_classes_with_options(
         map: None,
         classes,
         raw_class_names,
+        merge_groups: Vec::new(),
         diagnostics,
         recovery_tokens,
         css_variable_map: merge_variable_maps(
@@ -1262,6 +1303,7 @@ fn noop_result(file: &TransformFile) -> TransformResult {
         map: None,
         classes: Vec::new(),
         raw_class_names: Vec::new(),
+        merge_groups: Vec::new(),
         diagnostics: Vec::new(),
         recovery_tokens: Vec::new(),
         css_variable_map: Vec::new(),
@@ -3008,6 +3050,189 @@ mod tests {
     /// original property name in its class while the emitted variable map
     /// still describes the alias, so the stylesheet and the markup would name
     /// two different custom properties and the colour would never apply.
+    /// The object rule's two outputs besides the code: the lists a merge would
+    /// read, from a pass without a table, and every class the table removed,
+    /// kept in the reported classes for a path that resolves at run time.
+    #[test]
+    fn a_pass_reports_its_merge_lists_and_keeps_what_the_table_removed() {
+        let file = TransformFile {
+            filename: "/repo/src/Merge.tsx".to_string(),
+            source: "const App = () => <div sz={{ pb: 2, p: 4 }} />;".to_string(),
+        };
+        let first = transform_file_with_options(&file, TransformOptions::default());
+        assert_eq!(first.merge_groups, [["pb-2", "p-4"]]);
+
+        let merged = transform_file_with_options(
+            &file,
+            TransformOptions {
+                merge_table_json: Some(
+                    r#"{"format":1,"signatures":{"p-4":0,"pb-2":1},"coverage":[[1],[]]}"#
+                        .to_string(),
+                ),
+                ..TransformOptions::default()
+            },
+        );
+        assert!(
+            merged.code.contains(r#"className="p-4""#),
+            "{}",
+            merged.code
+        );
+        assert!(merged.merge_groups.is_empty());
+        assert_eq!(merged.classes, ["p-4", "pb-2"]);
+    }
+
+    /// A table this engine cannot read leaves every class in place and says
+    /// why, rather than lowering as if the build had asked for no merge.
+    #[test]
+    fn a_table_it_cannot_read_is_refused_with_a_diagnostic() {
+        let file = TransformFile {
+            filename: "/repo/src/Refused.tsx".to_string(),
+            source: "const App = () => <div sz={{ pb: 2, p: 4 }} />;".to_string(),
+        };
+        for table in [
+            r#"{"format":99,"signatures":{"p-4":0,"pb-2":1},"coverage":[[1],[]]}"#,
+            "[]",
+        ] {
+            let result = transform_file_with_options(
+                &file,
+                TransformOptions {
+                    merge_table_json: Some(table.to_string()),
+                    ..TransformOptions::default()
+                },
+            );
+            assert!(
+                result.code.contains(r#"className="pb-2 p-4""#),
+                "{}",
+                result.code
+            );
+            let diagnostics = result.diagnostics.join("\n");
+            assert!(
+                diagnostics.contains("/repo/src/Refused.tsx")
+                    && diagnostics.contains("no sz key was merged"),
+                "{diagnostics}"
+            );
+        }
+    }
+
+    /// An element the runtime lowers keeps every class in its code, so the
+    /// classes the file reports must keep them too, under the variant they are
+    /// emitted with. Merging on the unprefixed name lost `hover:pb-2` from the
+    /// safelist while the runtime still emitted it.
+    #[test]
+    fn a_runtime_element_reports_every_class_under_its_variant() {
+        let file = TransformFile {
+            filename: "/repo/src/Runtime.tsx".to_string(),
+            source: "import { X } from './x';\nconst A = () => <div sz={{ pb: 2, p: 4, md: { hover: { pb: 2, p: 4 } }, ...X }} />;".to_string(),
+        };
+        let table = r#"{"format":1,"signatures":{"p-4":0,"pb-2":1,"md:hover:p-4":2,"md:hover:pb-2":3},"coverage":[[1],[],[3],[]]}"#;
+        let without = transform_file_with_options(&file, TransformOptions::default());
+        let merged = transform_file_with_options(
+            &file,
+            TransformOptions {
+                merge_table_json: Some(table.to_string()),
+                ..TransformOptions::default()
+            },
+        );
+        assert_eq!(merged.code, without.code);
+        let mut expected = without.classes;
+        let mut reported = merged.classes;
+        expected.sort();
+        reported.sort();
+        assert_eq!(reported, expected);
+        assert!(
+            reported.iter().any(|class| class == "md:hover:pb-2"),
+            "{reported:?}"
+        );
+    }
+
+    /// A branch the walk cannot lower as one object is prefixed after the
+    /// fact, and the variant goes after the stylesheet prefix, never before.
+    #[test]
+    fn a_runtime_element_prefixes_a_conditional_spread_under_its_variant() {
+        let file = TransformFile {
+            filename: "/repo/src/Spread.tsx".to_string(),
+            source: "import { X } from './x';\nconst A = ({ c }) => <div sz={{ hover: { ...(c ? { p: 4 } : { p: 8 }) }, ...X }} />;".to_string(),
+        };
+        let plain = transform_file_with_options(&file, TransformOptions::default());
+        assert!(
+            plain.classes.iter().any(|class| class == "hover:p-4")
+                && plain.classes.iter().any(|class| class == "hover:p-8"),
+            "{:?}",
+            plain.classes
+        );
+        let prefixed = transform_file_with_options(
+            &file,
+            TransformOptions {
+                class_prefix: Some("tw".to_string()),
+                ..TransformOptions::default()
+            },
+        );
+        assert!(
+            prefixed.classes.iter().any(|class| class == "tw:hover:p-4"),
+            "{:?}",
+            prefixed.classes
+        );
+    }
+
+    /// Candidate collection cannot merge classes that the runtime still emits.
+    #[test]
+    fn runtime_spread_candidates_keep_covered_classes_under_variants() {
+        let table = r#"{"format":1,"signatures":{"p-4":0,"pb-2":1,"tw:p-4":0,"tw:pb-2":1},"coverage":[[1],[]]}"#;
+        for branch in ["c ? {pb:2,p:4} : {p:8}", "c && {pb:2,p:4}"] {
+            let object = format!("{{md:{{hover:{{...({branch})}}}},w:width}}");
+            for sz in [object.clone(), format!("[{object}]")] {
+                let file = TransformFile {
+                    filename: "/repo/src/RuntimeSpread.tsx".to_string(),
+                    source: format!("const A=({{c,width}})=><><div sz={{{{pb:2,p:4}}}}/><div sz={{{sz}}}/><div sz={{{{pb:2,p:4}}}}/></>"),
+                };
+                for prefix in [None, Some("tw".to_string())] {
+                    let result = transform_file_with_options(
+                        &file,
+                        TransformOptions {
+                            class_prefix: prefix.clone(),
+                            merge_table_json: Some(table.to_string()),
+                            ..TransformOptions::default()
+                        },
+                    );
+                    let expected = if prefix.is_some() {
+                        "tw:md:hover:pb-2"
+                    } else {
+                        "md:hover:pb-2"
+                    };
+                    assert!(
+                        result.classes.iter().any(|class| class == expected),
+                        "{sz}: {:?}",
+                        result.classes
+                    );
+                    let static_class = if prefix.is_some() {
+                        "className=\"tw:p-4\""
+                    } else {
+                        "className=\"p-4\""
+                    };
+                    assert_eq!(
+                        result.code.matches(static_class).count(),
+                        2,
+                        "{}",
+                        result.code
+                    );
+                }
+            }
+        }
+    }
+
+    /// A file that emits no class reports no list, even when a lowering along
+    /// the way saw one.
+    #[test]
+    fn a_file_with_no_classes_reports_no_merge_list() {
+        let file = TransformFile {
+            filename: "/repo/src/None.tsx".to_string(),
+            source: "const App = () => <div className=\"a b\" />;".to_string(),
+        };
+        let result = transform_file_with_options(&file, TransformOptions::default());
+        assert!(result.classes.is_empty());
+        assert!(result.merge_groups.is_empty());
+    }
+
     #[test]
     fn global_var_aliases_apply_on_the_parser_lane() {
         let file = TransformFile {

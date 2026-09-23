@@ -69,6 +69,31 @@ const RUNTIME_HELPERS: ReadonlyArray<readonly [string, keyof CompilerFlags]> = [
     ['__szBoolClass', 'usesBoolClass'],
 ];
 
+/** What the preview leaves out that a build with the project's stylesheet does. */
+const MERGE_NOTE =
+    'Unmerged: a build drops a class that a later key in the same static sz object covers (`{ pb: 2, p: 4 }` → `p-4`). Write the refinement last — `{ p: 4, pb: 2 }` — to keep both. `szr` and `szv` are never merged.';
+
+/**
+ * Whether a build could merge two of the classes this module lowered to.
+ *
+ * Two elements never merge with each other, so a file of single-key objects
+ * gets no note however many classes it holds. The engine reports each static
+ * object's list; an engine too old to do so is read as one list of every class.
+ *
+ * @param result - What the compiler returned.
+ * @param result.mergeGroups - Each static object's class list, when reported.
+ * @param result.classes - Every class the module lowered to.
+ * @returns True when some object holds two or more classes.
+ */
+function mergesSomewhere(result: {
+    mergeGroups?: readonly (readonly string[])[];
+    classes: ReadonlySet<string>;
+}): boolean {
+    return result.mergeGroups === undefined
+        ? result.classes.size > 1
+        : result.mergeGroups.some(group => group.length > 1);
+}
+
 /**
  * Put one environment variable back, including back to absent.
  *
@@ -155,6 +180,10 @@ export function handleCompilePreview(input: CompilePreviewInput): {
                         ).map(([name]) => name),
                         // Echoed so the reader knows which vocabulary the classes are in.
                         classPrefix,
+                        // The build merges from the project's stylesheet, which
+                        // the preview does not read; only an object whose list
+                        // holds two or more classes can lose one to it.
+                        ...(mergesSomewhere(result) ? { mergeNote: MERGE_NOTE } : {}),
                         ...(classPrefix === null
                             ? {
                                   note: 'No classPrefix was given, so the classes carry none. If the project stylesheet sets one, such as `@import "tailwindcss" prefix(tw)`, pass it as classPrefix to see the classes that project serves.',

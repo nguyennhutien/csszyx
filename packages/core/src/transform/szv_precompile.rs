@@ -460,7 +460,14 @@ pub(crate) fn overlap_disqualify_path(config: &StaticSzvConfig) -> Option<String
 }
 
 /// Compile a validated, overlap-free config into its table.
+///
+/// Lowered with no merge table, whatever the file was handed: the table stands
+/// in for `szv` at run time, which lowers the selected object with none, and
+/// merging here would make the classes depend on whether the config
+/// precompiled.
 pub(crate) fn compile_szv_table(config: &StaticSzvConfig) -> SzvTable {
+    let _unmerged = super::merge::MergeTableScope::enter(None);
+    let _uncollected = super::merge::MergeGroupScope::enter(false);
     let base = config
         .base
         .as_ref()

@@ -33,6 +33,13 @@ describe('csszyxTurbopack', () => {
         expect(rule.loaders[0].options.importedStaticSz).toBe(value);
     });
 
+    it.each([true, false])('forwards an explicit mergeCoveredKeys of %s', value => {
+        const rule = csszyxTurbopack({ mergeCoveredKeys: value }).rules?.['*.tsx'] as {
+            loaders: Array<{ options: Record<string, unknown> }>;
+        };
+        expect(rule.loaders[0].options.mergeCoveredKeys).toBe(value);
+    });
+
     it('omits importedStaticSz when nothing configures it', () => {
         const rule = csszyxTurbopack().rules?.['*.tsx'] as {
             loaders: Array<{ options: Record<string, unknown> }>;

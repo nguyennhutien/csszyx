@@ -411,6 +411,12 @@ Strategy for static analysis vs runtime generation.
 | **Chained variables**         | ❌ Not applicable        | ✅ **Build time**        | `const b = { ...a, key: val }; <div sz={b} />` — compiler resolves the chain recursively.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | **Safelist**                  | Required for dynamic     | **Not Required**         | Auto-detected for static logic; Auto-injected for runtime values.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
+Safelist collection for an object left to runtime does not apply the build's
+merge table. A conditional spread such as
+`{ hover: { ...(active ? { pb: 2, p: 4 } : { p: 8 }) }, w: width }` retains
+`hover:pb-2`, `hover:p-4`, and `hover:p-8`, including under a stylesheet prefix.
+This also holds for a runtime array element; static siblings still merge.
+
 **Performance Rule**: Prefer **Static Strings** in `sz` objects.
 
 - ✅ `sz({ color: isErr ? 'red-500' : 'green-500' })` (Zero Runtime)
