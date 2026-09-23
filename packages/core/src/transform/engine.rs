@@ -3145,6 +3145,35 @@ mod tests {
         );
     }
 
+    /// A branch the walk cannot lower as one object is prefixed after the
+    /// fact, and the variant goes after the stylesheet prefix, never before.
+    #[test]
+    fn a_runtime_element_prefixes_a_conditional_spread_under_its_variant() {
+        let file = TransformFile {
+            filename: "/repo/src/Spread.tsx".to_string(),
+            source: "import { X } from './x';\nconst A = ({ c }) => <div sz={{ hover: { ...(c ? { p: 4 } : { p: 8 }) }, ...X }} />;".to_string(),
+        };
+        let plain = transform_file_with_options(&file, TransformOptions::default());
+        assert!(
+            plain.classes.iter().any(|class| class == "hover:p-4")
+                && plain.classes.iter().any(|class| class == "hover:p-8"),
+            "{:?}",
+            plain.classes
+        );
+        let prefixed = transform_file_with_options(
+            &file,
+            TransformOptions {
+                class_prefix: Some("tw".to_string()),
+                ..TransformOptions::default()
+            },
+        );
+        assert!(
+            prefixed.classes.iter().any(|class| class == "tw:hover:p-4"),
+            "{:?}",
+            prefixed.classes
+        );
+    }
+
     /// Candidate collection cannot merge classes that the runtime still emits.
     #[test]
     fn runtime_spread_candidates_keep_covered_classes_under_variants() {
