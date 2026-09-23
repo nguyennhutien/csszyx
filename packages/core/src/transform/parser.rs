@@ -2559,6 +2559,9 @@ fn dynamic_array_part(
     unwrapped: &Expression<'_>,
     ctx: ResolveContext<'_>,
 ) -> StaticArrayPartIr {
+    // `_szPart` still lowers the original object without the build's table.
+    // Candidate collection must retain every class it can emit at runtime.
+    let _unmerged = super::merge::MergeTableScope::enter(None);
     StaticArrayPartIr {
         condition_span: None,
         classes: Vec::new(),
@@ -3285,6 +3288,10 @@ fn candidate_classes_from_jsx_expression(
     expression: &JSXExpression<'_>,
     ctx: ResolveContext<'_>,
 ) -> Vec<String> {
+    // This walk only safelists an expression left intact for `_sz`. Merging
+    // inside it would remove runtime classes before outer variants are added.
+    // One O(1) scope swap covers the entire recursive walk, not each node.
+    let _unmerged = super::merge::MergeTableScope::enter(None);
     match expression {
         JSXExpression::ObjectExpression(object) => {
             candidate_classes_from_object_expression(object, ctx, None, &[])
@@ -3374,8 +3381,13 @@ fn candidate_classes_from_object_expression(
     variant_prefix: Option<&str>,
     variant_keys: &[String],
 ) -> Vec<String> {
+    // Lowered under its variant keys rather than prefixed afterwards: the merge
+    // table inside the lowering reads the names the file emits (`hover:pb-2`),
+    // and a class it removes is recorded under that name. Prefixing after the
+    // fact merged on `pb-2`, so the safelist lost `hover:pb-2` while the
+    // runtime, which keeps every class, still emitted it.
     if let Some(static_object) = static_object_from_object_expression(object, ctx) {
-        return prefix_classes(lower_static_sz_object(&static_object), variant_prefix);
+        return lower_static_sz_object(&wrap_in_variant_keys(variant_keys, static_object));
     }
 
     let mut classes = Vec::new();
@@ -3462,10 +3474,10 @@ fn candidate_classes_from_object_expression(
                                 let single_object = StaticSzObject {
                                     properties: vec![static_property],
                                 };
-                                classes.extend(prefix_classes(
-                                    lower_static_sz_object(&single_object),
-                                    variant_prefix,
-                                ));
+                                classes.extend(lower_static_sz_object(&wrap_in_variant_keys(
+                                    variant_keys,
+                                    single_object,
+                                )));
                             } else {
                                 classes.extend(prefix_classes(
                                     candidate_classes_from_expression(val, ctx),
@@ -3479,10 +3491,10 @@ fn candidate_classes_from_object_expression(
             ObjectPropertyKind::SpreadProperty(spread) => {
                 if let Some(static_obj) = static_object_from_spread_argument(&spread.argument, ctx)
                 {
-                    classes.extend(prefix_classes(
-                        lower_static_sz_object(&static_obj),
-                        variant_prefix,
-                    ));
+                    classes.extend(lower_static_sz_object(&wrap_in_variant_keys(
+                        variant_keys,
+                        static_obj,
+                    )));
                 } else {
                     classes.extend(prefix_classes(
                         candidate_classes_from_expression(&spread.argument, ctx),

@@ -59,6 +59,7 @@ describe('the object rule with a merge table', () => {
         ['{ w: 4, size: 8 }', 'className="size-8"'],
         ['{ pb: 2, px: 2, p: 4 }', 'className="p-4"'],
         ['[{ pb: 2 }, { p: 4 }]', 'className="p-4"'],
+        ['[{ w: 4 }, { size: 8 }]', 'className="size-8"'],
     ])('drops what a later key covers: %s', (sz, expected) => {
         for (const [name, code] of emit(sz, { mergeTable: TABLE })) {
             expect(code, name).toContain(expected);
@@ -146,6 +147,37 @@ describe('what the table does not decide', () => {
         for (const [name, transform] of ENGINES) {
             const classes = transform(source, 'a.tsx', { mergeTable: TABLE }).classes;
             expect([...classes], name).toEqual(expect.arrayContaining(['pb-2', 'p-4']));
+        }
+    });
+
+    // An element the runtime lowers keeps every class in the emitted code, so
+    // the classes a file reports — what Tailwind is asked to generate — must
+    // keep them too, under the variant they are emitted with.
+    it.each([
+        ['a variant beside the covering pair', '{ pb: 2, p: 4, hover: { pb: 2, p: 4 }, ...X }'],
+        ['a variant alone', '{ hover: { pb: 2, px: 2, p: 4 }, ...X }'],
+        ['two nested variants', '{ md: { hover: { pb: 2, p: 4 } }, ...X }'],
+    ])('reports every class a runtime element emits, for %s', (_, sz) => {
+        const source = `import { X } from './x';\nexport const A = () => <div sz={${sz}} />;`;
+        const table: EngineMergeTable = {
+            format: 1,
+            signatures: {
+                'p-4': 0,
+                'pb-2': 1,
+                'px-2': 2,
+                'hover:p-4': 3,
+                'hover:pb-2': 4,
+                'hover:px-2': 5,
+                'md:hover:p-4': 6,
+                'md:hover:pb-2': 7,
+            },
+            coverage: [[1, 2], [], [], [4, 5], [], [], [7], []],
+        };
+        for (const [name, transform] of ENGINES) {
+            const without = transform(source, 'a.tsx');
+            const withTable = transform(source, 'a.tsx', { mergeTable: table });
+            expect(withTable.code, name).toBe(without.code);
+            expect([...withTable.classes].sort(), name).toEqual([...without.classes].sort());
         }
     });
 

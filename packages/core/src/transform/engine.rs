@@ -3114,6 +3114,83 @@ mod tests {
         }
     }
 
+    /// An element the runtime lowers keeps every class in its code, so the
+    /// classes the file reports must keep them too, under the variant they are
+    /// emitted with. Merging on the unprefixed name lost `hover:pb-2` from the
+    /// safelist while the runtime still emitted it.
+    #[test]
+    fn a_runtime_element_reports_every_class_under_its_variant() {
+        let file = TransformFile {
+            filename: "/repo/src/Runtime.tsx".to_string(),
+            source: "import { X } from './x';\nconst A = () => <div sz={{ pb: 2, p: 4, md: { hover: { pb: 2, p: 4 } }, ...X }} />;".to_string(),
+        };
+        let table = r#"{"format":1,"signatures":{"p-4":0,"pb-2":1,"md:hover:p-4":2,"md:hover:pb-2":3},"coverage":[[1],[],[3],[]]}"#;
+        let without = transform_file_with_options(&file, TransformOptions::default());
+        let merged = transform_file_with_options(
+            &file,
+            TransformOptions {
+                merge_table_json: Some(table.to_string()),
+                ..TransformOptions::default()
+            },
+        );
+        assert_eq!(merged.code, without.code);
+        let mut expected = without.classes;
+        let mut reported = merged.classes;
+        expected.sort();
+        reported.sort();
+        assert_eq!(reported, expected);
+        assert!(
+            reported.iter().any(|class| class == "md:hover:pb-2"),
+            "{reported:?}"
+        );
+    }
+
+    /// Candidate collection cannot merge classes that the runtime still emits.
+    #[test]
+    fn runtime_spread_candidates_keep_covered_classes_under_variants() {
+        let table = r#"{"format":1,"signatures":{"p-4":0,"pb-2":1,"tw:p-4":0,"tw:pb-2":1},"coverage":[[1],[]]}"#;
+        for branch in ["c ? {pb:2,p:4} : {p:8}", "c && {pb:2,p:4}"] {
+            let object = format!("{{md:{{hover:{{...({branch})}}}},w:width}}");
+            for sz in [object.clone(), format!("[{object}]")] {
+                let file = TransformFile {
+                    filename: "/repo/src/RuntimeSpread.tsx".to_string(),
+                    source: format!("const A=({{c,width}})=><><div sz={{{{pb:2,p:4}}}}/><div sz={{{sz}}}/><div sz={{{{pb:2,p:4}}}}/></>"),
+                };
+                for prefix in [None, Some("tw".to_string())] {
+                    let result = transform_file_with_options(
+                        &file,
+                        TransformOptions {
+                            class_prefix: prefix.clone(),
+                            merge_table_json: Some(table.to_string()),
+                            ..TransformOptions::default()
+                        },
+                    );
+                    let expected = if prefix.is_some() {
+                        "tw:md:hover:pb-2"
+                    } else {
+                        "md:hover:pb-2"
+                    };
+                    assert!(
+                        result.classes.iter().any(|class| class == expected),
+                        "{sz}: {:?}",
+                        result.classes
+                    );
+                    let static_class = if prefix.is_some() {
+                        "className=\"tw:p-4\""
+                    } else {
+                        "className=\"p-4\""
+                    };
+                    assert_eq!(
+                        result.code.matches(static_class).count(),
+                        2,
+                        "{}",
+                        result.code
+                    );
+                }
+            }
+        }
+    }
+
     /// A file that emits no class reports no list, even when a lowering along
     /// the way saw one.
     #[test]
