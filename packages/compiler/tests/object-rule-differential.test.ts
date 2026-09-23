@@ -23,6 +23,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
     createRng,
+    escapeUnsafeChars,
     fuzzBudget,
     generateSzObject,
     loadSzPool,
@@ -57,7 +58,7 @@ function lower(
     elements: readonly SzObject[],
     options: { mergeTable?: EngineMergeTable; classPrefix?: string } = {},
 ): string[] | null {
-    const sz = `[${elements.map(element => JSON.stringify(element)).join(', ')}]`;
+    const sz = `[${elements.map(element => escapeUnsafeChars(JSON.stringify(element))).join(', ')}]`;
     const code = transform(`export const A = () => <div sz={${sz}} />;`, 'a.tsx', options).code;
     const match = /className="([^"]*)"/.exec(code ?? '');
     return match ? (match[1] as string).split(' ').filter(Boolean) : null;
