@@ -561,6 +561,21 @@ export interface BuildConfig {
      * @default true
      */
     importedStaticSz?: boolean;
+
+    /**
+     * Merge a later key of a static `sz` object over an earlier key whose CSS
+     * it fully covers, so `{ pb: 2, p: 4 }` compiles to `p-4`.
+     *
+     * Which class covers which is read from the project's compiled Tailwind.
+     * Set `false` when that reading is wrong for a project — a class it
+     * removes is then lost, and no key order brings it back — and the build
+     * keeps every class, as it did before 0.18, so the stylesheet decides.
+     * Every bundler lane reads this; on the Next.js Turbopack lane pass it to
+     * `csszyxTurbopack` instead.
+     *
+     * @default true
+     */
+    mergeCoveredKeys?: boolean;
 }
 
 /**
@@ -747,6 +762,7 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     astBudgetLimit: 50000,
     parser: 'rust',
     importedStaticSz: DEFAULT_IMPORTED_STATIC_SZ,
+    mergeCoveredKeys: true,
 };
 
 /**

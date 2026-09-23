@@ -431,6 +431,7 @@ interface BuildConfig {
   astBudgetLimit?: number; // Max AST nodes per file before the transform skips it (warned)
   parser?: "rust" | "wasm"; // Engine artifact for JSX/TSX sz transforms
   scanCss?: string | string[]; // CSS files with @theme blocks to auto-scan
+  mergeCoveredKeys?: boolean; // Merge a later sz key over one it covers (default true)
 }
 ```
 
@@ -445,6 +446,7 @@ interface BuildConfig {
 | `parser`         | `'rust'`               | Source parser for JSX/TSX sz transforms. Default uses the native Rust engine through the matching optional `@csszyx/core-*` platform package; when that binary is absent and the choice was only inherited, the build degrades to `'wasm'` — the same engine compiled to WebAssembly, shipped inside `@csszyx/core`, identical output. An explicit value always fails loudly instead of degrading. Set `'wasm'` to pin the WebAssembly build (useful where native addons cannot load at all). The former `'oxc'`/`'babel'` TypeScript lanes were removed; a config still naming them is ignored like an invalid env value and the build runs on the default. |
 | `scanCss`        | `undefined`            | CSS files to scan for `@theme` blocks. Literal paths and simple globs are supported.                                                                                                                                                                                                                                                                                       |
 | `importedStaticSz` | `true`               | Compile a static sz object a component imports from another module. On by default; set `false` to leave those imports to the runtime — see below.                                                                                                                                                                                                                           |
+| `mergeCoveredKeys` | `true`               | Merge a later `sz` key over an earlier one whose CSS it covers, so `{ pb: 2, p: 4 }` compiles to `p-4`. Set `false` when the stylesheet is read wrong for a project; the build then keeps every class, as before 0.18. On Turbopack, pass it to `csszyxTurbopack`. |
 
 #### Imported Static sz Objects (`importedStaticSz`)
 

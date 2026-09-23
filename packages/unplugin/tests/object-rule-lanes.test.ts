@@ -68,6 +68,25 @@ describe('the object rule on each lane', () => {
         expect(classNames(result.code)).toEqual(['p-4', 'p-4 pb-2']);
     }, 60_000);
 
+    // The way back when a project's stylesheet is read wrong: the build then
+    // does what it did before the rule, and the stylesheet decides.
+    it('vite keeps every key when `build.mergeCoveredKeys` is off', async () => {
+        const root = project();
+        const call = callHooks(
+            vitePlugin({
+                ...OPTIONS,
+                build: { ...OPTIONS.build, mergeCoveredKeys: false },
+            }) as unknown as Record<string, unknown>[],
+        );
+
+        await call('configResolved', { root, command: 'build' });
+        const result = (await call('transform', APP, join(root, 'src/App.tsx'))) as {
+            code: string;
+        };
+
+        expect(classNames(result.code)).toEqual(['pb-2 p-4', 'p-4 pb-2']);
+    }, 60_000);
+
     // The safelist is what Tailwind generates, and a class the build's merge
     // removed can still be emitted by a path that resolves at run time.
     it('vite keeps the dropped class in the safelist it writes', async () => {

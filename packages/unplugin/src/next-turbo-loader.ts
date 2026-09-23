@@ -71,6 +71,11 @@ export interface NextTurboLoaderOptions extends NextLaneOptions {
      * rule behind them.
      */
     importedStaticSz?: boolean;
+    /**
+     * Whether a later `sz` key replaces an earlier one whose CSS it covers,
+     * as the other lanes spell `build.mergeCoveredKeys`. On unless given.
+     */
+    mergeCoveredKeys?: boolean;
 }
 
 /** Minimal Webpack-compatible loader context used by Turbopack. */
@@ -225,7 +230,10 @@ export function runNextTurboLoader(
         astBudget: options.astBudget,
     };
     const transform = transformNextSource(transformInput);
-    const lowered = withNextObjectRule(transform.result, transformInput, context, loaderContext);
+    const lowered =
+        options.mergeCoveredKeys === false
+            ? transform.result
+            : withNextObjectRule(transform.result, transformInput, context, loaderContext);
     const injected = injectNextRuntimeImports(lowered.code, lowered, prefix.prefix);
     // szcn theme groups. The other lanes import a virtual module the plugin
     // resolves; a loader cannot, so a real file is written once per project and

@@ -107,6 +107,18 @@ describe.each(['rust', 'wasm'] as const)('the object rule under Turbopack (%s)',
         expect(context.dependencies).toContain(table);
     }, 60_000);
 
+    it('keeps every key when the loader is told not to merge', async () => {
+        const { root, page } = await app();
+        await settle(root);
+
+        const output = runNextTurboLoader(SOURCE, loaderContext(root, page), {
+            ...options,
+            mergeCoveredKeys: false,
+        });
+
+        expect(output.code).toContain('className="pb-2 p-4"');
+    }, 60_000);
+
     it('keeps the classes before the merge in the shard the next table is built from', async () => {
         const { root, page } = await app();
         await settle(root);

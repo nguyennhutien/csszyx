@@ -3768,6 +3768,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         compilerOptions: TransformSourceCodeOptions,
         first: SourceTransformResult,
     ): SourceTransformResult {
+        // Off by configuration is the way back when a project's stylesheet
+        // is read wrong: the first pass is what every build emitted before.
+        if (options.build?.mergeCoveredKeys === false) return first;
         const model = styleModel;
         const groups = mergeGroupsOf(first);
         if (model === undefined || objectRuleOutputs.has(first) || groups.length === 0) {

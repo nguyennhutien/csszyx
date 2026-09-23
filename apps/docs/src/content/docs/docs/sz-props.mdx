@@ -189,10 +189,13 @@ where a shorthand key follows one of its own longhands (`p` after `pb` or `px`,
 `inset` after `top` or `left`). A jest suite does not merge, so it keeps
 passing on the class list it always saw.
 
-There is no switch to turn this off in 0.18. Where something outside csszyx
-matches the class name — a CSS rule, a `[&_.pb-2]` variant, an E2E locator, a
-`toHaveClass` in a browser test — write the refining key last so the class
-survives.
+Where something outside csszyx matches the class name — a CSS rule, a
+`[&_.pb-2]` variant, an E2E locator, a `toHaveClass` in a browser test — write
+the refining key last so the class survives. If your stylesheet is read wrong
+and a class you need is removed, set
+[`build.mergeCoveredKeys: false`](/docs/reference/config/#build) (on the
+Turbopack lane, `csszyxTurbopack({ mergeCoveredKeys: false })`) and the build
+keeps every class, as it did before 0.18.
 :::
 
 ## Type safety — unknown keys are caught by TypeScript
