@@ -5713,6 +5713,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // Recompiling every module reloads the table module with them.
             if (mergeTableSettled) await computeUnservedClasses();
             recompileEveryModule(ctx.server);
+            // Ungated, like the prefix line below: a reload that drops the
+            // page's state with no explanation would be its own surprise.
+            console.warn(
+                `[csszyx] ${projectRelative(ctx.file)} changed which sz keys cover each other: recompiled every module and reloaded the page.`,
+            );
             return;
         }
         await prescanAndWriteClasses();
@@ -5866,7 +5871,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (objectRuleTable(previous) !== objectRuleTable(current)) {
                 emitWarning(
                     `[csszyx] ${changed.map(projectRelative).join(', ')} changed which sz keys cover each other, but this watch session merged its modules under the old stylesheet, so an sz object may keep a class a later key now covers, or leave out one it no longer covers.\n` +
-                        '  help: stop the watch and start it again.',
+                        '  help: stop the watch and start it again.\n' +
+                        '  note: this rebuild finished; only the objects whose keys changed cover are stale until then.',
                 );
             }
             return;

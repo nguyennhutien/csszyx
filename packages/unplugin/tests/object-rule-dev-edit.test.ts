@@ -49,7 +49,10 @@ async function devServer({ loadTable = true } = {}) {
         'src/App.tsx': APP,
     });
     vi.spyOn(process, 'cwd').mockReturnValue(root);
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnings: string[] = [];
+    vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+        warnings.push(args.map(String).join(' '));
+    });
     const call = callHooks(
         vitePlugin({ build: { cache: false }, production: { mangle: false } }) as unknown as Record<
             string,
@@ -88,7 +91,7 @@ async function devServer({ loadTable = true } = {}) {
         writeFileSync(css, content, 'utf8');
         await call('hotUpdate', { type: 'update', file: css, modules: [], server });
     };
-    return { edit, transform, counts, sent };
+    return { edit, transform, counts, sent, warnings };
 }
 
 describe('the object rule on a dev server', () => {
@@ -100,6 +103,10 @@ describe('the object rule on a dev server', () => {
         expect(dev.counts.invalidatedAll).toBeGreaterThan(0);
         expect(dev.sent).toContainEqual({ type: 'full-reload' });
         expect(await dev.transform()).toEqual(['pb-brand p-4']);
+        // A reload that drops the page's state says why, as the prefix one does.
+        expect(dev.warnings.join('\n')).toContain(
+            'src/index.css changed which sz keys cover each other: recompiled every module and reloaded the page.',
+        );
     }, 120_000);
 
     it('recompiles before any page has loaded the table module', async () => {
@@ -118,6 +125,7 @@ describe('the object rule on a dev server', () => {
 
         expect(dev.counts.invalidatedAll).toBe(0);
         expect(dev.sent).not.toContainEqual({ type: 'full-reload' });
+        expect(dev.warnings.join('\n')).not.toContain('cover each other');
     }, 120_000);
 });
 

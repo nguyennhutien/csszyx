@@ -149,7 +149,7 @@ pub(super) fn transform_file_with_options(
     }
     if let Some(problem) = table_problem {
         result.diagnostics.push(format!(
-            "[csszyx] {}: {problem}, so no sz key was merged with a later one it covers.\n  help: install the same csszyx version of every @csszyx package, then rebuild.",
+            "[csszyx] {}: {problem}, so no sz key was merged with a later one it covers.\n  help: install the same csszyx version of every @csszyx package, then rebuild; under Turbopack, delete .csszyx/merge-table.json and run `csszyx next prebuild`.\n  note: every class is kept, as before 0.18, so `{{ pb: 2, p: 4 }}` emits both and the stylesheet order decides.",
             file.filename
         ));
     }
