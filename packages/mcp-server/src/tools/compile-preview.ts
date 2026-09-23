@@ -71,7 +71,7 @@ const RUNTIME_HELPERS: ReadonlyArray<readonly [string, keyof CompilerFlags]> = [
 
 /** What the preview leaves out that a build with the project's stylesheet does. */
 const MERGE_NOTE =
-    'These classes are unmerged. A build reads the project stylesheet and drops a class that a later key in the same static sz object fully covers, so `{ pb: 2, p: 4 }` builds to `p-4`; write `{ p: 4, pb: 2 }` to keep both. An `szr` call or an `szv` factory is not merged at build.';
+    'Unmerged: a build drops a class that a later key in the same static sz object covers (`{ pb: 2, p: 4 }` → `p-4`). Write the refinement last — `{ p: 4, pb: 2 }` — to keep both. `szr` and `szv` are never merged.';
 
 /**
  * Whether a build could merge two of the classes this module lowered to.

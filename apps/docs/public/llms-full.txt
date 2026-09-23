@@ -699,6 +699,12 @@ Strategy for static analysis vs runtime generation.
 | **Chained variables**         | ❌ Not applicable        | ✅ **Build time**        | `const b = { ...a, key: val }; <div sz={b} />` — compiler resolves the chain recursively.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | **Safelist**                  | Required for dynamic     | **Not Required**         | Auto-detected for static logic; Auto-injected for runtime values.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
+Safelist collection for an object left to runtime does not apply the build's
+merge table. A conditional spread such as
+`{ hover: { ...(active ? { pb: 2, p: 4 } : { p: 8 }) }, w: width }` retains
+`hover:pb-2`, `hover:p-4`, and `hover:p-8`, including under a stylesheet prefix.
+This also holds for a runtime array element; static siblings still merge.
+
 **Performance Rule**: Prefer **Static Strings** in `sz` objects.
 
 - ✅ `sz({ color: isErr ? 'red-500' : 'green-500' })` (Zero Runtime)
@@ -3680,8 +3686,14 @@ forwarded `szsc` slot) pass through `_szPart`.
 Key ORDER matters across keys too: in a static `sz` object or array a later key
 replaces an earlier key whose CSS it fully covers, read from the project's
 compiled Tailwind — `{ pb: 2, p: 4 }` → `p-4`. Write the refinement last:
-`{ p: 4, pb: 2 }` → `p-4 pb-2`. A variant or `!important` class never covers a
-plain one; runtime values, `szr({…})` and `szv` factories keep every class:
+`{ p: 4, pb: 2 }` → `p-4 pb-2`. A class in another variant never covers one
+outside it, and an `!important` class and a plain one never replace each other;
+runtime values, `szr({…})`, `szv` factories, jest and the Svelte/Vue adapters
+keep every class. Safelisting a runtime object never applies the build's merge
+table: statically known classes inside conditional spreads retain their full
+variant and stylesheet prefixes, even when static siblings are merged.
+
+Array composition:
 
 ```tsx
 <div sz={[{ text: "base", p: 4 }, { text: "lg" }]} />

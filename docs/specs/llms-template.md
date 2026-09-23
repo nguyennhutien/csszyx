@@ -320,8 +320,14 @@ forwarded `szsc` slot) pass through `_szPart`.
 Key ORDER matters across keys too: in a static `sz` object or array a later key
 replaces an earlier key whose CSS it fully covers, read from the project's
 compiled Tailwind — `{ pb: 2, p: 4 }` → `p-4`. Write the refinement last:
-`{ p: 4, pb: 2 }` → `p-4 pb-2`. A variant or `!important` class never covers a
-plain one; runtime values, `szr({…})` and `szv` factories keep every class:
+`{ p: 4, pb: 2 }` → `p-4 pb-2`. A class in another variant never covers one
+outside it, and an `!important` class and a plain one never replace each other;
+runtime values, `szr({…})`, `szv` factories, jest and the Svelte/Vue adapters
+keep every class. Safelisting a runtime object never applies the build's merge
+table: statically known classes inside conditional spreads retain their full
+variant and stylesheet prefixes, even when static siblings are merged.
+
+Array composition:
 
 ```tsx
 <div sz={[{ text: "base", p: 4 }, { text: "lg" }]} />
