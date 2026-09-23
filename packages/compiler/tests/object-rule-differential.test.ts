@@ -205,6 +205,7 @@ describe('the object rule, engine against runtime', () => {
     it(`agrees with _szcn and keeps every law over ${CASES} cases (seed ${SEED})`, () => {
         const rng = createRng(SEED);
         let checked = 0;
+        let removing = 0;
         for (let index = 0; index < CASES; index += 1) {
             const length = 1 + Math.floor(rng() * 4);
             const testCase: Case = {
@@ -214,7 +215,13 @@ describe('the object rule, engine against runtime', () => {
                 tableSeed: Math.floor(rng() * 2 ** 32),
             };
             for (const [name, transform] of ENGINES) {
-                if (lower(transform, testCase.elements) !== null) checked += 1;
+                const plain = lower(transform, testCase.elements);
+                if (plain !== null) {
+                    checked += 1;
+                    const table = randomTable(plain, testCase.tableSeed);
+                    const merged = lower(transform, testCase.elements, { mergeTable: table });
+                    if (merged !== null && merged.length < plain.length) removing += 1;
+                }
                 const broken = violations(transform, testCase);
                 if (broken.length > 0) {
                     const smallest = shrink(transform, testCase);
@@ -226,7 +233,12 @@ describe('the object rule, engine against runtime', () => {
                 }
             }
         }
-        // A generator that stopped reaching static lowering would pass on nothing.
+        // A generator that stopped reaching static lowering would pass on
+        // nothing, and one whose tables stopped covering anything would hold
+        // the engine to `_szcn` on lists neither of them changes.
         expect(checked).toBeGreaterThan(CASES);
+        expect(removing, `${removing} of ${checked} checks removed a class`).toBeGreaterThan(
+            checked / 4,
+        );
     }, 120_000);
 });
