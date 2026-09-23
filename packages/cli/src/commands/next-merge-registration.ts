@@ -30,8 +30,9 @@ export function tryWriteMergeRegistration(input: MergeRegistrationInput): string
         const reason = (error as Error).message;
         return (
             `[csszyx] could not write .csszyx/${MERGE_REGISTRATION_FILE}: ${reason}\n` +
-            '  note: the safelist is written and the build is unaffected; until the file ' +
-            'can be written, `szcn` under Turbopack and jest removes only exact repeats.'
+            '  note: the safelist is written; until the file can be written, `szcn` under ' +
+            'Turbopack and jest removes only exact repeats, and a Turbopack build keeps every ' +
+            'key of an sz object rather than merging one a later key covers.'
         );
     }
 }
