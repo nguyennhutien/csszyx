@@ -85,7 +85,7 @@ jobs:
         run: test -s coverage/lcov.info && test -s packages/ts-plugin/coverage/lcov.info
 
       - name: Upload TypeScript coverage
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info,packages/ts-plugin/coverage/lcov.info
@@ -99,7 +99,7 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@c3ec0de9ae7f1019cea21aa96aa0a895b9552063 # v2.87.9
+        uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2.87.13
         with:
           tool: cargo-llvm-cov
 
@@ -110,7 +110,7 @@ jobs:
         run: test -s coverage/rust-lcov.info
 
       - name: Upload Rust coverage
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/rust-lcov.info
