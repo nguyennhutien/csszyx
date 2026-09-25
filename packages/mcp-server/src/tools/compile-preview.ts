@@ -71,7 +71,7 @@ const RUNTIME_HELPERS: ReadonlyArray<readonly [string, keyof CompilerFlags]> = [
 
 /** What the preview leaves out that a build with the project's stylesheet does. */
 const MERGE_NOTE =
-    'Unmerged: a build drops a class that a later key in the same static sz object covers (`{ pb: 2, p: 4 }` → `p-4`). Write the refinement last — `{ p: 4, pb: 2 }` — to keep both. `szr` and `szv` are never merged.';
+    'Unmerged: a build drops a Tailwind class that a later one on the same element covers — a later key in a static sz object (`{ pb: 2, p: 4 }` → `p-4`), or an sz class over a static className (`className="pb-2" sz={{ p: 4 }}` → `p-4`). Write the refinement last in sz — `{ p: 4, pb: 2 }` — to keep both. `szr` and `szv` are never merged.';
 
 /**
  * Whether a build could merge two of the classes this module lowered to.
@@ -82,16 +82,21 @@ const MERGE_NOTE =
  *
  * @param result - What the compiler returned.
  * @param result.mergeGroups - Each static object's class list, when reported.
+ * @param result.mergeOverrides - Each static class name beside a static `sz`.
  * @param result.classes - Every class the module lowered to.
- * @returns True when some object holds two or more classes.
+ * @returns True when some object holds two or more classes, or some class
+ *          name sits beside an `sz`.
  */
 function mergesSomewhere(result: {
     mergeGroups?: readonly (readonly string[])[];
+    mergeOverrides?: readonly unknown[];
     classes: ReadonlySet<string>;
 }): boolean {
-    return result.mergeGroups === undefined
-        ? result.classes.size > 1
-        : result.mergeGroups.some(group => group.length > 1);
+    if (result.mergeGroups === undefined) return result.classes.size > 1;
+    return (
+        result.mergeGroups.some(group => group.length > 1) ||
+        (result.mergeOverrides?.length ?? 0) > 0
+    );
 }
 
 /**

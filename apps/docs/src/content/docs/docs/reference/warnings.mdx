@@ -821,6 +821,18 @@ module merged its static `sz` objects under the stylesheet it was compiled
 with, so the server compiled every module again. Nothing to do.
 
 ```text
+[csszyx] {n} class(es) in {m} file(s) were removed: another class on the same element sets every property they set.
+  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them.
+  note: set `build.mergeCoveredClasses: false` to keep them.
+```
+
+Printed once when a Vite dev server or a webpack development build starts,
+never in production. Each class was dropped on purpose: a later key in the
+same `sz` object, or an `sz` class beside a static `className`, sets every
+property it sets. If you needed one, the audit shows where it was; move it into
+`sz` after the key that covers it, or set `build.mergeCoveredClasses: false`.
+
+```text
 [csszyx] {files} changed the Tailwind prefix from {before} to {after}, but this watch session compiled its modules under the old one, so their classes would style nothing.
   help: stop the watch and start it again.
   note: modules keep the classes they were compiled with until the restart.
@@ -1329,9 +1341,20 @@ finding:
 ```
 
 `rule` is one of `sz-diagnostic`, `dead-class`, `broken-opacity`,
-`sibling-keyword`, `theme-collision`. It is a stable id on purpose: messages get
-rewritten whenever they can be made clearer, so anything filtering on wording
-would break each time one was.
+`sibling-keyword`, `theme-collision`, `merge-covered-key`,
+`merge-covered-class`. It is a stable id on purpose: messages get rewritten
+whenever they can be made clearer, so anything filtering on wording would break
+each time one was.
+
+`merge-covered-key` and `merge-covered-class` are an audit, not a problem: they
+list each class the build drops because a later one on the same element covers
+it — a later key in one static `sz` object, or an `sz` class over a static
+`className` — one finding per file. They run only when named with `--rule`, and
+a finding never fails the run:
+
+```bash
+csszyx check --rule merge-covered-key --rule merge-covered-class
+```
 
 `kind` says what an `sz-diagnostic` found: `unknown-key`, `canonical-key`,
 `removed-key`, `numeric-key`, `closed-enum-value`, `off-scale-value`,

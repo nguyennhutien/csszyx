@@ -357,8 +357,12 @@ fn rewrite_static_sz_with_existing_class(
         let existing_classes = class_attribute
             .value
             .split_whitespace()
-            .filter(|class_name| !class_name.is_empty());
-        let merged = existing_classes
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        // On one element `sz` wins: the class name loses what its classes cover.
+        let merged = super::merge::apply_over_active(existing_classes, classes)
+            .iter()
+            .map(String::as_str)
             .chain(classes.iter().map(String::as_str))
             .collect::<Vec<_>>()
             .join(" ");

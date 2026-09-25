@@ -132,11 +132,12 @@ pub(super) fn transform_file_with_options(
     let groups = super::merge::MergeGroupScope::enter(table.is_none());
     let merge_table = super::merge::MergeTableScope::enter(table);
     let mut result = transform_file_in_scopes(file, options);
-    let groups = groups.finish();
+    let lists = groups.finish();
     let removed = merge_table.take_removed();
     // A file that emitted nothing, over the AST budget for one, merges nothing.
     if !result.classes.is_empty() {
-        result.merge_groups = groups;
+        result.merge_groups = lists.groups;
+        result.merge_overrides = lists.overrides;
         if !removed.is_empty() {
             let mut reported: std::collections::HashSet<String> =
                 result.classes.iter().cloned().collect();
@@ -218,6 +219,7 @@ fn transform_fast_static_ir_with_options(
         classes: lowered.classes,
         raw_class_names: lowered.raw_class_names,
         merge_groups: Vec::new(),
+        merge_overrides: Vec::new(),
         diagnostics: {
             let mut diagnostics =
                 unknown_property_diagnostics(file, lower_ir, options.root_dir.as_deref());
@@ -466,6 +468,7 @@ fn transform_static_classes_with_options(
         classes,
         raw_class_names,
         merge_groups: Vec::new(),
+        merge_overrides: Vec::new(),
         diagnostics,
         recovery_tokens,
         css_variable_map: merge_variable_maps(
@@ -1304,6 +1307,7 @@ fn noop_result(file: &TransformFile) -> TransformResult {
         classes: Vec::new(),
         raw_class_names: Vec::new(),
         merge_groups: Vec::new(),
+        merge_overrides: Vec::new(),
         diagnostics: Vec::new(),
         recovery_tokens: Vec::new(),
         css_variable_map: Vec::new(),
@@ -3079,6 +3083,48 @@ mod tests {
         );
         assert!(merged.merge_groups.is_empty());
         assert_eq!(merged.classes, ["p-4", "pb-2"]);
+    }
+
+    /// A static class name beside a static `sz` loses the classes an `sz`
+    /// class covers; the pass without a table reports the pair instead.
+    #[test]
+    fn a_static_class_name_loses_what_its_sz_covers() {
+        let file = TransformFile {
+            filename: "/repo/src/Merge.tsx".to_string(),
+            source: r#"const App = () => <div className="card pb-2" sz={{ p: 4 }} />;"#.to_string(),
+        };
+        let first = transform_file_with_options(&file, TransformOptions::default());
+        assert!(
+            first.code.contains(r#"className="card pb-2 p-4""#),
+            "{}",
+            first.code
+        );
+        assert_eq!(
+            first.merge_overrides,
+            [super::super::merge::MergeOverride {
+                base: vec!["card".to_string(), "pb-2".to_string()],
+                over: vec!["p-4".to_string()],
+            }]
+        );
+
+        let merged = transform_file_with_options(
+            &file,
+            TransformOptions {
+                merge_table_json: Some(
+                    r#"{"format":1,"signatures":{"p-4":0,"pb-2":1},"coverage":[[1],[]]}"#
+                        .to_string(),
+                ),
+                ..TransformOptions::default()
+            },
+        );
+        assert!(
+            merged.code.contains(r#"className="card p-4""#),
+            "{}",
+            merged.code
+        );
+        assert!(merged.merge_overrides.is_empty());
+        // The class name is authored, so it stays out of the reported classes.
+        assert_eq!(merged.classes, ["p-4"]);
     }
 
     /// A table this engine cannot read leaves every class in place and says

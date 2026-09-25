@@ -25,7 +25,9 @@ import { insertAfterUseDirective } from './directive-prologue.js';
 import {
     createMergeSignatureTable,
     ENGINE_MERGE_TABLE_FORMAT,
+    type MergeOverride,
     type MergeSignatureTable,
+    tableOverrideRemovesFrom,
     tableRemovesFrom,
 } from './merge-signature.js';
 import type { ProjectStyleModel } from './project-style-model.js';
@@ -302,14 +304,16 @@ export function ensureMergeTable(root: string): void {
  * @param root - The project root.
  * @param groups - The class lists a merge would read, from a pass without a
  *        table.
+ * @param overrides - Each static class name and the `sz` classes beside it.
  * @returns The table to hand the engine, or null when merging no list would
  *          remove a class, or no readable table exists.
  */
 export function mergeTableFor(
     root: string,
     groups: ReadonlyArray<readonly string[]>,
+    overrides: readonly MergeOverride[] = [],
 ): EngineMergeTable | null {
-    if (groups.length === 0) return null;
+    if (groups.length === 0 && overrides.length === 0) return null;
     const text = readText(mergeTablePath(root));
     if (text === null) return null;
     let table: EngineMergeTable;
@@ -319,11 +323,15 @@ export function mergeTableFor(
         return null;
     }
     if (typeof table?.signatures !== 'object' || !Array.isArray(table.coverage)) return null;
-    if (!groups.some(group => tableRemovesFrom(table.signatures, table.coverage, group))) {
-        return null;
-    }
+    const removes =
+        groups.some(group => tableRemovesFrom(table.signatures, table.coverage, group)) ||
+        overrides.some(pair =>
+            tableOverrideRemovesFrom(table.signatures, table.coverage, pair.base, pair.over),
+        );
+    if (!removes) return null;
     const signatures: Record<string, number> = {};
-    for (const className of new Set(groups.flat())) {
+    const classes = [...groups.flat(), ...overrides.flatMap(pair => [...pair.base, ...pair.over])];
+    for (const className of new Set(classes)) {
         const id: unknown = table.signatures[className];
         if (typeof id === 'number') signatures[className] = id;
     }

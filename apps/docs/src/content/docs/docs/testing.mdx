@@ -121,11 +121,15 @@ Two sources answer, in order.
    saw, and only when this csszyx version wrote it without variable mangling.
    Run your build (or dev server) before the suite when a component's styles
    live in another module. The entry holds the pass before the
-   [object rule](/docs/sz-props/#a-later-key-covers-an-earlier-one), and a
-   per-file compile has no stylesheet either, so where a build merged a later
-   `sz` key over an earlier one it covers (`{ pb: 2, p: 4 }` → `p-4`) a test
-   still sees both classes. Assert `toHaveClass` on the class you rely on, not
-   on the whole string, and read a class list from a suite as the unmerged one.
+   [merge](/docs/sz-props/#a-later-key-covers-an-earlier-one), so jest applies
+   the table the same build settled in `.csszyx/merge-table.json` (or
+   `csszyx next prebuild` on Next.js): where the build dropped a covered class
+   — `{ pb: 2, p: 4 }` → `p-4`, `className="pb-2" sz={{ p: 4 }}` → `p-4` — the
+   suite sees the same classes. A file whose classes merge is compiled on its
+   own for that, so an `sz` it imports from another module resolves at run
+   time there, with the same classes. Before any table is written both classes
+   stay; pass `mergeCoveredClasses: false` to the transformer to keep them
+   always.
 2. **A per-file compile**, for everything else. This is the complete answer
    for an inline `sz` and for one built from a `const` in the same file. A
    shape it cannot resolve keeps the runtime path, exactly as the plugin
@@ -168,6 +172,9 @@ require('@csszyx/unplugin/jest').createTransformer({
     // Directories that hold another app, left out of the prefix vote. One glob
     // per entry: the comma of `csszyx next prebuild --ignore` separates nothing here.
     ignore: ['legacy/**'],
+    // Drop a class a later one on the same element covers, from the table the
+    // build settled, as `build.mergeCoveredClasses` does. Default: true.
+    mergeCoveredClasses: true,
 });
 ```
 

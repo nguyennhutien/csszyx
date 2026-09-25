@@ -16,7 +16,10 @@ import type { CssVariableMangleValue, SourceTransformResult, TokenData } from '@
 // entry would replay the old custom-property emit AND resurrect
 // `usesBoolClass` as `undefined`, so the helper import would be missing from
 // a file that calls it.
-const CACHE_SCHEMA_VERSION = 17;
+// 18: entries keep the class name and `sz` pairs the pass without a table
+// reported; a schema-17 entry lacks them, and a build reading it would leave
+// every static class name unmerged.
+const CACHE_SCHEMA_VERSION = 18;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'rust' | 'wasm';
@@ -43,6 +46,8 @@ interface SerializedTransformResult {
     rawClassNames: string[];
     /** Absent from an entry written before the field existed. */
     mergeGroups?: string[][];
+    /** Absent from an entry written before the field existed. */
+    mergeOverrides?: Array<{ base: string[]; over: string[] }>;
     diagnostics: string[];
     recoveryTokens: Array<[string, TokenData]>;
     cssVariableMap: Array<[string, CssVariableMangleValue]>;
@@ -356,6 +361,7 @@ function serializeResult(result: CacheableTransformResult): SerializedTransformR
         classes: [...result.classes],
         rawClassNames: [...result.rawClassNames],
         ...(result.mergeGroups === undefined ? {} : { mergeGroups: result.mergeGroups }),
+        ...(result.mergeOverrides === undefined ? {} : { mergeOverrides: result.mergeOverrides }),
         diagnostics: [...result.diagnostics],
         recoveryTokens: [...result.recoveryTokens],
         cssVariableMap: [...(result.cssVariableMap ?? new Map())],
@@ -387,6 +393,7 @@ function deserializeResult(result: SerializedTransformResult): CacheableTransfor
         rawClassNames: new Set(result.rawClassNames),
         // An entry from before the field reads as one list of every class.
         ...(Array.isArray(result.mergeGroups) ? { mergeGroups: result.mergeGroups } : {}),
+        ...(Array.isArray(result.mergeOverrides) ? { mergeOverrides: result.mergeOverrides } : {}),
         diagnostics: [...result.diagnostics],
         recoveryTokens: new Map(result.recoveryTokens),
         cssVariableMap: new Map(result.cssVariableMap ?? []),

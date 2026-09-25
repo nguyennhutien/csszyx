@@ -391,6 +391,151 @@ export function mergeGroupsOf(result: {
     return result.mergeGroups ?? [[...result.classes]];
 }
 
+/** A static class name and the static `sz` classes beside it on one element. */
+export interface MergeOverride {
+    /** The class name's classes, as written. */
+    readonly base: readonly string[];
+    /** The `sz` classes, as emitted. */
+    readonly over: readonly string[];
+}
+
+/**
+ * The class name and `sz` pairs a merge would read in one transform result.
+ *
+ * An older engine or cache entry reports none, and then no class name loses a
+ * class: a merge missed, not a class removed.
+ *
+ * @param result - A transform result.
+ * @param result.mergeOverrides - The pairs the engine reported, if it did.
+ * @returns The pairs, or none.
+ */
+export function mergeOverridesOf(result: {
+    mergeOverrides?: readonly MergeOverride[];
+}): readonly MergeOverride[] {
+    return result.mergeOverrides ?? [];
+}
+
+/**
+ * The resolved signature of a class, memoized per signature object.
+ *
+ * @param signatureOf - The style model's signature lookup.
+ * @param className - The class.
+ * @returns Its resolved signature, or null when it has none.
+ */
+function resolvedOf(
+    signatureOf: (candidate: string) => MergeSignature | null,
+    className: string,
+): ResolvedSignature | null {
+    const signature = signatureOf(className);
+    if (signature === null) return null;
+    let resolved = resolvedSignatures.get(signature);
+    if (resolved === undefined) {
+        resolved = resolveSides(signature);
+        resolvedSignatures.set(signature, resolved);
+    }
+    return resolved;
+}
+
+/**
+ * Whether the `sz` classes beside a class name would remove one of its
+ * classes: one they repeat, or one a class of theirs covers. The class name is
+ * never compared with itself, as the engine does not.
+ *
+ * `b` class name classes and `o` `sz` classes: `O(b · o)` coverage checks.
+ *
+ * @param base - The class name's classes.
+ * @param over - The `sz` classes.
+ * @param signatureOf - The style model's signature lookup.
+ * @returns True when the engine would drop a class name class.
+ */
+export function overrideRemovesFrom(
+    base: readonly string[],
+    over: readonly string[],
+    signatureOf: (candidate: string) => MergeSignature | null,
+): boolean {
+    return removedByOverride(base, over, signatureOf).length > 0;
+}
+
+/**
+ * The class name classes the `sz` classes beside them remove: each one they
+ * repeat or cover, in the class name's order.
+ *
+ * @param base - The class name's classes.
+ * @param over - The `sz` classes.
+ * @param signatureOf - The style model's signature lookup.
+ * @returns The removed classes.
+ */
+export function removedByOverride(
+    base: readonly string[],
+    over: readonly string[],
+    signatureOf: (candidate: string) => MergeSignature | null,
+): string[] {
+    const covering = over.flatMap(className => resolvedOf(signatureOf, className) ?? []);
+    return base.filter(className => {
+        if (over.includes(className)) return true;
+        const resolved = resolvedOf(signatureOf, className);
+        return resolved !== null && covering.some(later => signatureCovers(later, resolved));
+    });
+}
+
+/**
+ * The classes merging one list removes, later over earlier, as `_szcn` and
+ * the engine merge it: a class goes when a later one repeats it or covers it.
+ *
+ * @param classes - One list, in order.
+ * @param signatureOf - The style model's signature lookup.
+ * @returns The removed classes, in the list's order.
+ */
+export function removedByMerge(
+    classes: readonly string[],
+    signatureOf: (candidate: string) => MergeSignature | null,
+): string[] {
+    const gone = new Set<number>();
+    let survivors: Array<{ at: number; resolved: ResolvedSignature | null }> = [];
+    classes.forEach((name, at) => {
+        const resolved = resolvedOf(signatureOf, name);
+        survivors = survivors.filter(survivor => {
+            const earlier = survivor.resolved;
+            const removed =
+                classes[survivor.at] === name ||
+                (resolved !== null && earlier !== null && signatureCovers(resolved, earlier));
+            if (removed) gone.add(survivor.at);
+            return !removed;
+        });
+        survivors.push({ at, resolved });
+    });
+    return classes.filter((_, at) => gone.has(at));
+}
+
+/**
+ * {@link overrideRemovesFrom}, read from a settled table instead of the model.
+ *
+ * @param signatures - Class name to signature id.
+ * @param coverage - For each id, the ids it covers.
+ * @param base - The class name's classes.
+ * @param over - The `sz` classes.
+ * @returns True when the engine would drop a class name class.
+ */
+export function tableOverrideRemovesFrom(
+    signatures: Readonly<Record<string, number>>,
+    coverage: ReadonlyArray<readonly number[]>,
+    base: readonly string[],
+    over: readonly string[],
+): boolean {
+    const covered = new Set<number>();
+    for (const className of over) {
+        // A number, never an inherited `constructor` or `toString`.
+        const id: unknown = signatures[className];
+        if (typeof id !== 'number') continue;
+        covered.add(id);
+        for (const row of coverage[id] ?? []) covered.add(row);
+    }
+    return base.some(className => {
+        const id: unknown = signatures[className];
+        return over.includes(className) || (typeof id === 'number' && covered.has(id));
+    });
+}
+
 /**
  * Whether merging one list, in order, would remove a class from it.
  *
@@ -410,14 +555,8 @@ export function mergeRemovesFrom(
 ): boolean {
     const earlier: ResolvedSignature[] = [];
     for (const className of classes) {
-        const signature = signatureOf(className);
-        if (signature === null) continue;
-        let later = resolvedSignatures.get(signature);
-        if (later === undefined) {
-            later = resolveSides(signature);
-            resolvedSignatures.set(signature, later);
-        }
-        const resolved = later;
+        const resolved = resolvedOf(signatureOf, className);
+        if (resolved === null) continue;
         if (earlier.some(previous => signatureCovers(resolved, previous))) return true;
         earlier.push(resolved);
     }

@@ -239,6 +239,7 @@ function fromNativeResult(result: NativeTransformResult): SourceTransformResult 
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),
         mergeGroups: result.mergeGroups,
+        mergeOverrides: result.mergeOverrides,
         diagnostics: result.diagnostics,
         recoveryTokens: new Map(
             result.recoveryTokens.map(({ token, ...data }) => [

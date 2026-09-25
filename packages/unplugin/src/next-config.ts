@@ -45,11 +45,11 @@ export interface CsszyxTurbopackOptions {
      */
     importedStaticSz?: boolean;
     /**
-     * Merge a later `sz` key over an earlier one whose CSS it covers, as the
-     * other lanes spell `build.mergeCoveredKeys`. On unless set; `false`
-     * keeps every key, as before 0.18.
+     * Drop a class a later one on the same element covers, as the other lanes
+     * spell `build.mergeCoveredClasses`. On unless set; `false` keeps every
+     * class in static output, as before 0.18.
      */
-    mergeCoveredKeys?: boolean;
+    mergeCoveredClasses?: boolean;
     /**
      * The stylesheets the app loads, relative to the app root, when the
      * project also holds others: a fixture or an old copy that sets another
@@ -72,7 +72,7 @@ const OPTION_KEYS = new Set(
         config: true,
         glob: true,
         importedStaticSz: true,
-        mergeCoveredKeys: true,
+        mergeCoveredClasses: true,
         tailwindStylesheet: true,
         turbopack: true,
     } satisfies Record<keyof CsszyxTurbopackOptions, true>),
@@ -138,8 +138,8 @@ export function csszyxTurbopack(
     if (options.importedStaticSz !== undefined) {
         loaderOptions.importedStaticSz = options.importedStaticSz;
     }
-    if (options.mergeCoveredKeys !== undefined) {
-        loaderOptions.mergeCoveredKeys = options.mergeCoveredKeys;
+    if (options.mergeCoveredClasses !== undefined) {
+        loaderOptions.mergeCoveredClasses = options.mergeCoveredClasses;
     }
     if (safelistOutputFile !== undefined) {
         loaderOptions.safelistOutputFile = safelistOutputFile;

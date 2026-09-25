@@ -13,7 +13,7 @@ import {
     mergeTableFor,
     mergeTablePath,
 } from './merge-registration.js';
-import { mergeGroupsOf } from './merge-signature.js';
+import { mergeGroupsOf, mergeOverridesOf } from './merge-signature.js';
 import type { JsonLike } from './next-cache-identity.js';
 import {
     configWithImportedStaticSz,
@@ -72,10 +72,10 @@ export interface NextTurboLoaderOptions extends NextLaneOptions {
      */
     importedStaticSz?: boolean;
     /**
-     * Whether a later `sz` key replaces an earlier one whose CSS it covers,
-     * as the other lanes spell `build.mergeCoveredKeys`. On unless given.
+     * Whether a class a later one on the same element covers is dropped, as
+     * the other lanes spell `build.mergeCoveredClasses`. On unless given.
      */
-    mergeCoveredKeys?: boolean;
+    mergeCoveredClasses?: boolean;
 }
 
 /** Minimal Webpack-compatible loader context used by Turbopack. */
@@ -134,10 +134,11 @@ function withNextObjectRule(
     loaderContext: NextTurboLoaderContext,
 ): SourceTransformResult {
     const groups = mergeGroupsOf(first);
-    if (groups.length === 0) return first;
+    const overrides = mergeOverridesOf(first);
+    if (groups.length === 0 && overrides.length === 0) return first;
     ensureMergeTable(context.root);
     loaderContext.addDependency?.(mergeTablePath(context.root));
-    const mergeTable = mergeTableFor(context.root, groups);
+    const mergeTable = mergeTableFor(context.root, groups, overrides);
     if (mergeTable === null) return first;
     return transformNextSource({
         ...transformInput,
@@ -231,7 +232,7 @@ export function runNextTurboLoader(
     };
     const transform = transformNextSource(transformInput);
     const lowered =
-        options.mergeCoveredKeys === false
+        options.mergeCoveredClasses === false
             ? transform.result
             : withNextObjectRule(transform.result, transformInput, context, loaderContext);
     const injected = injectNextRuntimeImports(lowered.code, lowered, prefix.prefix);

@@ -163,7 +163,11 @@ import {
     type MergeSignature,
     type MergeSignatureTable,
     mergeGroupsOf,
+    mergeOverridesOf,
     mergeRemovesFrom,
+    overrideRemovesFrom,
+    removedByMerge,
+    removedByOverride,
 } from './merge-signature.js';
 import { isMonorepoPackage } from './monorepo.js';
 import { recordStylesheetFacts } from './next-stylesheet-facts.js';
@@ -3750,8 +3754,45 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     /**
      * Every class a first pass handed the object rule. The classes it removed
      * reach no census, so a stylesheet edit is checked against these.
+     *
+     * Grows for the life of a dev server and is never pruned: a class an edit
+     * took out of a file stays, and every stylesheet edit rebuilds the table
+     * from all of them. Bounded by the classes the project ever wrote, and not
+     * measured as a cost; prune by file here if a long session ever shows the
+     * rebuild in a profile.
      */
     const objectRuleClasses = new Set<string>();
+    /**
+     * Classes the merge removed, per file, for the count a dev server prints.
+     *
+     * Holds one number per file and is SET, not added to: it is right only
+     * because `withObjectRule` runs once per first-pass result of a whole file
+     * (the `objectRuleMerged` guard). A caller that merges one file in parts,
+     * or twice under different results, must sum here instead, or the count
+     * under-reports. A file that stops removing anything keeps its old count,
+     * which is harmless while the count prints only at start.
+     */
+    const mergeRemovals = new Map<string, number>();
+
+    /**
+     * Print, once at dev start, how many classes the merge removed.
+     *
+     * Nothing marks a removed class in the output, so an upgrade would change
+     * rendering with no sign of it. One line points at the audit that lists
+     * them; per-class lines would repeat on every intentional override.
+     */
+    function printMergeRemovals(): void {
+        let classes = 0;
+        for (const count of mergeRemovals.values()) classes += count;
+        if (classes === 0) return;
+        const files = mergeRemovals.size;
+        emitWarning(
+            `[csszyx] ${classes} class(es) in ${files} file(s) were removed: another class on the same element sets every property they set.\n` +
+                '  help: `csszyx check --rule merge-covered-key --rule merge-covered-class` lists them.\n' +
+                '  note: set `build.mergeCoveredClasses: false` to keep them.',
+            { devOnly: true },
+        );
+    }
 
     /**
      * Merge a later sz key over an earlier one it covers, from the compiled CSS.
@@ -3784,13 +3825,21 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     ): SourceTransformResult {
         // Off by configuration is the way back when a project's stylesheet
         // is read wrong: the first pass is what every build emitted before.
-        if (options.build?.mergeCoveredKeys === false) return first;
+        if (options.build?.mergeCoveredClasses === false) return first;
         const model = styleModel;
         const groups = mergeGroupsOf(first);
-        if (model === undefined || objectRuleOutputs.has(first) || groups.length === 0) {
+        const overrides = mergeOverridesOf(first);
+        if (
+            model === undefined ||
+            objectRuleOutputs.has(first) ||
+            (groups.length === 0 && overrides.length === 0)
+        ) {
             return first;
         }
-        const grouped = new Set(groups.flat());
+        const grouped = new Set([
+            ...groups.flat(),
+            ...overrides.flatMap(pair => [...pair.base, ...pair.over]),
+        ]);
         for (const className of grouped) objectRuleClasses.add(className);
         const known = objectRuleMerged.get(first);
         if (known?.model === model) return known.merged;
@@ -3799,7 +3848,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         let merged = first;
         // Asked per list before any table is built: most files hold no list a
         // merge would shorten, and they pay only these checks.
-        if (groups.some(group => mergeRemovesFrom(group, signatureOf))) {
+        if (
+            groups.some(group => mergeRemovesFrom(group, signatureOf)) ||
+            overrides.some(pair => overrideRemovesFrom(pair.base, pair.over, signatureOf))
+        ) {
+            mergeRemovals.set(
+                effectiveFilename,
+                groups.flatMap(group => removedByMerge(group, signatureOf)).length +
+                    overrides.flatMap(pair => removedByOverride(pair.base, pair.over, signatureOf))
+                        .length,
+            );
             const [signatures, coverage] = createMergeSignatureTable([...grouped], signatureOf);
             merged = runConfiguredParser(source, effectiveFilename, {
                 ...compilerOptions,
@@ -7006,6 +7064,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     ].filter(file => file.endsWith('.css'));
                     if (state.classes.size === 0) {
                         await prescanAndWriteClasses();
+                        if (compiler.options?.mode !== 'production') printMergeRemovals();
                     } else if (styleModel !== undefined && changedStylesheets.length > 0) {
                         // A rebuild skips the prescan, so a stylesheet edit is
                         // the one moment the prefix can have changed under it.
@@ -7103,6 +7162,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     runAutoThemeScan(root);
                     // Pre-scan source files so Tailwind can discover classes
                     await prescanAndWriteClasses();
+                    if (config.command === 'serve') printMergeRemovals();
                     skipRscRecords =
                         config.command === 'build' &&
                         !config.build?.watch &&

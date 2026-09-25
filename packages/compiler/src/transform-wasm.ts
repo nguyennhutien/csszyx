@@ -30,6 +30,7 @@ interface WasmResultJson {
     classes: string[];
     raw_class_names: string[];
     merge_groups: string[][];
+    merge_overrides?: Array<{ base: string[]; over: string[] }>;
     diagnostics: string[];
     recovery_tokens: Array<{
         token: string;
@@ -220,6 +221,7 @@ function fromWasmResult(result: WasmResultJson): SourceTransformResult {
         classes: new Set(result.classes),
         rawClassNames: new Set(result.raw_class_names),
         mergeGroups: result.merge_groups,
+        mergeOverrides: result.merge_overrides,
         diagnostics: result.diagnostics,
         recoveryTokens: new Map(
             result.recovery_tokens.map(({ token, ...data }) => [
