@@ -135,6 +135,62 @@ export function buildSquashBody(firstLine, commitMessages) {
     return bullets.length === 0 ? firstLine : `${firstLine}\n\n${bullets.join('\n\n')}`;
 }
 
+/** Markers release-please reads a pull request's own release notes between. */
+const OVERRIDE_BEGIN = 'BEGIN_COMMIT_OVERRIDE';
+const OVERRIDE_END = 'END_COMMIT_OVERRIDE';
+
+/**
+ * The release notes a pull request body sets in place of its commits.
+ *
+ * `release-please.md` tells a maintainer to fix a merged pull request's notes
+ * this way. release-please honours the block, but these notes are rebuilt from
+ * the pull request's own commits afterwards, so without this the stale note the
+ * block was written to replace came straight back.
+ *
+ * Stricter than release-please on purpose: a marker counts only on a line of
+ * its own and outside a code fence, so a description that quotes the template
+ * does not replace the notes. The first closed block wins.
+ *
+ * @param {string | null | undefined} body - Pull request body.
+ * @returns {string | null} The block's text, empty for an empty block, or null
+ *          when there is no closed block.
+ */
+export function readCommitOverride(body) {
+    if (typeof body !== 'string') return null;
+    let fenced = false;
+    let block = null;
+    for (const raw of body.split('\n')) {
+        const line = raw.trim();
+        if (block !== null) {
+            if (line === OVERRIDE_END) return block.join('\n').trim();
+            block.push(raw.trimEnd());
+            continue;
+        }
+        if (line.startsWith('```') || line.startsWith('~~~')) fenced = !fenced;
+        else if (!fenced && line === OVERRIDE_BEGIN) block = [];
+    }
+    return null;
+}
+
+/**
+ * The message the notes read for one squash commit.
+ *
+ * An override replaces the whole message, subject included, as it does for
+ * release-please; only the pull request reference is kept, on a first line that
+ * is not itself an entry. Otherwise the pull request's own commits rebuild it,
+ * and with neither the squash message stands.
+ *
+ * @param {string} firstLine - Squash subject, trailing `(#123)` included.
+ * @param {{ body: string | null, commitMessages: string[] }} pullRequest - What the pull request says.
+ * @returns {string} The message to parse.
+ */
+export function expandedSquashMessage(firstLine, pullRequest) {
+    const override = readCommitOverride(pullRequest.body);
+    const { pr } = readTrailingPr(firstLine);
+    if (override && pr !== null) return `(#${pr})\n\n${override}`;
+    return buildSquashBody(firstLine, pullRequest.commitMessages);
+}
+
 /**
  * Extract deduped conventional-commit entries from a list of commit messages.
  * Reads the subject and every body line (squash bodies list each commit as a
@@ -390,28 +446,42 @@ function prCommitMessages(repo, pr) {
 }
 
 /**
- * Replace each squash commit with the commits it flattened.
+ * Replace each squash commit with the commits it flattened, or with the
+ * release notes its pull request sets in their place.
  *
  * Best-effort per commit: a subject with no PR reference is a direct push and
  * is already its own message, and a reference that cannot be read — an issue
  * number, a deleted PR, a rate limit — falls back to the squash body, which is
  * what this read replaces rather than depends on.
  *
- * @param {string} repo - `owner/name`.
+ * An override is read only from a body last written by someone with write
+ * access: a pull request's author can edit its body after the merge without
+ * it, and these notes are published with the package.
+ *
  * @param {Array<{ commit: { message: string } }>} commits - Commits on main since the last release.
+ * @param {{
+ *   pullRequest: (pr: string) => { body: string | null, trusted: boolean },
+ *   commitMessages: (pr: string) => string[],
+ * }} source - Reads a pull request's body and its commits; either may throw.
+ * @param {(line: string) => void} [log] - Where to say what was chosen.
  * @returns {string[]} One message per commit, squashes expanded.
  */
-function expandSquashCommits(repo, commits) {
+export function expandSquashCommits(commits, source, log = console.log) {
     return commits.map(commit => {
         const message = commit.commit.message;
         const firstLine = message.split('\n', 1)[0] ?? '';
         const { pr } = readTrailingPr(firstLine);
         if (pr === null) return message;
+        const override = readOverrideOf(source, pr, log);
+        if (override !== null) {
+            log(`[enrich] #${pr} overrides its commits — using the override`);
+            return expandedSquashMessage(firstLine, { body: override, commitMessages: [] });
+        }
         let messages;
         try {
-            messages = prCommitMessages(repo, pr);
+            messages = source.commitMessages(pr);
         } catch (err) {
-            console.log(
+            log(
                 `[enrich] #${pr} commits unreadable (${err?.message || err}) — using the squash body`,
             );
             return message;
@@ -421,12 +491,91 @@ function expandSquashCommits(repo, commits) {
             // The one hole this read cannot close. Said out loud because the
             // failure it replaces was silent, and a silent replacement for a
             // silent failure is no improvement.
-            console.log(
+            log(
                 `[enrich] #${pr} lists ${messages.length} commits — GitHub stops at ${PR_COMMIT_CEILING}, so anything past that is missing from these notes`,
             );
         }
         return buildSquashBody(firstLine, messages);
     });
+}
+
+/**
+ * A pull request's override block, rebuilt as a body of its own, when one
+ * should replace its commits; null otherwise, with the reason logged.
+ *
+ * @param {{ pullRequest: (pr: string) => { body: string | null, trusted: boolean } }} source - Reads the pull request.
+ * @param {string} pr - Pull request number.
+ * @param {(line: string) => void} log - Where to say why an override is ignored.
+ * @returns {string | null} A body holding only the override block, or null.
+ */
+function readOverrideOf(source, pr, log) {
+    let pullRequest;
+    try {
+        pullRequest = source.pullRequest(pr);
+    } catch (err) {
+        log(`[enrich] #${pr} body unreadable (${err?.message || err}) — reading its commits`);
+        return null;
+    }
+    const override = readCommitOverride(pullRequest.body);
+    if (override === null) return null;
+    if (override === '') {
+        log(`[enrich] #${pr} has an empty commit override — ignored, reading its commits`);
+        return null;
+    }
+    if (!pullRequest.trusted) {
+        log(
+            `[enrich] #${pr} commit override was last written by someone without write access — ignored, reading its commits`,
+        );
+        return null;
+    }
+    return `${OVERRIDE_BEGIN}\n${override}\n${OVERRIDE_END}`;
+}
+
+/** Permissions that may rewrite the published notes. */
+const WRITE_PERMISSIONS = new Set(['admin', 'maintain', 'write']);
+
+/**
+ * Reads pull requests through `gh`: the body with whoever last wrote it, and
+ * the commits.
+ *
+ * @param {string} repo - `owner/name`.
+ * @returns {{ pullRequest: (pr: string) => { body: string | null, trusted: boolean }, commitMessages: (pr: string) => string[] }} The source.
+ */
+function githubSource(repo) {
+    const [owner, name] = repo.split('/');
+    const permissions = new Map();
+    const canWrite = login => {
+        if (!permissions.has(login)) {
+            const answer = JSON.parse(
+                gh(['api', `repos/${repo}/collaborators/${login}/permission`]),
+            );
+            permissions.set(login, WRITE_PERMISSIONS.has(answer.permission));
+        }
+        return permissions.get(login);
+    };
+    return {
+        pullRequest(pr) {
+            const answer = JSON.parse(
+                gh([
+                    'api',
+                    'graphql',
+                    '-f',
+                    'query=query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { body editor { login } author { login } } } }',
+                    '-f',
+                    `owner=${owner}`,
+                    '-f',
+                    `name=${name}`,
+                    '-F',
+                    `number=${pr}`,
+                ]),
+            ).data.repository.pullRequest;
+            // The editor is whoever last wrote the body; an unedited body is
+            // the author's.
+            const login = (answer.editor ?? answer.author)?.login;
+            return { body: answer.body ?? null, trusted: login !== undefined && canWrite(login) };
+        },
+        commitMessages: pr => prCommitMessages(repo, pr),
+    };
 }
 
 /**
@@ -477,7 +626,7 @@ async function main() {
 
         const lastTag = JSON.parse(gh(['api', `repos/${repo}/releases/latest`])).tag_name;
         const compare = JSON.parse(gh(['api', `repos/${repo}/compare/${lastTag}...main`]));
-        const messages = expandSquashCommits(repo, compare.commits ?? []);
+        const messages = expandSquashCommits(compare.commits ?? [], githubSource(repo));
         const entries = parseConventional(messages);
         if (!entries.some(e => sectionMap.has(e.type))) {
             console.log('[enrich] no visible entries — leaving release-please output as-is');
