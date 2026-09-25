@@ -20,15 +20,20 @@
 import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-
 import {
+    type ClassHooks,
+    type ClassOrigin,
+    collectClassHooks,
     createEmittedClassOracle,
+    isHook,
     loadCandidateScanner,
+    noClassHooks,
     type OracleSkipKind,
     readStylesheetRole,
     type ScanSource,
     type StylesheetAlias,
     type StylesheetFacts,
+    type TailwindLoader,
 } from '@csszyx/tailwind-oracle';
 import { type MergeSignature, mergeSignatureFromCss } from './merge-signature.js';
 import { isMonorepoPackage } from './monorepo.js';
@@ -55,6 +60,11 @@ export interface StyleEntry {
     facts?: StylesheetFacts;
     /** Why it could not be compiled, for a failed entry. */
     failure?: { kind: OracleSkipKind; reason: string; reachedTailwind?: boolean };
+    /**
+     * Why a compiled root cannot tell Tailwind's own classes from the
+     * project's. Every class then keeps its place in a merge.
+     */
+    originFailure?: string;
 }
 
 /** What the project's stylesheets say, from one compile of each root. */
@@ -93,6 +103,16 @@ export interface ProjectStyleModel {
      * @returns The shared signature, or null when missing or disputed.
      */
     signature(candidate: string): MergeSignature | null;
+    /**
+     * The signature a merge reads: {@link ProjectStyleModel.signature}, for a
+     * class every root reads as Tailwind's own utility and no project rule
+     * selects on. Null for the rest, so a class from `@utility`, a plugin or
+     * plain CSS is never removed and never removes another.
+     *
+     * @param candidate - Tailwind candidate class.
+     * @returns The signature a merge may use, or null.
+     */
+    mergeSignature(candidate: string): MergeSignature | null;
     /**
      * The class names the project's Tailwind finds in its sources.
      *
@@ -202,6 +222,30 @@ export function styleModelWarning(
 }
 
 /**
+ * What the build must say when a root cannot tell Tailwind's own classes from
+ * the project's: no class is merged then, which changes output silently.
+ *
+ * Said in every mode, production included, since what it reports is the
+ * build's output and not a style nudge.
+ *
+ * @param model - The opened style model.
+ * @param root - Project root, so the message names files the way the author does.
+ * @returns The message, or null when every root can tell.
+ */
+export function originWarning(model: ProjectStyleModel, root: string): string | null {
+    const failed = model.entries.filter(entry => entry.originFailure !== undefined);
+    if (failed.length === 0) return null;
+    return [
+        ...failed.map(
+            entry =>
+                `[csszyx] csszyx merges no class in this build: ${relativeName(root, entry.file)} did not compile with its \`@utility\` blocks and plugin classes taken out (${entry.originFailure}).`,
+        ),
+        '  help: report it at https://github.com/nguyennhutien/csszyx/issues with the plugin or `@utility` block the stylesheet uses.',
+        '  note: every class is kept: `{ pb: 2, p: 4 }` emits `pb-2 p-4`, a `className` class stays next to the `sz` classes, and `szcn` removes only exact repeats.',
+    ].join('\n');
+}
+
+/**
  * The stylesheets that did not compile, split by whether they reached Tailwind.
  *
  * An `environment` skip is left out: with no Tailwind 4 to ask there is no
@@ -274,6 +318,8 @@ interface CompiledEntry {
     facts: StylesheetFacts;
     findDead(classes: readonly string[]): string[];
     signature(candidate: string): MergeSignature | null;
+    /** Null when this root cannot tell. */
+    origin(candidate: string): ClassOrigin | null;
 }
 
 /**
@@ -342,38 +388,73 @@ function realPath(file: string): string {
 
 /** What one stylesheet is before any root is compiled. */
 type ClassifiedStylesheet =
-    | { role: 'not-root' }
-    | { role: 'failed'; failure: NonNullable<StyleEntry['failure']> }
+    /** With the classes its rules select on, which a merge must keep. */
+    | { role: 'not-root'; hooks: ClassHooks }
+    | { role: 'failed'; failure: NonNullable<StyleEntry['failure']>; hooks: ClassHooks }
     | { role: 'root'; css: string; imports: readonly string[]; scanSources: ScanSource[] };
+
+/** How to reach the project's Tailwind: where to resolve from, and with what. */
+interface CompileContext {
+    /** Project directory whose `package.json` anchors resolution. */
+    resolveFrom: string;
+    /** The bundler's aliases, tsconfig paths included. */
+    aliases: readonly StylesheetAlias[];
+    /** Resolver override, for tests; the project's own Tailwind otherwise. */
+    loadTailwind: TailwindLoader | undefined;
+}
+
+/**
+ * What one stylesheet's rules select on.
+ *
+ * @param css - Stylesheet text.
+ * @returns Its hooks.
+ */
+function hooksOf(css: string): ClassHooks {
+    const hooks = noClassHooks();
+    collectClassHooks(css, hooks);
+    return hooks;
+}
+
+/**
+ * Add one stylesheet's hooks to the project's.
+ *
+ * @param into - The project's hooks.
+ * @param from - One stylesheet's.
+ */
+function addHooks(into: ClassHooks, from: ClassHooks): void {
+    for (const name of from.names) into.names.add(name);
+    for (const matcher of from.attributes) into.attributes.push(matcher);
+}
 
 /**
  * Read one stylesheet and decide whether it is a root, from its text and a
  * compile that reports features only.
  *
  * @param file - Stylesheet path.
- * @param resolveFrom - Project directory whose `package.json` anchors resolution.
- * @param aliases - The bundler's aliases, tsconfig paths included.
+ * @param context - How to reach the project's Tailwind.
  * @returns What the stylesheet is, with the text and imports of a root.
  */
 async function classifyStylesheet(
     file: string,
-    resolveFrom: string,
-    aliases: readonly StylesheetAlias[],
+    context: CompileContext,
 ): Promise<ClassifiedStylesheet> {
     let css: string;
     try {
         css = await readFile(file, 'utf8');
     } catch {
         // A stylesheet that cannot be read cannot be an entry point.
-        return { role: 'not-root' };
+        return { role: 'not-root', hooks: noClassHooks() };
     }
-    if (!mayReachTailwind(css)) return { role: 'not-root' };
-    const role = await readStylesheetRole({
-        resolveFrom,
-        css,
-        cssBase: path.dirname(file),
-        aliases,
-    });
+    if (!mayReachTailwind(css)) return { role: 'not-root', hooks: hooksOf(css) };
+    const role = await readStylesheetRole(
+        {
+            resolveFrom: context.resolveFrom,
+            css,
+            cssBase: path.dirname(file),
+            aliases: context.aliases,
+        },
+        context.loadTailwind,
+    );
     if (!role.ok) {
         return {
             role: 'failed',
@@ -382,11 +463,14 @@ async function classifyStylesheet(
                 reason: role.reason,
                 reachedTailwind: role.reachedTailwind,
             },
+            // The bundler may resolve what the oracle could not; its rules
+            // select on the element all the same.
+            hooks: hooksOf(css),
         };
     }
     return role.utilities
         ? { role: 'root', css, imports: role.imports, scanSources: role.scanSources }
-        : { role: 'not-root' };
+        : { role: 'not-root', hooks: hooksOf(css) };
 }
 
 /** Every stylesheet classified, with where its roots and failures sit. */
@@ -399,6 +483,12 @@ interface ClassifiedStylesheets {
     failed: number[];
     /** Real paths of every stylesheet a root imports. */
     importedByRoots: Set<string>;
+    /**
+     * Classes the rules of every stylesheet no root compiles select on, one
+     * that failed to compile included: CSS a component or page imports on its
+     * own still selects on the element.
+     */
+    hooks: ClassHooks;
 }
 
 /** Two Tailwind compiles overlap without multiplying their peak memory unboundedly. */
@@ -441,23 +531,22 @@ async function mapConcurrent<T, U>(
  * Classify every stylesheet the caller walked.
  *
  * @param cssFiles - Stylesheet paths the caller already walked.
- * @param resolveFrom - Project directory whose `package.json` anchors resolution.
- * @param aliases - The bundler's aliases, tsconfig paths included.
+ * @param context - How to reach the project's Tailwind.
  * @returns The entries, and where the roots and failures among them are.
  */
 async function classifyStylesheets(
     cssFiles: readonly string[],
-    resolveFrom: string,
-    aliases: readonly StylesheetAlias[],
+    context: CompileContext,
 ): Promise<ClassifiedStylesheets> {
     const classified: ClassifiedStylesheets = {
         entries: [],
         roots: [],
         failed: [],
         importedByRoots: new Set<string>(),
+        hooks: noClassHooks(),
     };
     const stylesheets = await mapConcurrent(cssFiles, STYLESHEET_COMPILE_CONCURRENCY, async file =>
-        classifyStylesheet(file, resolveFrom, aliases),
+        classifyStylesheet(file, context),
     );
     for (const [candidateIndex, stylesheet] of stylesheets.entries()) {
         const file = cssFiles[candidateIndex] as string;
@@ -475,8 +564,10 @@ async function classifyStylesheets(
             const index =
                 classified.entries.push({ file, role: 'failed', failure: stylesheet.failure }) - 1;
             classified.failed.push(index);
+            addHooks(classified.hooks, stylesheet.hooks);
         } else {
             classified.entries.push({ file, role: 'not-root' });
+            addHooks(classified.hooks, stylesheet.hooks);
         }
     }
     return classified;
@@ -487,22 +578,23 @@ async function classifyStylesheets(
  *
  * @param file - Stylesheet path.
  * @param css - Its text.
- * @param resolveFrom - Project directory whose `package.json` anchors resolution.
- * @param aliases - The bundler's aliases, tsconfig paths included.
+ * @param context - How to reach the project's Tailwind.
  * @returns The root's entry, and its compiled answers unless it failed.
  */
 async function compileRoot(
     file: string,
     css: string,
-    resolveFrom: string,
-    aliases: readonly StylesheetAlias[],
+    context: CompileContext,
 ): Promise<{ entry: StyleEntry; compiled: CompiledEntry | null }> {
-    const oracle = await createEmittedClassOracle({
-        resolveFrom,
-        css,
-        cssBase: path.dirname(file),
-        aliases,
-    });
+    const oracle = await createEmittedClassOracle(
+        {
+            resolveFrom: context.resolveFrom,
+            css,
+            cssBase: path.dirname(file),
+            aliases: context.aliases,
+        },
+        context.loadTailwind,
+    );
     if (!oracle.ok) {
         return {
             entry: {
@@ -515,11 +607,24 @@ async function compileRoot(
         };
     }
     const signatures = new Map<string, MergeSignature | null>();
+    const origins = await oracle.loadOriginOracle();
+    const originOf = new Map<string, ClassOrigin>();
     return {
-        entry: { file, role: 'root', facts: oracle.facts },
+        entry: origins.ok
+            ? { file, role: 'root', facts: oracle.facts }
+            : { file, role: 'root', facts: oracle.facts, originFailure: origins.reason },
         compiled: {
             facts: oracle.facts,
             findDead: classes => oracle.findDead(classes),
+            origin(candidate) {
+                if (!origins.ok) return null;
+                let origin = originOf.get(candidate);
+                if (origin === undefined) {
+                    origin = origins.origin(candidate);
+                    originOf.set(candidate, origin);
+                }
+                return origin;
+            },
             signature(candidate) {
                 if (!signatures.has(candidate)) {
                     signatures.set(
@@ -531,6 +636,47 @@ async function compileRoot(
             },
         },
     };
+}
+
+/** How to open the style model beyond the stylesheets it compiles. */
+export interface OpenStyleModelOptions {
+    /**
+     * The bundler's aliases, tsconfig paths included, so an `@import` written
+     * the way the app's own code imports resolves.
+     */
+    aliases?: readonly StylesheetAlias[];
+    /**
+     * Stylesheets read only for the classes their rules select on: the ones a
+     * named `tailwindStylesheet` list leaves out, which a component or page may
+     * still import.
+     */
+    hookStylesheets?: readonly string[];
+    /** Resolver override, for tests; the project's own Tailwind otherwise. */
+    loadTailwind?: TailwindLoader;
+}
+
+/**
+ * Read stylesheets the model does not compile for the classes their rules
+ * select on.
+ *
+ * @param hooks - The project's hooks, added to.
+ * @param files - The stylesheets.
+ * @param compiled - Stylesheets the model already read; skipped.
+ */
+async function addHookStylesheets(
+    hooks: ClassHooks,
+    files: readonly string[],
+    compiled: readonly string[],
+): Promise<void> {
+    const read = new Set(compiled);
+    for (const file of files) {
+        if (read.has(file)) continue;
+        try {
+            addHooks(hooks, hooksOf(await readFile(file, 'utf8')));
+        } catch {
+            // A stylesheet gone since the walk selects on nothing.
+        }
+    }
 }
 
 /**
@@ -548,20 +694,25 @@ async function compileRoot(
  *
  * @param resolveFrom - Project directory whose `package.json` anchors resolution.
  * @param cssFiles - Stylesheet paths the caller already walked.
- * @param aliases - The bundler's aliases, tsconfig paths included, so an
- *        `@import` written the way the app's own code imports resolves.
+ * @param options - Aliases, stylesheets read for hooks only, and a resolver
+ *        override.
  * @returns The model, with every stylesheet accounted for.
  */
 export async function openProjectStyleModel(
     resolveFrom: string,
     cssFiles: readonly string[],
-    aliases: readonly StylesheetAlias[] = [],
+    options: OpenStyleModelOptions = {},
 ): Promise<ProjectStyleModel> {
-    const { entries, roots, failed, importedByRoots } = await classifyStylesheets(
-        cssFiles,
+    const context: CompileContext = {
         resolveFrom,
-        aliases,
+        aliases: options.aliases ?? [],
+        loadTailwind: options.loadTailwind,
+    };
+    const { entries, roots, failed, importedByRoots, hooks } = await classifyStylesheets(
+        cssFiles,
+        context,
     );
+    await addHookStylesheets(hooks, options.hookStylesheets ?? [], cssFiles);
 
     const selectedRoots: Array<{
         index: number;
@@ -580,7 +731,7 @@ export async function openProjectStyleModel(
     const openedRoots = await mapConcurrent(
         selectedRoots,
         STYLESHEET_COMPILE_CONCURRENCY,
-        async ({ file, css }) => compileRoot(file, css, resolveFrom, aliases),
+        async ({ file, css }) => compileRoot(file, css, context),
     );
     const compiled: CompiledEntry[] = [];
     for (const [rootIndex, root] of openedRoots.entries()) {
@@ -595,6 +746,22 @@ export async function openProjectStyleModel(
         if (importedByRoots.has(realPath(file))) entries[index] = { file, role: 'imported' };
     }
 
+    /**
+     * The signature every compiled root gives a class.
+     *
+     * @param candidate - Tailwind candidate class.
+     * @returns The shared signature, or null when missing or disputed.
+     */
+    const agreedSignature = (candidate: string): MergeSignature | null => {
+        if (compiled.length === 0) return null;
+        const signatures = compiled.map(entry => entry.signature(candidate));
+        const [firstSignature, ...otherSignatures] = signatures;
+        if (firstSignature === null || firstSignature === undefined) return null;
+        const canonical = JSON.stringify(firstSignature);
+        return otherSignatures.every(signature => JSON.stringify(signature) === canonical)
+            ? firstSignature
+            : null;
+    };
     const [first, ...rest] = compiled;
     return {
         entries,
@@ -631,15 +798,12 @@ export async function openProjectStyleModel(
             if (scan === null) return [];
             return sortStrings(new Set(scan([...sources.values()])));
         },
-        signature(candidate) {
-            if (compiled.length === 0) return null;
-            const signatures = compiled.map(entry => entry.signature(candidate));
-            const [firstSignature, ...otherSignatures] = signatures;
-            if (firstSignature === null || firstSignature === undefined) return null;
-            const canonical = JSON.stringify(firstSignature);
-            return otherSignatures.every(signature => JSON.stringify(signature) === canonical)
-                ? firstSignature
+        mergeSignature(candidate) {
+            return !isHook(hooks, candidate) &&
+                compiled.every(entry => entry.origin(candidate) === 'tailwind')
+                ? agreedSignature(candidate)
                 : null;
         },
+        signature: agreedSignature,
     };
 }

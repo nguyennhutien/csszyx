@@ -154,7 +154,14 @@ key replaces another only when it sets every property the other sets:
 - with the same `!important`: an important class and a plain one never replace
   each other;
 - with CSS behind it: a class your stylesheet generates nothing for is never
-  removed.
+  removed;
+- from Tailwind itself: a class from `@utility`, a plugin or plain CSS is
+  never removed and never removes another, even when it reuses a Tailwind name
+  (`@utility container`), and neither is a Tailwind class that a rule of your
+  own CSS selects on (`.card.shadow-md { … }`, `[class~="shadow-md"]`). The
+  build reads every stylesheet it walks, not yet a Vue or Svelte `<style>`
+  block or a class named in an arbitrary variant of your markup
+  (`group-[.shadow-md]:p-2`).
 
 It applies where the build compiles the object. In this release the build
 merges only the keys it lowers statically; these keep every class:
@@ -189,9 +196,10 @@ where a shorthand key follows one of its own longhands (`p` after `pb` or `px`,
 `inset` after `top` or `left`). A jest suite does not merge, so it keeps
 passing on the class list it always saw.
 
-Where something outside csszyx matches the class name — a CSS rule, a
-`[&_.pb-2]` variant, an E2E locator, a `toHaveClass` in a browser test — write
-the refining key last so the class survives. If your stylesheet is read wrong
+Where something outside csszyx matches the class name — a CSS rule csszyx does
+not read (see the list above), a `[&_.pb-2]` variant, an E2E locator, a
+`toHaveClass` in a browser test — write the refining key last so the class
+survives. If your stylesheet is read wrong
 and a class you need is removed, set
 [`build.mergeCoveredKeys: false`](/docs/reference/config/#build) (on the
 Turbopack lane, `csszyxTurbopack({ mergeCoveredKeys: false })`) and the build

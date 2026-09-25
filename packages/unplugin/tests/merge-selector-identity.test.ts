@@ -1,3 +1,13 @@
+/**
+ * The analyzer's reading of custom CSS, pinned with `@utility` fixtures.
+ *
+ * These tables are built from the raw `signature` on purpose: `@utility` is the
+ * only way to give a class exactly the declarations a case needs, and the
+ * analyzer still serves diagnostics that read what a class sets. A build never
+ * merges these classes: it reads `mergeSignature`, which keeps every
+ * `@utility`, plugin and plain-CSS class out of the table
+ * (`merge-scope.test.ts`).
+ */
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createRng } from '../../core/tests/helpers/sz-fuzz.js';

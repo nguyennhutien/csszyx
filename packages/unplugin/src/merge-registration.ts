@@ -349,7 +349,7 @@ function settle(input: MergeRegistrationInput): {
     // Tailwind's own scan as well as the shards' census, as the bundler lanes do.
     const table = createMergeSignatureTable(
         [...input.classes, ...authored, ...input.mergeLiterals, ...model.candidates()],
-        candidate => model.signature(candidate),
+        candidate => model.mergeSignature(candidate),
     );
     const unserved =
         authored.size === 0

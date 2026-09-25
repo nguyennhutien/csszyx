@@ -322,6 +322,8 @@ replaces an earlier key whose CSS it fully covers, read from the project's
 compiled Tailwind — `{ pb: 2, p: 4 }` → `p-4`. Write the refinement last:
 `{ p: 4, pb: 2 }` → `p-4 pb-2`. A class in another variant never covers one
 outside it, and an `!important` class and a plain one never replace each other;
+only Tailwind's own utilities merge — a class from `@utility`, a plugin or
+plain CSS, or one the project's CSS selects on, is kept;
 runtime values, `szr({…})`, `szv` factories, jest and the Svelte/Vue adapters
 keep every class. Safelisting a runtime object never applies the build's merge
 table: statically known classes inside conditional spreads retain their full
@@ -520,9 +522,13 @@ are compiler-injected, do not hand-author them):
     `shadow-lg shadow-red-500` keeps both).
   - `!important` is its own context: `szcn('p-4','p-4!')` keeps both;
     `szcn('p-4!','p-8!')` → `p-8!`.
-  - Custom `@theme` tokens, `@utility` classes and plugin utilities merge with
-    nothing to register. `registerSzcnGroups(...)` feeds `classify`'s
-    `property` only — `szcn` does not read it.
+  - Custom `@theme` tokens merge with nothing to register. Only Tailwind's
+    own utilities merge: classes from `@utility`, a plugin or plain CSS, and
+    built-in classes the project's CSS selects on (`.card.shadow-md`), are
+    never removed and never remove another. To make a custom value merge,
+    declare a `@theme` token, not an `@utility` or a CSS rule.
+    `registerSzcnGroups(...)` feeds `classify`'s `property` only — `szcn` does
+    not read it.
   - The table covers every class the project's Tailwind generates CSS for:
     its own source scan (maps of variants, constants, `@source` packages)
     plus `sz` output.

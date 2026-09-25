@@ -85,6 +85,15 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
         'packages/tailwind-oracle/src/index.ts',
         'packages/unplugin/src/project-style-model.ts',
     ],
+    // What a project's own rules select on: the hooks a merge must keep. The
+    // model reads it from the stylesheets it already walked, and nothing else
+    // reads stylesheet text for classes.
+    collectClassHooks: [
+        'packages/tailwind-oracle/src/origin-oracle.ts',
+        'packages/tailwind-oracle/src/emitted-class-oracle.ts',
+        'packages/tailwind-oracle/src/index.ts',
+        'packages/unplugin/src/project-style-model.ts',
+    ],
     // Tailwind's own loader. Exactly one file may call it.
     __unstable__loadDesignSystem: ['packages/tailwind-oracle/src/emitted-class-oracle.ts'],
 };

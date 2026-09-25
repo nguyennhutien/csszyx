@@ -171,9 +171,21 @@ follow from it:
   different variant is a different context (`md:gap-2 gap-8`), and `!important`
   is its own context (`p-4 p-4!` keeps both; `p-4! p-8!` → `p-8!`).
 
-Because the table comes from your compiled CSS, custom `@theme` tokens,
-`@utility` classes and plugin utilities merge the same way built-in ones do,
-with nothing to register.
+Because the table comes from your compiled CSS, custom `@theme` tokens merge
+the same way built-in ones do, with nothing to register. Only Tailwind's own
+utilities merge. A class from `@utility`, a plugin or plain CSS is never
+removed and never removes another, and that includes a `@utility` that reuses
+a Tailwind name such as `container`, and the utilities of a package your
+stylesheet imports, such as `tw-animate-css`. Neither is a built-in class that
+a rule of your own CSS selects on (`.card.shadow-md { … }`): such a class is
+often a hook for a script or for another rule.
+
+csszyx reads every stylesheet the build walks for these rules, including one
+`tailwindStylesheet` leaves out, and an attribute selector such as
+`[class~="shadow-md"]` counts. It does not yet read a Vue or Svelte `<style>`
+block, or a class named inside an arbitrary variant in your markup
+(`group-[.shadow-md]:p-2`). For a class matched there, pass it last to `szcn`,
+or leave out the class that covers it.
 
 **Fail-safe contract:** a class the table has no entry for is NEVER merged
 away — only an exact repeat of it is dropped. The worst case is two classes
@@ -186,8 +198,12 @@ and every class on a lane that has no table — see
 <Aside type="caution" title="Changed in 0.18.0">
 Before 0.18.0 `szcn` classified tokens by name with a hand-written table, which
 merged without a build but deleted classes it misread. Now it merges only on
-evidence from compiled CSS. If a merge you relied on stopped happening, the
-build has no table for that class — check the lane table below.
+evidence from compiled CSS. If a merge you relied on stopped happening, either
+the build has no table for that class (see the lane table below), or the class
+is not Tailwind's own: one from `@utility`, a plugin or plain CSS, or one a rule
+of your CSS selects on, is never removed and never removes another. Give it a
+`@theme` token (`--radius-pill` for `rounded-pill`) and delete the rule you
+wrote for it, or drop the earlier class yourself.
 </Aside>
 
 ### Directional shorthand coverage

@@ -403,9 +403,12 @@ export function registerSzcnGroups(groups: SzcnThemeGroups, source: string = DEF
     warnOnce(
         '`registerSzcnGroups` no longer changes what `szcn` merges: `szcn` merges on the ' +
             'CSS your Tailwind compiles, and this registry now only names the property ' +
-            '`classify` and `splitBox` read.\n  help: declare plain-CSS classes with `@utility` ' +
-            'and use a csszyx integration that supplies a merge table.\n' +
-            '  note: without a table, `szcn` removes only exact repeats.',
+            '`classify` and `splitBox` read.\n  help: declare the tokens under `@theme` ' +
+            '(`--color-*`, `--text-*`, `--font-*`, `--font-weight-*`), delete the CSS rules ' +
+            'you wrote for those classes, and use a csszyx integration that supplies a ' +
+            'merge table.\n' +
+            '  note: `szcn` never removes a class from `@utility`, a plugin or plain CSS; ' +
+            'without a table it removes only exact repeats.',
     );
     writeDeclarations(source, groups, false);
 }
