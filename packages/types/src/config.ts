@@ -563,8 +563,11 @@ export interface BuildConfig {
     importedStaticSz?: boolean;
 
     /**
-     * Merge a later key of a static `sz` object over an earlier key whose CSS
-     * it fully covers, so `{ pb: 2, p: 4 }` compiles to `p-4`.
+     * Drop a class a later one on the same element fully covers: a later key
+     * of a static `sz` object over an earlier key, so `{ pb: 2, p: 4 }`
+     * compiles to `p-4`, and a static `sz` over a static class name beside it,
+     * so `className="pb-2" sz={{ p: 4 }}` compiles to `p-4`. Only Tailwind's
+     * own utilities take part.
      *
      * Which class covers which is read from the project's compiled Tailwind.
      * Set `false` when that reading is wrong for a project — a class it
@@ -575,7 +578,7 @@ export interface BuildConfig {
      *
      * @default true
      */
-    mergeCoveredKeys?: boolean;
+    mergeCoveredClasses?: boolean;
 }
 
 /**
@@ -762,7 +765,7 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
     astBudgetLimit: 50000,
     parser: 'rust',
     importedStaticSz: DEFAULT_IMPORTED_STATIC_SZ,
-    mergeCoveredKeys: true,
+    mergeCoveredClasses: true,
 };
 
 /**

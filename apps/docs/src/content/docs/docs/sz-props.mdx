@@ -172,8 +172,9 @@ merges only the keys it lowers statically; these keep every class:
   runtime;
 - a `.svelte` or `.vue` file, which the adapters compile without the project's
   stylesheet;
-- a [jest run](/docs/testing/#where-the-classes-come-from), and a tool that
-  compiles without your stylesheet, such as the
+- a [jest run](/docs/testing/#where-the-classes-come-from) before any build or
+  `csszyx next prebuild` has written the table, and a tool that compiles
+  without your stylesheet, such as the
   [MCP preview](/docs/mcp-server/#csszyx_compile_preview).
 
 Classes that can be resolved inside a runtime object stay in the safelist,
@@ -188,21 +189,22 @@ stylesheet edit that changes which class covers which, a Vite dev server
 recompiles every module, and a watch build asks you to restart it.
 
 :::note[Upgrading from 0.17]
-An object that relied on the earlier key winning now renders the later one.
-Write the refining key last: `{ p: 4, pb: 2 }`. Nothing prints when a build
-merges, so the sites are found by reading, not by the log: search for an object
-where a shorthand key follows one of its own longhands (`p` after `pb` or `px`,
-`size` after `w` or `h`, `border` after `borderT`, `rounded` after `roundedT`,
-`inset` after `top` or `left`). A jest suite does not merge, so it keeps
-passing on the class list it always saw.
+An object that relied on the earlier key winning now renders the later one,
+and a static `className` class that an `sz` class beside it covers is dropped
+([`sz` over `className`](#sz-over-a-static-classname)). Write the refining key
+last: `{ p: 4, pb: 2 }`. A production build prints nothing; a Vite dev
+server or a webpack development build prints a count once at start, and
+`csszyx check --rule merge-covered-key --rule merge-covered-class` lists every
+class it drops, file by file. A jest suite reads the table the build wrote, so
+a snapshot of a class list changes with it.
 
 Where something outside csszyx matches the class name — a CSS rule csszyx does
 not read (see the list above), a `[&_.pb-2]` variant, an E2E locator, a
 `toHaveClass` in a browser test — write the refining key last so the class
 survives. If your stylesheet is read wrong
 and a class you need is removed, set
-[`build.mergeCoveredKeys: false`](/docs/reference/config/#build) (on the
-Turbopack lane, `csszyxTurbopack({ mergeCoveredKeys: false })`) and the build
+[`build.mergeCoveredClasses: false`](/docs/reference/config/#build) (on the
+Turbopack lane, `csszyxTurbopack({ mergeCoveredClasses: false })`) and the build
 keeps every class, as it did before 0.18.
 :::
 
@@ -861,11 +863,45 @@ and the `p-8` is removed rather than losing in the cascade.
 <div sz={{ p: 4 }} className={baseClass} />
 ```
 
-When `className` is a static string the compiler joins the two lists as shown
-above and does not resolve a conflict between them at build time: with
-`className="p-8" sz={{ p: 4 }}` both classes reach the DOM and the stylesheet
-order decides. If the two can overlap, put both in one `sz` array — position
-then states the winner and the merge is the later-wins one.
+### `sz` over a static `className`
+
+When `className` is a static string the build resolves the conflict too: a
+Tailwind class in `className` is dropped when a class the `sz` beside it emits
+sets every property it sets, read from your compiled stylesheet as in
+[the object rule](#a-later-key-covers-an-earlier-one).
+
+```tsx
+<div className="card pb-2" sz={{ p: 4 }} />
+// → className="card p-4"
+```
+
+Only the class name loses classes, and only to `sz`: two classes inside a
+static `className` are never compared (`className="pb-2 p-8"` keeps both, and
+the stylesheet order decides between them), and the `sz` classes come out as
+they would with no `className`. A class that sets only part of what an `sz` class
+sets stays, and so does one with a different variant or `!important`. The
+exceptions of the object rule apply: a class from `@utility`, a plugin or
+plain CSS, and a Tailwind class a stylesheet the build reads selects on, is
+never removed. A Vue or Svelte `<style>` block and an arbitrary variant in
+markup are not read yet, so a class kept only as a hook for a selector or a
+test is safest under a name Tailwind does not generate (`card-body`) or as a
+`data-*` attribute.
+
+To keep a `className` refinement, write it in `sz` after the key that covers
+it: `sz={{ p: 4, pb: 2 }}`. `build.mergeCoveredClasses: false` turns both rules
+off.
+
+A `className` expression, a ternary `sz` and a runtime `sz` merge at runtime
+through `szcn` instead, where every class is compared with every other and the
+later one wins, inside the class name too. The same classes can therefore come
+out differently written two ways:
+
+```tsx
+<div className="pb-2 p-8" sz={{ m: 4 }} />   // → "pb-2 p-8 m-4"
+<div className={"pb-2 p-8"} sz={{ m: 4 }} /> // → "p-8 m-4" at runtime
+```
+
+Write a refinement last and in `sz` and both forms agree.
 
 This is worth knowing before you write a wrapper component. A caller's `sz` is
 demoted to `className` at the call site, so it arrives on the losing side of

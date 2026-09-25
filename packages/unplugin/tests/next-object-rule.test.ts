@@ -113,7 +113,7 @@ describe.each(['rust', 'wasm'] as const)('the object rule under Turbopack (%s)',
 
         const output = runNextTurboLoader(SOURCE, loaderContext(root, page), {
             ...options,
-            mergeCoveredKeys: false,
+            mergeCoveredClasses: false,
         });
 
         expect(output.code).toContain('className="pb-2 p-4"');

@@ -4418,6 +4418,14 @@ export interface SourceTransformResult {
      * entry produced; a reader then treats every class of the file as one list.
      */
     mergeGroups?: string[][];
+    /**
+     * Each static class name and the static `sz` classes beside it, from a pass
+     * without a merge table: the class name loses what the `sz` classes cover.
+     * Absent from a result an older engine or cache entry produced.
+     *
+     * @internal Read by the bundler plugin; not a stable shape.
+     */
+    mergeOverrides?: Array<{ base: string[]; over: string[] }>;
     /** Compiler diagnostics to emit in development. */
     diagnostics: string[];
     /** Recovery tokens emitted by szRecover attributes. */

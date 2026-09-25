@@ -191,6 +191,10 @@ pub struct TransformResult {
     /// had no merge table; lists of one class are left out.
     #[serde(default)]
     pub merge_groups: Vec<Vec<String>>,
+    /// Each static class name beside a static `sz` a merge would read, when
+    /// the pass had no merge table; one side empty is left out.
+    #[serde(default)]
+    pub merge_overrides: Vec<super::merge::MergeOverride>,
     /// Non-fatal transform diagnostics.
     pub diagnostics: Vec<String>,
     /// Recovery token metadata emitted for hydration safety.

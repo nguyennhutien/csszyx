@@ -77,6 +77,11 @@ describe('csszyx_compile_preview', () => {
         expect(String(data.mergeNote)).toContain('`p-4`');
     });
 
+    it('says the classes are unmerged when a class name sits beside an sz', () => {
+        const data = preview('export const A = () => <div className="pb-2" sz={{ p: 4 }} />;');
+        expect(String(data.mergeNote)).toContain('className');
+    });
+
     // Two elements never merge with each other, whatever their classes cover.
     it('adds no merge note when no object holds two classes', () => {
         expect(

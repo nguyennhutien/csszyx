@@ -22,6 +22,8 @@ export const CHECK_RULES = [
     'broken-opacity',
     'sibling-keyword',
     'theme-collision',
+    'merge-covered-key',
+    'merge-covered-class',
 ] as const;
 
 /** Which pass produced a finding. */

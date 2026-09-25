@@ -70,12 +70,12 @@ describe('the object rule on each lane', () => {
 
     // The way back when a project's stylesheet is read wrong: the build then
     // does what it did before the rule, and the stylesheet decides.
-    it('vite keeps every key when `build.mergeCoveredKeys` is off', async () => {
+    it('vite keeps every key when `build.mergeCoveredClasses` is off', async () => {
         const root = project();
         const call = callHooks(
             vitePlugin({
                 ...OPTIONS,
-                build: { ...OPTIONS.build, mergeCoveredKeys: false },
+                build: { ...OPTIONS.build, mergeCoveredClasses: false },
             }) as unknown as Record<string, unknown>[],
         );
 

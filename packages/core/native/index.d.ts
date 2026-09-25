@@ -74,6 +74,8 @@ export interface NativeTransformResult {
     rawClassNames: string[];
     /** The class list of each static object a merge would read. */
     mergeGroups: string[][];
+    /** Each static class name and the static `sz` classes beside it a merge would read. */
+    mergeOverrides: Array<{ base: string[]; over: string[] }>;
     /** Non-fatal transform diagnostics. */
     diagnostics: string[];
     /** Recovery token metadata emitted for hydration safety. */

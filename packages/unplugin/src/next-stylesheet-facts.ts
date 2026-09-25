@@ -271,26 +271,25 @@ function readText(file: string): string | null {
 }
 
 /**
- * Read the project's stylesheets and record what they settled.
+ * Open the project's style model from the stylesheets a Next command reads,
+ * writing nothing.
  *
  * Stops, exactly as a bundler build does, when the stylesheets give no single
  * prefix or one that reaches Tailwind does not compile.
  *
  * @param input - Where the app is and which stylesheets it loads.
  * @param input.root - The Next app root.
- * @param input.cacheDir - The csszyx cache directory for that app.
+ * @param input.cacheDir - The csszyx cache directory for that app, read for
+ *        the stylesheets and patterns an earlier command recorded.
  * @param input.tailwindStylesheet - The stylesheets the app loads, when named.
- * @param input.extraCandidates - Stylesheets the walk cannot find, such as one
- *        a source file imports from a package.
- * @param input.ignore - Glob patterns, relative to the root, whose stylesheets
- *        are left out of the walk; the recorded ones when not given.
+ * @param input.extraCandidates - Stylesheets the walk cannot find.
+ * @param input.ignore - Glob patterns whose stylesheets are left out of the
+ *        walk; the recorded ones when not given.
  * @param input.setting - What messages call the setting that names the stylesheets.
- * @param input.ignoreSetting - What messages call the setting that carries
- *        `ignore`, on a lane that has one.
- * @param input.writeOptions - Atomic write options.
- * @returns The record, where it lives, and any warning to print.
+ * @param input.ignoreSetting - What messages call the setting that carries `ignore`.
+ * @returns The model, the stylesheets it compiled, and the patterns applied.
  */
-export async function writeNextStylesheetFacts(input: {
+export async function openStylesheetModel(input: {
     root: string;
     cacheDir: string;
     tailwindStylesheet?: readonly string[];
@@ -298,13 +297,7 @@ export async function writeNextStylesheetFacts(input: {
     ignore?: readonly string[];
     setting?: string;
     ignoreSetting?: string;
-    writeOptions?: AtomicWriteOptions;
-}): Promise<{
-    record: NextStylesheetFactsRecord;
-    path: string;
-    warning: string | null;
-    model: ProjectStyleModel;
-}> {
+}): Promise<{ model: ProjectStyleModel; candidates: string[]; ignore: string[] }> {
     const listed = (input.tailwindStylesheet ?? []).map(file => ({
         file,
         absolute: path.resolve(input.root, file),
@@ -340,6 +333,45 @@ export async function writeNextStylesheetFacts(input: {
     const problem = styleModelError(model, input.root, input.setting, input.ignoreSetting);
     if (problem !== null) throw new Error(problem);
 
+    return { model, candidates, ignore };
+}
+
+/**
+ * Read the project's stylesheets and record what they settled.
+ *
+ * Stops, exactly as a bundler build does, when the stylesheets give no single
+ * prefix or one that reaches Tailwind does not compile.
+ *
+ * @param input - Where the app is and which stylesheets it loads.
+ * @param input.root - The Next app root.
+ * @param input.cacheDir - The csszyx cache directory for that app.
+ * @param input.tailwindStylesheet - The stylesheets the app loads, when named.
+ * @param input.extraCandidates - Stylesheets the walk cannot find, such as one
+ *        a source file imports from a package.
+ * @param input.ignore - Glob patterns, relative to the root, whose stylesheets
+ *        are left out of the walk; the recorded ones when not given.
+ * @param input.setting - What messages call the setting that names the stylesheets.
+ * @param input.ignoreSetting - What messages call the setting that carries
+ *        `ignore`, on a lane that has one.
+ * @param input.writeOptions - Atomic write options.
+ * @returns The record, where it lives, and any warning to print.
+ */
+export async function writeNextStylesheetFacts(input: {
+    root: string;
+    cacheDir: string;
+    tailwindStylesheet?: readonly string[];
+    extraCandidates?: readonly string[];
+    ignore?: readonly string[];
+    setting?: string;
+    ignoreSetting?: string;
+    writeOptions?: AtomicWriteOptions;
+}): Promise<{
+    record: NextStylesheetFactsRecord;
+    path: string;
+    warning: string | null;
+    model: ProjectStyleModel;
+}> {
+    const { model, candidates, ignore } = await openStylesheetModel(input);
     const { record, path: file } = recordStylesheetFacts(
         model,
         input.root,

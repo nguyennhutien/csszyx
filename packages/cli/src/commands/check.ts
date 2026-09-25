@@ -39,6 +39,7 @@ import {
     type Reporter,
     renderJsonReport,
 } from '../scanner/check-report.js';
+import { reportMergeAudit } from '../scanner/merge-audit-report.js';
 import { declaredThemeTokens } from '../scanner/theme-declarations.js';
 import { relativePosix, withPosixSeparators } from '../utils/posix-path.js';
 import { spinner } from '../utils/terminal-ui.js';
@@ -1017,6 +1018,9 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     ) {
         process.exitCode = 1;
     }
+
+    // An audit rather than a problem: run only when named, and never failing.
+    await reportMergeAudit(out, { cwd, files, rules: options.rule });
 
     // Written last, after every pass has recorded what it found, so the
     // document is the whole run rather than whatever had arrived by then.

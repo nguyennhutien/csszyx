@@ -364,3 +364,67 @@ describe('csszyx check --json — diagnostic kinds and rule selection', () => {
         expect(log.mock.calls.flat().join('\n')).toContain('"unknwn-key"');
     });
 });
+
+describe('csszyx check --rule merge-covered-key --rule merge-covered-class', () => {
+    const files = {
+        'src/app.css': '@import "tailwindcss";',
+        'src/App.tsx':
+            'export const A = () => <><div className="card pb-2" sz={{ p: 4 }} /><b sz={{ px: 2, p: 4 }} /></>;',
+    };
+
+    // An audit of what the build changed, not a problem to fix: selected only
+    // by name, and a finding does not fail the run.
+    it('lists what a build removes, file by file, and passes', async () => {
+        const report = await jsonFor(projectWith(files), {
+            rule: ['merge-covered-key', 'merge-covered-class'],
+        });
+        expect(report.findings.map(({ rule, file, message }) => ({ rule, file, message }))).toEqual(
+            [
+                {
+                    rule: 'merge-covered-key',
+                    file: 'src/App.tsx',
+                    message:
+                        '`px-2` removed: a later key in the same `sz` object sets every property it sets.',
+                },
+                {
+                    rule: 'merge-covered-class',
+                    file: 'src/App.tsx',
+                    message:
+                        '`pb-2` removed from `className`: an `sz` class on the same element sets every property it sets.',
+                },
+            ],
+        );
+        expect(process.exitCode).toBeUndefined();
+    });
+
+    it('lists nothing when nothing merges', async () => {
+        const report = await jsonFor(
+            projectWith({
+                ...files,
+                'src/App.tsx': 'export const A = () => <div sz={{ p: 4 }} />;',
+            }),
+            { rule: ['merge-covered-class'] },
+        );
+        expect(report.findings).toEqual([]);
+    });
+
+    it('is skipped, and says why, when the stylesheets do not compile', async () => {
+        const cwd = projectWith({
+            ...files,
+            // Two entries that set different prefixes give the build nothing
+            // to lower with, so it stops, and the audit with it.
+            'src/app.css': '@import "tailwindcss" prefix(tw);',
+            'src/other.css': '@import "tailwindcss";',
+        });
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        // The human report prints its warnings to stdout.
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        await check({ cwd, rule: ['merge-covered-class'] });
+        expect(log.mock.calls.flat().join('\n')).toContain('Merge audit skipped');
+    });
+
+    it('is not part of a run that does not name it', async () => {
+        const report = await jsonFor(projectWith(files));
+        expect(report.findings.filter(finding => finding.rule.startsWith('merge-'))).toEqual([]);
+    });
+});

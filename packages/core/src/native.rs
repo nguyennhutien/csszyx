@@ -193,6 +193,16 @@ pub struct NativeTransformTimings {
     pub total_ns: u32,
 }
 
+/// A static class name and the `sz` classes beside it.
+#[derive(Debug)]
+#[napi(object)]
+pub struct NativeMergeOverride {
+    /// The class name's classes, as written.
+    pub base: Vec<String>,
+    /// The `sz` classes, as emitted.
+    pub over: Vec<String>,
+}
+
 /// Transform output shape returned to JavaScript per source file.
 #[derive(Debug)]
 #[napi(object)]
@@ -207,6 +217,8 @@ pub struct NativeTransformResult {
     pub raw_class_names: Vec<String>,
     /// The class list of each static object a merge would read.
     pub merge_groups: Vec<Vec<String>>,
+    /// Each static class name beside a static `sz` a merge would read.
+    pub merge_overrides: Vec<NativeMergeOverride>,
     /// Non-fatal transform diagnostics.
     pub diagnostics: Vec<String>,
     /// Recovery token metadata emitted for hydration safety.
@@ -280,6 +292,14 @@ impl From<TransformResult> for NativeTransformResult {
             classes: result.classes,
             raw_class_names: result.raw_class_names,
             merge_groups: result.merge_groups,
+            merge_overrides: result
+                .merge_overrides
+                .into_iter()
+                .map(|pair| NativeMergeOverride {
+                    base: pair.base,
+                    over: pair.over,
+                })
+                .collect(),
             diagnostics: result.diagnostics,
             recovery_tokens: result
                 .recovery_tokens

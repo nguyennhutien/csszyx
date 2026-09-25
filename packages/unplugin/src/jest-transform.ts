@@ -40,6 +40,7 @@ import path from 'node:path';
 
 import {
     VERSION as compilerVersion,
+    type SourceTransformResult,
     szFallbackConsequenceOf,
     transformSource,
 } from '@csszyx/compiler';
@@ -48,7 +49,10 @@ import {
     importMergeRegistration,
     loadsCsszyxRuntime,
     mergeRegistrationPath,
+    mergeTableFor,
+    mergeTablePath,
 } from './merge-registration.js';
+import type { MergeOverride } from './merge-signature.js';
 import { injectNextRuntimeImports, type NextRuntimeImportUsage } from './next-runtime-injection.js';
 import {
     failedNextClassPrefixInputsStamp,
@@ -61,6 +65,8 @@ interface CompiledFile extends NextRuntimeImportUsage {
     code?: unknown;
     transformed?: unknown;
     diagnostics?: unknown;
+    mergeGroups?: unknown;
+    mergeOverrides?: unknown;
 }
 
 /** One entry as the plugin writes it; only the fields this lane reads. */
@@ -313,6 +319,13 @@ export interface JestTransformOptions {
      * runs before any command has recorded them.
      */
     ignore?: string | string[];
+    /**
+     * Whether a class a later one on the same element covers is dropped, as
+     * the bundler lanes spell `build.mergeCoveredClasses`. On unless set; the
+     * table comes from `.csszyx/merge-table.json`, which the build or
+     * `csszyx next prebuild` writes.
+     */
+    mergeCoveredClasses?: boolean;
 }
 
 /** The slice of the options jest hands `process` that this lane reads. */
@@ -488,6 +501,48 @@ function formatOf(jestOptions: JestProcessOptions | undefined): 'esm' | 'cjs' {
 }
 
 /**
+ * The file compiled again with the settled merge table, when that table drops
+ * a class from one of the lists the first pass reported.
+ *
+ * A pass with a table compiles the file on its own, so an `sz` imported from
+ * another module resolves at run time there instead of from the build's
+ * answer; the classes it renders are the same.
+ *
+ * @param first - What the first pass reported.
+ * @param first.mergeGroups - Each static object's classes.
+ * @param first.mergeOverrides - Each static class name beside a static `sz`.
+ * @param compile - Compiles the file with a table.
+ * @param root - The project root the table lives under.
+ * @returns The merged result, or null when nothing merges.
+ */
+function mergedWithSettledTable<T>(
+    first: { mergeGroups?: unknown; mergeOverrides?: unknown },
+    compile: (mergeTable: NonNullable<ReturnType<typeof mergeTableFor>>) => T,
+    root: string,
+): T | null {
+    const groups = Array.isArray(first.mergeGroups) ? (first.mergeGroups as string[][]) : [];
+    const overrides = Array.isArray(first.mergeOverrides)
+        ? (first.mergeOverrides as MergeOverride[])
+        : [];
+    const mergeTable = mergeTableFor(root, groups, overrides);
+    return mergeTable === null ? null : compile(mergeTable);
+}
+
+/**
+ * A file's text, or empty when it cannot be read.
+ *
+ * @param file - The path.
+ * @returns The text.
+ */
+function textOrEmpty(file: string): string {
+    try {
+        return fs.readFileSync(file, 'utf8');
+    } catch {
+        return '';
+    }
+}
+
+/**
  * The settled module's text, for the cache key.
  *
  * @param root - The project root.
@@ -538,11 +593,31 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
             // The build's answer first: it is the only one that resolves an
             // `sz` object or `szv` factory imported from another module.
             const built = cached(sourceText, sourcePath, prefix);
+            const withTable = (first: CompiledFile): SourceTransformResult | null =>
+                options.mergeCoveredClasses === false
+                    ? null
+                    : mergedWithSettledTable(
+                          first,
+                          mergeTable =>
+                              transformSource(sourceText, sourcePath, {
+                                  classPrefix: prefix,
+                                  mergeTable,
+                              }),
+                          root,
+                      );
             if (built !== null && typeof built.code === 'string') {
                 reportDeadClasses(sourcePath, built.diagnostics);
-                return { code: merges(finish(built.code, built, prefix)) };
+                const merged = withTable(built);
+                return {
+                    code: merges(
+                        merged === null
+                            ? finish(built.code, built, prefix)
+                            : finish(merged.code, merged, prefix),
+                    ),
+                };
             }
-            const result = transformSource(sourceText, sourcePath, { classPrefix: prefix });
+            const first = transformSource(sourceText, sourcePath, { classPrefix: prefix });
+            const result = withTable(first) ?? first;
             reportDeadClasses(sourcePath, result.diagnostics);
             return {
                 code: merges(result.transformed ? finish(result.code, result, prefix) : sourceText),
@@ -575,6 +650,10 @@ export function createTransformer(options: JestTransformOptions = {}): JestTrans
                             ? ''
                             : mergeRegistrationText(project.root, formatOf(cacheKeyOptions)),
                     )
+                    .update('\0')
+                    // The table the file's own merge reads, which a build or
+                    // `next prebuild` settles apart from the registration.
+                    .update(project === null ? '' : textOrEmpty(mergeTablePath(project.root)))
                     .digest('hex')
             );
         },

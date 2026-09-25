@@ -22,7 +22,12 @@ import { registerMergeSignatures } from '../../runtime/src/merge-signatures.js';
 import {
     createMergeSignatureTable,
     mergeGroupsOf,
+    mergeOverridesOf,
     mergeRemovesFrom,
+    overrideRemovesFrom,
+    removedByMerge,
+    removedByOverride,
+    tableOverrideRemovesFrom,
     tableRemovesFrom,
 } from '../src/merge-signature.js';
 import { openProjectStyleModel, type ProjectStyleModel } from '../src/project-style-model.js';
@@ -94,6 +99,113 @@ describe('whether a merge would remove a class from a list', () => {
         // Both answers must be exercised, or agreement proves nothing.
         expect(removing, `${removing} of ${CASES} remove a class`).toBeGreaterThan(CASES / 10);
         expect(removing).toBeLessThan(CASES - CASES / 10);
+    }, 60_000);
+});
+
+/**
+ * What the engine keeps of a class name beside `sz` classes, from a table:
+ * a class goes when an `sz` class has its signature or covers it, or repeats it.
+ *
+ * @param table - Signatures and coverage.
+ * @param base - The class name's classes.
+ * @param over - The `sz` classes.
+ * @returns The class name's classes that stay.
+ */
+function subtracted(
+    table: readonly [Readonly<Record<string, number>>, ReadonlyArray<readonly number[]>],
+    base: readonly string[],
+    over: readonly string[],
+): string[] {
+    const [signatures, coverage] = table;
+    const covered = new Set<number>();
+    for (const className of over) {
+        const id = signatures[className];
+        if (id === undefined) continue;
+        covered.add(id);
+        for (const row of coverage[id] ?? []) covered.add(row);
+    }
+    return base.filter(className => {
+        const id = signatures[className];
+        return !over.includes(className) && !(id !== undefined && covered.has(id));
+    });
+}
+
+describe('whether an sz beside a class name would remove one of its classes', () => {
+    it('agrees with the engine’s subtraction, from the model and from the table', () => {
+        const rng = createRng(0x0ce4);
+        const signatureOf = (candidate: string) => model.signature(candidate);
+        let removing = 0;
+        for (let index = 0; index < CASES; index += 1) {
+            const pool = [...POOL];
+            const draw = (count: number) =>
+                Array.from(
+                    { length: count },
+                    () => pool.splice(Math.floor(rng() * pool.length), 1)[0] as string,
+                );
+            const base = draw(1 + Math.floor(rng() * 4));
+            const over = draw(1 + Math.floor(rng() * 3));
+            // A repeat across the two sides is removed whatever the table says.
+            if (rng() < 0.1) over.push(base[0] as string);
+            const table = createMergeSignatureTable([...base, ...over], signatureOf);
+            const expected = subtracted(table, base, over).length < base.length;
+            if (expected) removing += 1;
+            const context = `case ${index}: ${base.join(' ')} | ${over.join(' ')}`;
+            expect(overrideRemovesFrom(base, over, signatureOf), context).toBe(expected);
+            expect(tableOverrideRemovesFrom(table[0], table[1], base, over), context).toBe(
+                expected,
+            );
+        }
+        expect(removing, `${removing} of ${CASES} remove a class`).toBeGreaterThan(CASES / 10);
+        expect(removing).toBeLessThan(CASES - CASES / 10);
+    }, 60_000);
+
+    // A table prunes a signature only one class holds, so that class has no
+    // row: it covers itself and nothing else.
+    it('reads a class with no coverage row as covering only itself', () => {
+        const signatures = { 'p-4': 0, 'pb-2': 1 };
+        expect(tableOverrideRemovesFrom(signatures, [[1]], ['pb-2'], ['p-4'])).toBe(true);
+        expect(tableOverrideRemovesFrom(signatures, [], ['pb-2'], ['p-4'])).toBe(false);
+        expect(tableOverrideRemovesFrom(signatures, [], ['p-4'], ['p-4'])).toBe(true);
+    });
+
+    it('reads none from a result an older engine produced', () => {
+        expect(mergeOverridesOf({})).toEqual([]);
+        const pair = { base: ['pb-2'], over: ['p-4'] };
+        expect(mergeOverridesOf({ mergeOverrides: [pair] })).toEqual([pair]);
+    });
+});
+
+describe('which classes a merge removes', () => {
+    it('are the ones _szcn drops, for an object, and the filter, for a class name', () => {
+        const rng = createRng(0xa0d17);
+        const signatureOf = (candidate: string) => model.signature(candidate);
+        for (let index = 0; index < CASES; index += 1) {
+            const pool = [...POOL];
+            const draw = (count: number) =>
+                Array.from(
+                    { length: count },
+                    () => pool.splice(Math.floor(rng() * pool.length), 1)[0] as string,
+                );
+            const list = draw(2 + Math.floor(rng() * 5));
+            const table = createMergeSignatureTable(list, signatureOf);
+            registerMergeSignatures(table);
+            const kept = _szcn(list.join(' ')).split(' ');
+            const context = `case ${index}: ${list.join(' ')}`;
+            expect(removedByMerge(list, signatureOf), context).toEqual(
+                list.filter(className => !kept.includes(className)),
+            );
+            const [base, over] = [list.slice(0, 2), list.slice(2)];
+            expect(removedByOverride(base, over, signatureOf), context).toEqual(
+                base.filter(
+                    className =>
+                        !subtracted(
+                            createMergeSignatureTable(list, signatureOf),
+                            base,
+                            over,
+                        ).includes(className),
+                ),
+            );
+        }
     }, 60_000);
 });
 
