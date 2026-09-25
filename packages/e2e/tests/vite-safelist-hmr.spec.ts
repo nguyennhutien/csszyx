@@ -79,6 +79,18 @@ test.describe
             page.on('load', () => {
                 loadCount += 1;
             });
+            // The reload is a websocket message the client handles only after
+            // every hot update queued ahead of it, seconds after the style has
+            // changed; the page state below may still read as unreloaded when
+            // it is checked. The frame itself arrives with the updates, before
+            // the new style applies, so it is what this test asserts on.
+            const reloads: string[] = [];
+            page.on('websocket', socket => {
+                socket.on('framereceived', frame => {
+                    const payload = String(frame.payload);
+                    if (payload.includes('"full-reload"')) reloads.push(payload);
+                });
+            });
 
             await page.goto('/?page=safelist-hmr');
             const target = page.getByTestId('safelist-hmr-target');
@@ -90,6 +102,7 @@ test.describe
             await expect(page.getByTestId('safelist-hmr-slim-merge')).toHaveText('pt-8');
 
             const loadsBeforeEdit = loadCount;
+            const reloadsBeforeEdit = reloads.length;
             await page.evaluate(() => {
                 (
                     window as unknown as { __csszyxSafelistSentinel?: string }
@@ -135,5 +148,9 @@ test.describe
             expect(loadCount, 'the safelist write must not navigate the page').toBe(
                 loadsBeforeEdit,
             );
+            expect(
+                reloads.slice(reloadsBeforeEdit),
+                'the edit must not send a full reload, however late the client would run it',
+            ).toEqual([]);
         });
     });

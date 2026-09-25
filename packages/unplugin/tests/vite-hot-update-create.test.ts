@@ -40,6 +40,8 @@ async function setupProject(): Promise<{
     entryFile: string;
     styleModule: { id: string; type: string };
     server: unknown;
+    /** What the graph holds for a file other than the entry. */
+    modulesByFile: Map<string, { id: string; type: string }[]>;
 }> {
     const { vitePlugin } = await import('../src/unplugin.js');
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-hot-create-'));
@@ -71,10 +73,12 @@ async function setupProject(): Promise<{
 
     const styleModule = { id: entryFile, type: 'js' };
     const safelistPath = path.join(root, '.csszyx/csszyx-classes.txt');
+    const modulesByFile = new Map<string, { id: string; type: string }[]>();
     const moduleGraph = {
         getModuleById: () => null,
         invalidateModule() {},
-        getModulesByFile: (file: string) => (file === entryFile ? [styleModule] : undefined),
+        getModulesByFile: (file: string) =>
+            file === entryFile ? [styleModule] : modulesByFile.get(file),
     };
     const server = {
         config: { root },
@@ -85,7 +89,7 @@ async function setupProject(): Promise<{
         // environment's module list, so that is the graph the hook reads.
         environments: { client: { moduleGraph } },
     };
-    return { call, callWith, root, safelistPath, entryFile, styleModule, server };
+    return { call, callWith, root, safelistPath, entryFile, styleModule, server, modulesByFile };
 }
 
 describe('hotUpdate on the generated safelist', () => {
@@ -164,6 +168,56 @@ describe('hotUpdate on the generated safelist', () => {
         };
         await callWith(client, 'hotUpdate', { type: 'update', file, modules: [], server });
         expect(fs.readFileSync(safelist, 'utf8')).toContain('p-4');
+    });
+
+    // csszyx writes more than the safelist under `.csszyx/`: the merge
+    // registration for jest and Next, the merge table, the theme types. A
+    // Tailwind that scans the directory watches each as an asset, and a change
+    // to one with only asset modules is answered with a full reload, so the
+    // first use of a new class reloaded the page.
+    it.each(['merge-registration.mjs', 'merge-registration.cjs', 'merge-table.json', 'theme.d.ts'])(
+        'answers a write to .csszyx/%s without the asset node',
+        async name => {
+            const { call, root, server, modulesByFile } = await setupProject();
+            const file = path.join(root, '.csszyx', name);
+            const asset = { id: file, type: 'asset' };
+            modulesByFile.set(file, [asset]);
+
+            const answer = await call('hotUpdate', {
+                type: 'update',
+                file,
+                modules: [asset],
+                server,
+            });
+
+            expect(answer, 'silence lets @tailwindcss/vite reload the page').toEqual([]);
+        },
+    );
+
+    it('keeps a module the app really imports from .csszyx', async () => {
+        const { call, root, server, modulesByFile } = await setupProject();
+        const file = path.join(root, '.csszyx/merge-registration.mjs');
+        const imported = { id: file, type: 'js' };
+        const modules = [{ id: file, type: 'asset' }, imported];
+        modulesByFile.set(file, modules);
+
+        const answer = await call('hotUpdate', { type: 'update', file, modules, server });
+
+        expect(answer).toEqual([imported]);
+    });
+
+    // Vite 5 has no asset type: a watched file's node is a file-only entry,
+    // with no id, and the legacy hook reads the server-wide graph.
+    it('leaves out the file-only entry Vite 5 keeps for a watched file', async () => {
+        const { call, root, server, modulesByFile } = await setupProject();
+        const file = path.join(root, '.csszyx/merge-registration.mjs');
+        modulesByFile.set(file, [
+            { id: null, type: 'js' } as unknown as { id: string; type: string },
+        ]);
+
+        const answer = await call('handleHotUpdate', { file, modules: [], server });
+
+        expect(answer).toEqual([]);
     });
 
     it('leaves an ordinary source file to Vite so class discovery still runs', async () => {
