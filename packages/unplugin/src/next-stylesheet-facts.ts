@@ -36,6 +36,7 @@ import {
     mayReachTailwind,
     missingTailwindStylesheetMessage,
     openProjectStyleModel,
+    originWarning,
     type ProjectStyleModel,
     styleModelError,
     styleModelWarning,
@@ -322,23 +323,20 @@ export async function writeNextStylesheetFacts(input: {
     // writer would drop them and record the prefix they set as none. A
     // stylesheet this run's sources import stays even under an ignored path:
     // the import is evidence the app loads it.
-    const candidates =
-        listed.length > 0
-            ? listed.map(entry => entry.absolute)
-            : [
-                  ...new Set([
-                      ...walkedStylesheets(input.root, ignore),
-                      ...(input.extraCandidates ?? []),
-                      ...recordedCandidates(input.cacheDir, input.root).filter(
-                          file => !ignoresFile(file),
-                      ),
-                  ]),
-              ];
-    const model = await openProjectStyleModel(
-        input.root,
-        candidates,
-        collectSpecifierAliases(input.root),
-    );
+    const walked = [
+        ...new Set([
+            ...walkedStylesheets(input.root, ignore),
+            ...(input.extraCandidates ?? []),
+            ...recordedCandidates(input.cacheDir, input.root).filter(file => !ignoresFile(file)),
+        ]),
+    ];
+    const candidates = listed.length > 0 ? listed.map(entry => entry.absolute) : walked;
+    const model = await openProjectStyleModel(input.root, candidates, {
+        aliases: collectSpecifierAliases(input.root),
+        // A named list decides the prefix; a stylesheet a page imports still
+        // selects on its elements.
+        hookStylesheets: listed.length > 0 ? walked : [],
+    });
     const problem = styleModelError(model, input.root, input.setting, input.ignoreSetting);
     if (problem !== null) throw new Error(problem);
 
@@ -353,7 +351,10 @@ export async function writeNextStylesheetFacts(input: {
     return {
         record,
         path: file,
-        warning: styleModelWarning(model, input.root, input.setting),
+        warning:
+            [styleModelWarning(model, input.root, input.setting), originWarning(model, input.root)]
+                .filter(message => message !== null)
+                .join('\n') || null,
         model,
     };
 }

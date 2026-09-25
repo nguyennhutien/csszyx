@@ -57,7 +57,7 @@ describe('openProjectStyleModel', () => {
             exact: false,
         };
 
-        const model = await openProjectStyleModel(REPO, [app as string], [alias]);
+        const model = await openProjectStyleModel(REPO, [app as string], { aliases: [alias] });
 
         expect(model.facts).toEqual({ prefix: 'tw', important: false });
     });

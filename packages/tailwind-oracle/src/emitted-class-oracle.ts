@@ -41,6 +41,19 @@ import {
 import { keywordOracleFrom } from './keyword-oracle.js';
 import { brokenOpacityValue, collectCustomProperties } from './opacity-verdict.js';
 import {
+    collectClassHooks,
+    type DeclaredUtilities,
+    declareUtilitiesIn,
+    hasCustomSource,
+    isDeclared,
+    isHook,
+    noClassHooks,
+    noDeclaredUtilities,
+    type OriginOracle,
+    stripCustomUtilities,
+    withoutRegisteredClasses,
+} from './origin-oracle.js';
+import {
     expandAlias,
     type ProjectResolver,
     projectResolver,
@@ -175,6 +188,13 @@ export type EmittedClassOracle =
            * should not pay.
            */
           loadCollisionOracle(): Promise<CollisionOracle | null>;
+          /**
+           * Which classes are Tailwind's own, as opposed to the project's
+           * `@utility`, plugin or selector hooks. Built on first call and
+           * cached; it compiles the stylesheet a second time only when the
+           * project defines classes of its own.
+           */
+          loadOriginOracle(): Promise<OriginOracle>;
           /** What the project's Tailwind import settled for every class. */
           facts: StylesheetFacts;
       }
@@ -304,7 +324,7 @@ export function designSystemEntry(entry: ImportedTailwind): unknown {
  * @param resolveFrom - Directory whose `package.json` anchors resolution.
  * @returns The installation, or null when the project has none.
  */
-const defaultLoader: TailwindLoader = async resolveFrom => {
+export const defaultTailwindLoader: TailwindLoader = async resolveFrom => {
     try {
         const require = createRequire(path.join(resolveFrom, 'package.json'));
         const manifestPath = require.resolve('tailwindcss/package.json');
@@ -604,7 +624,7 @@ const UTILITIES_FEATURE = 16;
  */
 export async function readStylesheetRole(
     options: OracleOptions,
-    loadTailwind: TailwindLoader = defaultLoader,
+    loadTailwind: TailwindLoader = defaultTailwindLoader,
 ): Promise<StylesheetRole> {
     const tailwind = await loadTailwind(options.resolveFrom);
     if (tailwind === null) {
@@ -668,6 +688,67 @@ export async function readStylesheetRole(
 }
 
 /**
+ * Whether a file sits inside a directory.
+ *
+ * @param directory - The directory.
+ * @param file - The file.
+ * @returns True when `file` is inside `directory`.
+ */
+function isInside(directory: string, file: string): boolean {
+    const relative = path.relative(directory, file);
+    return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+/**
+ * Tell Tailwind's own classes from the project's, from what the first compile
+ * read.
+ *
+ * A project that declares nothing of its own needs no second compile: every
+ * class it serves is Tailwind's, except the ones its CSS selects on.
+ *
+ * @param input - What the first compile read, and how to run the second.
+ * @param input.css - The root stylesheet.
+ * @param input.projectStylesheets - Every other stylesheet it read outside
+ *        Tailwind's package.
+ * @param input.loadedModules - Whether it loaded a plugin or config module.
+ * @param input.compileStripped - Compiles the stylesheets with every project
+ *        definition taken out, recording the names a plugin would have
+ *        registered.
+ * @returns The origin of each class, or why it cannot be told.
+ */
+async function originOracleFrom(input: {
+    css: string;
+    projectStylesheets: readonly string[];
+    loadedModules: boolean;
+    compileStripped: (declared: DeclaredUtilities) => Promise<DesignSystem>;
+}): Promise<OriginOracle> {
+    const stylesheets = [input.css, ...input.projectStylesheets];
+    const hooks = noClassHooks();
+    for (const stylesheet of stylesheets) collectClassHooks(stylesheet, hooks);
+    // A name the project declares is its own even when Tailwind has a utility
+    // of the same name, which the stripped design system still serves.
+    const declared = noDeclaredUtilities();
+    for (const stylesheet of stylesheets) declareUtilitiesIn(stylesheet, declared);
+    if (!input.loadedModules && !stylesheets.some(hasCustomSource)) {
+        return { ok: true, origin: candidate => (isHook(hooks, candidate) ? 'hook' : 'tailwind') };
+    }
+    let stripped: DesignSystem;
+    try {
+        stripped = await input.compileStripped(declared);
+    } catch (error) {
+        return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+    }
+    return {
+        ok: true,
+        origin(candidate) {
+            if (isDeclared(declared, candidate)) return 'custom';
+            if (stripped.candidatesToCss([candidate])[0] === null) return 'custom';
+            return isHook(hooks, candidate) ? 'hook' : 'tailwind';
+        },
+    };
+}
+
+/**
  * Build an oracle over the project's own Tailwind and stylesheet.
  *
  * @param options - What to compile and where to resolve it from.
@@ -676,7 +757,7 @@ export async function readStylesheetRole(
  */
 export async function createEmittedClassOracle(
     options: OracleOptions,
-    loadTailwind: TailwindLoader = defaultLoader,
+    loadTailwind: TailwindLoader = defaultTailwindLoader,
 ): Promise<EmittedClassOracle> {
     const tailwind = await loadTailwind(options.resolveFrom);
     if (tailwind === null) {
@@ -702,11 +783,30 @@ export async function createEmittedClassOracle(
         aliases: options.aliases ?? [],
         resolver: await projectResolver(options.resolveFrom),
     };
+    // What the first compile read beyond Tailwind's own stylesheets: the
+    // origin question needs the project's CSS and whether any module loaded,
+    // and reading them here costs no second resolve.
+    const projectStylesheets = new Map<string, string>();
+    let loadedModules = false;
     const loadOptions: LoadDesignSystemOptions = {
         base: options.cssBase,
-        loadStylesheet: (id, base) =>
-            loadStylesheet(id, base, tailwind.root, options.resolveFrom, context),
-        loadModule: (id, base) => loadModule(id, base, options.resolveFrom, context),
+        loadStylesheet: async (id, base) => {
+            const loaded = await loadStylesheet(
+                id,
+                base,
+                tailwind.root,
+                options.resolveFrom,
+                context,
+            );
+            if (!isInside(tailwind.root, loaded.path)) {
+                projectStylesheets.set(loaded.path, loaded.content);
+            }
+            return loaded;
+        },
+        loadModule: (id, base) => {
+            loadedModules = true;
+            return loadModule(id, base, options.resolveFrom, context);
+        },
     };
 
     let design: DesignSystem;
@@ -736,6 +836,7 @@ export async function createEmittedClassOracle(
     // a compile would put a diagnostic's instrumentation inside another
     // diagnostic's evidence.
     let collisions: CollisionOracle | null | undefined;
+    let origins: Promise<OriginOracle> | undefined;
 
     const facts: StylesheetFacts = {
         // Normalised to null: Tailwind reports an absent prefix as null
@@ -785,6 +886,31 @@ export async function createEmittedClassOracle(
                 collisions = null;
             }
             return collisions;
+        },
+        async loadOriginOracle() {
+            origins ??= originOracleFrom({
+                css: options.css,
+                projectStylesheets: [...projectStylesheets.values()],
+                loadedModules,
+                compileStripped: async declared =>
+                    load(stripCustomUtilities(options.css), {
+                        ...loadOptions,
+                        loadStylesheet: async (id, base) => {
+                            const loaded = await loadOptions.loadStylesheet(id, base);
+                            return isInside(tailwind.root, loaded.path)
+                                ? loaded
+                                : { ...loaded, content: stripCustomUtilities(loaded.content) };
+                        },
+                        loadModule: async (id, base, resourceHint) => {
+                            const loaded = await loadOptions.loadModule(id, base, resourceHint);
+                            return {
+                                ...loaded,
+                                module: withoutRegisteredClasses(loaded.module, declared),
+                            };
+                        },
+                    }),
+            });
+            return origins;
         },
         findDead(classes) {
             // Markers are excluded before the question is asked, not filtered

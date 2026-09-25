@@ -170,6 +170,7 @@ import { recordStylesheetFacts } from './next-stylesheet-facts.js';
 import {
     missingTailwindStylesheetMessage,
     openProjectStyleModel,
+    originWarning,
     type ProjectStyleModel,
     styleModelError,
     styleModelWarning,
@@ -3781,7 +3782,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const known = objectRuleMerged.get(first);
         if (known?.model === model) return known.merged;
         const signatureOf = (candidate: string): MergeSignature | null =>
-            model.signature(candidate);
+            model.mergeSignature(candidate);
         let merged = first;
         // Asked per list before any table is built: most files hold no list a
         // merge would shorten, and they pay only these checks.
@@ -5037,22 +5038,32 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
         // A named list is the whole answer. The walk also meets fixtures and
         // old copies, which is exactly why an author names the real ones.
-        const candidates =
-            listed.length > 0
-                ? listed.map(entry => entry.absolute)
-                : [...new Set([...projectCssFiles, ...jsImportedCssFiles])];
-        const opened = await openProjectStyleModel(state.rootDir, candidates, specifierAliases);
+        const walked = [...new Set([...projectCssFiles, ...jsImportedCssFiles])];
+        const candidates = listed.length > 0 ? listed.map(entry => entry.absolute) : walked;
+        // A named list decides the prefix and the table; a component's own
+        // stylesheet still selects on its elements.
+        const hookStylesheets = listed.length > 0 ? walked : [];
+        const opened = await openProjectStyleModel(state.rootDir, candidates, {
+            aliases: specifierAliases,
+            hookStylesheets,
+        });
         const problem = styleModelError(opened, state.rootDir);
         // Thrown before the model is kept: a build started again after this
         // error has to read the stylesheets again, not lower with this model.
         if (problem !== null) throw new Error(problem);
         styleModel = opened;
         styleModelFiles = [
-            ...new Set([...opened.entries.map(entry => entry.file), ...opened.imports]),
+            ...new Set([
+                ...opened.entries.map(entry => entry.file),
+                ...opened.imports,
+                ...hookStylesheets,
+            ]),
         ];
         styleModelStamps = stylesheetStamps(styleModelFiles);
         const skipped = styleModelWarning(opened, state.rootDir);
         if (skipped !== null) emitWarning(skipped);
+        const unmerged = originWarning(opened, state.rootDir);
+        if (unmerged !== null) emitWarning(unmerged);
         try {
             recordStylesheetFacts(
                 opened,
@@ -5185,7 +5196,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 ...state.ownedClasses,
                 ...model.candidates(),
             ],
-            candidate => model.signature(candidate),
+            candidate => model.mergeSignature(candidate),
         );
         if (state.authoredClasses.size === 0) return;
         unservedClasses = unservedAuthoredClasses(
@@ -5746,7 +5757,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     function objectRuleTable(model: ProjectStyleModel): string {
         return JSON.stringify(
             createMergeSignatureTable([...objectRuleClasses], candidate =>
-                model.signature(candidate),
+                model.mergeSignature(candidate),
             ),
         );
     }

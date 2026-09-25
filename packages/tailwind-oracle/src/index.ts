@@ -31,6 +31,16 @@ export {
     type TailwindModule,
     tailwindEntriesAmong,
 } from './emitted-class-oracle.js';
+export {
+    type ClassAttributeMatcher,
+    type ClassAttributeOperator,
+    type ClassHooks,
+    type ClassOrigin,
+    collectClassHooks,
+    isHook,
+    noClassHooks,
+    type OriginOracle,
+} from './origin-oracle.js';
 export type { StylesheetAlias } from './project-resolver.js';
 export {
     findSiblingKeywordValues,

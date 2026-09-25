@@ -34,7 +34,8 @@ describe('registering theme tokens by hand', () => {
         const printed = await warningsOf('register');
 
         expect(printed).toContain('no longer changes what `szcn` merges');
-        expect(printed).toContain('`@utility`');
+        // Every group the registry took is a `@theme` namespace.
+        expect(printed).toContain('declare the tokens under `@theme`');
     });
 
     it.each([false, true])(
@@ -49,7 +50,7 @@ describe('registering theme tokens by hand', () => {
             }
             const printed = await warningsOf('register');
             expect(printed).toContain('integration that supplies a merge table');
-            expect(printed).toContain('without a table, `szcn` removes only exact repeats');
+            expect(printed).toContain('without a table it removes only exact repeats');
 
             // Registering names does not substitute for delivery of merge data.
             const { szcn, _szcn } = await import('../src/merge-classes.js');
