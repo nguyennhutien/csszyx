@@ -1356,6 +1356,19 @@ export function isCompileSourceOptedIn(id: string, sourceDirs: readonly string[]
 }
 
 /**
+ * Whether a graph node is a module the app imports, rather than the node a
+ * watched file leaves: an `asset` node on Vite 6 and later, and on Vite 5 a
+ * file-only entry, which has no id.
+ *
+ * @param module - A node from the calling hook's graph.
+ * @returns True for a module Vite can hot-update.
+ */
+function isImportedModule(module: unknown): boolean {
+    const node = module as { type?: string; id?: string | null };
+    return node.type !== 'asset' && node.id != null;
+}
+
+/**
  * Whether a file lives in a directory csszyx never transforms.
  *
  * An explicitly opted-in `compileSources` path wins over every default ignore —
@@ -6055,8 +6068,35 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return tailwindEntryModules(pass.moduleGraph());
         }
 
+        // Every other file csszyx writes under `.csszyx/` — the merge
+        // registration for jest and Next, the merge table, the theme types —
+        // meets the same Tailwind: its automatic source scan reaches the
+        // directory, so each is a watched asset, and a write to one with only
+        // asset modules drew the unaddressed reload the safelist answer above
+        // prevents. A source edit rewrites the registration whenever it adds a
+        // class, so the page reloaded on the first use of each one. Nothing is
+        // lost by leaving the asset nodes out: the stylesheet follows the
+        // safelist, and a module the app really imports from here keeps its
+        // own hot update.
+        if (isStateFile(ctx.file)) {
+            return [...(pass.moduleGraph().getModulesByFile(ctx.file) ?? [])].filter(
+                isImportedModule,
+            );
+        }
+
         if (isClientPass) discoverHotFileClasses(ctx.file, ctx.server.watcher);
         return undefined;
+    }
+
+    /**
+     * Whether csszyx wrote this file into the project's `.csszyx` directory.
+     *
+     * @param file - Absolute path the watcher reported.
+     * @returns True for a file under `<root>/.csszyx/`.
+     */
+    function isStateFile(file: string): boolean {
+        const stateDir = normalizePathSeparators(path.join(state.rootDir, '.csszyx'));
+        return normalizePathSeparators(file).startsWith(`${stateDir}/`);
     }
 
     /**
