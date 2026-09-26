@@ -159,9 +159,10 @@ key replaces another only when it sets every property the other sets:
   never removed and never removes another, even when it reuses a Tailwind name
   (`@utility container`), and neither is a Tailwind class that a rule of your
   own CSS selects on (`.card.shadow-md { … }`, `[class~="shadow-md"]`). The
-  build reads every stylesheet it walks, not yet a Vue or Svelte `<style>`
-  block or a class named in an arbitrary variant of your markup
-  (`group-[.shadow-md]:p-2`).
+  build reads every stylesheet it walks, the `<style>` blocks of your Vue,
+  Svelte and Astro components, HTML pages and JSX, and every arbitrary variant
+  in your markup or your `sz` (`group-[.shadow-md]:p-2`,
+  `group: { '.shadow-md': { p: 2 } }`).
 
 It applies where the build compiles the object. In this release the build
 merges only the keys it lowers statically; these keep every class:
@@ -881,11 +882,15 @@ the stylesheet order decides between them), and the `sz` classes come out as
 they would with no `className`. A class that sets only part of what an `sz` class
 sets stays, and so does one with a different variant or `!important`. The
 exceptions of the object rule apply: a class from `@utility`, a plugin or
-plain CSS, and a Tailwind class a stylesheet the build reads selects on, is
-never removed. A Vue or Svelte `<style>` block and an arbitrary variant in
-markup are not read yet, so a class kept only as a hook for a selector or a
-test is safest under a name Tailwind does not generate (`card-body`) or as a
-`data-*` attribute.
+plain CSS, and a Tailwind class that a stylesheet, a component's `<style>`
+block or an arbitrary variant selects on, is never removed. A selector the
+build cannot read, in CSS-in-JS or in a script (`querySelector('.shadow-md')`),
+is not a hook, so a class kept only for one is safest under a name Tailwind
+does not generate (`card-body`) or as a `data-*` attribute.
+
+A build that meets such a selector only after it merged, from a module
+outside its walk or an edit during a watch, stops and names the class, rather
+than ship a page without it.
 
 To keep a `className` refinement, write it in `sz` after the key that covers
 it: `sz={{ p: 4, pb: 2 }}`. `build.mergeCoveredClasses: false` turns both rules

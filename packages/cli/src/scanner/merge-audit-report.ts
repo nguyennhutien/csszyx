@@ -11,6 +11,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { loadContentScanner } from '@csszyx/tailwind-oracle';
 import {
     auditMerges,
     type MergeAuditKind,
@@ -66,9 +67,12 @@ export async function reportMergeAudit(
             source: await readFile(file, 'utf8'),
         })),
     );
-    const findings = auditMerges({ model, classPrefix: model.facts?.prefix ?? null, files }).filter(
-        finding => selected.includes(finding.kind),
-    );
+    const findings = auditMerges({
+        model,
+        classPrefix: model.facts?.prefix ?? null,
+        files,
+        scanner: loadContentScanner(input.cwd),
+    }).filter(finding => selected.includes(finding.kind));
     for (const finding of findings) {
         for (const className of finding.classes) {
             const message = `\`${className}\` ${REASON[finding.kind]}`;

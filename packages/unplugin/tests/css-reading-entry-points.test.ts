@@ -94,6 +94,31 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
         'packages/tailwind-oracle/src/index.ts',
         'packages/unplugin/src/project-style-model.ts',
     ],
+    // What the rules Tailwind writes for a variant select on
+    // (`group-[.shadow-md]:`), and what a stylesheet's `@apply` statements
+    // apply: both are hooks read through the design system, never a second
+    // grammar of Tailwind's syntax.
+    collectVariantHooks: [
+        'packages/tailwind-oracle/src/origin-oracle.ts',
+        'packages/tailwind-oracle/src/emitted-class-oracle.ts',
+        'packages/tailwind-oracle/src/index.ts',
+        'packages/unplugin/src/project-style-model.ts',
+    ],
+    appliedCandidatesIn: [
+        'packages/tailwind-oracle/src/origin-oracle.ts',
+        'packages/tailwind-oracle/src/emitted-class-oracle.ts',
+        'packages/tailwind-oracle/src/index.ts',
+        'packages/unplugin/src/project-style-model.ts',
+    ],
+    // A `<style>` block in a component, page or JSX file is a new input to
+    // the hook analyzer: it returns the classes a block selects on and never
+    // answers what a class sets or which tokens exist.
+    styleBlockHooks: [
+        'packages/tailwind-oracle/src/origin-oracle.ts',
+        'packages/tailwind-oracle/src/index.ts',
+        'packages/unplugin/src/source-hooks.ts',
+        'packages/unplugin/src/merge-registration.ts',
+    ],
     // Tailwind's own loader. Exactly one file may call it.
     __unstable__loadDesignSystem: ['packages/tailwind-oracle/src/emitted-class-oracle.ts'],
 };

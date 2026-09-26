@@ -25,6 +25,7 @@ import {
 import { compute_mangle_checksum, encode } from '@csszyx/core';
 import { getNativePackageName } from '@csszyx/core/native';
 import { type SvelteAdapterOptions, preprocess as sveltePreprocess } from '@csszyx/svelte-adapter';
+import { loadContentScanner } from '@csszyx/tailwind-oracle';
 import {
     CSSZYX_GLOBAL_ALIAS_PREFIX,
     DEFAULT_BUILD_CONFIG,
@@ -180,6 +181,7 @@ import {
     styleModelWarning,
     unsupportedStylesheetFactsMessage,
 } from './project-style-model.js';
+import { MARKUP_EXTENSIONS, SourceHookRegistry } from './source-hooks.js';
 import { collectSpecifierAliases, type SpecifierAlias } from './specifier-aliases.js';
 import { readStableTextFileSnapshotSync } from './stable-file-snapshot.js';
 import { discoverProjectTheme } from './theme-discovery.js';
@@ -432,6 +434,14 @@ interface PrescanTransformResult {
     filePath: string;
     /** Compiler result for the file. */
     result: SourceTransformResult;
+}
+
+/** A merge the prescan asked for, run once every file's hooks are read. */
+interface HeldMerge {
+    source: string;
+    effectiveFilename: string;
+    compilerOptions: TransformSourceCodeOptions;
+    first: SourceTransformResult;
 }
 
 /** One Rust prescan input not satisfied by the transform cache. */
@@ -3173,6 +3183,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * to a name the project serves no CSS for.
      */
     let styleModel: ProjectStyleModel | undefined;
+    /**
+     * What sources select on outside stylesheets: arbitrary variants and
+     * `<style>` blocks. `styleModel` always carries their union.
+     */
+    const sourceHooks = new SourceHookRegistry(() => loadContentScanner(state.rootDir));
+    /** The registry key of Tailwind's own scan; no file path starts with a NUL. */
+    const TAILWIND_SCAN_HOOKS = '\0tailwind-scan';
+    /**
+     * Merges the prescan asked for while it lowered every file. They wait
+     * until every file's hooks are read: a hook in the last file can keep a
+     * class in the first.
+     */
+    let heldMerges: HeldMerge[] | null = null;
+    /**
+     * Classes each file's merge removed. A build that meets a rule selecting on
+     * one of them after the merge has already shipped the loss, so it stops.
+     */
+    const mergeRemovedClasses = new Map<string, string[]>();
+    /** The Vite dev server, to send every module through again. */
+    let devServer: ViteDevServer | undefined;
     // The stylesheets the last opened model read, and those its roots import.
     // A webpack build depends on them, so an edit to one rebuilds even when no
     // module imports it.
@@ -3826,14 +3856,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Off by configuration is the way back when a project's stylesheet
         // is read wrong: the first pass is what every build emitted before.
         if (options.build?.mergeCoveredClasses === false) return first;
+        if (objectRuleOutputs.has(first)) return first;
+        // A class this file's sz lowered to can select on another class, in
+        // this file or in any other: `group: { '.shadow-md': … }`.
+        if (sourceHooks.readLowered(effectiveFilename, first.classes)) followSourceHooks();
+        if (heldMerges !== null) {
+            heldMerges.push({ source, effectiveFilename, compilerOptions, first });
+            return first;
+        }
         const model = styleModel;
         const groups = mergeGroupsOf(first);
         const overrides = mergeOverridesOf(first);
-        if (
-            model === undefined ||
-            objectRuleOutputs.has(first) ||
-            (groups.length === 0 && overrides.length === 0)
-        ) {
+        if (model === undefined || (groups.length === 0 && overrides.length === 0)) {
             return first;
         }
         const grouped = new Set([
@@ -3852,21 +3886,133 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             groups.some(group => mergeRemovesFrom(group, signatureOf)) ||
             overrides.some(pair => overrideRemovesFrom(pair.base, pair.over, signatureOf))
         ) {
-            mergeRemovals.set(
-                effectiveFilename,
-                groups.flatMap(group => removedByMerge(group, signatureOf)).length +
-                    overrides.flatMap(pair => removedByOverride(pair.base, pair.over, signatureOf))
-                        .length,
-            );
+            const removed = [
+                ...groups.flatMap(group => removedByMerge(group, signatureOf)),
+                ...overrides.flatMap(pair => removedByOverride(pair.base, pair.over, signatureOf)),
+            ];
+            mergeRemovals.set(effectiveFilename, removed.length);
             const [signatures, coverage] = createMergeSignatureTable([...grouped], signatureOf);
             merged = runConfiguredParser(source, effectiveFilename, {
                 ...compilerOptions,
                 mergeTable: { format: ENGINE_MERGE_TABLE_FORMAT, signatures, coverage },
             }).result;
+            // A repeat the merge dropped is still on the element; only a class
+            // that left its list is lost if a rule selects on it.
+            mergeRemovedClasses.set(effectiveFilename, [
+                ...groups.flatMap(group =>
+                    removedByMerge(group, signatureOf).filter(
+                        className => group.indexOf(className) === group.lastIndexOf(className),
+                    ),
+                ),
+                ...overrides.flatMap(pair =>
+                    removedByOverride(pair.base, pair.over, signatureOf).filter(
+                        className => !pair.over.includes(className),
+                    ),
+                ),
+            ]);
         }
+        if (merged === first) mergeRemovedClasses.delete(effectiveFilename);
         objectRuleMerged.set(first, { model, merged });
         if (merged !== first) objectRuleOutputs.add(merged);
         return merged;
+    }
+
+    /**
+     * Run the merges the prescan held, now that every file's hooks are read.
+     *
+     * @param held - The merges it held.
+     * @returns Each first pass's merged result.
+     */
+    function releaseHeldMerges(
+        held: readonly HeldMerge[],
+    ): Map<SourceTransformResult, SourceTransformResult> {
+        heldMerges = null;
+        applySourceHooks();
+        const merged = new Map<SourceTransformResult, SourceTransformResult>();
+        for (const merge of held) {
+            merged.set(
+                merge.first,
+                withObjectRule(
+                    merge.source,
+                    merge.effectiveFilename,
+                    merge.compilerOptions,
+                    merge.first,
+                ),
+            );
+        }
+        return merged;
+    }
+
+    /**
+     * Hand the style model what the sources select on now.
+     *
+     * @returns True when that changes what the merge removes from a list it
+     *          has already seen.
+     */
+    function applySourceHooks(): boolean {
+        const model = styleModel;
+        if (model === undefined) return false;
+        const next = model.withSourceHooks(sourceHooks.hooksFor(model));
+        const changed = objectRuleTable(model) !== objectRuleTable(next);
+        styleModel = next;
+        return changed;
+    }
+
+    /**
+     * Follow a change in what the sources select on.
+     *
+     * The prescan applies once, after every file. A dev server sends every
+     * module through again when the change keeps a class a module already
+     * dropped; a build checks its removals once every module is read.
+     */
+    function followSourceHooks(): void {
+        if (heldMerges !== null) return;
+        if (!applySourceHooks() || !serving || devServer === undefined) return;
+        const server = devServer;
+        // Not from inside the transform that found the hook: invalidating the
+        // graph mid-transform would drop the module being served.
+        setTimeout(() => {
+            void (async () => {
+                if (mergeTableSettled) await computeUnservedClasses();
+                recompileEveryModule(server);
+            })();
+        }, 0);
+    }
+
+    /**
+     * Read one source's text for what it selects on.
+     *
+     * @param file - Its path or bundler id; a query means a part of a file,
+     *        which the whole file's read already covers.
+     * @param text - Its text.
+     */
+    function readSourceHooks(file: string, text: string): void {
+        if (file.includes('?') || options.build?.mergeCoveredClasses === false) return;
+        const extension = path.extname(file).slice(1);
+        if (sourceHooks.readText(normalizeSourceFilename(file), text, extension)) {
+            followSourceHooks();
+        }
+    }
+
+    /**
+     * What a build must say when it removed a class a rule it read later
+     * selects on.
+     *
+     * @returns The message, or null when every removal still holds.
+     */
+    function lateHookMessage(): string | null {
+        const model = styleModel;
+        if (model === undefined) return null;
+        for (const [file, classes] of mergeRemovedClasses) {
+            const hooked = classes.find(candidate => model.mergeSignature(candidate) === null);
+            if (hooked === undefined) continue;
+            return (
+                `[csszyx] \`${hooked}\` was removed from ${projectRelative(file)} before csszyx read a rule that selects on it, so the page would lose it.\n` +
+                '  help: set `build.mergeCoveredClasses: false` to keep every class, or restart a watch session.\n' +
+                '  note: csszyx reads every source for such rules before it merges; this one came later, from a module outside the project walk or an edit during a watch.'
+            );
+        }
+        return null;
     }
 
     /**
@@ -4649,6 +4795,77 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Visit every file of the project walk: the root, and opted-in
+     * compileSources directories that live OUTSIDE it (a sibling design-system
+     * package), so their sz/szv classes reach the safelist. Directories inside
+     * the root are already covered; `shouldProcessSource` relaxes the ignore for
+     * these, since they are opted in.
+     *
+     * @param visit - Called with each file and its extension.
+     */
+    function walkProjectFiles(visit: (filePath: string, extension: string) => void): void {
+        const scanDir = (dir: string): void => {
+            let entries: fs.Dirent[];
+            try {
+                entries = fs.readdirSync(dir, { withFileTypes: true });
+            } catch {
+                return;
+            }
+            for (const entry of entries) {
+                if (entry.isDirectory()) {
+                    if (!IGNORE_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
+                        scanDir(path.join(dir, entry.name));
+                    }
+                    continue;
+                }
+                visit(path.join(dir, entry.name), path.extname(entry.name));
+            }
+        };
+        scanDir(state.rootDir);
+        const normRoot = normalizeForMatch(state.rootDir);
+        for (const sourceDir of compileSourceDirs) {
+            if (sourceDir === normRoot || sourceDir.startsWith(`${normRoot}/`)) continue;
+            scanDir(sourceDir);
+        }
+    }
+
+    /**
+     * Read a component or page csszyx does not lower here for what its markup
+     * and `<style>` blocks select on.
+     *
+     * @param filePath - Markup file path.
+     */
+    function readMarkupHooks(filePath: string): void {
+        if (isHardIgnored(filePath) || isUserExcluded(filePath)) return;
+        let content: string;
+        try {
+            content = fs.readFileSync(filePath, 'utf-8');
+        } catch {
+            return;
+        }
+        readSourceHooks(filePath, content);
+    }
+
+    /**
+     * Read every source of the project walk for what it selects on, on a lane
+     * with no prescan: its merges start at the first transform, and a hook in
+     * a later module keeps a class in an earlier one.
+     */
+    function readProjectSourceHooks(): void {
+        if (options.build?.mergeCoveredClasses === false) return;
+        walkProjectFiles((filePath, extension) => {
+            if (MARKUP_EXTENSIONS.has(extension)) readMarkupHooks(filePath);
+            else if (SOURCE_EXTENSIONS.has(extension) && shouldProcessSource(filePath)) {
+                try {
+                    readSourceHooks(filePath, fs.readFileSync(filePath, 'utf-8'));
+                } catch {
+                    // A file gone since the walk selects on nothing.
+                }
+            }
+        });
+    }
+
+    /**
      * Pre-scans source files to discover class names before Tailwind CSS runs.
      * Tailwind v4 reads source files from disk and can't detect classes generated
      * by the csszyx transform (e.g. `sz={{ hover: { bg: 'gray-700' } }}` → `hover:bg-gray-700`).
@@ -4665,6 +4882,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // against entries that no longer exist would never be read again.
         szObjectProvidersExamined.clear();
         prescanSawServerModule = false;
+        // Every merge below waits for every file's hooks; see `heldMerges`.
+        const held: HeldMerge[] = [];
+        heldMerges = held;
+        try {
+            await prescanUnderHeldMerges(held);
+        } finally {
+            heldMerges = null;
+        }
+    }
+
+    /**
+     * The prescan, with merges held until every file is read.
+     *
+     * @param held - Where the held merges collect.
+     * @returns Nothing once the classes are written.
+     */
+    async function prescanUnderHeldMerges(held: HeldMerge[]): Promise<void> {
         const prescanStarted = performance.now();
         const discoveredClasses = new Set<string>();
         // Raw className values feed both Tailwind safelisting and the authored
@@ -4697,6 +4931,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 return;
             }
             if (mayImportStylesheet(content)) cssImportingSources.push({ filePath, content });
+            readSourceHooks(filePath, content);
             // Ownership must be complete before a virtual mangle-map module can
             // load. Raw-only modules therefore participate even when they do not
             // need the expensive sz parser pass.
@@ -4756,44 +4991,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             recordSzvRegistryFile(szvCrossModuleRegistry, filePath, content);
         }
 
-        /**
-         * Recursively walks directories to discover source files containing sz prop usage.
-         * @param dir - the directory path to scan recursively
-         */
-        function scanDir(dir: string): void {
-            let entries: fs.Dirent[];
-            try {
-                entries = fs.readdirSync(dir, { withFileTypes: true });
-            } catch {
-                return;
-            }
-            for (const entry of entries) {
-                if (entry.isDirectory()) {
-                    if (!IGNORE_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
-                        scanDir(path.join(dir, entry.name));
-                    }
-                    continue;
-                }
-                if (SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
-                    collectPrescanSource(path.join(dir, entry.name));
-                }
-            }
-        }
-
         const walkStarted = performance.now();
-        scanDir(state.rootDir);
-        // Also walk opted-in compileSources directories that live OUTSIDE rootDir
-        // (a sibling design-system package), so their sz/szv classes reach the
-        // safelist. Dirs inside rootDir are already covered by the walk above.
-        // shouldProcessSource relaxes the ignore for these (they are opted in), so
-        // scanDir accepts their files.
-        const normRoot = normalizeForMatch(state.rootDir);
-        for (const sourceDir of compileSourceDirs) {
-            if (sourceDir === normRoot || sourceDir.startsWith(`${normRoot}/`)) {
-                continue;
-            }
-            scanDir(sourceDir);
-        }
+        walkProjectFiles((filePath, extension) => {
+            if (SOURCE_EXTENSIONS.has(extension)) collectPrescanSource(filePath);
+            else if (MARKUP_EXTENSIONS.has(extension)) readMarkupHooks(filePath);
+        });
         traceBenchTiming(
             `prescan:walk files=${seenSourcePaths.size} sz=${prescanSources.length}`,
             state.rootDir,
@@ -4818,11 +5020,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const prescanContentByPath = new Map(
             prescanSources.map(file => [file.filePath, file.content]),
         );
-        for (const { filePath, result } of transformPrescanSources(prescanSources)) {
+        const firstPasses = transformPrescanSources(prescanSources);
+        const merged = releaseHeldMerges(held);
+        for (const { filePath, result } of firstPasses) {
             processPrescanTransform(
                 filePath,
                 prescanContentByPath.get(filePath),
-                result,
+                merged.get(result) ?? result,
                 discoveredClasses,
                 rawDiscoveredClasses,
             );
@@ -5122,7 +5326,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // Thrown before the model is kept: a build started again after this
         // error has to read the stylesheets again, not lower with this model.
         if (problem !== null) throw new Error(problem);
-        styleModel = opened;
+        // What the sources select on is read against the new design system:
+        // a variant's rule can change with a stylesheet edit.
+        const withSources = opened.withSourceHooks(sourceHooks.hooksFor(opened));
+        styleModel = withSources;
         styleModelFiles = [
             ...new Set([
                 ...opened.entries.map(entry => entry.file),
@@ -5146,7 +5353,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // The file is for lanes with no bundler; a project where it cannot
             // be written still builds, and those lanes read the stylesheets.
         }
-        return opened;
+        return withSources;
     }
 
     /**
@@ -5199,6 +5406,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (styleModel === undefined) {
             refreshCompileSourceDirs();
             projectCssFiles = discoverProjectTheme(state.rootDir, [...compileSourceDirs]).scanned;
+            readProjectSourceHooks();
             await openStyleModel();
             return;
         }
@@ -5218,7 +5426,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @returns Nothing; the result lands in `unservedClasses`.
      */
     async function computeUnservedClasses(): Promise<void> {
-        await settleUnservedClasses();
+        // Tailwind's own scan, taken once here: the table needs it, and it
+        // reaches files the project walk does not (an `@source`d package, a
+        // Markdown page), whose hooks are read now. On a monorepo root it can
+        // cost more than the whole build, so the prescan does not ask for it.
+        const model = styleModel;
+        const scanned = model?.facts == null ? [] : model.candidates();
+        if (
+            options.build?.mergeCoveredClasses !== false &&
+            sourceHooks.readCandidates(TAILWIND_SCAN_HOOKS, scanned)
+        ) {
+            followSourceHooks();
+        }
+        // A dev server sends every module through again instead; see
+        // `followSourceHooks`.
+        const late = serving ? null : lateHookMessage();
+        if (late !== null) throw new Error(late);
+        await settleUnservedClasses(scanned);
         mergeTableSettled = true;
         // The same module the chunk embeds, as a file: jest has no bundler to
         // settle the table under and imports what the last build settled. An
@@ -5234,10 +5458,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     /**
      * Settle the unserved list and the merge table from the census.
      *
+     * @param scanned - Tailwind's own scan of the project's sources.
      * @returns Nothing; the results land in `unservedClasses` and
      *          `mergeSignatureTable`.
      */
-    async function settleUnservedClasses(): Promise<void> {
+    async function settleUnservedClasses(scanned: readonly string[]): Promise<void> {
         // Every lane opened the model before its first transform. Without it
         // the list would come back empty, which reads as "Tailwind serves every
         // class" and places each name wrong without a word.
@@ -5261,12 +5486,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // reaches `szcn` through a variable, and a package the plugin never
         // transforms still has its classes generated.
         mergeSignatureTable = createMergeSignatureTable(
-            [
-                ...state.classes,
-                ...state.authoredClasses,
-                ...state.ownedClasses,
-                ...model.candidates(),
-            ],
+            [...state.classes, ...state.authoredClasses, ...state.ownedClasses, ...scanned],
             candidate => model.mergeSignature(candidate),
         );
         if (state.authoredClasses.size === 0) return;
@@ -5991,6 +6211,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     ): TModule[] | undefined | Promise<TModule[] | undefined> {
         const answer = handleHotFile(pass, ctx);
         if (!pass.isClientPass) return answer;
+        if (shouldProcessSource(ctx.file) || MARKUP_EXTENSIONS.has(path.extname(ctx.file))) {
+            // Before the module is transformed again: a hook it gained keeps a
+            // class in the modules already served.
+            try {
+                readSourceHooks(ctx.file, fs.readFileSync(ctx.file, 'utf8'));
+            } catch {
+                // A file gone since the event selects on nothing new.
+            }
+        }
         if (ctx.file.endsWith('.css')) return followStyleModelEdit(ctx).then(() => answer);
         if (shouldProcessSource(ctx.file)) {
             return followMergeTableEdit({ server: ctx.server, sourceEdit: true }).then(
@@ -6821,12 +7050,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // Bundlers without the vite/webpack lifecycle hooks (rollup,
                 // esbuild) still announce on the first real transform.
                 announceActiveParser();
+                const markup = MARKUP_EXTENSIONS.has(path.extname(id));
+                if (markup && !isHardIgnored(id) && !isUserExcluded(id)) {
+                    readSourceHooks(id, code);
+                }
                 if (!shouldProcessCss(id) && !shouldProcessSource(id)) {
                     return null;
                 }
                 if (shouldProcessSource(id)) {
                     trackGlobalVarSourceFile(id, code);
                     recordAuthoredClasses(code);
+                    if (!markup) readSourceHooks(id, code);
                 }
 
                 if (matchesScriptExtension(id, SCRIPT_ID_EXTENSIONS)) {
@@ -7122,11 +7356,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
             vite: {
                 /**
+                 * Keep the dev server, to send every module through again when
+                 * a source gains a rule that keeps a class they dropped.
+                 *
+                 * @param server - The dev server.
+                 */
+                configureServer(server) {
+                    devServer = server;
+                },
+
+                /**
                  * Vite hook: pre-scans source files when config is resolved.
                  * Also runs theme scan to generate .csszyx/theme.d.ts if scanCss is configured.
                  * @param config - the resolved Vite configuration object
                  * @returns Nothing once the prescan has lowered every source.
                  */
+
                 async configResolved(config) {
                     activeFramework = 'vite';
                     announceActiveParser();

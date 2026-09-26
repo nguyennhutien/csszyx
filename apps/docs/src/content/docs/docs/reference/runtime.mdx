@@ -182,10 +182,11 @@ often a hook for a script or for another rule.
 
 csszyx reads every stylesheet the build walks for these rules, including one
 `tailwindStylesheet` leaves out, and an attribute selector such as
-`[class~="shadow-md"]` counts. It does not yet read a Vue or Svelte `<style>`
-block, or a class named inside an arbitrary variant in your markup
-(`group-[.shadow-md]:p-2`). For a class matched there, pass it last to `szcn`,
-or leave out the class that covers it.
+`[class~="shadow-md"]` counts. It also reads the `<style>` blocks of your Vue,
+Svelte and Astro components, HTML pages and JSX, and every arbitrary variant in
+your markup or your `sz` (`group-[.shadow-md]:p-2`). A selector in CSS-in-JS or
+in a script (`querySelector('.shadow-md')`) is not read; for a class matched
+there, pass it last to `szcn`, or leave out the class that covers it.
 
 **Fail-safe contract:** a class the table has no entry for is NEVER merged
 away — only an exact repeat of it is dropped. The worst case is two classes

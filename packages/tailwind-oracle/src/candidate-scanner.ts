@@ -55,13 +55,22 @@ const INTEGRATIONS = [
     '@tailwindcss/node',
 ] as const;
 
+/** The part of oxide's Scanner this module uses. */
+interface OxideScanner {
+    scan(): string[];
+    scanFiles(input: Array<{ content: string; extension: string }>): string[];
+}
+
+/** The Scanner class of the oxide an anchor resolves. */
+type OxideScannerClass = new (options: { sources: ScanSource[] }) => OxideScanner;
+
 /**
- * Load the project's Scanner, from its own dependencies or its integration's.
+ * The project's Scanner class, from its own dependencies or its integration's.
  *
  * @param resolveFrom - Directory whose `package.json` anchors resolution.
- * @returns A scanner, or null when the project has none to load.
+ * @returns The class, or null when the project has none to load.
  */
-export function loadCandidateScanner(resolveFrom: string): CandidateScanner | null {
+function loadScannerClass(resolveFrom: string): OxideScannerClass | null {
     const project = createRequire(path.join(resolveFrom, 'package.json'));
     const anchors = [
         project,
@@ -74,7 +83,7 @@ export function loadCandidateScanner(resolveFrom: string): CandidateScanner | nu
         }),
     ];
     for (const anchor of anchors) {
-        let oxide: { Scanner?: new (options: { sources: ScanSource[] }) => { scan(): string[] } };
+        let oxide: { Scanner?: OxideScannerClass };
         try {
             oxide = anchor('@tailwindcss/oxide') as typeof oxide;
         } catch {
@@ -84,7 +93,38 @@ export function loadCandidateScanner(resolveFrom: string): CandidateScanner | nu
         // An oxide from before the Scanner API: another anchor may carry a
         // newer one, and none means no scan rather than a failed build.
         if (typeof Scanner !== 'function') continue;
-        return sources => new Scanner({ sources: [...sources] }).scan();
+        return Scanner;
     }
     return null;
+}
+
+/**
+ * Load the project's Scanner, from its own dependencies or its integration's.
+ *
+ * @param resolveFrom - Directory whose `package.json` anchors resolution.
+ * @returns A scanner, or null when the project has none to load.
+ */
+export function loadCandidateScanner(resolveFrom: string): CandidateScanner | null {
+    const Scanner = loadScannerClass(resolveFrom);
+    if (Scanner === null) return null;
+    return sources => new Scanner({ sources: [...sources] }).scan();
+}
+
+/** Tailwind's extractor over text the caller already read. */
+export type ContentScanner = (content: string, extension: string) => string[];
+
+/**
+ * Load the project's extractor for text already in memory.
+ *
+ * Each call gets a fresh Scanner: one Scanner reports a candidate only the
+ * first time it meets it, and a caller asking per file needs every
+ * candidate that file holds.
+ *
+ * @param resolveFrom - Directory whose `package.json` anchors resolution.
+ * @returns A scanner, or null when the project has none to load.
+ */
+export function loadContentScanner(resolveFrom: string): ContentScanner | null {
+    const Scanner = loadScannerClass(resolveFrom);
+    if (Scanner === null) return null;
+    return (content, extension) => new Scanner({ sources: [] }).scanFiles([{ content, extension }]);
 }
