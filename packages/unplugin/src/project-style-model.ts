@@ -21,9 +21,12 @@ import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
+    addClassHooks,
+    appliedCandidatesIn,
     type ClassHooks,
     type ClassOrigin,
     collectClassHooks,
+    collectVariantHooks,
     createEmittedClassOracle,
     isHook,
     loadCandidateScanner,
@@ -119,6 +122,24 @@ export interface ProjectStyleModel {
      * @returns Candidates, sorted; empty when no scanner could be loaded.
      */
     candidates(): string[];
+    /**
+     * What the rules of these candidates select on, other than the candidate
+     * itself, in any root: `group-[.shadow-md]:p-2` selects on `shadow-md`.
+     *
+     * @param candidates - Classes as written; those without a variant add nothing.
+     * @returns The hooks.
+     */
+    variantHooks(candidates: Iterable<string>): ClassHooks;
+    /**
+     * This model, with the classes its sources select on outside any
+     * stylesheet: arbitrary variants in markup, and `<style>` blocks. They
+     * replace the ones this model was given before, so a hook an edit removed
+     * is gone; the stylesheets' own hooks stay.
+     *
+     * @param hooks - Everything the sources select on.
+     * @returns A model whose merge signature is null for those classes too.
+     */
+    withSourceHooks(hooks: ClassHooks): ProjectStyleModel;
 }
 
 /**
@@ -318,6 +339,7 @@ interface CompiledEntry {
     facts: StylesheetFacts;
     findDead(classes: readonly string[]): string[];
     signature(candidate: string): MergeSignature | null;
+    cssFor(classes: readonly string[]): Array<string | null>;
     /** Null when this root cannot tell. */
     origin(candidate: string): ClassOrigin | null;
 }
@@ -386,11 +408,20 @@ function realPath(file: string): string {
     }
 }
 
+/**
+ * What a stylesheet no root compiles selects on, with the candidates it
+ * applies: the rule Tailwind writes for one may select on more, and only a
+ * compiled root can say.
+ */
+interface StylesheetHooks extends ClassHooks {
+    readonly applied: Set<string>;
+}
+
 /** What one stylesheet is before any root is compiled. */
 type ClassifiedStylesheet =
     /** With the classes its rules select on, which a merge must keep. */
-    | { role: 'not-root'; hooks: ClassHooks }
-    | { role: 'failed'; failure: NonNullable<StyleEntry['failure']>; hooks: ClassHooks }
+    | { role: 'not-root'; hooks: StylesheetHooks }
+    | { role: 'failed'; failure: NonNullable<StyleEntry['failure']>; hooks: StylesheetHooks }
     | { role: 'root'; css: string; imports: readonly string[]; scanSources: ScanSource[] };
 
 /** How to reach the project's Tailwind: where to resolve from, and with what. */
@@ -409,10 +440,20 @@ interface CompileContext {
  * @param css - Stylesheet text.
  * @returns Its hooks.
  */
-function hooksOf(css: string): ClassHooks {
-    const hooks = noClassHooks();
+function hooksOf(css: string): StylesheetHooks {
+    const hooks = noStylesheetHooks();
     collectClassHooks(css, hooks);
+    for (const candidate of appliedCandidatesIn(css)) hooks.applied.add(candidate);
     return hooks;
+}
+
+/**
+ * No hooks and nothing applied.
+ *
+ * @returns An empty record.
+ */
+function noStylesheetHooks(): StylesheetHooks {
+    return { ...noClassHooks(), applied: new Set() };
 }
 
 /**
@@ -421,9 +462,9 @@ function hooksOf(css: string): ClassHooks {
  * @param into - The project's hooks.
  * @param from - One stylesheet's.
  */
-function addHooks(into: ClassHooks, from: ClassHooks): void {
-    for (const name of from.names) into.names.add(name);
-    for (const matcher of from.attributes) into.attributes.push(matcher);
+function addHooks(into: StylesheetHooks, from: StylesheetHooks): void {
+    addClassHooks(into, from);
+    for (const candidate of from.applied) into.applied.add(candidate);
 }
 
 /**
@@ -443,7 +484,7 @@ async function classifyStylesheet(
         css = await readFile(file, 'utf8');
     } catch {
         // A stylesheet that cannot be read cannot be an entry point.
-        return { role: 'not-root', hooks: noClassHooks() };
+        return { role: 'not-root', hooks: noStylesheetHooks() };
     }
     if (!mayReachTailwind(css)) return { role: 'not-root', hooks: hooksOf(css) };
     const role = await readStylesheetRole(
@@ -488,7 +529,7 @@ interface ClassifiedStylesheets {
      * that failed to compile included: CSS a component or page imports on its
      * own still selects on the element.
      */
-    hooks: ClassHooks;
+    hooks: StylesheetHooks;
 }
 
 /** Two Tailwind compiles overlap without multiplying their peak memory unboundedly. */
@@ -543,7 +584,7 @@ async function classifyStylesheets(
         roots: [],
         failed: [],
         importedByRoots: new Set<string>(),
-        hooks: noClassHooks(),
+        hooks: noStylesheetHooks(),
     };
     const stylesheets = await mapConcurrent(cssFiles, STYLESHEET_COMPILE_CONCURRENCY, async file =>
         classifyStylesheet(file, context),
@@ -616,6 +657,7 @@ async function compileRoot(
         compiled: {
             facts: oracle.facts,
             findDead: classes => oracle.findDead(classes),
+            cssFor: classes => oracle.cssFor(classes),
             origin(candidate) {
                 if (!origins.ok) return null;
                 let origin = originOf.get(candidate);
@@ -664,7 +706,7 @@ export interface OpenStyleModelOptions {
  * @param compiled - Stylesheets the model already read; skipped.
  */
 async function addHookStylesheets(
-    hooks: ClassHooks,
+    hooks: StylesheetHooks,
     files: readonly string[],
     compiled: readonly string[],
 ): Promise<void> {
@@ -762,8 +804,27 @@ export async function openProjectStyleModel(
             ? firstSignature
             : null;
     };
+    /**
+     * What the rules of these candidates select on, in any compiled root.
+     *
+     * @param candidates - Classes as written.
+     * @returns The hooks.
+     */
+    const variantHooks = (candidates: Iterable<string>): ClassHooks => {
+        const found = noClassHooks();
+        const asked = [...candidates];
+        for (const entry of compiled) collectVariantHooks(asked, entry.cssFor, found);
+        return found;
+    };
+    addClassHooks(hooks, variantHooks(hooks.applied));
     const [first, ...rest] = compiled;
-    return {
+    /**
+     * The model, with the hooks its sources were read to have.
+     *
+     * @param sourceHooks - What the sources select on.
+     * @returns The model.
+     */
+    const withSourceHooks = (sourceHooks: ClassHooks): ProjectStyleModel => ({
         entries,
         facts: first === undefined ? null : agreedFacts(first, rest),
         imports: [...importedByRoots],
@@ -800,10 +861,14 @@ export async function openProjectStyleModel(
         },
         mergeSignature(candidate) {
             return !isHook(hooks, candidate) &&
+                !isHook(sourceHooks, candidate) &&
                 compiled.every(entry => entry.origin(candidate) === 'tailwind')
                 ? agreedSignature(candidate)
                 : null;
         },
         signature: agreedSignature,
-    };
+        variantHooks,
+        withSourceHooks,
+    });
+    return withSourceHooks(noClassHooks());
 }

@@ -595,7 +595,8 @@ compiled Tailwind — `{ pb: 2, p: 4 }` → `p-4`. Write the refinement last:
 `{ p: 4, pb: 2 }` → `p-4 pb-2`. A class in another variant never covers one
 outside it, and an `!important` class and a plain one never replace each other;
 only Tailwind's own utilities merge — a class from `@utility`, a plugin or
-plain CSS, or one the project's CSS selects on, is kept;
+plain CSS, or one a selector names — in the project's CSS, a component's
+`<style>` block, or an arbitrary variant like `group-[.shadow-md]:` — is kept;
 runtime values, `szr({…})`, `szv` factories, jest before a build writes the table, and the Svelte/Vue adapters
 keep every class. Safelisting a runtime object never applies the build's merge
 table: statically known classes inside conditional spreads retain their full
