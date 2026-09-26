@@ -2,30 +2,75 @@
 
 ## [0.18.0](https://github.com/nguyennhutien/csszyx/compare/v0.17.2...v0.18.0) (2026-09-26)
 
-
 ### ⚠ BREAKING CHANGES
 
-* **unplugin:** a Tailwind utility in a static `className` is dropped when a static `sz` on the same element sets every property it sets (`className="card pb-2" sz={{ p: 4 }}` renders `card p-4`), and jest snapshots follow the build's table; find affected sites with `csszyx check --rule merge-covered-key --rule merge-covered-class`, keep a refinement by writing it in `sz` after its shorthand, or set `build.mergeCoveredClasses: false`, or the `mergeCoveredClasses` option of `csszyxTurbopack` on Turbopack, which replaces the unreleased `build.mergeCoveredKeys`.
-* **unplugin:** `sz` objects, `szcn` and `_szcn` merge only Tailwind's own utilities: a class from `@utility`, a plugin or plain CSS, and a Tailwind class a rule of the project's CSS selects on, is never removed and never removes another, so `szcn('z-10', 'z-modal')` now keeps both; give such a class a `@theme` token (`--color-brand`, `--radius-pill`) and delete its hand-written rule, which also replaces `registerSzcnGroups`.
-* **unplugin:** a later key in a static `sz` object or array now replaces an earlier key whose CSS it fully covers, so `{ pb: 2, p: 4 }` compiles to `p-4`; write `{ p: 4, pb: 2 }` to keep both.
-* **api:** `csszyxTurbopack` takes one options object. `csszyxTurbopack({}, opts)` becomes `csszyxTurbopack(opts)`; `csszyxTurbopack(config, opts)` becomes `csszyxTurbopack({ turbopack: config, ...opts })`. For a config alone, use `csszyxTurbopack({ turbopack: config })`. Extra arguments and unrecognized top-level keys throw and name the replacement; `rules` and `resolveAlias` belong inside `turbopack`.
-* **runtime:** `szcn` and `_szcn` now drop an earlier class only when the table the build generates from the project's compiled CSS proves the later class sets everything it set. Output changes for pairs the old prefix rules merged or kept apart differently: `flex block` now keeps only `block` and `border-t-2 border-2` only `border-2`, while `text-2xl text-[0.8rem]`, `transition transition-none` and any pair that differs in its `!` flag keep both. Where no table is registered, `szcn` removes only exact repeats and prints one development warning: the esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun lanes, jest before the build or `csszyx next prebuild` has run, and the runtime used on its own. `registerSzcnGroups` and `setSzcnGroups` no longer affect `szcn`; they still name the property `classify` and `splitBox` read. A class written in plain CSS merges once it is declared with `@utility`, and custom `@theme` tokens merge with nothing to register.
 * lower sz with the prefix the project's Tailwind sets ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* **runtime:** `szcn` and `_szcn` now drop an earlier class only when the table the build generates from the project's compiled CSS proves the later class sets everything it set. Output changes for pairs the old prefix rules merged or kept apart differently: `flex block` now keeps only `block` and `border-t-2 border-2` only `border-2`, while `text-2xl text-[0.8rem]`, `transition transition-none` and any pair that differs in its `!` flag keep both. Where no table is registered, `szcn` removes only exact repeats and prints one development warning: the esbuild, Rspack, Rsbuild, Rolldown, Farm and Bun lanes, jest before the build or `csszyx next prebuild` has run, and the runtime used on its own. `registerSzcnGroups` and `setSzcnGroups` no longer affect `szcn`; they still name the property `classify` and `splitBox` read. A class written in plain CSS merges once it is declared with `@utility`, and custom `@theme` tokens merge with nothing to register. ([#329](https://github.com/nguyennhutien/csszyx/issues/329))
+* **api:** use options objects and narrow unplugin exports ([#334](https://github.com/nguyennhutien/csszyx/issues/334))
+* **unplugin:** `csszyxTurbopack` takes one options object. `csszyxTurbopack({}, opts)` becomes `csszyxTurbopack(opts)`; `csszyxTurbopack(config, opts)` becomes `csszyxTurbopack({ turbopack: config, ...opts })`. For a config alone, use `csszyxTurbopack({ turbopack: config })`. Extra arguments and unrecognized top-level keys throw and name the replacement; `rules` and `resolveAlias` belong inside `turbopack`. ([#334](https://github.com/nguyennhutien/csszyx/issues/334))
+* **compiler:** `transform` takes an options object: `transform(sz, 'hover:')` becomes `transform(sz, { prefix: 'hover:' })` and `transform(sz, '', map)` becomes `transform(sz, { mangleMap: map })`. A call that passes anything but an options object throws and names the replacement. ([#334](https://github.com/nguyennhutien/csszyx/issues/334))
+* **unplugin:** `@csszyx/unplugin` exports `unplugin` (also the default export), `vitePlugin`, `webpackPlugin`, `rollupPlugin`, `esbuildPlugin`, `parseThemeBlocks` and `hasTokens` from its main entry. The other 72 names it used to re-export are internal; import a lane's own entry — `@csszyx/unplugin/css-mangler`, `/next`, `/next-prebuild`, `/jest`, `/postcss` — for what that lane offers. ([#334](https://github.com/nguyennhutien/csszyx/issues/334))
+* **unplugin:** merge covered keys in static `sz` objects ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **unplugin:** a later key in a static `sz` object or array now replaces an earlier key whose CSS it fully covers, so `{ pb: 2, p: 4 }` compiles to `p-4`; write `{ p: 4, pb: 2 }` to keep both. ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **unplugin:** `sz` objects, `szcn` and `_szcn` merge only Tailwind's own utilities: a class from `@utility`, a plugin or plain CSS, and a Tailwind class a rule of the project's CSS selects on, is never removed and never removes another, so `szcn('z-10', 'z-modal')` now keeps both; give such a class a `@theme` token (`--color-brand`, `--radius-pill`) and delete its hand-written rule, which also replaces `registerSzcnGroups`. ([#339](https://github.com/nguyennhutien/csszyx/issues/339))
+* **unplugin:** a Tailwind utility in a static `className` is dropped when a static `sz` on the same element sets every property it sets (`className="card pb-2" sz={{ p: 4 }}` renders `card p-4`), and jest snapshots follow the build's table; find affected sites with `csszyx check --rule merge-covered-key --rule merge-covered-class`, keep a refinement by writing it in `sz` after its shorthand, or set `build.mergeCoveredClasses: false`, or the `mergeCoveredClasses` option of `csszyxTurbopack` on Turbopack, which replaces the unreleased `build.mergeCoveredKeys`. ([#341](https://github.com/nguyennhutien/csszyx/issues/341))
 
 ### Features
 
-* **api:** use options objects and narrow unplugin exports ([#334](https://github.com/nguyennhutien/csszyx/issues/334)) ([cb4b7f6](https://github.com/nguyennhutien/csszyx/commit/cb4b7f6a1b0867b411081d0b6ff85b5b8651f05b))
-* lower sz with the prefix the project's Tailwind sets ([#324](https://github.com/nguyennhutien/csszyx/issues/324)) ([00bfdd2](https://github.com/nguyennhutien/csszyx/commit/00bfdd2475f4f37690b1f72f67af0df466473e03))
-* **runtime:** merge classes only on evidence from compiled CSS ([#329](https://github.com/nguyennhutien/csszyx/issues/329)) ([de39d90](https://github.com/nguyennhutien/csszyx/commit/de39d9011d8b4e99a6dc42d65ccfb18df4253ec7))
-* **unplugin:** drop the class-name classes a static sz covers ([#341](https://github.com/nguyennhutien/csszyx/issues/341)) ([38b33f0](https://github.com/nguyennhutien/csszyx/commit/38b33f0ceb853a0c9c6da96e627e198c977ac080))
-* **unplugin:** merge covered keys in static `sz` objects ([#338](https://github.com/nguyennhutien/csszyx/issues/338)) ([2b65136](https://github.com/nguyennhutien/csszyx/commit/2b65136cab4e96756eeca7f8f033e8aa84de0af0))
-
+* lower sz with the prefix the project's Tailwind sets ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* let the engine write a Tailwind prefix before every class ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* stop the build when Tailwind entries set different prefixes ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* stop the build when a Tailwind entry does not compile ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* follow a Tailwind prefix that changes on a running dev server ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* fail a watch rebuild when the Tailwind prefix changes ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* lower sz with the Tailwind prefix on the Next Turbopack lane ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* record the Tailwind prefix from next prebuild and next watch ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* let the MCP compile preview take the Tailwind prefix ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* record the stylesheet facts from every bundler build ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* lower sz objects with the Tailwind prefix at runtime ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* lower sz with the Tailwind prefix under jest ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* **runtime:** merge classes only on evidence from compiled CSS ([#329](https://github.com/nguyennhutien/csszyx/issues/329))
+* **unplugin:** derive merge signatures from project CSS ([#329](https://github.com/nguyennhutien/csszyx/issues/329))
+* **unplugin:** deliver the merge table to Turbopack, jest and Vite dev ([#329](https://github.com/nguyennhutien/csszyx/issues/329))
+* **unplugin:** let the jest transformer take `ignore` patterns ([#332](https://github.com/nguyennhutien/csszyx/issues/332))
+* **api:** use options objects and narrow unplugin exports ([#334](https://github.com/nguyennhutien/csszyx/issues/334))
+* **unplugin:** give `csszyxTurbopack` one options object ([#334](https://github.com/nguyennhutien/csszyx/issues/334))
+* **compiler:** give `transform` its prefix and mangle map as options ([#334](https://github.com/nguyennhutien/csszyx/issues/334))
+* **unplugin:** list what the package entry exports ([#334](https://github.com/nguyennhutien/csszyx/issues/334))
+* **unplugin:** merge covered keys in static `sz` objects ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **core:** apply a per-file merge table to static `sz` objects ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **unplugin:** merge a later `sz` key over an earlier one it covers ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **core:** lower precompiled `szv` tables without the merge table ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **mcp-server:** say that the compile preview does not merge ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **unplugin:** merge covered `sz` keys under Turbopack ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **unplugin:** say what a merge-related reload or refusal leaves behind ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **unplugin:** add `build.mergeCoveredKeys` to turn the object rule off ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **unplugin:** drop the class-name classes a static sz covers ([#341](https://github.com/nguyennhutien/csszyx/issues/341))
 
 ### Bug Fixes
 
-* **unplugin:** keep a Vite dev page when csszyx writes its own files ([#340](https://github.com/nguyennhutien/csszyx/issues/340)) ([cb1d705](https://github.com/nguyennhutien/csszyx/commit/cb1d7051346e8a776ceedd70d68bb91c12ea1654))
-* **unplugin:** keep stylesheets under `--ignore` out of the Next prefix vote ([#332](https://github.com/nguyennhutien/csszyx/issues/332)) ([2e5f710](https://github.com/nguyennhutien/csszyx/commit/2e5f710ac516b6255e3bf41f504c517f482657af))
-* **unplugin:** merge only Tailwind's own utilities ([#339](https://github.com/nguyennhutien/csszyx/issues/339)) ([67dfdb7](https://github.com/nguyennhutien/csszyx/commit/67dfdb7c1461ff11516d20823e491e474d1f6f10))
+* free the parse behind cross-module forwards ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* resolve stylesheet imports the way the project's Tailwind does ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* decide Tailwind entry stylesheets the way Tailwind's build does ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* read the stylesheets an app imports from JavaScript ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* judge markers and opacity under a Tailwind prefix ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* check a prefixed project against the classes it serves ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* **unplugin:** retain important across style roots ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* **unplugin:** keep the theme-group import below a module's directives ([#329](https://github.com/nguyennhutien/csszyx/issues/329))
+* **unplugin:** escape the unserved list inside webpack's eval wrapper ([#329](https://github.com/nguyennhutien/csszyx/issues/329))
+* **unplugin:** let exclusive creation decide registration bootstrap ([#329](https://github.com/nguyennhutien/csszyx/issues/329))
+* **unplugin:** keep stylesheets under `--ignore` out of the Next prefix vote ([#332](https://github.com/nguyennhutien/csszyx/issues/332))
+* **cli:** keep a glob group in `--ignore` as one pattern ([#332](https://github.com/nguyennhutien/csszyx/issues/332))
+* **mcp-server:** note a merge only where an object holds two classes ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **core:** keep runtime candidates under their full variants ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **cli:** stop saying a build is unaffected by an unwritten merge table ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
+* **unplugin:** merge only Tailwind's own utilities ([#339](https://github.com/nguyennhutien/csszyx/issues/339))
+* **unplugin:** keep a Vite dev page when csszyx writes its own files ([#340](https://github.com/nguyennhutien/csszyx/issues/340))
+
+### Performance
+
+* **unplugin:** bound concurrent style root inspection ([#324](https://github.com/nguyennhutien/csszyx/issues/324))
+* **unplugin:** lower a file again only when a merge removes a class ([#338](https://github.com/nguyennhutien/csszyx/issues/338))
 
 ## [0.17.2](https://github.com/nguyennhutien/csszyx/compare/v0.17.1...v0.17.2) (2026-09-14)
 
