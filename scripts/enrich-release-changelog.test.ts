@@ -5,7 +5,10 @@ import {
     buildSection,
     buildSquashBody,
     contentsPutRequest,
+    expandedSquashMessage,
+    expandSquashCommits,
     parseConventional,
+    readCommitOverride,
     spliceSection,
 } from './enrich-release-changelog.mjs';
 
@@ -213,6 +216,216 @@ describe('release changelog enrichment', () => {
 // release job reported success, because the enricher is best-effort and swallows
 // what it catches, so the notes simply came out thin: one breaking change of
 // two, and not one of the eight fixes.
+describe('a pull request that overrides its commits', () => {
+    const body = [
+        'Some description.',
+        '',
+        'BEGIN_COMMIT_OVERRIDE',
+        'feat(unplugin)!: merge a later sz key over an earlier one it covers',
+        '',
+        'BREAKING CHANGE: `{ pb: 2, p: 4 }` renders `p-4`.',
+        '',
+        'fix(runtime): keep a class no table signs',
+        'END_COMMIT_OVERRIDE',
+    ].join('\n');
+
+    it('reads the block between the markers, and nothing without them', () => {
+        assert.equal(
+            readCommitOverride(body),
+            [
+                'feat(unplugin)!: merge a later sz key over an earlier one it covers',
+                '',
+                'BREAKING CHANGE: `{ pb: 2, p: 4 }` renders `p-4`.',
+                '',
+                'fix(runtime): keep a class no table signs',
+            ].join('\n'),
+        );
+        assert.equal(readCommitOverride('no override here'), null);
+        assert.equal(readCommitOverride('BEGIN_COMMIT_OVERRIDE\nfeat: never closed'), null);
+        assert.equal(readCommitOverride(null), null);
+    });
+
+    // release-please reads the override in place of the whole squash message,
+    // subject included; the notes must too, or a stale commit note the
+    // override exists to replace comes back from the PR's own commits.
+    it('replaces the title and every commit of the pull request', () => {
+        const message = expandedSquashMessage('feat(unplugin)!: an old title (#329)', {
+            body,
+            commitMessages: ['feat(unplugin)!: a stale note\n\nBREAKING CHANGE: no longer true.'],
+        });
+        const entries = parseConventional([message]);
+
+        assert.deepEqual(
+            entries.map(e => [e.type, e.scope, e.desc, e.pr, e.breaking]),
+            [
+                [
+                    'feat',
+                    'unplugin',
+                    'merge a later sz key over an earlier one it covers',
+                    '329',
+                    true,
+                ],
+                ['fix', 'runtime', 'keep a class no table signs', '329', false],
+            ],
+        );
+        assert.equal(entries[0].note, '`{ pb: 2, p: 4 }` renders `p-4`.');
+    });
+
+    it('rebuilds from the commits when the pull request overrides nothing', () => {
+        const message = expandedSquashMessage('feat: a title (#7)', {
+            body: 'Just a description.',
+            commitMessages: ['feat(cli): a commit'],
+        });
+        assert.equal(message, buildSquashBody('feat: a title (#7)', ['feat(cli): a commit']));
+        assert.equal(
+            expandedSquashMessage('feat: bare (#8)', { body: null, commitMessages: [] }),
+            'feat: bare (#8)',
+        );
+        // A direct push names no pull request, so no body can override it.
+        assert.equal(
+            expandedSquashMessage('feat: pushed straight to main', { body, commitMessages: [] }),
+            'feat: pushed straight to main',
+        );
+    });
+});
+
+describe('which override a pull request body carries', () => {
+    const block = (lines: string[]) => lines.join('\n');
+
+    it('reads markers only on lines of their own, outside a code fence', () => {
+        assert.equal(
+            readCommitOverride(
+                block([
+                    'To fix notes, paste:',
+                    '```text',
+                    'BEGIN_COMMIT_OVERRIDE',
+                    'feat: an example',
+                    'END_COMMIT_OVERRIDE',
+                    '```',
+                    'and mention BEGIN_COMMIT_OVERRIDE in prose.',
+                ]),
+            ),
+            null,
+        );
+        assert.equal(
+            readCommitOverride(
+                block(['BEGIN_COMMIT_OVERRIDE feat: same line', 'END_COMMIT_OVERRIDE']),
+            ),
+            null,
+        );
+    });
+
+    it('reads a body the web editor saved with CRLF line ends', () => {
+        assert.equal(
+            readCommitOverride(
+                'BEGIN_COMMIT_OVERRIDE\r\nfeat(cli): one\r\nEND_COMMIT_OVERRIDE\r\n',
+            ),
+            'feat(cli): one',
+        );
+    });
+
+    it('reads the first of two blocks, and an empty one as empty', () => {
+        assert.equal(
+            readCommitOverride(
+                block([
+                    'BEGIN_COMMIT_OVERRIDE',
+                    'feat: first',
+                    'END_COMMIT_OVERRIDE',
+                    'BEGIN_COMMIT_OVERRIDE',
+                    'feat: second',
+                    'END_COMMIT_OVERRIDE',
+                ]),
+            ),
+            'feat: first',
+        );
+        assert.equal(
+            readCommitOverride(block(['BEGIN_COMMIT_OVERRIDE', '', 'END_COMMIT_OVERRIDE'])),
+            '',
+        );
+    });
+});
+
+describe('expanding the squash commits of a release', () => {
+    const override = 'BEGIN_COMMIT_OVERRIDE\nfeat(cli): the corrected note\nEND_COMMIT_OVERRIDE';
+    const squash = [{ commit: { message: 'feat(cli): the title (#12)' } }];
+    const commits = ['feat(cli): a stale note'];
+
+    /**
+     * Expand one squash with a fake GitHub and collect what it logged.
+     *
+     * @param pullRequest - What reading the pull request answers, or an error to throw.
+     * @param commitMessages - What reading its commits answers, or an error to throw.
+     * @returns The descriptions parsed from the result, and the log.
+     */
+    function expand(
+        pullRequest: { body: string | null; trusted: boolean } | Error,
+        commitMessages: string[] | Error = commits,
+    ) {
+        const log: string[] = [];
+        const messages = expandSquashCommits(
+            squash,
+            {
+                pullRequest: () => {
+                    if (pullRequest instanceof Error) throw pullRequest;
+                    return pullRequest;
+                },
+                commitMessages: () => {
+                    if (commitMessages instanceof Error) throw commitMessages;
+                    return commitMessages;
+                },
+            },
+            (line: string) => log.push(line),
+        );
+        return { descs: parseConventional(messages).map(entry => entry.desc), log };
+    }
+
+    it('uses an override a maintainer wrote in place of the commits', () => {
+        assert.deepEqual(expand({ body: override, trusted: true }).descs, ['the corrected note']);
+    });
+
+    // A pull request's author can edit its body after the merge, without write
+    // access, and these notes are published to npm.
+    it('keeps the commits when the body was last written by someone without write access', () => {
+        const { descs, log } = expand({ body: override, trusted: false });
+        assert.deepEqual(descs, ['the title', 'a stale note']);
+        assert.match(log.join('\n'), /#12 .*write access/);
+    });
+
+    it('keeps the commits, and says so, when the override is empty', () => {
+        const { descs, log } = expand({
+            body: 'BEGIN_COMMIT_OVERRIDE\n\nEND_COMMIT_OVERRIDE',
+            trusted: true,
+        });
+        assert.deepEqual(descs, ['the title', 'a stale note']);
+        assert.match(log.join('\n'), /#12 .*empty/);
+    });
+
+    it('keeps the commits when there is no override or the body cannot be read', () => {
+        assert.deepEqual(expand({ body: 'A description.', trusted: true }).descs, [
+            'the title',
+            'a stale note',
+        ]);
+        assert.deepEqual(expand(new Error('rate limited')).descs, ['the title', 'a stale note']);
+    });
+
+    it('keeps the squash message when neither can be read', () => {
+        const { descs } = expand(new Error('down'), new Error('down'));
+        assert.deepEqual(descs, ['the title']);
+    });
+
+    it('asks nothing for a commit pushed without a pull request', () => {
+        const messages = expandSquashCommits(
+            [{ commit: { message: 'fix: pushed straight to main' } }],
+            {
+                pullRequest: () => assert.fail('no pull request to read'),
+                commitMessages: () => assert.fail('no pull request to read'),
+            },
+            () => {},
+        );
+        assert.deepEqual(messages, ['fix: pushed straight to main']);
+    });
+});
+
 describe('the request that writes the changelog back', () => {
     /** Linux `MAX_ARG_STRLEN`: the cap on one argument, not on the whole list. */
     const SINGLE_ARGUMENT_CAP = 32 * 4096;
