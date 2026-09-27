@@ -163,6 +163,31 @@ fn rewrite_element_sz_attributes(
     element: &super::JsxOpeningElementIr,
     magic: &mut MagicString<'_>,
 ) {
+    if element.side_class_indices.is_empty() {
+        rewrite_side_sz_attributes(source, ir, element, magic);
+        return;
+    }
+    // A spread splits the element: each side is rewritten as an element of
+    // its own, one `sz` and the class name beside it. One copy serves every
+    // side, so an element with many sides is not copied once per side.
+    let mut side = element.empty_side();
+    for (sz_index, class_index) in element.sz_sides() {
+        side.sz_attribute_indices.clear();
+        side.sz_attribute_indices.push(sz_index);
+        side.class_attribute_index = class_index;
+        rewrite_side_sz_attributes(source, ir, &side, magic);
+    }
+    // Once, with every side's CSS variables: the element has one style.
+    apply_dynamic_style_props(source, ir, element, magic);
+}
+
+/// Rewrite the one `sz` of an element, or of one side of it.
+fn rewrite_side_sz_attributes(
+    source: &str,
+    ir: &SourceIr,
+    element: &super::JsxOpeningElementIr,
+    magic: &mut MagicString<'_>,
+) {
     // Attributes the parser folded into the first one leave the source here,
     // so every lane below rewrites exactly one attribute.
     let attributes = element
@@ -637,6 +662,9 @@ fn apply_dynamic_style_props(
     element: &super::JsxOpeningElementIr,
     magic: &mut MagicString<'_>,
 ) {
+    if element.rewrite_scope == super::RewriteScope::OneSide {
+        return;
+    }
     let dynamic_props = element
         .sz_attribute_indices
         .iter()

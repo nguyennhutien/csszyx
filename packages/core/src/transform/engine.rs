@@ -394,21 +394,20 @@ fn transform_static_classes_with_options(
     });
     let uses_merge = transformed
         && parsed.ir.jsx_opening_elements.iter().any(|element| {
-            let Some(class_index) = element.class_attribute_index else {
-                return false;
-            };
-            let class_attribute = &parsed.ir.class_attributes[class_index];
-            let has_runtime_like_sz = element.sz_attribute_indices.iter().any(|index| {
-                let attribute = &parsed.ir.sz_attributes[*index];
+            // Per side of a spread: a class name merges only with the `sz`
+            // beside it.
+            element.sz_sides().any(|(index, class_index)| {
+                let Some(class_index) = class_index else {
+                    return false;
+                };
+                let class_attribute = &parsed.ir.class_attributes[class_index];
+                let attribute = &parsed.ir.sz_attributes[index];
                 // Arrays merge their className through szcn, not _szMerge.
-                (attribute.runtime_fallback || !attribute.ternaries.is_empty())
-                    && attribute.array_parts.is_empty()
-            });
-            let has_static_sz = element
-                .sz_attribute_indices
-                .iter()
-                .any(|index| parsed.ir.sz_attributes[*index].array_parts.is_empty());
-            has_runtime_like_sz || (class_attribute.expression_span.is_some() && has_static_sz)
+                let runtime_like = (attribute.runtime_fallback || !attribute.ternaries.is_empty())
+                    && attribute.array_parts.is_empty();
+                let is_static = attribute.array_parts.is_empty();
+                runtime_like || (class_attribute.expression_span.is_some() && is_static)
+            })
         });
     let uses_runtime = transformed
         && (uses_merge
@@ -1025,7 +1024,36 @@ fn unknown_property_diagnostics(
         file, ir, &location, &mut lines,
     ));
     out.extend(duplicate_sz_diagnostics(file, ir, &location, &mut lines));
+    out.extend(spread_split_class_diagnostics(
+        file, ir, &location, &mut lines,
+    ));
     out
+}
+
+/// Class names and `sz` written on more than one side of a spread.
+///
+/// Each side merges on its own and keeps its place, and the platform decides
+/// between them as it does between any attributes: in React, Preact, Solid
+/// and Qwik the last one replaces the others and what the spreads set. So the
+/// earlier sides never apply, which is output lost in any build, not advice.
+fn spread_split_class_diagnostics(
+    file: &TransformFile,
+    ir: &super::SourceIr,
+    location: &str,
+    lines: &mut Option<LineIndex>,
+) -> Vec<String> {
+    ir.spread_split_classes
+        .iter()
+        .map(|split| {
+            let (line, column) = babel_line_column(&file.source, lines, split.span.start);
+            format!(
+                "[csszyx] <{}> at {location}:{line}:{column}: class names and `sz` on more than one side of a spread stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so {} will not apply there (Vue JSX merges every class instead).\n  help: write them in one `sz` array {}.",
+                split.element_name,
+                split.earlier.join(" and "),
+                split.example,
+            )
+        })
+        .collect()
 }
 
 /// Advice for an element that carried more than one `sz` attribute.
@@ -1230,8 +1258,12 @@ fn class_name_precedence_advisories(
     lines: &mut Option<LineIndex>,
 ) -> Vec<String> {
     let mut out = Vec::new();
-    for element in &ir.jsx_opening_elements {
-        let Some(class_index) = element.class_attribute_index else {
+    for (index, class_index) in ir
+        .jsx_opening_elements
+        .iter()
+        .flat_map(super::JsxOpeningElementIr::sz_sides)
+    {
+        let Some(class_index) = class_index else {
             continue;
         };
         // A literal className is written right there beside the sz, so the
@@ -1240,11 +1272,7 @@ fn class_name_precedence_advisories(
             continue;
         };
         // An sz that is already an array has stated its precedence by position.
-        if !element
-            .sz_attribute_indices
-            .iter()
-            .any(|index| ir.sz_attributes[*index].array_parts.is_empty())
-        {
+        if !ir.sz_attributes[index].array_parts.is_empty() {
             continue;
         }
         let (line, _) = lines
@@ -2939,6 +2967,160 @@ mod tests {
                 "[csszyx] <div> at /repo/src/App.tsx:1:22 carries 2 `sz` attributes; they were merged as sz={[first, …, last]}, later wins per property.\n  Suggestion: fold them into one sz array so the order is written down."
             )]
         );
+    }
+
+    #[test]
+    fn static_engine_keeps_a_class_name_and_sz_a_spread_stands_between_apart() {
+        // Each keeps its place; the one written first is the one the platform
+        // replaces, so the note names it and what to write instead.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = (r) => <div className=\"card\" {...r} sz={{ p: 4 }} />;\nconst Y = (r) => <b sz={{ m: 1 }} {...r} className={c} />;\nconst Z = (r) => <i {...r} className=\"card\" sz={{ p: 4 }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(
+            result.code,
+            "const X = (r) => <div className=\"card\" {...r} className=\"p-4\" />;\nconst Y = (r) => <b className=\"m-1\" {...r} className={c} />;\nconst Z = (r) => <i {...r} className=\"card p-4\" />;"
+        );
+        assert_eq!(
+            result.diagnostics,
+            vec![
+                String::from(
+                    "[csszyx] <div> at /repo/src/App.tsx:1:23: class names and `sz` on more than one side of a spread stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so `card` will not apply there (Vue JSX merges every class instead).\n  help: write them in one `sz` array after `{...r}`, in the order that should win: `sz={['card', r.className, { … }]}`."
+                ),
+                String::from(
+                    "[csszyx] <b> at /repo/src/App.tsx:2:21: class names and `sz` on more than one side of a spread stay separate attributes, one per side: in React, Preact, Solid and Qwik the last one replaces the others, so the classes of an earlier `sz` will not apply there (Vue JSX merges every class instead).\n  help: write them in one `sz` array after `{...r}`, in the order that should win: `sz={[r.className, c, { … }]}`."
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn static_engine_names_an_expression_class_name_before_a_spread() {
+        // The class name is quoted as written, expression and all; an sz array
+        // beside a runtime class name has stated its order, so it gets no
+        // precedence advice.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = (r) => <div className={c} {...r} sz={{ p: 4 }} />;\nconst Y = (r) => <b className={c} sz={[{ m: 1 }, r.x]} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
+        assert!(
+            result.diagnostics[0].contains("so `c` will not apply"),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn static_engine_names_a_spread_whose_name_holds_a_dollar() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = ($rest) => <div className=\"card\" {...$rest} sz={{ p: 4 }} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
+        assert!(
+            result.diagnostics[0].ends_with(
+                "after `{...$rest}`, in the order that should win: `sz={['card', $rest.className, { … }]}`."
+            ),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn static_engine_writes_the_help_from_what_the_element_holds() {
+        // The attribute name the author wrote (`class` in Solid), an
+        // expression on one line, a template literal quoted so its backticks
+        // survive, and a spread that is not a plain name left unnamed.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = (p) => <div class=\"card\" {...p.rest} sz={{ p: 4 }} />;\nconst Y = (r) => <b className={cn(\n  'a',\n  'b'\n)} {...r} sz={{ p: 4 }} />;\nconst Z = (r) => <i className={`x ${y}`} {...(r ?? {})} sz={{ p: 4 }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(result.diagnostics.len(), 3, "{:?}", result.diagnostics);
+        assert!(
+            result.diagnostics[0]
+                .ends_with("after `{...p.rest}`, in the order that should win: `sz={['card', p.rest.class, { … }]}`."),
+            "{:?}",
+            result.diagnostics
+        );
+        assert!(
+            result.diagnostics[1].contains("so `cn( 'a', 'b' )` will not apply"),
+            "{:?}",
+            result.diagnostics
+        );
+        assert!(
+            result.diagnostics[2].contains("so `` `x ${y}` `` will not apply"),
+            "{:?}",
+            result.diagnostics
+        );
+        assert!(
+            result.diagnostics[2].ends_with(
+                "after the spread, in the order that should win: `sz={[`x ${y}`, { … }]}`."
+            ),
+            "{:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn static_engine_writes_every_side_s_css_variables_into_the_one_style() {
+        // Each side lowers on its own, but the element has one `style`: the
+        // variables of every side land in it, not only the last side's.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = ({ r, n, c }) => <div style={{ color: \"red\" }} sz={{ p: n }} {...r} sz={{ m: c }} />;".to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert!(result.code.contains("\"--_sz-p\""), "{}", result.code);
+        assert!(result.code.contains("\"--_sz-m\""), "{}", result.code);
+        assert_eq!(result.code.matches("style=").count(), 1, "{}", result.code);
+
+        // Many sides name the classes of earlier `sz` once, not once each.
+        let many = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source:
+                "const X = (r) => <div sz={{ p: 1 }} {...r} sz={{ p: 2 }} {...r} sz={{ p: 3 }} />;"
+                    .to_string(),
+        };
+        let result = transform_static_classes(&many, 0, std::time::Instant::now());
+        assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
+        assert_eq!(
+            result.diagnostics[0].matches("earlier `sz`").count(),
+            1,
+            "{:?}",
+            result.diagnostics
+        );
+        assert!(
+            result.diagnostics[0].contains("the classes of 2 earlier `sz` will not apply"),
+            "{:?}",
+            result.diagnostics
+        );
+
+        // With no style to extend, the element still gets exactly one.
+        let bare = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: "const X = ({ r, n, c }) => <div sz={{ p: n }} {...r} sz={{ m: c }} />;"
+                .to_string(),
+        };
+        let result = transform_static_classes(&bare, 0, std::time::Instant::now());
+        assert!(result.code.contains("\"--_sz-p\""), "{}", result.code);
+        assert!(result.code.contains("\"--_sz-m\""), "{}", result.code);
+        assert_eq!(result.code.matches("style=").count(), 1, "{}", result.code);
     }
 
     #[test]

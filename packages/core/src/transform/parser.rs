@@ -25,13 +25,23 @@ use super::{
     ClassAttributeIr, DroppedKeyReason, DroppedSzKeyIr, DuplicateSzAttributeIr,
     DynamicCssVarCategory, DynamicCssVarIr, JsxOpeningElementIr, RecoveryAttributeIr, RecoveryMode,
     SafeStyleSpreadExpressionIr, SafeStyleSpreadIr, SafeStyleSpreadObjectIr,
-    SafeStyleSpreadValueIr, SourceIr, StaticArrayPartIr, StaticSzObject, StaticSzProperty,
-    StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr, SzsAttributeIr,
-    SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings, UnsupportedRecoveryIr,
+    SafeStyleSpreadValueIr, SourceIr, SpreadSplitClassIr, StaticArrayPartIr, StaticSzObject,
+    StaticSzProperty, StaticSzValue, StaticTernaryIr, StyleAttributeIr, SzAttributeIr,
+    SzsAttributeIr, SzsSlotEntryIr, TextSpan, TransformFile, TransformTimings,
+    UnsupportedRecoveryIr,
 };
 
 /// Matches the TypeScript compiler AST budget guard.
 pub const AST_BUDGET: usize = 50_000;
+
+/// The `sz` and class name written on one side of an element's spreads.
+#[derive(Debug, Default)]
+struct SideAttributes {
+    sz: Vec<usize>,
+    class: Option<usize>,
+    /// The argument of the spread this side follows, if any.
+    spread: Option<TextSpan>,
+}
 
 /// Parser shell output before AST walking is implemented.
 #[derive(Debug, Clone, PartialEq)]
@@ -391,6 +401,8 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             can_host_style: false,
             sz_attribute_indices: Vec::new(),
             class_attribute_index: None,
+            side_class_indices: Vec::new(),
+            rewrite_scope: super::RewriteScope::Element,
             style_attribute_index: None,
             recovery_attribute_index: None,
             has_recovery_token_attribute: false,
@@ -408,8 +420,9 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
 
     fn visit_jsx_opening_element(&mut self, element: &JSXOpeningElement<'a>) {
         let element_name = jsx_element_name(&element.name);
-        let mut sz_attribute_indices = Vec::new();
-        let mut class_attribute_index = None;
+        // One side per spread: the `sz` and the class name written between two
+        // spreads, or before the first or after the last.
+        let mut sides: Vec<SideAttributes> = vec![SideAttributes::default()];
         let mut style_attribute_index = None;
         let mut recovery_attribute_index = None;
         let mut has_recovery_token_attribute = false;
@@ -422,6 +435,11 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             let attr = match item {
                 JSXAttributeItem::Attribute(attr) => attr,
                 JSXAttributeItem::SpreadAttribute(spread) => {
+                    self.fold_side(&mut sides, &element_name);
+                    sides.push(SideAttributes {
+                        spread: Some(text_span(spread.argument.span())),
+                        ..SideAttributes::default()
+                    });
                     has_spread_attribute = true;
                     spread_count += 1;
                     safe_style_spread = if spread_count == 1 {
@@ -437,7 +455,7 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
                 match name {
                     "sz" => {
                         if let Some(index) = self.collect_sz_attribute(attr) {
-                            sz_attribute_indices.push(index);
+                            sides.last_mut().expect("a side is open").sz.push(index);
                         } else {
                             self.ir
                                 .unsupported_sz_attribute_spans
@@ -446,7 +464,7 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
                     }
                     "class" | "className" => {
                         if let Some(index) = self.collect_class_attribute(attr) {
-                            class_attribute_index = Some(index);
+                            sides.last_mut().expect("a side is open").class = Some(index);
                         }
                     }
                     "style" => {
@@ -469,10 +487,9 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             }
         }
 
-        if sz_attribute_indices.len() > 1 {
-            let folded = self.fold_sz_attributes(&sz_attribute_indices, &element_name);
-            sz_attribute_indices = vec![folded];
-        }
+        self.fold_side(&mut sides, &element_name);
+        let (sz_attribute_indices, class_attribute_index, side_class_indices) =
+            self.merge_sides(&element_name, sides);
 
         self.ir.jsx_opening_elements.push(JsxOpeningElementIr {
             opening_span: text_span(element.span),
@@ -480,6 +497,8 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             can_host_style: is_style_host_element_name(&element_name),
             sz_attribute_indices,
             class_attribute_index,
+            side_class_indices,
+            rewrite_scope: super::RewriteScope::Element,
             style_attribute_index,
             recovery_attribute_index,
             has_recovery_token_attribute,
@@ -542,6 +561,21 @@ impl<'a> Visit<'a> for CsszyxIrVisitor<'_, '_, 'a> {
             }
         }
         walk::walk_ts_type_query(self, query);
+    }
+}
+
+/// Source text on one line: a class expression written over several lines
+/// would break the one-line note it is quoted in.
+fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Markdown code span around text that may itself hold a backtick.
+fn code_span(text: &str) -> String {
+    if text.contains('`') {
+        format!("`` {text} ``")
+    } else {
+        format!("`{text}`")
     }
 }
 
@@ -955,6 +989,127 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             folded_attribute_spans,
         });
         first_index
+    }
+
+    /// Fold the `sz` attributes of the side being closed into one.
+    fn fold_side(&mut self, sides: &mut [SideAttributes], element_name: &str) {
+        let side = sides.last_mut().expect("a side is open");
+        if side.sz.len() > 1 {
+            let folded = self.fold_sz_attributes(&side.sz, element_name);
+            side.sz = vec![folded];
+        }
+    }
+
+    /// The `sz` indices, the class name and the class name of each side, for
+    /// an element's closed sides.
+    ///
+    /// Class names and `sz` merge only on the same side of a spread. An element
+    /// with one side keeps the shape every rewrite lane reads; one with several
+    /// lists a class name per `sz`, and is recorded so the engine can say which
+    /// classes the platform will replace.
+    fn merge_sides(
+        &mut self,
+        element_name: &str,
+        sides: Vec<SideAttributes>,
+    ) -> (Vec<usize>, Option<usize>, Vec<Option<usize>>) {
+        let written: Vec<SideAttributes> = sides
+            .into_iter()
+            .filter(|side| !side.sz.is_empty() || side.class.is_some())
+            .collect();
+        let has_sz = written.iter().any(|side| !side.sz.is_empty());
+        if written.len() < 2 || !has_sz {
+            let class = written.iter().rev().find_map(|side| side.class);
+            let sz = written.into_iter().flat_map(|side| side.sz).collect();
+            return (sz, class, Vec::new());
+        }
+        self.record_spread_split_class(element_name, &written);
+        let (sz, classes) = written
+            .iter()
+            .filter_map(|side| side.sz.first().map(|index| (*index, side.class)))
+            .unzip();
+        (sz, None, classes)
+    }
+
+    /// Record an element that a spread splits into several sides.
+    ///
+    /// The note names what the earlier sides hold and writes the one `sz`
+    /// array that would replace them from what the element holds, so the
+    /// help reads as the author's code and not a stock example.
+    fn record_spread_split_class(&mut self, element_name: &str, sides: &[SideAttributes]) {
+        let mut earlier = Vec::new();
+        let mut parts = Vec::new();
+        let mut earlier_sz = 0usize;
+        let mut sz_position = None;
+        let mut spread_part = None;
+        let mut attribute = "className";
+        let mut start = u32::MAX;
+        let spread = sides.last().and_then(|side| side.spread).and_then(|span| {
+            let text = &self.source[span.start as usize..span.end as usize];
+            let simple = !text.is_empty()
+                && text
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$' || c == '.');
+            simple.then(|| text.to_string())
+        });
+        for (position, side) in sides.iter().enumerate() {
+            let is_earlier = position + 1 < sides.len();
+            if !is_earlier && spread.is_some() {
+                // Filled in once every side is read and the attribute name
+                // is known.
+                spread_part = Some(parts.len());
+                parts.push(String::new());
+            }
+            if let Some(class_index) = side.class {
+                let class = &self.ir.class_attributes[class_index];
+                start = start.min(class.attribute_span.start);
+                if !self.source[class.attribute_span.start as usize..].starts_with("className") {
+                    attribute = "class";
+                }
+                let (label, part) = match class.expression_span {
+                    Some(span) => {
+                        let text = one_line(&self.source[span.start as usize..span.end as usize]);
+                        (text.clone(), text)
+                    }
+                    None => (class.value.clone(), format!("'{}'", class.value)),
+                };
+                if is_earlier {
+                    earlier.push(code_span(&label));
+                }
+                parts.push(part);
+            }
+            if let Some(sz_index) = side.sz.first() {
+                start = start.min(self.ir.sz_attributes[*sz_index].attribute_span.start);
+                if is_earlier {
+                    earlier_sz += 1;
+                    sz_position.get_or_insert(earlier.len());
+                }
+            }
+        }
+        if let Some(position) = sz_position {
+            let named = if earlier_sz == 1 {
+                "the classes of an earlier `sz`".to_string()
+            } else {
+                format!("the classes of {earlier_sz} earlier `sz`")
+            };
+            earlier.insert(position, named);
+        }
+        if let (Some(index), Some(spread)) = (spread_part, &spread) {
+            parts[index] = format!("{spread}.{attribute}");
+        }
+        parts.push("{ … }".to_string());
+        let after = spread.map_or_else(
+            || "the spread".to_string(),
+            |text| format!("`{{...{text}}}`"),
+        );
+        self.ir.spread_split_classes.push(SpreadSplitClassIr {
+            element_name: element_name.to_string(),
+            span: TextSpan { start, end: start },
+            earlier,
+            example: format!(
+                "after {after}, in the order that should win: `sz={{[{}]}}`",
+                parts.join(", ")
+            ),
+        });
     }
 
     fn collect_class_attribute(&mut self, attr: &JSXAttribute<'_>) -> Option<usize> {

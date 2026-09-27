@@ -43,6 +43,7 @@ const ENGINE_SOURCES: Readonly<Record<string, string>> = {
     'class-precedence':
         'export const A = (props) => <div className={props.className} sz={{ p: 4 }} />;',
     'duplicate-sz': 'export const A = () => <div sz={{ p: 4 }} sz={{ m: 2 }} />;',
+    'spread-split-class': 'export const A = (r) => <div className="card" {...r} sz={{ p: 4 }} />;',
 };
 
 describe('SZ_DIAGNOSTIC_KIND_IDS', () => {

@@ -160,11 +160,17 @@ export const SIZE_BUDGETS = [
     // table inside the engine and reports each static object's class list,
     // which costs 9,112 gzip bytes here (522,744 at the merge base, 531,856
     // on the branch, both un-optimized, gzip -9 of the nodejs parser build).
+    //
+    // Raised 2026-09-27 from 542,000: a spread splits an element into sides
+    // that merge and rewrite on their own, and the note for a split element
+    // writes its fix from the element's own spread and class values, which
+    // costs 4,693 gzip bytes here (537,756 at the merge base, 542,449 on the
+    // branch, measured the same way).
     {
         name: '@csszyx/core parser wasm artifact',
         kind: 'file',
         target: 'packages/core/pkg-parser/csszyx_core_bg.wasm',
-        maxGzipBytes: 542_000,
+        maxGzipBytes: 550_000,
     },
 ];
 

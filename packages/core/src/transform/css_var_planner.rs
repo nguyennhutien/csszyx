@@ -648,6 +648,7 @@ mod tests {
             szs_diagnostics: Vec::new(),
             catalog_sz_objects: Vec::new(),
             duplicate_sz_attributes: Vec::new(),
+            spread_split_classes: Vec::new(),
             omitted_sz_objects: Vec::new(),
         };
 
@@ -834,6 +835,8 @@ mod tests {
             can_host_style: true,
             sz_attribute_indices,
             class_attribute_index: None,
+            side_class_indices: Vec::new(),
+            rewrite_scope: crate::transform::RewriteScope::Element,
             style_attribute_index: None,
             recovery_attribute_index: None,
             has_recovery_token_attribute: false,
