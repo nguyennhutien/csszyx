@@ -21,6 +21,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { EngineMergeTable } from '@csszyx/compiler';
+import { styleBlockHooks } from '@csszyx/tailwind-oracle';
 import { insertAfterUseDirective } from './directive-prologue.js';
 import {
     createMergeSignatureTable,
@@ -108,6 +109,11 @@ export interface MergeRegistrationInput {
     authoredClasses: Iterable<string>;
     /** String literals written inside `szcn(...)` calls across the project. */
     mergeLiterals: Iterable<string>;
+    /**
+     * Source files whose `<style>` blocks may select on a class, read for
+     * nothing else. The census has no text to find them in.
+     */
+    sources?: Iterable<string>;
 }
 
 /**
@@ -355,9 +361,23 @@ function settle(input: MergeRegistrationInput): {
     if (model === null || facts === null) return { unserved: [], table: [{}, []] };
     const authored = new Set(input.authoredClasses);
     // Tailwind's own scan as well as the shards' census, as the bundler lanes do.
-    const table = createMergeSignatureTable(
-        [...input.classes, ...authored, ...input.mergeLiterals, ...model.candidates()],
-        candidate => model.mergeSignature(candidate),
+    const candidates = [
+        ...input.classes,
+        ...authored,
+        ...input.mergeLiterals,
+        ...model.candidates(),
+    ];
+    // What the sources select on outside the stylesheets: a class an arbitrary
+    // variant or a `<style>` block names keeps no signature, so the loader
+    // never removes it.
+    const hooks = model.variantHooks(candidates);
+    for (const file of input.sources ?? []) {
+        const text = readText(file);
+        if (text !== null) styleBlockHooks(text, hooks);
+    }
+    const hooked = model.withSourceHooks(hooks);
+    const table = createMergeSignatureTable(candidates, candidate =>
+        hooked.mergeSignature(candidate),
     );
     const unserved =
         authored.size === 0

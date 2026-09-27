@@ -247,6 +247,7 @@ export async function startNextWatch(
             classes: census.classes,
             authoredClasses: census.authoredClasses,
             mergeLiterals: census.mergeLiterals,
+            sources: files,
         });
         if (warning !== null) printWatcherNotice(warning);
     };
