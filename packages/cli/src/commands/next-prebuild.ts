@@ -102,6 +102,7 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             classes: result.cycle.materialize.classes,
             authoredClasses: result.cycle.materialize.authoredClasses,
             mergeLiterals: result.cycle.materialize.mergeLiterals,
+            sources: matches,
         });
         if (registrationWarning !== null) console.warn(registrationWarning);
 

@@ -10,7 +10,10 @@
  *
  * @module
  */
+import path from 'node:path';
+
 import { transformSource } from '@csszyx/compiler';
+import type { ContentScanner } from '@csszyx/tailwind-oracle';
 
 import {
     type MergeSignature,
@@ -20,6 +23,7 @@ import {
     removedByOverride,
 } from './merge-signature.js';
 import type { ProjectStyleModel } from './project-style-model.js';
+import { SourceHookRegistry } from './source-hooks.js';
 
 /** Which merge dropped a class. */
 export type MergeAuditKind =
@@ -53,6 +57,8 @@ export interface MergeAuditFile {
  * @param input.model - The opened style model.
  * @param input.classPrefix - The Tailwind prefix the stylesheets set, or null.
  * @param input.files - The source files.
+ * @param input.scanner - Tailwind's extractor, to read what the files select
+ *        on outside the stylesheets; without one every quoted token is read.
  * @returns The findings, in file order; empty when nothing merges.
  * @internal Called by `csszyx check`; not a stable shape.
  */
@@ -60,12 +66,22 @@ export function auditMerges(input: {
     model: ProjectStyleModel;
     classPrefix: string | null;
     files: readonly MergeAuditFile[];
+    scanner?: ContentScanner | null;
 }): MergeAuditFinding[] {
-    const signatureOf = (candidate: string): MergeSignature | null =>
-        input.model.mergeSignature(candidate);
-    const findings: MergeAuditFinding[] = [];
-    for (const file of input.files) {
+    // Every file first: a hook in the last one keeps a class in the first,
+    // as the build reads every source before it merges.
+    const sources = new SourceHookRegistry(() => input.scanner ?? null);
+    const firstPasses = input.files.map(file => {
         const first = transformSource(file.source, file.path, { classPrefix: input.classPrefix });
+        sources.readText(file.path, file.source, path.extname(file.path).slice(1));
+        sources.readLowered(file.path, first.classes);
+        return { file, first };
+    });
+    const model = input.model.withSourceHooks(sources.hooksFor(input.model));
+    const signatureOf = (candidate: string): MergeSignature | null =>
+        model.mergeSignature(candidate);
+    const findings: MergeAuditFinding[] = [];
+    for (const { file, first } of firstPasses) {
         const keys = mergeGroupsOf(first).flatMap(group => removedByMerge(group, signatureOf));
         const classes = mergeOverridesOf(first).flatMap(pair =>
             removedByOverride(pair.base, pair.over, signatureOf),

@@ -41,7 +41,9 @@ import {
 import { keywordOracleFrom } from './keyword-oracle.js';
 import { brokenOpacityValue, collectCustomProperties } from './opacity-verdict.js';
 import {
+    appliedCandidatesIn,
     collectClassHooks,
+    collectVariantHooks,
     type DeclaredUtilities,
     declareUtilitiesIn,
     hasCustomSource,
@@ -711,6 +713,7 @@ function isInside(directory: string, file: string): boolean {
  * @param input.projectStylesheets - Every other stylesheet it read outside
  *        Tailwind's package.
  * @param input.loadedModules - Whether it loaded a plugin or config module.
+ * @param input.cssFor - The CSS the first compile writes for each class.
  * @param input.compileStripped - Compiles the stylesheets with every project
  *        definition taken out, recording the names a plugin would have
  *        registered.
@@ -720,11 +723,15 @@ async function originOracleFrom(input: {
     css: string;
     projectStylesheets: readonly string[];
     loadedModules: boolean;
+    cssFor: (classes: readonly string[]) => ReadonlyArray<string | null>;
     compileStripped: (declared: DeclaredUtilities) => Promise<DesignSystem>;
 }): Promise<OriginOracle> {
     const stylesheets = [input.css, ...input.projectStylesheets];
     const hooks = noClassHooks();
     for (const stylesheet of stylesheets) collectClassHooks(stylesheet, hooks);
+    // `.card { @apply [&.shadow-md]:p-2 }` selects on `shadow-md` only in the
+    // rule Tailwind writes for it.
+    collectVariantHooks(stylesheets.flatMap(appliedCandidatesIn), input.cssFor, hooks);
     // A name the project declares is its own even when Tailwind has a utility
     // of the same name, which the stripped design system still serves.
     const declared = noDeclaredUtilities();
@@ -892,6 +899,7 @@ export async function createEmittedClassOracle(
                 css: options.css,
                 projectStylesheets: [...projectStylesheets.values()],
                 loadedModules,
+                cssFor: classes => design.candidatesToCss([...classes]),
                 compileStripped: async declared =>
                     load(stripCustomUtilities(options.css), {
                         ...loadOptions,

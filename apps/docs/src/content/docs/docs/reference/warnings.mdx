@@ -886,6 +886,23 @@ answer. The rebuild goes on, since only the objects whose keys changed are
 affected; restart the watch to compile them again. A Vite dev server needs no
 restart: it compiles every module again and reloads the page.
 
+### A rule selects on a class the build already removed
+
+```text
+[csszyx] `{class}` was removed from {file} before csszyx read a rule that selects on it, so the page would lose it.
+  help: set `build.mergeCoveredClasses: false` to keep every class, or restart a watch session.
+  note: csszyx reads every source for such rules before it merges; this one came later, from a module outside the project walk or an edit during a watch.
+```
+
+A build **error**. A merge never removes a class that a rule selects on: a
+rule in a stylesheet, a component's `<style>` block, or an arbitrary variant
+such as `group-[.shadow-md]:p-2`, written in markup or lowered from an `sz` key.
+The build reads all of them before its first merge. This stops the build
+when it meets one only afterwards, from a module outside the directories it
+walks or from an edit during a watch, because the class is already gone from
+`{file}`. A Vite dev server does not stop: it compiles every module again and
+reloads the page.
+
 ### Next.js with Turbopack
 
 Turbopack compiles each module on its own, so csszyx cannot hold the class set

@@ -13,7 +13,9 @@
  */
 export {
     type CandidateScanner,
+    type ContentScanner,
     loadCandidateScanner,
+    loadContentScanner,
     type ScanSource,
     scanSourcesOf,
 } from './candidate-scanner.js';
@@ -32,14 +34,18 @@ export {
     tailwindEntriesAmong,
 } from './emitted-class-oracle.js';
 export {
+    addClassHooks,
+    appliedCandidatesIn,
     type ClassAttributeMatcher,
     type ClassAttributeOperator,
     type ClassHooks,
     type ClassOrigin,
     collectClassHooks,
+    collectVariantHooks,
     isHook,
     noClassHooks,
     type OriginOracle,
+    styleBlockHooks,
 } from './origin-oracle.js';
 export type { StylesheetAlias } from './project-resolver.js';
 export {

@@ -309,10 +309,13 @@ function classSelectorsIn(prelude: string): string[] {
  * @param css - Stylesheet text.
  * @param visit - Called with each prelude, the character that ends it, and
  *        the text of its strings.
+ * @param lastStatement - Also visit, as `;`, the text a `}` ends: the last
+ *        statement of a block, written without its `;`.
  */
 function forEachPrelude(
     css: string,
     visit: (prelude: string, end: '{' | ';', strings: readonly string[]) => void,
+    lastStatement = false,
 ): void {
     let prelude = '';
     let strings: string[] = [];
@@ -331,6 +334,10 @@ function forEachPrelude(
         }
         const char = css[index] as string;
         if (char === '{' || char === ';') visit(prelude, char, strings);
+        // The last statement of a block may leave out its `;`.
+        else if (char === '}' && lastStatement && prelude.trim() !== '') {
+            visit(prelude, ';', strings);
+        }
         if (char === '{' || char === '}' || char === ';') {
             prelude = '';
             strings = [];
@@ -423,6 +430,12 @@ function attributeMatchersIn(
     let seen = 0;
     for (let index = 0; index < prelude.length; index += 1) {
         const char = prelude[index];
+        // An escape is kept as written, so `\"` is part of a name, not a string,
+        // and `\[` opens nothing.
+        if (char === '\\') {
+            index += 1;
+            continue;
+        }
         if (char === '"') seen += 1;
         if (char !== '[') continue;
         const match = CLASS_ATTRIBUTE.exec(prelude.slice(index));
@@ -451,6 +464,122 @@ export function collectClassHooks(css: string, into: ClassHooks): void {
         for (const name of classSelectorsIn(prelude)) into.names.add(name);
         attributeMatchersIn(prelude, strings, into.attributes);
     });
+}
+
+/**
+ * Add one set of hooks to another.
+ *
+ * @param into - The hooks added to.
+ * @param from - The hooks to add.
+ */
+export function addClassHooks(into: ClassHooks, from: ClassHooks): void {
+    for (const name of from.names) into.names.add(name);
+    for (const matcher of from.attributes) into.attributes.push(matcher);
+}
+
+/**
+ * Whether a candidate carries a variant: a `:` outside its brackets.
+ *
+ * @param candidate - Class as written.
+ * @returns True for `hover:p-4` and `[&.x]:p-2`, false for `[color:red]`.
+ */
+function hasVariant(candidate: string): boolean {
+    return topLevelIndices(candidate, ':').length > 0;
+}
+
+/**
+ * Record every class the rule of a variant-bearing candidate selects on,
+ * other than the candidate itself.
+ *
+ * Tailwind writes the rule, so an arbitrary variant (`group-[.shadow-md]:`),
+ * a `@custom-variant` and a plugin's `addVariant` are read the way the browser
+ * will read them, and no second grammar of Tailwind's syntax exists here.
+ *
+ * @param candidates - Classes as written; those without a variant are skipped.
+ * @param cssFor - The CSS the design system writes for each class, or null.
+ * @param into - Where the hooks go.
+ */
+export function collectVariantHooks(
+    candidates: Iterable<string>,
+    cssFor: (classes: readonly string[]) => ReadonlyArray<string | null>,
+    into: ClassHooks,
+): void {
+    const asked = [...new Set(candidates)].filter(hasVariant);
+    if (asked.length === 0) return;
+    const css = cssFor(asked);
+    for (const [index, candidate] of asked.entries()) {
+        const rule = css[index];
+        if (rule === null || rule === undefined) continue;
+        const own = noClassHooks();
+        collectClassHooks(rule, own);
+        own.names.delete(candidate);
+        addClassHooks(into, own);
+    }
+}
+
+/** A `lang` whose blocks are indented rather than braced. */
+const INDENTED_LANG = /\blang\s*=\s*["']?(?:sass|stylus|styl)\b/i;
+
+/**
+ * Record every class the `<style>` blocks of a component or page select on.
+ *
+ * A scoped block still selects on the class: the scope narrows which elements
+ * match, and `:deep` or `:global` widen it again, so every block is read as
+ * global. An indented block (`lang="sass"`, `stylus`) has no braces to find a
+ * selector by, so every class name in it counts: reading too many keeps a
+ * class, which is what the build did before merging.
+ *
+ * @param text - The component's source text.
+ * @param into - Where the hooks go.
+ */
+export function styleBlockHooks(text: string, into: ClassHooks): void {
+    // Found with `indexOf`, once over the text: a tag regex searched from
+    // every `<style` would read to the end each time one never closes.
+    const lower = text.toLowerCase();
+    let tag = lower.indexOf('<style');
+    while (tag !== -1) {
+        const attributesStart = tag + '<style'.length;
+        if (NAME_CHAR.test(lower.charAt(attributesStart))) {
+            tag = lower.indexOf('<style', attributesStart);
+            continue;
+        }
+        const tagEnd = lower.indexOf('>', attributesStart);
+        if (tagEnd === -1) return;
+        const close = lower.indexOf('</style', tagEnd + 1);
+        const end = close === -1 ? text.length : close;
+        const body = text.slice(tagEnd + 1, end);
+        if (INDENTED_LANG.test(text.slice(attributesStart, tagEnd))) {
+            for (const name of classSelectorsIn(body)) into.names.add(name);
+        } else {
+            collectClassHooks(body, into);
+        }
+        tag = lower.indexOf('<style', end);
+    }
+}
+
+/**
+ * Every candidate a stylesheet's `@apply` statements apply.
+ *
+ * A variant in one can select on a class (`@apply [&.shadow-md]:p-2` inside
+ * `.card`), and only Tailwind's rule for it says which.
+ *
+ * @param css - Stylesheet text.
+ * @returns Candidates as written, `!important` markers left out.
+ */
+export function appliedCandidatesIn(css: string): string[] {
+    const applied: string[] = [];
+    forEachPrelude(
+        css,
+        prelude => {
+            const statement = prelude.trimStart();
+            if (!/^@apply\s/.test(statement)) return;
+            for (const candidate of statement.slice('@apply'.length).split(/\s+/)) {
+                if (candidate !== '' && candidate !== '!important') applied.push(candidate);
+            }
+        },
+        true,
+    );
+    return applied;
 }
 
 /**
