@@ -225,8 +225,8 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
         }
         found = true;
 
-        let opening_start = file.source[..attribute_start].rfind('<')?;
-        let opening_end = attribute_start + file.source[attribute_start..].find('>')? + 1;
+        let opening_start = opening_start(&file.source, attribute_start)?;
+        let opening_end = opening_end(&file.source, attribute_start)?;
         let opening = &file.source[opening_start..opening_end];
         // No `szs=` check here: `triage_source` already bailed file-wide on
         // that marker before this walk runs, so no opening can contain it.
@@ -391,6 +391,92 @@ fn is_attribute_boundary(source: &str, index: usize) -> bool {
         .is_some_and(|ch| ch.is_whitespace() || ch == '<')
 }
 
+/// Index just past the string or brace group that opens at `index`, or
+/// `None` when it never closes or holds what this scan cannot step over.
+///
+/// A `>` or `<` inside either is not a tag boundary: an arrow in an event
+/// handler, a comparison, a `title` with an angle bracket. Strings inside a
+/// brace group are stepped over whole so their braces do not count; a
+/// template literal with a `${` in it bails rather than track nesting.
+fn skip_group(source: &str, index: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let open = *bytes.get(index)?;
+    let mut at = index + 1;
+    if open != b'{' {
+        while at < bytes.len() {
+            match bytes[at] {
+                b'\\' => at += 2,
+                b'$' if open == b'`' && bytes.get(at + 1) == Some(&b'{') => return None,
+                byte if byte == open => return Some(at + 1),
+                _ => at += 1,
+            }
+        }
+        return None;
+    }
+    let mut depth = 1usize;
+    while at < bytes.len() {
+        match bytes[at] {
+            b'"' | b'\'' | b'`' => at = skip_group(source, at)?,
+            b'{' => {
+                depth += 1;
+                at += 1;
+            }
+            b'}' => {
+                depth -= 1;
+                at += 1;
+                if depth == 0 {
+                    return Some(at);
+                }
+            }
+            _ => at += 1,
+        }
+    }
+    None
+}
+
+/// End of the opening tag an attribute starting at `from` belongs to: just
+/// past the first `>` outside a string or brace group.
+fn opening_end(source: &str, from: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let mut at = from;
+    while at < bytes.len() {
+        match bytes[at] {
+            b'>' => return Some(at + 1),
+            b'"' | b'\'' | b'{' => at = skip_group(source, at)?,
+            _ => at += 1,
+        }
+    }
+    None
+}
+
+/// Start of the opening tag the attribute at `attribute` belongs to, when
+/// the text before it reads as one: `<`, a tag name, whitespace, then only
+/// whole attributes up to `attribute`. A `<` found inside an earlier
+/// expression or string fails that reading, and the file goes to the parser
+/// rather than lose the attributes written before it.
+fn opening_start(source: &str, attribute: usize) -> Option<usize> {
+    let start = source[..attribute].rfind('<')?;
+    let bytes = source.as_bytes();
+    let mut at = start + 1;
+    while at < attribute
+        && (bytes[at].is_ascii_alphanumeric()
+            || matches!(bytes[at], b'.' | b':' | b'-' | b'_' | b'$'))
+    {
+        at += 1;
+    }
+    if at == start + 1 || !bytes[at].is_ascii_whitespace() {
+        return None;
+    }
+    while at < attribute {
+        match bytes[at] {
+            b'>' | b'}' => return None,
+            b'"' | b'\'' | b'{' => at = skip_group(source, at)?,
+            _ => at += 1,
+        }
+    }
+    (at == attribute).then_some(start)
+}
+
 fn element_name(opening: &str) -> Option<String> {
     let mut name = opening.strip_prefix('<')?.trim_start();
     if name.starts_with('/') {
@@ -413,8 +499,8 @@ fn span(start: usize, end: usize) -> Option<TextSpan> {
 #[cfg(test)]
 mod tests {
     use super::{
-        element_name, is_identifier_key, non_code_ranges, parse_simple_string, triage_source,
-        FastPathBailoutReason, FastPathTriage,
+        element_name, is_identifier_key, non_code_ranges, opening_end, parse_simple_string,
+        skip_group, triage_source, FastPathBailoutReason, FastPathTriage,
     };
     use crate::transform::TransformFile;
 
@@ -760,6 +846,25 @@ mod tests {
                 "a data-sz attribute",
                 "export const A = () => <div data-sz={{ p: 4 }} />;",
             ),
+            (
+                // The tag does not end at the arrow's `>`: the class name
+                // after it is on the same element.
+                "a class name after an arrow",
+                "export const A = ({ f }) => <div sz={{ p: 4 }} onClick={() => f()} className=\"c\" />;",
+            ),
+            (
+                "a spread after an arrow",
+                "export const A = ({ f, r }) => <div sz={{ p: 4 }} onClick={() => f()} {...r} />;",
+            ),
+            (
+                // The tag does not start at a `<` inside an expression.
+                "a class name before a less-than in an expression",
+                "export const A = ({ a }) => <div className=\"c\" data-n={a <b ? 1 : 2} sz={{ p: 4 }} />;",
+            ),
+            (
+                "a class name before a less-than in a string",
+                "export const A = () => <div className=\"c\" title=\"x <y\" sz={{ p: 4 }} />;",
+            ),
         ] {
             let file = TransformFile {
                 filename: "/repo/src/App.tsx".to_string(),
@@ -819,6 +924,35 @@ mod tests {
     /// would never be noticed: the existing fixtures all use a single-digit
     /// positive integer, so a value scanner that rejects everything else looks
     /// perfectly healthy.
+    #[test]
+    fn the_tag_scan_steps_over_escapes_and_refuses_what_never_closes() {
+        // An escaped quote does not close the string it sits in.
+        assert_eq!(skip_group("'a\\'b' x", 0), Some(6));
+        // A string or a tag that never closes is not guessed at: the file
+        // goes to the parser.
+        assert_eq!(skip_group("'abc", 0), None);
+        assert_eq!(skip_group("{ a", 0), None);
+        assert_eq!(opening_end("sz={{ p: 4 }} id=\"a\"", 0), None);
+    }
+
+    #[test]
+    fn an_arrow_after_sz_keeps_the_fast_path_and_the_whole_tag() {
+        let source =
+            "export const A = ({ f }) => <div sz={{ p: 4 }} onClick={() => f()} title=\"a>b\" />;";
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: source.to_string(),
+        };
+        let FastPathTriage::StaticIr(ir) = triage_source(&file) else {
+            panic!("expected the AST-free lane for: {source}");
+        };
+        let opening = ir.jsx_opening_elements[0].opening_span;
+        assert_eq!(
+            &source[opening.start as usize..opening.end as usize],
+            "<div sz={{ p: 4 }} onClick={() => f()} title=\"a>b\" />"
+        );
+    }
+
     #[test]
     fn multi_digit_negative_and_decimal_values_stay_on_the_fast_path() {
         for source in [
