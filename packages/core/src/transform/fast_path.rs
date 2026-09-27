@@ -457,14 +457,14 @@ fn opening_end(source: &str, from: usize) -> Option<usize> {
 fn opening_start(source: &str, attribute: usize) -> Option<usize> {
     let start = source[..attribute].rfind('<')?;
     let bytes = source.as_bytes();
-    let mut at = start + 1;
-    while at < attribute
-        && (bytes[at].is_ascii_alphanumeric()
-            || matches!(bytes[at], b'.' | b':' | b'-' | b'_' | b'$'))
-    {
-        at += 1;
-    }
-    if at == start + 1 || !bytes[at].is_ascii_whitespace() {
+    let name = source[start + 1..attribute]
+        .bytes()
+        .take_while(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b':' | b'-' | b'_' | b'$')
+        })
+        .count();
+    let mut at = start + 1 + name;
+    if name == 0 || !bytes[at].is_ascii_whitespace() {
         return None;
     }
     while at < attribute {
@@ -499,8 +499,8 @@ fn span(start: usize, end: usize) -> Option<TextSpan> {
 #[cfg(test)]
 mod tests {
     use super::{
-        element_name, is_identifier_key, non_code_ranges, opening_end, parse_simple_string,
-        skip_group, triage_source, FastPathBailoutReason, FastPathTriage,
+        element_name, is_identifier_key, non_code_ranges, opening_end, opening_start,
+        parse_simple_string, skip_group, triage_source, FastPathBailoutReason, FastPathTriage,
     };
     use crate::transform::TransformFile;
 
@@ -933,6 +933,31 @@ mod tests {
         assert_eq!(skip_group("'abc", 0), None);
         assert_eq!(skip_group("{ a", 0), None);
         assert_eq!(opening_end("sz={{ p: 4 }} id=\"a\"", 0), None);
+    }
+
+    #[test]
+    fn the_tag_scan_steps_over_each_kind_of_group_to_its_exact_end() {
+        // An escape skips the character after it, and only that one.
+        assert_eq!(skip_group("'\\'x' y", 0), Some(5));
+        // A template literal with a substitution is not stepped over; one
+        // without, and a `${` in a plain string, are.
+        assert_eq!(skip_group("`a${b}` z", 0), None);
+        assert_eq!(skip_group("`a$b` z", 0), Some(5));
+        assert_eq!(skip_group("'a${' z", 0), Some(5));
+        // Inside braces a string's brace does not count, a nested group does,
+        // and the end is just past the closing brace.
+        assert_eq!(skip_group("{ '}' {a} } x", 0), Some(11));
+    }
+
+    #[test]
+    fn the_tag_start_needs_a_name_then_whole_attributes() {
+        // A `>` inside an expression or a string before `sz` is not the end
+        // of the tag, wherever the tag starts.
+        let source = "x = <div a={x > y} b=\"p>q\" sz={{ p: 4 }} />";
+        assert_eq!(opening_start(source, source.find("sz=").unwrap()), Some(4));
+        // A `<` with no name after it is not a tag start.
+        assert_eq!(opening_start("< a sz", 4), None);
+        assert_eq!(opening_start("<div a sz", 7), Some(0));
     }
 
     #[test]
