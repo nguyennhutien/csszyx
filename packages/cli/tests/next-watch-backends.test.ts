@@ -138,6 +138,8 @@ describe.each(LANES)('next watch on the %s watcher', (_name, factory) => {
                     !existsSync(shardPath),
                 'the shard to be removed with its source',
             );
+            expect(readFileSync(session.safelistOutputPath, 'utf8')).not.toContain('m-2');
+            expect(existsSync(shardPath)).toBe(false);
         } finally {
             await session.close();
         }
@@ -174,6 +176,7 @@ describe('a removed directory', () => {
             rmSync(join(session.root, 'app'), { recursive: true });
             emitter.emit('all', 'unlinkDir', join(session.root, 'app'));
             await waitFor(() => !existsSync(shardPath), 'the shard to be reaped');
+            expect(existsSync(shardPath)).toBe(false);
         } finally {
             await session.close();
         }
@@ -217,6 +220,7 @@ describe('a change the platform cannot name', () => {
             rmSync(join(session.root, 'app'), { recursive: true });
             emitter.emit('all', 'rescan', session.root);
             await waitFor(() => !existsSync(shardPath), 'the shard to be reaped');
+            expect(existsSync(shardPath)).toBe(false);
         } finally {
             await session.close();
         }

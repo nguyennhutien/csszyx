@@ -213,6 +213,7 @@ describe.each(BACKENDS)('the %s backend', (_name, start) => {
 
             rmSync(target);
             await waitForEvent(events, entry => entry === `unlink ${target}`);
+            expect(events).toContain(`unlink ${target}`);
         } finally {
             await watcher.close();
         }
@@ -231,6 +232,7 @@ describe('watchRecursively', () => {
         try {
             rmSync(join(root, 'app'), { recursive: true });
             await waitForEvent(events, entry => entry === `unlinkDir ${join(root, 'app')}`);
+            expect(events).toContain(`unlinkDir ${join(root, 'app')}`);
         } finally {
             await watcher.close();
         }
